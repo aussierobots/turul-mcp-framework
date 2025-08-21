@@ -1,0 +1,123 @@
+{
+  "development_commands": [
+    {
+      "name": "build",
+      "label": "Build command",
+      "description": "Compile and build the project",
+      "category": "compilation",
+      "common_tools": ["cargo", "npm", "gradle", "maven", "make"]
+    },
+    {
+      "name": "test",
+      "label": "Test command",
+      "description": "Run the test suite",
+      "category": "testing",
+      "common_tools": ["cargo test", "npm test", "pytest", "mvn test"]
+    },
+    {
+      "name": "run",
+      "label": "Run command", 
+      "description": "Execute the application",
+      "category": "execution",
+      "common_tools": ["cargo run", "npm start", "python", "java -jar"]
+    },
+    {
+      "name": "install",
+      "label": "Install command",
+      "description": "Install dependencies or packages",
+      "category": "package_management",
+      "common_tools": ["npm install", "pip install", "cargo install", "apt install"]
+    },
+    {
+      "name": "update",
+      "label": "Update command",
+      "description": "Update dependencies to latest versions",
+      "category": "package_management",
+      "common_tools": ["npm update", "pip upgrade", "cargo update", "apt upgrade"]
+    },
+    {
+      "name": "deploy",
+      "label": "Deploy command",
+      "description": "Deploy to production environment",
+      "category": "deployment",
+      "common_tools": ["kubectl apply", "docker deploy", "aws deploy", "heroku deploy"]
+    },
+    {
+      "name": "start",
+      "label": "Start command",
+      "description": "Start the service or application",
+      "category": "service_management",
+      "common_tools": ["systemctl start", "docker start", "pm2 start", "supervisorctl start"]
+    },
+    {
+      "name": "stop",
+      "label": "Stop command",
+      "description": "Stop the running service",
+      "category": "service_management", 
+      "common_tools": ["systemctl stop", "docker stop", "pm2 stop", "supervisorctl stop"]
+    },
+    {
+      "name": "restart",
+      "label": "Restart command",
+      "description": "Restart the service or application",
+      "category": "service_management",
+      "common_tools": ["systemctl restart", "docker restart", "pm2 restart", "supervisorctl restart"]
+    },
+    {
+      "name": "status",
+      "label": "Status command",
+      "description": "Check service or application status",
+      "category": "monitoring",
+      "common_tools": ["systemctl status", "docker ps", "pm2 status", "kubectl get pods"]
+    },
+    {
+      "name": "logs",
+      "label": "Logs command",
+      "description": "View application logs",
+      "category": "monitoring",
+      "common_tools": ["docker logs", "journalctl", "pm2 logs", "kubectl logs"]
+    },
+    {
+      "name": "backup",
+      "label": "Backup command",
+      "description": "Create backup of data or system",
+      "category": "data_management",
+      "common_tools": ["pg_dump", "mysqldump", "rsync", "tar"]
+    },
+    {
+      "name": "restore",
+      "label": "Restore command",
+      "description": "Restore from backup",
+      "category": "data_management",
+      "common_tools": ["pg_restore", "mysql", "rsync", "tar -xf"]
+    },
+    {
+      "name": "migrate",
+      "label": "Migrate command",
+      "description": "Run database migrations",
+      "category": "data_management",
+      "common_tools": ["alembic upgrade", "django migrate", "rails db:migrate", "flyway migrate"]
+    },
+    {
+      "name": "clean",
+      "label": "Clean command",
+      "description": "Clean build artifacts and temporary files",
+      "category": "maintenance",
+      "common_tools": ["cargo clean", "npm run clean", "mvn clean", "make clean"]
+    },
+    {
+      "name": "format",
+      "label": "Format command",
+      "description": "Format code according to style guidelines",
+      "category": "code_quality",
+      "common_tools": ["cargo fmt", "prettier", "black", "gofmt"]
+    },
+    {
+      "name": "lint",
+      "label": "Lint command",
+      "description": "Check code for style and potential issues",
+      "category": "code_quality",
+      "common_tools": ["cargo clippy", "eslint", "pylint", "golint"]
+    }
+  ]
+}

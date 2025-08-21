@@ -1,0 +1,179 @@
+{
+  "code_generation_templates": {
+    "rust_struct": {
+      "name": "Rust Struct Generator",
+      "description": "Generate Rust struct definitions with derive macros",
+      "template": "{% if attributes %}{% for attr in attributes %}#[{{ attr }}]\n{% endfor %}{% endif %}{% if visibility %}{{ visibility }} {% endif %}struct {{ name }} {\n{% for field in fields %}    {% if field.visibility %}{{ field.visibility }} {% endif %}{{ field.name }}: {{ field.type }},\n{% endfor %}}",
+      "parameters": {
+        "name": "struct name",
+        "visibility": "pub|private (optional)",
+        "attributes": "array of derive attributes like Debug, Clone",
+        "fields": "array of field objects with name, type, and optional visibility"
+      },
+      "example": {
+        "name": "User",
+        "visibility": "pub",
+        "attributes": ["derive(Debug, Clone, Serialize)", "serde(rename_all = \"snake_case\")"],
+        "fields": [
+          {"name": "id", "type": "u64", "visibility": "pub"},
+          {"name": "username", "type": "String", "visibility": "pub"},
+          {"name": "email", "type": "String", "visibility": "pub"},
+          {"name": "created_at", "type": "DateTime<Utc>"}
+        ]
+      }
+    },
+    "rust_enum": {
+      "name": "Rust Enum Generator",
+      "description": "Generate Rust enum definitions with variants",
+      "template": "{% if attributes %}{% for attr in attributes %}#[{{ attr }}]\n{% endfor %}{% endif %}{% if visibility %}{{ visibility }} {% endif %}enum {{ name }} {\n{% for variant in variants %}    {{ variant.name }}{% if variant.data %}({{ variant.data }}){% endif %}{% if variant.fields %} {\n{% for field in variant.fields %}        {{ field.name }}: {{ field.type }},\n{% endfor %}    }{% endif %},\n{% endfor %}}",
+      "parameters": {
+        "name": "enum name",
+        "visibility": "pub|private (optional)",
+        "attributes": "array of derive attributes",
+        "variants": "array of variant objects with name and optional data/fields"
+      },
+      "example": {
+        "name": "Status",
+        "visibility": "pub",
+        "attributes": ["derive(Debug, Clone, PartialEq)", "serde(tag = \"type\", content = \"data\")"],
+        "variants": [
+          {"name": "Pending"},
+          {"name": "InProgress", "data": "String"},
+          {"name": "Completed", "fields": [{"name": "result", "type": "String"}, {"name": "timestamp", "type": "DateTime<Utc>"}]}
+        ]
+      }
+    },
+    "api_endpoint": {
+      "name": "REST API Endpoint",
+      "description": "Generate REST API endpoint handlers",
+      "template": "{% if attributes %}{% for attr in attributes %}#[{{ attr }}]\n{% endfor %}{% endif %}{% if async %}async {% endif %}fn {{ function_name }}(\n{% for param in parameters %}    {{ param.name }}: {{ param.type }},\n{% endfor %}) -> {{ return_type }} {\n    // TODO: Implement {{ description }}\n{% for line in implementation %}    {{ line }}\n{% endfor %}\n}",
+      "parameters": {
+        "function_name": "function name",
+        "description": "endpoint description",
+        "async": "boolean for async function",
+        "attributes": "function attributes like #[get(\"/users\")]",
+        "parameters": "array of parameter objects",
+        "return_type": "function return type",
+        "implementation": "array of implementation lines"
+      },
+      "example": {
+        "function_name": "get_user",
+        "description": "Get user by ID",
+        "async": true,
+        "attributes": ["get(\"/users/{id}\")", "response(status = 200, description = \"User found\")"],
+        "parameters": [
+          {"name": "path", "type": "web::Path<u64>"},
+          {"name": "db", "type": "web::Data<DatabaseConnection>"}
+        ],
+        "return_type": "Result<Json<User>, ApiError>",
+        "implementation": [
+          "let user_id = path.into_inner();",
+          "let user = db.find_user_by_id(user_id).await?;",
+          "Ok(Json(user))"
+        ]
+      }
+    },
+    "database_model": {
+      "name": "Database Model",
+      "description": "Generate database model with ORM attributes",
+      "template": "{% for attr in table_attributes %}#[{{ attr }}]\n{% endfor %}#[derive({{ derives | join(\", \") }})]\npub struct {{ table_name }} {\n{% for field in fields %}    {% for attr in field.attributes %}#[{{ attr }}]\n    {% endfor %}pub {{ field.name }}: {{ field.type }},\n{% endfor %}}",
+      "parameters": {
+        "table_name": "model struct name",
+        "table_attributes": "ORM table attributes",
+        "derives": "derive macros for the struct",
+        "fields": "database fields with attributes and types"
+      },
+      "example": {
+        "table_name": "User",
+        "table_attributes": ["table_name = \"users\"", "belongs_to(Account)"],
+        "derives": ["Debug", "Queryable", "Insertable", "AsChangeset"],
+        "fields": [
+          {
+            "name": "id",
+            "type": "i32",
+            "attributes": ["column_name = \"user_id\"", "primary_key"]
+          },
+          {
+            "name": "username",
+            "type": "String",
+            "attributes": ["column_name = \"username\"", "unique"]
+          },
+          {
+            "name": "email",
+            "type": "String",
+            "attributes": ["column_name = \"email_address\"", "unique", "not_null"]
+          },
+          {
+            "name": "created_at",
+            "type": "chrono::NaiveDateTime",
+            "attributes": ["column_name = \"created_at\"", "default = \"CURRENT_TIMESTAMP\""]
+          }
+        ]
+      }
+    }
+  },
+  "validation_rules": {
+    "rust_naming": {
+      "struct_name": "PascalCase, descriptive noun",
+      "enum_name": "PascalCase, descriptive noun",
+      "field_name": "snake_case, descriptive",
+      "function_name": "snake_case, verb-based",
+      "constant_name": "SCREAMING_SNAKE_CASE"
+    },
+    "code_quality": {
+      "max_function_length": 50,
+      "max_struct_fields": 20,
+      "required_derives": ["Debug"],
+      "documentation_required": true,
+      "error_handling": "must use Result for fallible operations"
+    },
+    "security": {
+      "avoid_unsafe": true,
+      "input_validation": "always validate external input",
+      "sql_injection": "use parameterized queries only",
+      "sensitive_data": "mark sensitive fields with appropriate attributes"
+    }
+  },
+  "transformation_patterns": {
+    "camelcase_to_snake": {
+      "pattern": "([a-z0-9])([A-Z])",
+      "replacement": "$1_$2",
+      "description": "Convert camelCase to snake_case"
+    },
+    "snake_to_camel": {
+      "pattern": "_([a-z])",
+      "replacement": "${1:uppercase}",
+      "description": "Convert snake_case to camelCase"
+    },
+    "add_documentation": {
+      "pattern": "^(pub )?struct (\\w+)",
+      "replacement": "/// Documentation for $2\n$0",
+      "description": "Add documentation comments to structs"
+    },
+    "add_derives": {
+      "pattern": "^struct (\\w+)",
+      "replacement": "#[derive(Debug)]\nstruct $1",
+      "description": "Add basic derive macros to structs"
+    }
+  },
+  "language_support": {
+    "rust": {
+      "file_extension": ".rs",
+      "common_derives": ["Debug", "Clone", "PartialEq", "Serialize", "Deserialize"],
+      "attribute_syntax": "#[attribute]",
+      "visibility": ["pub", "pub(crate)", "pub(super)", "private"]
+    },
+    "typescript": {
+      "file_extension": ".ts",
+      "interface_template": "interface {{ name }} {\n{% for field in fields %}  {{ field.name }}{% if field.optional %}?{% endif %}: {{ field.type }};\n{% endfor %}}",
+      "type_template": "type {{ name }} = {% for variant in variants %}{{ variant }}{% if not loop.last %} | {% endif %}{% endfor %};",
+      "visibility": ["public", "private", "protected"]
+    },
+    "python": {
+      "file_extension": ".py",
+      "dataclass_template": "@dataclass\nclass {{ name }}:\n{% for field in fields %}    {{ field.name }}: {{ field.type }}{% if field.default %} = {{ field.default }}{% endif %}\n{% endfor %}",
+      "pydantic_template": "class {{ name }}(BaseModel):\n{% for field in fields %}    {{ field.name }}: {{ field.type }}{% if field.description %} = Field(description=\"{{ field.description }}\"){% endif %}\n{% endfor %}",
+      "decorators": ["@dataclass", "@property", "@classmethod"]
+    }
+  }
+}

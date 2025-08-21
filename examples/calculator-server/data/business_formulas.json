@@ -1,0 +1,339 @@
+{
+  "financial_formulas": {
+    "compound_interest": {
+      "name": "Compound Interest Calculator",
+      "description": "Calculate compound interest for investments and loans",
+      "formula": "A = P(1 + r/n)^(nt)",
+      "parameters": {
+        "principal": "Initial principal amount (P)",
+        "annual_rate": "Annual interest rate as decimal (r)",
+        "compounds_per_year": "Number of times interest compounds per year (n)",
+        "years": "Number of years (t)"
+      },
+      "examples": {
+        "retirement_savings": {
+          "principal": 10000,
+          "annual_rate": 0.07,
+          "compounds_per_year": 12,
+          "years": 30,
+          "expected_result": 81174.03
+        },
+        "mortgage_calculation": {
+          "principal": 300000,
+          "annual_rate": 0.045,
+          "compounds_per_year": 12,
+          "years": 30,
+          "expected_result": 1185087.77
+        }
+      },
+      "use_cases": ["Investment planning", "Retirement calculations", "Loan analysis", "Savings projections"]
+    },
+    "present_value": {
+      "name": "Present Value Calculator",
+      "description": "Calculate present value of future cash flows",
+      "formula": "PV = FV / (1 + r)^n",
+      "parameters": {
+        "future_value": "Future value of money (FV)",
+        "discount_rate": "Discount rate per period (r)",
+        "periods": "Number of periods (n)"
+      },
+      "examples": {
+        "investment_valuation": {
+          "future_value": 50000,
+          "discount_rate": 0.08,
+          "periods": 5,
+          "expected_result": 34029.16
+        }
+      },
+      "use_cases": ["Investment valuation", "Capital budgeting", "Bond pricing", "DCF analysis"]
+    },
+    "net_present_value": {
+      "name": "Net Present Value (NPV) Calculator",
+      "description": "Calculate NPV for investment projects",
+      "formula": "NPV = Σ(CF_t / (1 + r)^t) - Initial Investment",
+      "parameters": {
+        "initial_investment": "Initial cash outflow",
+        "cash_flows": "Array of future cash flows",
+        "discount_rate": "Required rate of return"
+      },
+      "examples": {
+        "project_evaluation": {
+          "initial_investment": 100000,
+          "cash_flows": [30000, 35000, 40000, 45000],
+          "discount_rate": 0.10,
+          "expected_result": 17118.19
+        }
+      },
+      "use_cases": ["Capital investment decisions", "Project evaluation", "Business case analysis"]
+    },
+    "internal_rate_of_return": {
+      "name": "Internal Rate of Return (IRR) Calculator",
+      "description": "Calculate IRR for investment projects using iterative method",
+      "formula": "0 = Σ(CF_t / (1 + IRR)^t)",
+      "parameters": {
+        "cash_flows": "Array of cash flows including initial investment (negative)",
+        "initial_guess": "Starting guess for IRR calculation (optional, default 0.1)"
+      },
+      "examples": {
+        "business_investment": {
+          "cash_flows": [-50000, 15000, 20000, 25000, 30000],
+          "expected_result": 0.2827
+        }
+      },
+      "use_cases": ["Investment analysis", "Project profitability", "Portfolio management"]
+    },
+    "loan_payment": {
+      "name": "Loan Payment Calculator",
+      "description": "Calculate monthly payment for loans and mortgages",
+      "formula": "PMT = P * [r(1+r)^n] / [(1+r)^n - 1]",
+      "parameters": {
+        "principal": "Loan principal amount",
+        "annual_rate": "Annual interest rate as decimal",
+        "years": "Loan term in years"
+      },
+      "examples": {
+        "mortgage_payment": {
+          "principal": 400000,
+          "annual_rate": 0.0375,
+          "years": 30,
+          "expected_result": 1852.15
+        },
+        "car_loan": {
+          "principal": 25000,
+          "annual_rate": 0.055,
+          "years": 5,
+          "expected_result": 478.66
+        }
+      },
+      "use_cases": ["Mortgage planning", "Auto loans", "Personal financing", "Debt management"]
+    },
+    "break_even_analysis": {
+      "name": "Break-Even Analysis",
+      "description": "Calculate break-even point for business operations",
+      "formula": "Break-even = Fixed Costs / (Price per Unit - Variable Cost per Unit)",
+      "parameters": {
+        "fixed_costs": "Total fixed costs",
+        "price_per_unit": "Selling price per unit",
+        "variable_cost_per_unit": "Variable cost per unit"
+      },
+      "examples": {
+        "product_launch": {
+          "fixed_costs": 50000,
+          "price_per_unit": 25,
+          "variable_cost_per_unit": 15,
+          "expected_result": 5000
+        }
+      },
+      "use_cases": ["Business planning", "Product pricing", "Cost analysis", "Profitability planning"]
+    },
+    "depreciation": {
+      "name": "Asset Depreciation Calculator",
+      "description": "Calculate straight-line depreciation for assets",
+      "formula": "Annual Depreciation = (Cost - Salvage Value) / Useful Life",
+      "parameters": {
+        "asset_cost": "Initial cost of the asset",
+        "salvage_value": "Estimated salvage value at end of useful life",
+        "useful_life": "Useful life in years"
+      },
+      "examples": {
+        "equipment_depreciation": {
+          "asset_cost": 100000,
+          "salvage_value": 10000,
+          "useful_life": 10,
+          "expected_result": 9000
+        }
+      },
+      "use_cases": ["Tax planning", "Asset management", "Financial reporting", "Budgeting"]
+    },
+    "roi_calculation": {
+      "name": "Return on Investment (ROI) Calculator",
+      "description": "Calculate return on investment percentage",
+      "formula": "ROI = (Gain - Cost) / Cost * 100",
+      "parameters": {
+        "initial_investment": "Initial investment amount",
+        "final_value": "Final value of investment"
+      },
+      "examples": {
+        "stock_investment": {
+          "initial_investment": 10000,
+          "final_value": 12500,
+          "expected_result": 25.0
+        }
+      },
+      "use_cases": ["Investment performance", "Business efficiency", "Project evaluation"]
+    }
+  },
+  "business_metrics": {
+    "customer_lifetime_value": {
+      "name": "Customer Lifetime Value (CLV)",
+      "description": "Calculate the total value a customer brings over their lifetime",
+      "formula": "CLV = (Average Order Value × Purchase Frequency × Gross Margin) × Lifespan",
+      "parameters": {
+        "average_order_value": "Average amount spent per order",
+        "purchase_frequency": "Number of purchases per year",
+        "gross_margin": "Gross margin percentage as decimal",
+        "customer_lifespan": "Average customer lifespan in years"
+      },
+      "examples": {
+        "ecommerce_customer": {
+          "average_order_value": 75,
+          "purchase_frequency": 4,
+          "gross_margin": 0.40,
+          "customer_lifespan": 3,
+          "expected_result": 360
+        }
+      },
+      "use_cases": ["Marketing budget allocation", "Customer acquisition strategy", "Retention planning"]
+    },
+    "conversion_rate": {
+      "name": "Conversion Rate Calculator",
+      "description": "Calculate conversion rates for marketing and sales",
+      "formula": "Conversion Rate = (Conversions / Total Visitors) × 100",
+      "parameters": {
+        "conversions": "Number of successful conversions",
+        "total_visitors": "Total number of visitors or leads"
+      },
+      "examples": {
+        "website_conversion": {
+          "conversions": 150,
+          "total_visitors": 5000,
+          "expected_result": 3.0
+        }
+      },
+      "use_cases": ["Marketing optimization", "Sales performance", "A/B testing", "Funnel analysis"]
+    },
+    "churn_rate": {
+      "name": "Customer Churn Rate",
+      "description": "Calculate the rate at which customers stop using your service",
+      "formula": "Churn Rate = (Customers Lost / Total Customers at Start) × 100",
+      "parameters": {
+        "customers_lost": "Number of customers lost in period",
+        "total_customers_start": "Total customers at start of period"
+      },
+      "examples": {
+        "saas_churn": {
+          "customers_lost": 25,
+          "total_customers_start": 500,
+          "expected_result": 5.0
+        }
+      },
+      "use_cases": ["Retention strategy", "Revenue forecasting", "Customer success metrics"]
+    },
+    "employee_productivity": {
+      "name": "Employee Productivity Calculator",
+      "description": "Calculate revenue per employee and productivity metrics",
+      "formula": "Revenue per Employee = Total Revenue / Number of Employees",
+      "parameters": {
+        "total_revenue": "Total company revenue",
+        "number_of_employees": "Total number of employees"
+      },
+      "examples": {
+        "tech_company": {
+          "total_revenue": 5000000,
+          "number_of_employees": 50,
+          "expected_result": 100000
+        }
+      },
+      "use_cases": ["HR planning", "Operational efficiency", "Benchmarking", "Growth planning"]
+    }
+  },
+  "tax_calculations": {
+    "sales_tax": {
+      "name": "Sales Tax Calculator",
+      "description": "Calculate sales tax for purchases and business transactions",
+      "formula": "Sales Tax = Amount × Tax Rate",
+      "parameters": {
+        "amount": "Pre-tax amount",
+        "tax_rate": "Tax rate as decimal"
+      },
+      "examples": {
+        "retail_purchase": {
+          "amount": 100,
+          "tax_rate": 0.0825,
+          "expected_result": 8.25
+        }
+      },
+      "use_cases": ["Retail operations", "Invoice generation", "Tax compliance", "Budgeting"]
+    },
+    "income_tax_estimate": {
+      "name": "Income Tax Estimator",
+      "description": "Estimate federal income tax (simplified calculation)",
+      "formula": "Tax = Income × Tax Rate (simplified flat rate)",
+      "parameters": {
+        "annual_income": "Gross annual income",
+        "tax_rate": "Effective tax rate as decimal"
+      },
+      "examples": {
+        "professional_income": {
+          "annual_income": 80000,
+          "tax_rate": 0.22,
+          "expected_result": 17600
+        }
+      },
+      "use_cases": ["Tax planning", "Payroll calculations", "Financial planning", "Budgeting"]
+    }
+  },
+  "real_estate": {
+    "mortgage_affordability": {
+      "name": "Mortgage Affordability Calculator",
+      "description": "Calculate maximum affordable mortgage based on income",
+      "formula": "Max Mortgage = (Monthly Income × 0.28) × 12 / Annual Rate",
+      "parameters": {
+        "monthly_income": "Gross monthly income",
+        "debt_to_income_ratio": "Maximum debt-to-income ratio (typically 0.28)",
+        "interest_rate": "Annual mortgage interest rate"
+      },
+      "examples": {
+        "home_buyer": {
+          "monthly_income": 6000,
+          "debt_to_income_ratio": 0.28,
+          "interest_rate": 0.065,
+          "expected_result": 387692.31
+        }
+      },
+      "use_cases": ["Home buying", "Financial planning", "Real estate investment", "Lending decisions"]
+    },
+    "property_cash_flow": {
+      "name": "Rental Property Cash Flow",
+      "description": "Calculate cash flow for rental property investments",
+      "formula": "Cash Flow = Monthly Rent - (Mortgage + Taxes + Insurance + Maintenance)",
+      "parameters": {
+        "monthly_rent": "Expected monthly rental income",
+        "monthly_mortgage": "Monthly mortgage payment",
+        "monthly_expenses": "Monthly property expenses (taxes, insurance, maintenance)"
+      },
+      "examples": {
+        "rental_property": {
+          "monthly_rent": 2500,
+          "monthly_mortgage": 1800,
+          "monthly_expenses": 500,
+          "expected_result": 200
+        }
+      },
+      "use_cases": ["Real estate investment", "Property management", "Investment analysis"]
+    }
+  },
+  "retirement_planning": {
+    "retirement_savings_goal": {
+      "name": "Retirement Savings Goal Calculator",
+      "description": "Calculate how much to save monthly for retirement",
+      "formula": "Monthly Savings = (Retirement Goal × r) / [(1 + r)^n - 1] where r = annual_rate/12",
+      "parameters": {
+        "retirement_goal": "Target retirement savings amount",
+        "current_age": "Current age",
+        "retirement_age": "Planned retirement age",
+        "annual_return": "Expected annual return rate"
+      },
+      "examples": {
+        "retirement_planning": {
+          "retirement_goal": 1000000,
+          "current_age": 30,
+          "retirement_age": 65,
+          "annual_return": 0.07,
+          "expected_result": 671.89
+        }
+      },
+      "use_cases": ["Retirement planning", "Financial advisory", "Life planning", "Investment strategy"]
+    }
+  }
+}

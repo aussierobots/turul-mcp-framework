@@ -1,0 +1,442 @@
+//! # Development Team Resource Server
+//!
+//! This example demonstrates a real-world MCP resources server that provides access to 
+//! development team resources including project documentation, database schemas, 
+//! configuration files, and system status. This simulates a central resource hub 
+//! that development teams use to access project artifacts and documentation.
+
+use async_trait::async_trait;
+use mcp_server::{McpServer, McpResult};
+use mcp_server::handlers::McpResource;
+use mcp_protocol::resources::ResourceContent;
+use serde_json::json;
+use std::fs;
+use std::path::Path;
+use tracing::info;
+use chrono::{DateTime, Utc};
+
+/// Project documentation resource that loads from actual files
+/// Real-world use case: Central documentation hub for development teams
+struct ProjectDocumentationResource;
+
+#[async_trait]
+impl McpResource for ProjectDocumentationResource {
+    fn uri(&self) -> &str {
+        "docs://project"
+    }
+
+    fn name(&self) -> &str {
+        "Project Documentation"
+    }
+
+    fn description(&self) -> &str {
+        "Comprehensive project documentation including setup, architecture, and guidelines"
+    }
+
+    async fn read(&self) -> McpResult<Vec<ResourceContent>> {
+        let mut contents = Vec::new();
+        
+        // Load main project README
+        let readme_path = Path::new("../../README.md");
+        if readme_path.exists() {
+            match fs::read_to_string(readme_path) {
+                Ok(content) => {
+                    contents.push(ResourceContent::text(format!(
+                        "# Main Project Documentation\n\n{}", content
+                    )));
+                },
+                Err(_) => {
+                    contents.push(ResourceContent::text(
+                        "# Project Documentation\n\nMain README file not accessible".to_string()
+                    ));
+                }
+            }
+        }
+        
+        // Add project structure overview
+        contents.push(ResourceContent::text(
+            "# MCP Framework Project Structure\n\n\
+             ## Core Crates\n\
+             - `mcp-server/` - Main MCP server framework\n\
+             - `mcp-protocol/` - Protocol definitions and types\n\
+             - `mcp-derive/` - Procedural macros for tool generation\n\
+             - `http-mcp-server/` - HTTP transport layer\n\
+             - `json-rpc-server/` - JSON-RPC implementation\n\n\
+             ## Example Applications\n\
+             - 25 comprehensive examples demonstrating different patterns\n\
+             - Real-world use cases: IDE completion, CMS resources, notifications\n\
+             - Performance testing and benchmarking tools\n\n\
+             ## Development Workflow\n\
+             1. Make changes to core framework\n\
+             2. Update examples to demonstrate new features\n\
+             3. Run comprehensive test suite\n\
+             4. Update documentation and examples\n\
+             5. Performance testing and validation".to_string()
+        ));
+        
+        // Add architectural overview
+        contents.push(ResourceContent::text(
+            "# Architecture Overview\n\n\
+             ## MCP Protocol Implementation\n\
+             The framework implements the Model Context Protocol (MCP) 2025-06-18 specification:\n\n\
+             - **Tools**: Server-side functions that clients can invoke\n\
+             - **Resources**: Structured data and files that clients can access\n\
+             - **Prompts**: AI prompt templates for language model interactions\n\
+             - **Completion**: Auto-completion suggestions for user inputs\n\
+             - **Notifications**: Real-time updates via Server-Sent Events\n\n\
+             ## Session Management\n\
+             - Stateful operations with automatic cleanup\n\
+             - Type-safe state storage and retrieval\n\
+             - Progress tracking and notification broadcasting\n\n\
+             ## Development Patterns\n\
+             1. **Manual Implementation**: Full control with trait implementation\n\
+             2. **Derive Macros**: Automatic schema generation from structs\n\
+             3. **Function Macros**: Natural function-based tool definitions\n\
+             4. **Declarative Macros**: Ultra-concise tool creation".to_string()
+        ));
+        
+        Ok(contents)
+    }
+}
+
+/// API documentation resource loaded from external markdown file
+/// Real-world use case: Team API documentation accessible via MCP
+struct ApiDocumentationResource;
+
+#[async_trait]
+impl McpResource for ApiDocumentationResource {
+    fn uri(&self) -> &str {
+        "docs://api"
+    }
+
+    fn name(&self) -> &str {
+        "API Documentation"
+    }
+
+    fn description(&self) -> &str {
+        "Complete API documentation with authentication, endpoints, examples and SDKs"
+    }
+
+    async fn read(&self) -> McpResult<Vec<ResourceContent>> {
+        let api_docs_path = Path::new("data/api_docs.md");
+        
+        match fs::read_to_string(api_docs_path) {
+            Ok(content) => {
+                Ok(vec![ResourceContent::text(content)])
+            },
+            Err(_) => {
+                // Fallback content if file is not accessible
+                Ok(vec![
+                    ResourceContent::text(
+                        "# API Documentation\n\n\
+                         Documentation file not found at data/api_docs.md\n\n\
+                         This resource loads API documentation from external markdown files,\n\
+                         demonstrating how production systems maintain documentation\n\
+                         separate from code for easier updates and collaboration.\n\n\
+                         ## Expected Structure\n\
+                         - Authentication methods\n\
+                         - Base URLs and versioning\n\
+                         - Rate limiting policies\n\
+                         - Endpoint documentation\n\
+                         - Request/response examples\n\
+                         - SDK and client library information\n\
+                         - Error handling guidelines".to_string()
+                    )
+                ])
+            }
+        }
+    }
+}
+
+/// Configuration resource loaded from external JSON file
+/// Real-world use case: Production configuration management with external files
+struct ConfigurationResource;
+
+#[async_trait]
+impl McpResource for ConfigurationResource {
+    fn uri(&self) -> &str {
+        "config://app"
+    }
+
+    fn name(&self) -> &str {
+        "Application Configuration"
+    }
+
+    fn description(&self) -> &str {
+        "Production application configuration loaded from external JSON file"
+    }
+
+    async fn read(&self) -> McpResult<Vec<ResourceContent>> {
+        let config_path = Path::new("data/app_config.json");
+        
+        let mut contents = Vec::new();
+        
+        match fs::read_to_string(config_path) {
+            Ok(config_content) => {
+                // Parse and pretty-print the JSON for better readability
+                match serde_json::from_str::<serde_json::Value>(&config_content) {
+                    Ok(config_json) => {
+                        contents.push(ResourceContent::text(
+                            serde_json::to_string_pretty(&config_json).unwrap()
+                        ));
+                    },
+                    Err(_) => {
+                        contents.push(ResourceContent::text(config_content));
+                    }
+                }
+            },
+            Err(_) => {
+                contents.push(ResourceContent::text(
+                    "# Application Configuration\n\n\
+                     Configuration file not found at data/app_config.json\n\n\
+                     This resource demonstrates production configuration management\n\
+                     where configuration is externalized from code for:\n\n\
+                     - **Environment-specific settings**\n\
+                     - **Security**: Sensitive values via environment variables\n\
+                     - **Maintainability**: Configuration updates without deployments\n\
+                     - **Compliance**: Audit trails for configuration changes\n\n\
+                     ## Expected Configuration Sections\n\
+                     - Server settings (host, port, workers)\n\
+                     - Database configuration\n\
+                     - Redis/cache settings\n\
+                     - Authentication and security\n\
+                     - Feature flags\n\
+                     - Monitoring and observability\n\
+                     - External service integrations".to_string()
+                ));
+            }
+        }
+        
+        // Add environment variables documentation
+        contents.push(ResourceContent::text(
+            "# Environment Variables Guide\n\n\
+             ## Security Best Practices\n\
+             Never commit sensitive values to configuration files. Use environment variables:\n\n\
+             ```bash\n\
+             # Required secrets\n\
+             export JWT_SECRET=\"your-256-bit-secret\"\n\
+             export DB_PASSWORD=\"your-database-password\"\n\
+             export REDIS_PASSWORD=\"your-redis-password\"\n\
+             export S3_ACCESS_KEY=\"your-s3-access-key\"\n\
+             export S3_SECRET_KEY=\"your-s3-secret-key\"\n\n\
+             # Optional overrides\n\
+             export APP_PORT=\"8080\"\n\
+             export LOG_LEVEL=\"info\"\n\
+             export WORKERS=\"4\"\n\
+             ```\n\n\
+             ## Configuration Management\n\
+             1. **Development**: Use .env files (never commit)\n\
+             2. **Staging**: Environment-specific configs\n\
+             3. **Production**: Secure secret management systems\n\
+             4. **Docker**: Environment variables in compose files\n\
+             5. **Kubernetes**: ConfigMaps and Secrets".to_string()
+        ));
+        
+        Ok(contents)
+    }
+}
+
+/// Database schema resource loaded from external SQL file
+/// Real-world use case: Database schema documentation and migrations
+struct DatabaseSchemaResource;
+
+#[async_trait]
+impl McpResource for DatabaseSchemaResource {
+    fn uri(&self) -> &str {
+        "schema://database"
+    }
+
+    fn name(&self) -> &str {
+        "Database Schema"
+    }
+
+    fn description(&self) -> &str {
+        "Production database schema with tables, indexes, and relationships"
+    }
+
+    async fn read(&self) -> McpResult<Vec<ResourceContent>> {
+        let schema_path = Path::new("data/database_schema.sql");
+        
+        let mut contents = Vec::new();
+        
+        match fs::read_to_string(schema_path) {
+            Ok(schema_content) => {
+                contents.push(ResourceContent::text(schema_content));
+            },
+            Err(_) => {
+                contents.push(ResourceContent::text(
+                    "-- Database Schema\n\
+                     -- Schema file not found at data/database_schema.sql\n\n\
+                     /*\n\
+                      * This resource demonstrates how development teams manage\n\
+                      * database schemas using external SQL files for:\n\
+                      *\n\
+                      * - Version control: Track schema changes over time\n\
+                      * - Migrations: Structured database updates\n\
+                      * - Documentation: Living schema documentation\n\
+                      * - Team collaboration: Shared schema understanding\n\
+                      * - Deployment: Automated schema deployment\n\
+                      */\n\n\
+                     -- Expected schema structure:\n\
+                     -- ✓ User management tables\n\
+                     -- ✓ Content management (posts, comments)\n\
+                     -- ✓ Media and file storage\n\
+                     -- ✓ Authentication and sessions\n\
+                     -- ✓ Audit logs and tracking\n\
+                     -- ✓ Proper indexes and constraints\n\
+                     -- ✓ Views for common queries".to_string()
+                ));
+            }
+        }
+        
+        // Add database documentation
+        contents.push(ResourceContent::text(
+            "# Database Architecture Guide\n\n\
+             ## Schema Management Best Practices\n\n\
+             ### 1. Migration Strategy\n\
+             - **Version Control**: All schema changes in SQL files\n\
+             - **Forward-only**: Never edit existing migrations\n\
+             - **Rollback Plans**: Document rollback procedures\n\
+             - **Testing**: Test migrations on staging first\n\n\
+             ### 2. Performance Considerations\n\
+             - **Indexes**: Strategic indexing for query patterns\n\
+             - **Constraints**: Enforce data integrity at database level\n\
+             - **Partitioning**: Consider for large tables\n\
+             - **Monitoring**: Track query performance metrics\n\n\
+             ### 3. Security Features\n\
+             - **Row-level Security**: Implemented where needed\n\
+             - **Audit Trails**: Complete change tracking\n\
+             - **Access Control**: Minimal privilege principles\n\
+             - **Encryption**: Sensitive data protection\n\n\
+             ### 4. Backup and Recovery\n\
+             - **Automated Backups**: Daily production backups\n\
+             - **Point-in-time Recovery**: Transaction log backups\n\
+             - **Disaster Recovery**: Cross-region replication\n\
+             - **Testing**: Regular restore testing".to_string()
+        ));
+        
+        Ok(contents)
+    }
+}
+
+/// System status resource providing real-time information
+struct SystemStatusResource;
+
+#[async_trait]
+impl McpResource for SystemStatusResource {
+    fn uri(&self) -> &str {
+        "status://system"
+    }
+
+    fn name(&self) -> &str {
+        "System Status"
+    }
+
+    fn description(&self) -> &str {
+        "Real-time system status and health metrics"
+    }
+
+    async fn read(&self) -> McpResult<Vec<ResourceContent>> {
+        let now: DateTime<Utc> = Utc::now();
+        
+        let status = json!({
+            "timestamp": now.to_rfc3339(),
+            "uptime": "2d 14h 32m 18s",
+            "server": {
+                "status": "healthy",
+                "version": "1.2.3",
+                "environment": "production",
+                "last_restart": "2024-01-15T08:30:00Z"
+            },
+            "database": {
+                "status": "connected",
+                "connections": {
+                    "active": 15,
+                    "idle": 5,
+                    "max": 20
+                },
+                "response_time_ms": 12.5,
+                "last_backup": "2024-01-17T02:00:00Z"
+            },
+            "redis": {
+                "status": "connected",
+                "memory_usage": "245MB",
+                "keys": 12847,
+                "response_time_ms": 2.1
+            },
+            "resources": {
+                "cpu_usage": 45.2,
+                "memory_usage": 68.7,
+                "disk_usage": 23.4,
+                "network_io": {
+                    "rx_mbps": 125.3,
+                    "tx_mbps": 89.7
+                }
+            },
+            "metrics": {
+                "requests_per_minute": 1247,
+                "error_rate": 0.02,
+                "average_response_time_ms": 85.6,
+                "active_sessions": 342
+            }
+        });
+
+        Ok(vec![
+            ResourceContent::text(serde_json::to_string_pretty(&status).unwrap()),
+            ResourceContent::text(
+                "# System Health Report\n\n\
+                 ## Overall Status: ✅ HEALTHY\n\n\
+                 ### Services\n\
+                 - **Web Server**: ✅ Running (version 1.2.3)\n\
+                 - **Database**: ✅ Connected (PostgreSQL 15.2)\n\
+                 - **Cache**: ✅ Connected (Redis 7.0)\n\
+                 - **Background Jobs**: ✅ Processing\n\n\
+                 ### Performance\n\
+                 - **Response Time**: 85.6ms average\n\
+                 - **Error Rate**: 0.02% (well below 1% threshold)\n\
+                 - **Throughput**: 1,247 requests/minute\n\n\
+                 ### Resources\n\
+                 - **CPU**: 45.2% (normal)\n\
+                 - **Memory**: 68.7% (normal)\n\
+                 - **Disk**: 23.4% (plenty of space)\n\n\
+                 ### Alerts\n\
+                 No active alerts or warnings.".to_string()
+            ),
+        ])
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
+
+    info!("Starting Development Team Resource Server");
+
+    let server = McpServer::builder()
+        .name("development-resource-server")
+        .version("1.0.0")
+        .title("Development Team Resource Server")
+        .instructions("Real-world MCP resources server for development teams. Provides access to project documentation, API specs, configuration files, database schemas, and system status. Loads data from external files demonstrating production resource management patterns.")
+        .resource(ProjectDocumentationResource)
+        .resource(ApiDocumentationResource)
+        .resource(ConfigurationResource)
+        .resource(DatabaseSchemaResource)
+        .resource(SystemStatusResource)
+        .with_resources()
+        .bind_address("127.0.0.1:8041".parse()?)
+        .build()?;
+    
+    info!("Development resource server running at: http://127.0.0.1:8041/mcp");
+    info!("Real-world team resources available:");
+    info!("  - docs://project: Comprehensive project documentation and architecture");
+    info!("  - docs://api: Complete API documentation loaded from external markdown");
+    info!("  - config://app: Production configuration management with security best practices");
+    info!("  - schema://database: Database schema and migration management");
+    info!("  - status://system: Real-time system monitoring and health metrics");
+    info!("External data files: data/api_docs.md, data/app_config.json, data/database_schema.sql");
+
+    server.run().await?;
+    Ok(())
+}

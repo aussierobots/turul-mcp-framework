@@ -1,0 +1,122 @@
+{
+  "templates": {
+    "rust": {
+      "function": {
+        "template": "/// {description}\n/// \n/// # Arguments\n/// \n/// * `{param}` - {param_description}\n/// \n/// # Returns\n/// \n/// {return_description}\n/// \n/// # Examples\n/// \n/// ```rust\n/// let result = {function_name}({example_args});\n/// assert_eq!(result, {expected_result});\n/// ```\npub fn {function_name}({params}) -> {return_type} {\n    {implementation_hint}\n}",
+        "test_template": "#[cfg(test)]\nmod tests {\n    use super::*;\n\n    #[test]\n    fn test_{function_name}() {\n        let result = {function_name}({test_args});\n        assert_eq!(result, {expected});\n    }\n\n    #[test]\n    fn test_{function_name}_edge_cases() {\n        // Test edge cases here\n        {edge_case_tests}\n    }\n}"
+      },
+      "struct": {
+        "template": "/// {description}\n#[derive(Debug, Clone, PartialEq)]\npub struct {struct_name} {\n    {fields}\n}\n\nimpl {struct_name} {\n    /// Creates a new {struct_name}\n    pub fn new({constructor_params}) -> Self {\n        Self {\n            {field_assignments}\n        }\n    }\n\n    {methods}\n}"
+      },
+      "error": {
+        "template": "/// {description}\n#[derive(Debug, thiserror::Error)]\npub enum {error_name} {\n    {error_variants}\n}\n\npub type Result<T> = std::result::Result<T, {error_name}>;"
+      }
+    },
+    "python": {
+      "function": {
+        "template": "def {function_name}({params}) -> {return_type}:\n    \"\"\"{description}\n    \n    Args:\n        {param_docs}\n    \n    Returns:\n        {return_description}\n    \n    Raises:\n        {exceptions}\n    \n    Example:\n        >>> result = {function_name}({example_args})\n        >>> print(result)\n        {expected_output}\n    \"\"\"\n    {implementation_hint}",
+        "test_template": "import pytest\nfrom {module} import {function_name}\n\n\nclass Test{function_name_camel}:\n    def test_{function_name}_basic(self):\n        \"\"\"Test basic functionality.\"\"\"\n        result = {function_name}({test_args})\n        assert result == {expected}\n    \n    def test_{function_name}_edge_cases(self):\n        \"\"\"Test edge cases and error conditions.\"\"\"\n        {edge_case_tests}\n    \n    @pytest.mark.parametrize(\"input_data,expected\", [\n        {parametrized_tests}\n    ])\n    def test_{function_name}_parametrized(self, input_data, expected):\n        \"\"\"Test with multiple input combinations.\"\"\"\n        assert {function_name}(input_data) == expected"
+      },
+      "class": {
+        "template": "class {class_name}:\n    \"\"\"{description}\n    \n    Attributes:\n        {attribute_docs}\n    \"\"\"\n    \n    def __init__(self, {constructor_params}):\n        \"\"\"\n        Initialize {class_name}.\n        \n        Args:\n            {param_docs}\n        \"\"\"\n        {attribute_assignments}\n    \n    def __str__(self) -> str:\n        \"\"\"Return string representation.\"\"\"\n        return f\"{class_name}({self_attributes})\"\n    \n    def __repr__(self) -> str:\n        \"\"\"Return detailed string representation.\"\"\"\n        return self.__str__()\n    \n    {methods}"
+      }
+    },
+    "javascript": {
+      "function": {
+        "template": "/**\n * {description}\n * \n * @param {{type}} {param} - {param_description}\n * @returns {{return_type}} {return_description}\n * \n * @example\n * const result = {function_name}({example_args});\n * console.log(result); // {expected_output}\n */\nfunction {function_name}({params}) {\n    {implementation_hint}\n}",
+        "test_template": "describe('{function_name}', () => {\n    test('should {test_description}', () => {\n        const result = {function_name}({test_args});\n        expect(result).toBe({expected});\n    });\n    \n    test('should handle edge cases', () => {\n        {edge_case_tests}\n    });\n    \n    test('should throw error for invalid input', () => {\n        expect(() => {\n            {function_name}({invalid_args});\n        }).toThrow({expected_error});\n    });\n});"
+      },
+      "class": {
+        "template": "/**\n * {description}\n */\nclass {class_name} {\n    /**\n     * Create a {class_name}.\n     * @param {{Object}} options - Configuration options\n     * {param_docs}\n     */\n    constructor({constructor_params}) {\n        {property_assignments}\n    }\n    \n    /**\n     * {method_description}\n     * @param {{type}} {param} - {param_description}\n     * @returns {{return_type}} {return_description}\n     */\n    {methods}\n    \n    /**\n     * Convert to JSON representation.\n     * @returns {{Object}} JSON representation\n     */\n    toJSON() {\n        return {\n            {json_properties}\n        };\n    }\n}"
+      }
+    }
+  },
+  "best_practices": {
+    "rust": {
+      "naming": {
+        "functions": "snake_case",
+        "types": "PascalCase", 
+        "constants": "SCREAMING_SNAKE_CASE",
+        "modules": "snake_case"
+      },
+      "documentation": {
+        "required_sections": ["description", "arguments", "returns", "examples"],
+        "panic_documentation": "Document when functions panic",
+        "safety_documentation": "Document unsafe code safety requirements"
+      },
+      "error_handling": {
+        "prefer_result": "Use Result<T, E> for fallible operations",
+        "custom_errors": "Create custom error types with thiserror",
+        "error_context": "Provide meaningful error context"
+      }
+    },
+    "python": {
+      "naming": {
+        "functions": "snake_case",
+        "classes": "PascalCase",
+        "constants": "SCREAMING_SNAKE_CASE",
+        "modules": "snake_case"
+      },
+      "documentation": {
+        "style": "Google or NumPy docstring style",
+        "type_hints": "Always include type hints",
+        "examples": "Include doctest examples where appropriate"
+      },
+      "testing": {
+        "framework": "pytest",
+        "coverage": "Aim for >90% test coverage",
+        "fixtures": "Use pytest fixtures for setup/teardown"
+      }
+    },
+    "javascript": {
+      "naming": {
+        "functions": "camelCase",
+        "classes": "PascalCase",
+        "constants": "SCREAMING_SNAKE_CASE",
+        "files": "kebab-case"
+      },
+      "documentation": {
+        "style": "JSDoc format",
+        "type_annotations": "Use TypeScript or JSDoc @param/@returns",
+        "examples": "Include usage examples in comments"
+      },
+      "testing": {
+        "framework": "Jest or Vitest",
+        "structure": "Describe/test pattern",
+        "mocking": "Mock external dependencies"
+      }
+    }
+  },
+  "code_review_checklist": {
+    "general": [
+      "Is the code readable and well-documented?",
+      "Are there sufficient tests covering edge cases?",
+      "Is error handling appropriate and comprehensive?",
+      "Are there any security vulnerabilities?",
+      "Is performance acceptable for the use case?",
+      "Does the code follow the project's style guidelines?",
+      "Are there any breaking changes to the API?"
+    ],
+    "rust": [
+      "Are lifetimes properly managed?",
+      "Is unsafe code properly documented and justified?",
+      "Are error types appropriate and informative?",
+      "Is memory usage efficient?",
+      "Are dependencies minimized and necessary?"
+    ],
+    "python": [
+      "Are type hints comprehensive and accurate?",
+      "Is the code compatible with the target Python version?",
+      "Are there any performance bottlenecks in hot paths?",
+      "Is the code properly formatted with black/ruff?",
+      "Are imports organized and minimal?"
+    ],
+    "javascript": [
+      "Is the code compatible with target browser/Node versions?",
+      "Are there any prototype pollution vulnerabilities?",
+      "Is bundle size impact acceptable?",
+      "Are async operations properly handled?",
+      "Is the code properly formatted with prettier/eslint?"
+    ]
+  }
+}

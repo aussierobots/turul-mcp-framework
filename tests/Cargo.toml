@@ -1,0 +1,24 @@
+[package]
+name = "mcp-framework-integration-tests"
+version = "0.1.0"
+edition.workspace = true
+
+[lib]
+name = "integration_tests"
+path = "integration_tests.rs"
+
+[dependencies]
+mcp-derive = { workspace = true }
+mcp-server = { workspace = true }
+mcp-protocol = { workspace = true }
+mcp-protocol-2025-06-18 = { workspace = true }
+tokio = { workspace = true }
+tokio-test = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+async-trait = { workspace = true }
+reqwest = { workspace = true }
+futures = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+chrono = { workspace = true }

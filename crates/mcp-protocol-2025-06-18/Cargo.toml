@@ -1,0 +1,24 @@
+[package]
+name = "mcp-protocol-2025-06-18"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Model Context Protocol (MCP) specification implementation - 2025-06-18 version"
+
+[features]
+default = []
+server = []  # Server-side features
+client = []  # Client-side features
+
+[dependencies]
+json-rpc-server.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

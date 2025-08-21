@@ -1,0 +1,56 @@
+[package]
+name = "performance-testing"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[[bin]]
+name = "load_test_server"
+path = "src/load_test_server.rs"
+
+[[bin]]
+name = "performance_client"
+path = "src/performance_client.rs"
+
+[[bin]]
+name = "stress_test"
+path = "src/stress_test.rs"
+
+[[bin]]
+name = "memory_benchmark"
+path = "src/memory_benchmark.rs"
+
+[dependencies]
+mcp-server = { workspace = true }
+mcp-derive = { workspace = true }
+http-mcp-server = { workspace = true }
+mcp-protocol = { workspace = true }
+
+tokio = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+clap = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
+futures = { workspace = true }
+async-trait = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name = "tool_execution"
+harness = false
+
+[[bench]]
+name = "session_management"
+harness = false
+
+[[bench]]
+name = "notification_broadcasting"
+harness = false

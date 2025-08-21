@@ -1,0 +1,264 @@
+{
+  "platform_info": {
+    "name": "Development Team Integration Platform",
+    "version": "2.1.0",
+    "description": "Comprehensive platform integrating development workflows, team collaboration, and project management",
+    "environment": "production",
+    "deployment_region": "us-west-2",
+    "last_updated": "2025-01-19T12:00:00Z"
+  },
+  "team_configuration": {
+    "organization": {
+      "name": "Tech Innovation Corp",
+      "teams": [
+        {
+          "name": "Platform Engineering",
+          "id": "platform-eng",
+          "lead": "Sarah Chen",
+          "members": ["alex.kim", "maria.rodriguez", "james.wilson", "priya.patel"],
+          "focus_areas": ["Infrastructure", "DevOps", "Monitoring", "Security"],
+          "tech_stack": ["Kubernetes", "Terraform", "Prometheus", "Grafana", "AWS"],
+          "repositories": ["platform-core", "infrastructure-as-code", "monitoring-stack"],
+          "on_call_rotation": true
+        },
+        {
+          "name": "Backend Services",
+          "id": "backend-services",
+          "lead": "Michael Zhang",
+          "members": ["olivia.brown", "david.garcia", "emma.johnson", "ryan.lee"],
+          "focus_areas": ["APIs", "Databases", "Microservices", "Performance"],
+          "tech_stack": ["Node.js", "PostgreSQL", "Redis", "Docker", "gRPC"],
+          "repositories": ["user-service", "payment-service", "notification-service", "analytics-api"],
+          "on_call_rotation": true
+        },
+        {
+          "name": "Frontend Platform",
+          "id": "frontend-platform",
+          "lead": "Jessica Park",
+          "members": ["kevin.martinez", "sophia.taylor", "daniel.white", "chloe.anderson"],
+          "focus_areas": ["Web Applications", "Mobile Apps", "UI/UX", "Accessibility"],
+          "tech_stack": ["React", "TypeScript", "Next.js", "React Native", "Tailwind CSS"],
+          "repositories": ["web-app", "mobile-app", "design-system", "admin-dashboard"],
+          "on_call_rotation": false
+        },
+        {
+          "name": "Data Engineering",
+          "id": "data-engineering",
+          "lead": "Andrew Thompson",
+          "members": ["natalie.davis", "jonathan.miller", "samantha.clark"],
+          "focus_areas": ["Data Pipelines", "Analytics", "Machine Learning", "ETL"],
+          "tech_stack": ["Python", "Apache Kafka", "Snowflake", "dbt", "Airflow"],
+          "repositories": ["data-pipeline", "ml-models", "analytics-dashboard", "etl-jobs"],
+          "on_call_rotation": true
+        }
+      ]
+    },
+    "projects": [
+      {
+        "name": "Customer Portal Redesign",
+        "id": "customer-portal-v2",
+        "status": "in_progress",
+        "priority": "high",
+        "start_date": "2025-01-01",
+        "target_date": "2025-03-15",
+        "teams": ["frontend-platform", "backend-services"],
+        "budget": 750000,
+        "milestones": [
+          {"name": "Design System", "date": "2025-01-20", "status": "completed"},
+          {"name": "API Development", "date": "2025-02-10", "status": "in_progress"},
+          {"name": "Frontend Implementation", "date": "2025-02-28", "status": "planned"},
+          {"name": "Testing & QA", "date": "2025-03-10", "status": "planned"},
+          {"name": "Production Deployment", "date": "2025-03-15", "status": "planned"}
+        ]
+      },
+      {
+        "name": "Real-time Analytics Platform",
+        "id": "analytics-platform",
+        "status": "planning",
+        "priority": "medium",
+        "start_date": "2025-02-01",
+        "target_date": "2025-06-30",
+        "teams": ["data-engineering", "platform-eng"],
+        "budget": 500000,
+        "milestones": [
+          {"name": "Architecture Design", "date": "2025-02-15", "status": "planned"},
+          {"name": "Data Pipeline Setup", "date": "2025-03-30", "status": "planned"},
+          {"name": "Dashboard Development", "date": "2025-05-15", "status": "planned"},
+          {"name": "Performance Optimization", "date": "2025-06-15", "status": "planned"}
+        ]
+      },
+      {
+        "name": "Security Compliance Initiative",
+        "id": "security-compliance",
+        "status": "in_progress",
+        "priority": "critical",
+        "start_date": "2024-12-01",
+        "target_date": "2025-04-01",
+        "teams": ["platform-eng", "backend-services"],
+        "budget": 300000,
+        "milestones": [
+          {"name": "Security Audit", "date": "2025-01-15", "status": "completed"},
+          {"name": "Vulnerability Remediation", "date": "2025-02-28", "status": "in_progress"},
+          {"name": "Compliance Documentation", "date": "2025-03-15", "status": "planned"},
+          {"name": "External Certification", "date": "2025-04-01", "status": "planned"}
+        ]
+      }
+    ]
+  },
+  "integration_settings": {
+    "version_control": {
+      "platform": "GitHub Enterprise",
+      "organization": "tech-innovation-corp",
+      "default_branch": "main",
+      "required_reviews": 2,
+      "auto_merge": false,
+      "branch_protection": true
+    },
+    "ci_cd": {
+      "platform": "GitHub Actions",
+      "environments": ["development", "staging", "production"],
+      "deployment_gates": {
+        "staging": ["unit_tests", "integration_tests", "security_scan"],
+        "production": ["manual_approval", "performance_tests", "smoke_tests"]
+      },
+      "notifications": {
+        "slack_channel": "#deployments",
+        "email_groups": ["platform-team@company.com", "devops@company.com"]
+      }
+    },
+    "monitoring": {
+      "apm": "New Relic",
+      "logging": "Datadog",
+      "metrics": "Prometheus + Grafana",
+      "alerting": {
+        "pagerduty_integration": true,
+        "slack_alerts": "#incidents",
+        "escalation_policy": "devops-escalation"
+      }
+    },
+    "project_management": {
+      "platform": "Jira",
+      "workflow": "Scrum",
+      "sprint_length": "2 weeks",
+      "story_points": true,
+      "custom_fields": ["Technical Debt", "Security Impact", "Performance Impact"]
+    },
+    "communication": {
+      "primary": "Slack",
+      "channels": {
+        "general": "#general",
+        "engineering": "#engineering",
+        "incidents": "#incidents",
+        "deployments": "#deployments",
+        "random": "#random"
+      },
+      "meeting_tools": ["Google Meet", "Zoom"],
+      "documentation": "Confluence"
+    }
+  },
+  "development_workflows": {
+    "code_review": {
+      "required_reviewers": 2,
+      "auto_assign": true,
+      "review_checklist": [
+        "Code follows team standards",
+        "Tests are included and passing",
+        "Documentation is updated",
+        "Security considerations addressed",
+        "Performance impact assessed"
+      ],
+      "approval_rules": {
+        "senior_dev_required": true,
+        "team_lead_for_architecture": true,
+        "security_review_for_auth": true
+      }
+    },
+    "testing": {
+      "unit_tests": {
+        "required": true,
+        "coverage_threshold": 80,
+        "frameworks": ["Jest", "pytest", "RSpec"]
+      },
+      "integration_tests": {
+        "required_for_apis": true,
+        "test_environments": ["staging"],
+        "frameworks": ["Cypress", "Postman", "TestContainers"]
+      },
+      "e2e_tests": {
+        "schedule": "nightly",
+        "critical_paths_only": false,
+        "frameworks": ["Playwright", "Selenium"]
+      }
+    },
+    "deployment": {
+      "strategy": "blue-green",
+      "rollback_threshold": "5% error_rate",
+      "canary_percentage": 10,
+      "monitoring_window": "30 minutes",
+      "approval_process": {
+        "staging": "automatic",
+        "production": "manual"
+      }
+    }
+  },
+  "compliance_and_security": {
+    "standards": ["SOC2", "GDPR", "HIPAA"],
+    "security_scanning": {
+      "sast": "SonarQube",
+      "dependency_check": "Snyk",
+      "container_scanning": "Trivy",
+      "schedule": "every_commit"
+    },
+    "data_protection": {
+      "encryption_at_rest": true,
+      "encryption_in_transit": true,
+      "key_management": "AWS KMS",
+      "data_classification": ["public", "internal", "confidential", "restricted"]
+    },
+    "access_control": {
+      "sso_provider": "Okta",
+      "mfa_required": true,
+      "role_based_access": true,
+      "regular_access_review": "quarterly"
+    }
+  },
+  "performance_metrics": {
+    "development_kpis": {
+      "deployment_frequency": "daily",
+      "lead_time": "< 2 days",
+      "change_failure_rate": "< 5%",
+      "mttr": "< 4 hours"
+    },
+    "quality_metrics": {
+      "bug_escape_rate": "< 2%",
+      "test_coverage": "> 80%",
+      "code_review_coverage": "100%",
+      "documentation_coverage": "> 70%"
+    },
+    "operational_metrics": {
+      "uptime": "> 99.9%",
+      "response_time": "< 200ms p95",
+      "error_rate": "< 0.1%",
+      "capacity_utilization": "< 70%"
+    }
+  },
+  "innovation_initiatives": {
+    "technology_radar": {
+      "adopt": ["Kubernetes", "GraphQL", "TypeScript"],
+      "trial": ["Rust", "WebAssembly", "Temporal"],
+      "assess": ["Deno", "Solid.js", "Tauri"],
+      "hold": ["jQuery", "Bower", "Gulp"]
+    },
+    "learning_and_development": {
+      "tech_talks": "bi-weekly",
+      "conference_budget": 5000,
+      "certification_support": true,
+      "innovation_time": "20%"
+    },
+    "open_source": {
+      "contribution_encouraged": true,
+      "internal_projects_public": ["design-system", "deployment-tools"],
+      "oss_friday": "last_friday_of_month"
+    }
+  }
+}

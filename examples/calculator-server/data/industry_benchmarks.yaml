@@ -1,0 +1,277 @@
+industry_benchmarks:
+  technology:
+    name: "Technology & Software"
+    description: "Benchmarks for technology companies and software businesses"
+    metrics:
+      gross_margin:
+        typical_range: [70, 90]
+        unit: "percentage"
+        description: "Typical gross margin for software companies"
+      
+      customer_acquisition_cost:
+        saas_b2b: [200, 1500]
+        saas_b2c: [50, 200]
+        unit: "dollars"
+        description: "Cost to acquire a new customer"
+      
+      churn_rate_monthly:
+        saas_b2b: [2, 8]
+        saas_b2c: [5, 15]
+        unit: "percentage"
+        description: "Monthly customer churn rate"
+      
+      revenue_per_employee:
+        range: [150000, 500000]
+        unit: "dollars"
+        description: "Annual revenue per employee"
+      
+      ltv_cac_ratio:
+        healthy_minimum: 3.0
+        excellent: 5.0
+        unit: "ratio"
+        description: "Lifetime Value to Customer Acquisition Cost ratio"
+
+  retail:
+    name: "Retail & E-commerce"
+    description: "Benchmarks for retail and e-commerce businesses"
+    metrics:
+      gross_margin:
+        typical_range: [20, 50]
+        unit: "percentage"
+        description: "Typical gross margin for retail businesses"
+      
+      inventory_turnover:
+        range: [4, 12]
+        unit: "times_per_year"
+        description: "How many times inventory is sold per year"
+      
+      conversion_rate:
+        ecommerce: [2, 4]
+        retail_store: [15, 25]
+        unit: "percentage"
+        description: "Percentage of visitors who make a purchase"
+      
+      average_order_value:
+        varies_by_category: true
+        examples:
+          clothing: [75, 150]
+          electronics: [200, 800]
+          home_goods: [50, 300]
+        unit: "dollars"
+
+  manufacturing:
+    name: "Manufacturing"
+    description: "Benchmarks for manufacturing and production businesses"
+    metrics:
+      gross_margin:
+        typical_range: [25, 45]
+        unit: "percentage"
+        description: "Typical gross margin for manufacturing"
+      
+      inventory_days:
+        range: [30, 90]
+        unit: "days"
+        description: "Days of inventory on hand"
+      
+      equipment_utilization:
+        target: [75, 85]
+        unit: "percentage"
+        description: "Percentage of time equipment is productive"
+      
+      revenue_per_employee:
+        range: [100000, 300000]
+        unit: "dollars"
+        description: "Annual revenue per employee"
+
+  financial_services:
+    name: "Financial Services"
+    description: "Benchmarks for banks, insurance, and financial companies"
+    metrics:
+      net_interest_margin:
+        banks: [3, 5]
+        credit_unions: [2.5, 4]
+        unit: "percentage"
+        description: "Net interest income as percentage of interest-earning assets"
+      
+      loan_loss_provision:
+        typical: [0.5, 2]
+        recession: [3, 6]
+        unit: "percentage"
+        description: "Provision for loan losses as percentage of loans"
+      
+      return_on_equity:
+        target: [10, 15]
+        unit: "percentage"
+        description: "Net income as percentage of shareholder equity"
+
+  healthcare:
+    name: "Healthcare"
+    description: "Benchmarks for healthcare providers and services"
+    metrics:
+      operating_margin:
+        hospitals: [1, 4]
+        clinics: [5, 15]
+        unit: "percentage"
+        description: "Operating income as percentage of revenue"
+      
+      patient_satisfaction:
+        target: [85, 95]
+        unit: "percentage"
+        description: "Patient satisfaction scores"
+      
+      staff_to_patient_ratio:
+        varies_by_service: true
+        examples:
+          icu: 1.0
+          general_ward: 0.25
+          emergency: 0.5
+        unit: "nurses_per_patient"
+
+  hospitality:
+    name: "Hospitality & Travel"
+    description: "Benchmarks for hotels, restaurants, and travel businesses"
+    metrics:
+      occupancy_rate:
+        hotels: [65, 80]
+        unit: "percentage"
+        description: "Percentage of rooms occupied"
+      
+      revenue_per_available_room:
+        varies_by_location: true
+        urban: [100, 300]
+        suburban: [60, 150]
+        unit: "dollars"
+        description: "RevPAR for hotel properties"
+      
+      food_cost_percentage:
+        restaurants: [25, 35]
+        unit: "percentage"
+        description: "Food costs as percentage of revenue"
+      
+      labor_cost_percentage:
+        restaurants: [25, 35]
+        hotels: [40, 55]
+        unit: "percentage"
+        description: "Labor costs as percentage of revenue"
+
+  real_estate:
+    name: "Real Estate"
+    description: "Benchmarks for real estate investment and management"
+    metrics:
+      cap_rate:
+        multifamily: [4, 8]
+        office: [5, 9]
+        retail: [6, 10]
+        industrial: [5, 8]
+        unit: "percentage"
+        description: "Capitalization rate for property valuation"
+      
+      gross_rent_multiplier:
+        residential: [8, 15]
+        commercial: [6, 12]
+        unit: "multiple"
+        description: "Property price divided by gross annual rent"
+      
+      vacancy_rate:
+        target: [3, 7]
+        unit: "percentage"
+        description: "Percentage of units vacant"
+      
+      debt_service_coverage:
+        minimum: 1.25
+        preferred: 1.5
+        unit: "ratio"
+        description: "Cash flow divided by debt service"
+
+regional_adjustments:
+  cost_of_living:
+    high_cost_areas:
+      - "San Francisco Bay Area"
+      - "New York City"
+      - "Seattle"
+      - "Boston"
+      adjustment_factor: 1.3
+    
+    moderate_cost_areas:
+      - "Chicago"
+      - "Austin"
+      - "Denver"
+      - "Atlanta"
+      adjustment_factor: 1.1
+    
+    low_cost_areas:
+      - "Kansas City"
+      - "Phoenix"
+      - "Dallas"
+      - "Nashville"
+      adjustment_factor: 0.9
+
+economic_conditions:
+  recession:
+    description: "Adjustments during economic downturns"
+    adjustments:
+      - metric: "churn_rate"
+        multiplier: 1.5
+        reason: "Higher customer churn during recessions"
+      
+      - metric: "customer_acquisition_cost" 
+        multiplier: 1.3
+        reason: "More expensive to acquire customers"
+      
+      - metric: "gross_margin"
+        adjustment: -5
+        reason: "Pricing pressure reduces margins"
+
+  growth_period:
+    description: "Adjustments during rapid economic growth"
+    adjustments:
+      - metric: "revenue_per_employee"
+        multiplier: 1.2
+        reason: "Higher productivity during growth periods"
+      
+      - metric: "conversion_rate"
+        multiplier: 1.1
+        reason: "Increased consumer confidence"
+
+calculation_notes:
+  data_sources:
+    - "Industry reports from McKinsey & Company"
+    - "PwC Annual Industry Surveys"
+    - "Deloitte Industry Benchmarking Studies"
+    - "Federal Reserve Economic Data (FRED)"
+    - "Bureau of Labor Statistics"
+  
+  currency: "USD"
+  last_updated: "2025-01-19"
+  
+  usage_guidelines:
+    - "Benchmarks are general guidelines and may vary significantly by company size, location, and specific circumstances"
+    - "Always consider multiple data points when making business decisions"
+    - "Adjust for regional and economic conditions as appropriate"
+    - "Use for comparative analysis rather than absolute targets"
+    - "Consult with industry experts for specific strategic decisions"
+
+benchmark_categories:
+  profitability:
+    - "gross_margin"
+    - "operating_margin" 
+    - "net_margin"
+    - "return_on_equity"
+  
+  efficiency:
+    - "revenue_per_employee"
+    - "inventory_turnover"
+    - "asset_turnover"
+    - "equipment_utilization"
+  
+  customer_metrics:
+    - "customer_acquisition_cost"
+    - "customer_lifetime_value"
+    - "churn_rate"
+    - "conversion_rate"
+  
+  financial_health:
+    - "debt_to_equity"
+    - "current_ratio"
+    - "debt_service_coverage"
+    - "cash_flow_margin"

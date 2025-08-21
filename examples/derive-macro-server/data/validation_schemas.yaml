@@ -1,0 +1,270 @@
+validation_schemas:
+  code_structure:
+    rust_project:
+      name: "Rust Project Structure"
+      description: "Validate Rust project structure and dependencies"
+      rules:
+        required_files:
+          - "Cargo.toml"
+          - "src/main.rs OR src/lib.rs"
+        recommended_files:
+          - "README.md"
+          - ".gitignore"
+          - "LICENSE"
+        cargo_toml_sections:
+          required:
+            - "package"
+            - "dependencies"
+          optional:
+            - "dev-dependencies"
+            - "build-dependencies"
+            - "features"
+        dependency_validation:
+          version_format: "semantic_version"
+          security_check: true
+          outdated_check: true
+          
+    typescript_project:
+      name: "TypeScript Project Structure"
+      description: "Validate TypeScript/Node.js project structure"
+      rules:
+        required_files:
+          - "package.json"
+          - "tsconfig.json"
+        entry_points:
+          - "src/index.ts"
+          - "src/main.ts"
+          - "index.ts"
+        configuration_files:
+          - "eslint.config.js"
+          - ".prettierrc"
+          - "jest.config.js"
+          
+  configuration_validation:
+    database_config:
+      name: "Database Configuration"
+      description: "Validate database connection and schema configuration"
+      schema:
+        type: "object"
+        required: ["host", "port", "database", "username"]
+        properties:
+          host:
+            type: "string"
+            pattern: "^[a-zA-Z0-9.-]+$"
+          port:
+            type: "integer"
+            minimum: 1
+            maximum: 65535
+          database:
+            type: "string"
+            minLength: 1
+            maxLength: 64
+          username:
+            type: "string"
+            minLength: 1
+            maxLength: 32
+          password:
+            type: "string"
+            minLength: 8
+            security_note: "Should be stored securely, not in plain text"
+          ssl_mode:
+            type: "string"
+            enum: ["disable", "require", "verify-ca", "verify-full"]
+          connection_pool:
+            type: "object"
+            properties:
+              max_size:
+                type: "integer"
+                minimum: 1
+                maximum: 100
+              timeout:
+                type: "integer"
+                minimum: 1000
+                maximum: 30000
+                
+    api_config:
+      name: "API Configuration"
+      description: "Validate REST API server configuration"
+      schema:
+        type: "object"
+        required: ["server", "security"]
+        properties:
+          server:
+            type: "object"
+            required: ["host", "port"]
+            properties:
+              host:
+                type: "string"
+                default: "127.0.0.1"
+              port:
+                type: "integer"
+                minimum: 1024
+                maximum: 65535
+              max_connections:
+                type: "integer"
+                minimum: 1
+                maximum: 10000
+                default: 1000
+          security:
+            type: "object"
+            required: ["cors", "rate_limiting"]
+            properties:
+              cors:
+                type: "object"
+                properties:
+                  allowed_origins:
+                    type: "array"
+                    items:
+                      type: "string"
+                      pattern: "^https?://[a-zA-Z0-9.-]+(:[0-9]+)?$"
+                  allowed_methods:
+                    type: "array"
+                    items:
+                      type: "string"
+                      enum: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
+              rate_limiting:
+                type: "object"
+                properties:
+                  requests_per_minute:
+                    type: "integer"
+                    minimum: 1
+                    maximum: 10000
+                  burst_size:
+                    type: "integer"
+                    minimum: 1
+                    maximum: 1000
+                    
+  code_quality:
+    complexity_metrics:
+      name: "Code Complexity Analysis"
+      description: "Analyze code complexity and maintainability metrics"
+      metrics:
+        cyclomatic_complexity:
+          threshold: 10
+          description: "Maximum cyclomatic complexity per function"
+        function_length:
+          max_lines: 50
+          description: "Maximum lines of code per function"
+        parameter_count:
+          max_params: 7
+          description: "Maximum parameters per function"
+        nesting_depth:
+          max_depth: 4
+          description: "Maximum nesting depth in functions"
+        class_methods:
+          max_methods: 20
+          description: "Maximum methods per class/struct"
+          
+    security_validation:
+      name: "Security Code Analysis"
+      description: "Validate code for common security vulnerabilities"
+      rules:
+        input_validation:
+          - "Always validate user input"
+          - "Use parameterized queries for database operations"
+          - "Sanitize output data"
+        authentication:
+          - "Use secure session management"
+          - "Implement proper password hashing"
+          - "Validate JWT tokens securely"
+        data_protection:
+          - "Encrypt sensitive data at rest"
+          - "Use HTTPS for data in transit"
+          - "Implement proper error handling without information leakage"
+        dependency_security:
+          - "Regularly update dependencies"
+          - "Check for known vulnerabilities"
+          - "Use dependency scanning tools"
+          
+  performance_standards:
+    response_times:
+      name: "API Response Time Standards"
+      description: "Performance benchmarks for API endpoints"
+      thresholds:
+        excellent: "< 100ms"
+        good: "< 300ms"
+        acceptable: "< 1000ms"
+        poor: "> 1000ms"
+      optimization_tips:
+        - "Use database indexing for frequent queries"
+        - "Implement caching for static data"
+        - "Optimize N+1 query patterns"
+        - "Use connection pooling"
+        
+    resource_usage:
+      name: "Resource Usage Guidelines"
+      description: "Memory and CPU usage benchmarks"
+      limits:
+        memory:
+          development: "512MB"
+          staging: "1GB"
+          production: "2GB"
+        cpu:
+          idle: "< 5%"
+          normal_load: "< 50%"
+          peak_load: "< 80%"
+      monitoring:
+        - "Track memory leaks"
+        - "Monitor garbage collection patterns"
+        - "Profile CPU-intensive operations"
+        - "Set up alerting for resource thresholds"
+        
+data_format_validation:
+  json_schema:
+    name: "JSON Schema Validation"
+    description: "Validate JSON data against predefined schemas"
+    common_patterns:
+      iso_date: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{3})?Z?$"
+      email: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+      uuid: "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      semver: "^\\d+\\.\\d+\\.\\d+(-(alpha|beta|rc)\\.\\d+)?$"
+      
+  yaml_validation:
+    name: "YAML Configuration Validation"
+    description: "Validate YAML files for syntax and structure"
+    rules:
+      indentation: "consistent, 2 or 4 spaces"
+      quotation: "consistent usage of quotes"
+      line_length: "< 120 characters"
+      boolean_values: "true/false, yes/no, on/off"
+      
+  toml_validation:
+    name: "TOML Configuration Validation"
+    description: "Validate TOML files (Cargo.toml, config files)"
+    rules:
+      sections: "properly defined with [section_name]"
+      key_format: "snake_case or kebab-case consistently"
+      string_quotes: "use double quotes for strings"
+      arrays: "consistent formatting and trailing commas"
+      
+testing_standards:
+  unit_testing:
+    name: "Unit Test Standards"
+    description: "Guidelines for writing effective unit tests"
+    coverage_targets:
+      minimum: 70
+      recommended: 85
+      excellent: 95
+    naming_conventions:
+      test_function: "test_should_do_something_when_condition"
+      test_module: "tests"
+      test_file: "*_test.rs, test_*.rs"
+    best_practices:
+      - "One assertion per test when possible"
+      - "Use descriptive test names"
+      - "Test edge cases and error conditions"
+      - "Mock external dependencies"
+      - "Keep tests independent and isolated"
+      
+  integration_testing:
+    name: "Integration Test Standards"
+    description: "Guidelines for integration testing"
+    test_environments:
+      - "Use test databases/services"
+      - "Isolate test data"
+      - "Clean up after tests"
+    api_testing:
+      - "Test complete request/response cycles"
+      - "Validate status codes and response formats"
+      - "Test authentication and authorization"
+      - "Test rate limiting and error handling"

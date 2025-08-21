@@ -1,0 +1,695 @@
+//! # MCP Framework Integration Tests
+//!
+//! Comprehensive integration tests to verify MCP 2025-06-18 specification compliance
+//! and framework functionality.
+
+use std::collections::HashMap;
+use std::time::Duration;
+
+use mcp_derive::McpTool;
+use mcp_server::{McpTool, SessionContext};
+use mcp_server::{McpServer, HasData, HasMeta}; // TODO: Use for advanced tests
+use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema};
+use mcp_protocol_2025_06_18::{
+    Meta, ProgressToken, JsonRpcRequest, JsonRpcResponse, RequestParams, ResultWithMeta,
+    JsonRpcError, JsonRpcNotification
+}; // TODO: Use for advanced protocol tests
+use serde_json::{json, Value};
+use async_trait::async_trait;
+
+/// Test tool for integration testing
+#[derive(McpTool, Clone)]
+#[tool(name = "test_add", description = "Add two numbers")]
+struct AddTool {
+    #[param(description = "First number")]
+    a: f64,
+    #[param(description = "Second number")]
+    b: f64,
+}
+
+impl AddTool {
+    async fn execute(&self) -> mcp_server::McpResult<String> {
+        Ok(format!("{} + {} = {}", self.a, self.b, self.a + self.b))
+    }
+}
+
+// TODO: Re-enable when McpResource derive macro is fully implemented
+/*
+/// Test resource for integration testing
+#[derive(McpResource)]
+#[uri = "test://data"]
+#[name = "Test Data"]
+#[description = "Test data resource"]
+struct TestResource {
+    #[content]
+    #[content_type = "application/json"]
+    data: String,
+}
+
+impl TestResource {
+    fn new() -> Self {
+        Self {
+            data: json!({
+                "test": true,
+                "message": "Integration test data"
+            }).to_string(),
+        }
+    }
+}
+*/
+
+/// Session-aware tool for testing session management
+struct SessionTool;
+
+#[async_trait]
+impl McpTool for SessionTool {
+    fn name(&self) -> &str {
+        "session_test"
+    }
+    
+    fn description(&self) -> &str {
+        "Test session functionality"
+    }
+    
+    fn input_schema(&self) -> ToolSchema {
+        ToolSchema::object()
+            .with_properties(HashMap::from([
+                ("message".to_string(), JsonSchema::string().with_description("Test message")),
+            ]))
+            .with_required(vec!["message".to_string()])
+    }
+    
+    async fn call(&self, args: Value, session: Option<SessionContext>) -> mcp_server::McpResult<Vec<ToolResult>> {
+        let message = args["message"].as_str().unwrap_or("default");
+        
+        let mut response = HashMap::new();
+        response.insert("received_message".to_string(), json!(message));
+        
+        if let Some(session) = session {
+            response.insert("has_session".to_string(), json!(true));
+            response.insert("session_id".to_string(), json!(session.session_id.to_string()));
+            
+            // Test session state
+            let counter: u64 = (session.get_state)("counter")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            (session.set_state)("counter", json!(counter + 1));
+            response.insert("call_count".to_string(), json!(counter + 1));
+        } else {
+            response.insert("has_session".to_string(), json!(false));
+        }
+        
+        let result_json = serde_json::to_value(response).map_err(|e| e.to_string())?;
+        Ok(vec![ToolResult::text(result_json.to_string())])
+    }
+}
+
+#[tokio::test]
+async fn test_derive_macro_tool() {
+    let tool = AddTool { a: 5.0, b: 3.0 };
+    
+    // Test basic properties
+    assert_eq!(tool.name(), "test_add");
+    assert_eq!(tool.description(), "Add two numbers");
+    
+    // Test schema generation
+    let schema = tool.input_schema();
+    println!("Tool schema: {:?}", schema);
+    
+    // Test execution
+    let args = json!({ "a": 10.0, "b": 5.0 });
+    let result = tool.call(args, None).await;
+    
+    assert!(result.is_ok());
+    let results = result.unwrap();
+    assert_eq!(results.len(), 1);
+    
+    // The exact format may vary, but should contain the calculation
+    let result_text = match &results[0] {
+        ToolResult::Text { text } => text,
+        _ => panic!("Expected text result"),
+    };
+    assert!(result_text.contains("10"));
+    assert!(result_text.contains("5"));
+    assert!(result_text.contains("15"));
+}
+
+// TODO: Re-enable when McpResource derive macro is fully implemented
+/*
+#[tokio::test]
+async fn test_derive_macro_resource() {
+    let resource = TestResource::new();
+    
+    // Test basic properties
+    assert_eq!(resource.uri(), "test://data");
+    assert_eq!(resource.name(), "Test Data");
+    assert_eq!(resource.description(), "Test data resource");
+    
+    // Test content reading
+    let content = resource.read().await;
+    assert!(content.is_ok());
+    
+    let contents = content.unwrap();
+    assert_eq!(contents.len(), 1);
+    
+    // Verify content structure
+    match &contents[0] {
+        mcp_protocol::resources::ResourceContent::Blob { data, mime_type } => {
+            assert_eq!(mime_type, "application/json");
+            let parsed: Value = serde_json::from_str(&data).expect("Valid JSON");
+            assert_eq!(parsed["test"], true);
+            assert_eq!(parsed["message"], "Integration test data");
+        }
+        _ => panic!("Expected blob content"),
+    }
+}
+*/
+
+// Note: Resource declarative macro and schema_for macro tests are disabled
+// until the implementation is completed
+
+#[tokio::test]
+async fn test_session_management_basic() {
+    let tool = SessionTool;
+    
+    // Test without session
+    let args = json!({ "message": "test call" });
+    let result = tool.call(args, None).await;
+    assert!(result.is_ok());
+    
+    let results = result.unwrap();
+    let result_text = match &results[0] {
+        ToolResult::Text { text } => text,
+        _ => panic!("Expected text result"),
+    };
+    
+    let result_json: Value = serde_json::from_str(result_text).expect("Valid JSON");
+    assert_eq!(result_json["has_session"], false);
+    assert_eq!(result_json["received_message"], "test call");
+}
+
+#[tokio::test]
+async fn test_json_rpc_compliance() {
+    // Test request creation with _meta
+    let mut other = HashMap::new();
+    other.insert("name".to_string(), json!("test_add"));
+    other.insert("arguments".to_string(), json!({"a": 1.0, "b": 2.0}));
+    
+    let params = RequestParams {
+        meta: Some(Meta {
+            progress_token: Some(ProgressToken::new("test-123")),
+            cursor: None,
+            total: Some(100),
+            has_more: Some(false),
+            ..Default::default()
+        }),
+        other,
+    };
+    
+    let request = JsonRpcRequest::new(json!("req-001"), "tools/call".to_string())
+        .with_params(params);
+    
+    // Test serialization
+    let json_str = serde_json::to_string(&request).expect("Serialization should work");
+    assert!(json_str.contains("progressToken"));
+    assert!(json_str.contains("test-123"));
+    assert!(json_str.contains("tools/call"));
+    
+    // Test deserialization
+    let parsed: JsonRpcRequest = serde_json::from_str(&json_str).expect("Deserialization should work");
+    assert_eq!(parsed.method, "tools/call");
+    assert!(parsed.params.is_some());
+    
+    let parsed_params = parsed.params.unwrap();
+    assert!(parsed_params.meta.is_some());
+    assert_eq!(
+        parsed_params.meta.unwrap().progress_token.unwrap().as_str(),
+        "test-123"
+    );
+    
+    // Test response with _meta
+    let mut response_data = HashMap::new();
+    response_data.insert("content".to_string(), json!([{"type": "text", "text": "result"}]));
+    
+    let mut meta_data = HashMap::new();
+    meta_data.insert("completed".to_string(), json!(true));
+    
+    let result = ResultWithMeta::new(response_data).with_meta(meta_data);
+    let response = JsonRpcResponse::success(json!("req-001"), result);
+    
+    // Test trait compliance  
+    let response_result = response.result.as_ref().unwrap();
+    assert!(!response_result.data().is_empty());
+    assert!(response_result.meta().is_some());
+    
+    // Test serialization includes _meta
+    let response_json = serde_json::to_string(&response).expect("Response serialization");
+    assert!(response_json.contains("_meta"));
+    assert!(response_json.contains("completed"));
+}
+
+#[tokio::test]
+async fn test_server_builder() {
+    let tool = AddTool { a: 0.0, b: 0.0 };
+    // let resource = TestResource::new(); // TODO: Re-enable when resource derive works
+    
+    // Test server building with basic features
+    let server_result = McpServer::builder()
+        .name("integration-test")
+        .version("1.0.0") 
+        .title("Integration Test Server")
+        .instructions("Test server for integration testing")
+        .tool(tool)
+        // .resource(resource) // TODO: Re-enable when resource derive works
+        // .with_resources() // TODO: Re-enable when resource derive works
+        .with_completion()
+        .with_logging()
+        .with_notifications()
+        .bind_address("127.0.0.1:0".parse().unwrap()) // Use port 0 for testing
+        .build();
+    
+    assert!(server_result.is_ok());
+    let _server = server_result.unwrap();
+    
+    // Note: We don't actually run the server in tests as that would require
+    // more complex async test setup and port management
+}
+
+#[tokio::test]
+async fn test_progress_tracking() {
+    // Test progress token and meta field handling
+    let meta = Meta {
+        progress_token: Some(ProgressToken::new("progress-123")),
+        current_step: Some(5),
+        total_steps: Some(10),
+        progress: Some(0.5),
+        estimated_remaining_seconds: Some(30.0),
+        ..Default::default()
+    };
+    
+    // Test serialization preserves all fields
+    let json_str = serde_json::to_string(&meta).expect("Meta serialization");
+    assert!(json_str.contains("progressToken"));
+    assert!(json_str.contains("progress-123"));
+    assert!(json_str.contains("currentStep"));
+    assert!(json_str.contains("totalSteps"));
+    assert!(json_str.contains("estimatedRemainingSeconds"));
+    
+    // Test deserialization
+    let parsed: Meta = serde_json::from_str(&json_str).expect("Meta deserialization");
+    assert_eq!(parsed.progress_token.unwrap().as_str(), "progress-123");
+    assert_eq!(parsed.current_step.unwrap(), 5);
+    assert_eq!(parsed.total_steps.unwrap(), 10);
+    assert_eq!(parsed.progress.unwrap(), 0.5);
+    assert_eq!(parsed.estimated_remaining_seconds.unwrap(), 30.0);
+}
+
+/// Performance test for macro-generated tools
+#[tokio::test]
+async fn test_macro_performance() {
+    let tool = AddTool { a: 1.0, b: 2.0 };
+    
+    let start = std::time::Instant::now();
+    
+    // Execute many tool calls to test performance
+    for i in 0..1000 {
+        let args = json!({ "a": i as f64, "b": (i + 1) as f64 });
+        let result = tool.call(args, None).await;
+        assert!(result.is_ok());
+    }
+    
+    let duration = start.elapsed();
+    println!("1000 tool calls took: {:?}", duration);
+    
+    // Should complete within reasonable time (adjust threshold as needed)
+    assert!(duration < Duration::from_secs(1));
+}
+
+#[tokio::test]
+async fn test_error_handling() {
+    let tool = AddTool { a: 0.0, b: 0.0 };
+    
+    // Test with invalid arguments
+    let invalid_args = json!({ "a": "not_a_number", "b": 2.0 });
+    let result = tool.call(invalid_args, None).await;
+    
+    // Should handle the error gracefully
+    assert!(result.is_err());
+    let error_msg = result.unwrap_err();
+    assert!(error_msg.to_string().contains("Invalid parameter type"));
+}
+
+#[tokio::test]
+async fn test_specification_compliance() {
+    // Test that our JSON-RPC messages match MCP 2025-06-18 specification
+    
+    // 1. Test request structure
+    let request = JsonRpcRequest::new(json!("test-id"), "initialize".to_string());
+    let request_json = serde_json::to_string(&request).unwrap();
+    let request_value: Value = serde_json::from_str(&request_json).unwrap();
+    
+    assert_eq!(request_value["jsonrpc"], "2.0");
+    assert_eq!(request_value["id"], "test-id");
+    assert_eq!(request_value["method"], "initialize");
+    
+    // 2. Test response structure with _meta
+    let mut data = HashMap::new();
+    data.insert("protocolVersion".to_string(), json!("2025-06-18"));
+    
+    let mut meta = HashMap::new();
+    meta.insert("serverVersion".to_string(), json!("1.0.0"));
+    
+    let result = ResultWithMeta::new(data).with_meta(meta);
+    let response = JsonRpcResponse::success(json!("test-id"), result);
+    let response_json = serde_json::to_string(&response).unwrap();
+    let response_value: Value = serde_json::from_str(&response_json).unwrap();
+    
+    assert_eq!(response_value["jsonrpc"], "2.0");
+    assert_eq!(response_value["id"], "test-id");
+    assert!(response_value["result"].is_object());
+    assert!(response_value["result"]["_meta"].is_object());
+    
+    // 3. Test _meta field structure
+    assert_eq!(
+        response_value["result"]["_meta"]["serverVersion"],
+        "1.0.0"
+    );
+}
+
+/// MCP 2025-06-18 Specification Compliance Tests
+#[cfg(test)]
+mod mcp_compliance_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_json_rpc_request_structure() {
+        // Valid JSON-RPC 2.0 request structure
+        let valid_request = json!({
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "test-client",
+                    "version": "1.0.0"
+                }
+            },
+            "id": 1
+        });
+
+        // Parse as MCP request
+        let request: JsonRpcRequest = serde_json::from_value(valid_request).unwrap();
+        
+        // Validate required fields
+        assert_eq!(request.jsonrpc, "2.0");
+        assert_eq!(request.method, "initialize");
+        assert!(request.params.is_some());
+        assert_eq!(request.id, json!(1));
+    }
+
+    #[tokio::test]
+    async fn test_json_rpc_response_structure() {
+        // Test successful response
+        let mut data = HashMap::new();
+        data.insert("protocolVersion".to_string(), json!("2025-06-18"));
+        data.insert("capabilities".to_string(), json!({}));
+        data.insert("serverInfo".to_string(), json!({
+            "name": "test-server",
+            "version": "1.0.0"
+        }));
+        
+        let result = ResultWithMeta::new(data);
+        let success_response = JsonRpcResponse::success(json!(1), result);
+
+        assert_eq!(success_response.jsonrpc, "2.0");
+        assert_eq!(success_response.id, json!(1));
+        assert!(success_response.result.is_some());
+        assert!(success_response.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_tool_call_message_structure() {
+        // MCP 2025-06-18 tool call structure with _meta
+        let tool_call = json!({
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {
+                "name": "calculator",
+                "arguments": {
+                    "operation": "add",
+                    "a": 5,
+                    "b": 3
+                },
+                "_meta": {
+                    "progressToken": "calc-123"
+                }
+            },
+            "id": "call-1"
+        });
+
+        let request: JsonRpcRequest = serde_json::from_value(tool_call).unwrap();
+        assert_eq!(request.method, "tools/call");
+        
+        let params = request.params.unwrap();
+        assert_eq!(params.other["name"], "calculator");
+        assert!(params.other["arguments"].is_object());
+        assert!(params.meta.is_some());
+        assert_eq!(params.meta.unwrap().progress_token.unwrap().as_str(), "calc-123");
+    }
+
+    #[tokio::test]
+    async fn test_meta_field_compliance() {
+        // Test _meta field with progressToken and custom fields
+        let request_with_meta = json!({
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {
+                "name": "test_tool",
+                "arguments": {},
+                "_meta": {
+                    "progressToken": "progress-abc-123",
+                    "sessionId": "session-xyz-789",
+                    "customField": "custom_value"
+                }
+            },
+            "id": 1
+        });
+
+        let request: JsonRpcRequest = serde_json::from_value(request_with_meta).unwrap();
+        let params = request.params.unwrap();
+        
+        // _meta should be preserved
+        assert!(params.meta.is_some());
+        let meta = params.meta.unwrap();
+        assert_eq!(meta.progress_token.unwrap().as_str(), "progress-abc-123");
+        // Note: sessionId and customField are not part of the standard Meta struct
+        // They would be in the other HashMap if needed
+    }
+
+    #[tokio::test]
+    async fn test_notification_structure() {
+        // Test various MCP notifications
+        let notifications = vec![
+            ("notifications/initialized", json!({})),
+            ("notifications/progress", json!({
+                "progressToken": "token-123",
+                "progress": 50,
+                "total": 100
+            })),
+            ("notifications/resources/listChanged", json!({})),
+            ("notifications/tools/listChanged", json!({})),
+            ("notifications/message", json!({
+                "level": "info",
+                "logger": "mcp.server",
+                "data": "Test message"
+            }))
+        ];
+
+        for (method, params) in notifications {
+            let notification = if params == json!({}) {
+                JsonRpcNotification::new(method.to_string())
+            } else {
+                let request_params = RequestParams {
+                    meta: None,
+                    other: serde_json::from_value(params).unwrap()
+                };
+                JsonRpcNotification::new(method.to_string())
+                    .with_params(request_params)
+            };
+            
+            let serialized = serde_json::to_value(&notification).unwrap();
+            assert_eq!(serialized["jsonrpc"], "2.0");
+            assert_eq!(serialized["method"], method);
+            assert!(serialized.get("id").is_none()); // Notifications must not have id
+        }
+    }
+
+    #[tokio::test]
+    async fn test_error_response_compliance() {
+        // Test standard JSON-RPC error codes
+        let errors = vec![
+            (-32700, "Parse error"),
+            (-32600, "Invalid Request"),
+            (-32601, "Method not found"),
+            (-32602, "Invalid params"),
+            (-32603, "Internal error"),
+        ];
+
+        for (code, message) in errors {
+            let error = JsonRpcError {
+                code,
+                message: message.to_string(),
+                data: None,
+            };
+            
+            let response = JsonRpcResponse::error(json!(1), error);
+            
+            assert_eq!(response.jsonrpc, "2.0");
+            assert_eq!(response.id, json!(1));
+            assert!(response.result.is_none());
+            assert!(response.error.is_some());
+            
+            let error = response.error.unwrap();
+            assert_eq!(error.code, code);
+            assert_eq!(error.message, message);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_content_type_structures() {
+        // Test various content types in MCP 2025-06-18
+        let content_types = vec![
+            json!({
+                "type": "text",
+                "text": "This is plain text content"
+            }),
+            json!({
+                "type": "image",
+                "data": "base64-encoded-image-data",
+                "mimeType": "image/png"
+            }),
+            json!({
+                "type": "resource",
+                "resource": {
+                    "uri": "file:///example.txt",
+                    "text": "File contents here"
+                }
+            })
+        ];
+
+        for content in content_types {
+            assert!(content["type"].is_string());
+            assert!(!content["type"].as_str().unwrap().is_empty());
+            
+            match content["type"].as_str().unwrap() {
+                "text" => assert!(content["text"].is_string()),
+                "image" => {
+                    assert!(content["data"].is_string());
+                    assert!(content["mimeType"].is_string());
+                },
+                "resource" => {
+                    assert!(content["resource"].is_object());
+                    assert!(content["resource"]["uri"].is_string());
+                },
+                _ => panic!("Unknown content type"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_cursor_pagination() {
+        // Test cursor-based pagination structure
+        let paginated_response = json!({
+            "jsonrpc": "2.0",
+            "result": {
+                "resources": [
+                    {
+                        "uri": "file:///first.txt",
+                        "name": "First File"
+                    },
+                    {
+                        "uri": "file:///second.txt", 
+                        "name": "Second File"
+                    }
+                ],
+                "nextCursor": "page-2-token-abc123"
+            },
+            "id": 1
+        });
+
+        let response: JsonRpcResponse = serde_json::from_value(paginated_response).unwrap();
+        let result = response.result.unwrap();
+        
+        assert!(result.data["resources"].is_array());
+        assert_eq!(result.data["nextCursor"], "page-2-token-abc123");
+        
+        // Test that resources have required fields
+        let resources = result.data["resources"].as_array().unwrap();
+        for resource in resources {
+            assert!(resource["uri"].is_string());
+            assert!(resource["name"].is_string());
+        }
+    }
+
+    #[tokio::test]
+    async fn test_protocol_version_compliance() {
+        // Test that our implementation supports MCP 2025-06-18
+        let supported_version = "2025-06-18";
+        
+        let initialize_request = json!({
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": supported_version,
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "compliance-test",
+                    "version": "1.0.0"
+                }
+            },
+            "id": 1
+        });
+
+        let request: JsonRpcRequest = serde_json::from_value(initialize_request).unwrap();
+        let params = request.params.unwrap();
+        
+        assert_eq!(params.other["protocolVersion"], supported_version);
+        assert!(params.other["capabilities"].is_object());
+        assert!(params.other["clientInfo"].is_object());
+        assert_eq!(params.other["clientInfo"]["name"], "compliance-test");
+    }
+
+    #[tokio::test]
+    async fn test_framework_integration_compliance() {
+        // Test that our framework produces compliant messages
+        let other = HashMap::new();
+        let params = RequestParams {
+            meta: Some(Meta {
+                progress_token: Some(ProgressToken::new("list-tools-123")),
+                ..Default::default()
+            }),
+            other,
+        };
+        
+        let request = JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            method: "tools/list".to_string(),
+            params: Some(params),
+            id: json!("test-list"),
+        };
+
+        // Serialize and deserialize to ensure round-trip compatibility
+        let serialized = serde_json::to_string(&request).unwrap();
+        let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).unwrap();
+        
+        assert_eq!(deserialized.jsonrpc, "2.0");
+        assert_eq!(deserialized.method, "tools/list");
+        assert_eq!(deserialized.id, json!("test-list"));
+        
+        let params = deserialized.params.unwrap();
+        assert!(params.meta.is_some());
+        assert_eq!(params.meta.unwrap().progress_token.unwrap().as_str(), "list-tools-123");
+    }
+}
+

@@ -1,0 +1,304 @@
+architecture_patterns:
+  microservices:
+    description: "Distributed architecture with independent, loosely-coupled services"
+    use_cases:
+      - "Large-scale applications with multiple teams"
+      - "Applications requiring independent scaling"
+      - "Systems with diverse technology stacks"
+      - "Organizations with DevOps maturity"
+    pros:
+      - "Independent deployment and scaling"
+      - "Technology diversity"
+      - "Fault isolation"
+      - "Team autonomy"
+    cons:
+      - "Distributed system complexity"
+      - "Network latency and reliability"
+      - "Data consistency challenges"
+      - "Operational overhead"
+    components:
+      - "API Gateway"
+      - "Service Discovery"
+      - "Configuration Management"
+      - "Distributed Tracing"
+      - "Circuit Breaker"
+    technologies:
+      - "Kubernetes"
+      - "Istio/Envoy"
+      - "Spring Cloud"
+      - "Apache Kafka"
+      - "Redis/etcd"
+
+  event_driven:
+    description: "Architecture based on event production, detection, and reaction"
+    use_cases:
+      - "Real-time data processing"
+      - "Decoupled system integration"
+      - "Audit trails and event sourcing"
+      - "IoT and sensor data systems"
+    pros:
+      - "Loose coupling between components"
+      - "Scalability and responsiveness"
+      - "Easy to add new consumers"
+      - "Natural audit trail"
+    cons:
+      - "Complex debugging and testing"
+      - "Eventual consistency"
+      - "Event schema evolution"
+      - "Message ordering challenges"
+    components:
+      - "Event Bus/Message Broker"
+      - "Event Store"
+      - "Event Processors"
+      - "Saga Orchestrator"
+    technologies:
+      - "Apache Kafka"
+      - "RabbitMQ"
+      - "AWS EventBridge"
+      - "Apache Pulsar"
+      - "NATS"
+
+  layered:
+    description: "Hierarchical organization with clear separation of concerns"
+    use_cases:
+      - "Traditional enterprise applications"
+      - "CRUD-heavy business applications"
+      - "Applications with clear business logic layers"
+      - "Teams new to software architecture"
+    pros:
+      - "Clear separation of concerns"
+      - "Easy to understand and maintain"
+      - "Well-established pattern"
+      - "Good for team collaboration"
+    cons:
+      - "Can become rigid and monolithic"
+      - "Performance overhead from layers"
+      - "Tendency toward anemic domain model"
+      - "Difficult to evolve"
+    layers:
+      - name: "Presentation"
+        responsibility: "User interface and user interaction"
+        technologies: ["React", "Angular", "Vue.js", "HTML/CSS"]
+      - name: "Business/Application"
+        responsibility: "Business logic and application workflows"
+        technologies: ["Spring", "Express.js", "Django", "ASP.NET"]
+      - name: "Data Access"
+        responsibility: "Data persistence and retrieval"
+        technologies: ["JPA/Hibernate", "Entity Framework", "SQLAlchemy"]
+      - name: "Database"
+        responsibility: "Data storage and management"
+        technologies: ["PostgreSQL", "MySQL", "MongoDB", "Redis"]
+
+  hexagonal:
+    description: "Ports and adapters architecture isolating core business logic"
+    use_cases:
+      - "Domain-driven design implementations"
+      - "Applications requiring high testability"
+      - "Systems with multiple integration points"
+      - "Applications with complex business rules"
+    pros:
+      - "Highly testable and maintainable"
+      - "Technology agnostic core"
+      - "Clear boundaries and dependencies"
+      - "Easy to adapt to new requirements"
+    cons:
+      - "Initial complexity and overhead"
+      - "Requires disciplined design"
+      - "Can be over-engineered for simple apps"
+      - "Learning curve for teams"
+    components:
+      - "Domain Core"
+      - "Application Services"
+      - "Ports (Interfaces)"
+      - "Adapters (Implementations)"
+    patterns:
+      - "Repository Pattern"
+      - "Dependency Injection"
+      - "Command Query Responsibility Segregation (CQRS)"
+      - "Domain Events"
+
+  serverless:
+    description: "Function-as-a-Service architecture with event-driven execution"
+    use_cases:
+      - "Event-driven data processing"
+      - "API backends with variable load"
+      - "Scheduled tasks and batch processing"
+      - "Rapid prototyping and MVP development"
+    pros:
+      - "Automatic scaling and high availability"
+      - "Pay-per-use pricing model"
+      - "Reduced operational overhead"
+      - "Fast deployment and iteration"
+    cons:
+      - "Vendor lock-in"
+      - "Cold start latency"
+      - "Limited execution time and resources"
+      - "Debugging and monitoring challenges"
+    components:
+      - "Function Runtime"
+      - "Event Sources"
+      - "API Gateway"
+      - "State Storage"
+    technologies:
+      - "AWS Lambda"
+      - "Azure Functions"
+      - "Google Cloud Functions"
+      - "Cloudflare Workers"
+
+design_principles:
+  solid:
+    single_responsibility:
+      description: "A class should have only one reason to change"
+      benefits: ["Easier to understand", "Easier to test", "Reduced coupling"]
+      example: "Separate data access from business logic"
+    
+    open_closed:
+      description: "Software entities should be open for extension, closed for modification"
+      benefits: ["Reduced risk of bugs", "Better maintainability", "Easier to extend"]
+      example: "Use interfaces and dependency injection"
+    
+    liskov_substitution:
+      description: "Objects should be replaceable with instances of their subtypes"
+      benefits: ["Reliable inheritance", "Predictable behavior", "Better polymorphism"]
+      example: "Derived classes must be substitutable for base classes"
+    
+    interface_segregation:
+      description: "Many client-specific interfaces are better than one general-purpose interface"
+      benefits: ["Reduced coupling", "Better cohesion", "Easier testing"]
+      example: "Split large interfaces into smaller, focused ones"
+    
+    dependency_inversion:
+      description: "Depend on abstractions, not concretions"
+      benefits: ["Flexible design", "Easier testing", "Reduced coupling"]
+      example: "Inject dependencies rather than creating them"
+
+  twelve_factor:
+    codebase: "One codebase tracked in revision control, many deploys"
+    dependencies: "Explicitly declare and isolate dependencies"
+    config: "Store config in the environment"
+    backing_services: "Treat backing services as attached resources"
+    build_release_run: "Strictly separate build and run stages"
+    processes: "Execute the app as one or more stateless processes"
+    port_binding: "Export services via port binding"
+    concurrency: "Scale out via the process model"
+    disposability: "Maximize robustness with fast startup and graceful shutdown"
+    dev_prod_parity: "Keep development, staging, and production as similar as possible"
+    logs: "Treat logs as event streams"
+    admin_processes: "Run admin/management tasks as one-off processes"
+
+scalability_patterns:
+  horizontal_scaling:
+    description: "Adding more servers to handle increased load"
+    techniques:
+      - "Load balancing"
+      - "Database sharding"
+      - "Stateless services"
+      - "CDN usage"
+    considerations:
+      - "Data consistency"
+      - "Session management"
+      - "Cross-server communication"
+      - "Deployment complexity"
+
+  vertical_scaling:
+    description: "Adding more power to existing servers"
+    techniques:
+      - "CPU/Memory upgrades"
+      - "SSD storage"
+      - "Network bandwidth"
+      - "Database optimization"
+    limitations:
+      - "Hardware limits"
+      - "Single point of failure"
+      - "Cost inefficiency at scale"
+      - "Downtime for upgrades"
+
+  caching_strategies:
+    cache_aside:
+      description: "Application manages cache directly"
+      use_cases: ["Read-heavy workloads", "Complex query results"]
+      pros: ["Simple to implement", "Cache failures don't affect writes"]
+      cons: ["Cache misses impact performance", "Potential data inconsistency"]
+    
+    write_through:
+      description: "Write to cache and database simultaneously"
+      use_cases: ["Write-heavy workloads", "Strong consistency requirements"]
+      pros: ["Data consistency", "Cache always up-to-date"]
+      cons: ["Write latency", "Wasted cache space"]
+    
+    write_behind:
+      description: "Write to cache immediately, database asynchronously"
+      use_cases: ["High write throughput", "Acceptable eventual consistency"]
+      pros: ["Fast writes", "Reduced database load"]
+      cons: ["Data loss risk", "Complex implementation"]
+
+security_considerations:
+  authentication:
+    strategies:
+      - "OAuth 2.0 / OpenID Connect"
+      - "JWT tokens"
+      - "Multi-factor authentication"
+      - "Certificate-based authentication"
+    best_practices:
+      - "Use strong password policies"
+      - "Implement account lockout"
+      - "Secure session management"
+      - "Regular security audits"
+
+  authorization:
+    models:
+      - "Role-Based Access Control (RBAC)"
+      - "Attribute-Based Access Control (ABAC)"
+      - "Access Control Lists (ACLs)"
+      - "Policy-Based Access Control"
+    implementation:
+      - "Principle of least privilege"
+      - "Centralized authorization service"
+      - "Fine-grained permissions"
+      - "Regular access reviews"
+
+  data_protection:
+    techniques:
+      - "Encryption at rest and in transit"
+      - "Data masking and anonymization"
+      - "Secure key management"
+      - "Regular backups and recovery testing"
+    compliance:
+      - "GDPR compliance"
+      - "HIPAA requirements"
+      - "SOC 2 controls"
+      - "PCI DSS standards"
+
+monitoring_and_observability:
+  three_pillars:
+    metrics:
+      types: ["Business metrics", "Application metrics", "Infrastructure metrics"]
+      tools: ["Prometheus", "Grafana", "DataDog", "New Relic"]
+      key_metrics: ["Response time", "Throughput", "Error rate", "Resource utilization"]
+    
+    logs:
+      types: ["Application logs", "Access logs", "Security logs", "Audit logs"]
+      tools: ["ELK Stack", "Splunk", "Fluentd", "Loki"]
+      best_practices: ["Structured logging", "Log correlation", "Retention policies"]
+    
+    traces:
+      purpose: "Track requests across distributed systems"
+      tools: ["Jaeger", "Zipkin", "AWS X-Ray", "OpenTelemetry"]
+      benefits: ["Request flow visibility", "Performance bottleneck identification"]
+
+  sre_practices:
+    sli_slo:
+      description: "Service Level Indicators and Objectives"
+      examples:
+        - "99.9% uptime"
+        - "< 200ms response time"
+        - "< 0.1% error rate"
+    
+    error_budgets:
+      description: "Acceptable level of unreliability"
+      purpose: "Balance reliability and feature velocity"
+      calculation: "100% - SLO = Error Budget"
+    
+    incident_response:
+      phases: ["Detection", "Response", "Recovery", "Post-mortem"]
+      principles: ["Blameless culture", "Focus on systems", "Learning from failures"]

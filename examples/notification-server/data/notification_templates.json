@@ -1,0 +1,343 @@
+{
+  "notification_types": {
+    "ci_cd": {
+      "name": "CI/CD Pipeline",
+      "description": "Continuous integration and deployment notifications",
+      "templates": {
+        "build_started": {
+          "title": "Build Started",
+          "message": "Build #{build_number} started for {branch} by {author}",
+          "priority": "info",
+          "channels": ["slack", "email"],
+          "color": "#36a64f"
+        },
+        "build_success": {
+          "title": "Build Successful",
+          "message": "Build #{build_number} completed successfully for {branch}",
+          "priority": "success",
+          "channels": ["slack"],
+          "color": "#36a64f"
+        },
+        "build_failed": {
+          "title": "Build Failed",
+          "message": "Build #{build_number} failed for {branch}. Check logs for details.",
+          "priority": "error",
+          "channels": ["slack", "email", "sms"],
+          "color": "#ff0000"
+        },
+        "deploy_started": {
+          "title": "Deployment Started",
+          "message": "Deploying {service} v{version} to {environment}",
+          "priority": "info",
+          "channels": ["slack"],
+          "color": "#ffaa00"
+        },
+        "deploy_success": {
+          "title": "Deployment Successful",
+          "message": "{service} v{version} deployed successfully to {environment}",
+          "priority": "success",
+          "channels": ["slack", "email"],
+          "color": "#36a64f"
+        },
+        "deploy_failed": {
+          "title": "Deployment Failed",
+          "message": "Failed to deploy {service} v{version} to {environment}. Rolling back...",
+          "priority": "critical",
+          "channels": ["slack", "email", "sms", "pagerduty"],
+          "color": "#ff0000"
+        }
+      }
+    },
+    "monitoring": {
+      "name": "System Monitoring",
+      "description": "Application and infrastructure monitoring alerts",
+      "templates": {
+        "high_cpu": {
+          "title": "High CPU Usage",
+          "message": "CPU usage is {cpu_percentage}% on {server} for the last {duration} minutes",
+          "priority": "warning",
+          "channels": ["slack", "email"],
+          "color": "#ffaa00"
+        },
+        "high_memory": {
+          "title": "High Memory Usage",
+          "message": "Memory usage is {memory_percentage}% on {server}",
+          "priority": "warning",
+          "channels": ["slack"],
+          "color": "#ffaa00"
+        },
+        "service_down": {
+          "title": "Service Down",
+          "message": "{service} is not responding on {server}. Last check: {timestamp}",
+          "priority": "critical",
+          "channels": ["slack", "email", "sms", "pagerduty"],
+          "color": "#ff0000"
+        },
+        "disk_space_low": {
+          "title": "Low Disk Space",
+          "message": "Disk usage is {disk_percentage}% on {server} ({filesystem})",
+          "priority": "warning",
+          "channels": ["slack", "email"],
+          "color": "#ffaa00"
+        },
+        "database_slow": {
+          "title": "Slow Database Queries",
+          "message": "Database queries averaging {avg_time}ms on {database}",
+          "priority": "warning",
+          "channels": ["slack"],
+          "color": "#ffaa00"
+        }
+      }
+    },
+    "security": {
+      "name": "Security Alerts",
+      "description": "Security-related notifications and alerts",
+      "templates": {
+        "failed_login": {
+          "title": "Multiple Failed Login Attempts",
+          "message": "{attempts} failed login attempts for {username} from {ip_address}",
+          "priority": "warning",
+          "channels": ["slack", "email"],
+          "color": "#ffaa00"
+        },
+        "suspicious_activity": {
+          "title": "Suspicious Activity Detected",
+          "message": "Unusual activity detected: {activity_type} from {source}",
+          "priority": "critical",
+          "channels": ["slack", "email", "sms"],
+          "color": "#ff0000"
+        },
+        "certificate_expiry": {
+          "title": "Certificate Expiring Soon",
+          "message": "SSL certificate for {domain} expires in {days_remaining} days",
+          "priority": "warning",
+          "channels": ["slack", "email"],
+          "color": "#ffaa00"
+        },
+        "vulnerability_found": {
+          "title": "Security Vulnerability Detected",
+          "message": "Vulnerability {cve_id} found in {component}. Severity: {severity}",
+          "priority": "error",
+          "channels": ["slack", "email"],
+          "color": "#ff0000"
+        }
+      }
+    },
+    "development": {
+      "name": "Development Workflow",
+      "description": "Development team workflow and collaboration notifications",
+      "templates": {
+        "pull_request_opened": {
+          "title": "Pull Request Opened",
+          "message": "{author} opened PR #{pr_number}: {title}",
+          "priority": "info",
+          "channels": ["slack"],
+          "color": "#36a64f"
+        },
+        "pull_request_approved": {
+          "title": "Pull Request Approved",
+          "message": "PR #{pr_number} approved by {reviewer}. Ready to merge.",
+          "priority": "info",
+          "channels": ["slack"],
+          "color": "#36a64f"
+        },
+        "pull_request_merged": {
+          "title": "Pull Request Merged",
+          "message": "PR #{pr_number} merged by {author}: {title}",
+          "priority": "info",
+          "channels": ["slack"],
+          "color": "#36a64f"
+        },
+        "code_review_request": {
+          "title": "Code Review Requested",
+          "message": "{author} requested review from {reviewers} for PR #{pr_number}",
+          "priority": "info",
+          "channels": ["slack", "email"],
+          "color": "#ffaa00"
+        },
+        "release_created": {
+          "title": "New Release",
+          "message": "Release {version} created with {commit_count} commits",
+          "priority": "info",
+          "channels": ["slack", "email"],
+          "color": "#36a64f"
+        }
+      }
+    },
+    "business": {
+      "name": "Business Events",
+      "description": "Business-critical events and metrics notifications",
+      "templates": {
+        "high_error_rate": {
+          "title": "High Error Rate",
+          "message": "Error rate increased to {error_rate}% (threshold: {threshold}%)",
+          "priority": "warning",
+          "channels": ["slack", "email"],
+          "color": "#ffaa00"
+        },
+        "revenue_milestone": {
+          "title": "Revenue Milestone Reached",
+          "message": "Congratulations! {milestone} revenue milestone reached: ${amount}",
+          "priority": "success",
+          "channels": ["slack", "email"],
+          "color": "#36a64f"
+        },
+        "user_signup_spike": {
+          "title": "User Signup Spike",
+          "message": "{signup_count} new users signed up in the last hour",
+          "priority": "info",
+          "channels": ["slack"],
+          "color": "#36a64f"
+        },
+        "payment_failure": {
+          "title": "Payment System Issue",
+          "message": "Payment processing failure rate: {failure_rate}%",
+          "priority": "critical",
+          "channels": ["slack", "email", "sms"],
+          "color": "#ff0000"
+        }
+      }
+    }
+  },
+  "notification_priorities": {
+    "info": {
+      "level": 1,
+      "description": "Informational updates",
+      "default_channels": ["slack"],
+      "escalation_delay": null
+    },
+    "success": {
+      "level": 2,
+      "description": "Positive outcomes and achievements",
+      "default_channels": ["slack"],
+      "escalation_delay": null
+    },
+    "warning": {
+      "level": 3,
+      "description": "Issues that need attention",
+      "default_channels": ["slack", "email"],
+      "escalation_delay": 1800
+    },
+    "error": {
+      "level": 4,
+      "description": "Errors that impact functionality",
+      "default_channels": ["slack", "email"],
+      "escalation_delay": 900
+    },
+    "critical": {
+      "level": 5,
+      "description": "Critical issues requiring immediate attention",
+      "default_channels": ["slack", "email", "sms", "pagerduty"],
+      "escalation_delay": 300
+    }
+  },
+  "notification_channels": {
+    "slack": {
+      "name": "Slack",
+      "description": "Team communication via Slack webhooks",
+      "config": {
+        "webhook_url": "${SLACK_WEBHOOK_URL}",
+        "default_channel": "#alerts",
+        "username": "DevOps Bot",
+        "icon_emoji": ":warning:"
+      },
+      "rate_limit": {
+        "requests_per_minute": 60,
+        "burst_limit": 10
+      }
+    },
+    "email": {
+      "name": "Email",
+      "description": "Email notifications via SMTP",
+      "config": {
+        "smtp_server": "${SMTP_SERVER}",
+        "smtp_port": 587,
+        "username": "${SMTP_USERNAME}",
+        "password": "${SMTP_PASSWORD}",
+        "from_address": "alerts@company.com",
+        "use_tls": true
+      },
+      "rate_limit": {
+        "requests_per_minute": 30,
+        "burst_limit": 5
+      }
+    },
+    "sms": {
+      "name": "SMS",
+      "description": "SMS notifications via Twilio",
+      "config": {
+        "account_sid": "${TWILIO_ACCOUNT_SID}",
+        "auth_token": "${TWILIO_AUTH_TOKEN}",
+        "from_number": "${TWILIO_FROM_NUMBER}"
+      },
+      "rate_limit": {
+        "requests_per_minute": 10,
+        "burst_limit": 3
+      }
+    },
+    "pagerduty": {
+      "name": "PagerDuty",
+      "description": "Critical incident management via PagerDuty",
+      "config": {
+        "integration_key": "${PAGERDUTY_INTEGRATION_KEY}",
+        "service_key": "${PAGERDUTY_SERVICE_KEY}"
+      },
+      "rate_limit": {
+        "requests_per_minute": 20,
+        "burst_limit": 5
+      }
+    }
+  },
+  "escalation_rules": {
+    "default": {
+      "description": "Default escalation policy",
+      "stages": [
+        {
+          "delay_seconds": 300,
+          "targets": ["on_call_engineer"],
+          "channels": ["slack", "email"]
+        },
+        {
+          "delay_seconds": 900,
+          "targets": ["team_lead", "on_call_engineer"],
+          "channels": ["slack", "email", "sms"]
+        },
+        {
+          "delay_seconds": 1800,
+          "targets": ["engineering_manager", "team_lead"],
+          "channels": ["pagerduty", "sms"]
+        }
+      ]
+    },
+    "security": {
+      "description": "Security incident escalation",
+      "stages": [
+        {
+          "delay_seconds": 0,
+          "targets": ["security_team", "on_call_engineer"],
+          "channels": ["slack", "email", "sms"]
+        },
+        {
+          "delay_seconds": 300,
+          "targets": ["security_lead", "engineering_manager"],
+          "channels": ["pagerduty", "sms"]
+        }
+      ]
+    },
+    "critical_system": {
+      "description": "Critical system failure escalation",
+      "stages": [
+        {
+          "delay_seconds": 0,
+          "targets": ["on_call_engineer", "sre_team"],
+          "channels": ["pagerduty", "slack", "sms"]
+        },
+        {
+          "delay_seconds": 180,
+          "targets": ["engineering_manager", "sre_lead"],
+          "channels": ["pagerduty", "sms"]
+        }
+      ]
+    }
+  }
+}

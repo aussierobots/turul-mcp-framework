@@ -1,0 +1,20 @@
+[package]
+name = "comprehensive-server"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+mcp-server = { workspace = true, features = ["http"] }
+mcp-protocol = { workspace = true }
+mcp-derive = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+serde_yml = { workspace = true }
+async-trait = { workspace = true }

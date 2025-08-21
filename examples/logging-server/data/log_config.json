@@ -1,0 +1,255 @@
+{
+  "application": {
+    "name": "Production Application Logger",
+    "version": "2.1.0",
+    "environment": "production"
+  },
+  "log_levels": {
+    "global_default": "info",
+    "per_service": {
+      "user_service": "debug",
+      "payment_service": "warning",
+      "auth_service": "info",
+      "notification_service": "info",
+      "database": "error",
+      "api_gateway": "warning",
+      "security_service": "debug",
+      "audit_service": "info"
+    },
+    "per_module": {
+      "authentication": "info",
+      "authorization": "warning",
+      "user_management": "debug",
+      "payment_processing": "warning",
+      "data_validation": "info",
+      "error_handling": "error",
+      "performance_monitoring": "debug",
+      "security_monitoring": "debug"
+    }
+  },
+  "log_categories": {
+    "business": {
+      "description": "Business logic and transaction logs",
+      "default_level": "info",
+      "retention_days": 90,
+      "include_pii": false,
+      "alert_threshold": "warning"
+    },
+    "security": {
+      "description": "Security-related events and audit logs",
+      "default_level": "debug",
+      "retention_days": 365,
+      "include_pii": true,
+      "alert_threshold": "warning",
+      "compliance_required": true
+    },
+    "performance": {
+      "description": "Performance metrics and monitoring",
+      "default_level": "info",
+      "retention_days": 30,
+      "include_pii": false,
+      "alert_threshold": "warning"
+    },
+    "error": {
+      "description": "Application errors and exceptions",
+      "default_level": "error",
+      "retention_days": 180,
+      "include_pii": false,
+      "alert_threshold": "error",
+      "immediate_notification": true
+    },
+    "audit": {
+      "description": "Audit trail for compliance and governance",
+      "default_level": "info",
+      "retention_days": 2555,
+      "include_pii": true,
+      "alert_threshold": "info",
+      "compliance_required": true,
+      "immutable": true
+    },
+    "debug": {
+      "description": "Development and debugging information",
+      "default_level": "debug",
+      "retention_days": 7,
+      "include_pii": false,
+      "alert_threshold": "error"
+    }
+  },
+  "alert_rules": {
+    "high_error_rate": {
+      "description": "Alert when error rate exceeds threshold",
+      "condition": "error_count_per_minute > 10",
+      "severity": "critical",
+      "channels": ["slack", "email", "pagerduty"],
+      "cooldown_minutes": 15
+    },
+    "security_breach_attempt": {
+      "description": "Multiple failed authentication attempts",
+      "condition": "failed_auth_count > 5 in 5 minutes",
+      "severity": "high",
+      "channels": ["slack", "email", "security_team"],
+      "cooldown_minutes": 5
+    },
+    "performance_degradation": {
+      "description": "Response time degradation",
+      "condition": "avg_response_time > 2000ms for 5 minutes",
+      "severity": "medium",
+      "channels": ["slack"],
+      "cooldown_minutes": 10
+    },
+    "database_connection_issues": {
+      "description": "Database connectivity problems",
+      "condition": "db_connection_errors > 3 in 1 minute",
+      "severity": "high",
+      "channels": ["slack", "email"],
+      "cooldown_minutes": 5
+    },
+    "memory_leak_detection": {
+      "description": "Potential memory leak detected",
+      "condition": "memory_usage_increase > 20% over 1 hour",
+      "severity": "medium",
+      "channels": ["slack"],
+      "cooldown_minutes": 60
+    }
+  },
+  "log_destinations": {
+    "console": {
+      "enabled": true,
+      "level": "info",
+      "format": "human_readable",
+      "include_timestamp": true,
+      "include_level": true,
+      "include_source": true
+    },
+    "file": {
+      "enabled": true,
+      "level": "debug",
+      "path": "/var/log/application/app.log",
+      "max_size_mb": 100,
+      "max_files": 10,
+      "rotation": "daily",
+      "format": "json"
+    },
+    "elasticsearch": {
+      "enabled": true,
+      "level": "info",
+      "endpoint": "${ELASTICSEARCH_URL}",
+      "index_pattern": "application-logs-{YYYY.MM.DD}",
+      "auth": {
+        "username": "${ELASTICSEARCH_USERNAME}",
+        "password": "${ELASTICSEARCH_PASSWORD}"
+      },
+      "buffer_size": 1000,
+      "flush_interval_seconds": 30
+    },
+    "cloudwatch": {
+      "enabled": false,
+      "level": "warning",
+      "log_group": "/aws/application/production",
+      "log_stream": "{instance_id}",
+      "region": "us-east-1",
+      "credentials": {
+        "access_key": "${AWS_ACCESS_KEY}",
+        "secret_key": "${AWS_SECRET_KEY}"
+      }
+    },
+    "datadog": {
+      "enabled": false,
+      "level": "info",
+      "api_key": "${DATADOG_API_KEY}",
+      "service": "production-app",
+      "env": "production",
+      "version": "2.1.0"
+    }
+  },
+  "structured_logging": {
+    "enabled": true,
+    "format": "json",
+    "include_fields": {
+      "timestamp": true,
+      "level": true,
+      "service": true,
+      "version": true,
+      "environment": true,
+      "trace_id": true,
+      "span_id": true,
+      "user_id": true,
+      "session_id": true,
+      "request_id": true,
+      "correlation_id": true,
+      "source_file": false,
+      "source_line": false,
+      "thread_id": false
+    },
+    "sensitive_fields": [
+      "password",
+      "ssn",
+      "credit_card",
+      "email",
+      "phone",
+      "address",
+      "api_key",
+      "token",
+      "session_id"
+    ],
+    "masking": {
+      "enabled": true,
+      "strategy": "partial",
+      "preserve_length": true,
+      "mask_character": "*"
+    }
+  },
+  "compliance": {
+    "gdpr": {
+      "enabled": true,
+      "log_personal_data": false,
+      "anonymize_after_days": 90,
+      "deletion_request_support": true
+    },
+    "hipaa": {
+      "enabled": false,
+      "encrypt_phi": true,
+      "audit_access": true
+    },
+    "pci_dss": {
+      "enabled": true,
+      "mask_card_numbers": true,
+      "secure_transmission": true,
+      "access_logging": true
+    },
+    "sox": {
+      "enabled": true,
+      "financial_data_logging": true,
+      "change_audit": true,
+      "retention_years": 7
+    }
+  },
+  "monitoring_integration": {
+    "prometheus": {
+      "enabled": true,
+      "metrics_port": 9090,
+      "export_log_counters": true,
+      "export_error_rates": true,
+      "export_response_times": true
+    },
+    "grafana": {
+      "enabled": true,
+      "dashboard_url": "http://grafana:3000/dashboards/app-logs",
+      "alert_manager_url": "http://alertmanager:9093"
+    },
+    "jaeger": {
+      "enabled": true,
+      "trace_correlation": true,
+      "endpoint": "http://jaeger:14268/api/traces"
+    }
+  },
+  "development": {
+    "debug_mode": false,
+    "verbose_errors": false,
+    "include_stack_traces": true,
+    "log_sql_queries": false,
+    "log_http_requests": true,
+    "log_http_responses": false,
+    "performance_profiling": false
+  }
+}

@@ -1,0 +1,337 @@
+audit_policies:
+  user_management:
+    policy_name: "User Management Audit Policy"
+    description: "Audit policy for all user-related operations"
+    enabled: true
+    events:
+      user_creation:
+        log_level: "info"
+        required_fields: ["user_id", "username", "email", "role", "created_by", "ip_address"]
+        sensitive_fields: ["email"]
+        retention_days: 2555
+        compliance: ["gdpr", "sox"]
+      
+      user_deletion:
+        log_level: "warning"
+        required_fields: ["user_id", "username", "deleted_by", "reason", "ip_address"]
+        retention_days: 2555
+        compliance: ["gdpr", "sox"]
+        immediate_alert: true
+      
+      user_modification:
+        log_level: "info"
+        required_fields: ["user_id", "modified_fields", "modified_by", "ip_address"]
+        retention_days: 365
+        compliance: ["gdpr"]
+      
+      password_change:
+        log_level: "info"
+        required_fields: ["user_id", "changed_by", "ip_address", "strength_score"]
+        retention_days: 90
+        compliance: ["security"]
+      
+      role_assignment:
+        log_level: "warning"
+        required_fields: ["user_id", "new_role", "previous_role", "assigned_by", "ip_address"]
+        retention_days: 2555
+        compliance: ["sox", "security"]
+        immediate_alert: true
+
+  authentication:
+    policy_name: "Authentication Audit Policy"
+    description: "Audit policy for authentication and authorization events"
+    enabled: true
+    events:
+      login_success:
+        log_level: "info"
+        required_fields: ["user_id", "username", "ip_address", "user_agent", "session_id"]
+        retention_days: 90
+        compliance: ["security"]
+      
+      login_failure:
+        log_level: "warning"
+        required_fields: ["username", "ip_address", "user_agent", "failure_reason"]
+        retention_days: 365
+        compliance: ["security"]
+        alert_threshold: 5
+        alert_window_minutes: 5
+      
+      logout:
+        log_level: "info"
+        required_fields: ["user_id", "session_id", "session_duration"]
+        retention_days: 30
+        compliance: ["security"]
+      
+      session_timeout:
+        log_level: "info"
+        required_fields: ["user_id", "session_id", "timeout_reason"]
+        retention_days: 90
+        compliance: ["security"]
+      
+      password_reset_request:
+        log_level: "warning"
+        required_fields: ["username", "email", "ip_address", "request_method"]
+        retention_days: 180
+        compliance: ["security"]
+      
+      mfa_challenge:
+        log_level: "info"
+        required_fields: ["user_id", "challenge_type", "ip_address", "success"]
+        retention_days: 90
+        compliance: ["security"]
+
+  data_access:
+    policy_name: "Data Access Audit Policy"
+    description: "Audit policy for sensitive data access and modifications"
+    enabled: true
+    events:
+      sensitive_data_access:
+        log_level: "info"
+        required_fields: ["user_id", "data_type", "record_id", "access_reason", "ip_address"]
+        retention_days: 2555
+        compliance: ["gdpr", "hipaa", "pci_dss"]
+      
+      data_export:
+        log_level: "warning"
+        required_fields: ["user_id", "export_type", "record_count", "destination", "ip_address"]
+        retention_days: 2555
+        compliance: ["gdpr", "sox"]
+        immediate_alert: true
+      
+      data_modification:
+        log_level: "warning"
+        required_fields: ["user_id", "table_name", "record_id", "modified_fields", "old_values", "new_values"]
+        retention_days: 2555
+        compliance: ["sox", "gdpr"]
+        sensitive_fields: ["old_values", "new_values"]
+      
+      data_deletion:
+        log_level: "error"
+        required_fields: ["user_id", "table_name", "record_id", "deletion_reason", "ip_address"]
+        retention_days: 2555
+        compliance: ["gdpr", "sox"]
+        immediate_alert: true
+        approval_required: true
+
+  financial_transactions:
+    policy_name: "Financial Transaction Audit Policy"
+    description: "Audit policy for all financial operations"
+    enabled: true
+    events:
+      payment_processing:
+        log_level: "info"
+        required_fields: ["transaction_id", "user_id", "amount", "currency", "payment_method", "processor"]
+        retention_days: 2555
+        compliance: ["pci_dss", "sox"]
+        sensitive_fields: ["payment_method"]
+      
+      refund_processing:
+        log_level: "warning"
+        required_fields: ["transaction_id", "refund_id", "amount", "reason", "processed_by"]
+        retention_days: 2555
+        compliance: ["sox", "pci_dss"]
+        immediate_alert: true
+      
+      chargeback:
+        log_level: "error"
+        required_fields: ["transaction_id", "chargeback_id", "amount", "reason", "processor_response"]
+        retention_days: 2555
+        compliance: ["pci_dss", "sox"]
+        immediate_alert: true
+      
+      failed_payment:
+        log_level: "warning"
+        required_fields: ["transaction_id", "user_id", "failure_reason", "processor_code"]
+        retention_days: 365
+        compliance: ["pci_dss"]
+
+  system_administration:
+    policy_name: "System Administration Audit Policy"
+    description: "Audit policy for system and configuration changes"
+    enabled: true
+    events:
+      configuration_change:
+        log_level: "warning"
+        required_fields: ["admin_user", "config_key", "old_value", "new_value", "change_reason"]
+        retention_days: 2555
+        compliance: ["sox"]
+        immediate_alert: true
+      
+      database_schema_change:
+        log_level: "error"
+        required_fields: ["admin_user", "schema_change", "affected_tables", "migration_id"]
+        retention_days: 2555
+        compliance: ["sox"]
+        immediate_alert: true
+        approval_required: true
+      
+      backup_operation:
+        log_level: "info"
+        required_fields: ["backup_type", "size_mb", "duration_seconds", "success", "destination"]
+        retention_days: 365
+        compliance: ["sox"]
+      
+      restore_operation:
+        log_level: "error"
+        required_fields: ["restore_type", "source", "admin_user", "reason", "affected_data"]
+        retention_days: 2555
+        compliance: ["sox"]
+        immediate_alert: true
+        approval_required: true
+
+  security_events:
+    policy_name: "Security Events Audit Policy"
+    description: "Audit policy for security-related events and threats"
+    enabled: true
+    events:
+      suspicious_activity:
+        log_level: "error"
+        required_fields: ["activity_type", "user_id", "ip_address", "threat_level", "detection_method"]
+        retention_days: 2555
+        compliance: ["security"]
+        immediate_alert: true
+      
+      rate_limit_exceeded:
+        log_level: "warning"
+        required_fields: ["ip_address", "endpoint", "request_count", "time_window"]
+        retention_days: 180
+        compliance: ["security"]
+        alert_threshold: 10
+      
+      sql_injection_attempt:
+        log_level: "critical"
+        required_fields: ["ip_address", "user_agent", "attempted_query", "endpoint", "blocked"]
+        retention_days: 2555
+        compliance: ["security"]
+        immediate_alert: true
+        law_enforcement_reportable: true
+      
+      xss_attempt:
+        log_level: "error"
+        required_fields: ["ip_address", "user_agent", "attempted_payload", "endpoint", "blocked"]
+        retention_days: 2555
+        compliance: ["security"]
+        immediate_alert: true
+      
+      privilege_escalation:
+        log_level: "critical"
+        required_fields: ["user_id", "attempted_privilege", "current_privilege", "ip_address", "blocked"]
+        retention_days: 2555
+        compliance: ["security", "sox"]
+        immediate_alert: true
+
+compliance_frameworks:
+  gdpr:
+    name: "General Data Protection Regulation"
+    description: "EU privacy regulation compliance"
+    requirements:
+      - "Log access to personal data"
+      - "Support data subject access requests"
+      - "Implement data retention policies"
+      - "Provide audit trails for consent management"
+    retention_default_days: 90
+    anonymization_required: true
+    right_to_deletion: true
+  
+  sox:
+    name: "Sarbanes-Oxley Act"
+    description: "Financial reporting and corporate governance compliance"
+    requirements:
+      - "Maintain immutable audit trails"
+      - "Log all financial data changes"
+      - "Implement segregation of duties"
+      - "Provide comprehensive reporting"
+    retention_default_days: 2555  # 7 years
+    immutable_logs: true
+    change_approval_required: true
+  
+  pci_dss:
+    name: "Payment Card Industry Data Security Standard"
+    description: "Payment card data protection compliance"
+    requirements:
+      - "Log access to cardholder data"
+      - "Implement secure log storage"
+      - "Monitor and test security systems"
+      - "Maintain secure network"
+    retention_default_days: 365
+    encryption_required: true
+    access_monitoring: true
+  
+  hipaa:
+    name: "Health Insurance Portability and Accountability Act"
+    description: "Healthcare data protection compliance"
+    requirements:
+      - "Log access to protected health information"
+      - "Implement role-based access controls"
+      - "Provide audit trails for PHI access"
+      - "Ensure data integrity"
+    retention_default_days: 2555
+    encryption_required: true
+    access_audit_required: true
+
+alert_channels:
+  slack:
+    name: "Slack Notifications"
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    default_channel: "#security-alerts"
+    message_format: "json"
+    rate_limit: 
+      requests_per_minute: 60
+      burst_limit: 10
+  
+  email:
+    name: "Email Notifications"
+    smtp_server: "${SMTP_SERVER}"
+    smtp_port: 587
+    from_address: "security@company.com"
+    to_addresses: ["security-team@company.com", "compliance@company.com"]
+    use_tls: true
+    rate_limit:
+      requests_per_minute: 30
+  
+  pagerduty:
+    name: "PagerDuty Incidents"
+    integration_key: "${PAGERDUTY_INTEGRATION_KEY}"
+    service_key: "${PAGERDUTY_SERVICE_KEY}"
+    severity_mapping:
+      critical: "critical"
+      error: "error"
+      warning: "warning"
+      info: "info"
+  
+  security_team:
+    name: "Security Team Direct"
+    notification_type: "secure_channel"
+    encryption_required: true
+    escalation_minutes: 5
+
+log_analysis_rules:
+  anomaly_detection:
+    enabled: true
+    algorithms: ["statistical", "machine_learning", "rule_based"]
+    baseline_days: 30
+    sensitivity: "medium"
+    alert_threshold: 0.95
+  
+  threat_intelligence:
+    enabled: true
+    ip_blacklists: ["tor_exit_nodes", "known_malicious_ips", "botnet_ips"]
+    signature_matching: true
+    behavioral_analysis: true
+  
+  pattern_matching:
+    failed_login_patterns:
+      - pattern: "rapid_succession"
+        threshold: 5
+        time_window_minutes: 5
+      - pattern: "distributed_attack"
+        threshold: 100
+        time_window_minutes: 60
+        unique_ips_required: 10
+    
+    data_exfiltration_patterns:
+      - pattern: "large_data_export"
+        threshold_gb: 1.0
+        time_window_minutes: 30
+      - pattern: "unusual_access_pattern"
+        deviation_threshold: 3.0  # standard deviations

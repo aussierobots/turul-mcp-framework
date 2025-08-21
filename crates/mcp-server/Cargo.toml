@@ -1,0 +1,33 @@
+[package]
+name = "mcp-server"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "High-level framework for building Model Context Protocol (MCP) servers"
+
+[features]
+default = ["http", "sse"]
+http = ["http-mcp-server"]
+sse = ["http-mcp-server/sse"]
+
+[dependencies]
+# Framework dependencies
+json-rpc-server.workspace = true
+mcp-protocol.workspace = true
+http-mcp-server = { workspace = true, optional = true }
+
+# Core dependencies
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+futures.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+uuid = { version = "1.0", features = ["v4"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

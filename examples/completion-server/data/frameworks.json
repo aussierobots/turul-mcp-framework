@@ -1,0 +1,116 @@
+{
+  "web_frameworks": [
+    {
+      "name": "react",
+      "label": "React framework",
+      "description": "JavaScript library for building user interfaces",
+      "category": "frontend",
+      "language": "javascript"
+    },
+    {
+      "name": "angular",
+      "label": "Angular framework", 
+      "description": "TypeScript-based web application framework",
+      "category": "frontend",
+      "language": "typescript"
+    },
+    {
+      "name": "vue",
+      "label": "Vue framework",
+      "description": "Progressive JavaScript framework",
+      "category": "frontend", 
+      "language": "javascript"
+    },
+    {
+      "name": "svelte",
+      "label": "Svelte framework",
+      "description": "Cybernetically enhanced web apps",
+      "category": "frontend",
+      "language": "javascript"
+    },
+    {
+      "name": "nextjs",
+      "label": "Next.js framework",
+      "description": "React framework for production applications",
+      "category": "fullstack",
+      "language": "javascript"
+    },
+    {
+      "name": "nuxtjs", 
+      "label": "Nuxt.js framework",
+      "description": "Vue.js framework for universal applications",
+      "category": "fullstack",
+      "language": "javascript"
+    },
+    {
+      "name": "express",
+      "label": "Express framework",
+      "description": "Fast, unopinionated web framework for Node.js",
+      "category": "backend",
+      "language": "javascript"
+    },
+    {
+      "name": "fastapi",
+      "label": "FastAPI framework",
+      "description": "Modern, fast Python web framework",
+      "category": "backend",
+      "language": "python"
+    },
+    {
+      "name": "django",
+      "label": "Django framework",
+      "description": "High-level Python web framework",
+      "category": "backend",
+      "language": "python"
+    },
+    {
+      "name": "flask",
+      "label": "Flask framework",
+      "description": "Lightweight Python web framework",
+      "category": "backend",
+      "language": "python"
+    },
+    {
+      "name": "spring",
+      "label": "Spring framework",
+      "description": "Java-based enterprise application framework",
+      "category": "backend",
+      "language": "java"
+    },
+    {
+      "name": "rails",
+      "label": "Ruby on Rails framework",
+      "description": "Web application framework written in Ruby",
+      "category": "backend",
+      "language": "ruby"
+    },
+    {
+      "name": "tokio",
+      "label": "Tokio framework",
+      "description": "Asynchronous runtime for Rust",
+      "category": "backend",
+      "language": "rust"
+    },
+    {
+      "name": "actix",
+      "label": "Actix framework",
+      "description": "Actor framework for Rust",
+      "category": "backend",
+      "language": "rust"
+    },
+    {
+      "name": "axum",
+      "label": "Axum framework",
+      "description": "Ergonomic web framework for Rust",
+      "category": "backend",
+      "language": "rust"
+    },
+    {
+      "name": "rocket",
+      "label": "Rocket framework",
+      "description": "Web framework for Rust that makes it simple to write fast, secure web applications",
+      "category": "backend",
+      "language": "rust"
+    }
+  ]
+}

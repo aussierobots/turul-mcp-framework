@@ -1,0 +1,112 @@
+{
+  "programming_languages": [
+    {
+      "name": "rust",
+      "label": "Rust programming language",
+      "description": "Systems programming language focused on safety and performance",
+      "category": "systems"
+    },
+    {
+      "name": "python",
+      "label": "Python programming language", 
+      "description": "High-level programming language with elegant syntax",
+      "category": "scripting"
+    },
+    {
+      "name": "javascript",
+      "label": "JavaScript programming language",
+      "description": "Dynamic programming language for web development",
+      "category": "web"
+    },
+    {
+      "name": "typescript",
+      "label": "TypeScript programming language",
+      "description": "Typed superset of JavaScript for large-scale applications",
+      "category": "web"
+    },
+    {
+      "name": "java",
+      "label": "Java programming language",
+      "description": "Enterprise-grade object-oriented programming language",
+      "category": "enterprise"
+    },
+    {
+      "name": "go",
+      "label": "Go programming language",
+      "description": "Simple, fast, and reliable language for cloud applications",
+      "category": "systems"
+    },
+    {
+      "name": "cpp",
+      "label": "C++ programming language",
+      "description": "High-performance language for system and application development",
+      "category": "systems"
+    },
+    {
+      "name": "csharp",
+      "label": "C# programming language",
+      "description": "Microsoft's object-oriented language for .NET ecosystem",
+      "category": "enterprise"
+    },
+    {
+      "name": "kotlin",
+      "label": "Kotlin programming language",
+      "description": "Modern language for Android and multiplatform development",
+      "category": "mobile"
+    },
+    {
+      "name": "swift",
+      "label": "Swift programming language",
+      "description": "Apple's language for iOS, macOS, and server development",
+      "category": "mobile"
+    },
+    {
+      "name": "php",
+      "label": "PHP programming language",
+      "description": "Server-side scripting language for web development",
+      "category": "web"
+    },
+    {
+      "name": "ruby",
+      "label": "Ruby programming language",
+      "description": "Dynamic language focused on simplicity and productivity",
+      "category": "scripting"
+    },
+    {
+      "name": "scala",
+      "label": "Scala programming language",
+      "description": "Functional and object-oriented language for the JVM",
+      "category": "functional"
+    },
+    {
+      "name": "haskell",
+      "label": "Haskell programming language",
+      "description": "Pure functional programming language with strong type system",
+      "category": "functional"
+    },
+    {
+      "name": "elixir",
+      "label": "Elixir programming language",
+      "description": "Dynamic language for scalable and maintainable applications",
+      "category": "functional"
+    },
+    {
+      "name": "dart",
+      "label": "Dart programming language",
+      "description": "Client-optimized language for fast apps on any platform",
+      "category": "mobile"
+    },
+    {
+      "name": "r",
+      "label": "R programming language",
+      "description": "Language for statistical computing and graphics",
+      "category": "data_science"
+    },
+    {
+      "name": "julia",
+      "label": "Julia programming language",
+      "description": "High-level language for technical computing",
+      "category": "data_science"
+    }
+  ]
+}

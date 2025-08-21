@@ -1,0 +1,237 @@
+aws_tools:
+  real_time_monitor:
+    name: "aws_real_time_monitor"
+    description: "Monitor AWS resources with live SQS updates and streaming responses"
+    parameters:
+      resource_type:
+        type: "string"
+        description: "Type of AWS resource to monitor (EC2, RDS, Lambda, etc.)"
+        required: true
+        enum: ["EC2", "RDS", "Lambda", "ECS", "S3", "CloudFormation"]
+      region:
+        type: "string"
+        description: "AWS region to monitor"
+        required: false
+        default: "us-east-1"
+      update_frequency:
+        type: "number"
+        description: "Update frequency in milliseconds"
+        required: false
+        default: 5000
+        minimum: 1000
+        maximum: 60000
+      filter_tags:
+        type: "object"
+        description: "Tag filters for resource selection"
+        required: false
+        properties:
+          environment:
+            type: "string"
+          application:
+            type: "string"
+          owner:
+            type: "string"
+    output_schema:
+      type: "object"
+      properties:
+        resources:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              id:
+                type: "string"
+              state:
+                type: "string"
+              tags:
+                type: "object"
+              last_updated:
+                type: "string"
+                format: "date-time"
+        monitoring_status:
+          type: "string"
+          enum: ["active", "paused", "error"]
+        correlation_id:
+          type: "string"
+
+  # publish_test_event tool removed - incompatible with clean SNS → Lambda direct triggers + tokio broadcast architecture
+  # Use global_events::broadcast_global_event() for internal event broadcasting instead
+
+lambda_tools:
+  diagnostics:
+    name: "lambda_diagnostics"
+    description: "Get Lambda execution metrics, session info, and system diagnostics"
+    parameters:
+      include_metrics:
+        type: "boolean"
+        description: "Include CloudWatch metrics"
+        required: false
+        default: true
+      include_session_info:
+        type: "boolean"
+        description: "Include session management details"
+        required: false
+        default: true
+      include_aws_info:
+        type: "boolean"
+        description: "Include AWS service information"
+        required: false
+        default: false
+    output_schema:
+      type: "object"
+      properties:
+        lambda_info:
+          type: "object"
+          properties:
+            function_name:
+              type: "string"
+            function_version:
+              type: "string"
+            memory_size:
+              type: "number"
+            timeout:
+              type: "number"
+            remaining_time_ms:
+              type: "number"
+        session_info:
+          type: "object"
+          properties:
+            session_id:
+              type: "string"
+            client_id:
+              type: "string"
+            connection_status:
+              type: "string"
+            last_activity:
+              type: "string"
+              format: "date-time"
+            active_sessions_count:
+              type: "number"
+        aws_info:
+          type: "object"
+          properties:
+            region:
+              type: "string"
+            account_id:
+              type: "string"
+            request_id:
+              type: "string"
+
+session_tools:
+  session_info:
+    name: "session_info"
+    description: "Get detailed information about the current MCP session"
+    parameters:
+      include_capabilities:
+        type: "boolean"
+        description: "Include negotiated capabilities"
+        required: false
+        default: true
+      include_statistics:
+        type: "boolean"
+        description: "Include session statistics"
+        required: false
+        default: true
+    output_schema:
+      type: "object"
+      properties:
+        session_id:
+          type: "string"
+        protocol_version:
+          type: "string"
+        capabilities:
+          type: "object"
+        statistics:
+          type: "object"
+          properties:
+            tool_calls:
+              type: "number"
+            resource_accesses:
+              type: "number"
+            sqs_events_received:
+              type: "number"
+            streaming_responses:
+              type: "number"
+        created_at:
+          type: "string"
+          format: "date-time"
+        last_activity:
+          type: "string"
+          format: "date-time"
+
+  list_active_sessions:
+    name: "list_active_sessions"
+    description: "List all active sessions (admin tool)"
+    parameters:
+      limit:
+        type: "number"
+        description: "Maximum number of sessions to return"
+        required: false
+        default: 50
+        minimum: 1
+        maximum: 1000
+      client_filter:
+        type: "string"
+        description: "Filter by client ID pattern"
+        required: false
+    output_schema:
+      type: "object"
+      properties:
+        sessions:
+          type: "array"
+          items:
+            type: "object"
+            properties:
+              session_id:
+                type: "string"
+              client_id:
+                type: "string"
+              status:
+                type: "string"
+              created_at:
+                type: "string"
+                format: "date-time"
+              last_activity:
+                type: "string"
+                format: "date-time"
+        total_count:
+          type: "number"
+        active_count:
+          type: "number"
+
+event_scenarios:
+  demo_scenarios:
+    ec2_monitoring:
+      description: "Demonstrate EC2 instance monitoring with real-time streaming"
+      steps:
+        - action: "start_monitoring"
+          tool: "aws_real_time_monitor"
+          params:
+            resource_type: "EC2"
+            region: "us-east-1"
+        # Event publishing now uses global_events::broadcast_global_event() internally
+        # Events are delivered via tokio broadcast channels to all active SSE connections
+
+    lambda_diagnostics:
+      description: "Demonstrate Lambda diagnostics and session management"
+      steps:
+        - action: "get_diagnostics"
+          tool: "lambda_diagnostics"
+          params:
+            include_metrics: true
+            include_session_info: true
+        - action: "get_session_info"
+          tool: "session_info"
+          params:
+            include_statistics: true
+
+    streaming_demo:
+      description: "Demonstrate streaming responses with real-time tokio broadcast events"
+      steps:
+        - action: "start_monitoring"
+          tool: "aws_real_time_monitor"
+          params:
+            resource_type: "EC2"
+            update_frequency: 2000
+        # Real-time events are delivered via tokio broadcast channels
+        # Multiple concurrent SSE connections receive events simultaneously

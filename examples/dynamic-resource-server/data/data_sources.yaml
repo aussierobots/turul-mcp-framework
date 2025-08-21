@@ -1,0 +1,382 @@
+data_sources:
+  databases:
+    customer_db:
+      name: "Customer Database"
+      type: "postgresql"
+      connection:
+        host: "customer-db.enterprise.com"
+        port: 5432
+        database: "customer_data"
+        ssl: true
+      schemas:
+        customers:
+          table: "customers"
+          primary_key: "customer_id"
+          fields:
+            customer_id: "VARCHAR(20) PRIMARY KEY"
+            company_name: "VARCHAR(255) NOT NULL"
+            industry: "VARCHAR(100)"
+            contact_email: "VARCHAR(255)"
+            phone: "VARCHAR(20)"
+            address: "JSONB"
+            account_status: "ENUM('active', 'inactive', 'suspended')"
+            credit_limit: "DECIMAL(15,2)"
+            created_at: "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            updated_at: "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+          indexes:
+            - "idx_customers_status ON customers(account_status)"
+            - "idx_customers_industry ON customers(industry)"
+            - "idx_customers_email ON customers(contact_email)"
+        orders:
+          table: "orders"
+          primary_key: "order_id"
+          fields:
+            order_id: "VARCHAR(30) PRIMARY KEY"
+            customer_id: "VARCHAR(20) REFERENCES customers(customer_id)"
+            order_date: "DATE NOT NULL"
+            total_amount: "DECIMAL(15,2) NOT NULL"
+            status: "ENUM('pending', 'processing', 'shipped', 'delivered', 'cancelled')"
+            shipping_address: "JSONB"
+            items: "JSONB"
+            
+    inventory_db:
+      name: "Inventory Database"
+      type: "mysql"
+      connection:
+        host: "inventory-db.enterprise.com"
+        port: 3306
+        database: "inventory_management"
+        ssl: true
+      schemas:
+        products:
+          table: "products"
+          primary_key: "sku"
+          fields:
+            sku: "VARCHAR(20) PRIMARY KEY"
+            name: "VARCHAR(255) NOT NULL"
+            category: "VARCHAR(100)"
+            brand: "VARCHAR(100)"
+            unit_price: "DECIMAL(10,2)"
+            cost_price: "DECIMAL(10,2)"
+            weight: "DECIMAL(8,3)"
+            dimensions: "JSON"
+            active: "BOOLEAN DEFAULT true"
+        inventory:
+          table: "inventory_levels"
+          primary_key: ["sku", "warehouse_id"]
+          fields:
+            sku: "VARCHAR(20) REFERENCES products(sku)"
+            warehouse_id: "VARCHAR(20)"
+            quantity_on_hand: "INT NOT NULL DEFAULT 0"
+            quantity_reserved: "INT NOT NULL DEFAULT 0"
+            reorder_level: "INT NOT NULL DEFAULT 10"
+            max_stock_level: "INT NOT NULL DEFAULT 1000"
+            last_updated: "TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+            
+    financial_db:
+      name: "Financial Database"
+      type: "postgresql"
+      connection:
+        host: "finance-db.enterprise.com"
+        port: 5432
+        database: "financial_data"
+        ssl: true
+        read_replica: "finance-db-replica.enterprise.com"
+      schemas:
+        accounts:
+          table: "chart_of_accounts"
+          primary_key: "account_code"
+          fields:
+            account_code: "VARCHAR(20) PRIMARY KEY"
+            account_name: "VARCHAR(255) NOT NULL"
+            account_type: "ENUM('asset', 'liability', 'equity', 'revenue', 'expense')"
+            parent_account: "VARCHAR(20) REFERENCES chart_of_accounts(account_code)"
+            active: "BOOLEAN DEFAULT true"
+        transactions:
+          table: "general_ledger"
+          primary_key: "transaction_id"
+          fields:
+            transaction_id: "UUID PRIMARY KEY DEFAULT gen_random_uuid()"
+            transaction_date: "DATE NOT NULL"
+            account_code: "VARCHAR(20) REFERENCES chart_of_accounts(account_code)"
+            debit_amount: "DECIMAL(15,2)"
+            credit_amount: "DECIMAL(15,2)"
+            description: "TEXT"
+            reference_number: "VARCHAR(50)"
+            created_by: "VARCHAR(100)"
+            created_at: "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            
+    hr_db:
+      name: "Human Resources Database"
+      type: "postgresql"
+      connection:
+        host: "hr-db.enterprise.com"
+        port: 5432
+        database: "human_resources"
+        ssl: true
+        encryption: "at_rest"
+      schemas:
+        employees:
+          table: "employees"
+          primary_key: "employee_id"
+          fields:
+            employee_id: "VARCHAR(20) PRIMARY KEY"
+            first_name: "VARCHAR(100) NOT NULL"
+            last_name: "VARCHAR(100) NOT NULL"
+            email: "VARCHAR(255) UNIQUE NOT NULL"
+            phone: "VARCHAR(20)"
+            hire_date: "DATE NOT NULL"
+            department_id: "VARCHAR(20)"
+            position: "VARCHAR(100)"
+            manager_id: "VARCHAR(20) REFERENCES employees(employee_id)"
+            salary: "DECIMAL(12,2)"
+            status: "ENUM('active', 'inactive', 'terminated')"
+        departments:
+          table: "departments"
+          primary_key: "department_id"
+          fields:
+            department_id: "VARCHAR(20) PRIMARY KEY"
+            department_name: "VARCHAR(100) NOT NULL"
+            budget: "DECIMAL(15,2)"
+            manager_id: "VARCHAR(20) REFERENCES employees(employee_id)"
+            cost_center: "VARCHAR(20)"
+
+  data_warehouses:
+    enterprise_dwh:
+      name: "Enterprise Data Warehouse"
+      type: "snowflake"
+      connection:
+        account: "enterprise.snowflakecomputing.com"
+        warehouse: "ENTERPRISE_WH"
+        database: "ENTERPRISE_DWH"
+        schema: "PUBLIC"
+      fact_tables:
+        fact_sales:
+          description: "Sales transaction facts"
+          grain: "One row per order line item"
+          fields:
+            order_date_key: "INT REFERENCES dim_date(date_key)"
+            customer_key: "INT REFERENCES dim_customer(customer_key)"
+            product_key: "INT REFERENCES dim_product(product_key)"
+            quantity: "INT"
+            unit_price: "DECIMAL(10,2)"
+            total_amount: "DECIMAL(15,2)"
+            cost_amount: "DECIMAL(15,2)"
+        fact_inventory:
+          description: "Daily inventory snapshots"
+          grain: "One row per product per warehouse per day"
+          fields:
+            date_key: "INT REFERENCES dim_date(date_key)"
+            product_key: "INT REFERENCES dim_product(product_key)"
+            warehouse_key: "INT REFERENCES dim_warehouse(warehouse_key)"
+            beginning_balance: "INT"
+            ending_balance: "INT"
+            receipts: "INT"
+            shipments: "INT"
+      dimension_tables:
+        dim_customer:
+          description: "Customer dimension"
+          type: "slowly_changing_dimension_type_2"
+          fields:
+            customer_key: "INT IDENTITY PRIMARY KEY"
+            customer_id: "VARCHAR(20) NOT NULL"
+            company_name: "VARCHAR(255)"
+            industry: "VARCHAR(100)"
+            customer_segment: "VARCHAR(50)"
+            effective_date: "DATE"
+            expiration_date: "DATE"
+            current_flag: "BOOLEAN"
+        dim_product:
+          description: "Product dimension"
+          type: "slowly_changing_dimension_type_1"
+          fields:
+            product_key: "INT IDENTITY PRIMARY KEY"
+            sku: "VARCHAR(20) NOT NULL"
+            product_name: "VARCHAR(255)"
+            category: "VARCHAR(100)"
+            brand: "VARCHAR(100)"
+            unit_cost: "DECIMAL(10,2)"
+            
+  streaming_sources:
+    kafka_cluster:
+      name: "Enterprise Kafka Cluster"
+      connection:
+        bootstrap_servers: "kafka1.enterprise.com:9092,kafka2.enterprise.com:9092"
+        security_protocol: "SSL"
+        ssl_ca_location: "/etc/ssl/certs/ca.pem"
+      topics:
+        customer_events:
+          name: "customer-lifecycle-events"
+          partitions: 12
+          replication_factor: 3
+          schema:
+            event_type: "string"
+            customer_id: "string"
+            timestamp: "timestamp"
+            event_data: "json"
+        order_events:
+          name: "order-processing-events"
+          partitions: 24
+          replication_factor: 3
+          schema:
+            event_type: "string"
+            order_id: "string"
+            customer_id: "string"
+            timestamp: "timestamp"
+            order_data: "json"
+        inventory_updates:
+          name: "inventory-level-updates"
+          partitions: 8
+          replication_factor: 3
+          schema:
+            sku: "string"
+            warehouse_id: "string"
+            old_quantity: "integer"
+            new_quantity: "integer"
+            timestamp: "timestamp"
+            
+    kinesis_streams:
+      name: "AWS Kinesis Data Streams"
+      connection:
+        region: "us-east-1"
+        endpoint: "kinesis.us-east-1.amazonaws.com"
+      streams:
+        financial_transactions:
+          name: "financial-transaction-stream"
+          shard_count: 4
+          retention_period: "24 hours"
+          schema:
+            transaction_id: "string"
+            account_code: "string"
+            amount: "decimal"
+            transaction_type: "string"
+            timestamp: "timestamp"
+
+  file_systems:
+    data_lake:
+      name: "Enterprise Data Lake"
+      type: "s3"
+      connection:
+        bucket: "enterprise-data-lake"
+        region: "us-east-1"
+        prefix: "raw-data/"
+      partitioning:
+        scheme: "year/month/day/hour"
+        format: "parquet"
+      datasets:
+        web_analytics:
+          path: "web-analytics/"
+          format: "json"
+          compression: "gzip"
+          schema:
+            user_id: "string"
+            session_id: "string"
+            page_url: "string"
+            timestamp: "timestamp"
+            user_agent: "string"
+            referrer: "string"
+        application_logs:
+          path: "application-logs/"
+          format: "json"
+          compression: "gzip"
+          retention: "90 days"
+          schema:
+            timestamp: "timestamp"
+            level: "string"
+            service: "string"
+            message: "string"
+            context: "json"
+            
+  monitoring_systems:
+    metrics_system:
+      name: "Enterprise Metrics System"
+      type: "prometheus"
+      connection:
+        endpoint: "https://prometheus.enterprise.com"
+        auth_type: "basic"
+      metrics:
+        business_metrics:
+          - "daily_active_users"
+          - "revenue_per_customer"
+          - "order_completion_rate"
+          - "customer_satisfaction_score"
+        operational_metrics:
+          - "api_response_time"
+          - "database_connection_pool_usage"
+          - "queue_depth"
+          - "error_rate_by_service"
+        infrastructure_metrics:
+          - "cpu_utilization"
+          - "memory_usage"
+          - "disk_io_operations"
+          - "network_throughput"
+          
+    logging_system:
+      name: "Centralized Logging"
+      type: "elasticsearch"
+      connection:
+        cluster: "logging.enterprise.com:9200"
+        index_pattern: "enterprise-logs-*"
+      log_sources:
+        application_logs:
+          pattern: "app-*"
+          retention: "30 days"
+          fields:
+            - "timestamp"
+            - "service_name"
+            - "log_level"
+            - "message"
+            - "trace_id"
+            - "user_id"
+        audit_logs:
+          pattern: "audit-*"
+          retention: "7 years"
+          fields:
+            - "timestamp"
+            - "user_id"
+            - "action"
+            - "resource"
+            - "outcome"
+            - "ip_address"
+
+access_patterns:
+  data_governance:
+    classification_levels:
+      - "public"
+      - "internal"
+      - "confidential"
+      - "restricted"
+    data_lineage_tracking: true
+    retention_policies:
+      customer_data: "7 years"
+      financial_data: "10 years"
+      hr_data: "varies by jurisdiction"
+      system_logs: "1 year"
+      
+  security_controls:
+    encryption:
+      at_rest: "AES-256"
+      in_transit: "TLS 1.3"
+    access_control:
+      authentication: "SAML 2.0 SSO"
+      authorization: "RBAC with ABAC policies"
+    auditing:
+      all_data_access: true
+      privileged_operations: true
+      compliance_reporting: "automated"
+      
+  performance_optimization:
+    caching:
+      strategy: "multi-level"
+      levels:
+        - "application_cache"
+        - "database_query_cache"
+        - "cdn_edge_cache"
+    query_optimization:
+      automatic_indexing: true
+      query_plan_analysis: true
+      slow_query_alerts: true
+    connection_pooling:
+      enabled: true
+      max_connections_per_pool: 50
+      idle_timeout: "300 seconds"

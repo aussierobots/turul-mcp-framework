@@ -1,0 +1,362 @@
+{
+  "enterprise_apis": {
+    "customer_management": {
+      "name": "Customer Management API",
+      "base_url": "https://api.enterprise.com/v2/customers",
+      "authentication": {
+        "type": "oauth2",
+        "scopes": ["customers:read", "customers:write"]
+      },
+      "rate_limits": {
+        "requests_per_minute": 1000,
+        "burst_limit": 50
+      },
+      "endpoints": [
+        {
+          "id": "get_customer",
+          "method": "GET",
+          "path": "/customers/{customer_id}",
+          "description": "Retrieve detailed customer information by ID",
+          "parameters": {
+            "customer_id": {
+              "type": "string",
+              "required": true,
+              "pattern": "^CUST-[0-9]{6}$",
+              "description": "Customer ID in format CUST-123456"
+            },
+            "include_orders": {
+              "type": "boolean",
+              "required": false,
+              "default": false,
+              "description": "Include recent order history"
+            }
+          },
+          "response_schema": {
+            "customer_id": "string",
+            "company_name": "string",
+            "contact_info": "object",
+            "account_status": "string",
+            "credit_limit": "number",
+            "orders": "array"
+          }
+        },
+        {
+          "id": "search_customers",
+          "method": "GET",
+          "path": "/customers/search",
+          "description": "Search customers by various criteria",
+          "parameters": {
+            "query": {
+              "type": "string",
+              "required": true,
+              "description": "Search query (company name, email, etc.)"
+            },
+            "status": {
+              "type": "string",
+              "required": false,
+              "enum": ["active", "inactive", "suspended"],
+              "description": "Filter by account status"
+            },
+            "limit": {
+              "type": "integer",
+              "required": false,
+              "default": 50,
+              "max": 500,
+              "description": "Maximum number of results"
+            }
+          }
+        }
+      ]
+    },
+    "inventory_management": {
+      "name": "Inventory Management API",
+      "base_url": "https://api.enterprise.com/v3/inventory",
+      "authentication": {
+        "type": "api_key",
+        "header": "X-API-Key"
+      },
+      "rate_limits": {
+        "requests_per_minute": 2000,
+        "burst_limit": 100
+      },
+      "endpoints": [
+        {
+          "id": "get_product",
+          "method": "GET",
+          "path": "/products/{sku}",
+          "description": "Retrieve product details and inventory status",
+          "parameters": {
+            "sku": {
+              "type": "string",
+              "required": true,
+              "pattern": "^SKU-[A-Z0-9]{8}$",
+              "description": "Product SKU in format SKU-ABC12345"
+            },
+            "warehouse_id": {
+              "type": "string",
+              "required": false,
+              "description": "Filter by specific warehouse"
+            }
+          },
+          "response_schema": {
+            "sku": "string",
+            "name": "string",
+            "category": "string",
+            "price": "number",
+            "inventory_levels": "array",
+            "suppliers": "array"
+          }
+        },
+        {
+          "id": "update_inventory",
+          "method": "PUT",
+          "path": "/products/{sku}/inventory",
+          "description": "Update inventory levels for a product",
+          "parameters": {
+            "sku": {
+              "type": "string",
+              "required": true
+            },
+            "warehouse_id": {
+              "type": "string",
+              "required": true
+            },
+            "quantity": {
+              "type": "integer",
+              "required": true,
+              "minimum": 0
+            },
+            "reason": {
+              "type": "string",
+              "required": true,
+              "enum": ["stock_adjustment", "damage", "return", "sale", "purchase"]
+            }
+          }
+        }
+      ]
+    },
+    "financial_reporting": {
+      "name": "Financial Reporting API",
+      "base_url": "https://api.enterprise.com/v1/finance",
+      "authentication": {
+        "type": "jwt",
+        "issuer": "enterprise-auth"
+      },
+      "rate_limits": {
+        "requests_per_minute": 500,
+        "burst_limit": 25
+      },
+      "endpoints": [
+        {
+          "id": "get_financial_report",
+          "method": "GET",
+          "path": "/reports/{report_type}",
+          "description": "Generate financial reports",
+          "parameters": {
+            "report_type": {
+              "type": "string",
+              "required": true,
+              "enum": ["income_statement", "balance_sheet", "cash_flow", "trial_balance"]
+            },
+            "start_date": {
+              "type": "string",
+              "format": "date",
+              "required": true
+            },
+            "end_date": {
+              "type": "string",
+              "format": "date",
+              "required": true
+            },
+            "format": {
+              "type": "string",
+              "enum": ["json", "csv", "pdf"],
+              "default": "json"
+            }
+          }
+        },
+        {
+          "id": "get_revenue_analytics",
+          "method": "GET",
+          "path": "/analytics/revenue",
+          "description": "Retrieve revenue analytics and trends",
+          "parameters": {
+            "period": {
+              "type": "string",
+              "enum": ["daily", "weekly", "monthly", "quarterly"],
+              "default": "monthly"
+            },
+            "segments": {
+              "type": "array",
+              "items": "string",
+              "description": "Revenue segments to include"
+            }
+          }
+        }
+      ]
+    },
+    "human_resources": {
+      "name": "Human Resources API",
+      "base_url": "https://api.enterprise.com/v2/hr",
+      "authentication": {
+        "type": "oauth2",
+        "scopes": ["hr:read", "payroll:read"]
+      },
+      "rate_limits": {
+        "requests_per_minute": 300,
+        "burst_limit": 20
+      },
+      "endpoints": [
+        {
+          "id": "get_employee",
+          "method": "GET",
+          "path": "/employees/{employee_id}",
+          "description": "Retrieve employee information",
+          "parameters": {
+            "employee_id": {
+              "type": "string",
+              "required": true,
+              "pattern": "^EMP-[0-9]{5}$"
+            },
+            "include_salary": {
+              "type": "boolean",
+              "default": false,
+              "description": "Include salary information (requires payroll:read scope)"
+            }
+          },
+          "response_schema": {
+            "employee_id": "string",
+            "name": "string",
+            "department": "string",
+            "position": "string",
+            "hire_date": "string",
+            "manager_id": "string",
+            "salary": "number"
+          }
+        },
+        {
+          "id": "get_department_metrics",
+          "method": "GET",
+          "path": "/departments/{department_id}/metrics",
+          "description": "Get department performance metrics",
+          "parameters": {
+            "department_id": {
+              "type": "string",
+              "required": true
+            },
+            "metric_types": {
+              "type": "array",
+              "items": {
+                "enum": ["headcount", "turnover", "performance", "budget"]
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "third_party_integrations": {
+    "salesforce": {
+      "name": "Salesforce CRM Integration",
+      "type": "crm",
+      "base_url": "https://yourinstance.salesforce.com/services/data/v58.0",
+      "authentication": {
+        "type": "oauth2",
+        "client_credentials": true
+      },
+      "endpoints": [
+        {
+          "id": "get_account",
+          "method": "GET",
+          "path": "/sobjects/Account/{id}",
+          "description": "Retrieve Salesforce account information"
+        },
+        {
+          "id": "get_opportunities",
+          "method": "GET",
+          "path": "/query/?q=SELECT+Id,Name,Amount+FROM+Opportunity",
+          "description": "Query opportunities"
+        }
+      ]
+    },
+    "stripe": {
+      "name": "Stripe Payment Processing",
+      "type": "payment",
+      "base_url": "https://api.stripe.com/v1",
+      "authentication": {
+        "type": "bearer_token",
+        "prefix": "Bearer"
+      },
+      "endpoints": [
+        {
+          "id": "get_customer",
+          "method": "GET",
+          "path": "/customers/{customer_id}",
+          "description": "Retrieve Stripe customer"
+        },
+        {
+          "id": "list_payments",
+          "method": "GET",
+          "path": "/payment_intents",
+          "description": "List payment intents"
+        }
+      ]
+    },
+    "hubspot": {
+      "name": "HubSpot Marketing Hub",
+      "type": "marketing",
+      "base_url": "https://api.hubapi.com",
+      "authentication": {
+        "type": "api_key",
+        "parameter": "hapikey"
+      },
+      "endpoints": [
+        {
+          "id": "get_contact",
+          "method": "GET",
+          "path": "/contacts/v1/contact/vid/{contact_id}/profile",
+          "description": "Retrieve HubSpot contact"
+        },
+        {
+          "id": "get_deals",
+          "method": "GET",
+          "path": "/deals/v1/deal/paged",
+          "description": "List deals"
+        }
+      ]
+    }
+  },
+  "data_transformations": {
+    "customer_360": {
+      "name": "Customer 360 View",
+      "description": "Aggregate customer data from multiple sources",
+      "sources": ["customer_management", "salesforce", "stripe", "hubspot"],
+      "transformations": [
+        {
+          "field": "customer_id",
+          "mapping": {
+            "customer_management": "customer_id",
+            "salesforce": "Account.Id",
+            "stripe": "customer.id",
+            "hubspot": "contact.vid"
+          }
+        },
+        {
+          "field": "total_value",
+          "calculation": "sum(orders.total) + sum(stripe_payments.amount)"
+        }
+      ]
+    },
+    "financial_consolidation": {
+      "name": "Financial Data Consolidation",
+      "description": "Consolidate financial data across systems",
+      "sources": ["financial_reporting", "stripe", "salesforce"],
+      "transformations": [
+        {
+          "field": "revenue_total",
+          "calculation": "sum(financial_reports.revenue, stripe_revenue, salesforce_revenue)"
+        }
+      ]
+    }
+  }
+}

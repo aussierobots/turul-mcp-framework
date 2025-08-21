@@ -1,0 +1,238 @@
+validation_rules:
+  field_types:
+    string:
+      default_max_length: 255
+      trim_whitespace: true
+      allowed_characters: 
+        alphanumeric: "^[A-Za-z0-9\\s]+$"
+        name: "^[A-Za-z\\s'-\\.]+$"
+        address: "^[A-Za-z0-9\\s',.-]+$"
+      
+    email:
+      pattern: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$"
+      max_length: 254
+      normalize: "lowercase"
+      validation_service: "email_validator_api"
+      
+    phone:
+      international_format: "^\\+[1-9]\\d{1,14}$"
+      us_format: "^\\+?1?[-.\\s]?\\(?[0-9]{3}\\)?[-.\\s]?[0-9]{3}[-.\\s]?[0-9]{4}$"
+      validation_service: "phone_validator_api"
+      
+    date:
+      format: "YYYY-MM-DD"
+      min_date: "1900-01-01"
+      max_date: "+0 years"  # Current date
+      
+    password:
+      min_length: 12
+      max_length: 128
+      require_uppercase: true
+      require_lowercase: true
+      require_numbers: true
+      require_special_chars: true
+      forbidden_patterns:
+        - "password"
+        - "123456"
+        - "qwerty"
+        - "admin"
+        - "login"
+      entropy_minimum: 50
+      
+    credit_card:
+      luhn_validation: true
+      supported_types:
+        - "visa"
+        - "mastercard"
+        - "amex"
+        - "discover"
+      format: "masked"  # Show only last 4 digits
+      
+  business_rules:
+    age_verification:
+      minimum_age: 18
+      maximum_age: 150
+      age_calculation: "from_birth_date"
+      
+    kyc_requirements:
+      individual:
+        required_documents:
+          - "government_id"
+          - "proof_of_address"
+        identity_score_threshold: 0.8
+        
+      business:
+        required_documents:
+          - "business_registration"
+          - "tax_identification"
+          - "authorized_representative_id"
+        kyb_score_threshold: 0.85
+        
+    data_retention:
+      customer_data: "7 years"
+      audit_logs: "10 years"
+      marketing_consent: "until_withdrawn"
+      temporary_files: "30 days"
+      
+    compliance_checks:
+      gdpr:
+        applicable_regions: ["EU", "EEA", "UK"]
+        consent_required_for:
+          - "marketing_communications"
+          - "data_sharing_third_parties"
+          - "profiling_activities"
+        retention_limits:
+          inactive_accounts: "3 years"
+          marketing_data: "2 years"
+          
+      ccpa:
+        applicable_regions: ["CA", "US"]  # California and US territories
+        right_to_know: true
+        right_to_delete: true
+        right_to_opt_out: true
+        
+      pci_dss:
+        applicable_when: "processing_card_data"
+        requirements:
+          - "encrypted_transmission"
+          - "secure_storage"
+          - "access_logging"
+          - "regular_security_testing"
+          
+  security_policies:
+    authentication:
+      password_expiry: "90 days"
+      failed_login_lockout: 5
+      lockout_duration: "30 minutes"
+      session_timeout: "4 hours"
+      
+    two_factor_authentication:
+      required_for:
+        - "admin_accounts"
+        - "high_value_transactions"
+        - "sensitive_data_access"
+      methods:
+        - "authenticator_app"
+        - "sms"
+        - "email"
+        - "hardware_token"
+        
+    data_encryption:
+      at_rest: "AES-256"
+      in_transit: "TLS 1.3"
+      key_rotation: "annually"
+      
+  data_quality:
+    duplicate_detection:
+      email_matching: "exact"
+      name_matching: "fuzzy_80_percent"
+      address_matching: "normalized_comparison"
+      
+    data_standardization:
+      names:
+        capitalization: "title_case"
+        remove_extra_spaces: true
+        
+      addresses:
+        service: "address_validation_api"
+        standardize_format: true
+        verify_deliverability: true
+        
+      phone_numbers:
+        format: "international"
+        remove_formatting: true
+        country_code_required: true
+        
+    completeness_requirements:
+      personal_account:
+        required_completion: 80  # 80% of required fields
+        critical_fields:
+          - "email"
+          - "full_name"
+          - "date_of_birth"
+          
+      business_account:
+        required_completion: 90  # 90% of required fields
+        critical_fields:
+          - "company_name"
+          - "tax_id"
+          - "authorized_representative"
+          
+  error_handling:
+    validation_errors:
+      show_inline: true
+      aggregate_errors: false
+      max_errors_displayed: 10
+      
+    user_friendly_messages:
+      field_required: "This field is required"
+      invalid_email: "Please enter a valid email address"
+      invalid_phone: "Please enter a valid phone number with country code"
+      password_weak: "Password must be at least 12 characters with uppercase, lowercase, numbers, and symbols"
+      age_restriction: "You must be at least 18 years old to create an account"
+      file_too_large: "File must be smaller than {max_size}"
+      invalid_file_type: "Only {allowed_types} files are allowed"
+      
+    retry_policies:
+      api_validation: 
+        max_retries: 3
+        backoff_strategy: "exponential"
+        
+      document_upload:
+        max_retries: 5
+        retry_on: ["network_error", "timeout"]
+        
+  accessibility_compliance:
+    wcag_level: "AA"
+    requirements:
+      keyboard_navigation: true
+      screen_reader_support: true
+      color_contrast_ratio: 4.5
+      alternative_text: "required"
+      form_labels: "explicit"
+      error_identification: "programmatic"
+      
+  localization:
+    supported_languages:
+      - code: "en"
+        name: "English"
+        date_format: "MM/DD/YYYY"
+        number_format: "1,234.56"
+        
+      - code: "es"
+        name: "Spanish"
+        date_format: "DD/MM/YYYY"
+        number_format: "1.234,56"
+        
+      - code: "fr"
+        name: "French"
+        date_format: "DD/MM/YYYY"
+        number_format: "1 234,56"
+        
+      - code: "de"
+        name: "German"
+        date_format: "DD.MM.YYYY"
+        number_format: "1.234,56"
+        
+    currency_formats:
+      USD: "$1,234.56"
+      EUR: "€1.234,56"
+      GBP: "£1,234.56"
+      JPY: "¥1,234"
+      
+  performance_optimization:
+    form_rendering:
+      lazy_load_choices: true
+      pagination_threshold: 50  # Paginate choice lists over 50 items
+      cache_validation_results: "1 hour"
+      
+    file_uploads:
+      chunk_size: "1MB"
+      parallel_uploads: 3
+      progress_reporting: true
+      virus_scanning: true
+      
+    validation_caching:
+      email_validation: "24 hours"
+      address_validation: "7 days"
+      business_registration: "30 days"

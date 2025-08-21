@@ -1,0 +1,227 @@
+teams:
+  engineering:
+    name: "Engineering Team"
+    description: "Core development team"
+    slack_channel: "#engineering"
+    email_group: "engineering@company.com"
+    members:
+      - name: "Alice Johnson"
+        role: "Senior Software Engineer"
+        email: "alice.johnson@company.com"
+        slack: "@alice"
+        phone: "+1-555-0101"
+        timezone: "US/Pacific"
+        on_call_rotation: true
+        expertise: ["backend", "databases", "performance"]
+        
+      - name: "Bob Smith"
+        role: "Frontend Developer"
+        email: "bob.smith@company.com"
+        slack: "@bob"
+        phone: "+1-555-0102"
+        timezone: "US/Eastern"
+        on_call_rotation: false
+        expertise: ["frontend", "ui_ux", "javascript"]
+        
+      - name: "Carol Davis"
+        role: "DevOps Engineer"
+        email: "carol.davis@company.com"
+        slack: "@carol"
+        phone: "+1-555-0103"
+        timezone: "US/Central"
+        on_call_rotation: true
+        expertise: ["infrastructure", "ci_cd", "monitoring"]
+
+  sre:
+    name: "Site Reliability Engineering"
+    description: "Infrastructure and reliability team"
+    slack_channel: "#sre"
+    email_group: "sre@company.com"
+    members:
+      - name: "David Wilson"
+        role: "SRE Lead"
+        email: "david.wilson@company.com"
+        slack: "@david.wilson"
+        phone: "+1-555-0201"
+        timezone: "US/Pacific"
+        on_call_rotation: true
+        expertise: ["kubernetes", "monitoring", "incident_response"]
+        
+      - name: "Eva Martinez"
+        role: "Infrastructure Engineer"
+        email: "eva.martinez@company.com"
+        slack: "@eva"
+        phone: "+1-555-0202"
+        timezone: "US/Mountain"
+        on_call_rotation: true
+        expertise: ["cloud", "security", "automation"]
+
+  security:
+    name: "Security Team"
+    description: "Information security and compliance"
+    slack_channel: "#security"
+    email_group: "security@company.com"
+    members:
+      - name: "Frank Chen"
+        role: "Security Lead"
+        email: "frank.chen@company.com"
+        slack: "@frank.chen"
+        phone: "+1-555-0301"
+        timezone: "US/Pacific"
+        on_call_rotation: true
+        expertise: ["appsec", "compliance", "incident_response"]
+        
+      - name: "Grace Kim"
+        role: "Security Engineer"
+        email: "grace.kim@company.com"
+        slack: "@grace"
+        phone: "+1-555-0302"
+        timezone: "US/Eastern"
+        on_call_rotation: true
+        expertise: ["network_security", "vulnerability_management"]
+
+  product:
+    name: "Product Team"
+    description: "Product management and design"
+    slack_channel: "#product"
+    email_group: "product@company.com"
+    members:
+      - name: "Henry Rodriguez"
+        role: "Product Manager"
+        email: "henry.rodriguez@company.com"
+        slack: "@henry"
+        phone: "+1-555-0401"
+        timezone: "US/Pacific"
+        on_call_rotation: false
+        expertise: ["product_strategy", "user_research", "analytics"]
+        
+      - name: "Iris Taylor"
+        role: "UX Designer"
+        email: "iris.taylor@company.com"
+        slack: "@iris"
+        phone: "+1-555-0402"
+        timezone: "US/Eastern"
+        on_call_rotation: false
+        expertise: ["ux_design", "prototyping", "user_testing"]
+
+on_call_rotations:
+  primary:
+    name: "Primary On-Call"
+    description: "Primary escalation for critical incidents"
+    schedule:
+      - week: 1
+        engineer: "alice.johnson@company.com"
+        backup: "carol.davis@company.com"
+      - week: 2
+        engineer: "david.wilson@company.com"
+        backup: "eva.martinez@company.com"
+      - week: 3
+        engineer: "carol.davis@company.com"
+        backup: "alice.johnson@company.com"
+      - week: 4
+        engineer: "eva.martinez@company.com"
+        backup: "david.wilson@company.com"
+    
+  security:
+    name: "Security On-Call"
+    description: "Security incident response rotation"
+    schedule:
+      - week: 1
+        engineer: "frank.chen@company.com"
+        backup: "grace.kim@company.com"
+      - week: 2
+        engineer: "grace.kim@company.com"
+        backup: "frank.chen@company.com"
+
+escalation_contacts:
+  engineering_manager:
+    name: "John Manager"
+    role: "Engineering Manager"
+    email: "john.manager@company.com"
+    slack: "@john.manager"
+    phone: "+1-555-0501"
+    timezone: "US/Pacific"
+    
+  sre_lead:
+    name: "David Wilson"
+    role: "SRE Lead"
+    email: "david.wilson@company.com"
+    slack: "@david.wilson"
+    phone: "+1-555-0201"
+    timezone: "US/Pacific"
+    
+  security_lead:
+    name: "Frank Chen"
+    role: "Security Lead"
+    email: "frank.chen@company.com"
+    slack: "@frank.chen"
+    phone: "+1-555-0301"
+    timezone: "US/Pacific"
+    
+  cto:
+    name: "Sarah CTO"
+    role: "Chief Technology Officer"
+    email: "sarah.cto@company.com"
+    slack: "@sarah.cto"
+    phone: "+1-555-0001"
+    timezone: "US/Pacific"
+
+notification_preferences:
+  business_hours:
+    start: "09:00"
+    end: "17:00"
+    timezone: "US/Pacific"
+    
+  quiet_hours:
+    start: "22:00"
+    end: "08:00"
+    timezone: "US/Pacific"
+    
+  weekend_policy:
+    critical_only: true
+    reduced_channels: ["slack", "sms"]
+    
+  holiday_policy:
+    critical_only: true
+    escalation_delay_multiplier: 0.5
+
+communication_templates:
+  incident_declared:
+    subject: "🚨 Incident #{incident_id}: {title}"
+    slack_message: |
+      🚨 **Incident Declared**
+      
+      **Incident ID:** #{incident_id}
+      **Severity:** {severity}
+      **Title:** {title}
+      **Description:** {description}
+      
+      **Incident Commander:** {commander}
+      **War Room:** {war_room_link}
+      
+      Please join the war room if you're part of the response team.
+    
+  incident_resolved:
+    subject: "✅ Incident #{incident_id} Resolved: {title}"
+    slack_message: |
+      ✅ **Incident Resolved**
+      
+      **Incident ID:** #{incident_id}
+      **Duration:** {duration}
+      **Resolution:** {resolution}
+      
+      **Post-mortem:** {postmortem_link}
+      
+      Great work team! 🎉
+      
+  maintenance_window:
+    subject: "🔧 Scheduled Maintenance: {service}"
+    slack_message: |
+      🔧 **Scheduled Maintenance Window**
+      
+      **Service:** {service}
+      **Start Time:** {start_time}
+      **Duration:** {duration}
+      **Impact:** {expected_impact}
+      
+      **Details:** {description}

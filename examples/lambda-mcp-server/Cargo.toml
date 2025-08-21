@@ -1,0 +1,43 @@
+[package]
+name = "lambda-mcp-server"
+version = "0.1.0"
+edition.workspace = true
+description = "AWS Lambda serverless MCP server using mcp-framework components"
+license = "MIT"
+
+[[bin]]
+name = "lambda-mcp-server"
+path = "src/main.rs"
+
+[dependencies]
+# Lambda runtime with streaming support
+lambda_http.workspace = true
+
+# Our MCP framework
+mcp-server = { workspace = true }
+http-mcp-server = { workspace = true }
+mcp-protocol = { workspace = true }
+mcp-derive = { workspace = true }
+json-rpc-server = { workspace = true }
+async-trait = { workspace = true }
+
+# HTTP and JSON handling
+serde_json = { workspace = true }
+uuid = { workspace = true }
+# HTTP headers for CORS support
+http = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+
+# Error handling and logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tokio-test.workspace = true
+
+[features]
+default = ["lambda"]
+lambda = []
+local = []

@@ -1,0 +1,281 @@
+{
+  "application": {
+    "name": "Content Management System",
+    "version": "2.1.4",
+    "description": "Production-ready CMS with user management and content publishing",
+    "environment": "production"
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "workers": 4,
+    "timeout": 30,
+    "max_connections": 1000,
+    "keepalive": 75,
+    "compression": {
+      "enabled": true,
+      "level": 6,
+      "threshold": 1024
+    }
+  },
+  "database": {
+    "host": "localhost",
+    "port": 5432,
+    "name": "cms_production",
+    "username": "cms_user",
+    "password": "${DB_PASSWORD}",
+    "pool_size": 20,
+    "pool_timeout": 30,
+    "connection_timeout": 15,
+    "ssl_mode": "require",
+    "migrations": {
+      "auto_run": false,
+      "directory": "./migrations"
+    }
+  },
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "database": 0,
+    "password": "${REDIS_PASSWORD}",
+    "pool_size": 10,
+    "timeout": 5,
+    "cluster_mode": false,
+    "sentinel": {
+      "enabled": false,
+      "master_name": "mymaster",
+      "nodes": []
+    }
+  },
+  "authentication": {
+    "jwt": {
+      "secret": "${JWT_SECRET}",
+      "expiration": 3600,
+      "refresh_expiration": 604800,
+      "issuer": "cms-api",
+      "audience": "cms-users"
+    },
+    "session": {
+      "timeout": 1800,
+      "cleanup_interval": 300,
+      "secure_cookies": true,
+      "same_site": "strict"
+    },
+    "password": {
+      "min_length": 8,
+      "require_uppercase": true,
+      "require_lowercase": true,
+      "require_numbers": true,
+      "require_symbols": true,
+      "bcrypt_rounds": 12
+    },
+    "two_factor": {
+      "enabled": true,
+      "app_name": "CMS",
+      "issuer": "Company CMS",
+      "window_size": 1
+    }
+  },
+  "security": {
+    "cors": {
+      "enabled": true,
+      "allowed_origins": [
+        "https://cms.example.com",
+        "https://admin.example.com"
+      ],
+      "allowed_methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      "allowed_headers": ["Authorization", "Content-Type", "X-Requested-With"],
+      "expose_headers": ["X-Total-Count", "X-Page-Count"],
+      "credentials": true,
+      "max_age": 86400
+    },
+    "rate_limiting": {
+      "enabled": true,
+      "window_size": 3600,
+      "max_requests": 1000,
+      "ip_whitelist": ["127.0.0.1", "10.0.0.0/8"],
+      "authenticated_multiplier": 5
+    },
+    "content_security_policy": {
+      "enabled": true,
+      "default_src": "'self'",
+      "script_src": "'self' 'unsafe-inline' https://cdn.jsdelivr.net",
+      "style_src": "'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "img_src": "'self' data: https:",
+      "font_src": "'self' https://fonts.gstatic.com",
+      "connect_src": "'self' https://api.example.com"
+    }
+  },
+  "storage": {
+    "default": "s3",
+    "providers": {
+      "local": {
+        "driver": "local",
+        "root": "./storage/uploads",
+        "url": "/uploads",
+        "permissions": {
+          "file": 644,
+          "dir": 755
+        }
+      },
+      "s3": {
+        "driver": "s3",
+        "bucket": "${S3_BUCKET}",
+        "region": "${S3_REGION}",
+        "access_key": "${S3_ACCESS_KEY}",
+        "secret_key": "${S3_SECRET_KEY}",
+        "endpoint": null,
+        "path_style": false,
+        "cdn_url": "https://cdn.example.com"
+      }
+    },
+    "upload": {
+      "max_file_size": 10485760,
+      "allowed_extensions": [
+        "jpg", "jpeg", "png", "gif", "webp",
+        "pdf", "doc", "docx", "txt", "csv",
+        "mp3", "mp4", "avi", "mov"
+      ],
+      "image_processing": {
+        "enabled": true,
+        "thumbnails": [
+          {"name": "thumb", "width": 150, "height": 150},
+          {"name": "medium", "width": 800, "height": 600},
+          {"name": "large", "width": 1920, "height": 1080}
+        ]
+      }
+    }
+  },
+  "email": {
+    "default": "smtp",
+    "providers": {
+      "smtp": {
+        "host": "${SMTP_HOST}",
+        "port": 587,
+        "username": "${SMTP_USERNAME}",
+        "password": "${SMTP_PASSWORD}",
+        "encryption": "tls",
+        "from_address": "noreply@example.com",
+        "from_name": "CMS System"
+      },
+      "ses": {
+        "region": "${AWS_REGION}",
+        "access_key": "${AWS_ACCESS_KEY}",
+        "secret_key": "${AWS_SECRET_KEY}",
+        "from_address": "noreply@example.com",
+        "from_name": "CMS System"
+      }
+    },
+    "templates": {
+      "welcome": "emails/welcome.html",
+      "password_reset": "emails/password_reset.html",
+      "email_verification": "emails/email_verification.html"
+    }
+  },
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "output": "stdout",
+    "file": {
+      "enabled": false,
+      "path": "./logs/app.log",
+      "max_size": "100MB",
+      "max_files": 10,
+      "compress": true
+    },
+    "syslog": {
+      "enabled": false,
+      "facility": "local0",
+      "tag": "cms-api"
+    }
+  },
+  "monitoring": {
+    "metrics": {
+      "enabled": true,
+      "prometheus": {
+        "enabled": true,
+        "endpoint": "/metrics",
+        "namespace": "cms"
+      }
+    },
+    "health_checks": {
+      "enabled": true,
+      "endpoint": "/health",
+      "checks": ["database", "redis", "storage", "external_apis"]
+    },
+    "tracing": {
+      "enabled": true,
+      "jaeger": {
+        "endpoint": "http://localhost:14268/api/traces",
+        "service_name": "cms-api"
+      }
+    }
+  },
+  "features": {
+    "user_registration": true,
+    "email_verification": true,
+    "password_reset": true,
+    "two_factor_auth": true,
+    "content_moderation": true,
+    "file_uploads": true,
+    "comments": true,
+    "search": true,
+    "analytics": true,
+    "api_documentation": true,
+    "admin_panel": true
+  },
+  "api": {
+    "version": "v1",
+    "base_path": "/api/v1",
+    "documentation": {
+      "enabled": true,
+      "path": "/docs",
+      "title": "CMS API Documentation",
+      "description": "RESTful API for Content Management System"
+    },
+    "pagination": {
+      "default_limit": 20,
+      "max_limit": 100
+    },
+    "versioning": {
+      "strategy": "header",
+      "header_name": "API-Version",
+      "default_version": "v1"
+    }
+  },
+  "search": {
+    "provider": "elasticsearch",
+    "elasticsearch": {
+      "hosts": ["${ELASTICSEARCH_HOST}:9200"],
+      "username": "${ELASTICSEARCH_USERNAME}",
+      "password": "${ELASTICSEARCH_PASSWORD}",
+      "index_prefix": "cms",
+      "settings": {
+        "number_of_shards": 1,
+        "number_of_replicas": 1
+      }
+    }
+  },
+  "cache": {
+    "default": "redis",
+    "ttl": 3600,
+    "prefixes": {
+      "sessions": "sess:",
+      "users": "user:",
+      "posts": "post:",
+      "api": "api:"
+    }
+  },
+  "background_jobs": {
+    "provider": "redis",
+    "queues": {
+      "default": "cms_jobs",
+      "emails": "cms_emails",
+      "media": "cms_media",
+      "analytics": "cms_analytics"
+    },
+    "workers": 2,
+    "retry_attempts": 3,
+    "retry_delay": 60
+  }
+}
