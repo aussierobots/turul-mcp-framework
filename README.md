@@ -1,6 +1,9 @@
-# MCP Framework - Production-Ready Rust Implementation
+# MCP Framework - this is Work In Progress - Rust Implementation
 
 A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-06-18 specification**.
+
+## There are still significant architecture changes occurring
+Use at own risk. Suggest forking
 
 ## ✨ Key Highlights
 
@@ -25,7 +28,7 @@ use mcp_server::{McpServer, McpResult};
 struct AddTool {
     #[param(description = "First number")]
     a: f64,
-    #[param(description = "Second number")]  
+    #[param(description = "Second number")]
     b: f64,
 }
 
@@ -77,11 +80,11 @@ impl AuditTool {
             compliance_tags: vec!["sox".to_string(), "gdpr".to_string()],
             retention_days: 2555, // 7 years for compliance
         };
-        
+
         // Business logic with external data configuration
         let audit_policies = load_audit_policies("data/audit_policies.yaml")?;
         let formatted_entry = format_audit_entry(&audit_entry, &audit_policies)?;
-        
+
         Ok(formatted_entry)
     }
 }
@@ -91,7 +94,7 @@ impl AuditTool {
 
 ### Core Framework (6 Crates)
 - **`mcp-server`** - High-level server builder with session management
-- **`mcp-client`** - Comprehensive client library with multi-transport support  
+- **`mcp-client`** - Comprehensive client library with multi-transport support
 - **`http-mcp-server`** - HTTP/SSE transport with CORS and streaming
 - **`mcp-protocol-2025-06-18`** - Complete MCP specification implementation
 - **`mcp-derive`** - Procedural and declarative macros
@@ -122,7 +125,7 @@ impl AuditTool {
 Production-ready servers solving actual business problems:
 
 1. **comprehensive-server** → Development Team Integration Platform
-2. **dynamic-resource-server** → Enterprise API Data Gateway  
+2. **dynamic-resource-server** → Enterprise API Data Gateway
 3. **logging-server** → Application Audit & Compliance System
 4. **elicitation-server** → Customer Onboarding Platform
 5. **notification-server** → Development Team Alert System
@@ -168,7 +171,7 @@ sam deploy --guided
 ### Comprehensive Test Coverage
 - **217+ Test Functions** across the entire framework
 - **155 Core Framework Tests** - Protocol, server, client, macros
-- **18 Integration Tests** - MCP 2025-06-18 specification compliance  
+- **18 Integration Tests** - MCP 2025-06-18 specification compliance
 - **44 Example Tests** - Real-world scenario validation
 - **Performance Benchmarks** - Load testing and stress testing
 
@@ -176,7 +179,7 @@ sam deploy --guided
 # Run all tests
 cargo test --workspace
 
-# Integration tests  
+# Integration tests
 cargo test -p mcp-framework-integration-tests
 
 # Performance benchmarks
@@ -233,8 +236,8 @@ tool! {
 #[async_trait]
 impl McpTool for CustomTool {
     fn name(&self) -> &str { "custom_business_logic" }
-    
-    async fn call(&self, args: Value, session: Option<SessionContext>) 
+
+    async fn call(&self, args: Value, session: Option<SessionContext>)
         -> McpResult<Vec<ToolResult>> {
         // Full control over implementation
     }
@@ -322,7 +325,7 @@ curl -N -H "Accept: text/event-stream" \\
 - **logging-server**: SOX, PCI DSS, GDPR, and HIPAA compliance reporting
 - **comprehensive-server**: Team collaboration with project management and workflow automation
 
-### Developer Productivity  
+### Developer Productivity
 - **completion-server**: Context-aware IDE completions for multiple languages and frameworks
 - **prompts-server**: AI-powered code review and architecture guidance
 - **derive-macro-server**: Template-based code generation with validation
@@ -343,7 +346,7 @@ curl -N -H "Accept: text/event-stream" \\
 ## 🤝 Contributing
 
 1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)  
+2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
 3. **Add tests** for your changes
 4. **Run** the full test suite (`cargo test --workspace`)
 5. **Benchmark** performance impact if applicable
@@ -358,7 +361,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 ## 🙏 Acknowledgments
 
 - **[Model Context Protocol](https://modelcontextprotocol.io)** - The foundational specification
-- **[Tokio](https://tokio.rs)** - Async runtime powering the framework  
+- **[Tokio](https://tokio.rs)** - Async runtime powering the framework
 - **[Hyper](https://hyper.rs)** - HTTP foundation with HTTP/2 support
 - **[Serde](https://serde.rs)** - Serialization framework
 - **Rust Community** - For exceptional tooling and ecosystem
