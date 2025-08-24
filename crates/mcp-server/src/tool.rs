@@ -3,7 +3,7 @@
 //! This module defines the high-level trait for implementing MCP tools.
 
 use async_trait::async_trait;
-use mcp_protocol::{ToolSchema, ToolResult, McpResult};
+use mcp_protocol::{ToolSchema, ToolResult, McpResult, CallToolResponse};
 use serde_json::Value;
 
 use crate::session::SessionContext;
@@ -23,6 +23,11 @@ pub trait McpTool: Send + Sync {
     /// JSON Schema describing the tool's input parameters
     fn input_schema(&self) -> ToolSchema;
 
+    /// Optional: JSON Schema describing the tool's output results
+    fn output_schema(&self) -> Option<ToolSchema> {
+        None
+    }
+
     /// Execute the tool with the given arguments and optional session context
     /// 
     /// The session context is automatically provided by the framework when available.
@@ -35,6 +40,34 @@ pub trait McpTool: Send + Sync {
         session: Option<SessionContext>,
     ) -> McpResult<Vec<ToolResult>>;
 
+    /// Execute the tool and return a complete CallToolResponse with structured content
+    /// 
+    /// This method provides comprehensive response handling including structured content
+    /// that matches the tool's output schema. The default implementation calls `call()`
+    /// and wraps the result, but tools can override this for full control.
+    async fn execute(
+        &self,
+        args: Value,
+        session: Option<SessionContext>,
+    ) -> McpResult<CallToolResponse> {
+        let content = self.call(args, session).await?;
+        Ok(CallToolResponse::success(content))
+    }
+
+    /// Execute the tool and return a complete CallToolResponse with both content and structured data
+    /// 
+    /// This is a convenience method for tools that want to return both human-readable content
+    /// and structured data that matches their output schema.
+    async fn execute_with_structured_content(
+        &self,
+        args: Value,
+        session: Option<SessionContext>,
+        structured_content: Value,
+    ) -> McpResult<CallToolResponse> {
+        let content = self.call(args, session).await?;
+        Ok(CallToolResponse::success(content).with_structured_content(structured_content))
+    }
+
     /// Optional: Get tool annotations for client hints
     fn annotations(&self) -> Option<Value> {
         None
@@ -45,6 +78,10 @@ pub trait McpTool: Send + Sync {
 pub fn tool_to_descriptor(tool: &dyn McpTool) -> mcp_protocol::Tool {
     let mut mcp_tool = mcp_protocol::Tool::new(tool.name(), tool.input_schema())
         .with_description(tool.description());
+
+    if let Some(output_schema) = tool.output_schema() {
+        mcp_tool = mcp_tool.with_output_schema(output_schema);
+    }
 
     if let Some(annotations) = tool.annotations() {
         mcp_tool = mcp_tool.with_annotations(annotations);

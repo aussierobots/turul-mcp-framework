@@ -10,7 +10,7 @@ description = "HTTP transport layer for Model Context Protocol (MCP) servers"
 
 [features]
 default = ["sse"]
-sse = []  # Server-Sent Events support
+sse = []          # Server-Sent Events support
 
 [dependencies]
 json-rpc-server.workspace = true
@@ -31,7 +31,9 @@ tokio-stream.workspace = true
 http-body-util.workspace = true
 http-body.workspace = true
 bytes.workspace = true
-uuid.workspace = true
+uuid = { workspace = true, features = ["v7"] }
+lazy_static = "1.5"
+chrono = { version = "0.4", features = ["serde"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

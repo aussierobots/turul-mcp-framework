@@ -8,8 +8,13 @@ members = [
     "crates/mcp-server",
     "crates/mcp-derive",
     "crates/mcp-client",
+    "examples/calculator-add-simple-server-derive",
+    "examples/calculator-add-simple-server",
     "examples/calculator-server",
     "examples/macro-calculator",
+    "examples/comprehensive-types-example",
+    "examples/mixed-approaches-example",
+    "examples/all-tool-approaches-example",
     "examples/comprehensive-server",
     "examples/minimal-server",
     "examples/manual-tools-server",
@@ -35,6 +40,7 @@ members = [
     "examples/elicitation-server",
     "examples/lambda-mcp-server",
     "examples/lambda-mcp-client",
+    "examples/calculator-struct-output-example",
     "tests",
 ]
 

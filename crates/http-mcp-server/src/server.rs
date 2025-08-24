@@ -11,7 +11,7 @@ use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 use tracing::{info, error, debug};
 
-use crate::{Result, McpHttpHandler, CorsLayer, sse::SseManager};
+use crate::{Result, CorsLayer, SessionMcpHandler, mcp_session};
 use json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
 
 /// Configuration for the HTTP MCP server
@@ -109,7 +109,6 @@ impl HttpMcpServerBuilder {
         HttpMcpServer {
             config: self.config,
             dispatcher: Arc::new(self.dispatcher),
-            sse_manager: Arc::new(SseManager::new()),
         }
     }
 }
@@ -125,7 +124,6 @@ impl Default for HttpMcpServerBuilder {
 pub struct HttpMcpServer {
     config: ServerConfig,
     dispatcher: Arc<JsonRpcDispatcher>,
-    sse_manager: Arc<SseManager>,
 }
 
 impl HttpMcpServer {
@@ -134,13 +132,11 @@ impl HttpMcpServer {
         HttpMcpServerBuilder::new()
     }
 
-    /// Get access to the SSE manager for sending notifications
-    pub fn sse_manager(&self) -> &Arc<SseManager> {
-        &self.sse_manager
-    }
-
     /// Run the server
     pub async fn run(&self) -> Result<()> {
+        // Start session cleanup task
+        mcp_session::spawn_session_cleanup();
+        
         let listener = TcpListener::bind(&self.config.bind_address).await?;
         info!("HTTP MCP server listening on {}", self.config.bind_address);
         info!("MCP endpoint available at: {}", self.config.mcp_path);
@@ -151,12 +147,11 @@ impl HttpMcpServer {
 
             let config = self.config.clone();
             let dispatcher = Arc::clone(&self.dispatcher);
-            let sse_manager = Arc::clone(&self.sse_manager);
 
             tokio::spawn(async move {
                 let io = TokioIo::new(stream);
                 let service = service_fn(move |req| {
-                    handle_request(req, config.clone(), Arc::clone(&dispatcher), Arc::clone(&sse_manager))
+                    handle_request(req, config.clone(), Arc::clone(&dispatcher))
                 });
 
                 if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
@@ -167,12 +162,11 @@ impl HttpMcpServer {
     }
 }
 
-/// Handle HTTP requests
+/// Handle HTTP requests with session-integrated handler
 async fn handle_request(
     req: Request<hyper::body::Incoming>,
     config: ServerConfig,
     dispatcher: Arc<JsonRpcDispatcher>,
-    sse_manager: Arc<SseManager>,
 ) -> std::result::Result<Response<Full<Bytes>>, hyper::Error> {
     let method = req.method().clone();
     let uri = req.uri().clone();
@@ -180,41 +174,36 @@ async fn handle_request(
 
     debug!("Handling {} {}", method, path);
 
-    // Create the handler
-    let handler = McpHttpHandler::with_sse_manager(config, dispatcher, sse_manager);
+    // Create the JSON-RPC 2.0 over HTTP handler  
+    let handler = SessionMcpHandler::new(config.clone(), dispatcher);
 
-    // Route the request
-    let response = if path == &handler.config.mcp_path {
-        handler.handle_mcp_request(req).await
-    } else if path.starts_with(&format!("{}/", &handler.config.mcp_path)) {
-        // Sub-paths under MCP endpoint
-        handler.handle_mcp_request(req).await
+    // Route the request - handler now returns proper JSON-RPC responses
+    let response = if path == &config.mcp_path {
+        match handler.handle_mcp_request(req).await {
+            Ok(json_rpc_response) => json_rpc_response,
+            Err(err) => {
+                error!("Request handling error: {}", err);
+                Response::builder()
+                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .body(Full::new(Bytes::from(format!("Internal Server Error: {}", err))))
+                    .unwrap()
+            }
+        }
     } else {
         // 404 for other paths
-        Ok(Response::builder()
+        Response::builder()
             .status(StatusCode::NOT_FOUND)
             .body(Full::new(Bytes::from("Not Found")))
-            .unwrap())
+            .unwrap()
     };
 
     // Apply CORS if enabled
-    let response = match response {
-        Ok(mut resp) => {
-            if handler.config.enable_cors {
-                CorsLayer::apply_cors_headers(resp.headers_mut());
-            }
-            Ok(resp)
-        }
-        Err(err) => {
-            error!("Request handling error: {}", err);
-            Ok(Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
-                .body(Full::new(Bytes::from(format!("Internal Server Error: {}", err))))
-                .unwrap())
-        }
-    };
-
-    response
+    let mut final_response = response;
+    if config.enable_cors {
+        CorsLayer::apply_cors_headers(final_response.headers_mut());
+    }
+    
+    Ok(final_response)
 }
 
 #[cfg(test)]

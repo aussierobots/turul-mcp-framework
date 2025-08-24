@@ -19,6 +19,9 @@ pub struct Prompt {
     /// Arguments that the prompt accepts
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arguments: Option<Vec<PromptArgument>>,
+    /// Optional annotations for the prompt
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub annotations: Option<Value>,
 }
 
 impl Prompt {
@@ -27,6 +30,7 @@ impl Prompt {
             name: name.into(),
             description: None,
             arguments: None,
+            annotations: None,
         }
     }
 
@@ -37,6 +41,11 @@ impl Prompt {
 
     pub fn with_arguments(mut self, arguments: Vec<PromptArgument>) -> Self {
         self.arguments = Some(arguments);
+        self
+    }
+
+    pub fn with_annotations(mut self, annotations: Value) -> Self {
+        self.annotations = Some(annotations);
         self
     }
 }

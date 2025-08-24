@@ -25,6 +25,7 @@ use syn::{parse_macro_input, DeriveInput, ItemFn, punctuated::Punctuated, Meta, 
 mod tool_derive;
 mod tool_attr;
 mod resource;
+mod json_schema_derive;
 mod utils;
 
 #[cfg(test)]
@@ -60,7 +61,7 @@ mod tests;
 ///     }
 /// }
 /// ```
-#[proc_macro_derive(McpTool, attributes(tool, param))]
+#[proc_macro_derive(McpTool, attributes(tool, param, output_type))]
 pub fn derive_mcp_tool(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     tool_derive::derive_mcp_tool_impl(input)
@@ -130,6 +131,37 @@ pub fn derive_mcp_resource(input: TokenStream) -> TokenStream {
     resource::mcp_resource_impl(input)
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
+}
+
+/// JsonSchema derive macro for generating JSON schema from struct definitions
+/// 
+/// This macro generates a JSON schema implementation for structs that can be used
+/// as output types in MCP tools. It introspects the struct fields and generates
+/// the appropriate schema properties and requirements.
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::JsonSchema;
+/// use serde::{Deserialize, Serialize};
+/// 
+/// #[derive(JsonSchema, Serialize, Deserialize)]
+/// struct CalculationResult {
+///     pub operation: String,
+///     pub result: f64,
+///     pub metadata: CalculationMetadata,
+/// }
+/// 
+/// #[derive(JsonSchema, Serialize, Deserialize)]
+/// struct CalculationMetadata {
+///     pub precision: String,
+///     pub is_exact: bool,
+/// }
+/// ```
+#[proc_macro_derive(JsonSchema)]
+pub fn derive_json_schema(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    json_schema_derive::derive_json_schema(input).into()
 }
 
 /// Declarative macro for creating simple resources

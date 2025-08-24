@@ -19,6 +19,10 @@ pub mod handler;
 pub mod cors;
 pub mod sse;
 pub mod streamable_http;
+pub mod protocol;
+pub mod mcp_session;
+pub mod session_handler;
+pub mod json_rpc_responses;
 
 #[cfg(test)]
 mod tests;
@@ -27,7 +31,9 @@ mod tests;
 pub use server::{HttpMcpServer, HttpMcpServerBuilder, ServerConfig};
 pub use handler::McpHttpHandler;
 pub use cors::CorsLayer;
-pub use streamable_http::{StreamableHttpHandler, StreamableHttpContext, McpProtocolVersion};
+pub use streamable_http::{StreamableHttpHandler, StreamableHttpContext};
+pub use protocol::{McpProtocolVersion, extract_protocol_version, extract_session_id};
+pub use session_handler::{SessionMcpHandler, SessionSseStream};
 
 // Re-export foundational types
 pub use json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};

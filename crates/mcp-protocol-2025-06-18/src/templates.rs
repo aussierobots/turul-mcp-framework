@@ -19,6 +19,9 @@ pub struct Template {
     /// Template variables
     #[serde(skip_serializing_if = "Option::is_none")]
     pub variables: Option<Vec<TemplateVariable>>,
+    /// Optional annotations for the template
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub annotations: Option<Value>,
 }
 
 /// Template variable definition
@@ -64,6 +67,7 @@ impl Template {
             content: String::new(),
             description: None,
             variables: None,
+            annotations: None,
         }
     }
     
@@ -79,6 +83,11 @@ impl Template {
 
     pub fn with_variables(mut self, variables: Vec<TemplateVariable>) -> Self {
         self.variables = Some(variables);
+        self
+    }
+
+    pub fn with_annotations(mut self, annotations: Value) -> Self {
+        self.annotations = Some(annotations);
         self
     }
 }

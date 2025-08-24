@@ -49,6 +49,8 @@ impl McpServer {
         tools: HashMap<String, Arc<dyn McpTool>>,
         handlers: HashMap<String, Arc<dyn McpHandler>>,
         instructions: Option<String>,
+        session_timeout_minutes: Option<u64>,
+        session_cleanup_interval_seconds: Option<u64>,
         #[cfg(feature = "http")]
         bind_address: SocketAddr,
         #[cfg(feature = "http")]
@@ -58,8 +60,16 @@ impl McpServer {
         #[cfg(feature = "http")]
         enable_sse: bool,
     ) -> Self {
-        // Create session manager with server capabilities
-        let session_manager = Arc::new(SessionManager::new(capabilities.clone()));
+        // Create session manager with server capabilities and custom timeouts
+        let session_manager = if let (Some(timeout_mins), Some(cleanup_secs)) = (session_timeout_minutes, session_cleanup_interval_seconds) {
+            Arc::new(SessionManager::with_timeouts(
+                capabilities.clone(),
+                std::time::Duration::from_secs(timeout_mins * 60),
+                std::time::Duration::from_secs(cleanup_secs),
+            ))
+        } else {
+            Arc::new(SessionManager::new(capabilities.clone()))
+        };
         
         Self {
             implementation,
@@ -147,10 +157,9 @@ impl McpServer {
 
         let http_server = builder.build();
         
-        // Log SSE manager information if SSE is enabled
+        // SSE is now integrated directly into the session management
         if self.enable_sse {
-            debug!("SSE manager initialized with {} connections", 
-                   http_server.sse_manager().connection_count().await);
+            debug!("SSE support enabled with integrated session management");
         }
         
         http_server.run().await?;
@@ -462,22 +471,43 @@ impl ListToolsHandler {
 
 #[async_trait]
 impl JsonRpcHandler for ListToolsHandler {
-    async fn handle(&self, method: &str, _params: Option<json_rpc_server::RequestParams>) -> json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
+    async fn handle(&self, method: &str, params: Option<json_rpc_server::RequestParams>) -> json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
+        use mcp_protocol_2025_06_18::meta::{PaginatedResponse, Cursor};
+        
         debug!("Handling {} request", method);
 
         if method != "tools/list" {
-            return Err(json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                format!("Method not supported: {}", method)
+            return Err(json_rpc_server::error::JsonRpcProcessingError::RpcError(
+                json_rpc_server::JsonRpcError::method_not_found(
+                    json_rpc_server::types::RequestId::Number(0), method
+                )
             ));
         }
+
+        // Parse cursor from params if provided
+        let cursor = params.as_ref()
+            .and_then(|p| p.get("cursor"))
+            .and_then(|c| c.as_str())
+            .map(Cursor::from);
 
         let tools: Vec<Tool> = self.tools.values()
             .map(|tool| tool_to_descriptor(tool.as_ref()))
             .collect();
 
-        let response = ListToolsResponse::new(tools);
+        let base_response = ListToolsResponse::new(tools.clone());
+        
+        // Add pagination metadata
+        let has_more = false; // In a real implementation, this would depend on the actual data
+        let total = Some(tools.len() as u64);
+        
+        let paginated_response = PaginatedResponse::with_pagination(
+            base_response,
+            None, // next_cursor - would be calculated based on current page
+            total,
+            has_more
+        );
 
-        serde_json::to_value(response)
+        serde_json::to_value(paginated_response)
             .map_err(|e| json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string()))
     }
 
@@ -504,28 +534,37 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         debug!("Handling {} request with session support", method);
 
         if method != "tools/call" {
-            return Err(json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                format!("Method not supported: {}", method)
+            return Err(json_rpc_server::error::JsonRpcProcessingError::RpcError(
+                json_rpc_server::JsonRpcError::method_not_found(
+                    json_rpc_server::types::RequestId::Number(0), method
+                )
             ));
         }
 
         let params = params.ok_or_else(|| {
-            json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                "Missing parameters for tools/call".to_string()
+            let mcp_error = mcp_protocol::McpError::MissingParameter("CallToolRequest".to_string());
+            json_rpc_server::error::JsonRpcProcessingError::RpcError(
+                json_rpc_server::JsonRpcError::new(None, mcp_error.to_json_rpc_error())
             )
         })?;
 
         // Parse the tool call request
         let call_request: CallToolRequest = serde_json::from_value(params.to_value())
-            .map_err(|e| json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                format!("Invalid parameters for tools/call: {}", e)
-            ))?;
+            .map_err(|e| {
+                let mcp_error = mcp_protocol::McpError::InvalidParameters(format!("Invalid parameters for tools/call: {}", e));
+                json_rpc_server::error::JsonRpcProcessingError::RpcError(
+                    json_rpc_server::JsonRpcError::new(None, mcp_error.to_json_rpc_error())
+                )
+            })?;
 
         // Find the tool
         let tool = self.tools.get(&call_request.name)
-            .ok_or_else(|| json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                format!("Tool not found: {}", call_request.name)
-            ))?;
+            .ok_or_else(|| {
+                let mcp_error = mcp_protocol::McpError::ToolNotFound(call_request.name.clone());
+                json_rpc_server::error::JsonRpcProcessingError::RpcError(
+                    json_rpc_server::JsonRpcError::new(None, mcp_error.to_json_rpc_error())
+                )
+            })?;
 
         // Extract session ID from request (placeholder - will be from headers)
         let session_id = extract_session_id_from_params(&Some(params.clone()));
@@ -539,9 +578,8 @@ impl JsonRpcHandler for SessionAwareToolHandler {
 
         // Execute the tool with session context
         let args = call_request.arguments.unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
-        match tool.call(args, session_context).await {
-            Ok(content) => {
-                let response = CallToolResponse::success(content);
+        match tool.execute(args, session_context).await {
+            Ok(response) => {
                 serde_json::to_value(response)
                     .map_err(|e| json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string()))
             }

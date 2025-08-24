@@ -57,6 +57,7 @@ pub mod tool;
 pub mod server;
 pub mod handlers;
 pub mod session;
+pub mod dispatch;
 
 #[cfg(feature = "http")]
 pub mod http;
@@ -70,6 +71,7 @@ pub use tool::McpTool;
 pub use server::McpServer;
 pub use handlers::*;
 pub use session::{SessionContext, SessionManager, SessionEvent};
+pub use dispatch::{McpDispatcher, DispatchMiddleware, DispatchContext};
 
 // Re-export foundational types
 pub use json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};

@@ -10,11 +10,13 @@ use syn::{Attribute, Result};
 pub struct ToolMeta {
     pub name: String,
     pub description: String,
+    pub output_type: Option<syn::Type>,
 }
 
 pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
     let mut name = None;
     let mut description = None;
+    let mut output_type = None;
 
     for attr in attrs {
         if attr.path().is_ident("tool") {
@@ -30,6 +32,12 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
                 }
                 Ok(())
             })?;
+        } else if attr.path().is_ident("output_type") {
+            // Parse #[output_type(TypeName)] syntax
+            if let syn::Meta::List(meta_list) = &attr.meta {
+                let ty: syn::Type = syn::parse2(meta_list.tokens.clone())?;
+                output_type = Some(ty);
+            }
         }
     }
 
@@ -49,7 +57,7 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
         }
     })?;
 
-    Ok(ToolMeta { name, description })
+    Ok(ToolMeta { name, description, output_type })
 }
 
 /// Extract parameter metadata from field attributes
@@ -133,8 +141,15 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                         }
                     }
                     _ => {
-                        quote! {
-                            mcp_protocol::schema::JsonSchema::string() #description
+                        // Check if this is Vec<T>
+                        if type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Vec" {
+                            quote! {
+                                mcp_protocol::schema::JsonSchema::array() #description
+                            }
+                        } else {
+                            quote! {
+                                mcp_protocol::schema::JsonSchema::string() #description
+                            }
                         }
                     }
                 }
@@ -264,6 +279,32 @@ fn generate_option_extraction(field_name: &syn::Ident, inner_type: &syn::Type, f
                     .and_then(|i| i.try_into().ok());
             }
         }
+        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "i64") => {
+            quote! {
+                let #field_name: Option<i64> = args.get(#field_name_str)
+                    .and_then(|v| v.as_i64());
+            }
+        }
+        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "u32") => {
+            quote! {
+                let #field_name: Option<u32> = args.get(#field_name_str)
+                    .and_then(|v| v.as_u64())
+                    .and_then(|i| i.try_into().ok());
+            }
+        }
+        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "u64") => {
+            quote! {
+                let #field_name: Option<u64> = args.get(#field_name_str)
+                    .and_then(|v| v.as_u64());
+            }
+        }
+        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "f32") => {
+            quote! {
+                let #field_name: Option<f32> = args.get(#field_name_str)
+                    .and_then(|v| v.as_f64())
+                    .map(|f| f as f32);
+            }
+        }
         syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "bool") => {
             quote! {
                 let #field_name: Option<bool> = args.get(#field_name_str)
@@ -271,6 +312,21 @@ fn generate_option_extraction(field_name: &syn::Ident, inner_type: &syn::Type, f
             }
         }
         _ => {
+            // Check if this is Option<Vec<T>>
+            if let syn::Type::Path(inner_path) = inner_type {
+                if inner_path.path.segments.len() == 1 && inner_path.path.segments[0].ident == "Vec" {
+                    return quote! {
+                        let #field_name: Option<#inner_type> = args.get(#field_name_str)
+                            .and_then(|v| v.as_array())
+                            .map(|arr| arr.iter()
+                                .map(|item| serde_json::from_value(item.clone()))
+                                .collect::<Result<Vec<_>, _>>()
+                                .ok())
+                            .flatten();
+                    };
+                }
+            }
+            
             // Generic serde deserialization for complex Option types
             quote! {
                 let #field_name: Option<#inner_type> = args.get(#field_name_str)
@@ -306,11 +362,69 @@ fn generate_required_extraction(field_name: &syn::Ident, field_type: &syn::Type,
                     .ok_or_else(|| mcp_protocol::McpError::invalid_param_type(#field_name_str, "integer", "other"))?;
             }
         }
+        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "i64") => {
+            quote! {
+                let #field_name = args.get(#field_name_str)
+                    .and_then(|v| v.as_i64())
+                    .ok_or_else(|| mcp_protocol::McpError::invalid_param_type(#field_name_str, "integer", "other"))?;
+            }
+        }
+        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "u32") => {
+            quote! {
+                let #field_name = args.get(#field_name_str)
+                    .and_then(|v| v.as_u64())
+                    .and_then(|i| i.try_into().ok())
+                    .ok_or_else(|| mcp_protocol::McpError::invalid_param_type(#field_name_str, "integer", "other"))?;
+            }
+        }
+        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "u64") => {
+            quote! {
+                let #field_name = args.get(#field_name_str)
+                    .and_then(|v| v.as_u64())
+                    .ok_or_else(|| mcp_protocol::McpError::invalid_param_type(#field_name_str, "integer", "other"))?;
+            }
+        }
+        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "f32") => {
+            quote! {
+                let #field_name = args.get(#field_name_str)
+                    .and_then(|v| v.as_f64())
+                    .map(|f| f as f32)
+                    .ok_or_else(|| mcp_protocol::McpError::invalid_param_type(#field_name_str, "number", "other"))?;
+            }
+        }
         syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "bool") => {
             quote! {
                 let #field_name = args.get(#field_name_str)
                     .and_then(|v| v.as_bool())
                     .ok_or_else(|| mcp_protocol::McpError::invalid_param_type(#field_name_str, "boolean", "other"))?;
+            }
+        }
+        syn::Type::Path(type_path) if type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Vec" => {
+            quote! {
+                let #field_name: #field_type = args.get(#field_name_str)
+                    .ok_or_else(|| mcp_protocol::McpError::missing_param(#field_name_str))
+                    .and_then(|v| {
+                        // Handle both array values and string representations of arrays
+                        if let Some(arr) = v.as_array() {
+                            // Direct JSON array
+                            arr.iter()
+                                .map(|item| serde_json::from_value(item.clone()))
+                                .collect::<Result<Vec<_>, _>>()
+                                .map_err(|_| mcp_protocol::McpError::invalid_param_type(#field_name_str, "array of valid items", "other"))
+                        } else if let Some(s) = v.as_str() {
+                            // String representation of array like "[1,2,3,4]"
+                            serde_json::from_str::<Vec<serde_json::Value>>(s)
+                                .map_err(|_| mcp_protocol::McpError::invalid_param_type(#field_name_str, "array or array string", "invalid string"))
+                                .and_then(|arr| {
+                                    arr.iter()
+                                        .map(|item| serde_json::from_value(item.clone()))
+                                        .collect::<Result<Vec<_>, _>>()
+                                        .map_err(|_| mcp_protocol::McpError::invalid_param_type(#field_name_str, "array of valid items", "other"))
+                                })
+                        } else {
+                            Err(mcp_protocol::McpError::invalid_param_type(#field_name_str, "array or array string", "other"))
+                        }
+                    })?;
             }
         }
         _ => {
@@ -379,4 +493,200 @@ pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
     }
 
     Ok(meta)
+}
+
+/// Analyze execute method return type and generate output schema
+pub fn analyze_execute_return_type(_struct_name: &syn::Ident) -> TokenStream {
+    // Default to no schema - this should be overridden by type-specific generation
+    quote! {
+        fn output_schema(&self) -> Option<mcp_protocol::ToolSchema> {
+            None
+        }
+    }
+}
+
+/// Generate output schema from a specific type with struct introspection
+pub fn generate_output_schema_for_type(ty: &syn::Type) -> TokenStream {
+    match ty {
+        syn::Type::Path(type_path) => {
+            if let Some(ident) = type_path.path.get_ident() {
+                match ident.to_string().as_str() {
+                    "f64" | "f32" => {
+                        quote! {
+                            fn output_schema(&self) -> Option<mcp_protocol::ToolSchema> {
+                                use mcp_protocol::schema::JsonSchema;
+                                Some(mcp_protocol::ToolSchema::object().with_properties(
+                                    std::collections::HashMap::from([
+                                        ("value".to_string(), JsonSchema::number())
+                                    ])
+                                ).with_required(vec!["value".to_string()]))
+                            }
+                        }
+                    }
+                    "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize" | "usize" => {
+                        quote! {
+                            fn output_schema(&self) -> Option<mcp_protocol::ToolSchema> {
+                                use mcp_protocol::schema::JsonSchema;
+                                Some(mcp_protocol::ToolSchema::object().with_properties(
+                                    std::collections::HashMap::from([
+                                        ("value".to_string(), JsonSchema::integer())
+                                    ])
+                                ).with_required(vec!["value".to_string()]))
+                            }
+                        }
+                    }
+                    "String" | "str" => {
+                        quote! {
+                            fn output_schema(&self) -> Option<mcp_protocol::ToolSchema> {
+                                use mcp_protocol::schema::JsonSchema;
+                                Some(mcp_protocol::ToolSchema::object().with_properties(
+                                    std::collections::HashMap::from([
+                                        ("value".to_string(), JsonSchema::string())
+                                    ])
+                                ).with_required(vec!["value".to_string()]))
+                            }
+                        }
+                    }
+                    "bool" => {
+                        quote! {
+                            fn output_schema(&self) -> Option<mcp_protocol::ToolSchema> {
+                                use mcp_protocol::schema::JsonSchema;
+                                Some(mcp_protocol::ToolSchema::object().with_properties(
+                                    std::collections::HashMap::from([
+                                        ("value".to_string(), JsonSchema::boolean())
+                                    ])
+                                ).with_required(vec!["value".to_string()]))
+                            }
+                        }
+                    }
+                    _ => {
+                        // For custom struct types, try to generate a detailed schema
+                        // For now, we'll generate a basic object schema but this could be enhanced
+                        // to introspect the struct definition if available
+                        let type_name = ident.to_string();
+                        quote! {
+                            fn output_schema(&self) -> Option<mcp_protocol::ToolSchema> {
+                                // Try to use the JsonSchemaGenerator trait if implemented
+                                Some(<#ident as mcp_protocol::schema::JsonSchemaGenerator>::json_schema())
+                            }
+                        }
+                    }
+                }
+            } else {
+                quote! {
+                    fn output_schema(&self) -> Option<mcp_protocol::ToolSchema> {
+                        None
+                    }
+                }
+            }
+        }
+        _ => {
+            // For struct types, generate a basic object schema
+            quote! {
+                fn output_schema(&self) -> Option<mcp_protocol::ToolSchema> {
+                    Some(mcp_protocol::ToolSchema::object())
+                }
+            }
+        }
+    }
+}
+
+/// Generate tool result conversion from return type
+pub fn generate_result_conversion(ty: &syn::Type, has_output_schema: bool) -> TokenStream {
+    match ty {
+        syn::Type::Path(type_path) => {
+            if let Some(ident) = type_path.path.get_ident() {
+                match ident.to_string().as_str() {
+                    "f64" | "f32" | "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize" | "usize" | "bool" => {
+                        if has_output_schema {
+                            // For tools with output schema, still return Vec<ToolResult> for the call method
+                            // The structured content will be handled by the execute method
+                            quote! {
+                                match instance.execute().await {
+                                    Ok(result) => {
+                                        // Return JSON text that matches the structured content format
+                                        let json_text = serde_json::json!({"value": result}).to_string();
+                                        Ok(vec![mcp_protocol::ToolResult::text(json_text)])
+                                    }
+                                    Err(e) => Err(e)
+                                }
+                            }
+                        } else {
+                            // No output schema - return as text
+                            quote! {
+                                match instance.execute().await {
+                                    Ok(result) => {
+                                        Ok(vec![mcp_protocol::ToolResult::text(result.to_string())])
+                                    }
+                                    Err(e) => Err(e)
+                                }
+                            }
+                        }
+                    }
+                    "String" | "str" => {
+                        if has_output_schema {
+                            quote! {
+                                match instance.execute().await {
+                                    Ok(result) => {
+                                        let structured_result = serde_json::json!(result);
+                                        Ok(vec![
+                                            mcp_protocol::ToolResult::text(structured_result.to_string())
+                                        ])
+                                    }
+                                    Err(e) => Err(e)
+                                }
+                            }
+                        } else {
+                            quote! {
+                                match instance.execute().await {
+                                    Ok(result) => {
+                                        Ok(vec![mcp_protocol::ToolResult::text(result.to_string())])
+                                    }
+                                    Err(e) => Err(e)
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        // For complex types, use serde serialization
+                        quote! {
+                            match instance.execute().await {
+                                Ok(result) => {
+                                    let json_result = serde_json::to_value(result)
+                                        .map_err(|e| mcp_protocol::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
+                                    Ok(vec![mcp_protocol::ToolResult::text(json_result.to_string())])
+                                }
+                                Err(e) => Err(e)
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Generic complex type
+                quote! {
+                    match instance.execute().await {
+                        Ok(result) => {
+                            let json_result = serde_json::to_value(result)
+                                .map_err(|e| mcp_protocol::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
+                            Ok(vec![mcp_protocol::ToolResult::text(json_result.to_string())])
+                        }
+                        Err(e) => Err(e)
+                    }
+                }
+            }
+        }
+        _ => {
+            // Generic type
+            quote! {
+                match instance.execute().await {
+                    Ok(result) => {
+                        let json_result = serde_json::to_value(result)
+                            .map_err(|e| mcp_protocol::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
+                        Ok(vec![mcp_protocol::ToolResult::text(json_result.to_string())])
+                    }
+                    Err(e) => Err(e)
+                }
+            }
+        }
+    }
 }

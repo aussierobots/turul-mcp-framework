@@ -1,183 +1,432 @@
 //! Traits for JSON-RPC types as per MCP specification (2025-06-18)
-//!
-//! These traits provide a structured approach to handling MCP protocol messages
-//! and responses, ensuring compliance with the latest specification.
 
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::meta::ProgressToken;
+use crate::{
+    completion::CompleteArgument,
+    initialize::{ClientCapabilities, Implementation, ServerCapabilities},
+    logging::LogLevel,
+    meta::{Cursor, ProgressToken},
+    prompts::{Prompt, PromptMessage},
+    resources::Resource,
+    roots::Root,
+    sampling::{MessageContent, SamplingMessage},
+    tools::{Tool, ToolResult},
+    version::McpVersion,
+};
+
+// JSON-RPC version constant
+pub const JSONRPC_VERSION: &str = "2.0";
 
 // ====================
 // === Base Traits ====
 // ====================
 
-/// Marker trait for parameter types
 pub trait Params {}
 
-/// Trait for types that have a JSON-RPC request ID
 pub trait HasRequestId {
-    fn id(&self) -> &str;
+    fn id(&self) -> &json_rpc_server::types::RequestId;
 }
 
-/// Trait for types that have a result field
 pub trait HasResult {
     fn result(&self) -> &dyn RpcResult;
 }
 
-/// Trait for types that have a JSON-RPC version
 pub trait HasJsonRpcVersion {
     fn version(&self) -> &str {
-        "2.0"
+        JSONRPC_VERSION
     }
 }
 
-/// Trait for types that have a method name
 pub trait HasMethod {
     fn method(&self) -> &str;
 }
 
-/// Trait for types that have parameters
 pub trait HasParams {
     fn params(&self) -> Option<&dyn Params>;
 }
 
-/// Trait for types that have structured data
 pub trait HasData {
-    /// Returns an owned JSON object map of this value
+    /// Returns an owned JSON‐object map of this value.
     fn data(&self) -> HashMap<String, Value>;
 }
 
-/// Trait for types that have _meta information
 pub trait HasMeta {
-    /// Returns an owned JSON object map of _meta fields
+    /// Returns an owned JSON‐object map of this value.
     fn meta(&self) -> Option<HashMap<String, Value>>;
 }
 
-/// Trait for types that have error objects
 pub trait HasErrorObject {
-    fn error(&self) -> Option<&serde_json::Value>;
+    fn error(&self) -> &json_rpc_server::error::JsonRpcErrorObject;
 }
 
-// ========================
-// === Derived Traits =====
-// ========================
+// ==========================
+// === Derived Interfaces ===
+// ==========================
 
-/// JSON-RPC request trait (combines method + params)
 pub trait RpcRequest: HasMethod + HasParams {}
-
-/// JSON-RPC notification trait (combines method + params)
 pub trait RpcNotification: HasMethod + HasParams {}
-
-/// RPC result trait (combines data + meta)
 pub trait RpcResult: HasMeta + HasData {}
-
-/// Complete JSON-RPC request trait
 pub trait JsonRpcRequestTrait: HasJsonRpcVersion + HasRequestId + RpcRequest {}
-
-/// Complete JSON-RPC notification trait  
 pub trait JsonRpcNotificationTrait: HasJsonRpcVersion + RpcNotification {}
 
-/// Complete JSON-RPC response trait
 pub trait JsonRpcResponseTrait: HasJsonRpcVersion + HasRequestId + HasResult + Serialize {
     fn to_bytes(&self) -> Vec<u8> {
         serde_json::to_vec(self).unwrap()
     }
 }
 
-// ========================
-// === Parameter Traits ===
-// ========================
+pub trait JsonRpcErrorTrait: HasJsonRpcVersion + HasRequestId + HasErrorObject {}
 
-/// Trait for parameters that include a progress token
-pub trait HasProgressTokenParam: Params {
-    fn progress_token(&self) -> Option<&ProgressToken>;
+// ==========================
+// === Param Specialisations ===
+// ==========================
+
+pub trait HasRequestIdParam: Params {
+    fn request_id(&self) -> &json_rpc_server::types::RequestId;
 }
 
-/// Trait for parameters that include a cursor
-pub trait HasCursorParam: Params {
-    fn cursor(&self) -> Option<&str>;
-}
-
-/// Trait for parameters that include structured data
-pub trait HasDataParam: Params {
-    fn data(&self) -> &HashMap<String, Value>;
-}
-
-/// Trait for parameters that include _meta information
-pub trait HasMetaParam: Params {
-    fn meta(&self) -> Option<&HashMap<String, Value>>;
-}
-
-/// Trait for parameters that include a reason field
 pub trait HasReasonParam: Params {
     fn reason(&self) -> Option<&str>;
 }
 
-// ========================
-// === Specific Traits ===
-// ========================
+pub trait HasDataParam: Params {
+    fn data(&self) -> &HashMap<String, Value>;
+}
 
-/// Traits for specific MCP endpoints - these align with GPS Trust implementation
+pub trait HasMetaParam: Params {
+    fn meta(&self) -> Option<&HashMap<String, Value>>;
+}
 
-pub trait InitializeResult: RpcResult {}
-pub trait ListToolsResult: RpcResult {}
-pub trait CallToolResult: RpcResult {}
-pub trait ListResourcesResult: RpcResult {}
-pub trait ReadResourceResult: RpcResult {}
-pub trait ListPromptsResult: RpcResult {}
-pub trait GetPromptResult: RpcResult {}
-pub trait ListRootsResult: RpcResult {}
-pub trait CreateMessageResult: RpcResult {}
-pub trait ListResourceTemplatesResult: RpcResult {}
+pub trait HasProgressTokenParam: Params {
+    fn progress_token(&self) -> Option<&ProgressToken>;
+}
 
-// Parameter traits for specific endpoints
 pub trait HasInitializeParams: Params {
-    fn client_info(&self) -> Option<&HashMap<String, Value>>;
-    fn capabilities(&self) -> Option<&HashMap<String, Value>>;
+    fn protocol_version(&self) -> McpVersion;
+    fn capabilities(&self) -> &ClientCapabilities;
+    fn client_info(&self) -> &Implementation;
 }
 
-pub trait HasListToolsParams: Params {}
+// ==========================
+// === Typed Traits from MCP Spec ===
+// ==========================
 
-pub trait HasCallToolParams: Params {
-    fn name(&self) -> &str;
-    fn arguments(&self) -> Option<&HashMap<String, Value>>;
+pub trait HasCancelledParams: HasRequestIdParam + HasReasonParam {}
+pub trait CancelledNotification: RpcNotification + HasCancelledParams {}
+
+pub trait InitializeRequest: JsonRpcRequestTrait + HasInitializeParams {
+    fn method(&self) -> &str {
+        "initialize"
+    }
 }
 
-pub trait HasListResourcesParams: Params {}
-
-pub trait HasReadResourceParams: Params {
-    fn uri(&self) -> &str;
+pub trait InitializeResult: RpcResult {
+    fn protocol_version(&self) -> &str;
+    fn capabilities(&self) -> &ServerCapabilities;
+    fn server_info(&self) -> &Implementation;
+    fn instructions(&self) -> Option<&str>;
 }
 
-pub trait HasListPromptsParams: Params {}
+pub trait InitializeNotification: JsonRpcNotificationTrait {
+    fn method(&self) -> &str {
+        "notifications/initialized"
+    }
+}
+
+// ---------------------- notifications/progress ------------------------
+
+/// Trait for params of `notifications/progress`
+pub trait HasProgressParams: Params {
+    fn progress_token(&self) -> &ProgressToken;
+    fn progress(&self) -> u64;
+    fn total(&self) -> Option<u64>;
+    fn message(&self) -> Option<&String>;
+}
+
+/// The notification itself
+pub trait ProgressNotification: JsonRpcNotificationTrait + HasProgressParams {
+    /// Always exactly `"notifications/progress"`
+    fn method(&self) -> &str {
+        "notifications/progress"
+    }
+}
+
+// ---------------------- resources/list ------------------------
+
+pub trait HasListResourcesParams: Params {
+    fn cursor(&self) -> Option<&Cursor>;
+}
+
+pub trait ListResourcesRequest: JsonRpcRequestTrait + HasListResourcesParams {
+    fn method(&self) -> &str {
+        "resources/list"
+    }
+}
+
+pub trait ListResourcesResult: RpcResult {
+    fn resources(&self) -> &Vec<Resource>;
+    fn next_cursor(&self) -> Option<&Cursor>;
+}
+
+pub trait ResourcesListChangedNotification: JsonRpcNotificationTrait {
+    fn method(&self) -> &str {
+        "notifications/resources/listChanged"
+    }
+}
+
+pub trait HasResourceUpdatedParams: Params {
+    fn uri(&self) -> &String;
+}
+
+pub trait ResourceUpdatedNotification: JsonRpcNotificationTrait + HasResourceUpdatedParams {
+    fn method(&self) -> &str {
+        "notifications/resources/updated"
+    }
+}
+
+// ---------------------- prompts/list & get ------------------------
+
+pub trait HasListPromptsParams: Params {
+    fn cursor(&self) -> Option<&Cursor>;
+}
+
+pub trait ListPromptsRequest: JsonRpcRequestTrait + HasListPromptsParams {
+    fn method(&self) -> &str {
+        "prompts/list"
+    }
+}
+
+pub trait ListPromptsResult: RpcResult {
+    fn prompts(&self) -> &Vec<Prompt>;
+    fn next_cursor(&self) -> Option<&Cursor>;
+}
 
 pub trait HasGetPromptParams: Params {
-    fn name(&self) -> &str;
-    fn arguments(&self) -> Option<&HashMap<String, Value>>;
+    fn name(&self) -> &String;
+    fn arguments(&self) -> Option<&HashMap<String, String>>;
 }
+
+pub trait GetPromptRequest: JsonRpcRequestTrait + HasGetPromptParams {
+    fn method(&self) -> &str {
+        "prompts/get"
+    }
+}
+
+pub trait GetPromptResult: RpcResult {
+    fn description(&self) -> Option<&String>;
+    fn messages(&self) -> &Vec<PromptMessage>;
+}
+
+pub trait PromptListChangedNotification: JsonRpcNotificationTrait {
+    fn method(&self) -> &str {
+        "notifications/prompts/listChanged"
+    }
+}
+
+// ---------------------- tools/list & call ------------------------
+
+pub trait HasListToolsParams: Params {
+    fn cursor(&self) -> Option<&Cursor>;
+}
+
+pub trait ListToolsRequest: JsonRpcRequestTrait + HasListToolsParams {
+    fn method(&self) -> &str {
+        "tools/list"
+    }
+}
+
+pub trait ListToolsResult: RpcResult {
+    fn tools(&self) -> &Vec<Tool>;
+    fn next_cursor(&self) -> Option<&Cursor>;
+}
+
+pub trait HasCallToolParams: Params {
+    fn name(&self) -> &String;
+    fn arguments(&self) -> Option<&Value>;
+    fn meta(&self) -> &HashMap<String, Value>;
+}
+
+pub trait CallToolRequest: JsonRpcRequestTrait + HasCallToolParams {
+    fn method(&self) -> &str {
+        "tools/call"
+    }
+}
+
+pub trait CallToolResult: RpcResult {
+    fn content(&self) -> &Vec<ToolResult>;
+    fn is_error(&self) -> Option<bool>;
+    /// Structured content that matches the tool's output schema (MCP 2025-06-18)
+    fn structured_content(&self) -> Option<&Value>;
+}
+
+pub trait ToolListChangedNotification: JsonRpcNotificationTrait {
+    fn method(&self) -> &str {
+        "notifications/tools/listChanged"
+    }
+}
+
+// ---------------------- sampling/createMessage ------------------------
+
+pub trait HasCreateMessageParams: Params {
+    fn messages(&self) -> &Vec<SamplingMessage>;
+    fn model_preferences(&self) -> Option<&Value>;
+    fn system_prompt(&self) -> Option<&String>;
+    fn include_context(&self) -> Option<&String>;
+    fn temperature(&self) -> Option<&f64>;
+    fn max_tokens(&self) -> u32;
+    fn stop_sequences(&self) -> Option<&Vec<String>>;
+    fn metadata(&self) -> Option<&Value>;
+}
+
+pub trait CreateMessageRequest: JsonRpcRequestTrait + HasCreateMessageParams {
+    fn method(&self) -> &str {
+        "sampling/createMessage"
+    }
+}
+
+pub trait CreateMessageResult: RpcResult {
+    fn role(&self) -> &str;
+    fn content(&self) -> &MessageContent;
+    fn model(&self) -> &String;
+    fn stop_reason(&self) -> Option<&String>;
+}
+
+// ---------------------- completion/complete ------------------------
+
+/// The `params` object for `completion/complete`
+pub trait HasCompleteParams: Params {
+    /// The prompt or resource reference to complete against.
+    fn reference(&self) -> &Value;
+    /// The name/value pair to complete.
+    fn argument(&self) -> &CompleteArgument;
+    /// Optional additional context.
+    fn context(&self) -> Option<&Value>;
+}
+
+/// The JSON-RPC request for `completion/complete`
+pub trait CompleteRequestTrait: JsonRpcRequestTrait + HasCompleteParams {
+    /// Always exactly `"completion/complete"`
+    fn method(&self) -> &str {
+        "completion/complete"
+    }
+}
+
+/// Exposes the inner `completion` field of the response payload.
+pub trait HasCompletionResult: RpcResult {
+    fn completion(&self) -> &Value;
+}
+
+/// The JSON-RPC result for `completion/complete`
+pub trait CompleteResult: RpcResult + HasCompletionResult {}
+
+// ---------------------- templates/list ------------------------
+
+pub trait HasListResourceTemplatesParams: Params {
+    fn cursor(&self) -> Option<&Cursor>;
+}
+
+pub trait ListResourceTemplatesRequest:
+    JsonRpcRequestTrait + HasListResourceTemplatesParams
+{
+    fn method(&self) -> &str {
+        "resources/templates/list"
+    }
+}
+
+pub trait ListResourceTemplatesResult: RpcResult {
+    fn resource_templates(&self) -> &Vec<Value>;
+    fn next_cursor(&self) -> Option<&Cursor>;
+}
+
+// ---------------------- roots/list ------------------------
 
 pub trait HasListRootsParams: Params {}
 
-pub trait HasCreateMessageParams: Params {
-    fn messages(&self) -> &[Value];
-    fn model_preferences(&self) -> Option<&HashMap<String, Value>>;
+pub trait ListRootsRequest: JsonRpcRequestTrait + HasListRootsParams {
+    fn method(&self) -> &str {
+        "roots/list"
+    }
 }
 
-pub trait HasListResourceTemplatesParams: Params {}
+pub trait ListRootsResult: RpcResult {
+    fn roots(&self) -> &Vec<Root>;
+}
 
-// ========================
-// === Request Traits =====
-// ========================
+pub trait RootsListChangedNotification: JsonRpcNotificationTrait {
+    fn method(&self) -> &str {
+        "notifications/roots/listChanged"
+    }
+}
 
-pub trait InitializeRequest: JsonRpcRequestTrait + HasInitializeParams {}
-pub trait ListToolsRequest: JsonRpcRequestTrait + HasListToolsParams {}
-pub trait CallToolRequest: JsonRpcRequestTrait + HasCallToolParams {}
-pub trait ListResourcesRequest: JsonRpcRequestTrait + HasListResourcesParams {}
-pub trait ReadResourceRequest: JsonRpcRequestTrait + HasReadResourceParams {}
-pub trait ListPromptsRequest: JsonRpcRequestTrait + HasListPromptsParams {}
-pub trait GetPromptRequest: JsonRpcRequestTrait + HasGetPromptParams {}
-pub trait ListRootsRequest: JsonRpcRequestTrait + HasListRootsParams {}
-pub trait CreateMessageRequest: JsonRpcRequestTrait + HasCreateMessageParams {}
-pub trait ListResourceTemplatesRequest: JsonRpcRequestTrait + HasListResourceTemplatesParams {}
+// ---------------------- logging ------------------------
+
+pub trait HasSetLevelParams: Params {
+    fn level(&self) -> &LogLevel;
+}
+
+pub trait SetLevelRequest: JsonRpcRequestTrait + HasSetLevelParams {
+    fn method(&self) -> &str {
+        "logging/setLevel"
+    }
+}
+
+// Field-getter traits you already have; if not, add:
+pub trait HasLevelParam: Params {
+    fn level(&self) -> &LogLevel;
+}
+pub trait HasLoggerParam: Params {
+    fn logger(&self) -> Option<&String>;
+}
+
+pub trait LoggingMessageNotificationTrait: JsonRpcNotificationTrait + HasParams {
+    fn method(&self) -> &str {
+        "notifications/message"
+    }
+}
+
+// ---------------------- elicitation ------------------------
+
+pub trait HasElicitParams: Params {
+    fn message(&self) -> &String;
+    fn requested_schema(&self) -> &Value;
+}
+
+pub trait ElicitRequest: JsonRpcRequestTrait + HasElicitParams {
+    fn method(&self) -> &str {
+        "elicitation/create"
+    }
+}
+
+pub trait ElicitResult: RpcResult {
+    fn action(&self) -> &Value;
+    fn content(&self) -> Option<&HashMap<String, Value>>;
+}
+
+// ---------------------- trait-based parameter extraction ------------------------
+
+/// Trait for extracting parameters from RequestParams using trait constraints
+pub trait ParamExtractor<T: Params> {
+    type Error;
+
+    /// Extract parameters from RequestParams using trait-based conversion
+    fn extract(params: json_rpc_server::RequestParams) -> Result<T, Self::Error>;
+}
+
+/// Trait for serde-based parameter extraction (simpler cases)
+pub trait SerdeParamExtractor<T: Params> {
+    type Error;
+
+    /// Extract parameters using serde deserialization
+    fn extract_serde(params: json_rpc_server::RequestParams) -> Result<T, Self::Error>;
+}
+
+/// Trait for field-by-field parameter extraction (complex cases)
+pub trait FieldParamExtractor<T: Params> {
+    type Error;
+
+    /// Extract parameters field by field with validation
+    fn extract_fields(params: json_rpc_server::RequestParams) -> Result<T, Self::Error>;
+}

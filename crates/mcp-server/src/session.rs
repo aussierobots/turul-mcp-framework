@@ -298,10 +298,23 @@ pub struct SessionManager {
 impl SessionManager {
     /// Create a new session manager
     pub fn new(default_capabilities: ServerCapabilities) -> Self {
+        Self::with_timeouts(
+            default_capabilities,
+            Duration::from_secs(30 * 60), // 30 minutes
+            Duration::from_secs(60),      // 1 minute
+        )
+    }
+    
+    /// Create a new session manager with custom timeouts
+    pub fn with_timeouts(
+        default_capabilities: ServerCapabilities, 
+        session_timeout: Duration,
+        cleanup_interval: Duration,
+    ) -> Self {
         Self {
             sessions: RwLock::new(HashMap::new()),
-            session_timeout: Duration::from_secs(30 * 60), // 30 minutes
-            cleanup_interval: Duration::from_secs(60),      // 1 minute
+            session_timeout,
+            cleanup_interval,
             default_capabilities,
         }
     }
@@ -546,6 +559,12 @@ impl SessionManager {
                 }
             }
         })
+    }
+
+    /// Get a session's event receiver for SSE streaming
+    pub async fn get_session_event_receiver(&self, session_id: &str) -> Option<broadcast::Receiver<SessionEvent>> {
+        let sessions = self.sessions.read().await;
+        Some(sessions.get(session_id)?.subscribe_events())
     }
 }
 

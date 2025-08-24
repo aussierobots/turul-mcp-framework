@@ -196,4 +196,66 @@ impl McpError {
     pub fn configuration(message: &str) -> Self {
         Self::ConfigurationError(message.to_string())
     }
+    
+    /// Convert to a JsonRpcErrorObject for JSON-RPC 2.0 responses
+    pub fn to_json_rpc_error(&self) -> json_rpc_server::error::JsonRpcErrorObject {
+        use json_rpc_server::error::JsonRpcErrorObject;
+        
+        match self {
+            // Parameter-related errors map to InvalidParams (-32602)
+            McpError::InvalidParameters(msg) => 
+                JsonRpcErrorObject::invalid_params(msg),
+            McpError::MissingParameter(param) => 
+                JsonRpcErrorObject::invalid_params(&format!("Missing required parameter: {}", param)),
+            McpError::InvalidParameterType { param, expected, actual } => 
+                JsonRpcErrorObject::invalid_params(&format!(
+                    "Invalid parameter type for '{}': expected {}, got {}", param, expected, actual)),
+            McpError::ParameterOutOfRange { param, value, constraint } => 
+                JsonRpcErrorObject::invalid_params(&format!(
+                    "Parameter '{}' value {} is out of range: {}", param, value, constraint)),
+                    
+            // Not found errors map to server errors
+            McpError::ToolNotFound(name) => 
+                JsonRpcErrorObject::server_error(-32001, &format!("Tool not found: {}", name), None),
+            McpError::ResourceNotFound(uri) => 
+                JsonRpcErrorObject::server_error(-32002, &format!("Resource not found: {}", uri), None),
+            McpError::PromptNotFound(name) => 
+                JsonRpcErrorObject::server_error(-32003, &format!("Prompt not found: {}", name), None),
+                
+            // Access and execution errors
+            McpError::ToolExecutionError(msg) => 
+                JsonRpcErrorObject::server_error(-32010, &format!("Tool execution failed: {}", msg), None),
+            McpError::ResourceAccessDenied(uri) => 
+                JsonRpcErrorObject::server_error(-32011, &format!("Resource access denied: {}", uri), None),
+                
+            // Validation errors
+            McpError::ValidationError(msg) => 
+                JsonRpcErrorObject::server_error(-32020, &format!("Validation error: {}", msg), None),
+            McpError::InvalidCapability(cap) => 
+                JsonRpcErrorObject::server_error(-32021, &format!("Invalid capability: {}", cap), None),
+            McpError::VersionMismatch { expected, actual } => 
+                JsonRpcErrorObject::server_error(-32022, &format!(
+                    "Protocol version mismatch: expected {}, got {}", expected, actual), None),
+                    
+            // Configuration and session errors
+            McpError::ConfigurationError(msg) => 
+                JsonRpcErrorObject::server_error(-32030, &format!("Configuration error: {}", msg), None),
+            McpError::SessionError(msg) => 
+                JsonRpcErrorObject::server_error(-32031, &format!("Session error: {}", msg), None),
+                
+            // I/O and serialization errors map to internal errors
+            McpError::IoError(err) => 
+                JsonRpcErrorObject::internal_error(Some(format!("IO error: {}", err))),
+            McpError::SerializationError(err) => 
+                JsonRpcErrorObject::internal_error(Some(format!("Serialization error: {}", err))),
+                
+            // Nested JSON-RPC errors are passed through
+            McpError::JsonRpcError(err) => err.error.clone(),
+        }
+    }
+    
+    /// Create a JSON-RPC error response for this MCP error
+    pub fn to_json_rpc_response(&self, id: Option<json_rpc_server::RequestId>) -> json_rpc_server::JsonRpcError {
+        json_rpc_server::JsonRpcError::new(id, self.to_json_rpc_error())
+    }
 }

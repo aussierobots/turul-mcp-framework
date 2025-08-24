@@ -1,14 +1,16 @@
 //! JSON-RPC 2.0 Implementation for MCP 2025-06-18
 //!
-//! This module provides JSON-RPC structures that are fully compliant with the 
+//! This module provides JSON-RPC structures that are fully compliant with the
 //! MCP 2025-06-18 specification, including proper _meta field handling.
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 use crate::meta::{Meta, ProgressToken};
-use crate::traits::{HasData, HasMeta, HasProgressTokenParam, HasDataParam, HasMetaParam, Params, RpcResult};
+use crate::traits::{
+    HasData, HasDataParam, HasMeta, HasMetaParam, HasProgressTokenParam, Params, RpcResult,
+};
 
 /// JSON-RPC version constant
 pub const JSONRPC_VERSION: &str = "2.0";
@@ -33,10 +35,16 @@ impl HasMeta for RequestParams {
         self.meta.as_ref().map(|m| {
             let mut map = HashMap::new();
             if let Some(ref token) = m.progress_token {
-                map.insert("progressToken".to_string(), Value::String(token.as_str().to_string()));
+                map.insert(
+                    "progressToken".to_string(),
+                    Value::String(token.as_str().to_string()),
+                );
             }
             if let Some(ref cursor) = m.cursor {
-                map.insert("cursor".to_string(), Value::String(cursor.as_str().to_string()));
+                map.insert(
+                    "cursor".to_string(),
+                    Value::String(cursor.as_str().to_string()),
+                );
             }
             if let Some(total) = m.total {
                 map.insert("total".to_string(), Value::Number(total.into()));
@@ -45,13 +53,22 @@ impl HasMeta for RequestParams {
                 map.insert("hasMore".to_string(), Value::Bool(has_more));
             }
             if let Some(estimated_remaining) = m.estimated_remaining_seconds {
-                map.insert("estimatedRemainingSeconds".to_string(), Value::Number(serde_json::Number::from_f64(estimated_remaining).unwrap()));
+                map.insert(
+                    "estimatedRemainingSeconds".to_string(),
+                    Value::Number(serde_json::Number::from_f64(estimated_remaining).unwrap()),
+                );
             }
             if let Some(progress) = m.progress {
-                map.insert("progress".to_string(), Value::Number(serde_json::Number::from_f64(progress).unwrap()));
+                map.insert(
+                    "progress".to_string(),
+                    Value::Number(serde_json::Number::from_f64(progress).unwrap()),
+                );
             }
             if let Some(current_step) = m.current_step {
-                map.insert("currentStep".to_string(), Value::Number(current_step.into()));
+                map.insert(
+                    "currentStep".to_string(),
+                    Value::Number(current_step.into()),
+                );
             }
             if let Some(total_steps) = m.total_steps {
                 map.insert("totalSteps".to_string(), Value::Number(total_steps.into()));
@@ -87,25 +104,22 @@ pub struct ResultWithMeta {
     /// The result data
     #[serde(flatten)]
     pub data: HashMap<String, Value>,
-    
-    /// Optional _meta information 
+
+    /// Optional _meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
 impl ResultWithMeta {
     pub fn new(data: HashMap<String, Value>) -> Self {
-        Self {
-            data,
-            meta: None,
-        }
+        Self { data, meta: None }
     }
-    
+
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
-    
+
     pub fn from_value(value: Value) -> Self {
         match value {
             Value::Object(map) => Self {
@@ -115,7 +129,7 @@ impl ResultWithMeta {
             _ => Self {
                 data: HashMap::new(),
                 meta: None,
-            }
+            },
         }
     }
 }
@@ -153,7 +167,7 @@ impl JsonRpcRequest {
             params: None,
         }
     }
-    
+
     pub fn with_params(mut self, params: RequestParams) -> Self {
         self.params = Some(params);
         self
@@ -180,7 +194,7 @@ impl JsonRpcResponse {
             error: None,
         }
     }
-    
+
     pub fn error(id: Value, error: JsonRpcError) -> Self {
         Self {
             jsonrpc: JSONRPC_VERSION.to_string(),
@@ -208,29 +222,29 @@ impl JsonRpcError {
             data: None,
         }
     }
-    
+
     pub fn with_data(mut self, data: Value) -> Self {
         self.data = Some(data);
         self
     }
-    
+
     // Standard JSON-RPC error codes
     pub fn parse_error() -> Self {
         Self::new(-32700, "Parse error".to_string())
     }
-    
+
     pub fn invalid_request() -> Self {
         Self::new(-32600, "Invalid Request".to_string())
     }
-    
+
     pub fn method_not_found() -> Self {
         Self::new(-32601, "Method not found".to_string())
     }
-    
+
     pub fn invalid_params() -> Self {
         Self::new(-32602, "Invalid params".to_string())
     }
-    
+
     pub fn internal_error() -> Self {
         Self::new(-32603, "Internal error".to_string())
     }
@@ -253,7 +267,7 @@ impl JsonRpcNotification {
             params: None,
         }
     }
-    
+
     pub fn with_params(mut self, params: RequestParams) -> Self {
         self.params = Some(params);
         self
@@ -267,6 +281,7 @@ pub enum JsonRpcMessage {
     Request(JsonRpcRequest),
     Response(JsonRpcResponse),
     Notification(JsonRpcNotification),
+    Error(JsonRpcError),
 }
 
 #[cfg(test)]
@@ -303,23 +318,33 @@ mod tests {
         // Test deserialization
         let parsed: RequestParams = serde_json::from_str(&json_str).unwrap();
         assert!(parsed.meta.is_some());
-        assert_eq!(parsed.meta.as_ref().unwrap().progress_token.as_ref().unwrap().as_str(), "test-token");
+        assert_eq!(
+            parsed
+                .meta
+                .as_ref()
+                .unwrap()
+                .progress_token
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            "test-token"
+        );
     }
 
     #[test]
     fn test_result_with_meta() {
         let mut data = HashMap::new();
         data.insert("result".to_string(), json!("success"));
-        
+
         let mut meta = HashMap::new();
         meta.insert("total".to_string(), json!(42));
-        
+
         let result = ResultWithMeta::new(data).with_meta(meta);
-        
+
         // Test traits
         assert!(result.data().contains_key("result"));
         assert!(result.meta().unwrap().contains_key("total"));
-        
+
         // Test serialization
         let json_str = serde_json::to_string(&result).unwrap();
         assert!(json_str.contains("result"));

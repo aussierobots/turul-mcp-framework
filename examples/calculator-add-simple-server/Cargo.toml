@@ -1,0 +1,19 @@
+[package]
+name = "calculator-add-simple-server"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Example MCP calculator server using manual trait implementation"
+
+[dependencies]
+mcp-server = { workspace = true }
+mcp-protocol = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

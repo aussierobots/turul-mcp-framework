@@ -41,6 +41,10 @@ pub struct McpServerBuilder {
     /// Optional instructions for clients
     instructions: Option<String>,
     
+    /// Session configuration
+    session_timeout_minutes: Option<u64>,
+    session_cleanup_interval_seconds: Option<u64>,
+    
     /// HTTP configuration (if enabled)
     #[cfg(feature = "http")]
     bind_address: SocketAddr,
@@ -57,7 +61,29 @@ impl McpServerBuilder {
     pub fn new() -> Self {
         let tools = HashMap::new();
         let mut handlers: HashMap<String, Arc<dyn McpHandler>> = HashMap::new();
+        
+        // Add all standard MCP 2025-06-18 handlers by default
         handlers.insert("ping".to_string(), Arc::new(PingHandler));
+        handlers.insert("completion/complete".to_string(), Arc::new(CompletionHandler));
+        handlers.insert("resources/list".to_string(), Arc::new(ResourcesHandler::new()));
+        handlers.insert("prompts/list".to_string(), Arc::new(PromptsHandler::new()));
+        handlers.insert("prompts/get".to_string(), Arc::new(PromptsHandler::new()));
+        handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
+        handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
+        handlers.insert("sampling/createMessage".to_string(), Arc::new(SamplingHandler));
+        handlers.insert("resources/templates/list".to_string(), Arc::new(ResourceTemplatesHandler));
+        handlers.insert("elicitation/create".to_string(), Arc::new(ElicitationHandler::with_mock_provider()));
+        
+        // Add all notification handlers
+        let notifications_handler = Arc::new(NotificationsHandler);
+        handlers.insert("notifications/message".to_string(), notifications_handler.clone());
+        handlers.insert("notifications/initialized".to_string(), notifications_handler.clone());
+        handlers.insert("notifications/progress".to_string(), notifications_handler.clone());
+        handlers.insert("notifications/resources/listChanged".to_string(), notifications_handler.clone());
+        handlers.insert("notifications/resources/updated".to_string(), notifications_handler.clone());
+        handlers.insert("notifications/tools/listChanged".to_string(), notifications_handler.clone());
+        handlers.insert("notifications/prompts/listChanged".to_string(), notifications_handler.clone());
+        handlers.insert("notifications/roots/listChanged".to_string(), notifications_handler);
         
         
         
@@ -77,6 +103,8 @@ impl McpServerBuilder {
             handlers,
             roots: Vec::new(),
             instructions: None,
+            session_timeout_minutes: None,
+            session_cleanup_interval_seconds: None,
             #[cfg(feature = "http")]
             bind_address: "127.0.0.1:8000".parse().unwrap(),
             #[cfg(feature = "http")]
@@ -237,12 +265,20 @@ impl McpServerBuilder {
         self.handler(SamplingHandler)
     }
 
-    /// Add elicitation support (elicitation/request endpoint)
+    /// Add elicitation support with default mock provider
     pub fn with_elicitation(mut self) -> Self {
         self.capabilities.elicitation = Some(ElicitationCapabilities {
             enabled: Some(true),
         });
-        self.handler(ElicitationHandler)
+        self.handler(ElicitationHandler::with_mock_provider())
+    }
+    
+    /// Add elicitation support with custom provider
+    pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(mut self, provider: P) -> Self {
+        self.capabilities.elicitation = Some(ElicitationCapabilities {
+            enabled: Some(true),
+        });
+        self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
 
     /// Add templates support
@@ -253,6 +289,32 @@ impl McpServerBuilder {
     /// Add notifications support
     pub fn with_notifications(self) -> Self {
         self.handler(NotificationsHandler)
+    }
+
+    /// Configure session timeout (in minutes, default: 30)
+    pub fn session_timeout_minutes(mut self, minutes: u64) -> Self {
+        self.session_timeout_minutes = Some(minutes);
+        self
+    }
+    
+    /// Configure session cleanup interval (in seconds, default: 60)
+    pub fn session_cleanup_interval_seconds(mut self, seconds: u64) -> Self {
+        self.session_cleanup_interval_seconds = Some(seconds);
+        self
+    }
+    
+    /// Configure sessions with recommended defaults for long-running sessions
+    pub fn with_long_sessions(mut self) -> Self {
+        self.session_timeout_minutes = Some(120); // 2 hours
+        self.session_cleanup_interval_seconds = Some(300); // 5 minutes
+        self
+    }
+    
+    /// Configure sessions with recommended defaults for short-lived sessions
+    pub fn with_short_sessions(mut self) -> Self {
+        self.session_timeout_minutes = Some(15); // 15 minutes
+        self.session_cleanup_interval_seconds = Some(30); // 30 seconds
+        self
     }
 
     
@@ -318,6 +380,8 @@ impl McpServerBuilder {
             self.tools,
             handlers,
             self.instructions,
+            self.session_timeout_minutes,
+            self.session_cleanup_interval_seconds,
             #[cfg(feature = "http")]
             self.bind_address,
             #[cfg(feature = "http")]
@@ -364,7 +428,7 @@ mod tests {
         assert!(builder.title.is_none());
         assert!(builder.instructions.is_none());
         assert!(builder.tools.is_empty());
-        assert_eq!(builder.handlers.len(), 1); // Default ping handler
+        assert_eq!(builder.handlers.len(), 18); // Default MCP 2025-06-18 handlers
         assert!(builder.handlers.contains_key("ping"));
     }
 

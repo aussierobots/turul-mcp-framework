@@ -17,6 +17,7 @@ sse = ["http-mcp-server/sse"]
 # Framework dependencies
 json-rpc-server.workspace = true
 mcp-protocol.workspace = true
+mcp-protocol-2025-06-18.workspace = true
 http-mcp-server = { workspace = true, optional = true }
 
 # Core dependencies

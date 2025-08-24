@@ -2,10 +2,10 @@
 //!
 //! This module defines the types used for the MCP tools functionality.
 
-use std::collections::HashMap;
+use crate::schema::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::schema::JsonSchema;
+use std::collections::HashMap;
 
 /// A cursor for pagination
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,24 +66,47 @@ impl ToolSchema {
 pub struct Tool {
     /// The tool's name - used as identifier when calling
     pub name: String,
+    /// Intended for UI and end-user contexts — optimized to be human-readable
+    /// and easily understood, even by those unfamiliar with domain-specific terminology.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     /// Optional human-readable description
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// JSON Schema for input parameters
     pub input_schema: ToolSchema,
+    /// Optional JSON Schema for output results
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<ToolSchema>,
     /// Optional annotations for client hints
     #[serde(skip_serializing_if = "Option::is_none")]
     pub annotations: Option<Value>,
+
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "_meta",
+        rename = "_meta"
+    )]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 impl Tool {
     pub fn new(name: impl Into<String>, input_schema: ToolSchema) -> Self {
         Self {
             name: name.into(),
+            title: None,
             description: None,
             input_schema,
+            output_schema: None,
             annotations: None,
+            meta: None,
         }
+    }
+
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
+        self
     }
 
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
@@ -91,8 +114,18 @@ impl Tool {
         self
     }
 
+    pub fn with_output_schema(mut self, output_schema: ToolSchema) -> Self {
+        self.output_schema = Some(output_schema);
+        self
+    }
+
     pub fn with_annotations(mut self, annotations: Value) -> Self {
         self.annotations = Some(annotations);
+        self
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
         self
     }
 }
@@ -178,9 +211,7 @@ impl CallToolRequest {
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ToolResult {
     /// Text content
-    Text {
-        text: String,
-    },
+    Text { text: String },
     /// Image content
     Image {
         data: String,
@@ -246,6 +277,9 @@ pub struct CallToolResponse {
     /// Whether the tool call resulted in an error
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_error: Option<bool>,
+    /// Structured content that matches the tool's output schema (MCP 2025-06-18)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub structured_content: Option<Value>,
 }
 
 impl CallToolResponse {
@@ -253,6 +287,7 @@ impl CallToolResponse {
         Self {
             content,
             is_error: None,
+            structured_content: None,
         }
     }
 
@@ -260,6 +295,7 @@ impl CallToolResponse {
         Self {
             content,
             is_error: Some(false),
+            structured_content: None,
         }
     }
 
@@ -267,12 +303,58 @@ impl CallToolResponse {
         Self {
             content,
             is_error: Some(true),
+            structured_content: None,
         }
     }
 
     pub fn with_error_flag(mut self, is_error: bool) -> Self {
         self.is_error = Some(is_error);
         self
+    }
+
+    pub fn with_structured_content(mut self, structured_content: Value) -> Self {
+        self.structured_content = Some(structured_content);
+        self
+    }
+}
+
+// Trait implementations for CallToolResponse
+
+use crate::traits::*;
+
+impl HasData for CallToolResponse {
+    fn data(&self) -> HashMap<String, Value> {
+        let mut data = HashMap::new();
+        data.insert("content".to_string(), serde_json::to_value(&self.content).unwrap_or(Value::Null));
+        if let Some(is_error) = self.is_error {
+            data.insert("isError".to_string(), Value::Bool(is_error));
+        }
+        if let Some(ref structured_content) = self.structured_content {
+            data.insert("structuredContent".to_string(), structured_content.clone());
+        }
+        data
+    }
+}
+
+impl HasMeta for CallToolResponse {
+    fn meta(&self) -> Option<HashMap<String, Value>> {
+        None // CallToolResponse doesn't have explicit meta fields
+    }
+}
+
+impl RpcResult for CallToolResponse {}
+
+impl CallToolResult for CallToolResponse {
+    fn content(&self) -> &Vec<ToolResult> {
+        &self.content
+    }
+
+    fn is_error(&self) -> Option<bool> {
+        self.is_error
+    }
+
+    fn structured_content(&self) -> Option<&Value> {
+        self.structured_content.as_ref()
     }
 }
 
@@ -284,14 +366,10 @@ mod tests {
     #[test]
     fn test_tool_creation() {
         let schema = ToolSchema::object()
-            .with_properties(HashMap::from([(
-                "text".to_string(),
-                JsonSchema::string(),
-            )]))
+            .with_properties(HashMap::from([("text".to_string(), JsonSchema::string())]))
             .with_required(vec!["text".to_string()]);
 
-        let tool = Tool::new("test_tool", schema)
-            .with_description("A test tool");
+        let tool = Tool::new("test_tool", schema).with_description("A test tool");
 
         assert_eq!(tool.name, "test_tool");
         assert!(tool.description.is_some());
@@ -311,18 +389,33 @@ mod tests {
 
     #[test]
     fn test_call_tool_response() {
-        let response = CallToolResponse::success(vec![
-            ToolResult::text("Operation completed successfully"),
-        ]);
+        let response =
+            CallToolResponse::success(vec![ToolResult::text("Operation completed successfully")]);
 
         assert_eq!(response.is_error, Some(false));
         assert_eq!(response.content.len(), 1);
+        assert!(response.structured_content.is_none());
+    }
+
+    #[test]
+    fn test_call_tool_response_with_structured_content() {
+        let structured_data = serde_json::json!({
+            "result": "success",
+            "value": 42
+        });
+
+        let response =
+            CallToolResponse::success(vec![ToolResult::text("Operation completed successfully")])
+                .with_structured_content(structured_data.clone());
+
+        assert_eq!(response.is_error, Some(false));
+        assert_eq!(response.content.len(), 1);
+        assert_eq!(response.structured_content, Some(structured_data));
     }
 
     #[test]
     fn test_serialization() {
-        let tool = Tool::new("echo", ToolSchema::object())
-            .with_description("Echo tool");
+        let tool = Tool::new("echo", ToolSchema::object()).with_description("Echo tool");
 
         let json = serde_json::to_string(&tool).unwrap();
         assert!(json.contains("echo"));

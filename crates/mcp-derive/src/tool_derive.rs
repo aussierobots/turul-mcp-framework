@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, Result};
 
-use crate::utils::{extract_tool_meta, extract_param_meta, type_to_schema, generate_param_extraction};
+use crate::utils::{extract_tool_meta, extract_param_meta, type_to_schema, generate_param_extraction, generate_output_schema_for_type, generate_result_conversion};
 
 pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     let name = &input.ident;
@@ -62,6 +62,29 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let tool_name = &tool_meta.name;
     let tool_description = &tool_meta.description;
+    
+    // Generate output schema and result conversion based on return type
+    let (output_schema_tokens, result_conversion_tokens) = if let Some(ref output_type) = tool_meta.output_type {
+        let schema = generate_output_schema_for_type(output_type);
+        let conversion = generate_result_conversion(output_type, true); // Has output schema
+        (schema, conversion)
+    } else {
+        // Default case - no output schema
+        let default_schema = quote! {
+            fn output_schema(&self) -> Option<mcp_protocol::ToolSchema> {
+                None
+            }
+        };
+        let default_conversion = quote! {
+            match instance.execute().await {
+                Ok(result) => {
+                    Ok(vec![mcp_protocol::ToolResult::text(result.to_string())])
+                }
+                Err(e) => Err(e)
+            }
+        };
+        (default_schema, default_conversion)
+    };
 
     let expanded = quote! {
         #[automatically_derived]
@@ -86,6 +109,8 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                         #(#required_fields),*
                     ])
             }
+            
+            #output_schema_tokens
 
             async fn call(&self, args: serde_json::Value, _session: Option<mcp_server::SessionContext>) -> mcp_server::McpResult<Vec<mcp_protocol::ToolResult>> {
                 use serde_json::Value;
@@ -98,14 +123,36 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                     #(#field_assignments),*
                 };
 
-                // Call the execute method if it exists, otherwise provide a default implementation
-                // This uses the execute method that the user must implement
-                match instance.execute().await {
-                    Ok(result) => {
-                        // Convert result to ToolResult
-                        Ok(vec![mcp_protocol::ToolResult::text(result)])
+                // Call the execute method and convert result appropriately
+                #result_conversion_tokens
+            }
+
+            async fn execute(&self, args: serde_json::Value, session: Option<mcp_server::SessionContext>) -> mcp_server::McpResult<mcp_protocol::CallToolResponse> {
+                // Add structured content if this tool has an output schema
+                if self.output_schema().is_some() {
+                    // Extract parameters and execute once to get the result
+                    #(#param_extractions)*
+                    let instance = #name {
+                        #(#field_assignments),*
+                    };
+                    
+                    match instance.execute().await {
+                        Ok(result) => {
+                            // Convert result to both JSON text and structured content
+                            let json_result = serde_json::to_value(&result)
+                                .map_err(|e| mcp_protocol::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
+                            
+                            let text_content = vec![mcp_protocol::ToolResult::text(json_result.to_string())];
+                            let response = mcp_protocol::CallToolResponse::success(text_content);
+                            
+                            Ok(response.with_structured_content(json_result))
+                        }
+                        Err(e) => Err(e)
                     }
-                    Err(e) => Err(e)
+                } else {
+                    // No output schema, use the original call method
+                    let content = self.call(args, session).await?;
+                    Ok(mcp_protocol::CallToolResponse::success(content))
                 }
             }
         }
