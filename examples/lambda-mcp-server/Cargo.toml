@@ -12,6 +12,13 @@ path = "src/main.rs"
 [dependencies]
 # Lambda runtime with streaming support
 lambda_http.workspace = true
+lambda_runtime.workspace = true
+
+# AWS SDK for DynamoDB, SNS, SQS integration
+aws-config.workspace = true
+aws-sdk-dynamodb.workspace = true
+aws-sdk-sns.workspace = true
+aws-sdk-sqs.workspace = true
 
 # Our MCP framework
 mcp-server = { workspace = true }
@@ -22,17 +29,27 @@ json-rpc-server = { workspace = true }
 async-trait = { workspace = true }
 
 # HTTP and JSON handling
+serde = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
-# HTTP headers for CORS support
+# HTTP and Hyper support for streaming
 http = { workspace = true }
+hyper = { workspace = true }
+
+# Date/time handling
+chrono = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true }
+futures = { workspace = true }
 
 # Error handling and logging
+anyhow = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+
+# URL encoding for SSE parameters
+urlencoding = { workspace = true }
 
 [dev-dependencies]
 tokio-test.workspace = true

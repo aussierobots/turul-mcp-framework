@@ -46,6 +46,8 @@ impl McpClient {
         let client = Client::builder()
             .timeout(config.timeout)
             .user_agent(&config.user_agent)
+            .http1_only()  // Force HTTP/1.1 to avoid potential HTTP/2 issues with cargo-lambda
+            .tcp_keepalive(None)  // Disable keepalive to force fresh connections
             .build()
             .context("Failed to create HTTP client")?;
 
@@ -100,6 +102,7 @@ impl McpClient {
         // Send initialized notification
         let initialized_request = json!({
             "jsonrpc": "2.0",
+            "id": self.next_id(),
             "method": "notifications/initialized"
         });
 
@@ -290,12 +293,18 @@ impl McpClient {
     async fn send_request(&self, request: Value) -> Result<Value> {
         debug!("Sending MCP request: {}", request);
 
+        let request_body = serde_json::to_string(&request)
+            .context("Failed to serialize request")?;
+        
+        debug!("Serialized JSON body: {} (length: {})", request_body, request_body.len());
+        
         let response = self.client
-            .post(&format!("{}/mcp", self.config.base_url))
+            .post(&self.config.base_url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream")
-            .header("Mcp-Session-Id", &self.session_id)
-            .json(&request)
+            .header("mcp-session-id", &self.session_id)
+            .header("Content-Length", request_body.len().to_string())
+            .body(request_body)
             .send()
             .await
             .context("Failed to send HTTP request")?;
@@ -331,12 +340,18 @@ impl McpClient {
     async fn send_initialize_request(&mut self, request: Value) -> Result<Value> {
         debug!("Sending MCP initialize request (no session ID): {}", request);
 
+        let request_body = serde_json::to_string(&request)
+            .context("Failed to serialize request")?;
+        
+        debug!("Initialize JSON body: {} (length: {})", request_body, request_body.len());
+        
         let response = self.client
-            .post(&format!("{}/mcp", self.config.base_url))
+            .post(&self.config.base_url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream")
+            .header("Content-Length", request_body.len().to_string())
             // Don't send Mcp-Session-Id header for initialize request
-            .json(&request)
+            .body(request_body)
             .send()
             .await
             .context("Failed to send HTTP request")?;
@@ -417,6 +432,8 @@ impl McpSseClient {
         let client = Client::builder()
             .timeout(config.timeout)
             .user_agent(&config.user_agent)
+            .http1_only()  // Force HTTP/1.1 to avoid potential HTTP/2 issues with cargo-lambda
+            .tcp_keepalive(None)  // Disable keepalive to force fresh connections
             .build()
             .context("Failed to create HTTP client")?;
 
@@ -436,7 +453,7 @@ impl McpSseClient {
             .get(&format!("{}/mcp", self.config.base_url))
             .header("Accept", "application/json, text/event-stream")
             .header("Cache-Control", "no-cache")
-            .header("Mcp-Session-Id", &self.session_id)
+            .header("mcp-session-id", &self.session_id)
             .send()
             .await
             .context("Failed to start SSE connection")?;

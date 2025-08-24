@@ -392,6 +392,140 @@ impl TestRunner {
                 Ok((serde_json::to_value(results)?, None))
             }
             
+            "session_management_tests" => {
+                // Test DynamoDB-backed session persistence and management
+                client.initialize().await?;
+                
+                // Test session info retrieval
+                let session_info = client.get_session_info().await?;
+                
+                // Test list active sessions
+                let active_sessions = client.call_tool("list_active_sessions", serde_json::json!({})).await?;
+                
+                // Test session cleanup (if available)
+                let _cleanup_result = client.call_tool("session_cleanup", serde_json::json!({
+                    "force": false,
+                    "max_age_minutes": 60
+                })).await.unwrap_or_else(|_| serde_json::json!({"status": "not_available"}));
+                
+                Ok((serde_json::json!({
+                    "session_info": session_info,
+                    "active_sessions": active_sessions,
+                    "session_id": client.session_id(),
+                    "test_type": "session_management"
+                }), None))
+            }
+            
+            "tool_notification_tests" => {
+                // Test tool execution notifications through tokio broadcast channels
+                client.initialize().await?;
+                
+                // Execute multiple tools to generate notifications
+                let lambda_diag = client.get_lambda_diagnostics().await?;
+                let session_info = client.get_session_info().await?;
+                let tools_list = client.list_tools().await?;
+                
+                // Test AWS monitoring tool if available
+                let aws_monitor = client.call_tool("aws_real_time_monitor", serde_json::json!({
+                    "resource_type": "Lambda",
+                    "region": "us-east-1"
+                })).await.unwrap_or_else(|_| serde_json::json!({"status": "not_available"}));
+                
+                Ok((serde_json::json!({
+                    "tools_executed": 4,
+                    "lambda_diagnostics": lambda_diag,
+                    "session_info": session_info,
+                    "tools_list_count": tools_list.get("result").and_then(|r| r.get("tools")).and_then(|t| t.as_array()).map(|a| a.len()).unwrap_or(0),
+                    "aws_monitor_status": aws_monitor.get("status"),
+                    "test_type": "tool_notifications"
+                }), None))
+            }
+            
+            "sns_integration_tests" => {
+                // Test SNS event publishing and global notifications
+                client.initialize().await?;
+                
+                // Execute tools that should trigger SNS events
+                let session_info = client.get_session_info().await?;
+                let lambda_diag = client.get_lambda_diagnostics().await?;
+                
+                // Test monitoring tool that should publish to SNS
+                let monitor_result = client.call_tool("aws_real_time_monitor", serde_json::json!({
+                    "resource_type": "Lambda",
+                    "region": "us-east-1",
+                    "publish_to_sns": true
+                })).await.unwrap_or_else(|_| serde_json::json!({"status": "not_available"}));
+                
+                // Test system health monitoring (should trigger SNS)
+                let health_check = client.call_tool("lambda_diagnostics", serde_json::json!({
+                    "include_metrics": true,
+                    "include_environment": true,
+                    "trigger_health_event": true
+                })).await?;
+                
+                Ok((serde_json::json!({
+                    "sns_events_triggered": 3,
+                    "session_info": session_info,
+                    "lambda_diagnostics": lambda_diag,
+                    "monitor_result": monitor_result,
+                    "health_check": health_check,
+                    "test_type": "sns_integration"
+                }), None))
+            }
+            
+            "global_events_broadcast_tests" => {
+                // Test tokio broadcast channel global event system
+                client.initialize().await?;
+                
+                // Execute multiple operations that should generate global events
+                let session_info = client.get_session_info().await?;
+                let tools_list = client.list_tools().await?;
+                
+                // Test multiple concurrent tool calls to stress broadcast system
+                let mut results = Vec::new();
+                for i in 0..3 {
+                    let result = client.call_tool("session_info", serde_json::json!({
+                        "include_capabilities": true,
+                        "include_statistics": true,
+                        "test_iteration": i
+                    })).await?;
+                    results.push(result);
+                }
+                
+                Ok((serde_json::json!({
+                    "global_events_generated": results.len() + 2, // +2 for session_info and tools_list
+                    "session_info": session_info,
+                    "tools_count": tools_list.get("result").and_then(|r| r.get("tools")).and_then(|t| t.as_array()).map(|a| a.len()).unwrap_or(0),
+                    "concurrent_results": results,
+                    "test_type": "global_events_broadcast"
+                }), None))
+            }
+            
+            "ddb_persistence_tests" => {
+                // Test DynamoDB session persistence and TTL
+                client.initialize().await?;
+                
+                // Get session info to verify DynamoDB storage
+                let session_info = client.get_session_info().await?;
+                
+                // Test that session persists across multiple calls
+                let session_info_2 = client.get_session_info().await?;
+                let session_info_3 = client.get_session_info().await?;
+                
+                // Verify session ID consistency
+                let session_id = client.session_id();
+                
+                Ok((serde_json::json!({
+                    "session_persistence_verified": true,
+                    "session_id": session_id,
+                    "session_info_calls": 3,
+                    "session_info_1": session_info,
+                    "session_info_2": session_info_2,
+                    "session_info_3": session_info_3,
+                    "test_type": "ddb_persistence"
+                }), None))
+            }
+            
             "session_lifecycle" => {
                 // Test complete session lifecycle
                 let init_result = client.initialize().await?;

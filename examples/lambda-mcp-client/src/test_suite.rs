@@ -60,6 +60,21 @@ impl TestSuite {
         
         // Error handling per MCP specification
         test_cases.extend(Self::mcp_error_handling_tests());
+        
+        // Session management tests (DynamoDB, persistence, TTL)
+        test_cases.extend(Self::session_management_tests());
+        
+        // Tool notification tests (tokio broadcast channels)
+        test_cases.extend(Self::tool_notification_tests());
+        
+        // SNS integration tests (external event publishing)
+        test_cases.extend(Self::sns_integration_tests());
+        
+        // Global events broadcast tests (internal event system)
+        test_cases.extend(Self::global_events_tests());
+        
+        // DynamoDB persistence tests (session storage and retrieval)
+        test_cases.extend(Self::ddb_persistence_tests());
 
         Self {
             name: "MCP 2025-06-18 Specification Compliance Test Suite".to_string(),
@@ -670,6 +685,252 @@ impl TestSuite {
                     "verify_no_message_loss": true
                 })),
                 priority: 3,
+            },
+        ]
+    }
+
+    /// Session management tests for DynamoDB persistence and TTL
+    fn session_management_tests() -> Vec<TestCase> {
+        vec![
+            TestCase {
+                name: "DynamoDB Session Persistence".to_string(),
+                description: "Test DynamoDB-backed session storage, retrieval, and TTL management".to_string(),
+                test_type: "session_management_tests".to_string(),
+                expected_duration_secs: 15,
+                parameters: Some(json!({
+                    "test_persistence": true,
+                    "test_ttl": true,
+                    "test_cleanup": true
+                })),
+                priority: 1,
+            },
+            TestCase {
+                name: "Session Cleanup and Management".to_string(),
+                description: "Test session cleanup, active session listing, and management operations".to_string(),
+                test_type: "session_management_tests".to_string(),
+                expected_duration_secs: 12,
+                parameters: Some(json!({
+                    "test_active_sessions": true,
+                    "test_cleanup": true,
+                    "test_session_isolation": true
+                })),
+                priority: 1,
+            },
+        ]
+    }
+
+    /// Tool notification tests for tokio broadcast channels
+    fn tool_notification_tests() -> Vec<TestCase> {
+        vec![
+            TestCase {
+                name: "Tool Execution Notifications".to_string(),
+                description: "Test tokio broadcast channels for tool execution event notifications".to_string(),
+                test_type: "tool_notification_tests".to_string(),
+                expected_duration_secs: 20,
+                parameters: Some(json!({
+                    "tools_to_execute": 4,
+                    "test_broadcast_channels": true,
+                    "validate_notifications": true
+                })),
+                priority: 1,
+            },
+            TestCase {
+                name: "Real-time Tool Monitoring".to_string(),
+                description: "Test real-time monitoring of tool executions through event system".to_string(),
+                test_type: "tool_notification_tests".to_string(),
+                expected_duration_secs: 18,
+                parameters: Some(json!({
+                    "monitor_aws_tools": true,
+                    "monitor_lambda_tools": true,
+                    "validate_real_time": true
+                })),
+                priority: 2,
+            },
+            TestCase {
+                name: "Server Notification Tool".to_string(),
+                description: "Test server_notification tool for sending global server notifications via tokio broadcast".to_string(),
+                test_type: "tool_notification_tests".to_string(),
+                expected_duration_secs: 15,
+                parameters: Some(json!({
+                    "tool_name": "server_notification",
+                    "test_parameters": {
+                        "component": "test_component",
+                        "status": "healthy",
+                        "message": "Test server notification message",
+                        "details": {"test_key": "test_value"},
+                        "severity": "medium"
+                    },
+                    "require_session_id": true,
+                    "validate_broadcast": true,
+                    "expect_subscriber_count": true
+                })),
+                priority: 1,
+            },
+            TestCase {
+                name: "Progress Update Tool".to_string(),
+                description: "Test progress_update tool for sending progress updates via tokio broadcast mechanism".to_string(),
+                test_type: "tool_notification_tests".to_string(),
+                expected_duration_secs: 20,
+                parameters: Some(json!({
+                    "tool_name": "progress_update",
+                    "test_parameters": {
+                        "tool_name": "test_progress_tool",
+                        "status": "in_progress",
+                        "progress_percent": 75.5,
+                        "message": "Processing test data",
+                        "current_step": "Step 3 of 4",
+                        "total_steps": 4
+                    },
+                    "require_session_id": true,
+                    "validate_broadcast": true,
+                    "test_all_statuses": ["started", "in_progress", "completed", "failed"]
+                })),
+                priority: 1,
+            },
+            TestCase {
+                name: "Progress Update Tool Status Progression".to_string(),
+                description: "Test progress_update tool with complete status progression (started -> in_progress -> completed)".to_string(),
+                test_type: "tool_notification_tests".to_string(),
+                expected_duration_secs: 25,
+                parameters: Some(json!({
+                    "tool_name": "progress_update",
+                    "test_sequence": [
+                        {
+                            "tool_name": "multi_step_operation",
+                            "status": "started",
+                            "message": "Starting multi-step operation"
+                        },
+                        {
+                            "tool_name": "multi_step_operation",
+                            "status": "in_progress",
+                            "progress_percent": 25.0,
+                            "message": "Step 1 complete",
+                            "current_step": "Step 2 of 4"
+                        },
+                        {
+                            "tool_name": "multi_step_operation",
+                            "status": "in_progress",
+                            "progress_percent": 75.0,
+                            "message": "Step 3 complete",
+                            "current_step": "Step 4 of 4"
+                        },
+                        {
+                            "tool_name": "multi_step_operation",
+                            "status": "completed",
+                            "progress_percent": 100.0,
+                            "message": "Operation completed successfully",
+                            "result_data": {"total_processed": 42, "success": true}
+                        }
+                    ],
+                    "require_session_id": true,
+                    "validate_broadcast": true,
+                    "validate_sequence_timing": true
+                })),
+                priority: 2,
+            },
+            TestCase {
+                name: "Session ID Header Validation for Notification Tools".to_string(),
+                description: "Test that notification tools fail with proper JSON-RPC errors when mcp-session-id header is missing".to_string(),
+                test_type: "tool_notification_tests".to_string(),
+                expected_duration_secs: 10,
+                parameters: Some(json!({
+                    "test_tools": ["server_notification", "progress_update"],
+                    "omit_session_header": true,
+                    "expect_jsonrpc_error": true,
+                    "expected_error_code": -32602,
+                    "expected_error_message": "Missing mcp-session-id header"
+                })),
+                priority: 1,
+            },
+        ]
+    }
+
+    /// SNS integration tests for external event publishing
+    fn sns_integration_tests() -> Vec<TestCase> {
+        vec![
+            TestCase {
+                name: "SNS Event Publishing".to_string(),
+                description: "Test SNS external event publishing for global notifications".to_string(),
+                test_type: "sns_integration_tests".to_string(),
+                expected_duration_secs: 25,
+                parameters: Some(json!({
+                    "test_sns_publishing": true,
+                    "test_global_notifications": true,
+                    "validate_event_format": true
+                })),
+                priority: 1,
+            },
+            TestCase {
+                name: "Health Event SNS Integration".to_string(),
+                description: "Test health monitoring events published to SNS".to_string(),
+                test_type: "sns_integration_tests".to_string(),
+                expected_duration_secs: 20,
+                parameters: Some(json!({
+                    "test_health_events": true,
+                    "test_monitoring_events": true,
+                    "validate_sns_format": true
+                })),
+                priority: 2,
+            },
+        ]
+    }
+
+    /// Global events broadcast tests for internal event system
+    fn global_events_tests() -> Vec<TestCase> {
+        vec![
+            TestCase {
+                name: "Global Events Broadcast System".to_string(),
+                description: "Test tokio broadcast channels for internal global event distribution".to_string(),
+                test_type: "global_events_broadcast_tests".to_string(),
+                expected_duration_secs: 15,
+                parameters: Some(json!({
+                    "concurrent_operations": 3,
+                    "test_broadcast_channels": true,
+                    "validate_event_delivery": true
+                })),
+                priority: 1,
+            },
+            TestCase {
+                name: "Event System Stress Test".to_string(),
+                description: "Test global event system under multiple concurrent operations".to_string(),
+                test_type: "global_events_broadcast_tests".to_string(),
+                expected_duration_secs: 22,
+                parameters: Some(json!({
+                    "stress_test": true,
+                    "concurrent_clients": 5,
+                    "operations_per_client": 3
+                })),
+                priority: 3,
+            },
+        ]
+    }
+
+    /// DynamoDB persistence tests
+    fn ddb_persistence_tests() -> Vec<TestCase> {
+        vec![
+            TestCase {
+                name: "DynamoDB Session Storage".to_string(),
+                description: "Test DynamoDB session persistence across multiple operations".to_string(),
+                test_type: "ddb_persistence_tests".to_string(),
+                expected_duration_secs: 18,
+                parameters: Some(json!({
+                    "multiple_calls": 3,
+                    "test_consistency": true,
+                    "validate_persistence": true
+                })),
+                priority: 1,
+            },
+            TestCase {
+                name: "Session TTL and Expiration".to_string(),
+                description: "Test DynamoDB TTL handling and session expiration".to_string(),
+                test_type: "ddb_persistence_tests".to_string(),
+                expected_duration_secs: 25,
+                parameters: Some(json!({
+                    "test_ttl": true,
+                    "test_expiration": true,
+                    "validate_cleanup": true
+                })),
+                priority: 2,
             },
         ]
     }

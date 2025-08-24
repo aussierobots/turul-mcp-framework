@@ -127,6 +127,32 @@ create_dynamodb_table() {
         echo -e "${YELLOW}⏳ Waiting for table to become active...${NC}"
         aws dynamodb wait table-exists --table-name "$TABLE_NAME" --region "$REGION"
         echo -e "${GREEN}✅ DynamoDB table is now active${NC}"
+
+        # Enable TTL on the ttl field for automatic session cleanup
+        echo -e "${YELLOW}🕒 Enabling TTL for automatic session cleanup...${NC}"
+        aws dynamodb update-time-to-live \
+            --table-name "$TABLE_NAME" \
+            --region "$REGION" \
+            --time-to-live-specification Enabled=true,AttributeName=ttl
+        echo -e "${GREEN}✅ TTL enabled on 'ttl' attribute${NC}"
+    fi
+
+    # Enable TTL for existing tables (if not already enabled)
+    echo -e "${YELLOW}🕒 Checking and enabling TTL for session cleanup...${NC}"
+    TTL_STATUS=$(aws dynamodb describe-time-to-live \
+        --table-name "$TABLE_NAME" \
+        --region "$REGION" \
+        --query 'TimeToLiveDescription.TimeToLiveStatus' \
+        --output text 2>/dev/null || echo "DISABLED")
+    
+    if [ "$TTL_STATUS" != "ENABLED" ]; then
+        aws dynamodb update-time-to-live \
+            --table-name "$TABLE_NAME" \
+            --region "$REGION" \
+            --time-to-live-specification Enabled=true,AttributeName=ttl
+        echo -e "${GREEN}✅ TTL enabled on 'ttl' attribute${NC}"
+    else
+        echo -e "${GREEN}✅ TTL already enabled on 'ttl' attribute${NC}"
     fi
 
     # Get table ARN
@@ -270,12 +296,19 @@ output_environment_vars() {
     # Create .env file for local development
     cat > .env << EOF
 # Lambda MCP Server Environment Variables (Clean Architecture)
+# 
+# For local development with 'cargo lambda watch', you only need:
 SESSION_TABLE_NAME=$TABLE_NAME
 AWS_DEFAULT_REGION=$REGION
 
 # Optional SNS topic for external global event publishing
 # If not set, server uses internal tokio broadcast only
 $(if [ ! -z "$TOPIC_ARN" ]; then echo "SNS_TOPIC_ARN=$TOPIC_ARN"; else echo "# SNS_TOPIC_ARN=your-topic-arn-here"; fi)
+
+# AWS Lambda runtime variables (only needed for actual Lambda deployment, not local development)
+# AWS_LAMBDA_FUNCTION_NAME=lambda-mcp-server
+# AWS_LAMBDA_FUNCTION_MEMORY_SIZE=512
+# AWS_LAMBDA_FUNCTION_VERSION=\$LATEST
 
 # Optional configuration overrides
 # ALLOWED_ORIGINS=http://localhost:3000,https://your-domain.com

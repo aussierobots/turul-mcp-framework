@@ -249,9 +249,9 @@ sam deploy --guided
 ## 📖 Documentation
 
 ### **📚 Architecture & Implementation**
-- **[DynamoDB Schema](docs/dynamodb-schema.md)**: Complete session management schema with pk/sk patterns
-- **[SQS Configuration](docs/sqs-configuration.md)**: Event message formats and processing flow
+- **[Transport Architecture](docs/transport.md)**: MCP 2025-06-18 Streamable HTTP compliance and notification system
 - **[Infrastructure Scripts](scripts/)**: Automated AWS resource setup and cleanup
+- **[Session Management](docs/sessions.md)**: DynamoDB-backed session persistence and lifecycle
 
 ### **🔧 Configuration**
 The server uses a layered configuration approach:
@@ -264,7 +264,7 @@ Key environment variables:
 ```bash
 # Required
 SESSION_TABLE_NAME=mcp-sessions          # DynamoDB table for sessions
-SQS_QUEUE_URL=https://sqs.region...     # SQS queue for events
+SNS_TOPIC_ARN=arn:aws:sns:region...     # SNS topic for external events (optional)
 
 # Optional (with embedded defaults)
 ALLOWED_ORIGINS=*                        # CORS origins
