@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::tools::Cursor;
+use crate::meta::Cursor;
 
 /// A resource descriptor
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,26 +55,66 @@ impl Resource {
 /// Parameters for resources/list request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ListResourcesRequest {
+pub struct ListResourcesParams {
     /// Optional cursor for pagination
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<Cursor>,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<std::collections::HashMap<String, Value>>,
 }
 
-impl ListResourcesRequest {
+impl ListResourcesParams {
     pub fn new() -> Self {
-        Self { cursor: None }
+        Self { 
+            cursor: None,
+            meta: None,
+        }
     }
 
     pub fn with_cursor(mut self, cursor: Cursor) -> Self {
         self.cursor = Some(cursor);
         self
     }
+
+    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
 }
 
-impl Default for ListResourcesRequest {
+impl Default for ListResourcesParams {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Complete resources/list request (matches TypeScript ListResourcesRequest interface)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListResourcesRequest {
+    /// Method name (always "resources/list")
+    pub method: String,
+    /// Request parameters
+    pub params: ListResourcesParams,
+}
+
+impl ListResourcesRequest {
+    pub fn new() -> Self {
+        Self {
+            method: "resources/list".to_string(),
+            params: ListResourcesParams::new(),
+        }
+    }
+
+    pub fn with_cursor(mut self, cursor: Cursor) -> Self {
+        self.params = self.params.with_cursor(cursor);
+        self
+    }
+
+    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
+        self.params = self.params.with_meta(meta);
+        self
     }
 }
 
@@ -87,6 +127,14 @@ pub struct ListResourcesResponse {
     /// Optional cursor for next page
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<Cursor>,
+    /// Meta information (follows MCP Result interface)
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "_meta",
+        rename = "_meta"
+    )]
+    pub meta: Option<std::collections::HashMap<String, Value>>,
 }
 
 impl ListResourcesResponse {
@@ -94,6 +142,7 @@ impl ListResourcesResponse {
         Self {
             resources,
             next_cursor: None,
+            meta: None,
         }
     }
 
@@ -101,19 +150,59 @@ impl ListResourcesResponse {
         self.next_cursor = Some(cursor);
         self
     }
+
+    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
 }
 
 /// Parameters for resources/read request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReadResourceRequest {
+pub struct ReadResourceParams {
     /// URI of the resource to read
     pub uri: String,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<std::collections::HashMap<String, Value>>,
+}
+
+impl ReadResourceParams {
+    pub fn new(uri: impl Into<String>) -> Self {
+        Self { 
+            uri: uri.into(),
+            meta: None,
+        }
+    }
+
+    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
+}
+
+/// Complete resources/read request (matches TypeScript ReadResourceRequest interface)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadResourceRequest {
+    /// Method name (always "resources/read")
+    pub method: String,
+    /// Request parameters
+    pub params: ReadResourceParams,
 }
 
 impl ReadResourceRequest {
     pub fn new(uri: impl Into<String>) -> Self {
-        Self { uri: uri.into() }
+        Self {
+            method: "resources/read".to_string(),
+            params: ReadResourceParams::new(uri),
+        }
+    }
+
+    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
+        self.params = self.params.with_meta(meta);
+        self
     }
 }
 
@@ -155,15 +244,31 @@ impl ResourceContent {
 pub struct ReadResourceResponse {
     /// The resource content
     pub contents: Vec<ResourceContent>,
+    /// Meta information (follows MCP Result interface)
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "_meta",
+        rename = "_meta"
+    )]
+    pub meta: Option<std::collections::HashMap<String, Value>>,
 }
 
 impl ReadResourceResponse {
     pub fn new(contents: Vec<ResourceContent>) -> Self {
-        Self { contents }
+        Self { 
+            contents,
+            meta: None,
+        }
     }
 
     pub fn single(content: ResourceContent) -> Self {
         Self::new(vec![content])
+    }
+
+    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
     }
 }
 
@@ -178,6 +283,129 @@ pub struct ResourceSubscription {
 impl ResourceSubscription {
     pub fn new(uri: impl Into<String>) -> Self {
         Self { uri: uri.into() }
+    }
+}
+
+// Trait implementations for resources
+
+use crate::traits::*;
+use std::collections::HashMap;
+
+// Trait implementations for ListResourcesParams
+impl Params for ListResourcesParams {}
+
+impl HasListResourcesParams for ListResourcesParams {
+    fn cursor(&self) -> Option<&Cursor> {
+        self.cursor.as_ref()
+    }
+}
+
+impl HasMetaParam for ListResourcesParams {
+    fn meta(&self) -> Option<&std::collections::HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
+}
+
+// Trait implementations for ListResourcesRequest
+impl HasMethod for ListResourcesRequest {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+impl HasParams for ListResourcesRequest {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params)
+    }
+}
+
+// Trait implementations for ListResourcesResponse
+impl HasData for ListResourcesResponse {
+    fn data(&self) -> HashMap<String, Value> {
+        let mut data = HashMap::new();
+        data.insert("resources".to_string(), serde_json::to_value(&self.resources).unwrap_or(Value::Null));
+        if let Some(ref next_cursor) = self.next_cursor {
+            data.insert("nextCursor".to_string(), Value::String(next_cursor.as_str().to_string()));
+        }
+        data
+    }
+}
+
+impl HasMeta for ListResourcesResponse {
+    fn meta(&self) -> Option<HashMap<String, Value>> {
+        self.meta.clone()
+    }
+}
+
+impl RpcResult for ListResourcesResponse {}
+
+impl ListResourcesResult for ListResourcesResponse {
+    fn resources(&self) -> &Vec<Resource> {
+        &self.resources
+    }
+    
+    fn next_cursor(&self) -> Option<&Cursor> {
+        self.next_cursor.as_ref()
+    }
+}
+
+// Trait implementations for ReadResourceParams
+impl Params for ReadResourceParams {}
+
+impl HasReadResourceParams for ReadResourceParams {
+    fn uri(&self) -> &String {
+        &self.uri
+    }
+}
+
+impl HasMetaParam for ReadResourceParams {
+    fn meta(&self) -> Option<&std::collections::HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
+}
+
+// Trait implementations for ReadResourceRequest
+impl HasMethod for ReadResourceRequest {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+impl HasParams for ReadResourceRequest {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params)
+    }
+}
+
+// Trait implementations for ReadResourceResponse
+impl HasData for ReadResourceResponse {
+    fn data(&self) -> HashMap<String, Value> {
+        let mut data = HashMap::new();
+        data.insert("contents".to_string(), serde_json::to_value(&self.contents).unwrap_or(Value::Null));
+        data
+    }
+}
+
+impl HasMeta for ReadResourceResponse {
+    fn meta(&self) -> Option<HashMap<String, Value>> {
+        self.meta.clone()
+    }
+}
+
+impl RpcResult for ReadResourceResponse {}
+
+impl ReadResourceResult for ReadResourceResponse {
+    fn contents(&self) -> &Vec<ResourceContent> {
+        &self.contents
+    }
+}
+
+// Trait implementations for ResourceSubscription
+impl Params for ResourceSubscription {}
+
+impl HasResourceUpdatedParams for ResourceSubscription {
+    fn uri(&self) -> &String {
+        &self.uri
     }
 }
 
@@ -235,5 +463,19 @@ mod tests {
 
         let parsed: Resource = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.uri, "file:///example.txt");
+    }
+
+    #[test]
+    fn test_trait_implementations() {
+        let request = ListResourcesRequest::new();
+        assert!(request.params.cursor.is_none());
+        
+        let resources = vec![Resource::new("test://resource", "Test Resource")];
+        let response = ListResourcesResponse::new(resources);
+        assert_eq!(response.resources().len(), 1);
+        assert!(response.next_cursor().is_none());
+        
+        let data = response.data();
+        assert!(data.contains_key("resources"));
     }
 }

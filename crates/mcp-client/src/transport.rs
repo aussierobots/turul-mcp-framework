@@ -239,7 +239,7 @@ impl TransportFactory {
     
     /// List available transport types
     pub fn available_transports() -> Vec<TransportType> {
-        let mut transports = vec![TransportType::Http, TransportType::Sse];
+        let transports = vec![TransportType::Http, TransportType::Sse];
         
         #[cfg(feature = "websocket")]
         transports.push(TransportType::WebSocket);

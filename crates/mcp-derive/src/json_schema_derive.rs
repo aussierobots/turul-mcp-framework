@@ -26,6 +26,7 @@ pub fn derive_json_schema(input: DeriveInput) -> TokenStream {
 }
 
 fn generate_struct_schema(struct_name: &syn::Ident, fields: &Fields) -> TokenStream {
+    let _schema_comment = format!("Schema for {}", struct_name);
     match fields {
         Fields::Named(fields_named) => {
             let mut properties = Vec::new();
@@ -53,6 +54,7 @@ fn generate_struct_schema(struct_name: &syn::Ident, fields: &Fields) -> TokenStr
                     use std::collections::HashMap;
                     use mcp_protocol::schema::JsonSchema;
                     
+                    // Generate schema for struct #struct_name
                     let mut properties = HashMap::new();
                     #(
                         properties.insert(#properties.0, #properties.1);

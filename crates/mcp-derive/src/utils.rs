@@ -495,15 +495,6 @@ pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
     Ok(meta)
 }
 
-/// Analyze execute method return type and generate output schema
-pub fn analyze_execute_return_type(_struct_name: &syn::Ident) -> TokenStream {
-    // Default to no schema - this should be overridden by type-specific generation
-    quote! {
-        fn output_schema(&self) -> Option<mcp_protocol::ToolSchema> {
-            None
-        }
-    }
-}
 
 /// Generate output schema from a specific type with struct introspection
 pub fn generate_output_schema_for_type(ty: &syn::Type) -> TokenStream {
@@ -564,9 +555,10 @@ pub fn generate_output_schema_for_type(ty: &syn::Type) -> TokenStream {
                         // For now, we'll generate a basic object schema but this could be enhanced
                         // to introspect the struct definition if available
                         let type_name = ident.to_string();
+                        let _schema_debug = format!("Generating schema for type: {}", type_name);
                         quote! {
                             fn output_schema(&self) -> Option<mcp_protocol::ToolSchema> {
-                                // Try to use the JsonSchemaGenerator trait if implemented
+                                // Generate schema for custom type: #type_name
                                 Some(<#ident as mcp_protocol::schema::JsonSchemaGenerator>::json_schema())
                             }
                         }

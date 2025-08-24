@@ -7,7 +7,7 @@
 
 use async_trait::async_trait;
 use mcp_server::{McpServer, McpResult};
-use mcp_server::handlers::McpResource;
+use mcp_server::McpResource;
 use mcp_protocol::resources::ResourceContent;
 use serde_json::json;
 use std::fs;
@@ -33,7 +33,7 @@ impl McpResource for ProjectDocumentationResource {
         "Comprehensive project documentation including setup, architecture, and guidelines"
     }
 
-    async fn read(&self) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
         let mut contents = Vec::new();
         
         // Load main project README
@@ -117,7 +117,7 @@ impl McpResource for ApiDocumentationResource {
         "Complete API documentation with authentication, endpoints, examples and SDKs"
     }
 
-    async fn read(&self) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
         let api_docs_path = Path::new("data/api_docs.md");
         
         match fs::read_to_string(api_docs_path) {
@@ -166,7 +166,7 @@ impl McpResource for ConfigurationResource {
         "Production application configuration loaded from external JSON file"
     }
 
-    async fn read(&self) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
         let config_path = Path::new("data/app_config.json");
         
         let mut contents = Vec::new();
@@ -254,7 +254,7 @@ impl McpResource for DatabaseSchemaResource {
         "Production database schema with tables, indexes, and relationships"
     }
 
-    async fn read(&self) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
         let schema_path = Path::new("data/database_schema.sql");
         
         let mut contents = Vec::new();
@@ -336,7 +336,7 @@ impl McpResource for SystemStatusResource {
         "Real-time system status and health metrics"
     }
 
-    async fn read(&self) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
         let now: DateTime<Utc> = Utc::now();
         
         let status = json!({

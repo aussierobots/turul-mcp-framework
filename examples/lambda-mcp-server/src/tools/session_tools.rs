@@ -3,10 +3,9 @@
 //! Tools for MCP session management, monitoring, and diagnostics
 
 use crate::global_events::{broadcast_session_event, SessionEventType, broadcast_global_event, GlobalEvent, ToolExecutionStatus};
-use crate::session_manager::{SessionManager, McpSession};
+use crate::session_manager::SessionManager;
 
 // Import json-rpc-server framework types for proper error handling
-use json_rpc_server::{JsonRpcError, JsonRpcErrorCode};
 use async_trait::async_trait;
 use mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, McpError};
 use mcp_server::{McpTool, SessionContext, McpResult};
@@ -16,6 +15,7 @@ use serde::{Deserialize, Serialize};
 
 /// Response structure for session_info tool
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SessionInfoResponse {
     pub session_id: String,
     pub status: String,
@@ -29,6 +29,7 @@ pub struct SessionInfoResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SessionMetadata {
     pub is_active: bool,
     pub age_minutes: i64,
@@ -38,6 +39,7 @@ pub struct SessionMetadata {
 
 /// Response structure for list_active_sessions tool
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ListActiveSessionsResponse {
     pub timestamp: String,
     pub requested_by: String,
@@ -49,6 +51,7 @@ pub struct ListActiveSessionsResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SessionSummary {
     pub session_id: String,
     pub created_at: String,
@@ -66,6 +69,7 @@ pub struct SessionSummary {
 
 /// Response structure for session_cleanup tool
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SessionCleanupResponse {
     pub timestamp: String,
     pub cleanup_initiated_by: String,
@@ -75,6 +79,7 @@ pub struct SessionCleanupResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct CleanupResult {
     pub session_id: String,
     pub status: String,
@@ -82,6 +87,7 @@ pub struct CleanupResult {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct CleanupSummary {
     pub total_sessions_checked: u32,
     pub expired_sessions_removed: u32,

@@ -1,6 +1,5 @@
 use mcp_derive::McpTool;
 use mcp_server::{McpResult, McpServer};
-use serde::Serialize;
 use tracing::info;
 
 #[derive(McpTool, Clone)]

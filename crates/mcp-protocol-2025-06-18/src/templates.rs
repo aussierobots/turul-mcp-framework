@@ -98,7 +98,7 @@ impl Template {
 pub struct ListTemplatesRequest {
     /// Optional cursor for pagination
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub cursor: Option<crate::tools::Cursor>,
+    pub cursor: Option<crate::meta::Cursor>,
 }
 
 /// Response for templates/list
@@ -109,7 +109,7 @@ pub struct ListTemplatesResponse {
     pub templates: Vec<Template>,
     /// Optional cursor for next page
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub next_cursor: Option<crate::tools::Cursor>,
+    pub next_cursor: Option<crate::meta::Cursor>,
 }
 
 impl ListTemplatesResponse {
@@ -120,7 +120,7 @@ impl ListTemplatesResponse {
         }
     }
     
-    pub fn with_next_cursor(mut self, cursor: crate::tools::Cursor) -> Self {
+    pub fn with_next_cursor(mut self, cursor: crate::meta::Cursor) -> Self {
         self.next_cursor = Some(cursor);
         self
     }

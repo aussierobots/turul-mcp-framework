@@ -7,6 +7,9 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde_json::Value;
+use tracing::debug;
+
+use crate::resource::{McpResource, resource_to_descriptor};
 
 use crate::{McpResult, SessionContext};
 use mcp_protocol::McpError;
@@ -112,6 +115,8 @@ impl McpHandler for PromptsHandler {
             .and_then(|c| c.as_str())
             .map(Cursor::from);
         
+        debug!("Listing prompts with cursor: {:?}", cursor);
+        
         let prompts: Vec<Prompt> = self.prompts.values()
             .map(|p| Prompt::new(p.name()).with_description(p.description()))
             .collect();
@@ -185,8 +190,10 @@ impl McpHandler for ResourcesHandler {
             .and_then(|c| c.as_str())
             .map(Cursor::from);
         
+        debug!("Listing resources with cursor: {:?}", cursor);
+        
         let resources: Vec<Resource> = self.resources.values()
-            .map(|r| Resource::new(r.uri(), r.name()).with_description(r.description()))
+            .map(|r| resource_to_descriptor(r.as_ref()))
             .collect();
         
         let base_response = ListResourcesResponse::new(resources.clone());
@@ -210,21 +217,6 @@ impl McpHandler for ResourcesHandler {
     }
 }
 
-/// Trait for MCP resources
-#[async_trait]
-pub trait McpResource: Send + Sync {
-    /// The URI of the resource
-    fn uri(&self) -> &str;
-    
-    /// Human-readable name
-    fn name(&self) -> &str;
-    
-    /// Description of the resource
-    fn description(&self) -> &str;
-    
-    /// Read the resource content
-    async fn read(&self) -> McpResult<Vec<mcp_protocol::resources::ResourceContent>>;
-}
 
 /// Logging handler for logging/setLevel endpoint
 pub struct LoggingHandler;
@@ -238,7 +230,7 @@ impl McpHandler for LoggingHandler {
             let request: SetLevelRequest = serde_json::from_value(params)?;
             
             // In a real implementation, you'd set the actual log level
-            tracing::info!("Setting log level to: {:?}", request.level);
+            tracing::info!("Setting log level to: {:?}", request.params.level);
             
             // MCP logging/setLevel doesn't return data, just success
             Ok(Value::Null)
@@ -281,6 +273,8 @@ impl McpHandler for RootsHandler {
             .and_then(|p| p.get("cursor"))
             .and_then(|c| c.as_str())
             .map(Cursor::from);
+        
+        debug!("Listing roots with cursor: {:?}", cursor);
         
         let base_response = ListRootsResponse::new(self.roots.clone());
         
@@ -328,7 +322,9 @@ impl McpHandler for SamplingHandler {
         
         let base_response = CreateMessageResponse {
             message,
+            model: "mock-model-v1".to_string(),
             stop_reason: Some("stop".to_string()),
+            meta: None,
         };
         
         // Add progress metadata for message generation operations
@@ -378,6 +374,8 @@ impl McpHandler for TemplatesHandler {
             .and_then(|p| p.get("cursor"))
             .and_then(|c| c.as_str())
             .map(Cursor::from);
+        
+        debug!("Listing templates with cursor: {:?}", cursor);
         
         let templates: Vec<Template> = self.templates.values()
             .map(|t| Template::new(t.name()).with_description(t.description()))
@@ -431,6 +429,8 @@ impl McpHandler for ResourceTemplatesHandler {
             .and_then(|p| p.get("cursor"))
             .and_then(|c| c.as_str())
             .map(Cursor::from);
+        
+        debug!("Listing resource templates with cursor: {:?}", cursor);
         
         // In a real implementation, this would return actual resource templates
         // For demonstration purposes, we return an empty list

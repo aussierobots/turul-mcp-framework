@@ -2,24 +2,11 @@
 //!
 //! This module defines the types used for the MCP tools functionality.
 
+use crate::meta::Cursor;
 use crate::schema::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-
-/// A cursor for pagination
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Cursor(pub String);
-
-impl Cursor {
-    pub fn new(value: impl Into<String>) -> Self {
-        Self(value.into())
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
 
 /// JSON Schema definition for tool input/output
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -133,26 +120,66 @@ impl Tool {
 /// Parameters for tools/list request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ListToolsRequest {
+pub struct ListToolsParams {
     /// Optional cursor for pagination
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<Cursor>,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
-impl ListToolsRequest {
+impl ListToolsParams {
     pub fn new() -> Self {
-        Self { cursor: None }
+        Self {
+            cursor: None,
+            meta: None,
+        }
     }
 
     pub fn with_cursor(mut self, cursor: Cursor) -> Self {
         self.cursor = Some(cursor);
         self
     }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
 }
 
-impl Default for ListToolsRequest {
+impl Default for ListToolsParams {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Complete tools/list request (matches TypeScript ListToolsRequest interface)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListToolsRequest {
+    /// Method name (always "tools/list")
+    pub method: String,
+    /// Request parameters
+    pub params: ListToolsParams,
+}
+
+impl ListToolsRequest {
+    pub fn new() -> Self {
+        Self {
+            method: "tools/list".to_string(),
+            params: ListToolsParams::new(),
+        }
+    }
+
+    pub fn with_cursor(mut self, cursor: Cursor) -> Self {
+        self.params = self.params.with_cursor(cursor);
+        self
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.params = self.params.with_meta(meta);
+        self
     }
 }
 
@@ -181,27 +208,65 @@ impl ListToolsResponse {
     }
 }
 
-/// Parameters for tools/call request
+/// Parameters for tools/call request (matches TypeScript CallToolRequest.params)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CallToolRequest {
+pub struct CallToolParams {
     /// Name of the tool to call
     pub name: String,
     /// Arguments to pass to the tool
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arguments: Option<Value>,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
-impl CallToolRequest {
+impl CallToolParams {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             arguments: None,
+            meta: None,
         }
     }
 
     pub fn with_arguments(mut self, arguments: Value) -> Self {
         self.arguments = Some(arguments);
+        self
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
+}
+
+/// Complete tools/call request (matches TypeScript CallToolRequest interface)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CallToolRequest {
+    /// Method name (always "tools/call")
+    pub method: String,
+    /// Request parameters
+    pub params: CallToolParams,
+}
+
+impl CallToolRequest {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            method: "tools/call".to_string(),
+            params: CallToolParams::new(name),
+        }
+    }
+
+    pub fn with_arguments(mut self, arguments: Value) -> Self {
+        self.params = self.params.with_arguments(arguments);
+        self
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.params = self.params.with_meta(meta);
         self
     }
 }
@@ -280,6 +345,14 @@ pub struct CallToolResponse {
     /// Structured content that matches the tool's output schema (MCP 2025-06-18)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub structured_content: Option<Value>,
+    /// Meta information (follows MCP Result interface)
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "_meta",
+        rename = "_meta"
+    )]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 impl CallToolResponse {
@@ -288,6 +361,7 @@ impl CallToolResponse {
             content,
             is_error: None,
             structured_content: None,
+            meta: None,
         }
     }
 
@@ -296,6 +370,7 @@ impl CallToolResponse {
             content,
             is_error: Some(false),
             structured_content: None,
+            meta: None,
         }
     }
 
@@ -304,6 +379,7 @@ impl CallToolResponse {
             content,
             is_error: Some(true),
             structured_content: None,
+            meta: None,
         }
     }
 
@@ -316,6 +392,11 @@ impl CallToolResponse {
         self.structured_content = Some(structured_content);
         self
     }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
 }
 
 // Trait implementations for CallToolResponse
@@ -325,7 +406,10 @@ use crate::traits::*;
 impl HasData for CallToolResponse {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("content".to_string(), serde_json::to_value(&self.content).unwrap_or(Value::Null));
+        data.insert(
+            "content".to_string(),
+            serde_json::to_value(&self.content).unwrap_or(Value::Null),
+        );
         if let Some(is_error) = self.is_error {
             data.insert("isError".to_string(), Value::Bool(is_error));
         }
@@ -338,7 +422,7 @@ impl HasData for CallToolResponse {
 
 impl HasMeta for CallToolResponse {
     fn meta(&self) -> Option<HashMap<String, Value>> {
-        None // CallToolResponse doesn't have explicit meta fields
+        self.meta.clone()
     }
 }
 
@@ -355,6 +439,100 @@ impl CallToolResult for CallToolResponse {
 
     fn structured_content(&self) -> Option<&Value> {
         self.structured_content.as_ref()
+    }
+}
+
+// Trait implementations for ListToolsParams
+impl Params for ListToolsParams {}
+
+impl HasListToolsParams for ListToolsParams {
+    fn cursor(&self) -> Option<&Cursor> {
+        self.cursor.as_ref()
+    }
+}
+
+impl HasMetaParam for ListToolsParams {
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
+}
+
+// Trait implementations for ListToolsRequest
+impl HasMethod for ListToolsRequest {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+impl HasParams for ListToolsRequest {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params)
+    }
+}
+
+// Trait implementations for ListToolsResponse
+impl HasData for ListToolsResponse {
+    fn data(&self) -> HashMap<String, Value> {
+        let mut data = HashMap::new();
+        data.insert(
+            "tools".to_string(),
+            serde_json::to_value(&self.tools).unwrap_or(Value::Null),
+        );
+        if let Some(ref next_cursor) = self.next_cursor {
+            data.insert(
+                "nextCursor".to_string(),
+                Value::String(next_cursor.as_str().to_string()),
+            );
+        }
+        data
+    }
+}
+
+impl HasMeta for ListToolsResponse {
+    fn meta(&self) -> Option<HashMap<String, Value>> {
+        None // ListToolsResponse doesn't have explicit meta fields
+    }
+}
+
+impl RpcResult for ListToolsResponse {}
+
+impl ListToolsResult for ListToolsResponse {
+    fn tools(&self) -> &Vec<Tool> {
+        &self.tools
+    }
+
+    fn next_cursor(&self) -> Option<&Cursor> {
+        self.next_cursor.as_ref()
+    }
+}
+
+// Trait implementations for CallToolParams
+impl Params for CallToolParams {}
+
+impl HasCallToolParams for CallToolParams {
+    fn name(&self) -> &String {
+        &self.name
+    }
+
+    fn arguments(&self) -> Option<&Value> {
+        self.arguments.as_ref()
+    }
+
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
+}
+
+// Trait implementations for CallToolRequest
+impl HasMethod for CallToolRequest {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+impl HasParams for CallToolRequest {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params)
     }
 }
 

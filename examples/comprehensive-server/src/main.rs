@@ -13,8 +13,8 @@ use std::path::Path;
 
 use async_trait::async_trait;
 use mcp_protocol::{schema::JsonSchema, ToolResult, ToolSchema, McpError, McpResult};
-use mcp_server::handlers::{McpPrompt, McpResource, McpTemplate};
-use mcp_server::{McpServer, McpTool, SessionContext};
+use mcp_server::handlers::{McpPrompt, McpTemplate};
+use mcp_server::{McpServer, McpTool, McpResource, SessionContext};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value, from_str};
 use tracing::info;
@@ -863,7 +863,7 @@ impl McpResource for ProjectResourcesHandler {
         "Access to development team resources including repositories, APIs, documentation, and tools"
     }
 
-    async fn read(&self) -> McpResult<Vec<mcp_protocol::resources::ResourceContent>> {
+    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<mcp_protocol::resources::ResourceContent>> {
         let mut content = Vec::new();
 
         // Repository information

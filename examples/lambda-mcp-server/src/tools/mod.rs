@@ -6,16 +6,16 @@ pub mod aws_tools;
 pub mod lambda_tools;
 pub mod session_tools;
 
-use async_trait::async_trait;
 use lambda_runtime::Context as LambdaContext;
-use mcp_protocol::{ToolResult, ToolSchema};
-use mcp_server::{McpTool, SessionContext, McpResult};
+use mcp_protocol::ToolResult;
+use mcp_server::McpTool;
 use serde_json::Value;
 use std::collections::HashMap;
 use tracing::{debug, info};
 
 /// Tool execution context with Lambda and session information
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ToolExecutionContext {
     /// MCP session ID
     pub session_id: String,
@@ -34,6 +34,7 @@ pub struct LambdaEventContext {
     pub session_id: Option<String>,
 }
 
+#[allow(dead_code)]
 impl LambdaEventContext {
     /// Create new Lambda event context
     pub fn new(lambda_context: LambdaContext) -> Self {
@@ -86,6 +87,7 @@ pub struct ToolRegistry {
     tools: HashMap<String, Box<dyn McpTool + Send + Sync>>,
 }
 
+#[allow(dead_code)]
 impl ToolRegistry {
     /// Create new tool registry with all available tools
     pub async fn new() -> Result<Self, lambda_runtime::Error> {

@@ -4,6 +4,9 @@
 //! compliance with the official MCP 2025-06-18 specification. Tests focus on
 //! specification conformance rather than implementation-specific behavior.
 
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use serde_json::{json, Value};
 use std::collections::HashMap;
 

@@ -3,7 +3,6 @@
 //! Tools for Lambda execution context, metrics, and system diagnostics
 
 use async_trait::async_trait;
-use lambda_runtime::Context as LambdaContext;
 use mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema};
 use mcp_server::{McpTool, SessionContext, McpResult};
 use serde_json::{Value, json};
@@ -116,7 +115,8 @@ impl McpTool for LambdaDiagnostics {
 
 impl LambdaDiagnostics {
     /// Get Lambda execution context information
-    async fn get_lambda_info(&self, session: &Option<SessionContext>) -> Value {
+    async fn get_lambda_info(&self, _session: &Option<SessionContext>) -> Value {
+        debug!("Getting lambda info for session: {:?}", _session.as_ref().map(|s| &s.session_id));
         // Try to extract Lambda context from session metadata
         let lambda_context = Some("lambda-mcp-server");
         let remaining_time = Some(300000i64); // 5 minutes default

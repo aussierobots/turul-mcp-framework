@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// Session management for MCP protocol compliance
@@ -23,6 +23,7 @@ pub struct SessionManager {
 
 /// Session configuration from mcp_config.json
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SessionConfig {
     /// Default session TTL in seconds
     pub default_ttl_seconds: u64,
@@ -142,8 +143,11 @@ impl SessionManager {
     }
 
     /// Generate a new MCP session ID
+    #[allow(dead_code)]
     pub fn generate_session_id() -> String {
-        Uuid::now_v7().to_string()
+        let session_id = Uuid::now_v7().to_string();
+        debug!("Generated new session ID: {}", session_id);
+        session_id
     }
 
     /// Create a new MCP session
@@ -195,7 +199,9 @@ impl SessionManager {
     }
 
     /// Mark session as initialized (active)
+    #[allow(dead_code)]
     pub async fn mark_session_initialized(&self, session_id: &str) -> Result<(), DynamoError> {
+        debug!("Marking session as initialized: {}", session_id);
         let now = Utc::now();
         
         self.dynamo_client
@@ -249,7 +255,9 @@ impl SessionManager {
     }
 
     /// Increment session statistics
+    #[allow(dead_code)]
     pub async fn increment_tool_calls(&self, session_id: &str) -> Result<(), DynamoError> {
+        debug!("Incrementing tool calls for session: {}", session_id);
         self.dynamo_client
             .update_item()
             .table_name(&self.table_name)

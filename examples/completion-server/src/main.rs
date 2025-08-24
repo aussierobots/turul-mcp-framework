@@ -324,7 +324,7 @@ impl McpHandler for IdeCompletionHandler {
             })?;
 
             let suggestions =
-                self.get_smart_completions(&request.argument.name, &request.argument.value);
+                self.get_smart_completions(&request.params.argument.name, &request.params.argument.value);
 
             // Limit to 10 suggestions for better UX
             let limited_suggestions: Vec<_> = suggestions.into_iter().take(10).collect();

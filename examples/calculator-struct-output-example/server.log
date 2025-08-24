@@ -1,0 +1,88 @@
+warning: unused variable: `cursor`
+   --> crates/mcp-server/src/server.rs:488:13
+    |
+488 |         let cursor = params.as_ref()
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_cursor`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `cursor`
+   --> crates/mcp-server/src/handlers/mod.rs:110:13
+    |
+110 |         let cursor = params.as_ref()
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_cursor`
+
+warning: unused variable: `cursor`
+   --> crates/mcp-server/src/handlers/mod.rs:183:13
+    |
+183 |         let cursor = params.as_ref()
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_cursor`
+
+warning: unused variable: `cursor`
+   --> crates/mcp-server/src/handlers/mod.rs:280:13
+    |
+280 |         let cursor = params.as_ref()
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_cursor`
+
+warning: unused variable: `cursor`
+   --> crates/mcp-server/src/handlers/mod.rs:377:13
+    |
+377 |         let cursor = params.as_ref()
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_cursor`
+
+warning: unused variable: `cursor`
+   --> crates/mcp-server/src/handlers/mod.rs:430:13
+    |
+430 |         let cursor = params.as_ref()
+    |             ^^^^^^ help: if this is intentional, prefix it with an underscore: `_cursor`
+
+warning: unused variable: `value`
+   --> crates/mcp-server/src/dispatch/mod.rs:212:16
+    |
+212 |             Ok(value) => {
+    |                ^^^^^ help: if this is intentional, prefix it with an underscore: `_value`
+
+warning: `mcp-server` (lib) generated 7 warnings
+warning: `mcp-server` (lib) generated 7 warnings (7 duplicates)
+warning: unused variable: `struct_name`
+  --> crates/mcp-derive/src/json_schema_derive.rs:28:27
+   |
+28 | fn generate_struct_schema(struct_name: &syn::Ident, fields: &Fields) -> TokenStream {
+   |                           ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_struct_name`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `type_name`
+   --> crates/mcp-derive/src/utils.rs:566:29
+    |
+566 |                         let type_name = ident.to_string();
+    |                             ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_type_name`
+
+warning: function `analyze_execute_return_type` is never used
+   --> crates/mcp-derive/src/utils.rs:499:8
+    |
+499 | pub fn analyze_execute_return_type(_struct_name: &syn::Ident) -> TokenStream {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `mcp-derive` (lib) generated 3 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.20s
+     Running `/Users/nick/mcp-framework/target/debug/calculator-struct-output-example`
+[2m2025-08-24T04:47:20.538094Z[0m [32m INFO[0m [2mcalculator_struct_output_example[0m[2m:[0m Starting calculator struct output example server
+🧮 Calculator Struct Output Examples:
+  📊 calculator_struct - Basic arithmetic with detailed results
+  📈 statistics_calculator - Statistical analysis of number arrays
+  🔢 quadratic_solver - Comprehensive quadratic equation analysis
+
+🌟 Features demonstrated:
+  ✨ Struct-based output_type with derive macros
+  ✨ Complex nested data structures
+  ✨ Automatic JSON schema generation for structs
+  ✨ Structured content matching complex output schemas
+  ✨ Rich calculation metadata and analysis
+[2m2025-08-24T04:47:20.538939Z[0m [32m INFO[0m [2mmcp_server::server[0m[2m:[0m Starting MCP server: calculator_struct_output v0.1.0
+[2m2025-08-24T04:47:20.538953Z[0m [32m INFO[0m [2mmcp_server::server[0m[2m:[0m Session management: enabled with automatic cleanup
+[2m2025-08-24T04:47:20.538960Z[0m [32m INFO[0m [2mmcp_server::server[0m[2m:[0m SSE notifications: enabled at GET /mcp/sse
+[2m2025-08-24T04:47:20.539223Z[0m [32m INFO[0m [2mhttp_mcp_server::server[0m[2m:[0m HTTP MCP server listening on 127.0.0.1:8650
+[2m2025-08-24T04:47:20.539246Z[0m [32m INFO[0m [2mhttp_mcp_server::server[0m[2m:[0m MCP endpoint available at: /mcp

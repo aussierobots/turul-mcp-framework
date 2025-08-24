@@ -4,6 +4,10 @@
 //! implementation, validating MCP protocol compliance, tool functionality, session
 //! management, and infrastructure integration.
 
+#![allow(unused_imports)]
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use clap::{Args, Parser, Subcommand};

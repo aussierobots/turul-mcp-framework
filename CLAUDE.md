@@ -38,6 +38,38 @@ mcp-framework/
 - **V2025_03_26**: Streamable HTTP support 
 - **V2025_06_18**: Full feature set with _meta, cursor, progressToken, elicitation
 
+### MCP TypeScript Specification Compliance
+**CRITICAL**: All types in `mcp-protocol-2025-06-18` crate MUST exactly match the MCP TypeScript Schema specification. This includes:
+- **Request Pattern**: Every MCP request type must follow `XxxRequest { method, params: XxxParams }` pattern
+- **Params Pattern**: Every params type includes method-specific fields PLUS optional `_meta` field  
+- **Response Pattern**: Every response type includes method-specific fields PLUS optional top-level `_meta` field
+- **Field Naming**: All fields must use exact camelCase names from TypeScript schema
+- **Optional Fields**: Use `Option<T>` with proper `skip_serializing_if` attributes for optional TypeScript fields
+- **Inheritance**: Rust structs must replicate TypeScript interface inheritance via composition
+- **Trait Implementation**: ALL request/response types MUST implement corresponding traits from `traits.rs` for compile-time specification compliance
+
+**Example Pattern**:
+```rust
+// Matches: export interface CallToolRequest extends Request
+pub struct CallToolRequest {
+    pub method: String,  // "tools/call" from Request.method
+    pub params: CallToolParams,  // from Request.params
+}
+
+// Matches: params: { name: string; arguments?: {...}; _meta?: {...} }
+pub struct CallToolParams {
+    pub name: String,
+    pub arguments: Option<HashMap<String, Value>>,
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
+}
+
+// MUST implement traits for compile-time compliance
+impl Params for CallToolParams {}
+impl HasCallToolParams for CallToolParams { /* trait methods */ }
+impl CallToolRequest for CallToolRequest { /* trait methods */ }
+```
+
 ## Build Commands
 
 ### Standard Development
@@ -71,6 +103,49 @@ curl -X POST http://127.0.0.1:8000/mcp \
 curl -N -H "Accept: text/event-stream" \
   -H "Mcp-Session-Id: <session-id>" \
   http://127.0.0.1:8000/mcp
+```
+
+## MCP TypeScript Specification Compliance
+
+The MCP framework now fully implements the MCP TypeScript specification (2025-06-18) with comprehensive trait-based validation and compile-time compliance checking.
+
+### Request/Params Pattern
+All MCP requests follow the TypeScript schema pattern:
+```rust
+// TypeScript: { method: string, params: { ...fields, _meta?: {...} } }
+pub struct CallToolRequest {
+    pub method: String,  // "tools/call"
+    pub params: CallToolParams,
+}
+
+pub struct CallToolParams {
+    pub name: String,
+    pub arguments: Option<Value>,
+    #[serde(rename = "_meta")]
+    pub meta: Option<HashMap<String, Value>>,
+}
+```
+
+### Notification Pattern
+Notifications follow the TypeScript pattern:
+```rust
+// TypeScript: { method: string, params?: { _meta?: {...}, [key: string]: unknown } }
+pub struct ResourcesListChangedNotification {
+    pub method: String,  // "notifications/resources/listChanged"
+    pub params: Option<NotificationParams>,
+}
+```
+
+### Trait-Based Validation
+All types implement corresponding traits for compile-time specification compliance:
+- `HasMethod`, `HasParams`, `HasMetaParam` for requests
+- `HasData`, `HasMeta` for responses  
+- `JsonRpcRequestTrait`, `JsonRpcNotificationTrait`, `JsonRpcResponseTrait` for JSON-RPC
+
+### Testing Compliance
+Run the MCP TypeScript specification compliance tests:
+```bash
+cargo test --package mcp-protocol-2025-06-18 compliance_test::tests
 ```
 
 ## Key Implementation Guidelines

@@ -3,17 +3,16 @@
 //! Comprehensive integration tests to verify MCP 2025-06-18 specification compliance
 //! and framework functionality.
 
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::time::Duration;
 
 use mcp_derive::McpTool;
-use mcp_server::{McpTool, SessionContext};
-use mcp_server::{McpServer, HasData, HasMeta}; // TODO: Use for advanced tests
-use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema};
-use mcp_protocol_2025_06_18::{
-    Meta, ProgressToken, JsonRpcRequest, JsonRpcResponse, RequestParams, ResultWithMeta,
-    JsonRpcError, JsonRpcNotification
-}; // TODO: Use for advanced protocol tests
+use mcp_server::{McpTool, SessionContext, McpServer};
+use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, Meta, ProgressToken, ResultWithMeta};
+use json_rpc_server::{JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcNotification, RequestParams};
 use serde_json::{json, Value};
 use async_trait::async_trait;
 
@@ -29,6 +28,7 @@ struct AddTool {
 
 impl AddTool {
     async fn execute(&self) -> mcp_server::McpResult<String> {
+        tracing::debug!("AddTool executing with values a={}, b={}", self.a, self.b);
         Ok(format!("{} + {} = {}", self.a, self.b, self.a + self.b))
     }
 }
@@ -81,6 +81,7 @@ impl McpTool for SessionTool {
     
     async fn call(&self, args: Value, session: Option<SessionContext>) -> mcp_server::McpResult<Vec<ToolResult>> {
         let message = args["message"].as_str().unwrap_or("default");
+        tracing::debug!("SessionTool called with message: {}", message);
         
         let mut response = HashMap::new();
         response.insert("received_message".to_string(), json!(message));

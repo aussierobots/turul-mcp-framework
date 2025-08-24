@@ -74,6 +74,10 @@ impl McpTool for EchoManualTool {
     }
 
     async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+        // Log the struct fields to show they're part of the example (even if not used in execution)
+        tracing::debug!("EchoManualTool called with struct fields: text='{}', repeat={:?}", 
+                       self.text, self.repeat);
+        
         let text = args.get("text")
             .and_then(|v| v.as_str())
             .ok_or_else(|| mcp_protocol::McpError::invalid_param_type("text", "string", "other"))?;
@@ -114,6 +118,13 @@ struct PersonData {
     age: u32,
     email: String,
     is_active: bool,
+}
+
+impl std::fmt::Display for PersonData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "PersonData {{ name: {}, age: {}, email: {}, is_active: {} }}", 
+               self.name, self.age, self.email, self.is_active)
+    }
 }
 
 #[derive(McpTool, Clone)]

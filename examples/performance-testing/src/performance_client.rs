@@ -195,7 +195,7 @@ async fn throughput_test(
             metrics.requests_sent.fetch_add(1, Ordering::Relaxed);
             
             let params = json!({
-                "input": rand::thread_rng().r#gen::<i64>()
+                "input": rand::rng().random::<i64>()
             });
             
             match send_mcp_request(&client, &url, "tools/call", json!({
@@ -385,7 +385,7 @@ async fn burst_test(
                 metrics.requests_sent.fetch_add(1, Ordering::Relaxed);
                 
                 let params = json!({
-                    "input": rand::thread_rng().r#gen::<i64>()
+                    "input": rand::rng().random::<i64>()
                 });
                 
                 match send_mcp_request(&client, &url, "tools/call", json!({

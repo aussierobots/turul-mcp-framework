@@ -54,6 +54,7 @@
 
 pub mod builder;
 pub mod tool;
+pub mod resource;
 pub mod server;
 pub mod handlers;
 pub mod session;
@@ -68,6 +69,7 @@ mod tests;
 // Re-export main types
 pub use builder::McpServerBuilder;
 pub use tool::McpTool;
+pub use resource::McpResource;
 pub use server::McpServer;
 pub use handlers::*;
 pub use session::{SessionContext, SessionManager, SessionEvent};

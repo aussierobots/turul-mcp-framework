@@ -196,13 +196,14 @@ impl AwsRealTimeMonitor {
         resource_type: String,
         region: String,
         correlation_id: String,
-        session_id: String,
+        _session_id: String,
         update_frequency_ms: u64,
         _filter_tags: Value,
     ) {
         let mut update_count = 0;
         let max_updates = 20; // Limit for demo purposes
         
+        debug!("Background monitoring session: {}", _session_id);
         info!("Starting background monitoring for {} in {} ({})", resource_type, region, correlation_id);
 
         let mut interval = tokio::time::interval(tokio::time::Duration::from_millis(update_frequency_ms));

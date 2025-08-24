@@ -28,6 +28,10 @@ pub mod schema;
 pub mod meta;
 pub mod traits;
 pub mod json_rpc;
+pub mod param_extraction;
+
+#[cfg(test)]
+mod compliance_test;
 
 // Re-export main types
 pub use version::McpVersion;
@@ -36,7 +40,7 @@ pub use initialize::{
     ClientCapabilities, ServerCapabilities, Implementation
 };
 pub use tools::{
-    Tool, ToolResult, ToolSchema, Cursor,
+    Tool, ToolResult, ToolSchema,
     ListToolsRequest, ListToolsResponse,
     CallToolRequest, CallToolResponse
 };
@@ -54,10 +58,11 @@ pub use elicitation::{
     ElicitationRequestResult, ElicitationCancelledNotification, ElicitationBuilder
 };
 pub use notifications::{
-    CancelledNotification, InitializedNotification, ProgressNotificationParams,
-    LoggingMessageNotification, ResourceListChangedNotificationParams,
-    ResourceUpdatedNotificationParams, PromptListChangedNotificationParams,
-    ToolListChangedNotificationParams, RootListChangedNotificationParams
+    CancelledNotification, InitializedNotification, ProgressNotification, ProgressNotificationParams,
+    LoggingMessageNotification, LoggingMessageNotificationParams,
+    ResourcesListChangedNotification, ResourceUpdatedNotification, ResourceUpdatedNotificationParams,
+    PromptsListChangedNotification, ToolsListChangedNotification, RootsListChangedNotification,
+    NotificationParams, Notification
 };
 pub use schema::JsonSchema;
 pub use meta::{Meta, ProgressToken, Cursor as MetaCursor, WithMeta, PaginatedResponse, ProgressResponse};

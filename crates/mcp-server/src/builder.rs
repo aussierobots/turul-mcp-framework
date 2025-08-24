@@ -6,7 +6,8 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::{McpTool, McpResource, McpServer, Result, McpFrameworkError};
+use crate::{McpTool, McpServer, Result, McpFrameworkError};
+use crate::resource::McpResource;
 use crate::handlers::*;
 use mcp_protocol::{Implementation, ServerCapabilities};
 use mcp_protocol::initialize::*;

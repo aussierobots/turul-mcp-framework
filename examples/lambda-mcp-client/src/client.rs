@@ -3,6 +3,9 @@
 //! This module provides a comprehensive client for communicating with MCP servers
 //! following the MCP 2025-06-18 Streamable HTTP specification.
 
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use reqwest::{Client, Response};
@@ -40,6 +43,7 @@ pub struct McpClient {
     next_request_id: std::sync::atomic::AtomicI64,
 }
 
+#[allow(dead_code)]
 impl McpClient {
     /// Create a new MCP client
     pub fn new(config: McpClientConfig, session_id: String) -> Result<Self> {

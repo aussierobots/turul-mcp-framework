@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   URI: {}", config_resource.uri());
     println!("   Name: {}", config_resource.name());
     println!("   Description: {}", config_resource.description());
-    match config_resource.read().await {
+    match config_resource.read(None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
                 println!("   Content {}: {:?}", i + 1, item);
@@ -86,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   URI: {}", status_resource.uri());
     println!("   Name: {}", status_resource.name());
     println!("   Description: {}", status_resource.description());
-    match status_resource.read().await {
+    match status_resource.read(None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
                 println!("   Content {}: {:?}", i + 1, item);
@@ -99,7 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   URI: {}", log_resource.uri());
     println!("   Name: {}", log_resource.name());
     println!("   Description: {}", log_resource.description());
-    match log_resource.read().await {
+    match log_resource.read(None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
                 println!("   Content {}: {:?}", i + 1, item);

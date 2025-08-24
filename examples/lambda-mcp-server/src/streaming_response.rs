@@ -2,16 +2,16 @@
 //!
 //! SSE (Server-Sent Events) streaming for real-time MCP notifications in Lambda environment
 
-use crate::global_events::{GlobalEvent, EventFilter, subscribe_to_global_events};
+use crate::global_events::EventFilter;
 use lambda_http::{Body, Response};
 use lambda_runtime::Error as LambdaError;
 use serde_json::{Value, json};
 use std::time::Duration;
-use tokio::time::{interval, timeout};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 /// SSE streaming response configuration
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SseConfig {
     /// Heartbeat interval to keep connection alive
     pub heartbeat_interval: Duration,
@@ -32,12 +32,12 @@ impl Default for SseConfig {
 }
 
 /// Create an SSE streaming response for MCP events (simplified for Lambda)
-pub async fn create_sse_stream(
-    filter: Option<EventFilter>,
-    config: Option<SseConfig>,
+pub async fn _create_sse_stream(
+    _filter: Option<EventFilter>,
+    _config: Option<SseConfig>,
 ) -> Result<Response<Body>, LambdaError> {
-    let _config = config.unwrap_or_default();
-    let _filter = filter.unwrap_or_default();
+    let _config = _config.unwrap_or_default();
+    let _filter = _filter.unwrap_or_default();
     
     info!("Creating SSE stream for Lambda environment (simplified)");
     
@@ -67,7 +67,7 @@ pub async fn create_sse_stream(
 }
 
 /// Create a streaming response for tool execution with real-time updates (simplified for Lambda)
-pub async fn create_tool_streaming_response(
+pub async fn _create_tool_streaming_response(
     tool_name: String,
     session_id: String,
     initial_result: Value,
@@ -99,7 +99,7 @@ pub async fn create_tool_streaming_response(
 }
 
 /// Handle SSE connection requests with proper MCP session handling
-pub async fn handle_sse_request(
+pub async fn _handle_sse_request(
     session_id: Option<String>,
     event_types: Option<Vec<String>>,
 ) -> Result<Response<Body>, LambdaError> {
@@ -117,26 +117,26 @@ pub async fn handle_sse_request(
     }
     
     // Create the SSE stream
-    create_sse_stream(Some(filter), None).await
+    _create_sse_stream(Some(filter), None).await
 }
 
 /// Parse SSE request parameters from query string or headers
-pub fn parse_sse_parameters(
-    query_string: Option<&str>,
-    headers: &http::HeaderMap,
+pub fn _parse_sse_parameters(
+    _query_string: Option<&str>,
+    _headers: &http::HeaderMap,
 ) -> (Option<String>, Option<Vec<String>>) {
     let mut session_id = None;
     let mut event_types = None;
     
     // Try to get session ID from header first
-    if let Some(header_value) = headers.get("mcp-session-id") {
+    if let Some(header_value) = _headers.get("mcp-session-id") {
         if let Ok(id) = header_value.to_str() {
             session_id = Some(id.to_string());
         }
     }
     
     // Parse query parameters if provided
-    if let Some(query) = query_string {
+    if let Some(query) = _query_string {
         for param in query.split('&') {
             if let Some((key, value)) = param.split_once('=') {
                 match key {

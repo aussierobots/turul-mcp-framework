@@ -3,6 +3,10 @@
 //! This module provides the test execution framework for running comprehensive
 //! MCP server validation tests.
 
+#![allow(unused_imports)]
+#![allow(dead_code)]
+#![allow(unused_variables)]
+
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use indicatif::ProgressBar;

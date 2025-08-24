@@ -132,7 +132,7 @@ struct DevelopmentConfig {
 
 /// Enhanced audit entry with compliance and security features
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct AuditEntry {
+pub struct AuditEntry {
     pub id: String,
     pub timestamp: DateTime<Utc>,
     pub level: LogLevel,
@@ -442,7 +442,7 @@ impl McpHandler for ProductionLoggingHandler {
             
             {
                 let mut state = self.state.lock().unwrap();
-                state.set_global_level(request.level.clone());
+                state.set_global_level(request.params.level.clone());
             }
             
             Ok(Value::Null)
@@ -546,12 +546,13 @@ impl McpTool for BusinessEventTool {
             immutable: category == "audit",
         };
 
-        let mut triggered_alerts = Vec::new();
-        {
+        let triggered_alerts = {
             let mut state = self.state.lock().unwrap();
-            triggered_alerts = state.check_alert_rules(&audit_entry);
+            let alerts = state.check_alert_rules(&audit_entry);
+            tracing::debug!("Checked alert rules, found {} potential triggers", alerts.len());
             state.add_audit_entry(audit_entry.clone());
-        }
+            alerts
+        };
 
         let mut response = json!({
             "audit_entry_id": audit_entry.id,
@@ -702,12 +703,13 @@ impl McpTool for SecurityEventTool {
             immutable: true,
         };
 
-        let mut triggered_alerts = Vec::new();
-        {
+        let mut triggered_alerts = {
             let mut state = self.state.lock().unwrap();
-            triggered_alerts = state.check_alert_rules(&audit_entry);
+            let alerts = state.check_alert_rules(&audit_entry);
+            tracing::debug!("Checked alert rules, found {} potential triggers", alerts.len());
             state.add_audit_entry(audit_entry.clone());
-        }
+            alerts
+        };
 
         // Security events always generate immediate alerts for high/critical threats
         if threat_level == "high" || threat_level == "critical" {

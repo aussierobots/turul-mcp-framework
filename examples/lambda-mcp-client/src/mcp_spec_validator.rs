@@ -3,6 +3,9 @@
 //! This module provides comprehensive validation of MCP server responses against 
 //! the official MCP 2025-06-18 specification requirements.
 
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use anyhow::{Result, Context};
 use serde_json::{Value, json};
 use std::collections::HashMap;
@@ -19,6 +22,7 @@ pub struct McpSpecValidator {
 
 /// Validation rules for different MCP message types
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ValidationRules {
     /// JSON-RPC 2.0 base requirements
     pub jsonrpc_base: JsonRpcRules,
@@ -36,6 +40,7 @@ pub struct ValidationRules {
 
 /// JSON-RPC 2.0 base requirements
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct JsonRpcRules {
     /// Required fields for all requests
     pub required_request_fields: Vec<&'static str>,
@@ -47,6 +52,7 @@ pub struct JsonRpcRules {
 
 /// Initialization protocol validation rules
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct InitializationRules {
     /// Required initialize request fields
     pub required_init_fields: Vec<&'static str>,
@@ -58,6 +64,7 @@ pub struct InitializationRules {
 
 /// Tool calling protocol validation rules
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ToolRules {
     /// Required tools/list response fields
     pub required_list_fields: Vec<&'static str>,
@@ -69,6 +76,7 @@ pub struct ToolRules {
 
 /// Resource access protocol validation rules
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ResourceRules {
     /// Required resources/list response fields
     pub required_list_fields: Vec<&'static str>,
@@ -80,6 +88,7 @@ pub struct ResourceRules {
 
 /// Notification protocol validation rules
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct NotificationRules {
     /// Valid notification method names
     pub valid_methods: Vec<&'static str>,
@@ -89,6 +98,7 @@ pub struct NotificationRules {
 
 /// SSE streaming validation rules
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct StreamingRules {
     /// Required SSE headers
     pub required_headers: Vec<&'static str>,

@@ -375,7 +375,7 @@ async fn connection_flood_test(
                 .unwrap();
             
             let params = json!({
-                "input": rand::thread_rng().r#gen::<i64>()
+                "input": rand::rng().random::<i64>()
             });
             
             match send_stress_request(&client, &url, "fast_compute", params, Duration::from_secs(5)).await {
@@ -412,11 +412,11 @@ async fn error_recovery_test(
     while Instant::now() < end_time {
         metrics.requests_sent.fetch_add(1, Ordering::Relaxed);
         
-        let should_error = rand::thread_rng().gen_range(0..100) < error_rate_percent;
+        let should_error = rand::rng().random_range(0..100) < error_rate_percent;
         
         let (tool_name, params) = if should_error {
             ("error_simulation", json!({
-                "error_type": match rand::thread_rng().gen_range(0..4) {
+                "error_type": match rand::rng().random_range(0..4) {
                     0 => "timeout",
                     1 => "panic", 
                     2 => "invalid",
@@ -425,7 +425,7 @@ async fn error_recovery_test(
             }))
         } else {
             ("fast_compute", json!({
-                "input": rand::thread_rng().r#gen::<i64>()
+                "input": rand::rng().random::<i64>()
             }))
         };
         
@@ -467,7 +467,7 @@ async fn chaos_test(
     
     let end_time = Instant::now() + duration;
     let semaphore = Arc::new(tokio::sync::Semaphore::new(max_concurrent));
-    let _rng = rand::thread_rng();
+    let _rng = rand::rng();
     
     while Instant::now() < end_time {
         let permit = semaphore.clone().acquire_owned().await.unwrap();
@@ -480,11 +480,11 @@ async fn chaos_test(
             metrics.requests_sent.fetch_add(1, Ordering::Relaxed);
             
             // Randomly choose a stress scenario
-            let (tool_name, params, timeout) = match rand::thread_rng().gen_range(0..5) {
-                0 => ("fast_compute", json!({"input": rand::thread_rng().r#gen::<i64>()}), Duration::from_secs(5)),
-                1 => ("cpu_intensive", json!({"size": rand::thread_rng().gen_range(100..2000)}), Duration::from_secs(30)),
-                2 => ("memory_allocate", json!({"mb_size": rand::thread_rng().gen_range(1..100)}), Duration::from_secs(20)),
-                3 => ("async_io", json!({"delay_ms": rand::thread_rng().gen_range(10..1000)}), Duration::from_secs(15)),
+            let (tool_name, params, timeout) = match rand::rng().random_range(0..5) {
+                0 => ("fast_compute", json!({"input": rand::rng().random::<i64>()}), Duration::from_secs(5)),
+                1 => ("cpu_intensive", json!({"size": rand::rng().random_range(100..2000)}), Duration::from_secs(30)),
+                2 => ("memory_allocate", json!({"mb_size": rand::rng().random_range(1..100)}), Duration::from_secs(20)),
+                3 => ("async_io", json!({"delay_ms": rand::rng().random_range(10..1000)}), Duration::from_secs(15)),
                 _ => ("error_simulation", json!({"error_type": "invalid"}), Duration::from_secs(5)),
             };
             
@@ -507,7 +507,7 @@ async fn chaos_test(
         });
         
         // Variable delay to create chaotic patterns
-        let delay = rand::thread_rng().gen_range(1..100);
+        let delay = rand::rng().random_range(1..100);
         sleep(Duration::from_millis(delay)).await;
     }
     

@@ -108,6 +108,13 @@ struct AnalysisResult {
     has_negatives: bool,
 }
 
+impl std::fmt::Display for AnalysisResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "AnalysisResult {{ count: {}, average: {:.2}, min: {:.2}, max: {:.2}, has_negatives: {} }}", 
+               self.count, self.average, self.min, self.max, self.has_negatives)
+    }
+}
+
 #[derive(McpTool, Clone)]
 #[tool(name = "data_analyzer", description = "Analyze numerical data")]
 struct DataAnalyzerTool {
@@ -120,6 +127,8 @@ struct DataAnalyzerTool {
 // Note: For struct outputs, we don't use #[output_type] - it will use generic schema
 impl DataAnalyzerTool {
     async fn execute(&self) -> McpResult<AnalysisResult> {
+        tracing::debug!("DataAnalyzerTool executing with {} data points, detailed: {:?}", self.data.len(), self.detailed);
+        
         if self.data.is_empty() {
             return Err(mcp_protocol::McpError::invalid_param_type("data", "non-empty array", "empty array"));
         }

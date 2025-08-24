@@ -12,6 +12,7 @@ mcp-derive = { workspace = true }
 mcp-server = { workspace = true }
 mcp-protocol = { workspace = true }
 mcp-protocol-2025-06-18 = { workspace = true }
+json-rpc-server = { workspace = true }
 tokio = { workspace = true }
 tokio-test = { workspace = true }
 serde_json = { workspace = true }

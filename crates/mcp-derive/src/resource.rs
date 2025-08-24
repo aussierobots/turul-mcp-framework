@@ -45,7 +45,7 @@ pub fn mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
                 #description
             }
 
-            async fn read(&self) -> mcp_server::McpResult<Vec<mcp_protocol::resources::ResourceContent>> {
+            async fn read(&self, _params: Option<serde_json::Value>) -> mcp_server::McpResult<Vec<mcp_protocol::resources::ResourceContent>> {
                 #read_impl
             }
         }

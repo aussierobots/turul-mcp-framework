@@ -19,7 +19,6 @@ use global_events::initialize_global_events;
 use lambda_http::{
     Body, Error, Request, RequestExt, Response, run_with_streaming_response, service_fn,
 };
-use lambda_runtime::Context as LambdaContext;
 use sns_processor::initialize_sns_processor;
 use std::env;
 use std::sync::OnceLock;

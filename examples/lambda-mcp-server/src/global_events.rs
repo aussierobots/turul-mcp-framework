@@ -6,7 +6,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 use std::sync::OnceLock;
 use tokio::sync::broadcast;
 use tracing::{debug, error, info, warn};
@@ -161,7 +161,7 @@ impl GlobalEvent {
     }
 
     /// Create an external SNS event
-    pub fn external_event(
+    pub fn _external_event(
         source: impl Into<String>,
         event_type: impl Into<String>,
         payload: Value,
@@ -175,7 +175,7 @@ impl GlobalEvent {
     }
 
     /// Create a server lifecycle event
-    pub fn server_lifecycle(event: LifecycleEvent, instance_id: impl Into<String>) -> Self {
+    pub fn _server_lifecycle(event: LifecycleEvent, instance_id: impl Into<String>) -> Self {
         Self::ServerLifecycle {
             event,
             instance_id: instance_id.into(),
@@ -269,12 +269,12 @@ pub fn get_subscriber_count() -> usize {
 }
 
 /// Process external SNS event and broadcast internally
-pub async fn process_external_event(
+pub async fn _process_external_event(
     source: impl Into<String>,
     event_type: impl Into<String>,
     payload: Value,
 ) -> Result<usize, broadcast::error::SendError<GlobalEvent>> {
-    let event = GlobalEvent::external_event(source, event_type, payload);
+    let event = GlobalEvent::_external_event(source, event_type, payload);
     broadcast_global_event(event).await
 }
 
@@ -290,7 +290,7 @@ pub async fn broadcast_tool_progress(
 }
 
 /// Broadcast system health update
-pub async fn broadcast_system_health(
+pub async fn _broadcast_system_health(
     component: impl Into<String>,
     status: impl Into<String>,
     details: Value,
@@ -342,7 +342,9 @@ impl EventFilter {
     }
 
     /// Filter by event types
+    #[allow(dead_code)]
     pub fn with_event_types(mut self, types: Vec<String>) -> Self {
+        debug!("Setting event type filter: {:?}", types);
         self.event_types = Some(types);
         self
     }
@@ -354,7 +356,9 @@ impl EventFilter {
     }
 
     /// Filter by source
+    #[allow(dead_code)]
     pub fn with_source(mut self, source: String) -> Self {
+        debug!("Setting source filter: {}", source);
         self.source_filter = Some(source);
         self
     }

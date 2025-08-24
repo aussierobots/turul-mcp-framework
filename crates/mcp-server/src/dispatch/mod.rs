@@ -210,7 +210,7 @@ impl DispatchMiddleware for LoggingMiddleware {
         let session_id = session.as_ref().map(|s| s.session_id.as_str()).unwrap_or(&none_string);
         match result {
             Ok(value) => {
-                debug!("Response: method={}, session={}, success=true", method, session_id);
+                debug!("Response: method={}, session={}, success=true, result_keys={:?}", method, session_id, value.as_object().map(|o| o.keys().collect::<Vec<_>>()));
             }
             Err(error) => {
                 debug!("Response: method={}, session={}, error={}", method, session_id, error);

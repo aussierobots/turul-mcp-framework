@@ -56,11 +56,8 @@ impl McpTool for BasicSamplingTool {
             }
         ];
 
-        let request = CreateMessageRequest {
-            messages,
-            temperature: Some(0.7),
-            max_tokens: Some(500),
-        };
+        let request = CreateMessageRequest::new(messages, 500)
+            .with_temperature(0.7);
 
         // In a real implementation, this would be sent to the MCP client
         // For demonstration, we'll simulate a response
@@ -79,8 +76,8 @@ impl McpTool for BasicSamplingTool {
             Uuid::new_v4(),
             Utc::now().format("%Y-%m-%d %H:%M:%S UTC"),
             user_prompt,
-            request.temperature,
-            request.max_tokens
+            request.params.temperature,
+            request.params.max_tokens
         );
 
         let results = vec![ToolResult::text(simulated_response)];
@@ -151,11 +148,8 @@ impl McpTool for ConversationalSamplingTool {
             },
         ]);
 
-        let request = CreateMessageRequest {
-            messages,
-            temperature: Some(0.8),
-            max_tokens: Some(750),
-        };
+        let request = CreateMessageRequest::new(messages, 750)
+            .with_temperature(0.8);
 
         let simulated_response = format!(
             "💬 CONVERSATIONAL SAMPLING REQUEST\n\
@@ -175,8 +169,8 @@ impl McpTool for ConversationalSamplingTool {
             context,
             system_message,
             user_message,
-            request.temperature,
-            request.max_tokens,
+            request.params.temperature,
+            request.params.max_tokens,
             user_message
         );
 
@@ -253,11 +247,8 @@ impl McpTool for CodeGenerationSamplingTool {
             }
         ];
 
-        let request = CreateMessageRequest {
-            messages,
-            temperature: Some(0.3), // Lower temperature for more deterministic code
-            max_tokens: Some(1500),
-        };
+        let request = CreateMessageRequest::new(messages, 1500)
+            .with_temperature(0.3); // Lower temperature for more deterministic code
 
         let simulated_response = format!(
             "💻 CODE GENERATION SAMPLING REQUEST\n\
@@ -282,8 +273,8 @@ impl McpTool for CodeGenerationSamplingTool {
             language,
             task_description,
             complexity,
-            request.temperature,
-            request.max_tokens,
+            request.params.temperature,
+            request.params.max_tokens,
             language,
             language,
             complexity
@@ -383,11 +374,8 @@ impl McpTool for CreativeWritingSamplingTool {
             _ => 0.75,
         };
 
-        let request = CreateMessageRequest {
-            messages,
-            temperature: Some(temperature),
-            max_tokens: Some(1200),
-        };
+        let request = CreateMessageRequest::new(messages, 1200)
+            .with_temperature(temperature);
 
         let simulated_response = format!(
             "✨ CREATIVE WRITING SAMPLING REQUEST\n\
@@ -417,8 +405,8 @@ impl McpTool for CreativeWritingSamplingTool {
             length,
             word_count.0,
             word_count.1,
-            request.temperature,
-            request.max_tokens,
+            request.params.temperature,
+            request.params.max_tokens,
             style
         );
 
@@ -531,11 +519,8 @@ impl McpTool for AdvancedSamplingTool {
         model_hints.push(complexity.to_string());
         model_hints.push(output_format.replace(" ", "_"));
 
-        let request = CreateMessageRequest {
-            messages,
-            temperature: Some(temperature),
-            max_tokens: Some(max_tokens),
-        };
+        let request = CreateMessageRequest::new(messages, max_tokens)
+            .with_temperature(temperature);
 
         let simulated_response = format!(
             "🚀 ADVANCED SAMPLING CONFIGURATION\n\
@@ -565,8 +550,8 @@ impl McpTool for AdvancedSamplingTool {
             task_type,
             complexity,
             output_format,
-            request.temperature,
-            request.max_tokens,
+            request.params.temperature,
+            request.params.max_tokens,
             system_prompt,
             hints,
             output_format

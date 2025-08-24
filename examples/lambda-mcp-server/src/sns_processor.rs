@@ -9,12 +9,12 @@ use crate::global_events::{
 use aws_sdk_sns::{Client as SnsClient, types::MessageAttributeValue};
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// External event types that can be received via SNS
 #[derive(Debug, Clone)]
-pub enum ExternalEventType {
+pub enum _ExternalEventType {
     /// Session-related events from other services
     SessionEvent {
         session_id: String,
@@ -44,6 +44,7 @@ pub enum ExternalEventType {
 }
 
 /// SNS event processor for external event integration
+#[allow(dead_code)]
 pub struct SnsEventProcessor {
     /// SNS client for publishing events
     sns_client: SnsClient,
@@ -79,9 +80,9 @@ impl SnsEventProcessor {
     }
 
     /// Publish event to SNS topic (for outgoing events)
-    pub async fn publish_event(&self, event: GlobalEvent) -> Result<(), aws_sdk_sns::Error> {
+    pub async fn _publish_event(&self, event: GlobalEvent) -> Result<(), aws_sdk_sns::Error> {
         // Convert global event to SNS message
-        let (message, subject, attributes) = self.prepare_sns_message(event);
+        let (message, subject, attributes) = self._prepare_sns_message(event);
 
         debug!("Publishing event to SNS topic: {}", self.topic_arn);
 
@@ -98,7 +99,7 @@ impl SnsEventProcessor {
     }
 
     /// Prepare SNS message from global event
-    fn prepare_sns_message(&self, event: GlobalEvent) -> (String, String, HashMap<String, MessageAttributeValue>) {
+    fn _prepare_sns_message(&self, event: GlobalEvent) -> (String, String, HashMap<String, MessageAttributeValue>) {
         let mut attributes = HashMap::new();
         
         // Add correlation ID
@@ -290,7 +291,7 @@ impl SnsEventProcessor {
     }
 
     /// Process incoming SNS message (for Lambda SNS triggers)
-    pub async fn process_sns_message(&self, sns_message: Value) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn _process_sns_message(&self, sns_message: Value) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         debug!("Processing SNS message: {}", sns_message);
 
         // Extract message content
@@ -301,15 +302,15 @@ impl SnsEventProcessor {
         let event_data: Value = serde_json::from_str(message)?;
         
         // Convert to external event and broadcast internally
-        let external_event = self.parse_external_event(event_data)?;
-        self.broadcast_external_event(external_event).await?;
+        let external_event = self._parse_external_event(event_data)?;
+        self._broadcast_external_event(external_event).await?;
 
         debug!("Successfully processed SNS message");
         Ok(())
     }
 
     /// Parse external event from message data
-    fn parse_external_event(&self, data: Value) -> Result<ExternalEventType, Box<dyn std::error::Error + Send + Sync>> {
+    fn _parse_external_event(&self, data: Value) -> Result<_ExternalEventType, Box<dyn std::error::Error + Send + Sync>> {
         let event_type = data.get("event_type")
             .and_then(|t| t.as_str())
             .ok_or("Missing event_type in message")?;
@@ -336,7 +337,7 @@ impl SnsEventProcessor {
                     })
                     .ok_or("Invalid session_event_type")?;
 
-                Ok(ExternalEventType::SessionEvent {
+                Ok(_ExternalEventType::SessionEvent {
                     session_id,
                     event_type: session_event_type,
                     data: data.get("data").cloned(),
@@ -367,7 +368,7 @@ impl SnsEventProcessor {
                     })
                     .ok_or("Invalid tool execution status")?;
 
-                Ok(ExternalEventType::ToolEvent {
+                Ok(_ExternalEventType::ToolEvent {
                     tool_name,
                     session_id,
                     status,
@@ -395,7 +396,7 @@ impl SnsEventProcessor {
                     .cloned()
                     .ok_or("Missing data for monitoring event")?;
 
-                Ok(ExternalEventType::MonitoringEvent {
+                Ok(_ExternalEventType::MonitoringEvent {
                     resource_type,
                     region,
                     correlation_id,
@@ -418,7 +419,7 @@ impl SnsEventProcessor {
                     .cloned()
                     .unwrap_or_default();
 
-                Ok(ExternalEventType::SystemEvent {
+                Ok(_ExternalEventType::SystemEvent {
                     event_type: system_event_type,
                     source,
                     data: event_data,
@@ -430,21 +431,21 @@ impl SnsEventProcessor {
     }
 
     /// Broadcast external event to internal global event system
-    async fn broadcast_external_event(&self, external_event: ExternalEventType) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn _broadcast_external_event(&self, external_event: _ExternalEventType) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         match external_event {
-            ExternalEventType::SessionEvent { session_id, event_type, data } => {
+            _ExternalEventType::SessionEvent { session_id, event_type, data } => {
                 broadcast_session_event(&session_id, event_type, data).await?;
             }
             
-            ExternalEventType::ToolEvent { tool_name, session_id, status, data } => {
+            _ExternalEventType::ToolEvent { tool_name, session_id, status, data } => {
                 broadcast_tool_progress(&tool_name, &session_id, status, data).await?;
             }
             
-            ExternalEventType::MonitoringEvent { resource_type, region, correlation_id, data } => {
+            _ExternalEventType::MonitoringEvent { resource_type, region, correlation_id, data } => {
                 broadcast_monitoring_update(&resource_type, &region, &correlation_id, data).await?;
             }
             
-            ExternalEventType::SystemEvent { event_type, source, data } => {
+            _ExternalEventType::SystemEvent { event_type, source, data } => {
                 let global_event = GlobalEvent::SystemHealth {
                     component: source,
                     status: event_type,
@@ -460,8 +461,9 @@ impl SnsEventProcessor {
 }
 
 /// Start SNS event processing in background
-pub async fn start_sns_processing(topic_arn: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let processor = SnsEventProcessor::new(topic_arn).await?;
+pub async fn _start_sns_processing(topic_arn: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let _processor = SnsEventProcessor::new(topic_arn).await?;
+    debug!("SNS processor created for topic: {}", _processor.topic_arn);
     
     info!("SNS event processor initialized and ready for publishing");
     
@@ -487,9 +489,9 @@ pub async fn initialize_sns_processor(topic_arn: String) -> Result<(), Box<dyn s
 }
 
 /// Publish event to SNS using global processor
-pub async fn publish_to_sns(event: GlobalEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn _publish_to_sns(event: GlobalEvent) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if let Some(processor) = SNS_PROCESSOR.get() {
-        processor.publish_event(event).await?;
+        processor._publish_event(event).await?;
         Ok(())
     } else {
         warn!("SNS processor not initialized, skipping event publication");
@@ -503,14 +505,14 @@ mod tests {
 
     #[test]
     fn test_external_event_type_creation() {
-        let session_event = ExternalEventType::SessionEvent {
+        let session_event = _ExternalEventType::SessionEvent {
             session_id: "test-session".to_string(),
             event_type: SessionEventType::Created,
             data: Some(json!({"test": "data"})),
         };
 
         match session_event {
-            ExternalEventType::SessionEvent { session_id, .. } => {
+            _ExternalEventType::SessionEvent { session_id, .. } => {
                 assert_eq!(session_id, "test-session");
             }
             _ => panic!("Wrong event type"),

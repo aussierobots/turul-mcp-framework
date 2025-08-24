@@ -26,6 +26,7 @@ members = [
     "examples/tool-macro-example",
     "examples/enhanced-tool-macro-test",
     "examples/resource-macro-example",
+    "examples/comprehensive-resource-example",
     "examples/spec-compliant-server",
     "examples/prompts-server",
     "examples/resources-server",

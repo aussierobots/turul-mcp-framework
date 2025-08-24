@@ -177,6 +177,20 @@ pub trait ResourcesListChangedNotification: JsonRpcNotificationTrait {
     }
 }
 
+pub trait HasReadResourceParams: Params {
+    fn uri(&self) -> &String;
+}
+
+pub trait ReadResourceRequest: JsonRpcRequestTrait + HasReadResourceParams {
+    fn method(&self) -> &str {
+        "resources/read"
+    }
+}
+
+pub trait ReadResourceResult: RpcResult {
+    fn contents(&self) -> &Vec<crate::resources::ResourceContent>;
+}
+
 pub trait HasResourceUpdatedParams: Params {
     fn uri(&self) -> &String;
 }
@@ -206,7 +220,7 @@ pub trait ListPromptsResult: RpcResult {
 
 pub trait HasGetPromptParams: Params {
     fn name(&self) -> &String;
-    fn arguments(&self) -> Option<&HashMap<String, String>>;
+    fn arguments(&self) -> Option<&HashMap<String, Value>>;
 }
 
 pub trait GetPromptRequest: JsonRpcRequestTrait + HasGetPromptParams {
@@ -246,7 +260,7 @@ pub trait ListToolsResult: RpcResult {
 pub trait HasCallToolParams: Params {
     fn name(&self) -> &String;
     fn arguments(&self) -> Option<&Value>;
-    fn meta(&self) -> &HashMap<String, Value>;
+    fn meta(&self) -> Option<&HashMap<String, Value>>;
 }
 
 pub trait CallToolRequest: JsonRpcRequestTrait + HasCallToolParams {

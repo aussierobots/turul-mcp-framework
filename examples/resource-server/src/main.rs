@@ -1,6 +1,6 @@
 //! # Resource Server Example
 //!
-//! This example demonstrates using the #[derive(McpResource)] macro to create
+//! This example demonstrates using the #[derive(McpResource, Clone)] macro to create
 //! MCP resources with minimal boilerplate code.
 
 use serde::{Serialize, Deserialize};
@@ -9,7 +9,7 @@ use mcp_server::{McpServer, McpResource};
 // use mcp_protocol::resources::ResourceContent; // TODO: Use for advanced resource content
 
 /// Simple configuration file resource
-#[derive(McpResource, Serialize, Deserialize)]
+#[derive(McpResource, Serialize, Deserialize, Clone)]
 #[uri = "file://config.json"]
 #[name = "Application Configuration"]
 #[description = "Main application configuration file"]
@@ -35,14 +35,14 @@ impl ConfigResource {
 }
 
 /// System status resource (unit struct)
-#[derive(McpResource)]
+#[derive(McpResource, Clone)]
 #[uri = "system://status"]
 #[name = "System Status"]
 #[description = "Current system status and health information"]
 struct SystemStatusResource;
 
 /// User data resource with multiple content fields
-#[derive(McpResource, Serialize, Deserialize)]
+#[derive(McpResource, Serialize, Deserialize, Clone)]
 #[uri = "data://user-profile"]
 #[name = "User Profile"]
 #[description = "User profile data with multiple content sections"]
@@ -79,7 +79,7 @@ impl UserProfileResource {
 }
 
 /// Log file resource (tuple struct)
-#[derive(McpResource)]
+#[derive(McpResource, Clone)]
 #[uri = "file://app.log"]
 #[name = "Application Log"]
 #[description = "Current application log entries"]
@@ -106,7 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    println!("Starting MCP Resource Server with #[derive(McpResource)] examples");
+    println!("Starting MCP Resource Server with #[derive(McpResource, Clone)] examples");
 
     // Create resource instances
     let config_resource = ConfigResource::new();
@@ -118,8 +118,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("resource-server")
         .version("1.0.0")
         .title("Resource Server Example")
-        .instructions("This server demonstrates the #[derive(McpResource)] macro with various resource types.")
-        // TODO: Add resource registration when framework supports it
+        .instructions("This server demonstrates the #[derive(McpResource, Clone)] macro with various resource types.")
+        .resource(config_resource)
+        .resource(system_status)
+        .resource(user_profile)
+        .resource(log_file)
+        .with_resources()
         .bind_address("127.0.0.1:8007".parse()?)
         .build()?;
 
@@ -131,16 +135,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  4. LogFileResource - Tuple struct with single content field");
     
     println!("\nResource URIs:");
-    println!("  - {}", config_resource.uri());
-    println!("  - {}", system_status.uri());
-    println!("  - {}", user_profile.uri());
-    println!("  - {}", log_file.uri());
+    // Create new instances for testing since resources were moved to server
+    let test_config = ConfigResource::new();
+    let test_status = SystemStatusResource;
+    let test_user = UserProfileResource::new();
+    let test_log = LogFileResource::new();
+    
+    println!("  - {}", test_config.uri());
+    println!("  - {}", test_status.uri());
+    println!("  - {}", test_user.uri());
+    println!("  - {}", test_log.uri());
 
     // Demonstrate resource functionality
     println!("\nTesting resource read functionality:");
     
     println!("\n1. Config Resource:");
-    match config_resource.read().await {
+    match test_config.read(None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
                 println!("   Content {}: {:?}", i + 1, item);
@@ -150,7 +160,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     
     println!("\n2. System Status Resource:");
-    match system_status.read().await {
+    match test_status.read(None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
                 println!("   Content {}: {:?}", i + 1, item);
@@ -160,7 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n3. User Profile Resource:");
-    match user_profile.read().await {
+    match test_user.read(None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
                 println!("   Content {}: {:?}", i + 1, item);
@@ -170,7 +180,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n4. Log File Resource:");
-    match log_file.read().await {
+    match test_log.read(None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
                 println!("   Content {}: {:?}", i + 1, item);

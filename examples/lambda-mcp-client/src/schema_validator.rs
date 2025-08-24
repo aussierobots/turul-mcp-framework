@@ -3,6 +3,9 @@
 //! This module provides comprehensive schema validation for MCP protocol
 //! messages and tool responses, ensuring compliance with declared schemas.
 
+#![allow(unused_imports)]
+#![allow(dead_code)]
+
 use anyhow::{Context, Result};
 use jsonschema::{Validator, ValidationError};
 use serde_json::{json, Value};

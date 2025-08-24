@@ -88,9 +88,9 @@ impl MemoryAllocateTool {
         let mut data = vec![0u8; size];
         
         // Touch memory to ensure allocation
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for i in (0..size).step_by(4096) {
-            data[i] = rng.r#gen();
+            data[i] = rng.random();
         }
         
         let checksum: u64 = data.iter().map(|&b| b as u64).sum();

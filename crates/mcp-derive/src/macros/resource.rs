@@ -1,0 +1,132 @@
+//! Resource Declarative Macro Implementation
+//!
+//! Implements the `resource!{}` declarative macro for creating MCP resources with
+//! a concise syntax.
+
+use proc_macro::TokenStream;
+use quote::quote;
+use syn::{parse::Parse, parse::ParseStream, Result, Token, Expr, Ident, LitStr};
+
+use crate::macros::shared::capitalize;
+
+/// Implementation function for the resource!{} declarative macro
+pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
+    let input = syn::parse::<ResourceMacroInput>(input)?;
+    
+    let resource_name_ident = syn::Ident::new(
+        &format!("{}Resource", capitalize(&input.name.replace(" ", ""))),
+        proc_macro2::Span::call_site()
+    );
+    
+    let uri = &input.uri;
+    let name = &input.name;
+    let description = &input.description;
+    let content_closure = &input.content;
+    
+    let expanded = quote! {
+        {
+            #[derive(Clone)]
+            struct #resource_name_ident;
+            
+            #[async_trait::async_trait]
+            impl mcp_server::McpResource for #resource_name_ident {
+                fn uri(&self) -> &str {
+                    #uri
+                }
+                
+                fn name(&self) -> &str {
+                    #name
+                }
+                
+                fn description(&self) -> &str {
+                    #description
+                }
+                
+                async fn read(&self, _params: Option<serde_json::Value>) -> mcp_server::McpResult<Vec<mcp_protocol::resources::ResourceContent>> {
+                    let content_fn = #content_closure;
+                    content_fn(self).await
+                }
+            }
+            
+            #resource_name_ident
+        }
+    };
+    
+    Ok(expanded.into())
+}
+
+/// Parser for the resource! macro syntax
+pub struct ResourceMacroInput {
+    pub uri: String,
+    pub name: String,
+    pub description: String,
+    pub content: Expr,
+}
+
+impl Parse for ResourceMacroInput {
+    fn parse(input: ParseStream) -> Result<Self> {
+        let mut uri = None;
+        let mut name = None;
+        let mut description = None;
+        let mut content = None;
+        
+        while !input.is_empty() {
+            let ident: Ident = input.parse()?;
+            input.parse::<Token![:]>()?;
+            
+            match ident.to_string().as_str() {
+                "uri" => {
+                    let lit: LitStr = input.parse()?;
+                    uri = Some(lit.value());
+                }
+                "name" => {
+                    let lit: LitStr = input.parse()?;
+                    name = Some(lit.value());
+                }
+                "description" => {
+                    let lit: LitStr = input.parse()?;
+                    description = Some(lit.value());
+                }
+                "content" => {
+                    let expr: Expr = input.parse()?;
+                    content = Some(expr);
+                }
+                _ => {
+                    return Err(syn::Error::new_spanned(&ident, format!("Unknown field: {}", ident)));
+                }
+            }
+            
+            if input.peek(Token![,]) {
+                input.parse::<Token![,]>()?;
+            }
+        }
+        
+        Ok(ResourceMacroInput {
+            uri: uri.ok_or_else(|| syn::Error::new(input.span(), "Missing 'uri' field"))?,
+            name: name.ok_or_else(|| syn::Error::new(input.span(), "Missing 'name' field"))?,
+            description: description.ok_or_else(|| syn::Error::new(input.span(), "Missing 'description' field"))?,
+            content: content.ok_or_else(|| syn::Error::new(input.span(), "Missing 'content' field"))?,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn test_resource_macro_parse() {
+        let input = quote::quote! {
+            uri: "file://test.txt",
+            name: "Test Resource",
+            description: "A test resource",
+            content: |_self| async { Ok(vec![]) }
+        };
+
+        let parsed = syn::parse2::<ResourceMacroInput>(input).unwrap();
+        assert_eq!(parsed.uri, "file://test.txt");
+        assert_eq!(parsed.name, "Test Resource");
+        assert_eq!(parsed.description, "A test resource");
+    }
+}

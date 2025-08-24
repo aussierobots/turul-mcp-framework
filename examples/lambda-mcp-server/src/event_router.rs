@@ -2,24 +2,21 @@
 //!
 //! Routes Lambda events to appropriate handlers with context management and streaming support
 
-use crate::session_manager::{SessionManager, McpSession};
-use crate::global_events::{subscribe_to_global_events, GlobalEvent, EventFilter};
+use crate::session_manager::SessionManager;
+use crate::global_events::{subscribe_to_global_events, EventFilter};
 // MCP protocol uses JSON-RPC only - no custom streaming endpoints needed
 use crate::tools::{ToolRegistry, ToolExecutionContext, LambdaEventContext};
-use lambda_http::{Body, Response, Request, RequestExt};
-use http::{Method, StatusCode};
+use lambda_http::{Body, Response, Request};
+use http::Method;
 use lambda_runtime::{Context as LambdaContext, Error as LambdaError};
 use serde_json::{Value, json};
-use std::collections::HashMap;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 // Import json-rpc-server framework types for proper MCP spec compliance
 use json_rpc_server::{
-    JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcErrorCode,
-    RequestId, JsonRpcVersion
+    JsonRpcRequest, JsonRpcResponse, JsonRpcError
 };
-use mcp_protocol::ToolResult;
 
 /// Lambda event router for MCP protocol and SSE streaming
 pub struct EventRouter {
@@ -96,7 +93,7 @@ impl EventRouter {
     /// Handle MCP protocol JSON-RPC POST requests  
     async fn handle_mcp_post_request(
         &self,
-        mut event: Request,
+        event: Request,
         lambda_context: LambdaEventContext,
     ) -> Result<Response<Body>, LambdaError> {
         let body = event.body();
@@ -109,7 +106,8 @@ impl EventRouter {
         let json_request: JsonRpcRequest = serde_json::from_str(body_str)
             .map_err(|e| {
                 // Return proper JSON-RPC parse error
-                let parse_error = JsonRpcError::parse_error();
+                let _parse_error = JsonRpcError::parse_error();
+                debug!("Parse error details: {:?}", _parse_error);
                 LambdaError::from(format!("JSON-RPC parse error: {}", e))
             })?;
 
@@ -409,8 +407,9 @@ impl EventRouter {
     async fn handle_initialize(
         &self,
         params: Value,
-        lambda_context: LambdaEventContext,
+        _lambda_context: LambdaEventContext,
     ) -> Result<(Value, String), LambdaError> {
+        debug!("Initialize called with lambda context: {:?}", _lambda_context.request_id());
         let client_info = params.get("clientInfo").cloned();
         let capabilities = params.get("capabilities").cloned().unwrap_or_default();
 

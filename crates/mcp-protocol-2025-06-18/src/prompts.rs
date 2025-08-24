@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::tools::Cursor;
+use crate::meta::Cursor;
 
 /// A prompt descriptor
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,26 +92,66 @@ impl PromptArgument {
 /// Parameters for prompts/list request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ListPromptsRequest {
+pub struct ListPromptsParams {
     /// Optional cursor for pagination
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<Cursor>,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
-impl ListPromptsRequest {
+impl ListPromptsParams {
     pub fn new() -> Self {
-        Self { cursor: None }
+        Self { 
+            cursor: None,
+            meta: None,
+        }
     }
 
     pub fn with_cursor(mut self, cursor: Cursor) -> Self {
         self.cursor = Some(cursor);
         self
     }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
 }
 
-impl Default for ListPromptsRequest {
+impl Default for ListPromptsParams {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Complete prompts/list request (matches TypeScript ListPromptsRequest interface)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListPromptsRequest {
+    /// Method name (always "prompts/list")
+    pub method: String,
+    /// Request parameters
+    pub params: ListPromptsParams,
+}
+
+impl ListPromptsRequest {
+    pub fn new() -> Self {
+        Self {
+            method: "prompts/list".to_string(),
+            params: ListPromptsParams::new(),
+        }
+    }
+
+    pub fn with_cursor(mut self, cursor: Cursor) -> Self {
+        self.params = self.params.with_cursor(cursor);
+        self
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.params = self.params.with_meta(meta);
+        self
     }
 }
 
@@ -124,6 +164,14 @@ pub struct ListPromptsResponse {
     /// Optional cursor for next page
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<Cursor>,
+    /// Meta information (follows MCP Result interface)
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "_meta",
+        rename = "_meta"
+    )]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 impl ListPromptsResponse {
@@ -131,6 +179,7 @@ impl ListPromptsResponse {
         Self {
             prompts,
             next_cursor: None,
+            meta: None,
         }
     }
 
@@ -138,29 +187,72 @@ impl ListPromptsResponse {
         self.next_cursor = Some(cursor);
         self
     }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
 }
 
 /// Parameters for prompts/get request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetPromptRequest {
+pub struct GetPromptParams {
     /// Name of the prompt to get
     pub name: String,
     /// Arguments to pass to the prompt
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arguments: Option<HashMap<String, Value>>,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
-impl GetPromptRequest {
+impl GetPromptParams {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             arguments: None,
+            meta: None,
         }
     }
 
     pub fn with_arguments(mut self, arguments: HashMap<String, Value>) -> Self {
         self.arguments = Some(arguments);
+        self
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
+}
+
+/// Complete prompts/get request (matches TypeScript GetPromptRequest interface)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetPromptRequest {
+    /// Method name (always "prompts/get")
+    pub method: String,
+    /// Request parameters
+    pub params: GetPromptParams,
+}
+
+impl GetPromptRequest {
+    pub fn new(name: impl Into<String>) -> Self {
+        Self {
+            method: "prompts/get".to_string(),
+            params: GetPromptParams::new(name),
+        }
+    }
+
+    pub fn with_arguments(mut self, arguments: HashMap<String, Value>) -> Self {
+        self.params = self.params.with_arguments(arguments);
+        self
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.params = self.params.with_meta(meta);
         self
     }
 }
@@ -213,6 +305,14 @@ pub struct GetPromptResponse {
     pub description: Option<String>,
     /// Messages that make up the prompt
     pub messages: Vec<PromptMessage>,
+    /// Meta information (follows MCP Result interface)
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "_meta",
+        rename = "_meta"
+    )]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 impl GetPromptResponse {
@@ -220,12 +320,142 @@ impl GetPromptResponse {
         Self {
             description: None,
             messages,
+            meta: None,
         }
     }
 
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
+}
+
+// Trait implementations for prompts
+
+use crate::traits::*;
+
+// Trait implementations for ListPromptsParams
+impl Params for ListPromptsParams {}
+
+impl HasListPromptsParams for ListPromptsParams {
+    fn cursor(&self) -> Option<&Cursor> {
+        self.cursor.as_ref()
+    }
+}
+
+impl HasMetaParam for ListPromptsParams {
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
+}
+
+// Trait implementations for ListPromptsRequest
+impl HasMethod for ListPromptsRequest {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+impl HasParams for ListPromptsRequest {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params)
+    }
+}
+
+// Trait implementations for ListPromptsResponse
+impl HasData for ListPromptsResponse {
+    fn data(&self) -> HashMap<String, Value> {
+        let mut data = HashMap::new();
+        data.insert("prompts".to_string(), serde_json::to_value(&self.prompts).unwrap_or(Value::Null));
+        if let Some(ref next_cursor) = self.next_cursor {
+            data.insert("nextCursor".to_string(), Value::String(next_cursor.as_str().to_string()));
+        }
+        data
+    }
+}
+
+impl HasMeta for ListPromptsResponse {
+    fn meta(&self) -> Option<HashMap<String, Value>> {
+        self.meta.clone()
+    }
+}
+
+impl RpcResult for ListPromptsResponse {}
+
+impl ListPromptsResult for ListPromptsResponse {
+    fn prompts(&self) -> &Vec<Prompt> {
+        &self.prompts
+    }
+    
+    fn next_cursor(&self) -> Option<&Cursor> {
+        self.next_cursor.as_ref()
+    }
+}
+
+// Trait implementations for GetPromptParams
+impl Params for GetPromptParams {}
+
+impl HasGetPromptParams for GetPromptParams {
+    fn name(&self) -> &String {
+        &self.name
+    }
+    
+    fn arguments(&self) -> Option<&HashMap<String, Value>> {
+        self.arguments.as_ref()
+    }
+}
+
+impl HasMetaParam for GetPromptParams {
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
+}
+
+// Trait implementations for GetPromptRequest
+impl HasMethod for GetPromptRequest {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+impl HasParams for GetPromptRequest {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params)
+    }
+}
+
+// Trait implementations for GetPromptResponse
+impl HasData for GetPromptResponse {
+    fn data(&self) -> HashMap<String, Value> {
+        let mut data = HashMap::new();
+        data.insert("messages".to_string(), serde_json::to_value(&self.messages).unwrap_or(Value::Null));
+        if let Some(ref description) = self.description {
+            data.insert("description".to_string(), Value::String(description.clone()));
+        }
+        data
+    }
+}
+
+impl HasMeta for GetPromptResponse {
+    fn meta(&self) -> Option<HashMap<String, Value>> {
+        self.meta.clone()
+    }
+}
+
+impl RpcResult for GetPromptResponse {}
+
+impl GetPromptResult for GetPromptResponse {
+    fn description(&self) -> Option<&String> {
+        self.description.as_ref()
+    }
+    
+    fn messages(&self) -> &Vec<PromptMessage> {
+        &self.messages
     }
 }
 
@@ -268,8 +498,8 @@ mod tests {
         let request = GetPromptRequest::new("write_essay")
             .with_arguments(args);
 
-        assert_eq!(request.name, "write_essay");
-        assert!(request.arguments.is_some());
+        assert_eq!(request.params.name, "write_essay");
+        assert!(request.params.arguments.is_some());
     }
 
     #[test]

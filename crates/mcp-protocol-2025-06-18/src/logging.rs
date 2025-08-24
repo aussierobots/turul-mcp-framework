@@ -56,16 +56,83 @@ impl LogEntry {
     }
 }
 
-/// Request to set logging level
+/// Parameters for logging/setLevel request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetLevelParams {
+    /// The log level to set
+    pub level: LogLevel,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<std::collections::HashMap<String, serde_json::Value>>,
+}
+
+impl SetLevelParams {
+    pub fn new(level: LogLevel) -> Self {
+        Self { 
+            level,
+            meta: None,
+        }
+    }
+
+    pub fn with_meta(mut self, meta: std::collections::HashMap<String, serde_json::Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
+}
+
+/// Complete logging/setLevel request (matches TypeScript SetLevelRequest interface)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SetLevelRequest {
-    /// The log level to set
-    pub level: LogLevel,
+    /// Method name (always "logging/setLevel")
+    pub method: String,
+    /// Request parameters
+    pub params: SetLevelParams,
 }
 
 impl SetLevelRequest {
     pub fn new(level: LogLevel) -> Self {
-        Self { level }
+        Self {
+            method: "logging/setLevel".to_string(),
+            params: SetLevelParams::new(level),
+        }
+    }
+
+    pub fn with_meta(mut self, meta: std::collections::HashMap<String, serde_json::Value>) -> Self {
+        self.params = self.params.with_meta(meta);
+        self
+    }
+}
+
+// Trait implementations for logging
+
+use crate::traits::*;
+
+// Trait implementations for SetLevelParams
+impl Params for SetLevelParams {}
+
+impl HasSetLevelParams for SetLevelParams {
+    fn level(&self) -> &LogLevel {
+        &self.level
+    }
+}
+
+impl HasMetaParam for SetLevelParams {
+    fn meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+        self.meta.as_ref()
+    }
+}
+
+// Trait implementations for SetLevelRequest
+impl HasMethod for SetLevelRequest {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+impl HasParams for SetLevelRequest {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params)
     }
 }

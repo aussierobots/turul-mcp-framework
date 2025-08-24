@@ -111,6 +111,8 @@ pub struct ElicitationRequestParams {
     pub progress_token: Option<ProgressToken>,
 }
 
+impl crate::traits::Params for ElicitationRequestParams {}
+
 impl ElicitationRequestParams {
     pub fn new(request: ElicitationRequest) -> Self {
         Self {
