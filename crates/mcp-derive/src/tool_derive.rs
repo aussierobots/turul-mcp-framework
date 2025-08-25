@@ -64,14 +64,14 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     let tool_description = &tool_meta.description;
     
     // Generate output schema and result conversion based on return type
-    let (output_schema_tokens, result_conversion_tokens) = if let Some(ref output_type) = tool_meta.output_type {
+    let (output_schema_tokens, _result_conversion_tokens) = if let Some(ref output_type) = tool_meta.output_type {
         let schema = generate_output_schema_for_type(output_type);
         let conversion = generate_result_conversion(output_type, true); // Has output schema
         (schema, conversion)
     } else {
         // Default case - no output schema
         let default_schema = quote! {
-            fn output_schema(&self) -> Option<mcp_protocol::ToolSchema> {
+            fn output_schema(&self) -> Option<&mcp_protocol::tools::ToolSchema> {
                 None
             }
         };
@@ -88,32 +88,66 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        #[async_trait::async_trait]
-        impl mcp_server::McpTool for #name {
+        // Generate fine-grained trait implementations
+        impl mcp_protocol::tools::HasBaseMetadata for #name {
             fn name(&self) -> &str {
                 #tool_name
             }
-
-            fn description(&self) -> &str {
-                #tool_description  
-            }
-
-            fn input_schema(&self) -> mcp_protocol::ToolSchema {
-                use std::collections::HashMap;
-                
-                mcp_protocol::ToolSchema::object()
-                    .with_properties(HashMap::from([
-                        #(#schema_properties),*
-                    ]))
-                    .with_required(vec![
-                        #(#required_fields),*
-                    ])
-            }
             
-            #output_schema_tokens
+            fn title(&self) -> Option<&str> {
+                // TODO: Extract from tool attributes when available
+                None
+            }
+        }
 
-            async fn call(&self, args: serde_json::Value, _session: Option<mcp_server::SessionContext>) -> mcp_server::McpResult<Vec<mcp_protocol::ToolResult>> {
+        impl mcp_protocol::tools::HasDescription for #name {
+            fn description(&self) -> Option<&str> {
+                Some(#tool_description)
+            }
+        }
+
+        impl mcp_protocol::tools::HasInputSchema for #name {
+            fn input_schema(&self) -> &mcp_protocol::tools::ToolSchema {
+                // Generate static schema at compile time
+                static INPUT_SCHEMA: std::sync::OnceLock<mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+                INPUT_SCHEMA.get_or_init(|| {
+                    use std::collections::HashMap;
+                    mcp_protocol::tools::ToolSchema::object()
+                        .with_properties(HashMap::from([
+                            #(#schema_properties),*
+                        ]))
+                        .with_required(vec![
+                            #(#required_fields),*
+                        ])
+                })
+            }
+        }
+
+        impl mcp_protocol::tools::HasOutputSchema for #name {
+            #output_schema_tokens
+        }
+
+        impl mcp_protocol::tools::HasAnnotations for #name {
+            fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+                // TODO: Extract from tool attributes when available
+                None
+            }
+        }
+
+        impl mcp_protocol::tools::HasToolMeta for #name {
+            fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+                None
+            }
+        }
+
+        // ToolDefinition automatically implemented via trait composition!
+
+        #[automatically_derived]
+        #[async_trait::async_trait]
+        impl mcp_server::McpTool for #name {
+            async fn call(&self, args: serde_json::Value, _session: Option<mcp_server::SessionContext>) -> mcp_server::McpResult<mcp_protocol::tools::CallToolResult> {
                 use serde_json::Value;
+                use mcp_protocol::tools::HasOutputSchema;
                 
                 // Extract parameters
                 #(#param_extractions)*
@@ -123,36 +157,13 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                     #(#field_assignments),*
                 };
 
-                // Call the execute method and convert result appropriately
-                #result_conversion_tokens
-            }
-
-            async fn execute(&self, args: serde_json::Value, session: Option<mcp_server::SessionContext>) -> mcp_server::McpResult<mcp_protocol::CallToolResponse> {
-                // Add structured content if this tool has an output schema
-                if self.output_schema().is_some() {
-                    // Extract parameters and execute once to get the result
-                    #(#param_extractions)*
-                    let instance = #name {
-                        #(#field_assignments),*
-                    };
-                    
-                    match instance.execute().await {
-                        Ok(result) => {
-                            // Convert result to both JSON text and structured content
-                            let json_result = serde_json::to_value(&result)
-                                .map_err(|e| mcp_protocol::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
-                            
-                            let text_content = vec![mcp_protocol::ToolResult::text(json_result.to_string())];
-                            let response = mcp_protocol::CallToolResponse::success(text_content);
-                            
-                            Ok(response.with_structured_content(json_result))
-                        }
-                        Err(e) => Err(e)
+                // Execute and convert result to CallToolResult
+                match instance.execute().await {
+                    Ok(result) => {
+                        // Use smart response builder with automatic structured content
+                        mcp_protocol::tools::CallToolResult::from_result_with_schema(&result, self.output_schema())
                     }
-                } else {
-                    // No output schema, use the original call method
-                    let content = self.call(args, session).await?;
-                    Ok(mcp_protocol::CallToolResponse::success(content))
+                    Err(e) => Err(e)
                 }
             }
         }

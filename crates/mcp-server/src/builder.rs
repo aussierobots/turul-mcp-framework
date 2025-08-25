@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 use crate::{McpTool, McpServer, Result, McpFrameworkError};
 use crate::resource::McpResource;
+use crate::{McpElicitation, McpPrompt, McpSampling, McpCompletion, McpLogger, McpRoot, McpNotification};
 use crate::handlers::*;
 use mcp_protocol::{Implementation, ServerCapabilities};
 use mcp_protocol::initialize::*;
@@ -32,6 +33,24 @@ pub struct McpServerBuilder {
     
     /// Prompts registered with the server
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
+    
+    /// Elicitations registered with the server
+    elicitations: HashMap<String, Arc<dyn McpElicitation>>,
+    
+    /// Sampling providers registered with the server
+    sampling: HashMap<String, Arc<dyn McpSampling>>,
+    
+    /// Completion providers registered with the server
+    completions: HashMap<String, Arc<dyn McpCompletion>>,
+    
+    /// Loggers registered with the server
+    loggers: HashMap<String, Arc<dyn McpLogger>>,
+    
+    /// Root providers registered with the server
+    root_providers: HashMap<String, Arc<dyn McpRoot>>,
+    
+    /// Notification providers registered with the server
+    notifications: HashMap<String, Arc<dyn McpNotification>>,
     
     /// Handlers registered with the server
     handlers: HashMap<String, Arc<dyn McpHandler>>,
@@ -101,6 +120,12 @@ impl McpServerBuilder {
             tools,
             resources: HashMap::new(),
             prompts: HashMap::new(),
+            elicitations: HashMap::new(),
+            sampling: HashMap::new(),
+            completions: HashMap::new(),
+            loggers: HashMap::new(),
+            root_providers: HashMap::new(),
+            notifications: HashMap::new(),
             handlers,
             roots: Vec::new(),
             instructions: None,
@@ -148,6 +173,36 @@ impl McpServerBuilder {
         self
     }
 
+    /// Register a function tool created with #[mcp_tool] macro
+    /// 
+    /// This method provides a more intuitive way to register function tools.
+    /// The #[mcp_tool] macro generates a constructor function with the same name
+    /// as your async function, so you can use the function name directly.
+    /// 
+    /// # Example
+    /// ```rust,no_run
+    /// use mcp_derive::mcp_tool;
+    /// use mcp_server::McpServer;
+    /// 
+    /// #[mcp_tool(name = "add", description = "Add numbers")]
+    /// async fn add_numbers(a: f64, b: f64) -> Result<f64, String> {
+    ///     Ok(a + b)
+    /// }
+    /// 
+    /// let server = McpServer::builder()
+    ///     .name("math-server")
+    ///     .tool_fn(add_numbers) // Use the function name directly!
+    ///     .build()?;
+    /// ```
+    pub fn tool_fn<F, T>(self, func: F) -> Self 
+    where
+        F: Fn() -> T,
+        T: McpTool + 'static,
+    {
+        // Call the helper function to get the tool instance
+        self.tool(func())
+    }
+
     /// Register multiple tools
     pub fn tools<T: McpTool + 'static, I: IntoIterator<Item = T>>(mut self, tools: I) -> Self {
         for tool in tools {
@@ -186,6 +241,96 @@ impl McpServerBuilder {
         self
     }
 
+    /// Register an elicitation provider with the server
+    pub fn elicitation<E: McpElicitation + 'static>(mut self, elicitation: E) -> Self {
+        let key = format!("elicitation_{}", self.elicitations.len());
+        self.elicitations.insert(key, Arc::new(elicitation));
+        self
+    }
+
+    /// Register multiple elicitation providers
+    pub fn elicitations<E: McpElicitation + 'static, I: IntoIterator<Item = E>>(mut self, elicitations: I) -> Self {
+        for elicitation in elicitations {
+            self = self.elicitation(elicitation);
+        }
+        self
+    }
+
+    /// Register a sampling provider with the server
+    pub fn sampling_provider<S: McpSampling + 'static>(mut self, sampling: S) -> Self {
+        let key = format!("sampling_{}", self.sampling.len());
+        self.sampling.insert(key, Arc::new(sampling));
+        self
+    }
+
+    /// Register multiple sampling providers
+    pub fn sampling_providers<S: McpSampling + 'static, I: IntoIterator<Item = S>>(mut self, sampling: I) -> Self {
+        for s in sampling {
+            self = self.sampling_provider(s);
+        }
+        self
+    }
+
+    /// Register a completion provider with the server
+    pub fn completion_provider<C: McpCompletion + 'static>(mut self, completion: C) -> Self {
+        let key = format!("completion_{}", self.completions.len());
+        self.completions.insert(key, Arc::new(completion));
+        self
+    }
+
+    /// Register multiple completion providers
+    pub fn completion_providers<C: McpCompletion + 'static, I: IntoIterator<Item = C>>(mut self, completions: I) -> Self {
+        for completion in completions {
+            self = self.completion_provider(completion);
+        }
+        self
+    }
+
+    /// Register a logger with the server
+    pub fn logger<L: McpLogger + 'static>(mut self, logger: L) -> Self {
+        let key = format!("logger_{}", self.loggers.len());
+        self.loggers.insert(key, Arc::new(logger));
+        self
+    }
+
+    /// Register multiple loggers
+    pub fn loggers<L: McpLogger + 'static, I: IntoIterator<Item = L>>(mut self, loggers: I) -> Self {
+        for logger in loggers {
+            self = self.logger(logger);
+        }
+        self
+    }
+
+    /// Register a root provider with the server
+    pub fn root_provider<R: McpRoot + 'static>(mut self, root: R) -> Self {
+        let key = format!("root_{}", self.root_providers.len());
+        self.root_providers.insert(key, Arc::new(root));
+        self
+    }
+
+    /// Register multiple root providers
+    pub fn root_providers<R: McpRoot + 'static, I: IntoIterator<Item = R>>(mut self, roots: I) -> Self {
+        for root in roots {
+            self = self.root_provider(root);
+        }
+        self
+    }
+
+    /// Register a notification provider with the server
+    pub fn notification_provider<N: McpNotification + 'static>(mut self, notification: N) -> Self {
+        let key = format!("notification_{}", self.notifications.len());
+        self.notifications.insert(key, Arc::new(notification));
+        self
+    }
+
+    /// Register multiple notification providers
+    pub fn notification_providers<N: McpNotification + 'static, I: IntoIterator<Item = N>>(mut self, notifications: I) -> Self {
+        for notification in notifications {
+            self = self.notification_provider(notification);
+        }
+        self
+    }
+
     /// Register a handler with the server
     pub fn handler<H: McpHandler + 'static>(mut self, handler: H) -> Self {
         let handler_arc = Arc::new(handler);
@@ -217,13 +362,9 @@ impl McpServerBuilder {
             list_changed: Some(false),
         });
         
-        // Create PromptsHandler and add all registered prompts
-        let mut handler = PromptsHandler::new();
-        for (_, prompt) in &self.prompts {
-            handler = handler.add_prompt_arc(prompt.clone());
-        }
-        
-        self.handler(handler)
+        // TODO: Update PromptsHandler to work with new fine-grained McpPrompt trait
+        // Currently there's a conflict between handlers::McpPrompt and prompt::McpPrompt
+        self.handler(PromptsHandler::new())
     }
 
     /// Add resources support
@@ -406,18 +547,53 @@ mod tests {
     use super::*;
     use crate::{McpTool, SessionContext};
     use async_trait::async_trait;
-    use mcp_protocol::{ToolSchema, ToolResult};
+    use mcp_protocol::{ToolSchema, CallToolResponse};
+    use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations};
     use serde_json::Value;
+    use std::collections::HashMap;
 
-    struct TestTool;
+    struct TestTool {
+        input_schema: ToolSchema,
+    }
+
+    impl TestTool {
+        fn new() -> Self {
+            Self {
+                input_schema: ToolSchema::object(),
+            }
+        }
+    }
+
+    // Implement fine-grained traits
+    impl HasBaseMetadata for TestTool {
+        fn name(&self) -> &str { "test" }
+        fn title(&self) -> Option<&str> { None }
+    }
+
+    impl HasDescription for TestTool {
+        fn description(&self) -> Option<&str> { Some("Test tool") }
+    }
+
+    impl HasInputSchema for TestTool {
+        fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+    }
+
+    impl HasOutputSchema for TestTool {
+        fn output_schema(&self) -> Option<&ToolSchema> { None }
+    }
+
+    impl HasAnnotations for TestTool {
+        fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    }
+
+    impl HasToolMeta for TestTool {
+        fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    }
 
     #[async_trait]
     impl McpTool for TestTool {
-        fn name(&self) -> &str { "test" }
-        fn description(&self) -> &str { "Test tool" }
-        fn input_schema(&self) -> ToolSchema { ToolSchema::object() }
-        async fn call(&self, _args: Value, _session: Option<SessionContext>) -> crate::McpResult<Vec<ToolResult>> {
-            Ok(vec![ToolResult::text("test")])
+        async fn call(&self, _args: Value, _session: Option<SessionContext>) -> crate::McpResult<CallToolResponse> {
+            Ok(CallToolResponse::from_text("test"))
         }
     }
 
@@ -454,7 +630,7 @@ mod tests {
         let server = McpServerBuilder::new()
             .name("test-server")
             .version("1.0.0")
-            .tool(TestTool)
+            .tool(TestTool::new())
             .build()
             .unwrap();
 

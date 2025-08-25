@@ -118,10 +118,10 @@ impl ListResourcesRequest {
     }
 }
 
-/// Response for resources/list
+/// Result for resources/list (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ListResourcesResponse {
+pub struct ListResourcesResult {
     /// Available resources
     pub resources: Vec<Resource>,
     /// Optional cursor for next page
@@ -137,7 +137,7 @@ pub struct ListResourcesResponse {
     pub meta: Option<std::collections::HashMap<String, Value>>,
 }
 
-impl ListResourcesResponse {
+impl ListResourcesResult {
     pub fn new(resources: Vec<Resource>) -> Self {
         Self {
             resources,
@@ -238,10 +238,68 @@ impl ResourceContent {
     }
 }
 
-/// Response for resources/read
+/// Parameters for resources/subscribe request (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReadResourceResponse {
+pub struct SubscribeParams {
+    /// Resource URI to subscribe to
+    pub uri: String,
+}
+
+/// Complete resources/subscribe request (per MCP spec)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubscribeRequest {
+    /// Method name (always "resources/subscribe")
+    pub method: String,
+    /// Request parameters
+    pub params: SubscribeParams,
+}
+
+impl SubscribeRequest {
+    pub fn new(uri: impl Into<String>) -> Self {
+        Self {
+            method: "resources/subscribe".to_string(),
+            params: SubscribeParams {
+                uri: uri.into(),
+            },
+        }
+    }
+}
+
+/// Parameters for resources/unsubscribe request (per MCP spec)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnsubscribeParams {
+    /// Resource URI to unsubscribe from
+    pub uri: String,
+}
+
+/// Complete resources/unsubscribe request (per MCP spec)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnsubscribeRequest {
+    /// Method name (always "resources/unsubscribe")
+    pub method: String,
+    /// Request parameters
+    pub params: UnsubscribeParams,
+}
+
+impl UnsubscribeRequest {
+    pub fn new(uri: impl Into<String>) -> Self {
+        Self {
+            method: "resources/unsubscribe".to_string(),
+            params: UnsubscribeParams {
+                uri: uri.into(),
+            },
+        }
+    }
+}
+
+/// Result for resources/read (per MCP spec)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadResourceResult {
     /// The resource content
     pub contents: Vec<ResourceContent>,
     /// Meta information (follows MCP Result interface)
@@ -254,7 +312,7 @@ pub struct ReadResourceResponse {
     pub meta: Option<std::collections::HashMap<String, Value>>,
 }
 
-impl ReadResourceResponse {
+impl ReadResourceResult {
     pub fn new(contents: Vec<ResourceContent>) -> Self {
         Self { 
             contents,
@@ -319,8 +377,13 @@ impl HasParams for ListResourcesRequest {
     }
 }
 
-// Trait implementations for ListResourcesResponse
-impl HasData for ListResourcesResponse {
+// Trait implementations for protocol compliance
+use crate::traits::Params;
+impl Params for SubscribeParams {}
+impl Params for UnsubscribeParams {}
+
+// Trait implementations for ListResourcesResult
+impl HasData for ListResourcesResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
         data.insert("resources".to_string(), serde_json::to_value(&self.resources).unwrap_or(Value::Null));
@@ -331,15 +394,133 @@ impl HasData for ListResourcesResponse {
     }
 }
 
-impl HasMeta for ListResourcesResponse {
+impl HasMeta for ListResourcesResult {
     fn meta(&self) -> Option<HashMap<String, Value>> {
         self.meta.clone()
     }
 }
 
-impl RpcResult for ListResourcesResponse {}
+// ===========================================
+// === Fine-Grained Resource Traits ===
+// ===========================================
 
-impl ListResourcesResult for ListResourcesResponse {
+/// Trait for basic resource metadata (uri, name, title)
+pub trait HasResourceMetadata {
+    /// The URI identifier for this resource
+    fn uri(&self) -> &str;
+    
+    /// Human-readable name
+    fn name(&self) -> &str;
+    
+    /// Optional title for display
+    fn title(&self) -> Option<&str> {
+        None
+    }
+}
+
+/// Trait for resource description
+pub trait HasResourceDescription {
+    /// Description of the resource
+    fn description(&self) -> Option<&str>;
+}
+
+/// Trait for resource content information
+pub trait HasResourceContent {
+    /// Optional MIME type hint
+    fn mime_type(&self) -> Option<&str>;
+    
+    /// Content encoding information
+    fn encoding(&self) -> Option<&str> {
+        None
+    }
+    
+    /// Content size hint if known
+    fn content_size(&self) -> Option<u64> {
+        None
+    }
+}
+
+/// Trait for resource access capabilities
+pub trait HasResourceAccess {
+    /// Whether this resource supports real-time subscriptions
+    fn supports_subscriptions(&self) -> bool {
+        false
+    }
+    
+    /// Whether this resource requires authentication
+    fn requires_auth(&self) -> bool {
+        false
+    }
+    
+    /// Access permissions level
+    fn access_level(&self) -> ResourceAccessLevel {
+        ResourceAccessLevel::Read
+    }
+}
+
+/// Trait for resource annotations and custom metadata
+pub trait HasResourceAnnotations {
+    /// Optional annotations for client hints
+    fn annotations(&self) -> Option<&serde_json::Value>;
+}
+
+/// Trait for resource-specific metadata
+pub trait HasResourceMeta {
+    /// Optional resource-specific metadata
+    fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> {
+        None
+    }
+}
+
+/// Access levels for resources
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceAccessLevel {
+    /// Read-only access
+    Read,
+    /// Read and subscribe access
+    ReadSubscribe,
+    /// Full access (if resource supports modifications)
+    Full,
+}
+
+/// Composed resource definition trait (automatically implemented via blanket impl)
+pub trait ResourceDefinition: 
+    HasResourceMetadata + 
+    HasResourceDescription + 
+    HasResourceContent + 
+    HasResourceAccess + 
+    HasResourceAnnotations + 
+    HasResourceMeta 
+{
+    /// Convert this resource definition to a protocol Resource struct
+    fn to_resource(&self) -> Resource {
+        let mut resource = Resource::new(self.uri(), self.name());
+        
+        if let Some(description) = self.description() {
+            resource = resource.with_description(description);
+        }
+        
+        if let Some(mime_type) = self.mime_type() {
+            resource = resource.with_mime_type(mime_type);
+        }
+        
+        if let Some(annotations) = self.annotations() {
+            resource = resource.with_annotations(annotations.clone());
+        }
+        
+        resource
+    }
+}
+
+// Blanket implementation: any type implementing the fine-grained traits automatically gets ResourceDefinition
+impl<T> ResourceDefinition for T 
+where 
+    T: HasResourceMetadata + HasResourceDescription + HasResourceContent + HasResourceAccess + HasResourceAnnotations + HasResourceMeta 
+{}
+
+impl RpcResult for ListResourcesResult {}
+
+impl crate::traits::ListResourcesResult for ListResourcesResult {
     fn resources(&self) -> &Vec<Resource> {
         &self.resources
     }
@@ -351,6 +532,8 @@ impl ListResourcesResult for ListResourcesResponse {
 
 // Trait implementations for ReadResourceParams
 impl Params for ReadResourceParams {}
+impl Params for SubscribeRequest {}
+impl Params for UnsubscribeRequest {}
 
 impl HasReadResourceParams for ReadResourceParams {
     fn uri(&self) -> &String {
@@ -377,8 +560,8 @@ impl HasParams for ReadResourceRequest {
     }
 }
 
-// Trait implementations for ReadResourceResponse
-impl HasData for ReadResourceResponse {
+// Trait implementations for ReadResourceResult
+impl HasData for ReadResourceResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
         data.insert("contents".to_string(), serde_json::to_value(&self.contents).unwrap_or(Value::Null));
@@ -386,15 +569,15 @@ impl HasData for ReadResourceResponse {
     }
 }
 
-impl HasMeta for ReadResourceResponse {
+impl HasMeta for ReadResourceResult {
     fn meta(&self) -> Option<HashMap<String, Value>> {
         self.meta.clone()
     }
 }
 
-impl RpcResult for ReadResourceResponse {}
+impl RpcResult for ReadResourceResult {}
 
-impl ReadResourceResult for ReadResourceResponse {
+impl crate::traits::ReadResourceResult for ReadResourceResult {
     fn contents(&self) -> &Vec<ResourceContent> {
         &self.contents
     }
@@ -441,7 +624,7 @@ mod tests {
             Resource::new("file:///test2.txt", "Test 2"),
         ];
 
-        let response = ListResourcesResponse::new(resources);
+        let response = ListResourcesResult::new(resources);
         assert_eq!(response.resources.len(), 2);
         assert!(response.next_cursor.is_none());
     }
@@ -449,7 +632,7 @@ mod tests {
     #[test]
     fn test_read_resource_response() {
         let content = ResourceContent::text("File contents");
-        let response = ReadResourceResponse::single(content);
+        let response = ReadResourceResult::single(content);
 
         assert_eq!(response.contents.len(), 1);
     }
@@ -471,7 +654,7 @@ mod tests {
         assert!(request.params.cursor.is_none());
         
         let resources = vec![Resource::new("test://resource", "Test Resource")];
-        let response = ListResourcesResponse::new(resources);
+        let response = ListResourcesResult::new(resources);
         assert_eq!(response.resources().len(), 1);
         assert!(response.next_cursor().is_none());
         

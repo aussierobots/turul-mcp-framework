@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// Template definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -92,31 +93,59 @@ impl Template {
     }
 }
 
-/// Request for templates/list
+/// Request for resources/templates/list (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ListTemplatesRequest {
+pub struct ListResourceTemplatesRequest {
     /// Optional cursor for pagination
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<crate::meta::Cursor>,
 }
 
-/// Response for templates/list
+impl ListResourceTemplatesRequest {
+    pub fn new() -> Self {
+        Self {
+            cursor: None,
+        }
+    }
+    
+    pub fn with_cursor(mut self, cursor: crate::meta::Cursor) -> Self {
+        self.cursor = Some(cursor);
+        self
+    }
+}
+
+impl Default for ListResourceTemplatesRequest {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Result for resources/templates/list (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ListTemplatesResponse {
+pub struct ListResourceTemplatesResult {
     /// Available templates
     pub templates: Vec<Template>,
     /// Optional cursor for next page
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<crate::meta::Cursor>,
+    /// Meta information (follows MCP Result interface)
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "_meta",
+        rename = "_meta"
+    )]
+    pub meta: Option<std::collections::HashMap<String, Value>>,
 }
 
-impl ListTemplatesResponse {
+impl ListResourceTemplatesResult {
     pub fn new(templates: Vec<Template>) -> Self {
         Self {
             templates,
             next_cursor: None,
+            meta: None,
         }
     }
     
@@ -124,7 +153,38 @@ impl ListTemplatesResponse {
         self.next_cursor = Some(cursor);
         self
     }
+
+    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
 }
+
+// Trait implementations
+use crate::traits::{HasData, HasMeta, RpcResult, Params};
+
+impl HasData for ListResourceTemplatesResult {
+    fn data(&self) -> HashMap<String, Value> {
+        let mut map = HashMap::new();
+        map.insert("templates".to_string(), serde_json::to_value(&self.templates).unwrap_or(Value::Null));
+        if let Some(cursor) = &self.next_cursor {
+            map.insert("nextCursor".to_string(), serde_json::to_value(cursor).unwrap_or(Value::Null));
+        }
+        map
+    }
+}
+
+impl HasMeta for ListResourceTemplatesResult {
+    fn meta(&self) -> Option<HashMap<String, Value>> {
+        self.meta.clone()
+    }
+}
+
+impl RpcResult for ListResourceTemplatesResult {}
+
+impl Params for ListResourceTemplatesRequest {}
+impl Params for GetTemplateRequest {}
+impl Params for RenderTemplateRequest {}
 
 /// Request for templates/get
 #[derive(Debug, Clone, Serialize, Deserialize)]

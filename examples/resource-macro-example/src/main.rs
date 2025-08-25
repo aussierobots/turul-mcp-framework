@@ -5,7 +5,7 @@
 
 use mcp_derive::resource;
 use mcp_server::{McpServer, McpResource};
-use mcp_protocol::resources::ResourceContent;
+use mcp_protocol::resources::{ResourceContent, HasResourceMetadata, HasResourceDescription};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n1. Testing config resource:");
     println!("   URI: {}", config_resource.uri());
     println!("   Name: {}", config_resource.name());
-    println!("   Description: {}", config_resource.description());
+    println!("   Description: {}", config_resource.description().unwrap_or("No description"));
     match config_resource.read(None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n2. Testing status resource:");
     println!("   URI: {}", status_resource.uri());
     println!("   Name: {}", status_resource.name());
-    println!("   Description: {}", status_resource.description());
+    println!("   Description: {}", status_resource.description().unwrap_or("No description"));
     match status_resource.read(None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n3. Testing log resource:");
     println!("   URI: {}", log_resource.uri());
     println!("   Name: {}", log_resource.name());
-    println!("   Description: {}", log_resource.description());
+    println!("   Description: {}", log_resource.description().unwrap_or("No description"));
     match log_resource.read(None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {

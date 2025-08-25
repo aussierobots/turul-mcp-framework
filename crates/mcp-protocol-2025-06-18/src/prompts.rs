@@ -155,10 +155,10 @@ impl ListPromptsRequest {
     }
 }
 
-/// Response for prompts/list
+/// Result for prompts/list (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ListPromptsResponse {
+pub struct ListPromptsResult {
     /// Available prompts
     pub prompts: Vec<Prompt>,
     /// Optional cursor for next page
@@ -174,7 +174,7 @@ pub struct ListPromptsResponse {
     pub meta: Option<HashMap<String, Value>>,
 }
 
-impl ListPromptsResponse {
+impl ListPromptsResult {
     pub fn new(prompts: Vec<Prompt>) -> Self {
         Self {
             prompts,
@@ -296,10 +296,10 @@ impl PromptMessage {
     }
 }
 
-/// Response for prompts/get
+/// Result for prompts/get (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GetPromptResponse {
+pub struct GetPromptResult {
     /// Optional description of the prompt
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
@@ -315,7 +315,7 @@ pub struct GetPromptResponse {
     pub meta: Option<HashMap<String, Value>>,
 }
 
-impl GetPromptResponse {
+impl GetPromptResult {
     pub fn new(messages: Vec<PromptMessage>) -> Self {
         Self {
             description: None,
@@ -367,8 +367,8 @@ impl HasParams for ListPromptsRequest {
     }
 }
 
-// Trait implementations for ListPromptsResponse
-impl HasData for ListPromptsResponse {
+// Trait implementations for ListPromptsResult
+impl HasData for ListPromptsResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
         data.insert("prompts".to_string(), serde_json::to_value(&self.prompts).unwrap_or(Value::Null));
@@ -379,15 +379,15 @@ impl HasData for ListPromptsResponse {
     }
 }
 
-impl HasMeta for ListPromptsResponse {
+impl HasMeta for ListPromptsResult {
     fn meta(&self) -> Option<HashMap<String, Value>> {
         self.meta.clone()
     }
 }
 
-impl RpcResult for ListPromptsResponse {}
+impl RpcResult for ListPromptsResult {}
 
-impl ListPromptsResult for ListPromptsResponse {
+impl crate::traits::ListPromptsResult for ListPromptsResult {
     fn prompts(&self) -> &Vec<Prompt> {
         &self.prompts
     }
@@ -429,8 +429,8 @@ impl HasParams for GetPromptRequest {
     }
 }
 
-// Trait implementations for GetPromptResponse
-impl HasData for GetPromptResponse {
+// Trait implementations for GetPromptResult
+impl HasData for GetPromptResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
         data.insert("messages".to_string(), serde_json::to_value(&self.messages).unwrap_or(Value::Null));
@@ -441,15 +441,15 @@ impl HasData for GetPromptResponse {
     }
 }
 
-impl HasMeta for GetPromptResponse {
+impl HasMeta for GetPromptResult {
     fn meta(&self) -> Option<HashMap<String, Value>> {
         self.meta.clone()
     }
 }
 
-impl RpcResult for GetPromptResponse {}
+impl RpcResult for GetPromptResult {}
 
-impl GetPromptResult for GetPromptResponse {
+impl crate::traits::GetPromptResult for GetPromptResult {
     fn description(&self) -> Option<&String> {
         self.description.as_ref()
     }
@@ -509,7 +509,7 @@ mod tests {
             PromptMessage::text("AI Safety"),
         ];
 
-        let response = GetPromptResponse::new(messages)
+        let response = GetPromptResult::new(messages)
             .with_description("Generated essay prompt");
 
         assert_eq!(response.messages.len(), 2);
@@ -529,3 +529,117 @@ mod tests {
         assert_eq!(parsed.name, "test_prompt");
     }
 }
+
+// ===========================================
+// === Fine-Grained Prompt Traits ===
+// ===========================================
+
+/// Trait for prompt metadata (name, description)
+pub trait HasPromptMetadata {
+    /// Name identifier for the prompt
+    fn name(&self) -> &str;
+    
+    /// Optional human-readable description
+    fn description(&self) -> Option<&str> {
+        None
+    }
+    
+    /// Optional title for display purposes
+    fn title(&self) -> Option<&str> {
+        None
+    }
+}
+
+/// Trait for prompt arguments specification
+pub trait HasPromptArguments {
+    /// Arguments that the prompt accepts
+    fn arguments(&self) -> Option<&Vec<PromptArgument>>;
+    
+    /// Check if an argument is required
+    fn is_required_argument(&self, name: &str) -> bool {
+        if let Some(args) = self.arguments() {
+            args.iter().any(|arg| arg.name == name && arg.required.unwrap_or(false))
+        } else {
+            false
+        }
+    }
+    
+    /// Get argument by name
+    fn get_argument(&self, name: &str) -> Option<&PromptArgument> {
+        if let Some(args) = self.arguments() {
+            args.iter().find(|arg| arg.name == name)
+        } else {
+            None
+        }
+    }
+}
+
+/// Trait for prompt message generation and templating
+pub trait HasPromptMessages {
+    /// Generate prompt messages based on provided arguments
+    fn render_messages(&self, args: Option<&HashMap<String, Value>>) -> Result<Vec<PromptMessage>, String>;
+    
+    /// Optional: Get message templates before argument substitution
+    fn message_templates(&self) -> Vec<String> {
+        vec![]
+    }
+    
+    /// Optional: Validate arguments before rendering
+    fn validate_arguments(&self, _args: &HashMap<String, Value>) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+/// Trait for prompt annotations and custom metadata
+pub trait HasPromptAnnotations {
+    /// Optional annotations for client hints
+    fn annotations(&self) -> Option<&Value>;
+    
+    /// Prompt category for organization
+    fn category(&self) -> Option<&str> {
+        None
+    }
+    
+    /// Tags for discovery and filtering
+    fn tags(&self) -> Vec<&str> {
+        vec![]
+    }
+    
+    /// Usage examples for documentation
+    fn examples(&self) -> Vec<String> {
+        vec![]
+    }
+}
+
+/// Composed prompt definition trait (automatically implemented via blanket impl)
+pub trait PromptDefinition: 
+    HasPromptMetadata + 
+    HasPromptArguments + 
+    HasPromptMessages + 
+    HasPromptAnnotations 
+{
+    /// Convert this prompt definition to a protocol Prompt struct
+    fn to_prompt(&self) -> Prompt {
+        let mut prompt = Prompt::new(self.name());
+        
+        if let Some(description) = self.description() {
+            prompt = prompt.with_description(description);
+        }
+        
+        if let Some(arguments) = self.arguments() {
+            prompt = prompt.with_arguments(arguments.clone());
+        }
+        
+        if let Some(annotations) = self.annotations() {
+            prompt = prompt.with_annotations(annotations.clone());
+        }
+        
+        prompt
+    }
+}
+
+// Blanket implementation: any type implementing the fine-grained traits automatically gets PromptDefinition
+impl<T> PromptDefinition for T 
+where 
+    T: HasPromptMetadata + HasPromptArguments + HasPromptMessages + HasPromptAnnotations 
+{}

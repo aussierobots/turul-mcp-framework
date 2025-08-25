@@ -52,25 +52,16 @@ pub struct CompletionHandler;
 #[async_trait]
 impl McpHandler for CompletionHandler {
     async fn handle(&self, _params: Option<Value>) -> McpResult<Value> {
-        use mcp_protocol::completion::{CompletionResponse, CompletionSuggestion};
+        use mcp_protocol::completion::{CompleteResult, CompletionResult};
         
         // Default implementation - can be overridden by users
-        let suggestions = vec![
-            CompletionSuggestion {
-                value: "example1".to_string(),
-                label: Some("Example completion 1".to_string()),
-                description: Some("A sample completion".to_string()),
-                annotations: None,
-            },
-            CompletionSuggestion {
-                value: "example2".to_string(),
-                label: Some("Example completion 2".to_string()),
-                description: Some("Another sample completion".to_string()),
-                annotations: None,
-            },
+        let values = vec![
+            "example1".to_string(),
+            "example2".to_string(),
         ];
         
-        let response = CompletionResponse::new(suggestions);
+        let completion_result = CompletionResult::new(values);
+        let response = CompleteResult::new(completion_result);
         serde_json::to_value(response).map_err(McpError::from)
     }
     
@@ -106,7 +97,7 @@ impl PromptsHandler {
 impl McpHandler for PromptsHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         // Handle prompts/list with pagination support
-        use mcp_protocol::prompts::{ListPromptsResponse, Prompt};
+        use mcp_protocol::prompts::{ListPromptsResult, Prompt};
         use mcp_protocol_2025_06_18::meta::{PaginatedResponse, Cursor};
         
         // Parse cursor from params if provided
@@ -121,7 +112,7 @@ impl McpHandler for PromptsHandler {
             .map(|p| Prompt::new(p.name()).with_description(p.description()))
             .collect();
         
-        let base_response = ListPromptsResponse::new(prompts.clone());
+        let base_response = ListPromptsResult::new(prompts.clone());
         
         // Add pagination metadata
         let has_more = false; // In a real implementation, this would depend on the actual data
@@ -181,7 +172,7 @@ impl ResourcesHandler {
 #[async_trait]
 impl McpHandler for ResourcesHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
-        use mcp_protocol::resources::{ListResourcesResponse, Resource};
+        use mcp_protocol::resources::{ListResourcesResult, Resource};
         use mcp_protocol_2025_06_18::meta::{PaginatedResponse, Cursor};
         
         // Parse cursor from params if provided
@@ -196,7 +187,7 @@ impl McpHandler for ResourcesHandler {
             .map(|r| resource_to_descriptor(r.as_ref()))
             .collect();
         
-        let base_response = ListResourcesResponse::new(resources.clone());
+        let base_response = ListResourcesResult::new(resources.clone());
         
         // Add pagination metadata if applicable
         let has_more = false; // In a real implementation, this would depend on the actual data
@@ -265,7 +256,7 @@ impl RootsHandler {
 #[async_trait]
 impl McpHandler for RootsHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
-        use mcp_protocol::roots::ListRootsResponse;
+        use mcp_protocol::roots::ListRootsResult;
         use mcp_protocol_2025_06_18::meta::{PaginatedResponse, Cursor};
         
         // Parse cursor from params if provided
@@ -276,7 +267,7 @@ impl McpHandler for RootsHandler {
         
         debug!("Listing roots with cursor: {:?}", cursor);
         
-        let base_response = ListRootsResponse::new(self.roots.clone());
+        let base_response = ListRootsResult::new(self.roots.clone());
         
         // Add pagination metadata
         let has_more = false; // In a real implementation, this would depend on the actual data
@@ -303,7 +294,7 @@ pub struct SamplingHandler;
 #[async_trait]
 impl McpHandler for SamplingHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
-        use mcp_protocol::sampling::{CreateMessageResponse, SamplingMessage};
+        use mcp_protocol::sampling::{CreateMessageResult, SamplingMessage};
         use mcp_protocol_2025_06_18::meta::{ProgressResponse, ProgressToken};
         
         // Parse progress token if provided
@@ -320,7 +311,7 @@ impl McpHandler for SamplingHandler {
             },
         };
         
-        let base_response = CreateMessageResponse {
+        let base_response = CreateMessageResult {
             message,
             model: "mock-model-v1".to_string(),
             stop_reason: Some("stop".to_string()),
@@ -366,7 +357,7 @@ impl TemplatesHandler {
 #[async_trait]
 impl McpHandler for TemplatesHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
-        use mcp_protocol::templates::{ListTemplatesResponse, Template};
+        use mcp_protocol::templates::{ListResourceTemplatesResult, Template};
         use mcp_protocol_2025_06_18::meta::{PaginatedResponse, Cursor};
         
         // Parse cursor from params if provided
@@ -381,7 +372,7 @@ impl McpHandler for TemplatesHandler {
             .map(|t| Template::new(t.name()).with_description(t.description()))
             .collect();
         
-        let base_response = ListTemplatesResponse::new(templates.clone());
+        let base_response = ListResourceTemplatesResult::new(templates.clone());
         
         // Add pagination metadata if applicable
         let has_more = false; // In a real implementation, this would depend on the actual data
@@ -466,10 +457,10 @@ impl McpHandler for ResourceTemplatesHandler {
 #[async_trait]
 pub trait ElicitationProvider: Send + Sync {
     /// Present an elicitation request to the user and return their response
-    async fn elicit(&self, request: &mcp_protocol_2025_06_18::elicitation::ElicitationRequest) -> McpResult<mcp_protocol_2025_06_18::elicitation::ElicitationResponse>;
+    async fn elicit(&self, request: &mcp_protocol_2025_06_18::elicitation::ElicitCreateRequest) -> McpResult<mcp_protocol_2025_06_18::elicitation::ElicitResult>;
     
     /// Check if this provider can handle a specific elicitation schema
-    fn can_handle(&self, _request: &mcp_protocol_2025_06_18::elicitation::ElicitationRequest) -> bool {
+    fn can_handle(&self, _request: &mcp_protocol_2025_06_18::elicitation::ElicitCreateRequest) -> bool {
         // Default implementation accepts all requests
         true
     }
@@ -480,27 +471,30 @@ pub struct MockElicitationProvider;
 
 #[async_trait]
 impl ElicitationProvider for MockElicitationProvider {
-    async fn elicit(&self, request: &mcp_protocol_2025_06_18::elicitation::ElicitationRequest) -> McpResult<mcp_protocol_2025_06_18::elicitation::ElicitationResponse> {
-        use mcp_protocol_2025_06_18::elicitation::ElicitationResponse;
+    async fn elicit(&self, request: &mcp_protocol_2025_06_18::elicitation::ElicitCreateRequest) -> McpResult<mcp_protocol_2025_06_18::elicitation::ElicitResult> {
+        use mcp_protocol_2025_06_18::elicitation::ElicitResult;
         
-        if request.required {
-            // For required elicitations, provide mock structured data
-            let mock_data = serde_json::json!({
-                "mock_response": true,
-                "schema_description": request.description.as_deref().unwrap_or("No description"),
-                "prompt": &request.prompt,
-                "note": "This is a mock elicitation response for testing"
-            });
-            
-            Ok(ElicitationResponse::completed(mock_data)
-                .with_message("Mock elicitation completed"))
-        } else {
-            Ok(ElicitationResponse::cancelled()
-                .with_message("Mock provider cancelled optional elicitation"))
+        // Mock implementation based on message content
+        let mut mock_data = std::collections::HashMap::new();
+        mock_data.insert("mock_response".to_string(), serde_json::json!(true));
+        mock_data.insert("message".to_string(), serde_json::json!(&request.params.message));
+        mock_data.insert("note".to_string(), serde_json::json!("This is a mock elicitation response for testing"));
+        
+        // Simple mock logic based on message content
+        match request.params.message.as_str() {
+            msg if msg.contains("cancel") => {
+                Ok(ElicitResult::cancel())
+            },
+            msg if msg.contains("decline") => {
+                Ok(ElicitResult::decline())
+            },
+            _ => {
+                Ok(ElicitResult::accept(mock_data))
+            }
         }
     }
     
-    fn can_handle(&self, _request: &mcp_protocol_2025_06_18::elicitation::ElicitationRequest) -> bool {
+    fn can_handle(&self, _request: &mcp_protocol_2025_06_18::elicitation::ElicitCreateRequest) -> bool {
         true // Mock provider handles all requests
     }
 }
@@ -523,49 +517,34 @@ impl ElicitationHandler {
 #[async_trait]
 impl McpHandler for ElicitationHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
-        use mcp_protocol_2025_06_18::elicitation::{ElicitationRequestParams, ElicitationRequestResult};
-        use mcp_protocol_2025_06_18::meta::{ProgressToken, Meta};
+        use mcp_protocol_2025_06_18::elicitation::ElicitCreateParams;
         
         if let Some(params) = params {
-            let request_params: ElicitationRequestParams = serde_json::from_value(params)?;
+            let request_params: ElicitCreateParams = serde_json::from_value(params)?;
             
-            tracing::info!("Processing elicitation request: {} - {}", 
-                request_params.request.title.as_deref().unwrap_or("Untitled"), 
-                request_params.request.prompt
+            tracing::info!("Processing elicitation request: {}", 
+                request_params.message
             );
             
+            // Create full request object from parameters
+            use mcp_protocol_2025_06_18::elicitation::ElicitCreateRequest;
+            let create_request = ElicitCreateRequest {
+                method: "elicitation/create".to_string(),
+                params: request_params.clone(),
+            };
+            
             // Check if provider can handle this request
-            if !self.provider.can_handle(&request_params.request) {
-                let error_response = mcp_protocol_2025_06_18::elicitation::ElicitationResponse::cancelled()
-                    .with_message("This elicitation request cannot be handled by the current provider");
-                let result = ElicitationRequestResult::new(error_response);
-                return serde_json::to_value(result).map_err(McpError::from);
+            if !self.provider.can_handle(&create_request) {
+                let error_response = mcp_protocol_2025_06_18::elicitation::ElicitResult::cancel();
+                return serde_json::to_value(error_response).map_err(McpError::from);
             }
             
             // Delegate to the elicitation provider
-            let response = self.provider.elicit(&request_params.request).await?;
-            let mut result = ElicitationRequestResult::new(response);
+            let result = self.provider.elicit(&create_request).await?;
             
-            // Add comprehensive metadata for elicitation tracking
-            let progress_meta = Meta::with_progress(1.0, Some(1), Some(1))
-                .set_progress_token(request_params.progress_token.unwrap_or_else(|| 
-                    ProgressToken::new(format!("elicit-{}", uuid::Uuid::new_v4().to_string()[..8].to_string()))))
-                .add_extra("provider_type", "configurable")
-                .add_extra("request_required", request_params.request.required)
-                .add_extra("has_defaults", request_params.request.defaults.is_some())
-                .add_extra("schema_type", match request_params.request.schema {
-                    mcp_protocol_2025_06_18::schema::JsonSchema::Object { .. } => "object",
-                    mcp_protocol_2025_06_18::schema::JsonSchema::Array { .. } => "array", 
-                    mcp_protocol_2025_06_18::schema::JsonSchema::String { .. } => "string",
-                    mcp_protocol_2025_06_18::schema::JsonSchema::Number { .. } => "number",
-                    mcp_protocol_2025_06_18::schema::JsonSchema::Integer { .. } => "integer",
-                    mcp_protocol_2025_06_18::schema::JsonSchema::Boolean { .. } => "boolean",
-                });
-            
-            result = result.with_meta(progress_meta);
             serde_json::to_value(result).map_err(McpError::from)
         } else {
-            Err(McpError::missing_param("ElicitationRequestParams"))
+            Err(McpError::missing_param("ElicitCreateParams"))
         }
     }
     

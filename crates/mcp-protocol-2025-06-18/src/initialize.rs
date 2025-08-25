@@ -194,10 +194,10 @@ impl InitializeRequest {
     }
 }
 
-/// Response payload for initialize
+/// Result payload for initialize (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InitializeResponse {
+pub struct InitializeResult {
     /// The protocol version the server supports
     pub protocol_version: String,
     /// Capabilities the server supports
@@ -209,7 +209,7 @@ pub struct InitializeResponse {
     pub instructions: Option<String>,
 }
 
-impl InitializeResponse {
+impl InitializeResult {
     pub fn new(
         protocol_version: McpVersion,
         capabilities: ServerCapabilities,
@@ -272,7 +272,7 @@ mod tests {
     fn test_initialize_response_creation() {
         let server_info = Implementation::new("test-server", "1.0.0");
         let capabilities = ServerCapabilities::default();
-        let response = InitializeResponse::new(
+        let response = InitializeResult::new(
             McpVersion::V2025_06_18,
             capabilities,
             server_info,

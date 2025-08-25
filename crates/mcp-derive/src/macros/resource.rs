@@ -28,8 +28,14 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             #[derive(Clone)]
             struct #resource_name_ident;
             
-            #[async_trait::async_trait]
-            impl mcp_server::McpResource for #resource_name_ident {
+            impl #resource_name_ident {
+                fn new() -> Self {
+                    Self
+                }
+            }
+            
+            // Implement fine-grained traits
+            impl mcp_protocol::resources::HasResourceMetadata for #resource_name_ident {
                 fn uri(&self) -> &str {
                     #uri
                 }
@@ -37,18 +43,55 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 fn name(&self) -> &str {
                     #name
                 }
-                
-                fn description(&self) -> &str {
-                    #description
+            }
+            
+            impl mcp_protocol::resources::HasResourceDescription for #resource_name_ident {
+                fn description(&self) -> Option<&str> {
+                    Some(#description)
                 }
-                
+            }
+            
+            impl mcp_protocol::resources::HasResourceContent for #resource_name_ident {
+                fn mime_type(&self) -> Option<&str> {
+                    None
+                }
+            }
+            
+            impl mcp_protocol::resources::HasResourceAccess for #resource_name_ident {
+                // Default implementations
+            }
+            
+            impl mcp_protocol::resources::HasResourceAnnotations for #resource_name_ident {
+                fn annotations(&self) -> Option<&serde_json::Value> {
+                    None
+                }
+            }
+            
+            impl mcp_protocol::resources::HasResourceMeta for #resource_name_ident {
+                fn resource_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+                    None
+                }
+            }
+            
+            // ResourceDefinition automatically implemented via blanket impl!
+            
+            #[async_trait::async_trait]
+            impl mcp_server::McpResource for #resource_name_ident {
                 async fn read(&self, _params: Option<serde_json::Value>) -> mcp_server::McpResult<Vec<mcp_protocol::resources::ResourceContent>> {
                     let content_fn = #content_closure;
                     content_fn(self).await
                 }
+                
+                async fn subscribe(&self, _params: Option<serde_json::Value>) -> mcp_server::McpResult<()> {
+                    Err(mcp_protocol::McpError::InvalidParameters("subscribe not supported".to_string()))
+                }
+                
+                async fn unsubscribe(&self, _params: Option<serde_json::Value>) -> mcp_server::McpResult<()> {
+                    Err(mcp_protocol::McpError::InvalidParameters("unsubscribe not supported".to_string()))
+                }
             }
             
-            #resource_name_ident
+            #resource_name_ident::new()
         }
     };
     

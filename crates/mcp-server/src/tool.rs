@@ -3,7 +3,8 @@
 //! This module defines the high-level trait for implementing MCP tools.
 
 use async_trait::async_trait;
-use mcp_protocol::{ToolSchema, ToolResult, McpResult, CallToolResponse};
+use mcp_protocol::{McpResult, CallToolResult};
+use mcp_protocol_2025_06_18::tools::ToolDefinition;
 use serde_json::Value;
 
 use crate::session::SessionContext;
@@ -12,82 +13,25 @@ use crate::session::SessionContext;
 use mcp_protocol::McpError;
 
 /// High-level trait for implementing MCP tools
+/// 
+/// McpTool extends ToolDefinition with execution capabilities.
+/// All metadata is provided by the ToolDefinition trait, ensuring
+/// consistency between concrete Tool structs and dynamic implementations.
 #[async_trait]
-pub trait McpTool: Send + Sync {
-    /// The name of the tool - used as the identifier
-    fn name(&self) -> &str;
-
-    /// Human-readable description of what the tool does
-    fn description(&self) -> &str;
-
-    /// JSON Schema describing the tool's input parameters
-    fn input_schema(&self) -> ToolSchema;
-
-    /// Optional: JSON Schema describing the tool's output results
-    fn output_schema(&self) -> Option<ToolSchema> {
-        None
-    }
-
-    /// Execute the tool with the given arguments and optional session context
+pub trait McpTool: ToolDefinition {
+    /// Execute the tool with full session support
     /// 
-    /// The session context is automatically provided by the framework when available.
-    /// Tools can use it for state persistence across multiple calls.
-    /// 
-    /// Returns a list of content items or a structured MCP error
-    async fn call(
-        &self, 
-        args: Value,
-        session: Option<SessionContext>,
-    ) -> McpResult<Vec<ToolResult>>;
-
-    /// Execute the tool and return a complete CallToolResponse with structured content
-    /// 
-    /// This method provides comprehensive response handling including structured content
-    /// that matches the tool's output schema. The default implementation calls `call()`
-    /// and wraps the result, but tools can override this for full control.
-    async fn execute(
-        &self,
-        args: Value,
-        session: Option<SessionContext>,
-    ) -> McpResult<CallToolResponse> {
-        let content = self.call(args, session).await?;
-        Ok(CallToolResponse::success(content))
-    }
-
-    /// Execute the tool and return a complete CallToolResponse with both content and structured data
-    /// 
-    /// This is a convenience method for tools that want to return both human-readable content
-    /// and structured data that matches their output schema.
-    async fn execute_with_structured_content(
-        &self,
-        args: Value,
-        session: Option<SessionContext>,
-        structured_content: Value,
-    ) -> McpResult<CallToolResponse> {
-        let content = self.call(args, session).await?;
-        Ok(CallToolResponse::success(content).with_structured_content(structured_content))
-    }
-
-    /// Optional: Get tool annotations for client hints
-    fn annotations(&self) -> Option<Value> {
-        None
-    }
+    /// This is the primary execution method that tools should implement.
+    /// Returns a complete CallToolResponse with both content and structured data.
+    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult>;
 }
 
 /// Convert an McpTool trait object to a Tool descriptor
+/// 
+/// This is now a thin wrapper around the ToolDefinition::to_tool() method
+/// for backward compatibility. New code should use tool.to_tool() directly.
 pub fn tool_to_descriptor(tool: &dyn McpTool) -> mcp_protocol::Tool {
-    let mut mcp_tool = mcp_protocol::Tool::new(tool.name(), tool.input_schema())
-        .with_description(tool.description());
-
-    if let Some(output_schema) = tool.output_schema() {
-        mcp_tool = mcp_tool.with_output_schema(output_schema);
-    }
-
-    if let Some(annotations) = tool.annotations() {
-        mcp_tool = mcp_tool.with_annotations(annotations);
-    }
-
-    mcp_tool
+    tool.to_tool()
 }
 
 #[cfg(test)]
@@ -95,63 +39,91 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
     use mcp_protocol::schema::JsonSchema;
+    use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolSchema, ToolAnnotations, ToolResult, CallToolResponse};
 
-    struct TestTool;
-
-    #[async_trait]
-    impl McpTool for TestTool {
-        fn name(&self) -> &str {
-            "test"
-        }
-
-        fn description(&self) -> &str {
-            "A test tool"
-        }
-
-        fn input_schema(&self) -> ToolSchema {
-            ToolSchema::object()
+    struct TestTool {
+        input_schema: ToolSchema,
+    }
+    
+    impl TestTool {
+        fn new() -> Self {
+            let input_schema = ToolSchema::object()
                 .with_properties(HashMap::from([
                     ("message".to_string(), JsonSchema::string()),
                 ]))
-                .with_required(vec!["message".to_string()])
+                .with_required(vec!["message".to_string()]);
+            Self { input_schema }
         }
+    }
 
-        async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+    // Implement all the fine-grained traits
+    impl HasBaseMetadata for TestTool {
+        fn name(&self) -> &str { "test" }
+        fn title(&self) -> Option<&str> { None }
+    }
+
+    impl HasDescription for TestTool {
+        fn description(&self) -> Option<&str> { Some("A test tool") }
+    }
+
+    impl HasInputSchema for TestTool {
+        fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+    }
+
+    impl HasOutputSchema for TestTool {
+        fn output_schema(&self) -> Option<&ToolSchema> { None }
+    }
+
+    impl HasAnnotations for TestTool {
+        fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    }
+
+    impl HasToolMeta for TestTool {
+        fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    }
+
+    // ToolDefinition is automatically implemented via blanket impl!
+
+    #[async_trait]
+    impl McpTool for TestTool {
+        async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResponse> {
             let message = args.get("message")
                 .and_then(|v| v.as_str())
-                .ok_or_else(|| McpError::missing_param("message"))?;
+                .ok_or_else(|| mcp_protocol::McpError::missing_param("message"))?;
 
-            Ok(vec![ToolResult::text(format!("Test: {}", message))])
+            let result = format!("Test: {}", message);
+            Ok(CallToolResponse::from_text(result))
         }
     }
 
     #[test]
     fn test_tool_trait() {
-        let tool = TestTool;
+        let tool = TestTool::new();
         assert_eq!(tool.name(), "test");
-        assert_eq!(tool.description(), "A test tool");
+        assert_eq!(tool.description(), Some("A test tool"));
         assert!(tool.annotations().is_none());
     }
 
     #[test]
     fn test_tool_conversion() {
-        let tool = TestTool;
+        let tool = TestTool::new();
         let mcp_tool = tool_to_descriptor(&tool);
         
         assert_eq!(mcp_tool.name, "test");
         assert_eq!(mcp_tool.description, Some("A test tool".to_string()));
-        assert_eq!(mcp_tool.input_schema.schema_type, "object");
+        // ToolSchema doesn't have schema_type field anymore, check structure instead
+        assert!(mcp_tool.input_schema.properties.is_some());
     }
 
     #[tokio::test]
     async fn test_tool_call() {
-        let tool = TestTool;
+        let tool = TestTool::new();
         let args = serde_json::json!({"message": "hello"});
         
         let result = tool.call(args, None).await.unwrap();
-        assert_eq!(result.len(), 1);
+        assert!(!result.content.is_empty());
         
-        if let ToolResult::Text { text } = &result[0] {
+        if let ToolResult::Text { text } = &result.content[0] {
             assert_eq!(text, "Test: hello");
         } else {
             panic!("Expected text result");
@@ -160,14 +132,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_tool_call_error() {
-        let tool = TestTool;
+        let tool = TestTool::new();
         let args = serde_json::json!({"wrong": "parameter"});
         
         let result = tool.call(args, None).await;
         assert!(result.is_err());
         
         let error = result.unwrap_err();
-        if let McpError::MissingParameter(param) = error {
+        if let mcp_protocol::McpError::MissingParameter(param) = error {
             assert_eq!(param, "message");
         } else {
             panic!("Expected MissingParameter error, got: {:?}", error);

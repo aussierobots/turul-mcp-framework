@@ -24,6 +24,7 @@ pub mod sampling;
 pub mod templates;
 pub mod elicitation;
 pub mod notifications;
+pub mod ping;
 pub mod schema;
 pub mod meta;
 pub mod traits;
@@ -36,32 +37,40 @@ mod compliance_test;
 // Re-export main types
 pub use version::McpVersion;
 pub use initialize::{
-    InitializeRequest, InitializeResponse, 
+    InitializeRequest, InitializeResult, 
     ClientCapabilities, ServerCapabilities, Implementation
 };
 pub use tools::{
     Tool, ToolResult, ToolSchema,
-    ListToolsRequest, ListToolsResponse,
-    CallToolRequest, CallToolResponse
+    ListToolsRequest, ListToolsResult,
+    CallToolRequest, CallToolResult
 };
 pub use resources::{
-    Resource, ResourceContent, ListResourcesRequest, ListResourcesResponse,
-    ReadResourceRequest, ReadResourceResponse, ResourceSubscription
+    Resource, ResourceContent, ListResourcesRequest, ListResourcesResult,
+    ReadResourceRequest, ReadResourceResult, ResourceSubscription,
+    SubscribeRequest, UnsubscribeRequest
 };
 pub use prompts::{
     Prompt, PromptMessage, PromptArgument,
-    GetPromptRequest, GetPromptResponse,
-    ListPromptsRequest, ListPromptsResponse
+    GetPromptRequest, GetPromptResult,
+    ListPromptsRequest, ListPromptsResult
+};
+pub use templates::{
+    Template, TemplateVariable, ListResourceTemplatesRequest, ListResourceTemplatesResult,
+    GetTemplateRequest, GetTemplateResponse, RenderTemplateRequest, RenderTemplateResponse
 };
 pub use elicitation::{
-    ElicitationRequest, ElicitationResponse, ElicitationRequestParams,
-    ElicitationRequestResult, ElicitationCancelledNotification, ElicitationBuilder
+    ElicitCreateRequest, ElicitCreateParams, ElicitResult, ElicitAction,
+    PrimitiveSchemaDefinition, ElicitationSchema, StringFormat, ElicitationBuilder
+};
+pub use ping::{
+    PingRequest, EmptyResult, EmptyParams
 };
 pub use notifications::{
     CancelledNotification, InitializedNotification, ProgressNotification, ProgressNotificationParams,
     LoggingMessageNotification, LoggingMessageNotificationParams,
-    ResourcesListChangedNotification, ResourceUpdatedNotification, ResourceUpdatedNotificationParams,
-    PromptsListChangedNotification, ToolsListChangedNotification, RootsListChangedNotification,
+    ResourceListChangedNotification, ResourceUpdatedNotification, ResourceUpdatedNotificationParams,
+    PromptListChangedNotification, ToolListChangedNotification, RootsListChangedNotification,
     NotificationParams, Notification
 };
 pub use schema::JsonSchema;

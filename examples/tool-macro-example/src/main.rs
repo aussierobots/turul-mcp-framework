@@ -5,6 +5,7 @@
 
 use mcp_derive::tool;
 use mcp_server::{McpServer, McpTool};
+use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -84,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("\n1. Testing divide tool:");
     println!("   Name: {}", divide_tool.name());
-    println!("   Description: {}", divide_tool.description());
+    println!("   Description: {}", divide_tool.description().unwrap_or("No description"));
     
     let test_args = serde_json::json!({ "a": 10.0, "b": 2.0 });
     match divide_tool.call(test_args, None).await {
@@ -94,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n2. Testing add tool:");
     println!("   Name: {}", add_tool.name());
-    println!("   Description: {}", add_tool.description());
+    println!("   Description: {}", add_tool.description().unwrap_or("No description"));
     
     let test_args = serde_json::json!({ "x": 5.5, "y": 3.2 });
     match add_tool.call(test_args, None).await {
@@ -104,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n3. Testing greet tool:");
     println!("   Name: {}", greet_tool.name());
-    println!("   Description: {}", greet_tool.description());
+    println!("   Description: {}", greet_tool.description().unwrap_or("No description"));
     
     let test_args = serde_json::json!({ "name": "Alice", "formal": false });
     match greet_tool.call(test_args, None).await {
@@ -114,7 +115,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n4. Testing text processing tool:");
     println!("   Name: {}", text_tool.name());
-    println!("   Description: {}", text_tool.description());
+    println!("   Description: {}", text_tool.description().unwrap_or("No description"));
     
     let test_args = serde_json::json!({ "text": "Hello World", "operation": "reverse" });
     match text_tool.call(test_args, None).await {

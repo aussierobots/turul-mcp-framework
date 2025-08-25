@@ -54,8 +54,9 @@ impl RequestId {
 }
 
 /// JSON-RPC version
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub enum JsonRpcVersion {
+    #[default]
     V2_0,
 }
 
@@ -67,11 +68,6 @@ impl JsonRpcVersion {
     }
 }
 
-impl Default for JsonRpcVersion {
-    fn default() -> Self {
-        JsonRpcVersion::V2_0
-    }
-}
 
 impl fmt::Display for JsonRpcVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

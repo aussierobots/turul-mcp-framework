@@ -19,12 +19,12 @@ pub struct SamplingRequest {
 /// Sampling response
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct SamplingResponse {
+pub struct SamplingResult {
     /// The sampled result
     pub result: Value,
 }
 
-impl SamplingResponse {
+impl SamplingResult {
     pub fn new(result: Value) -> Self {
         Self { result }
     }
@@ -97,10 +97,10 @@ pub struct CreateMessageRequest {
     pub params: CreateMessageParams,
 }
 
-/// Response for sampling/createMessage
+/// Result for sampling/createMessage (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CreateMessageResponse {
+pub struct CreateMessageResult {
     /// The generated message
     pub message: SamplingMessage,
     /// Model used for generation
@@ -193,7 +193,7 @@ impl CreateMessageRequest {
     }
 }
 
-impl CreateMessageResponse {
+impl CreateMessageResult {
     pub fn new(message: SamplingMessage, model: impl Into<String>) -> Self {
         Self {
             message,
@@ -275,8 +275,8 @@ impl HasParams for CreateMessageRequest {
     }
 }
 
-// Trait implementations for CreateMessageResponse
-impl HasData for CreateMessageResponse {
+// Trait implementations for CreateMessageResult
+impl HasData for CreateMessageResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
         data.insert("role".to_string(), Value::String(self.message.role.clone()));
@@ -289,15 +289,15 @@ impl HasData for CreateMessageResponse {
     }
 }
 
-impl HasMeta for CreateMessageResponse {
+impl HasMeta for CreateMessageResult {
     fn meta(&self) -> Option<HashMap<String, Value>> {
         self.meta.clone()
     }
 }
 
-impl RpcResult for CreateMessageResponse {}
+impl RpcResult for CreateMessageResult {}
 
-impl CreateMessageResult for CreateMessageResponse {
+impl crate::traits::CreateMessageResult for CreateMessageResult {
     fn role(&self) -> &str {
         &self.message.role
     }
@@ -314,3 +314,89 @@ impl CreateMessageResult for CreateMessageResponse {
         self.stop_reason.as_ref()
     }
 }
+
+// ===========================================
+// === Fine-Grained Sampling Traits ===
+// ===========================================
+
+/// Trait for sampling message metadata (role, content from MCP spec)
+pub trait HasSamplingMessageMetadata {
+    /// Role of the message (from spec)
+    fn role(&self) -> &str;
+    
+    /// Content of the message (from spec)
+    fn content(&self) -> &MessageContent;
+}
+
+/// Trait for sampling configuration (from CreateMessageRequest spec)
+pub trait HasSamplingConfig {
+    /// Maximum tokens to generate (required field from spec)
+    fn max_tokens(&self) -> u32;
+    
+    /// Temperature for sampling (optional from spec)
+    fn temperature(&self) -> Option<f64> {
+        None
+    }
+    
+    /// Stop sequences (optional from spec)
+    fn stop_sequences(&self) -> Option<&Vec<String>> {
+        None
+    }
+}
+
+/// Trait for sampling context (from CreateMessageRequest spec)
+pub trait HasSamplingContext {
+    /// Messages for context (required from spec)
+    fn messages(&self) -> &[SamplingMessage];
+    
+    /// System prompt (optional from spec)
+    fn system_prompt(&self) -> Option<&str> {
+        None
+    }
+    
+    /// Include context setting (optional from spec)
+    fn include_context(&self) -> Option<&str> {
+        None
+    }
+}
+
+/// Trait for model preferences (from CreateMessageRequest spec)
+pub trait HasModelPreferences {
+    /// Model preferences (optional from spec)
+    fn model_preferences(&self) -> Option<&Value> {
+        None
+    }
+    
+    /// Metadata (optional from spec)
+    fn metadata(&self) -> Option<&Value> {
+        None
+    }
+}
+
+/// Composed sampling definition trait (automatically implemented via blanket impl)
+pub trait SamplingDefinition: 
+    HasSamplingConfig + 
+    HasSamplingContext + 
+    HasModelPreferences 
+{
+    /// Convert to CreateMessageParams
+    fn to_create_params(&self) -> CreateMessageParams {
+        CreateMessageParams {
+            messages: self.messages().to_vec(),
+            model_preferences: self.model_preferences().cloned(),
+            system_prompt: self.system_prompt().map(|s| s.to_string()),
+            include_context: self.include_context().map(|s| s.to_string()),
+            temperature: self.temperature(),
+            max_tokens: self.max_tokens(),
+            stop_sequences: self.stop_sequences().cloned(),
+            metadata: self.metadata().cloned(),
+            meta: None,
+        }
+    }
+}
+
+// Blanket implementation: any type implementing the fine-grained traits automatically gets SamplingDefinition
+impl<T> SamplingDefinition for T 
+where 
+    T: HasSamplingConfig + HasSamplingContext + HasModelPreferences 
+{}

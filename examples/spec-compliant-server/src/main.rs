@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use mcp_derive::{McpTool, resource};
 use mcp_server::{McpServer, McpTool, McpResource, SessionContext};
 use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema};
+use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
 use mcp_protocol_2025_06_18::{
     Meta, ProgressToken, ResultWithMeta, HasData, HasMeta,
     JsonRpcRequest, JsonRpcResponse, RequestParams
@@ -52,28 +53,62 @@ impl ProcessDataTool {
 }
 
 /// A tool that demonstrates session-aware processing with _meta
-struct SessionAwareTool;
+struct SessionAwareTool {
+    input_schema: ToolSchema,
+}
 
-#[async_trait]
-impl McpTool for SessionAwareTool {
-    fn name(&self) -> &str {
-        "session_tool"
-    }
-    
-    fn description(&self) -> &str {
-        "A tool that uses session context and demonstrates _meta field handling"
-    }
-    
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
+impl SessionAwareTool {
+    fn new() -> Self {
+        let input_schema = ToolSchema::object()
             .with_properties(HashMap::from([
                 ("message".to_string(), JsonSchema::string().with_description("Message to process")),
                 ("include_session_info".to_string(), JsonSchema::boolean().with_description("Whether to include session information")),
             ]))
-            .with_required(vec!["message".to_string()])
+            .with_required(vec!["message".to_string()]);
+        Self { input_schema }
     }
+}
+
+impl HasBaseMetadata for SessionAwareTool {
+    fn name(&self) -> &str {
+        "session_tool"
+    }
+}
+
+impl HasDescription for SessionAwareTool {
+    fn description(&self) -> Option<&str> {
+        Some("A tool that uses session context and demonstrates _meta field handling")
+    }
+}
+
+impl HasInputSchema for SessionAwareTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+
+impl HasOutputSchema for SessionAwareTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for SessionAwareTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for SessionAwareTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
+}
+
+#[async_trait]
+impl McpTool for SessionAwareTool {
     
-    async fn call(&self, args: Value, session: Option<SessionContext>) -> mcp_server::McpResult<Vec<ToolResult>> {
+    async fn call(&self, args: Value, session: Option<SessionContext>) -> mcp_server::McpResult<CallToolResult> {
         let message = args["message"].as_str().unwrap_or("default");
         let include_session = args["include_session_info"].as_bool().unwrap_or(false);
         
@@ -100,7 +135,8 @@ impl McpTool for SessionAwareTool {
         // Convert to ToolResult
         let result_json = serde_json::to_value(result_with_meta).map_err(|e| e.to_string())?;
         
-        Ok(vec![ToolResult::text(format!("Result: {}", result_json))])
+        let results = vec![ToolResult::text(format!("Result: {}", result_json))];
+        Ok(CallToolResult::success(results))
     }
 }
 
@@ -217,7 +253,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         data: "example".to_string(),
         steps: 3,
     };
-    let session_tool = SessionAwareTool;
+    let session_tool = SessionAwareTool::new();
     
     // Create resources
     let status_resource = create_status_resource().await;

@@ -37,10 +37,15 @@ impl_serde_extractor!(crate::prompts::ListPromptsParams);
 impl_serde_extractor!(crate::prompts::GetPromptParams);
 impl_serde_extractor!(crate::completion::CompleteParams);
 impl_serde_extractor!(crate::logging::SetLevelParams);
-impl_serde_extractor!(crate::roots::ListRootsParams);
-// Note: ListResourceTemplatesParams doesn't exist - need to check templates module
-impl_serde_extractor!(crate::elicitation::ElicitationRequestParams);
+// Note: ListRootsRequest has no params per MCP spec
+impl_serde_extractor!(crate::templates::ListResourceTemplatesRequest);
+impl_serde_extractor!(crate::templates::GetTemplateRequest);
+impl_serde_extractor!(crate::templates::RenderTemplateRequest);
+impl_serde_extractor!(crate::elicitation::ElicitCreateParams);
 impl_serde_extractor!(crate::sampling::CreateMessageParams);
+impl_serde_extractor!(crate::ping::EmptyParams);
+impl_serde_extractor!(crate::resources::SubscribeRequest);
+impl_serde_extractor!(crate::resources::UnsubscribeRequest);
 
 /// Generic parameter extractor function that works with any type implementing SerdeParamExtractor
 pub fn extract_params<T>(params: json_rpc_server::RequestParams) -> Result<T, crate::McpError>

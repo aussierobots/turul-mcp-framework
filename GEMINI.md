@@ -2,18 +2,51 @@
 
 ## Project Overview
 
-This project is a production-ready Rust framework for building Model Context Protocol (MCP) servers. It is designed to be fully compliant with the MCP 2025-06-18 specification. The framework provides automatic session management, real-time notifications, and multiple development patterns to simplify the creation of MCP servers.
+This project provides a Rust framework for building Model Context Protocol (MCP) servers. It aims to be compliant with the MCP 2025-06-18 specification and offers various development patterns to simplify server creation.
 
-The project is structured as a Rust workspace containing several crates:
+The project is a Rust workspace with the following key crates:
 
 *   **`json-rpc-server`**: A transport-agnostic JSON-RPC 2.0 server implementation.
-*   **`mcp-protocol-2025-06-18`**: A complete implementation of the MCP 2025-06-18 specification.
-*   **`mcp-protocol`**: An alias crate for the current MCP version.
+*   **`mcp-protocol-2025-06-18`**: An implementation of the MCP 2025-06-18 specification.
+*   **`mcp-protocol`**: A crate that aliases the current MCP version.
 *   **`http-mcp-server`**: An HTTP transport layer with CORS and Server-Sent Events (SSE) support.
-*   **`mcp-server`**: A high-level framework with a builder pattern for easy server creation.
+*   **`mcp-server`**: A high-level framework for building MCP servers.
 *   **`mcp-derive`**: Procedural and declarative macros for simplified development.
 
-The framework is built on top of popular Rust libraries like Tokio, Hyper, and Serde.
+## Specification Compliance
+
+While the project implements a significant portion of the MCP 2025-06-18 specification, the claim of being "fully compliant" is not entirely accurate. The framework has a strong focus on the "tools" capability, and other features, while present in the protocol crate, are not as well-integrated into the high-level server framework.
+
+### Implemented Features
+- **✅ Tools**: Comprehensive support for defining and using tools.
+- **✅ Session Management**: Basic session management is in place.
+- **✅ Notifications**: Support for real-time notifications via SSE.
+- **✅ Development Patterns**: Multiple development patterns are supported (derive macros, function attributes, etc.).
+
+### Partially Implemented or Missing Features
+- **⚠️ Resources**: The `resources` capability is only partially implemented. The framework currently supports static resources, but lacks support for subscriptions and real-time updates as defined in the specification.
+- **⚠️ Dynamic Capabilities**: The framework does not support dynamic capabilities, where the server's capabilities can change at runtime.
+- **⚠️ `initialize` Request Handling**: The handling of the `initialize` request is not explicitly defined in the `mcp-server` framework, which is a critical part of the MCP specification.
+
+## Architecture Review
+
+The framework is generally well-structured, with a clear separation of concerns between the protocol implementation and the server framework. However, a detailed review has identified several architectural flaws and areas for improvement:
+
+*   **Inconsistent Feature Enablement:** The `McpServerBuilder` API is inconsistent. Some features are enabled with `with_...` methods, while others are not. This can be confusing for developers.
+*   **Lack of Clear Separation between Core and Optional Features:** The builder mixes core and optional MCP features, making it difficult to create minimal, compliant servers.
+*   **Incomplete `resources` Implementation:** The `resources` feature is not fully implemented, lacking support for subscriptions and real-time updates.
+*   **No Support for Dynamic Capabilities:** The framework does not support dynamic capabilities, which is a key feature of the MCP specification.
+*   **Missing `initialize` Request Handler:** The `mcp-server` framework lacks a dedicated handler for the `initialize` request.
+
+## Recommendations
+
+To improve the framework and move closer to full compliance with the MCP 2025-06-18 specification, the following actions are recommended:
+
+*   **Improve the `McpServerBuilder` API:** Create a more consistent and intuitive API for enabling and configuring MCP features.
+*   **Separate Core and Optional Features:** Refactor the builder to clearly distinguish between core and optional features.
+*   **Complete the `resources` Implementation:** Add support for resource subscriptions and real-time updates.
+*   **Implement Dynamic Capabilities:** Allow the server's capabilities to be updated at runtime.
+*   **Add an `initialize` Request Handler:** Implement a dedicated handler for the `initialize` request in the `mcp-server` framework.
 
 ## Development Patterns
 
@@ -30,28 +63,6 @@ The framework supports multiple development patterns to cater to different needs
 
 4.  **Manual Implementation**: Provides maximum control for complex logic, custom schemas, and advanced validation.
     *   **Examples**: `minimal-server`, `calculator-server`, `manual-tools-server`
-
-## MCP Protocol Features Demonstrated
-
-The examples in this repository cover the entire MCP 2025-06-18 specification.
-
-### Core Features
-- **✅ Tools**: All examples demonstrate tool implementation.
-- **✅ Resources**: Static and dynamic content serving (`resources-server`, `resource-server`, `dynamic-resource-server`).
-- **✅ Prompts**: AI interaction templates (`prompts-server`).
-- **✅ Completion**: Text completion and suggestions (`completion-server`).
-- **✅ Logging**: Dynamic log level management (`logging-server`).
-- **✅ Notifications**: Real-time SSE updates (`notification-server`).
-- **✅ Roots**: File system security boundaries (`roots-server`).
-- **✅ Sampling**: AI model integration (`sampling-server`).
-- **✅ Elicitation**: Structured user input collection (`elicitation-server`).
-
-### Advanced Features
-- **✅ Session Management**: State persistence across requests (`stateful-server`).
-- **✅ Progress Tracking**: Real-time operation monitoring (`notification-server`, `elicitation-server`).
-- **✅ Pagination**: Cursor-based navigation for large datasets (`pagination-server`).
-- **✅ Version Negotiation**: Protocol compatibility handling (`version-negotiation-server`).
-- **✅ Performance Testing**: Load and stress testing capabilities (`performance-testing`).
 
 ## Examples
 

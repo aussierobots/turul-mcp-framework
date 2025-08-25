@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 mcp-server.workspace = true
 mcp-protocol.workspace = true
+mcp-derive.workspace = true
 async-trait.workspace = true
 tokio.workspace = true
 tracing.workspace = true

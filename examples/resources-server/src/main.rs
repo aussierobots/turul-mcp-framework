@@ -9,6 +9,10 @@ use async_trait::async_trait;
 use mcp_server::{McpServer, McpResult};
 use mcp_server::McpResource;
 use mcp_protocol::resources::ResourceContent;
+use mcp_protocol::resources::{
+    HasResourceMetadata, HasResourceDescription, HasResourceContent, 
+    HasResourceAccess, HasResourceAnnotations, HasResourceMeta
+};
 use serde_json::json;
 use std::fs;
 use std::path::Path;
@@ -19,8 +23,8 @@ use chrono::{DateTime, Utc};
 /// Real-world use case: Central documentation hub for development teams
 struct ProjectDocumentationResource;
 
-#[async_trait]
-impl McpResource for ProjectDocumentationResource {
+// Fine-grained trait implementations
+impl HasResourceMetadata for ProjectDocumentationResource {
     fn uri(&self) -> &str {
         "docs://project"
     }
@@ -28,10 +32,32 @@ impl McpResource for ProjectDocumentationResource {
     fn name(&self) -> &str {
         "Project Documentation"
     }
+}
 
-    fn description(&self) -> &str {
-        "Comprehensive project documentation including setup, architecture, and guidelines"
+impl HasResourceDescription for ProjectDocumentationResource {
+    fn description(&self) -> Option<&str> {
+        Some("Comprehensive project documentation including setup, architecture, and guidelines")
     }
+}
+
+impl HasResourceContent for ProjectDocumentationResource {
+    fn mime_type(&self) -> Option<&str> {
+        Some("text/markdown")
+    }
+}
+
+impl HasResourceAccess for ProjectDocumentationResource {}
+impl HasResourceAnnotations for ProjectDocumentationResource {
+    fn annotations(&self) -> Option<&serde_json::Value> {
+        None
+    }
+}
+impl HasResourceMeta for ProjectDocumentationResource {}
+
+// ResourceDefinition is automatically implemented via blanket impl
+// Now implement the execution trait
+#[async_trait]
+impl McpResource for ProjectDocumentationResource {
 
     async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
         let mut contents = Vec::new();
@@ -103,8 +129,8 @@ impl McpResource for ProjectDocumentationResource {
 /// Real-world use case: Team API documentation accessible via MCP
 struct ApiDocumentationResource;
 
-#[async_trait]
-impl McpResource for ApiDocumentationResource {
+// Fine-grained trait implementations
+impl HasResourceMetadata for ApiDocumentationResource {
     fn uri(&self) -> &str {
         "docs://api"
     }
@@ -112,10 +138,30 @@ impl McpResource for ApiDocumentationResource {
     fn name(&self) -> &str {
         "API Documentation"
     }
+}
 
-    fn description(&self) -> &str {
-        "Complete API documentation with authentication, endpoints, examples and SDKs"
+impl HasResourceDescription for ApiDocumentationResource {
+    fn description(&self) -> Option<&str> {
+        Some("Complete API documentation with authentication, endpoints, examples and SDKs")
     }
+}
+
+impl HasResourceContent for ApiDocumentationResource {
+    fn mime_type(&self) -> Option<&str> {
+        Some("text/markdown")
+    }
+}
+
+impl HasResourceAccess for ApiDocumentationResource {}
+impl HasResourceAnnotations for ApiDocumentationResource {
+    fn annotations(&self) -> Option<&serde_json::Value> {
+        None
+    }
+}
+impl HasResourceMeta for ApiDocumentationResource {}
+
+#[async_trait]
+impl McpResource for ApiDocumentationResource {
 
     async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
         let api_docs_path = Path::new("data/api_docs.md");
@@ -152,8 +198,8 @@ impl McpResource for ApiDocumentationResource {
 /// Real-world use case: Production configuration management with external files
 struct ConfigurationResource;
 
-#[async_trait]
-impl McpResource for ConfigurationResource {
+// Fine-grained trait implementations
+impl HasResourceMetadata for ConfigurationResource {
     fn uri(&self) -> &str {
         "config://app"
     }
@@ -161,10 +207,30 @@ impl McpResource for ConfigurationResource {
     fn name(&self) -> &str {
         "Application Configuration"
     }
+}
 
-    fn description(&self) -> &str {
-        "Production application configuration loaded from external JSON file"
+impl HasResourceDescription for ConfigurationResource {
+    fn description(&self) -> Option<&str> {
+        Some("Production application configuration loaded from external JSON file")
     }
+}
+
+impl HasResourceContent for ConfigurationResource {
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
+}
+
+impl HasResourceAccess for ConfigurationResource {}
+impl HasResourceAnnotations for ConfigurationResource {
+    fn annotations(&self) -> Option<&serde_json::Value> {
+        None
+    }
+}
+impl HasResourceMeta for ConfigurationResource {}
+
+#[async_trait]
+impl McpResource for ConfigurationResource {
 
     async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
         let config_path = Path::new("data/app_config.json");
@@ -240,8 +306,8 @@ impl McpResource for ConfigurationResource {
 /// Real-world use case: Database schema documentation and migrations
 struct DatabaseSchemaResource;
 
-#[async_trait]
-impl McpResource for DatabaseSchemaResource {
+// Fine-grained trait implementations
+impl HasResourceMetadata for DatabaseSchemaResource {
     fn uri(&self) -> &str {
         "schema://database"
     }
@@ -249,10 +315,30 @@ impl McpResource for DatabaseSchemaResource {
     fn name(&self) -> &str {
         "Database Schema"
     }
+}
 
-    fn description(&self) -> &str {
-        "Production database schema with tables, indexes, and relationships"
+impl HasResourceDescription for DatabaseSchemaResource {
+    fn description(&self) -> Option<&str> {
+        Some("Production database schema with tables, indexes, and relationships")
     }
+}
+
+impl HasResourceContent for DatabaseSchemaResource {
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/sql")
+    }
+}
+
+impl HasResourceAccess for DatabaseSchemaResource {}
+impl HasResourceAnnotations for DatabaseSchemaResource {
+    fn annotations(&self) -> Option<&serde_json::Value> {
+        None
+    }
+}
+impl HasResourceMeta for DatabaseSchemaResource {}
+
+#[async_trait]
+impl McpResource for DatabaseSchemaResource {
 
     async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
         let schema_path = Path::new("data/database_schema.sql");
@@ -322,8 +408,8 @@ impl McpResource for DatabaseSchemaResource {
 /// System status resource providing real-time information
 struct SystemStatusResource;
 
-#[async_trait]
-impl McpResource for SystemStatusResource {
+// Fine-grained trait implementations
+impl HasResourceMetadata for SystemStatusResource {
     fn uri(&self) -> &str {
         "status://system"
     }
@@ -331,10 +417,30 @@ impl McpResource for SystemStatusResource {
     fn name(&self) -> &str {
         "System Status"
     }
+}
 
-    fn description(&self) -> &str {
-        "Real-time system status and health metrics"
+impl HasResourceDescription for SystemStatusResource {
+    fn description(&self) -> Option<&str> {
+        Some("Real-time system status and health metrics")
     }
+}
+
+impl HasResourceContent for SystemStatusResource {
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
+}
+
+impl HasResourceAccess for SystemStatusResource {}
+impl HasResourceAnnotations for SystemStatusResource {
+    fn annotations(&self) -> Option<&serde_json::Value> {
+        None
+    }
+}
+impl HasResourceMeta for SystemStatusResource {}
+
+#[async_trait]
+impl McpResource for SystemStatusResource {
 
     async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
         let now: DateTime<Utc> = Utc::now();

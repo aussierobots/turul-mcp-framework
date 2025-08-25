@@ -8,31 +8,61 @@
 //!
 //! ```rust,no_run
 //! use mcp_server::{McpServer, McpTool, SessionContext};
-//! use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema};
+//! use mcp_protocol::{CallToolResult, tools::*};
 //! use serde_json::json;
 //! use async_trait::async_trait;
+//! use std::collections::HashMap;
 //!
-//! struct EchoTool;
+//! struct EchoTool {
+//!     input_schema: ToolSchema,
+//! }
+//!
+//! impl EchoTool {
+//!     fn new() -> Self {
+//!         let input_schema = ToolSchema::object()
+//!             .with_properties(HashMap::from([
+//!                 ("text".to_string(), mcp_protocol::schema::JsonSchema::string())
+//!             ]))
+//!             .with_required(vec!["text".to_string()]);
+//!         Self { input_schema }
+//!     }
+//! }
+//!
+//! // Implement fine-grained traits for complete ToolDefinition
+//! impl HasBaseMetadata for EchoTool {
+//!     fn name(&self) -> &str { "echo" }
+//! }
+//!
+//! impl HasDescription for EchoTool {
+//!     fn description(&self) -> Option<&str> { Some("Echo back the input text") }
+//! }
+//!
+//! impl HasInputSchema for EchoTool {
+//!     fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+//! }
+//!
+//! impl HasOutputSchema for EchoTool {
+//!     fn output_schema(&self) -> Option<&ToolSchema> { None }
+//! }
+//!
+//! impl HasAnnotations for EchoTool {
+//!     fn annotations(&self) -> Option<&ToolAnnotations> { None }
+//! }
+//!
+//! impl HasToolMeta for EchoTool {
+//!     fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+//! }
+//!
+//! // ToolDefinition automatically implemented via trait composition!
 //!
 //! #[async_trait]
 //! impl McpTool for EchoTool {
-//!     fn name(&self) -> &str { "echo" }
-//!     fn description(&self) -> &str { "Echo back the input text" }
-//!     
-//!     fn input_schema(&self) -> ToolSchema {
-//!         ToolSchema::object()
-//!             .with_properties(std::collections::HashMap::from([
-//!                 ("text".to_string(), JsonSchema::string())
-//!             ]))
-//!             .with_required(vec!["text".to_string()])
-//!     }
-//!     
-//!     async fn call(&self, args: serde_json::Value, _session: Option<SessionContext>) -> crate::McpResult<Vec<ToolResult>> {
+//!     async fn call(&self, args: serde_json::Value, _session: Option<SessionContext>) -> crate::McpResult<CallToolResult> {
 //!         let text = args.get("text")
 //!             .and_then(|v| v.as_str())
 //!             .unwrap_or("No text provided");
 //!         
-//!         Ok(vec![ToolResult::text(format!("Echo: {}", text))])
+//!         Ok(CallToolResult::from_text(format!("Echo: {}", text)))
 //!     }
 //! }
 //!
@@ -41,11 +71,8 @@
 //!     let server = McpServer::builder()
 //!         .name("echo-server")
 //!         .version("1.0.0")
-//!         .tool(EchoTool)
+//!         .tool(EchoTool::new())
 //!         .build()?;
-//!     
-//!     // For HTTP transport, use:
-//!     // server.run_http("127.0.0.1:8000".parse()?).await?;
 //!     
 //!     server.run().await?;
 //!     Ok(())
@@ -55,6 +82,13 @@
 pub mod builder;
 pub mod tool;
 pub mod resource;
+pub mod elicitation;
+pub mod prompt;
+pub mod sampling;
+pub mod completion;
+pub mod logging;
+pub mod roots;
+pub mod notifications;
 pub mod server;
 pub mod handlers;
 pub mod session;
@@ -70,6 +104,13 @@ mod tests;
 pub use builder::McpServerBuilder;
 pub use tool::McpTool;
 pub use resource::McpResource;
+pub use elicitation::McpElicitation;
+pub use prompt::McpPrompt;
+pub use sampling::McpSampling;
+pub use completion::McpCompletion;
+pub use logging::McpLogger;
+pub use roots::McpRoot;
+pub use notifications::McpNotification;
 pub use server::McpServer;
 pub use handlers::*;
 pub use session::{SessionContext, SessionManager, SessionEvent};
@@ -78,6 +119,9 @@ pub use dispatch::{McpDispatcher, DispatchMiddleware, DispatchContext};
 // Re-export foundational types
 pub use json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
 pub use mcp_protocol::*;
+
+// Re-export builder pattern for Level 3 tool creation
+pub use mcp_protocol::tools::builder::{ToolBuilder, DynamicTool};
 
 // Explicitly re-export error types for convenience
 pub use mcp_protocol::{McpError, McpResult as ProtocolMcpResult};
@@ -112,4 +156,20 @@ pub enum McpFrameworkError {
     
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+}
+
+// Implement McpTool for DynamicTool (Level 3 builder pattern)
+#[async_trait::async_trait]
+impl McpTool for DynamicTool {
+    async fn call(&self, args: serde_json::Value, _session: Option<SessionContext>) -> McpResult<mcp_protocol::tools::CallToolResult> {
+        use mcp_protocol::tools::{HasOutputSchema, CallToolResult};
+
+        match self.execute(args).await {
+            Ok(result) => {
+                // Use smart response builder with automatic structured content
+                CallToolResult::from_result_with_schema(&result, self.output_schema())
+            }
+            Err(e) => Err(McpError::tool_execution(&e))
+        }
+    }
 }

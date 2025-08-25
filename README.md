@@ -100,17 +100,89 @@ impl AuditTool {
 - **`mcp-derive`** - Procedural and declarative macros
 - **`json-rpc-server`** - Transport-agnostic JSON-RPC 2.0 foundation
 
+### Fine-Grained Trait Architecture
+**Modern composable design pattern for all MCP areas:**
+
+```rust
+// Fine-grained trait composition for maximum flexibility
+impl HasBaseMetadata for MyTool {
+    fn name(&self) -> &str { "my_tool" }
+}
+
+impl HasDescription for MyTool {
+    fn description(&self) -> Option<&str> { Some("Tool description") }
+}
+
+// ... implement other trait aspects as needed
+
+// ToolDefinition automatically implemented via blanket impl
+// McpTool trait provides execution interface
+```
+
+**Supported Areas:**
+- **Tools** (`ToolDefinition`) - Dynamic tool execution with validation
+- **Resources** (`ResourceDefinition`) - Static and dynamic content serving  
+- **Prompts** (`PromptDefinition`) - AI interaction template generation
+- **Sampling** (`SamplingDefinition`) - AI model integration patterns
+- **Completion** (`CompletionDefinition`) - Context-aware text completion
+- **Logging** (`LoggerDefinition`) - Dynamic log level management  
+- **Roots** (`RootDefinition`) - Secure file system access boundaries
+- **Elicitation** (`ElicitationDefinition`) - Structured user input collection
+- **Notifications** (`NotificationDefinition`) - Real-time event broadcasting
+
+### Comprehensive Server Builder
+**All MCP areas supported with consistent builder pattern:**
+
+```rust
+let server = McpServer::builder()
+    .name("comprehensive-server")
+    .version("1.0.0")
+    .instructions("Full-featured MCP server with all areas")
+    // Tools
+    .tool(WeatherTool::new())
+    .tools(vec![CalculatorTool::new(), ValidationTool::new()])
+    // Resources  
+    .resource(AppConfigResource::new())
+    .resources(vec![LogsResource::new(), MetricsResource::new()])
+    // Prompts
+    .prompt_provider(CodeReviewPrompt::new()) 
+    .prompt_providers(vec![DocumentationPrompt::new(), TestPrompt::new()])
+    // Sampling
+    .sampling_provider(CreativeSampling::new())
+    .sampling_providers(vec![CodeSampling::new(), TechnicalSampling::new()])
+    // Completion
+    .completion_provider(IdeCompletion::new())
+    .completion_providers(vec![SqlCompletion::new(), JsonCompletion::new()])
+    // Logging
+    .logger(AuditLogger::new())
+    .loggers(vec![SecurityLogger::new(), PerformanceLogger::new()])
+    // Roots
+    .root_provider(WorkspaceRoot::new())
+    .root_providers(vec![ConfigRoot::new(), TempRoot::new()])
+    // Elicitation  
+    .elicitation_provider(OnboardingElicitation::new())
+    .elicitation_providers(vec![SurveyElicitation::new(), FeedbackElicitation::new()])
+    // Notifications
+    .notification_provider(ProgressNotification::new())
+    .notification_providers(vec![AlertNotification::new(), StatusNotification::new()])
+    // Server configuration
+    .bind_address("127.0.0.1:8080".parse()?)
+    .build()?;
+```
+
 ### Complete MCP Implementation
-- ✅ **Tools** - Dynamic tool execution with validation
-- ✅ **Resources** - Static and dynamic content serving
-- ✅ **Prompts** - AI interaction template generation
-- ✅ **Completion** - Context-aware text completion
-- ✅ **Logging** - Dynamic log level management
-- ✅ **Notifications** - Real-time SSE event broadcasting
-- ✅ **Session Management** - Stateful operations with UUID v7
-- ✅ **Roots** - Secure file system access boundaries
-- ✅ **Sampling** - AI model integration patterns
-- ✅ **Elicitation** - Structured user input collection
+**All areas implemented with fine-grained trait architecture:**
+
+- ✅ **Tools** (`ToolDefinition`) - Dynamic tool execution with validation, schema generation, and metadata
+- ✅ **Resources** (`ResourceDefinition`) - Static and dynamic content serving with access control
+- ✅ **Prompts** (`PromptDefinition`) - AI interaction template generation with parameter validation
+- ✅ **Completion** (`CompletionDefinition`) - Context-aware text completion with model preferences  
+- ✅ **Logging** (`LoggerDefinition`) - Dynamic log level management with structured output
+- ✅ **Notifications** (`NotificationDefinition`) - Real-time SSE event broadcasting with filtering
+- ✅ **Roots** (`RootDefinition`) - Secure file system access boundaries with permissions
+- ✅ **Sampling** (`SamplingDefinition`) - AI model integration patterns with constraints
+- ✅ **Elicitation** (`ElicitationDefinition`) - Structured user input collection with validation
+- ✅ **Session Management** - Stateful operations with UUID v7 correlation IDs
 
 ### Transport Support
 - **HTTP/1.1 & HTTP/2** - Standard web transport
@@ -191,7 +263,10 @@ cargo run --bin performance_client -- throughput --concurrent 100
 
 ### 1. Derive Macros (Recommended)
 **Best for:** Type safety, IDE support, automatic schema generation
+
+**Available derive macros for all MCP areas:**
 ```rust
+// Tools
 #[derive(McpTool, Clone)]
 #[tool(name = "weather", description = "Get weather information")]
 struct WeatherTool {
@@ -200,6 +275,49 @@ struct WeatherTool {
     #[param(description = "Temperature unit", optional)]
     unit: Option<String>,
 }
+
+// Resources  
+#[derive(McpResource, Clone)]
+#[resource(uri = "config://app.json", description = "Application configuration")]
+struct AppConfigResource;
+
+// Prompts
+#[derive(McpPrompt, Clone)]  
+#[prompt(name = "code_review", description = "Generate code review prompts")]
+struct CodeReviewPrompt {
+    #[param(description = "Programming language")]
+    language: String,
+}
+
+// Sampling
+#[derive(McpSampling, Clone)]
+#[sampling(description = "Creative writing with style controls")]  
+struct CreativeSampling;
+
+// Completion
+#[derive(McpCompletion, Clone)]
+#[completion(description = "Context-aware IDE completions")]
+struct IdeCompletion;
+
+// Logging
+#[derive(McpLogger, Clone)]
+#[logger(name = "audit", description = "Compliance audit logging")]
+struct AuditLogger;
+
+// Roots  
+#[derive(McpRoot, Clone)]
+#[root(uri = "file:///workspace", description = "Project workspace")]
+struct WorkspaceRoot;
+
+// Elicitation
+#[derive(McpElicitation, Clone)]
+#[elicit(description = "Collect customer onboarding information")]
+struct OnboardingElicitation;
+
+// Notifications
+#[derive(McpNotification, Clone)]
+#[notification(method = "progress/update", description = "Progress updates")]
+struct ProgressNotification;
 ```
 
 ### 2. Function Attributes
@@ -230,15 +348,46 @@ tool! {
 }
 ```
 
-### 4. Manual Implementation
+### 4. Manual Implementation (Fine-Grained Traits)
 **Best for:** Maximum control, complex business logic
 ```rust
+use mcp_protocol::tools::*;
+
+struct CustomTool {
+    input_schema: ToolSchema,
+}
+
+// Implement fine-grained trait composition
+impl HasBaseMetadata for CustomTool {
+    fn name(&self) -> &str { "custom_business_logic" }
+}
+
+impl HasDescription for CustomTool {
+    fn description(&self) -> Option<&str> { Some("Custom business logic tool") }
+}
+
+impl HasInputSchema for CustomTool {
+    fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+}
+
+impl HasOutputSchema for CustomTool {
+    fn output_schema(&self) -> Option<&ToolSchema> { None }
+}
+
+impl HasAnnotations for CustomTool {
+    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+}
+
+impl HasToolMeta for CustomTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+}
+
+// ToolDefinition is automatically implemented via blanket impl!
+
 #[async_trait]
 impl McpTool for CustomTool {
-    fn name(&self) -> &str { "custom_business_logic" }
-
     async fn call(&self, args: Value, session: Option<SessionContext>)
-        -> McpResult<Vec<ToolResult>> {
+        -> McpResult<CallToolResult> {
         // Full control over implementation
     }
 }

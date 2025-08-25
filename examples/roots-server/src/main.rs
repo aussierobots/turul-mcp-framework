@@ -7,32 +7,68 @@
 use std::collections::HashMap;
 use async_trait::async_trait;
 use mcp_server::{McpServer, McpTool};
-use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, roots::Root, McpError, McpResult};
+use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, roots::Root, McpError, McpResult, CallToolResult};
+use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
 use serde_json::Value;
 use tracing::info;
 
 /// Tool to list all available roots
-struct ListRootsTool;
+struct ListRootsTool {
+    input_schema: ToolSchema,
+}
 
-#[async_trait]
-impl McpTool for ListRootsTool {
+impl ListRootsTool {
+    fn new() -> Self {
+        Self {
+            input_schema: ToolSchema::object()
+        }
+    }
+}
+
+// Implement fine-grained traits
+impl HasBaseMetadata for ListRootsTool {
     fn name(&self) -> &str {
         "list_roots"
     }
+}
 
-    fn description(&self) -> &str {
-        "List all available root directories that the server can access"
+impl HasDescription for ListRootsTool {
+    fn description(&self) -> Option<&str> {
+        Some("List all available root directories that the server can access")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
+impl HasInputSchema for ListRootsTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
     }
+}
 
+impl HasOutputSchema for ListRootsTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for ListRootsTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for ListRootsTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
+}
+
+#[async_trait]
+impl McpTool for ListRootsTool {
     async fn call(
         &self,
         _args: Value,
         _session: Option<mcp_server::SessionContext>,
-    ) -> McpResult<Vec<ToolResult>> {
+    ) -> McpResult<CallToolResult> {
         let results = vec![
             ToolResult::text("Available Root Directories:\n\
                 • file:///workspace - Project workspace directory\n\
@@ -47,37 +83,72 @@ impl McpTool for ListRootsTool {
                 - File operations are restricted to paths within these roots".to_string()),
         ];
 
-        Ok(results)
+        Ok(CallToolResult::success(results))
     }
 }
 
 /// Tool to inspect a specific root directory
-struct InspectRootTool;
+struct InspectRootTool {
+    input_schema: ToolSchema,
+}
 
-#[async_trait]
-impl McpTool for InspectRootTool {
-    fn name(&self) -> &str {
-        "inspect_root"
-    }
-
-    fn description(&self) -> &str {
-        "Inspect a specific root directory and show its properties"
-    }
-
-    fn input_schema(&self) -> ToolSchema {
+impl InspectRootTool {
+    fn new() -> Self {
         let mut properties = HashMap::new();
         properties.insert("root_uri".to_string(), JsonSchema::string());
         
-        ToolSchema::object()
+        let input_schema = ToolSchema::object()
             .with_properties(properties)
-            .with_required(vec!["root_uri".to_string()])
+            .with_required(vec!["root_uri".to_string()]);
+        
+        Self { input_schema }
     }
+}
+
+impl HasBaseMetadata for InspectRootTool {
+    fn name(&self) -> &str {
+        "inspect_root"
+    }
+}
+
+impl HasDescription for InspectRootTool {
+    fn description(&self) -> Option<&str> {
+        Some("Inspect a specific root directory and show its properties")
+    }
+}
+
+impl HasInputSchema for InspectRootTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+
+impl HasOutputSchema for InspectRootTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for InspectRootTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for InspectRootTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
+}
+
+#[async_trait]
+impl McpTool for InspectRootTool {
 
     async fn call(
         &self,
         args: Value,
         _session: Option<mcp_server::SessionContext>,
-    ) -> McpResult<Vec<ToolResult>> {
+    ) -> McpResult<CallToolResult> {
         let root_uri = args.get("root_uri")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("root_uri"))?;
@@ -133,38 +204,73 @@ impl McpTool for InspectRootTool {
         };
 
         let results = vec![ToolResult::text(root_info.to_string())];
-        Ok(results)
+        Ok(CallToolResult::success(results))
     }
 }
 
 /// Tool to simulate file operations within roots
-struct FileOperationTool;
+struct FileOperationTool {
+    input_schema: ToolSchema,
+}
 
-#[async_trait]
-impl McpTool for FileOperationTool {
-    fn name(&self) -> &str {
-        "simulate_file_operation"
-    }
-
-    fn description(&self) -> &str {
-        "Simulate file operations within root directories (read, write, list)"
-    }
-
-    fn input_schema(&self) -> ToolSchema {
+impl FileOperationTool {
+    fn new() -> Self {
         let mut properties = HashMap::new();
         properties.insert("operation".to_string(), JsonSchema::string());
         properties.insert("path".to_string(), JsonSchema::string());
         
-        ToolSchema::object()
+        let input_schema = ToolSchema::object()
             .with_properties(properties)
-            .with_required(vec!["operation".to_string(), "path".to_string()])
+            .with_required(vec!["operation".to_string(), "path".to_string()]);
+        
+        Self { input_schema }
     }
+}
+
+impl HasBaseMetadata for FileOperationTool {
+    fn name(&self) -> &str {
+        "simulate_file_operation"
+    }
+}
+
+impl HasDescription for FileOperationTool {
+    fn description(&self) -> Option<&str> {
+        Some("Simulate file operations within root directories (read, write, list)")
+    }
+}
+
+impl HasInputSchema for FileOperationTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+
+impl HasOutputSchema for FileOperationTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for FileOperationTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for FileOperationTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
+}
+
+#[async_trait]
+impl McpTool for FileOperationTool {
 
     async fn call(
         &self,
         args: Value,
         _session: Option<mcp_server::SessionContext>,
-    ) -> McpResult<Vec<ToolResult>> {
+    ) -> McpResult<CallToolResult> {
         let operation = args.get("operation")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("operation"))?;
@@ -235,32 +341,66 @@ impl McpTool for FileOperationTool {
         };
 
         let results = vec![ToolResult::text(result)];
-        Ok(results)
+        Ok(CallToolResult::success(results))
     }
 }
 
 /// Tool to demonstrate root security and permissions
-struct RootSecurityTool;
+struct RootSecurityTool {
+    input_schema: ToolSchema,
+}
 
-#[async_trait]
-impl McpTool for RootSecurityTool {
+impl RootSecurityTool {
+    fn new() -> Self {
+        let input_schema = ToolSchema::object();
+        Self { input_schema }
+    }
+}
+
+impl HasBaseMetadata for RootSecurityTool {
     fn name(&self) -> &str {
         "demonstrate_root_security"
     }
+}
 
-    fn description(&self) -> &str {
-        "Demonstrate how root directories provide security boundaries for file operations"
+impl HasDescription for RootSecurityTool {
+    fn description(&self) -> Option<&str> {
+        Some("Demonstrate how root directories provide security boundaries for file operations")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
+impl HasInputSchema for RootSecurityTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
     }
+}
+
+impl HasOutputSchema for RootSecurityTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for RootSecurityTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for RootSecurityTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
+}
+
+#[async_trait]
+impl McpTool for RootSecurityTool {
 
     async fn call(
         &self,
         _args: Value,
         _session: Option<mcp_server::SessionContext>,
-    ) -> McpResult<Vec<ToolResult>> {
+    ) -> McpResult<CallToolResult> {
         let results = vec![
             ToolResult::text("🔐 ROOT DIRECTORY SECURITY\n\
                 \n\
@@ -299,7 +439,7 @@ impl McpTool for RootSecurityTool {
                 🔒 Sandboxed execution environment".to_string()),
         ];
 
-        Ok(results)
+        Ok(CallToolResult::success(results))
     }
 }
 
@@ -328,10 +468,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .version("1.0.0")
         .title("MCP Roots Server Example")
         .instructions("This server demonstrates MCP roots functionality for file system access control and directory discovery. Roots define the boundaries of file operations and provide security isolation.")
-        .tool(ListRootsTool)
-        .tool(InspectRootTool)
-        .tool(FileOperationTool)
-        .tool(RootSecurityTool)
+        .tool(ListRootsTool::new())
+        .tool(InspectRootTool::new())
+        .tool(FileOperationTool::new())
+        .tool(RootSecurityTool::new())
         // Add root directories the server can access
         .root(workspace_root)
         .root(data_root)

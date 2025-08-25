@@ -4,31 +4,65 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
-/// Completion request parameters
+/// Reference types for completion (per MCP spec)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CompletionReference {
+    #[serde(rename = "ref/resource")]
+    Resource {
+        uri: String,
+    },
+    #[serde(rename = "ref/prompt")]
+    Prompt {
+        name: String,
+    },
+}
+
+/// Completion context (per MCP spec)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompletionContext {
+    /// Arguments context
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub arguments: Option<HashMap<String, String>>,
+}
+
+/// Argument being completed (per MCP spec)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompleteArgument {
+    /// Name of the argument
+    pub name: String,
+    /// Current value being completed
+    pub value: String,
+}
+
+/// Completion request parameters (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompleteParams {
-    /// The completion argument to complete
+    /// Reference to the prompt or resource being completed
+    pub r#ref: CompletionReference,
+    /// The argument being completed
     pub argument: CompleteArgument,
-    /// Reference to the tool or resource being completed
-    pub ref_value: Value,
-    /// Meta information (optional _meta field inside params)
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<std::collections::HashMap<String, Value>>,
+    /// Optional context
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<CompletionContext>,
 }
 
 impl CompleteParams {
-    pub fn new(argument: CompleteArgument, ref_value: Value) -> Self {
+    pub fn new(reference: CompletionReference, argument: CompleteArgument) -> Self {
         Self {
+            r#ref: reference,
             argument,
-            ref_value,
-            meta: None,
+            context: None,
         }
     }
 
-    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
+    pub fn with_context(mut self, context: CompletionContext) -> Self {
+        self.context = Some(context);
         self
     }
 }
@@ -44,52 +78,40 @@ pub struct CompleteRequest {
 }
 
 impl CompleteRequest {
-    pub fn new(argument: CompleteArgument, ref_value: Value) -> Self {
+    pub fn new(reference: CompletionReference, argument: CompleteArgument) -> Self {
         Self {
             method: "completion/complete".to_string(),
-            params: CompleteParams::new(argument, ref_value),
+            params: CompleteParams::new(reference, argument),
         }
     }
 
-    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
-        self.params = self.params.with_meta(meta);
+    pub fn with_context(mut self, context: CompletionContext) -> Self {
+        self.params = self.params.with_context(context);
         self
     }
 }
 
-/// Argument being completed
+
+/// Completion result (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CompleteArgument {
-    /// Name of the argument
-    pub name: String,
-    /// Current value being completed
-    pub value: String,
+pub struct CompletionResult {
+    /// The completion values
+    pub values: Vec<String>,
+    /// Optional total number of possible completions
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<u32>,
+    /// Whether there are more completions available
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub has_more: Option<bool>,
 }
 
-/// Completion suggestion
+/// Complete completion/complete response (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CompletionSuggestion {
-    /// The completion value
-    pub value: String,
-    /// Optional human-readable label
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub label: Option<String>,
-    /// Optional description
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    /// Optional annotations for the completion suggestion
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub annotations: Option<Value>,
-}
-
-/// Completion response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CompletionResponse {
-    /// List of completion suggestions
-    pub completions: Vec<CompletionSuggestion>,
+pub struct CompleteResult {
+    /// The completion result
+    pub completion: CompletionResult,
     /// Meta information (follows MCP Result interface)
     #[serde(
         default,
@@ -97,114 +119,143 @@ pub struct CompletionResponse {
         alias = "_meta",
         rename = "_meta"
     )]
-    pub meta: Option<std::collections::HashMap<String, Value>>,
+    pub meta: Option<HashMap<String, Value>>,
 }
 
-impl CompletionSuggestion {
-    pub fn new(value: impl Into<String>) -> Self {
+impl CompletionResult {
+    pub fn new(values: Vec<String>) -> Self {
         Self {
-            value: value.into(),
-            label: None,
-            description: None,
-            annotations: None,
+            values,
+            total: None,
+            has_more: None,
         }
     }
 
-    pub fn with_label(mut self, label: impl Into<String>) -> Self {
-        self.label = Some(label.into());
+    pub fn with_total(mut self, total: u32) -> Self {
+        self.total = Some(total);
         self
     }
 
-    pub fn with_description(mut self, description: impl Into<String>) -> Self {
-        self.description = Some(description.into());
-        self
-    }
-
-    pub fn with_annotations(mut self, annotations: Value) -> Self {
-        self.annotations = Some(annotations);
+    pub fn with_has_more(mut self, has_more: bool) -> Self {
+        self.has_more = Some(has_more);
         self
     }
 }
 
-impl CompletionResponse {
-    pub fn new(completions: Vec<CompletionSuggestion>) -> Self {
-        Self { 
-            completions,
+impl CompleteResult {
+    pub fn new(completion: CompletionResult) -> Self {
+        Self {
+            completion,
             meta: None,
         }
     }
 
-    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 }
 
-// Trait implementations for completion
+/// Convenience constructors
+impl CompletionReference {
+    pub fn resource(uri: impl Into<String>) -> Self {
+        Self::Resource {
+            uri: uri.into(),
+        }
+    }
 
-use crate::traits::*;
-use std::collections::HashMap;
+    pub fn prompt(name: impl Into<String>) -> Self {
+        Self::Prompt {
+            name: name.into(),
+        }
+    }
+}
 
-// Trait implementations for CompleteParams
+impl CompleteArgument {
+    pub fn new(name: impl Into<String>, value: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            value: value.into(),
+        }
+    }
+}
+
+impl CompletionContext {
+    pub fn new() -> Self {
+        Self {
+            arguments: None,
+        }
+    }
+
+    pub fn with_arguments(mut self, arguments: HashMap<String, String>) -> Self {
+        self.arguments = Some(arguments);
+        self
+    }
+}
+
+// Trait implementations for protocol compliance
+use crate::traits::Params;
 impl Params for CompleteParams {}
 
-impl HasCompleteParams for CompleteParams {
-    fn reference(&self) -> &Value {
-        &self.ref_value
+// ===========================================
+// === Fine-Grained Completion Traits ===
+// ===========================================
+
+/// Trait for completion metadata (method, reference type)
+pub trait HasCompletionMetadata {
+    /// The completion method name
+    fn method(&self) -> &str;
+    
+    /// The reference being completed (prompt or resource)
+    fn reference(&self) -> &CompletionReference;
+}
+
+/// Trait for completion context (argument, context)
+pub trait HasCompletionContext {
+    /// The argument being completed
+    fn argument(&self) -> &CompleteArgument;
+    
+    /// Optional completion context
+    fn context(&self) -> Option<&CompletionContext> {
+        None
+    }
+}
+
+/// Trait for completion validation and processing
+pub trait HasCompletionHandling {
+    /// Validate the completion request
+    fn validate_request(&self, _request: &CompleteRequest) -> Result<(), String> {
+        Ok(())
     }
     
-    fn argument(&self) -> &CompleteArgument {
-        &self.argument
-    }
-    
-    fn context(&self) -> Option<&Value> {
-        None // CompleteParams doesn't have explicit context field
-    }
-}
-
-impl HasMetaParam for CompleteParams {
-    fn meta(&self) -> Option<&std::collections::HashMap<String, Value>> {
-        self.meta.as_ref()
+    /// Filter completion values based on current input
+    fn filter_completions(&self, values: Vec<String>, current_value: &str) -> Vec<String> {
+        // Default: simple prefix matching
+        values
+            .into_iter()
+            .filter(|v| v.to_lowercase().starts_with(&current_value.to_lowercase()))
+            .collect()
     }
 }
 
-// Trait implementations for CompleteRequest
-impl HasMethod for CompleteRequest {
-    fn method(&self) -> &str {
-        &self.method
+/// Composed completion definition trait (automatically implemented via blanket impl)
+pub trait CompletionDefinition: 
+    HasCompletionMetadata + 
+    HasCompletionContext + 
+    HasCompletionHandling 
+{
+    /// Convert this completion definition to a protocol CompleteRequest
+    fn to_complete_request(&self) -> CompleteRequest {
+        CompleteRequest::new(
+            self.reference().clone(),
+            self.argument().clone()
+        )
+        .with_context(self.context().cloned().unwrap_or_else(CompletionContext::new))
     }
 }
 
-impl HasParams for CompleteRequest {
-    fn params(&self) -> Option<&dyn Params> {
-        Some(&self.params)
-    }
-}
-
-// Trait implementations for CompletionResponse
-impl HasData for CompletionResponse {
-    fn data(&self) -> HashMap<String, Value> {
-        let mut data = HashMap::new();
-        data.insert("completion".to_string(), serde_json::to_value(&self.completions).unwrap_or(Value::Null));
-        data
-    }
-}
-
-impl HasMeta for CompletionResponse {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
-    }
-}
-
-impl RpcResult for CompletionResponse {}
-
-impl HasCompletionResult for CompletionResponse {
-    fn completion(&self) -> &Value {
-        // This is a design issue - trait expects &Value but we have Vec<CompletionSuggestion>
-        // For now, return a static empty array - this needs proper design consideration
-        static EMPTY: Value = Value::Array(vec![]);
-        &EMPTY
-    }
-}
-
-impl CompleteResult for CompletionResponse {}
+// Blanket implementation: any type implementing the fine-grained traits automatically gets CompletionDefinition
+impl<T> CompletionDefinition for T 
+where 
+    T: HasCompletionMetadata + HasCompletionContext + HasCompletionHandling 
+{}

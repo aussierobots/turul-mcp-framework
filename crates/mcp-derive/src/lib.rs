@@ -28,6 +28,15 @@ mod json_schema_derive;
 mod utils;
 mod macros;
 
+// New derive modules for all MCP areas
+mod elicitation_derive;
+mod prompt_derive;
+mod sampling_derive;
+mod completion_derive;
+mod logging_derive;
+mod roots_derive;
+mod notification_derive;
+
 #[cfg(test)]
 mod tests;
 
@@ -223,6 +232,160 @@ pub fn schema_for(input: TokenStream) -> TokenStream {
         Ok(tokens) => tokens,
         Err(err) => err.to_compile_error().into(),
     }
+}
+
+/// Derive macro for automatically implementing McpElicitation
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::McpElicitation;
+/// 
+/// #[derive(McpElicitation)]
+/// #[elicitation(message = "Please enter your details")]
+/// struct UserDetailsElicitation {
+///     name: String,
+///     email: String,
+/// }
+/// ```
+#[proc_macro_derive(McpElicitation, attributes(elicitation, field))]
+pub fn derive_mcp_elicitation(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    elicitation_derive::derive_mcp_elicitation_impl(input)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Derive macro for automatically implementing McpPrompt
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::McpPrompt;
+/// 
+/// #[derive(McpPrompt)]
+/// #[prompt(name = "code_review", description = "Review code")]
+/// struct CodeReviewPrompt {
+///     code: String,
+///     language: String,
+/// }
+/// ```
+#[proc_macro_derive(McpPrompt, attributes(prompt, argument))]
+pub fn derive_mcp_prompt(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    prompt_derive::derive_mcp_prompt_impl(input)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Derive macro for automatically implementing McpSampling
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::McpSampling;
+/// 
+/// #[derive(McpSampling)]
+/// #[sampling(model = "claude-3-haiku", temperature = 0.7)]
+/// struct TextGenerationSampling {
+///     prompt: String,
+///     max_tokens: u32,
+/// }
+/// ```
+#[proc_macro_derive(McpSampling, attributes(sampling, config))]
+pub fn derive_mcp_sampling(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    sampling_derive::derive_mcp_sampling_impl(input)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Derive macro for automatically implementing McpCompletion
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::McpCompletion;
+/// 
+/// #[derive(McpCompletion)]
+/// #[completion(reference = "prompt://code_assist")]
+/// struct CodeCompletionProvider {
+///     context: String,
+///     cursor_position: usize,
+/// }
+/// ```
+#[proc_macro_derive(McpCompletion, attributes(completion, reference))]
+pub fn derive_mcp_completion(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    completion_derive::derive_mcp_completion_impl(input)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Derive macro for automatically implementing McpLogger
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::McpLogger;
+/// 
+/// #[derive(McpLogger)]
+/// #[logger(name = "app_logger", level = "info")]
+/// struct ApplicationLogger {
+///     format: String,
+///     output_path: Option<String>,
+/// }
+/// ```
+#[proc_macro_derive(McpLogger, attributes(logger, level))]
+pub fn derive_mcp_logger(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    logging_derive::derive_mcp_logger_impl(input)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Derive macro for automatically implementing McpRoot
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::McpRoot;
+/// 
+/// #[derive(McpRoot)]
+/// #[root(uri = "file:///home/user/project", name = "Project Root")]
+/// struct ProjectRoot {
+///     path: String,
+///     read_only: bool,
+/// }
+/// ```
+#[proc_macro_derive(McpRoot, attributes(root, permission))]
+pub fn derive_mcp_root(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    roots_derive::derive_mcp_root_impl(input)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Derive macro for automatically implementing McpNotification
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::McpNotification;
+/// 
+/// #[derive(McpNotification)]
+/// #[notification(method = "notifications/custom/alert")]
+/// struct AlertNotification {
+///     message: String,
+///     severity: String,
+/// }
+/// ```
+#[proc_macro_derive(McpNotification, attributes(notification, payload))]
+pub fn derive_mcp_notification(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    notification_derive::derive_mcp_notification_impl(input)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
 }
 
 /// Declarative macro for creating simple tools

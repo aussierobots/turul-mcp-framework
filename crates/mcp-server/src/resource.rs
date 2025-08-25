@@ -4,41 +4,21 @@
 
 use async_trait::async_trait;
 use mcp_protocol::{McpResult, resources::ResourceContent};
+use mcp_protocol_2025_06_18::resources::ResourceDefinition;
 use serde_json::Value;
 
-
 /// High-level trait for implementing MCP resources
+/// 
+/// McpResource extends ResourceDefinition with execution capabilities.
+/// All metadata is provided by the ResourceDefinition trait, ensuring
+/// consistency between concrete Resource structs and dynamic implementations.
 #[async_trait]
-pub trait McpResource: Send + Sync {
-    /// The URI identifier for this resource
-    fn uri(&self) -> &str;
-
-    /// Human-readable name
-    fn name(&self) -> &str;
-
-    /// Description of the resource
-    fn description(&self) -> &str;
-
-    /// Optional MIME type hint
-    fn mime_type(&self) -> Option<&str> {
-        None
-    }
-
-    /// Optional annotations for client hints
-    fn annotations(&self) -> Option<Value> {
-        None
-    }
-
+pub trait McpResource: ResourceDefinition + Send + Sync {
     /// Read the resource content
     /// 
     /// The params parameter can contain read-specific parameters like file paths,
     /// query filters, or other resource-specific options.
     async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>>;
-
-    /// Optional: Check if resource supports subscriptions for real-time updates
-    fn supports_subscriptions(&self) -> bool {
-        false
-    }
 
     /// Optional: Subscribe to resource changes
     /// 
@@ -55,24 +35,20 @@ pub trait McpResource: Send + Sync {
 }
 
 /// Convert an McpResource trait object to a Resource descriptor
+/// 
+/// This is now a thin wrapper around the ResourceDefinition::to_resource() method
+/// for backward compatibility. New code should use resource.to_resource() directly.
 pub fn resource_to_descriptor(resource: &dyn McpResource) -> mcp_protocol::resources::Resource {
-    let mut mcp_resource = mcp_protocol::resources::Resource::new(resource.uri(), resource.name())
-        .with_description(resource.description());
-        
-    if let Some(mime_type) = resource.mime_type() {
-        mcp_resource = mcp_resource.with_mime_type(mime_type);
-    }
-    
-    if let Some(annotations) = resource.annotations() {
-        mcp_resource = mcp_resource.with_annotations(annotations);
-    }
-    
-    mcp_resource
+    resource.to_resource()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mcp_protocol_2025_06_18::resources::{
+        HasResourceMetadata, HasResourceDescription, HasResourceContent, 
+        HasResourceAccess, HasResourceAnnotations, HasResourceMeta
+    };
     use std::collections::HashMap;
 
     struct TestResource {
@@ -81,8 +57,8 @@ mod tests {
         content: String,
     }
 
-    #[async_trait]
-    impl McpResource for TestResource {
+    // Implement fine-grained traits
+    impl HasResourceMetadata for TestResource {
         fn uri(&self) -> &str {
             &self.uri
         }
@@ -90,15 +66,38 @@ mod tests {
         fn name(&self) -> &str {
             &self.name
         }
+    }
 
-        fn description(&self) -> &str {
-            "A test resource"
+    impl HasResourceDescription for TestResource {
+        fn description(&self) -> Option<&str> {
+            Some("A test resource")
         }
+    }
 
+    impl HasResourceContent for TestResource {
         fn mime_type(&self) -> Option<&str> {
             Some("text/plain")
         }
+    }
 
+    impl HasResourceAccess for TestResource {
+        fn supports_subscriptions(&self) -> bool {
+            false
+        }
+    }
+
+    impl HasResourceAnnotations for TestResource {
+        fn annotations(&self) -> Option<&serde_json::Value> {
+            None
+        }
+    }
+
+    impl HasResourceMeta for TestResource {}
+
+    // ResourceDefinition automatically implemented via blanket impl!
+
+    #[async_trait]
+    impl McpResource for TestResource {
         async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
             Ok(vec![ResourceContent::text(&self.content)])
         }

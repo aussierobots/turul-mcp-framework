@@ -8,31 +8,71 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use mcp_server::{McpServer, McpTool};
 use mcp_protocol::{ToolSchema, ToolResult, version::McpVersion, schema::JsonSchema, McpError, McpResult};
+use mcp_protocol::tools::CallToolResult;
+use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
 use serde_json::Value;
 use tracing::info;
 
 /// Simple version info tool that shows negotiated protocol version
-struct VersionInfoTool;
+struct VersionInfoTool {
+    input_schema: ToolSchema,
+}
 
-#[async_trait]
-impl McpTool for VersionInfoTool {
+impl VersionInfoTool {
+    fn new() -> Self {
+        Self {
+            input_schema: ToolSchema::object(),
+        }
+    }
+}
+
+// Implement fine-grained traits (MCP spec compliant)
+impl HasBaseMetadata for VersionInfoTool {
     fn name(&self) -> &str {
         "version_info"
     }
+}
 
-    fn description(&self) -> &str {
-        "Get information about the negotiated MCP protocol version and capabilities"
+impl HasDescription for VersionInfoTool {
+    fn description(&self) -> Option<&str> {
+        Some("Get information about the negotiated MCP protocol version and capabilities")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
+impl HasInputSchema for VersionInfoTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
     }
+}
+
+impl HasOutputSchema for VersionInfoTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None // Use default
+    }
+}
+
+impl HasAnnotations for VersionInfoTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None // Use default
+    }
+}
+
+impl HasToolMeta for VersionInfoTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None // Use default
+    }
+}
+
+// ToolDefinition is automatically implemented via blanket impl!
+
+#[async_trait]
+impl McpTool for VersionInfoTool {
 
     async fn call(
         &self,
         _args: Value,
         session: Option<mcp_server::SessionContext>,
-    ) -> McpResult<Vec<ToolResult>> {
+    ) -> McpResult<CallToolResult> {
         let mut results = vec![];
 
         if let Some(ctx) = session {
@@ -75,37 +115,75 @@ impl McpTool for VersionInfoTool {
             ));
         }
 
-        Ok(results)
+        Ok(CallToolResult::success(results))
     }
 }
 
 /// Test version negotiation with different client versions
-struct VersionTestTool;
+struct VersionTestTool {
+    input_schema: ToolSchema,
+}
 
-#[async_trait]
-impl McpTool for VersionTestTool {
-    fn name(&self) -> &str {
-        "test_version_negotiation"
-    }
-
-    fn description(&self) -> &str {
-        "Test version negotiation by simulating different client version requests"
-    }
-
-    fn input_schema(&self) -> ToolSchema {
+impl VersionTestTool {
+    fn new() -> Self {
         let mut properties = HashMap::new();
         properties.insert("client_version".to_string(), JsonSchema::string());
         
-        ToolSchema::object()
-            .with_properties(properties)
-            .with_required(vec!["client_version".to_string()])
+        Self {
+            input_schema: ToolSchema::object()
+                .with_properties(properties)
+                .with_required(vec!["client_version".to_string()])
+        }
     }
+}
+
+// Implement fine-grained traits (MCP spec compliant)
+impl HasBaseMetadata for VersionTestTool {
+    fn name(&self) -> &str {
+        "test_version_negotiation"
+    }
+}
+
+impl HasDescription for VersionTestTool {
+    fn description(&self) -> Option<&str> {
+        Some("Test version negotiation by simulating different client version requests")
+    }
+}
+
+impl HasInputSchema for VersionTestTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+
+impl HasOutputSchema for VersionTestTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None // Use default
+    }
+}
+
+impl HasAnnotations for VersionTestTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None // Use default
+    }
+}
+
+impl HasToolMeta for VersionTestTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None // Use default
+    }
+}
+
+// ToolDefinition is automatically implemented via blanket impl!
+
+#[async_trait]
+impl McpTool for VersionTestTool {
 
     async fn call(
         &self,
         args: Value,
         _session: Option<mcp_server::SessionContext>,
-    ) -> McpResult<Vec<ToolResult>> {
+    ) -> McpResult<CallToolResult> {
         let client_version = args.get("client_version")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("client_version"))?;
@@ -139,7 +217,7 @@ impl McpTool for VersionTestTool {
             )),
         ];
 
-        Ok(results)
+        Ok(CallToolResult::success(results))
     }
 }
 
@@ -156,8 +234,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .version("1.0.0")
         .title("MCP Protocol Version Negotiation Example")
         .instructions("This server demonstrates automatic MCP protocol version negotiation. The server supports versions 2024-11-05, 2025-03-26, and 2025-06-18, and will negotiate the best compatible version during initialization.")
-        .tool(VersionInfoTool)
-        .tool(VersionTestTool)
+        .tool(VersionInfoTool::new())
+        .tool(VersionTestTool::new())
         .bind_address("127.0.0.1:8049".parse()?)
         .build()?;
 

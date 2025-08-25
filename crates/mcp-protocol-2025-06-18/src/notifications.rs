@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::logging::LogLevel;
+use crate::logging::LoggingLevel;
 use json_rpc_server::types::RequestId;
 
 /// Base notification parameters that can include _meta
@@ -68,21 +68,21 @@ impl Notification {
 
 // ==== Specific Notification Types Following MCP Specification ====
 
-/// Method: "notifications/resources/listChanged"
+/// Method: "notifications/resources/list_changed" (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ResourcesListChangedNotification {
-    /// Method name (always "notifications/resources/listChanged")
+pub struct ResourceListChangedNotification {
+    /// Method name (always "notifications/resources/list_changed")
     pub method: String,
     /// Optional empty params with _meta support
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<NotificationParams>,
 }
 
-impl ResourcesListChangedNotification {
+impl ResourceListChangedNotification {
     pub fn new() -> Self {
         Self {
-            method: "notifications/resources/listChanged".to_string(),
+            method: "notifications/resources/list_changed".to_string(),
             params: None,
         }
     }
@@ -93,21 +93,21 @@ impl ResourcesListChangedNotification {
     }
 }
 
-/// Method: "notifications/tools/listChanged"
+/// Method: "notifications/tools/list_changed" (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ToolsListChangedNotification {
-    /// Method name (always "notifications/tools/listChanged")
+pub struct ToolListChangedNotification {
+    /// Method name (always "notifications/tools/list_changed")
     pub method: String,
     /// Optional empty params with _meta support
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<NotificationParams>,
 }
 
-impl ToolsListChangedNotification {
+impl ToolListChangedNotification {
     pub fn new() -> Self {
         Self {
-            method: "notifications/tools/listChanged".to_string(),
+            method: "notifications/tools/list_changed".to_string(),
             params: None,
         }
     }
@@ -118,21 +118,21 @@ impl ToolsListChangedNotification {
     }
 }
 
-/// Method: "notifications/prompts/listChanged"
+/// Method: "notifications/prompts/list_changed" (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PromptsListChangedNotification {
-    /// Method name (always "notifications/prompts/listChanged")
+pub struct PromptListChangedNotification {
+    /// Method name (always "notifications/prompts/list_changed")
     pub method: String,
     /// Optional empty params with _meta support
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<NotificationParams>,
 }
 
-impl PromptsListChangedNotification {
+impl PromptListChangedNotification {
     pub fn new() -> Self {
         Self {
-            method: "notifications/prompts/listChanged".to_string(),
+            method: "notifications/prompts/list_changed".to_string(),
             params: None,
         }
     }
@@ -143,11 +143,11 @@ impl PromptsListChangedNotification {
     }
 }
 
-/// Method: "notifications/roots/listChanged"
+/// Method: "notifications/roots/list_changed" (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RootsListChangedNotification {
-    /// Method name (always "notifications/roots/listChanged")
+    /// Method name (always "notifications/roots/list_changed")
     pub method: String,
     /// Optional empty params with _meta support
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -157,7 +157,7 @@ pub struct RootsListChangedNotification {
 impl RootsListChangedNotification {
     pub fn new() -> Self {
         Self {
-            method: "notifications/roots/listChanged".to_string(),
+            method: "notifications/roots/list_changed".to_string(),
             params: None,
         }
     }
@@ -349,29 +349,25 @@ pub struct LoggingMessageNotification {
 #[serde(rename_all = "camelCase")]
 pub struct LoggingMessageNotificationParams {
     /// Log level
-    pub level: LogLevel,
-    /// Log message
-    pub message: String,
+    pub level: LoggingLevel,
     /// Optional logger name
     #[serde(skip_serializing_if = "Option::is_none")]
     pub logger: Option<String>,
-    /// Optional additional data
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
+    /// Log data (per MCP spec - any serializable type)
+    pub data: Value,
     /// Optional MCP meta information
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<HashMap<String, Value>>,
 }
 
 impl LoggingMessageNotification {
-    pub fn new(level: LogLevel, message: impl Into<String>) -> Self {
+    pub fn new(level: LoggingLevel, data: Value) -> Self {
         Self {
             method: "notifications/message".to_string(),
             params: LoggingMessageNotificationParams {
                 level,
-                message: message.into(),
                 logger: None,
-                data: None,
+                data,
                 meta: None,
             },
         }
@@ -379,11 +375,6 @@ impl LoggingMessageNotification {
 
     pub fn with_logger(mut self, logger: impl Into<String>) -> Self {
         self.params.logger = Some(logger.into());
-        self
-    }
-
-    pub fn with_data(mut self, data: Value) -> Self {
-        self.params.data = Some(data);
         self
     }
 
@@ -406,57 +397,190 @@ impl HasMetaParam for NotificationParams {
     }
 }
 
-// Base notification trait implementations
-impl HasMethod for ResourcesListChangedNotification {
-    fn method(&self) -> &str {
-        &self.method
+// ===========================================
+// === Fine-Grained Notification Traits ===
+// ===========================================
+
+/// Trait for notification metadata (method, type info)
+pub trait HasNotificationMetadata {
+    /// The notification method name
+    fn method(&self) -> &str;
+    
+    /// Optional notification type or category
+    fn notification_type(&self) -> Option<&str> {
+        None
+    }
+    
+    /// Whether this notification requires acknowledgment
+    fn requires_ack(&self) -> bool {
+        false
     }
 }
 
-impl HasMethod for ToolsListChangedNotification {
-    fn method(&self) -> &str {
-        &self.method
+/// Trait for notification payload and data structure
+pub trait HasNotificationPayload {
+    /// Get the notification payload data
+    fn payload(&self) -> Option<&Value> {
+        None
+    }
+    
+    /// Serialize notification to JSON
+    fn serialize_payload(&self) -> Result<String, String> {
+        match self.payload() {
+            Some(data) => serde_json::to_string(data)
+                .map_err(|e| format!("Serialization error: {}", e)),
+            None => Ok("{}".to_string()),
+        }
     }
 }
 
-impl HasMethod for PromptsListChangedNotification {
-    fn method(&self) -> &str {
-        &self.method
+/// Trait for notification delivery rules and filtering
+pub trait HasNotificationRules {
+    /// Optional delivery priority (higher = more important)
+    fn priority(&self) -> u32 {
+        0
+    }
+    
+    /// Whether this notification can be batched with others
+    fn can_batch(&self) -> bool {
+        true
+    }
+    
+    /// Maximum retry attempts for delivery
+    fn max_retries(&self) -> u32 {
+        3
+    }
+    
+    /// Check if notification should be delivered
+    fn should_deliver(&self) -> bool {
+        true
     }
 }
 
-impl HasMethod for RootsListChangedNotification {
-    fn method(&self) -> &str {
-        &self.method
+/// Composed notification definition trait (automatically implemented via blanket impl)
+pub trait NotificationDefinition: 
+    HasNotificationMetadata + 
+    HasNotificationPayload + 
+    HasNotificationRules 
+{
+    /// Convert this notification definition to a base Notification
+    fn to_notification(&self) -> Notification {
+        let mut notification = Notification::new(self.method());
+        if let Some(payload) = self.payload() {
+            let mut params = NotificationParams::new();
+            // Add payload data to params.other
+            if let Ok(obj) = serde_json::from_value::<HashMap<String, Value>>(payload.clone()) {
+                params.other = obj;
+            }
+            notification = notification.with_params(params);
+        }
+        notification
+    }
+    
+    /// Validate this notification
+    fn validate(&self) -> Result<(), String> {
+        if self.method().is_empty() {
+            return Err("Notification method cannot be empty".to_string());
+        }
+        if !self.method().starts_with("notifications/") {
+            return Err("Notification method must start with 'notifications/'".to_string());
+        }
+        Ok(())
     }
 }
 
-impl HasMethod for ProgressNotification {
-    fn method(&self) -> &str {
-        &self.method
-    }
-}
+// Blanket implementation: any type implementing the fine-grained traits automatically gets NotificationDefinition
+impl<T> NotificationDefinition for T 
+where 
+    T: HasNotificationMetadata + HasNotificationPayload + HasNotificationRules 
+{}
 
-impl HasMethod for ResourceUpdatedNotification {
-    fn method(&self) -> &str {
-        &self.method
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
 
-impl HasMethod for CancelledNotification {
-    fn method(&self) -> &str {
-        &self.method
+    #[test]
+    fn test_resource_list_changed() {
+        let notification = ResourceListChangedNotification::new();
+        assert_eq!(notification.method, "notifications/resources/list_changed");
     }
-}
 
-impl HasMethod for InitializedNotification {
-    fn method(&self) -> &str {
-        &self.method
+    #[test]
+    fn test_tool_list_changed() {
+        let notification = ToolListChangedNotification::new();
+        assert_eq!(notification.method, "notifications/tools/list_changed");
     }
-}
 
-impl HasMethod for LoggingMessageNotification {
-    fn method(&self) -> &str {
-        &self.method
+    #[test]
+    fn test_prompt_list_changed() {
+        let notification = PromptListChangedNotification::new();
+        assert_eq!(notification.method, "notifications/prompts/list_changed");
+    }
+
+    #[test]
+    fn test_roots_list_changed() {
+        let notification = RootsListChangedNotification::new();
+        assert_eq!(notification.method, "notifications/roots/list_changed");
+    }
+
+    #[test]
+    fn test_progress_notification() {
+        let notification = ProgressNotification::new("token123", 50)
+            .with_total(100)
+            .with_message("Processing...");
+        
+        assert_eq!(notification.method, "notifications/progress");
+        assert_eq!(notification.params.progress_token, "token123");
+        assert_eq!(notification.params.progress, 50);
+        assert_eq!(notification.params.total, Some(100));
+        assert_eq!(notification.params.message, Some("Processing...".to_string()));
+    }
+
+    #[test]
+    fn test_resource_updated() {
+        let notification = ResourceUpdatedNotification::new("file:///test.txt");
+        assert_eq!(notification.method, "notifications/resources/updated");
+        assert_eq!(notification.params.uri, "file:///test.txt");
+    }
+
+    #[test]
+    fn test_cancelled_notification() {
+        use json_rpc_server::types::RequestId;
+        let notification = CancelledNotification::new(RequestId::Number(123))
+            .with_reason("User cancelled");
+        
+        assert_eq!(notification.method, "notifications/cancelled");
+        assert_eq!(notification.params.request_id, RequestId::Number(123));
+        assert_eq!(notification.params.reason, Some("User cancelled".to_string()));
+    }
+
+    #[test]
+    fn test_initialized_notification() {
+        let notification = InitializedNotification::new();
+        assert_eq!(notification.method, "notifications/initialized");
+    }
+
+    #[test]
+    fn test_logging_message_notification() {
+        use crate::logging::LoggingLevel;
+        let data = json!({"message": "Test log message", "context": "test"});
+        let notification = LoggingMessageNotification::new(LoggingLevel::Info, data.clone())
+            .with_logger("test-logger");
+        
+        assert_eq!(notification.method, "notifications/message");
+        assert_eq!(notification.params.level, LoggingLevel::Info);
+        assert_eq!(notification.params.logger, Some("test-logger".to_string()));
+        assert_eq!(notification.params.data, data);
+    }
+
+    #[test]
+    fn test_serialization() {
+        let notification = InitializedNotification::new();
+        let json = serde_json::to_string(&notification).unwrap();
+        assert!(json.contains("notifications/initialized"));
+        
+        let parsed: InitializedNotification = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.method, "notifications/initialized");
     }
 }

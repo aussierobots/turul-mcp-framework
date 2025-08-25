@@ -9,23 +9,17 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use mcp_server::{McpServer, McpTool, SessionContext};
 use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
+use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
 use serde_json::{Value, json};
 
 /// Shopping cart tool that maintains state across requests
-struct ShoppingCartTool;
+struct ShoppingCartTool {
+    input_schema: ToolSchema,
+}
 
-#[async_trait]
-impl McpTool for ShoppingCartTool {
-    fn name(&self) -> &str {
-        "shopping_cart"
-    }
-
-    fn description(&self) -> &str {
-        "Manage a shopping cart with persistent state across requests"
-    }
-
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
+impl ShoppingCartTool {
+    fn new() -> Self {
+        let input_schema = ToolSchema::object()
             .with_properties(HashMap::from([
                 ("action".to_string(), JsonSchema::string_enum(vec![
                     "add".to_string(), "remove".to_string(), "list".to_string(), "clear".to_string()
@@ -37,10 +31,50 @@ impl McpTool for ShoppingCartTool {
                 ("price".to_string(), JsonSchema::number()
                     .with_description("Item price (required for add)")),
             ]))
-            .with_required(vec!["action".to_string()])
+            .with_required(vec!["action".to_string()]);
+        Self { input_schema }
     }
+}
 
-    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+impl HasBaseMetadata for ShoppingCartTool {
+    fn name(&self) -> &str {
+        "shopping_cart"
+    }
+}
+
+impl HasDescription for ShoppingCartTool {
+    fn description(&self) -> Option<&str> {
+        Some("Manage a shopping cart with persistent state across requests")
+    }
+}
+
+impl HasInputSchema for ShoppingCartTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+
+impl HasOutputSchema for ShoppingCartTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for ShoppingCartTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for ShoppingCartTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
+}
+
+#[async_trait]
+impl McpTool for ShoppingCartTool {
+    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let action = args.get("action")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("action"))?;
@@ -164,25 +198,23 @@ impl McpTool for ShoppingCartTool {
         // Update session state
         session.set_typed_state("cart_items", &cart_items).unwrap();
 
-        Ok(vec![ToolResult::text(result.to_string())])
+        Ok(CallToolResult {
+            content: vec![ToolResult::text(result.to_string())],
+            is_error: None,
+            structured_content: None,
+            meta: None,
+        })
     }
 }
 
 /// User preferences tool that persists settings across sessions
-struct UserPreferencesTool;
+struct UserPreferencesTool {
+    input_schema: ToolSchema,
+}
 
-#[async_trait]
-impl McpTool for UserPreferencesTool {
-    fn name(&self) -> &str {
-        "user_preferences"
-    }
-
-    fn description(&self) -> &str {
-        "Manage user preferences with session persistence"
-    }
-
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
+impl UserPreferencesTool {
+    fn new() -> Self {
+        let input_schema = ToolSchema::object()
             .with_properties(HashMap::from([
                 ("action".to_string(), JsonSchema::string_enum(vec![
                     "set".to_string(), "get".to_string(), "list".to_string(), "reset".to_string()
@@ -192,10 +224,50 @@ impl McpTool for UserPreferencesTool {
                 ("value".to_string(), JsonSchema::object()
                     .with_description("Preference value (required for set)")),
             ]))
-            .with_required(vec!["action".to_string()])
+            .with_required(vec!["action".to_string()]);
+        Self { input_schema }
     }
+}
 
-    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+impl HasBaseMetadata for UserPreferencesTool {
+    fn name(&self) -> &str {
+        "user_preferences"
+    }
+}
+
+impl HasDescription for UserPreferencesTool {
+    fn description(&self) -> Option<&str> {
+        Some("Manage user preferences with session persistence")
+    }
+}
+
+impl HasInputSchema for UserPreferencesTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+
+impl HasOutputSchema for UserPreferencesTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for UserPreferencesTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for UserPreferencesTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
+}
+
+#[async_trait]
+impl McpTool for UserPreferencesTool {
+    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let action = args.get("action")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("action"))?;
@@ -264,31 +336,69 @@ impl McpTool for UserPreferencesTool {
                     "message": "All preferences cleared"
                 })
             }
-            _ => return Err(McpError::invalid_param_type("action", "add|remove|list|clear", action))
+            _ => return Err(McpError::invalid_param_type("action", "set|get|list|reset", action))
         };
 
-        Ok(vec![ToolResult::text(result.to_string())])
+        Ok(CallToolResult {
+            content: vec![ToolResult::text(result.to_string())],
+            is_error: None,
+            structured_content: None,
+            meta: None,
+        })
     }
 }
 
 /// Session information tool
-struct SessionInfoTool;
+struct SessionInfoTool {
+    input_schema: ToolSchema,
+}
 
-#[async_trait]
-impl McpTool for SessionInfoTool {
+impl SessionInfoTool {
+    fn new() -> Self {
+        let input_schema = ToolSchema::object();
+        Self { input_schema }
+    }
+}
+
+impl HasBaseMetadata for SessionInfoTool {
     fn name(&self) -> &str {
         "session_info"
     }
+}
 
-    fn description(&self) -> &str {
-        "Get information about the current session"
+impl HasDescription for SessionInfoTool {
+    fn description(&self) -> Option<&str> {
+        Some("Get information about the current session")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
+impl HasInputSchema for SessionInfoTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
     }
+}
 
-    async fn call(&self, _args: Value, session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+impl HasOutputSchema for SessionInfoTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for SessionInfoTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for SessionInfoTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
+}
+
+#[async_trait]
+impl McpTool for SessionInfoTool {
+    async fn call(&self, _args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
         if let Some(session) = session {
             let session_id = &session.session_id;
             let is_initialized = (session.is_initialized)();
@@ -300,12 +410,22 @@ impl McpTool for SessionInfoTool {
                 "note": "Full state introspection not available in current API"
             });
 
-            Ok(vec![ToolResult::text(info.to_string())])
+            Ok(CallToolResult {
+                content: vec![ToolResult::text(info.to_string())],
+                is_error: None,
+                structured_content: None,
+                meta: None,
+            })
         } else {
-            Ok(vec![ToolResult::text(json!({
-                "has_session": false,
-                "message": "No session context available"
-            }).to_string())])
+            Ok(CallToolResult {
+                content: vec![ToolResult::text(json!({
+                    "has_session": false,
+                    "message": "No session context available"
+                }).to_string())],
+                is_error: None,
+                structured_content: None,
+                meta: None,
+            })
         }
     }
 }
@@ -323,9 +443,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .version("1.0.0")
         .title("Stateful Server Example")
         .instructions("This server demonstrates session-based state management. State persists across requests within the same session and is automatically cleaned up when sessions expire.")
-        .tool(ShoppingCartTool)
-        .tool(UserPreferencesTool)
-        .tool(SessionInfoTool)
+        .tool(ShoppingCartTool::new())
+        .tool(UserPreferencesTool::new())
+        .tool(SessionInfoTool::new())
         .bind_address("127.0.0.1:8006".parse()?)
         .sse(true)
         .build()?;

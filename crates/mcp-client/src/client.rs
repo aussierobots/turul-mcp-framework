@@ -13,8 +13,8 @@ use crate::transport::{BoxedTransport, TransportFactory};
 
 // Re-export protocol types for convenience
 use mcp_protocol_2025_06_18::{
-    CallToolResponse, GetPromptResponse, InitializeResponse, ListPromptsResponse,
-    ListResourcesResponse, ListToolsResponse, Prompt, ReadResourceResponse, Resource, Tool,
+    CallToolResult, GetPromptResult, InitializeResult, ListPromptsResult,
+    ListResourcesResult, ListToolsResult, Prompt, ReadResourceResult, Resource, Tool,
     ToolResult,
 };
 
@@ -148,7 +148,7 @@ impl McpClient {
         let response = response?;
 
         // Parse initialize response
-        let init_response: InitializeResponse =
+        let init_response: InitializeResult =
             serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))
                 .map_err(|e| {
                     McpClientError::generic(format!("Failed to parse initialize response: {}", e))
@@ -275,7 +275,7 @@ impl McpClient {
         });
 
         let response = self.send_request_internal(request).await?;
-        let tools_response: ListToolsResponse =
+        let tools_response: ListToolsResult =
             serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
 
         debug!(count = tools_response.tools.len(), "Retrieved tools");
@@ -301,7 +301,7 @@ impl McpClient {
         });
 
         let response = self.send_request_internal(request).await?;
-        let call_response: CallToolResponse =
+        let call_response: CallToolResult =
             serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
 
         debug!(
@@ -324,7 +324,7 @@ impl McpClient {
         });
 
         let response = self.send_request_internal(request).await?;
-        let resources_response: ListResourcesResponse =
+        let resources_response: ListResourcesResult =
             serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
 
         debug!(
@@ -348,7 +348,7 @@ impl McpClient {
         });
 
         let response = self.send_request_internal(request).await?;
-        let read_response: ReadResourceResponse =
+        let read_response: ReadResourceResult =
             serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
 
         debug!(
@@ -371,7 +371,7 @@ impl McpClient {
         });
 
         let response = self.send_request_internal(request).await?;
-        let prompts_response: ListPromptsResponse =
+        let prompts_response: ListPromptsResult =
             serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
 
         debug!(count = prompts_response.prompts.len(), "Retrieved prompts");
@@ -402,7 +402,7 @@ impl McpClient {
         });
 
         let response = self.send_request_internal(request).await?;
-        let prompt_response: GetPromptResponse =
+        let prompt_response: GetPromptResult =
             serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
 
         debug!(

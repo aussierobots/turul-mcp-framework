@@ -93,7 +93,7 @@ impl JsonRpcErrorObject {
     }
 
     pub fn server_error(code: i64, message: &str, data: Option<Value>) -> Self {
-        assert!(code >= -32099 && code <= -32000, "Server error code must be in range -32099 to -32000");
+        assert!((-32099..=-32000).contains(&code), "Server error code must be in range -32099 to -32000");
         Self::new(
             JsonRpcErrorCode::ServerError(code),
             Some(message.to_string()),

@@ -1,16 +1,17 @@
 [package]
-name = "calculator-add-simple-server"
+name = "calculator-add-function-server"
 version = "0.1.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Example MCP calculator server using manual trait implementation"
+description = "Example MCP calculator server using function macro (Level 1)"
 
 [dependencies]
 mcp-server = { workspace = true }
 mcp-protocol = { workspace = true }
+mcp-derive = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }

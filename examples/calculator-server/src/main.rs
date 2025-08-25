@@ -12,7 +12,8 @@ use std::path::Path;
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, McpError, McpResult};
+use mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, McpError, McpResult, CallToolResult};
+use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
 use mcp_server::{McpServer, McpTool, SessionContext};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value, from_str};
@@ -119,41 +120,70 @@ impl BusinessCalculatorState {
 /// Financial calculations tool for investment analysis and loan calculations
 struct FinancialCalculatorTool {
     state: Arc<BusinessCalculatorState>,
+    input_schema: ToolSchema,
 }
 
 impl FinancialCalculatorTool {
     fn new(state: Arc<BusinessCalculatorState>) -> Self {
-        Self { state }
+        Self { 
+            state,
+            input_schema: ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("calculation_type".to_string(), JsonSchema::string_enum(vec![
+                        "compound_interest".to_string(), "present_value".to_string(), "net_present_value".to_string(),
+                        "internal_rate_of_return".to_string(), "loan_payment".to_string(), "break_even_analysis".to_string(),
+                        "depreciation".to_string(), "roi_calculation".to_string()
+                    ]).with_description("Type of financial calculation")),
+                    ("parameters".to_string(), JsonSchema::object()
+                        .with_description("Calculation parameters based on the calculation type")),
+                    ("include_explanation".to_string(), JsonSchema::boolean()
+                        .with_description("Include detailed explanation and formula breakdown")),
+                ]))
+                .with_required(vec!["calculation_type".to_string(), "parameters".to_string()])
+        }
+    }
+}
+
+// Implement fine-grained traits
+impl HasBaseMetadata for FinancialCalculatorTool {
+    fn name(&self) -> &str {
+        "calculate_financial"
+    }
+}
+
+impl HasDescription for FinancialCalculatorTool {
+    fn description(&self) -> Option<&str> {
+        Some("Perform financial calculations including compound interest, NPV, IRR, loan payments, and investment analysis")
+    }
+}
+
+impl HasInputSchema for FinancialCalculatorTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+
+impl HasOutputSchema for FinancialCalculatorTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for FinancialCalculatorTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for FinancialCalculatorTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
     }
 }
 
 #[async_trait]
 impl McpTool for FinancialCalculatorTool {
-    fn name(&self) -> &str {
-        "calculate_financial"
-    }
-
-    fn description(&self) -> &str {
-        "Perform financial calculations including compound interest, NPV, IRR, loan payments, and investment analysis"
-    }
-
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("calculation_type".to_string(), JsonSchema::string_enum(vec![
-                    "compound_interest".to_string(), "present_value".to_string(), "net_present_value".to_string(),
-                    "internal_rate_of_return".to_string(), "loan_payment".to_string(), "break_even_analysis".to_string(),
-                    "depreciation".to_string(), "roi_calculation".to_string()
-                ]).with_description("Type of financial calculation")),
-                ("parameters".to_string(), JsonSchema::object()
-                    .with_description("Calculation parameters based on the calculation type")),
-                ("include_explanation".to_string(), JsonSchema::boolean()
-                    .with_description("Include detailed explanation and formula breakdown")),
-            ]))
-            .with_required(vec!["calculation_type".to_string(), "parameters".to_string()])
-    }
-
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let calc_type = args.get("calculation_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("calculation_type"))?;
@@ -330,7 +360,7 @@ impl McpTool for FinancialCalculatorTool {
             }
         };
 
-        if include_explanation {
+        let results = if include_explanation {
             if let Some(formula_def) = self.state.formulas.financial_formulas.get(calc_type) {
                 let mut enhanced_result = result;
                 enhanced_result["detailed_explanation"] = json!({
@@ -338,54 +368,85 @@ impl McpTool for FinancialCalculatorTool {
                     "use_cases": formula_def.use_cases,
                     "parameters_guide": formula_def.parameters
                 });
-                Ok(vec![ToolResult::text(serde_json::to_string_pretty(&enhanced_result)?)])
+                vec![ToolResult::text(serde_json::to_string_pretty(&enhanced_result)?)]
             } else {
-                Ok(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)])
+                vec![ToolResult::text(serde_json::to_string_pretty(&result)?)]
             }
         } else {
-            Ok(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)])
-        }
+            vec![ToolResult::text(serde_json::to_string_pretty(&result)?)]
+        };
+
+        Ok(CallToolResult::success(results))
     }
 }
 
 /// Business metrics calculator for customer analytics and operational KPIs
 struct BusinessMetricsTool {
     state: Arc<BusinessCalculatorState>,
+    input_schema: ToolSchema,
 }
 
 impl BusinessMetricsTool {
     fn new(state: Arc<BusinessCalculatorState>) -> Self {
-        Self { state }
+        Self { 
+            state,
+            input_schema: ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("metric_type".to_string(), JsonSchema::string_enum(vec![
+                        "customer_lifetime_value".to_string(), "conversion_rate".to_string(), 
+                        "churn_rate".to_string(), "employee_productivity".to_string(),
+                        "customer_acquisition_cost".to_string(), "marketing_roi".to_string()
+                    ]).with_description("Type of business metric to calculate")),
+                    ("parameters".to_string(), JsonSchema::object()
+                        .with_description("Metric calculation parameters")),
+                    ("industry".to_string(), JsonSchema::string()
+                        .with_description("Industry for benchmark comparison (optional)")),
+                ]))
+                .with_required(vec!["metric_type".to_string(), "parameters".to_string()])
+        }
+    }
+}
+
+// Implement fine-grained traits
+impl HasBaseMetadata for BusinessMetricsTool {
+    fn name(&self) -> &str {
+        "calculate_business_metrics"
+    }
+}
+
+impl HasDescription for BusinessMetricsTool {
+    fn description(&self) -> Option<&str> {
+        Some("Calculate key business metrics including CLV, churn rate, conversion rates, employee productivity, and operational KPIs")
+    }
+}
+
+impl HasInputSchema for BusinessMetricsTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+
+impl HasOutputSchema for BusinessMetricsTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for BusinessMetricsTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for BusinessMetricsTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
     }
 }
 
 #[async_trait]
 impl McpTool for BusinessMetricsTool {
-    fn name(&self) -> &str {
-        "calculate_business_metrics"
-    }
-
-    fn description(&self) -> &str {
-        "Calculate key business metrics including CLV, churn rate, conversion rates, employee productivity, and operational KPIs"
-    }
-
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("metric_type".to_string(), JsonSchema::string_enum(vec![
-                    "customer_lifetime_value".to_string(), "conversion_rate".to_string(), 
-                    "churn_rate".to_string(), "employee_productivity".to_string(),
-                    "customer_acquisition_cost".to_string(), "marketing_roi".to_string()
-                ]).with_description("Type of business metric to calculate")),
-                ("parameters".to_string(), JsonSchema::object()
-                    .with_description("Metric calculation parameters")),
-                ("industry".to_string(), JsonSchema::string()
-                    .with_description("Industry for benchmark comparison (optional)")),
-            ]))
-            .with_required(vec!["metric_type".to_string(), "parameters".to_string()])
-    }
-
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let metric_type = args.get("metric_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("metric_type"))?;
@@ -557,7 +618,7 @@ impl McpTool for BusinessMetricsTool {
         };
 
         // Add industry benchmark comparison if industry specified
-        if let Some(industry_name) = industry {
+        let results = if let Some(industry_name) = industry {
             if let Some(industry_data) = self.state.benchmarks.industry_benchmarks.get(industry_name) {
                 let mut enhanced_result = result;
                 enhanced_result["industry_context"] = json!({
@@ -565,54 +626,87 @@ impl McpTool for BusinessMetricsTool {
                     "description": industry_data.description,
                     "relevant_benchmarks": industry_data.metrics.keys().collect::<Vec<_>>()
                 });
-                return Ok(vec![ToolResult::text(serde_json::to_string_pretty(&enhanced_result)?)]);
+                vec![ToolResult::text(serde_json::to_string_pretty(&enhanced_result)?)]
+            } else {
+                vec![ToolResult::text(serde_json::to_string_pretty(&result)?)]
             }
-        }
+        } else {
+            vec![ToolResult::text(serde_json::to_string_pretty(&result)?)]
+        };
 
-        Ok(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)])
+        Ok(CallToolResult::success(results))
     }
 }
 
 /// Industry benchmarking tool for comparing performance against industry standards
 struct IndustryBenchmarkTool {
     state: Arc<BusinessCalculatorState>,
+    input_schema: ToolSchema,
 }
 
 impl IndustryBenchmarkTool {
     fn new(state: Arc<BusinessCalculatorState>) -> Self {
-        Self { state }
+        Self { 
+            state,
+            input_schema: ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("industry".to_string(), JsonSchema::string_enum(vec![
+                        "technology".to_string(), "retail".to_string(), "manufacturing".to_string(),
+                        "financial_services".to_string(), "healthcare".to_string(), "hospitality".to_string(),
+                        "real_estate".to_string()
+                    ]).with_description("Industry sector for benchmarking")),
+                    ("metric_category".to_string(), JsonSchema::string_enum(vec![
+                        "all".to_string(), "profitability".to_string(), "efficiency".to_string(),
+                        "customer_metrics".to_string(), "financial_health".to_string()
+                    ]).with_description("Category of metrics to retrieve")),
+                    ("region".to_string(), JsonSchema::string()
+                        .with_description("Geographic region for regional adjustments (optional)")),
+                ]))
+                .with_required(vec!["industry".to_string()])
+        }
+    }
+}
+
+// Implement fine-grained traits
+impl HasBaseMetadata for IndustryBenchmarkTool {
+    fn name(&self) -> &str {
+        "get_industry_benchmarks"
+    }
+}
+
+impl HasDescription for IndustryBenchmarkTool {
+    fn description(&self) -> Option<&str> {
+        Some("Get industry benchmarks and performance standards for various business metrics across different industries")
+    }
+}
+
+impl HasInputSchema for IndustryBenchmarkTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+
+impl HasOutputSchema for IndustryBenchmarkTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for IndustryBenchmarkTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for IndustryBenchmarkTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
     }
 }
 
 #[async_trait]
 impl McpTool for IndustryBenchmarkTool {
-    fn name(&self) -> &str {
-        "get_industry_benchmarks"
-    }
-
-    fn description(&self) -> &str {
-        "Get industry benchmarks and performance standards for various business metrics across different industries"
-    }
-
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("industry".to_string(), JsonSchema::string_enum(vec![
-                    "technology".to_string(), "retail".to_string(), "manufacturing".to_string(),
-                    "financial_services".to_string(), "healthcare".to_string(), "hospitality".to_string(),
-                    "real_estate".to_string()
-                ]).with_description("Industry sector for benchmarking")),
-                ("metric_category".to_string(), JsonSchema::string_enum(vec![
-                    "all".to_string(), "profitability".to_string(), "efficiency".to_string(),
-                    "customer_metrics".to_string(), "financial_health".to_string()
-                ]).with_description("Category of metrics to retrieve")),
-                ("region".to_string(), JsonSchema::string()
-                    .with_description("Geographic region for regional adjustments (optional)")),
-            ]))
-            .with_required(vec!["industry".to_string()])
-    }
-
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let industry = args.get("industry")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("industry"))?;
@@ -676,7 +770,7 @@ impl McpTool for IndustryBenchmarkTool {
                 "growth_period_adjustments": self.state.benchmarks.economic_conditions.get("growth_period")
             });
 
-            Ok(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)])
+            Ok(CallToolResult::success(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)]))
         } else {
             let available_industries: Vec<String> = self.state.benchmarks.industry_benchmarks.keys().cloned().collect();
             Err(McpError::tool_execution(&format!(
@@ -691,38 +785,67 @@ impl McpTool for IndustryBenchmarkTool {
 /// Calculator documentation and templates tool
 struct CalculatorDocumentationTool {
     state: Arc<BusinessCalculatorState>,
+    input_schema: ToolSchema,
 }
 
 impl CalculatorDocumentationTool {
     fn new(state: Arc<BusinessCalculatorState>) -> Self {
-        Self { state }
+        Self { 
+            state,
+            input_schema: ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("doc_type".to_string(), JsonSchema::string_enum(vec![
+                        "formulas".to_string(), "templates".to_string(), "examples".to_string(), 
+                        "best_practices".to_string(), "all".to_string()
+                    ]).with_description("Type of documentation to retrieve")),
+                    ("category".to_string(), JsonSchema::string()
+                        .with_description("Specific formula category (financial, business_metrics, etc.)")),
+                ]))
+                .with_required(vec!["doc_type".to_string()])
+        }
+    }
+}
+
+// Implement fine-grained traits
+impl HasBaseMetadata for CalculatorDocumentationTool {
+    fn name(&self) -> &str {
+        "get_calculator_documentation"
+    }
+}
+
+impl HasDescription for CalculatorDocumentationTool {
+    fn description(&self) -> Option<&str> {
+        Some("Get comprehensive documentation, calculation templates, formulas, and usage guidelines for business calculations")
+    }
+}
+
+impl HasInputSchema for CalculatorDocumentationTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+
+impl HasOutputSchema for CalculatorDocumentationTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for CalculatorDocumentationTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for CalculatorDocumentationTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
     }
 }
 
 #[async_trait]
 impl McpTool for CalculatorDocumentationTool {
-    fn name(&self) -> &str {
-        "get_calculator_documentation"
-    }
-
-    fn description(&self) -> &str {
-        "Get comprehensive documentation, calculation templates, formulas, and usage guidelines for business calculations"
-    }
-
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("doc_type".to_string(), JsonSchema::string_enum(vec![
-                    "formulas".to_string(), "templates".to_string(), "examples".to_string(), 
-                    "best_practices".to_string(), "all".to_string()
-                ]).with_description("Type of documentation to retrieve")),
-                ("category".to_string(), JsonSchema::string()
-                    .with_description("Specific formula category (financial, business_metrics, etc.)")),
-            ]))
-            .with_required(vec!["doc_type".to_string()])
-    }
-
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let doc_type = args.get("doc_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("doc_type"))?;
@@ -753,13 +876,13 @@ impl McpTool for CalculatorDocumentationTool {
                     })
                 };
 
-                Ok(vec![ToolResult::text(serde_json::to_string_pretty(&formulas)?)])
+                Ok(CallToolResult::success(vec![ToolResult::text(serde_json::to_string_pretty(&formulas)?)]))
             },
             "templates" => {
-                Ok(vec![ToolResult::text(format!(
+                Ok(CallToolResult::success(vec![ToolResult::text(format!(
                     "{}\n\n## Data Sources\nFormulas loaded from: data/business_formulas.json\nBenchmarks loaded from: data/industry_benchmarks.yaml",
                     self.state.calculation_templates
-                ))])
+                ))]))
             },
             "examples" => {
                 let examples = json!({
@@ -812,7 +935,7 @@ impl McpTool for CalculatorDocumentationTool {
                     }
                 });
 
-                Ok(vec![ToolResult::text(serde_json::to_string_pretty(&examples)?)])
+                Ok(CallToolResult::success(vec![ToolResult::text(serde_json::to_string_pretty(&examples)?)]))
             },
             "all" => {
                 let comprehensive_doc = json!({
@@ -843,7 +966,7 @@ impl McpTool for CalculatorDocumentationTool {
                     }
                 });
 
-                Ok(vec![ToolResult::text(serde_json::to_string_pretty(&comprehensive_doc)?)])
+                Ok(CallToolResult::success(vec![ToolResult::text(serde_json::to_string_pretty(&comprehensive_doc)?)]))
             },
             _ => {
                 Err(McpError::invalid_param_type("doc_type", "formulas|templates|examples|best_practices|all", doc_type))

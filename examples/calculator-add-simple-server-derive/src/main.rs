@@ -1,27 +1,41 @@
 use mcp_derive::McpTool;
 use mcp_server::{McpResult, McpServer};
+use serde::{Serialize, Deserialize};
 use tracing::info;
+use std::collections::HashMap;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AdditionResult {
+    sum: f64,
+}
+
+impl mcp_protocol::schema::JsonSchemaGenerator for AdditionResult {
+    fn json_schema() -> mcp_protocol::tools::ToolSchema {
+        use mcp_protocol::schema::JsonSchema;
+        mcp_protocol::tools::ToolSchema::object()
+            .with_properties(HashMap::from([
+                ("sum".to_string(), JsonSchema::number())
+            ]))
+            .with_required(vec!["sum".to_string()])
+    }
+}
 
 #[derive(McpTool, Clone)]
-#[tool(name = "calculator_add_simple", description = "Add two numbers simple")]
-#[output_type(f64)]
-struct CalculatorAddSimpleTool {
+#[tool(name = "calculator_add_derive", description = "Add two numbers using derive macro (Level 2)")]
+#[output_type(AdditionResult)]
+struct CalculatorAddDeriveTool {
     #[param(description = "First number")]
     a: f64,
     #[param(description = "Second number")]
     b: f64,
 }
 
-impl CalculatorAddSimpleTool {
-    async fn execute(&self) -> McpResult<f64> {
-        Ok(self.a + self.b)
+impl CalculatorAddDeriveTool {
+    async fn execute(&self) -> McpResult<AdditionResult> {
+        Ok(AdditionResult { sum: self.a + self.b })
     }
 }
 
-// #[derive(Debug, Clone, Serialize)]
-// struct AdditionResult {
-//     result: f64,
-// }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -29,14 +43,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    info!("Starting calculator_add_simple server");
+    info!("Starting calculator_add_derive server");
     let server = McpServer::builder()
-        .name("calculator_add_simple")
+        .name("calculator_add_derive")
         .version("0.0.1")
-        .title("Calculator Add Simple Server")
-        .instructions("Add two numbers simple")
-        .tool(CalculatorAddSimpleTool { a: 0.0, b: 0.0 })
-        .bind_address("127.0.0.1:8645".parse()?)
+        .title("Calculator Add Derive Server")
+        .instructions("Add two numbers using derive macro (Level 2)")
+        .tool(CalculatorAddDeriveTool { a: 0.0, b: 0.0 })
+        .bind_address("127.0.0.1:8647".parse()?)
         .build()?;
 
     server.run().await?;

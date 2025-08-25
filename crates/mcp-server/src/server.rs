@@ -499,7 +499,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
 
         // Create response with negotiated version and adjusted capabilities
         let adjusted_capabilities = self.adjust_capabilities_for_version(negotiated_version);
-        let mut response = InitializeResponse::new(
+        let mut response = InitializeResult::new(
             negotiated_version,
             adjusted_capabilities,
             self.implementation.clone(),
@@ -569,7 +569,7 @@ impl JsonRpcHandler for ListToolsHandler {
             .map(|tool| tool_to_descriptor(tool.as_ref()))
             .collect();
 
-        let base_response = ListToolsResponse::new(tools.clone());
+        let base_response = ListToolsResult::new(tools.clone());
 
         // Add pagination metadata
         let has_more = false; // In a real implementation, this would depend on the actual data
@@ -664,14 +664,14 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         let args = call_params
             .arguments
             .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
-        match tool.execute(args, session_context).await {
+        match tool.call(args, session_context).await {
             Ok(response) => serde_json::to_value(response).map_err(|e| {
                 json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
             }),
             Err(error_msg) => {
                 error!("Tool execution error: {}", error_msg);
                 let error_content = vec![ToolResult::text(format!("Error: {}", error_msg))];
-                let response = CallToolResponse::error(error_content);
+                let response = CallToolResult::error(error_content);
                 serde_json::to_value(response).map_err(|e| {
                     json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
                 })
@@ -747,7 +747,7 @@ mod tests {
         let handler = ListToolsHandler::new(tools);
         let result = handler.handle("tools/list", None).await.unwrap();
 
-        let response: ListToolsResponse = serde_json::from_value(result).unwrap();
+        let response: ListToolsResult = serde_json::from_value(result).unwrap();
         assert_eq!(response.tools.len(), 1);
         assert_eq!(response.tools[0].name, "test");
     }
@@ -770,7 +770,7 @@ mod tests {
         );
 
         let result = handler.handle("tools/call", Some(params)).await.unwrap();
-        let response: CallToolResponse = serde_json::from_value(result).unwrap();
+        let response: CallToolResult = serde_json::from_value(result).unwrap();
 
         assert_eq!(response.content.len(), 1);
         if let ToolResult::Text { text } = &response.content[0] {

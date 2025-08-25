@@ -213,31 +213,66 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let expanded = quote! {
         {
             #[derive(Clone)]
-            struct #tool_name_ident;
+            struct #tool_name_ident {
+                input_schema: mcp_protocol::ToolSchema,
+            }
             
-            #[async_trait::async_trait]
-            impl mcp_server::McpTool for #tool_name_ident {
-                fn name(&self) -> &str {
-                    #tool_name
-                }
-                
-                fn description(&self) -> &str {
-                    #tool_description
-                }
-                
-                fn input_schema(&self) -> mcp_protocol::ToolSchema {
+            impl #tool_name_ident {
+                fn new() -> Self {
                     use std::collections::HashMap;
-                    
-                    mcp_protocol::ToolSchema::object()
+                    let input_schema = mcp_protocol::ToolSchema::object()
                         .with_properties(HashMap::from([
                             #(#schema_properties),*
                         ]))
                         .with_required(vec![
                             #(#required_fields),*
-                        ])
+                        ]);
+                    Self { input_schema }
                 }
-                
-                async fn call(&self, args: serde_json::Value, _session: Option<mcp_server::SessionContext>) -> mcp_server::McpResult<Vec<mcp_protocol::ToolResult>> {
+            }
+            
+            // Implement fine-grained traits
+            impl mcp_protocol::tools::HasBaseMetadata for #tool_name_ident {
+                fn name(&self) -> &str {
+                    #tool_name
+                }
+            }
+            
+            impl mcp_protocol::tools::HasDescription for #tool_name_ident {
+                fn description(&self) -> Option<&str> {
+                    Some(#tool_description)
+                }
+            }
+            
+            impl mcp_protocol::tools::HasInputSchema for #tool_name_ident {
+                fn input_schema(&self) -> &mcp_protocol::ToolSchema {
+                    &self.input_schema
+                }
+            }
+            
+            impl mcp_protocol::tools::HasOutputSchema for #tool_name_ident {
+                fn output_schema(&self) -> Option<&mcp_protocol::ToolSchema> {
+                    None
+                }
+            }
+            
+            impl mcp_protocol::tools::HasAnnotations for #tool_name_ident {
+                fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+                    None
+                }
+            }
+            
+            impl mcp_protocol::tools::HasToolMeta for #tool_name_ident {
+                fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+                    None
+                }
+            }
+            
+            // ToolDefinition automatically implemented via blanket impl!
+            
+            #[async_trait::async_trait]
+            impl mcp_server::McpTool for #tool_name_ident {
+                async fn call(&self, args: serde_json::Value, _session: Option<mcp_server::SessionContext>) -> mcp_server::McpResult<mcp_protocol::tools::CallToolResult> {
                     use serde_json::Value;
                     
                     // Extract parameters
@@ -247,14 +282,14 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                     let execute_fn = #execute_closure;
                     match execute_fn(#(#param_names),*).await {
                         Ok(result) => {
-                            Ok(vec![mcp_protocol::ToolResult::text(result)])
+                            Ok(mcp_protocol::tools::CallToolResult::success(vec![mcp_protocol::ToolResult::text(result)]))
                         }
                         Err(e) => Err(mcp_protocol::McpError::ToolExecutionError(e.to_string()))
                     }
                 }
             }
             
-            #tool_name_ident
+            #tool_name_ident::new()
         }
     };
     
