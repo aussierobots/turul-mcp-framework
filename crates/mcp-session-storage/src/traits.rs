@@ -84,42 +84,13 @@ impl SessionInfo {
     }
 }
 
-/// Stream information for SSE management
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct StreamInfo {
-    /// Stream identifier within session
-    pub stream_id: String,
-    /// Session this stream belongs to
-    pub session_id: String,
-    /// Stream creation timestamp
-    pub created_at: u64,
-    /// Last event ID sent on this stream (for resumability)
-    pub last_event_id: u64,
-    /// Stream metadata
-    pub metadata: HashMap<String, Value>,
-}
-
-impl StreamInfo {
-    pub fn new(session_id: String, stream_id: String) -> Self {
-        Self {
-            session_id,
-            stream_id,
-            created_at: chrono::Utc::now().timestamp_millis() as u64,
-            last_event_id: 0,
-            metadata: HashMap::new(),
-        }
-    }
-}
-
-/// Enhanced SSE event with proper metadata for resumability
+/// SSE event with proper metadata for resumability
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SseEvent {
     /// Monotonic event ID for ordering and resumability
     pub id: u64,
     /// Event timestamp (Unix millis)
     pub timestamp: u64,
-    /// Stream ID this event belongs to
-    pub stream_id: String,
     /// Event type for client-side filtering
     pub event_type: String,
     /// Event data payload
@@ -130,11 +101,10 @@ pub struct SseEvent {
 
 impl SseEvent {
     /// Create new event with auto-generated ID
-    pub fn new(stream_id: String, event_type: String, data: Value) -> Self {
+    pub fn new(event_type: String, data: Value) -> Self {
         Self {
             id: 0, // Will be set by SessionStorage when storing
             timestamp: chrono::Utc::now().timestamp_millis() as u64,
-            stream_id,
             event_type,
             data,
             retry: None,
@@ -208,39 +178,20 @@ pub trait SessionStorage: Send + Sync {
     async fn list_sessions(&self) -> Result<Vec<String>, Self::Error>;
 
     // ============================================================================
-    // Stream Management (for SSE)
-    // ============================================================================
-
-    /// Create a new stream within a session
-    async fn create_stream(&self, session_id: &str, stream_id: String) -> Result<StreamInfo, Self::Error>;
-
-    /// Get stream information
-    async fn get_stream(&self, session_id: &str, stream_id: &str) -> Result<Option<StreamInfo>, Self::Error>;
-
-    /// Update stream information
-    async fn update_stream(&self, stream_info: StreamInfo) -> Result<(), Self::Error>;
-
-    /// Delete a stream
-    async fn delete_stream(&self, session_id: &str, stream_id: &str) -> Result<bool, Self::Error>;
-
-    /// List all streams for a session
-    async fn list_streams(&self, session_id: &str) -> Result<Vec<String>, Self::Error>;
-
-    // ============================================================================
     // Event Management (for SSE resumability)
     // ============================================================================
 
-    /// Store an event for a specific stream (assigns unique event ID)
-    async fn store_event(&self, session_id: &str, stream_id: &str, mut event: SseEvent) -> Result<SseEvent, Self::Error>;
+    /// Store an event for a session (assigns unique event ID)
+    async fn store_event(&self, session_id: &str, event: SseEvent) -> Result<SseEvent, Self::Error>;
 
     /// Get events after a specific event ID (for resumability)
-    async fn get_events_after(&self, session_id: &str, stream_id: &str, after_event_id: u64) -> Result<Vec<SseEvent>, Self::Error>;
+    async fn get_events_after(&self, session_id: &str, after_event_id: u64) -> Result<Vec<SseEvent>, Self::Error>;
 
     /// Get recent events (for initial connection)  
-    async fn get_recent_events(&self, session_id: &str, stream_id: &str, limit: usize) -> Result<Vec<SseEvent>, Self::Error>;
+    async fn get_recent_events(&self, session_id: &str, limit: usize) -> Result<Vec<SseEvent>, Self::Error>;
 
     /// Delete old events (cleanup)
-    async fn delete_events_before(&self, session_id: &str, stream_id: &str, before_event_id: u64) -> Result<u64, Self::Error>;
+    async fn delete_events_before(&self, session_id: &str, before_event_id: u64) -> Result<u64, Self::Error>;
 
     // ============================================================================
     // Cleanup and Maintenance

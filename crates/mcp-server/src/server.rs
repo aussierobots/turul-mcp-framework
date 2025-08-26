@@ -194,7 +194,6 @@ impl McpServer {
                         
                         if let Err(e) = stream_manager.broadcast_to_session(
                             &session_id,
-                            "main",
                             event_type,
                             data,
                         ).await {

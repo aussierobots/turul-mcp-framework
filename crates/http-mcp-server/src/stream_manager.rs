@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::pin::Pin;
 use futures::{Stream, StreamExt};
 use hyper::{Response, StatusCode};
-use http_body_util::Full;
+use http_body_util::{StreamBody, BodyExt};
 use bytes::Bytes;
 use hyper::header::{CONTENT_TYPE, CACHE_CONTROL, ACCESS_CONTROL_ALLOW_ORIGIN};
 use serde_json::Value;
@@ -55,13 +55,12 @@ impl Default for StreamConfig {
     }
 }
 
-/// SSE stream wrapper that formats events properly
+/// SSE stream wrapper that formats events properly (one per session)
 pub struct SseStream {
     /// Underlying event stream
     stream: Pin<Box<dyn Stream<Item = SseEvent> + Send>>,
-    /// Stream metadata
+    /// Session metadata
     session_id: String,
-    stream_id: String,
 }
 
 impl SseStream {
@@ -70,14 +69,9 @@ impl SseStream {
         &self.session_id
     }
     
-    /// Get the stream ID within the session
-    pub fn stream_id(&self) -> &str {
-        &self.stream_id
-    }
-    
-    /// Get full stream identifier for logging
+    /// Get stream identifier for logging (same as session_id)
     pub fn stream_identifier(&self) -> String {
-        format!("{}:{}", self.session_id, self.stream_id)
+        self.session_id.clone()
     }
 }
 
@@ -113,9 +107,8 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
     pub async fn handle_sse_connection(
         &self,
         session_id: String,
-        stream_id: String,
         last_event_id: Option<u64>,
-    ) -> Result<Response<Full<Bytes>>, StreamError> {
+    ) -> Result<Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>, StreamError> {
         // Verify session exists
         if self.storage.get_session(&session_id).await
             .map_err(|e| StreamError::StorageError(e.to_string()))?
@@ -124,26 +117,14 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
             return Err(StreamError::SessionNotFound(session_id));
         }
 
-        // Create or get stream
-        let _stream_info = match self.storage.get_stream(&session_id, &stream_id).await
-            .map_err(|e| StreamError::StorageError(e.to_string()))?
-        {
-            Some(info) => info,
-            None => {
-                // Create new stream
-                self.storage.create_stream(&session_id, stream_id.clone()).await
-                    .map_err(|e| StreamError::StorageError(e.to_string()))?
-            }
-        };
-
-        // Create the SSE stream
-        let sse_stream = self.create_sse_stream(session_id.clone(), stream_id.clone(), last_event_id).await?;
+        // Create the SSE stream (one per session, as per SSE standard)
+        let sse_stream = self.create_sse_stream(session_id.clone(), last_event_id).await?;
 
         // Convert to HTTP response
         let response = self.stream_to_response(sse_stream).await;
 
-        info!("Created SSE connection: session={}, stream={}, last_event_id={:?}", 
-              session_id, stream_id, last_event_id);
+        info!("Created SSE connection: session={}, last_event_id={:?}", 
+              session_id, last_event_id);
 
         Ok(response)
     }
@@ -152,7 +133,6 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
     async fn create_sse_stream(
         &self,
         session_id: String,
-        stream_id: String,
         last_event_id: Option<u64>,
     ) -> Result<SseStream, StreamError> {
         // Get or create broadcaster for this session
@@ -161,16 +141,15 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
         // Create the combined stream
         let storage = self.storage.clone();
         let session_id_clone = session_id.clone();
-        let stream_id_clone = stream_id.clone();
         let config = self.config.clone();
 
         let combined_stream = async_stream::stream! {
             // 1. First, yield any historical events (resumability)
             if let Some(after_event_id) = last_event_id {
-                debug!("Replaying events after ID {} for session={}, stream={}", 
-                       after_event_id, session_id_clone, stream_id_clone);
+                debug!("Replaying events after ID {} for session={}", 
+                       after_event_id, session_id_clone);
                 
-                match storage.get_events_after(&session_id_clone, &stream_id_clone, after_event_id).await {
+                match storage.get_events_after(&session_id_clone, after_event_id).await {
                     Ok(events) => {
                         for event in events.into_iter().take(config.max_replay_events) {
                             yield event;
@@ -195,10 +174,8 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
                     event = receiver.recv() => {
                         match event {
                             Ok(event) => {
-                                // Only yield events for this specific stream
-                                if event.stream_id == stream_id_clone {
-                                    yield event;
-                                }
+                                // All events for this session (no stream filtering needed)
+                                yield event;
                             },
                             Err(broadcast::error::RecvError::Closed) => {
                                 debug!("Broadcaster closed for session={}", session_id_clone);
@@ -216,7 +193,6 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
                         let keepalive_event = SseEvent {
                             id: 0, // Keep-alive events don't need persistent IDs
                             timestamp: chrono::Utc::now().timestamp_millis() as u64,
-                            stream_id: stream_id_clone.clone(),
                             event_type: "ping".to_string(),
                             data: serde_json::json!({"type": "keepalive"}),
                             retry: None,
@@ -230,7 +206,6 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
         Ok(SseStream {
             stream: Box::pin(combined_stream),
             session_id,
-            stream_id,
         })
     }
 
@@ -249,29 +224,26 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
     }
 
     /// Convert SSE stream to HTTP response with proper headers
-    async fn stream_to_response(&self, sse_stream: SseStream) -> Response<Full<Bytes>> {
-        // Extract session and stream info before moving the stream
+    async fn stream_to_response(&self, sse_stream: SseStream) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>> {
+        // Extract session info before moving the stream
         let session_id = sse_stream.session_id().to_string();
-        let stream_id = sse_stream.stream_id().to_string();
         let stream_identifier = sse_stream.stream_identifier();
         
-        // Log stream creation with session and stream identifiers
+        // Log stream creation with session identifier
         info!("Converting SSE stream to HTTP response: {}", stream_identifier);
-        debug!("Stream details: session_id={}, stream_id={}", session_id, stream_id);
+        debug!("Stream details: session_id={}", session_id);
         
-        // Transform events to SSE format
-        let _formatted_stream = sse_stream.stream.map(|event| {
-            Ok::<_, hyper::Error>(event.format())
+        // Transform events to SSE format and create proper HTTP frames
+        let formatted_stream = sse_stream.stream.map(|event| {
+            let sse_formatted = event.format();
+            debug!("📡 Streaming SSE event: id={}, event_type={}", event.id, event.event_type);
+            Ok(hyper::body::Frame::data(Bytes::from(sse_formatted)))
         });
 
-        // Create body from stream with session and stream info
-        let sse_data = format!(
-            "data: {{\"type\":\"sse_stream\",\"session_id\":\"{}\",\"stream_id\":\"{}\",\"identifier\":\"{}\"}}\n\n",
-            session_id, stream_id, stream_identifier
-        );
-        let body = Full::new(Bytes::from(sse_data));
+        // Create streaming body from the actual event stream and box it
+        let body = StreamBody::new(formatted_stream).boxed_unsync();
 
-        // Build response with proper SSE headers
+        // Build response with proper SSE headers for streaming
         Response::builder()
             .status(StatusCode::OK)
             .header(CONTENT_TYPE, "text/event-stream")
@@ -286,34 +258,32 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
     pub async fn broadcast_to_session(
         &self,
         session_id: &str,
-        stream_id: &str,
         event_type: String,
         data: Value,
     ) -> Result<u64, StreamError> {
-        // Create the event
-        let event = SseEvent::new(stream_id.to_string(), event_type, data);
+        // Create the event (no stream_id needed)
+        let event = SseEvent::new(event_type, data);
 
         // Store event for resumability
-        let stored_event = self.storage.store_event(session_id, stream_id, event).await
+        let stored_event = self.storage.store_event(session_id, event).await
             .map_err(|e| StreamError::StorageError(e.to_string()))?;
 
+        // Get or create broadcaster for this session (ensure it exists for all events)
+        let broadcaster = self.get_or_create_broadcaster(session_id).await;
+        
         // Broadcast to real-time subscribers
-        if let Some(broadcaster) = self.broadcasters.read().await.get(session_id) {
-            // Send event to real-time subscribers
-            if let Err(e) = broadcaster.send(stored_event.clone()) {
-                match e {
-                    broadcast::error::SendError(_) => {
-                        debug!("Broadcast channel closed for session: {}", session_id);
-                        // Remove closed broadcaster
-                        let mut broadcasters = self.broadcasters.write().await;
-                        broadcasters.remove(session_id);
-                    }
+        if let Err(e) = broadcaster.send(stored_event.clone()) {
+            match e {
+                broadcast::error::SendError(_) => {
+                    debug!("No active SSE subscribers for session: {} (event will be available for reconnection)", session_id);
+                    // DON'T remove broadcaster - keep it for reconnections
+                    // Events are stored in session storage and will be replayed on reconnect
                 }
             }
         }
 
-        debug!("Broadcast event to session={}, stream={}, event_id={}", 
-               session_id, stream_id, stored_event.id);
+        debug!("Broadcast event to session={}, event_id={}", 
+               session_id, stored_event.id);
 
         Ok(stored_event.id)
     }
@@ -331,10 +301,7 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
         let mut failed_sessions = Vec::new();
 
         for session_id in session_ids {
-            // Use a default stream ID for server-wide notifications
-            let stream_id = "main";
-            
-            if let Err(e) = self.broadcast_to_session(&session_id, stream_id, event_type.clone(), data.clone()).await {
+            if let Err(e) = self.broadcast_to_session(&session_id, event_type.clone(), data.clone()).await {
                 error!("Failed to broadcast to session {}: {}", session_id, e);
                 failed_sessions.push(session_id);
             }
@@ -363,6 +330,73 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
         }
         
         cleaned_count
+    }
+
+    /// Create SSE stream for POST requests (MCP Streamable HTTP)
+    pub async fn create_post_sse_stream(
+        &self,
+        session_id: String,
+        response: mcp_json_rpc_server::JsonRpcResponse,
+    ) -> Result<hyper::Response<http_body_util::Full<bytes::Bytes>>, StreamError> {
+        // Verify session exists
+        if self.storage.get_session(&session_id).await
+            .map_err(|e| StreamError::StorageError(e.to_string()))?
+            .is_none() 
+        {
+            return Err(StreamError::SessionNotFound(session_id));
+        }
+
+        info!("Creating POST SSE stream for session: {}", session_id);
+
+        // Create the SSE response body
+        let response_json = serde_json::to_string(&response)
+            .map_err(|e| StreamError::StorageError(format!("Failed to serialize response: {}", e)))?;
+
+        // For MCP Streamable HTTP, we create an SSE stream that:
+        // 1. Sends any pending notifications for this session
+        // 2. Sends the JSON-RPC response as an SSE event
+        // 3. Closes the stream
+        
+        let mut sse_content = String::new();
+        
+        // 1. Include recent notifications that may have been generated during tool execution
+        // Note: Since tool notifications are processed asynchronously, we need to wait a moment
+        // and then check for recent events to include in the POST SSE response
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        
+        if let Ok(events) = self.storage.get_recent_events(&session_id, 10).await {
+            for event in events {
+                // Convert stored SSE event to notification JSON-RPC format  
+                if event.event_type != "ping" { // Skip keepalive events
+                    let notification_sse = format!(
+                        "event: data\ndata: {}\n\n",
+                        event.data
+                    );
+                    sse_content.push_str(&notification_sse);
+                    debug!("📤 Including notification in POST SSE stream: event_type={}", event.event_type);
+                }
+            }
+        }
+        
+        // 2. Add the JSON-RPC tool response
+        let response_sse = format!(
+            "event: data\ndata: {}\n\n",
+            response_json
+        );
+        sse_content.push_str(&response_sse);
+
+        debug!("📡 POST SSE response created: session={}, content_length={}", session_id, sse_content.len());
+
+        // Build response with proper SSE headers including MCP session ID
+        Ok(hyper::Response::builder()
+            .status(hyper::StatusCode::OK)
+            .header(hyper::header::CONTENT_TYPE, "text/event-stream")
+            .header(hyper::header::CACHE_CONTROL, "no-cache")
+            .header(hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN, &self.config.cors_origin)
+            .header("Connection", "keep-alive")
+            .header("Mcp-Session-Id", &session_id)
+            .body(http_body_util::Full::new(bytes::Bytes::from(sse_content)))
+            .unwrap())
     }
 
     /// Get statistics about active streams
@@ -421,7 +455,6 @@ mod tests {
         // Broadcast an event
         let event_id = manager.broadcast_to_session(
             &session_id,
-            "main",
             "test".to_string(),
             serde_json::json!({"message": "test"})
         ).await.unwrap();
@@ -429,7 +462,7 @@ mod tests {
         assert!(event_id > 0);
         
         // Verify event was stored
-        let events = storage.get_events_after(&session_id, "main", 0).await.unwrap();
+        let events = storage.get_events_after(&session_id, 0).await.unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].id, event_id);
     }

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response};
-use http_body_util::Full;
+use http_body_util::{Full, BodyExt};
 use bytes::Bytes;
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
@@ -261,7 +261,7 @@ impl<S: SessionStorage + 'static> HttpMcpServer<S> {
 async fn handle_request<S: SessionStorage + 'static>(
     req: Request<hyper::body::Incoming>,
     handler: SessionMcpHandler<S>,
-) -> std::result::Result<Response<Full<Bytes>>, hyper::Error> {
+) -> std::result::Result<Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>, hyper::Error> {
     let method = req.method().clone();
     let uri = req.uri().clone();
     let path = uri.path();
@@ -276,7 +276,7 @@ async fn handle_request<S: SessionStorage + 'static>(
                 error!("Request handling error: {}", err);
                 Response::builder()
                     .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Full::new(Bytes::from(format!("Internal Server Error: {}", err))))
+                    .body(Full::new(Bytes::from(format!("Internal Server Error: {}", err))).map_err(|never| match never {}).boxed_unsync())
                     .unwrap()
             }
         }
@@ -284,7 +284,7 @@ async fn handle_request<S: SessionStorage + 'static>(
         // 404 for other paths
         Response::builder()
             .status(hyper::StatusCode::NOT_FOUND)
-            .body(Full::new(Bytes::from("Not Found")))
+            .body(Full::new(Bytes::from("Not Found")).map_err(|never| match never {}).boxed_unsync())
             .unwrap()
     };
 

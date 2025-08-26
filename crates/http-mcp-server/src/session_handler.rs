@@ -24,7 +24,9 @@ use futures::Stream;
 use mcp_json_rpc_server::{
     JsonRpcDispatcher,
     r#async::SessionContext,
-    dispatch::{parse_json_rpc_message, JsonRpcMessage, JsonRpcMessageResult}
+    dispatch::{parse_json_rpc_message, JsonRpcMessage, JsonRpcMessageResult},
+    error::{JsonRpcError, JsonRpcErrorObject},
+    JsonRpcResponse
 };
 use mcp_session_storage::{SessionStorage, InMemorySessionStorage};
 use mcp_protocol::ServerCapabilities;
@@ -75,6 +77,24 @@ impl Body for SessionSseStream {
 
 /// HTTP body type for JSON-RPC responses
 type JsonRpcBody = Full<Bytes>;
+
+/// HTTP body type for unified MCP responses (can handle both JSON-RPC and streaming)
+type UnifiedMcpBody = http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>;
+
+/// Helper function to convert Full<Bytes> to UnsyncBoxBody<Bytes, hyper::Error>
+fn convert_to_unified_body(full_body: Full<Bytes>) -> UnifiedMcpBody {
+    full_body.map_err(|never| match never {}).boxed_unsync()
+}
+
+/// Helper function to create JSON-RPC error response as unified body
+fn jsonrpc_error_to_unified_body(error: JsonRpcError) -> Result<Response<UnifiedMcpBody>> {
+    let error_json = serde_json::to_string(&error)?;
+    Ok(Response::builder()
+        .status(StatusCode::OK) // JSON-RPC errors still use 200 OK
+        .header(CONTENT_TYPE, "application/json")
+        .body(convert_to_unified_body(Full::new(Bytes::from(error_json))))
+        .unwrap())
+}
 
 /// JSON-RPC 2.0 over HTTP handler with SessionStorage integration and SSE streaming bridge
 pub struct SessionMcpHandler<S: SessionStorage = InMemorySessionStorage> {
@@ -173,13 +193,25 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
     pub async fn handle_mcp_request(
         &self,
         req: Request<hyper::body::Incoming>,
-    ) -> Result<Response<Full<Bytes>>> {
+    ) -> Result<Response<UnifiedMcpBody>> {
         match req.method() {
-            &Method::POST => self.handle_json_rpc_request(req).await,
+            &Method::POST => {
+                let response = self.handle_json_rpc_request(req).await?;
+                Ok(response.map(convert_to_unified_body))
+            },
             &Method::GET => self.handle_sse_request(req).await,
-            &Method::DELETE => self.handle_delete_request(req).await,
-            &Method::OPTIONS => Ok(self.handle_preflight()),
-            _ => Ok(self.method_not_allowed()),
+            &Method::DELETE => {
+                let response = self.handle_delete_request(req).await?;
+                Ok(response.map(convert_to_unified_body))
+            },
+            &Method::OPTIONS => {
+                let response = self.handle_preflight();
+                Ok(response.map(convert_to_unified_body))
+            },
+            _ => {
+                let response = self.method_not_allowed();
+                Ok(response.map(convert_to_unified_body))
+            }
         }
     }
 
@@ -204,6 +236,14 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
             warn!("Invalid content type: {}", content_type);
             return Ok(bad_request_response("Content-Type must be application/json"));
         }
+
+        // Check if client accepts SSE for streaming responses (MCP Streamable HTTP)
+        let accept_header = req.headers()
+            .get(ACCEPT)
+            .and_then(|accept| accept.to_str().ok())
+            .unwrap_or("");
+        
+        let accepts_sse = accept_header.contains("text/event-stream");
 
         // Read request body
         let body = req.into_body();
@@ -314,11 +354,18 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
             }
         };
 
-        // Convert message result to HTTP response (always JSON-RPC 2.0 conformant)
+        // Convert message result to HTTP response
         match message_result {
             JsonRpcMessageResult::Response(response) => {
-                debug!("Sending JSON-RPC response");
-                Ok(jsonrpc_response_with_session(response, response_session_id)?)
+                if accepts_sse && response_session_id.is_some() {
+                    // MCP Streamable HTTP: Return SSE stream with the response
+                    debug!("Client accepts SSE - creating streaming response");
+                    self.create_post_sse_response(response, response_session_id.unwrap()).await
+                } else {
+                    // Standard JSON response
+                    debug!("Sending JSON-RPC response");
+                    Ok(jsonrpc_response_with_session(response, response_session_id)?)
+                }
             }
             JsonRpcMessageResult::Error(error) => {
                 warn!("Sending JSON-RPC error response");
@@ -337,11 +384,40 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
         }
     }
 
+    /// Create SSE response for POST request (MCP Streamable HTTP)
+    async fn create_post_sse_response(
+        &self,
+        response: JsonRpcResponse,
+        session_id: String,
+    ) -> Result<Response<JsonRpcBody>> {
+        debug!("Creating POST SSE stream for session: {}", session_id);
+        
+        // Create the SSE stream using StreamManager
+        // For POST requests, we return a stream that:
+        // 1. Sends any notifications related to the request
+        // 2. Sends the JSON-RPC response
+        // 3. Closes the stream after response
+        match self.stream_manager.create_post_sse_stream(
+            session_id.clone(),
+            response.clone(),
+        ).await {
+            Ok(sse_response) => {
+                debug!("Created POST SSE stream for session: {}", session_id);
+                Ok(sse_response)
+            }
+            Err(err) => {
+                error!("Failed to create POST SSE stream: {}", err);
+                // Fall back to JSON response
+                Ok(jsonrpc_response_with_session(response, Some(session_id))?)
+            }
+        }
+    }
+
     /// Handle Server-Sent Events requests (SSE for streaming)
     async fn handle_sse_request(
         &self,
         req: Request<hyper::body::Incoming>,
-    ) -> Result<Response<JsonRpcBody>> {
+    ) -> Result<Response<UnifiedMcpBody>> {
         // Check if client accepts SSE
         let headers = req.headers();
         let accept = headers
@@ -351,10 +427,15 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
 
         if !accept.contains("text/event-stream") {
             warn!("GET request received without SSE support - header does not contain 'text/event-stream'");
-            return Ok(Response::builder()
-                .status(StatusCode::NOT_ACCEPTABLE)
-                .body(Full::new(Bytes::from("SSE not accepted - missing 'text/event-stream' in Accept header")))
-                .unwrap());
+            let error = JsonRpcError::new(
+                None,
+                JsonRpcErrorObject::server_error(
+                    -32001,
+                    "SSE not accepted - missing 'text/event-stream' in Accept header",
+                    None
+                )
+            );
+            return jsonrpc_error_to_unified_body(error);
         }
 
         // Extract protocol version and session ID
@@ -368,20 +449,30 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
             Some(id) => id,
             None => {
                 warn!("Missing Mcp-Session-Id header for SSE request");
-                return Ok(Response::builder()
-                    .status(StatusCode::PRECONDITION_FAILED)
-                    .body(Full::new(Bytes::from("Missing Mcp-Session-Id header")))
-                    .unwrap());
+                let error = JsonRpcError::new(
+                    None,
+                    JsonRpcErrorObject::server_error(
+                        -32002,
+                        "Missing Mcp-Session-Id header",
+                        None
+                    )
+                );
+                return jsonrpc_error_to_unified_body(error);
             }
         };
 
         // Validate session exists (do NOT create if missing)
         if let Err(err) = self.validate_session_exists(&session_id).await {
             error!("Session validation failed for Session ID {}: {}", session_id, err);
-            return Ok(Response::builder()
-                .status(StatusCode::PRECONDITION_FAILED)
-                .body(Full::new(Bytes::from(format!("Session validation failed: {}", err))))
-                .unwrap());
+            let error = JsonRpcError::new(
+                None,
+                JsonRpcErrorObject::server_error(
+                    -32003,
+                    &format!("Session validation failed: {}", err),
+                    None
+                )
+            );
+            return jsonrpc_error_to_unified_body(error);
         }
 
         // Extract Last-Event-ID for resumability
@@ -389,19 +480,21 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
         
         debug!("Creating SSE stream for session: {} with last_event_id: {:?}", session_id, last_event_id);
         
-        // Use StreamManager to create proper SSE connection
+        // Use StreamManager to create proper SSE connection (one per session per SSE spec)
         match self.stream_manager.handle_sse_connection(
             session_id,
-            "main".to_string(), // Default stream ID for main session events
             last_event_id,
         ).await {
             Ok(response) => Ok(response),
             Err(err) => {
                 error!("Failed to create SSE connection: {}", err);
-                Ok(Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Full::new(Bytes::from(format!("SSE connection failed: {}", err))))
-                    .unwrap())
+                let error = JsonRpcError::new(
+                    None,
+                    JsonRpcErrorObject::internal_error(
+                        Some(format!("SSE connection failed: {}", err))
+                    )
+                );
+                jsonrpc_error_to_unified_body(error)
             }
         }
     }
@@ -477,5 +570,3 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
         }
     }
 }
-
-

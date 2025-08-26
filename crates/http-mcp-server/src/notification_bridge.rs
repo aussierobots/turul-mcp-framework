@@ -337,7 +337,6 @@ impl<S: SessionStorage + 'static> NotificationBroadcaster for StreamManagerNotif
         // Send via StreamManager with proper JSON-RPC format
         match self.stream_manager.broadcast_to_session(
             session_id,
-            "main", // Use main stream for all notifications
             notification.method.clone(), // Use actual MCP method name as event type
             sse_data
         ).await {

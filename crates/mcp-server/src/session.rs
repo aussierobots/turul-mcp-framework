@@ -171,10 +171,13 @@ impl SessionContext {
             let session_id = session_id.clone();
             Arc::new(move |event: SessionEvent| {
                 debug!("📜 send_notification closure called for session {}: {:?}", session_id, event);
-                futures::executor::block_on(async {
-                    match session_manager_for_notify.send_event_to_session(&session_id, event).await {
-                        Ok(_) => debug!("✅ send_event_to_session succeeded for session {}", session_id),
-                        Err(e) => error!("❌ send_event_to_session failed for session {}: {}", session_id, e),
+                // Use tokio::spawn to run async operation without blocking the current thread
+                let session_id_clone = session_id.clone();
+                let session_manager_clone = session_manager_for_notify.clone();
+                tokio::spawn(async move {
+                    match session_manager_clone.send_event_to_session(&session_id_clone, event).await {
+                        Ok(_) => debug!("✅ send_event_to_session succeeded for session {}", session_id_clone),
+                        Err(e) => error!("❌ send_event_to_session failed for session {}: {}", session_id_clone, e),
                     }
                 });
                 debug!("🚀 send_notification closure completed for session {}", session_id);
