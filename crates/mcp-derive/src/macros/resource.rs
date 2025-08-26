@@ -83,11 +83,11 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 }
                 
                 async fn subscribe(&self, _params: Option<serde_json::Value>) -> mcp_server::McpResult<()> {
-                    Err(mcp_protocol::McpError::InvalidParameters("subscribe not supported".to_string()))
+                    Err(mcp_protocol::McpError::validation("subscribe not supported"))
                 }
                 
                 async fn unsubscribe(&self, _params: Option<serde_json::Value>) -> mcp_server::McpResult<()> {
-                    Err(mcp_protocol::McpError::InvalidParameters("unsubscribe not supported".to_string()))
+                    Err(mcp_protocol::McpError::validation("unsubscribe not supported"))
                 }
             }
             

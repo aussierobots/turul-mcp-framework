@@ -8,6 +8,7 @@ This is the **mcp-framework** - a standalone, production-ready Rust framework fo
 
 ### Key Features
 - **Complete MCP 2025-06-18 Specification Support**: Full protocol compliance with latest features
+- **Zero-Configuration Framework**: Users NEVER specify method strings - framework auto-determines ALL methods from types
 - **Streamable HTTP Transport**: Integrated SSE support for real-time notifications
 - **Session Management**: UUID v7-based sessions with automatic cleanup
 - **Rich Trait System**: Comprehensive trait coverage for all MCP operations
@@ -33,6 +34,39 @@ mcp-framework/
 - **Session Cleanup**: Automatic cleanup every 60 seconds, 30-minute expiry
 - **SSE Integration**: Sessions provide broadcast channels for real-time notifications
 
+### 🚨 **CRITICAL: SSE Streaming Architecture Requirements**
+
+**MANDATORY SSE INFRASTRUCTURE INTEGRATION**: The framework has two SSE systems that MUST be connected:
+
+#### **StreamManager** (SSE HTTP Layer)
+- Creates proper SSE HTTP responses with session storage
+- Handles event persistence and Last-Event-ID resumability
+- Manages SSE connection lifecycle and stream management
+
+#### **NotificationBroadcaster** (Tool Event Layer)  
+- Receives notifications from tools via SessionContext
+- Processes and formats events for broadcast
+- Handles session-aware event routing
+
+#### **CRITICAL REQUIREMENT: Bridge Connection**
+These systems MUST be connected in `SessionMcpHandler`:
+
+```rust
+// REQUIRED ARCHITECTURE PATTERN:
+impl SessionMcpHandler {
+    fn new() -> Self {
+        let stream_manager = Arc::new(StreamManager::new());
+        let broadcaster = Arc::new(ChannelNotificationBroadcaster::new());
+        
+        // 🔑 MANDATORY: Bridge notification events to SSE streams
+        Self::bridge_notifications_to_streams(broadcaster.clone(), stream_manager.clone());
+    }
+}
+```
+
+**Without this bridge**: Tools send notifications → NotificationBroadcaster → **VOID** (events never reach SSE clients)  
+**With this bridge**: Tools send notifications → NotificationBroadcaster → **StreamManager** → SSE clients ✅
+
 ### MCP Protocol Version Support
 - **V2024_11_05**: Basic MCP without streamable HTTP
 - **V2025_03_26**: Streamable HTTP support 
@@ -50,6 +84,124 @@ use mcp_protocol_2025_06_18::resources::{HasResourceMetadata, ResourceDefinition
 ```
 
 The `mcp_protocol` crate is an alias to `mcp_protocol_2025_06_18` but provides future-proofing and consistency across the framework.
+
+## 🚨 CRITICAL: Zero-Configuration Design Principle
+
+### Framework Auto-Determines ALL Methods
+
+**ABSOLUTE RULE**: Users NEVER specify method strings anywhere. The framework automatically determines ALL MCP methods from type names:
+
+```rust
+// ✅ CORRECT - Zero Configuration
+#[derive(McpTool)]
+struct Calculator;  // Framework automatically maps to "tools/call"
+
+#[derive(McpNotification)]  
+struct ProgressNotification;  // Framework automatically maps to "notifications/progress"
+
+#[derive(McpResource)]
+struct FileResource;  // Framework automatically maps to "resources/read"
+
+let server = McpServer::builder()
+    .tool(Calculator::default())                   // Framework → tools/call
+    .notification_type::<ProgressNotification>()   // Framework → notifications/progress  
+    .resource(FileResource::default())             // Framework → resources/read
+    .build()?;
+```
+
+```rust  
+// ❌ WRONG - User specifying methods (NEVER DO THIS!)
+#[derive(McpNotification)]
+#[notification(method = "notifications/progress")]  // ❌ NO METHOD STRINGS!
+struct ProgressNotification;
+
+#[mcp_tool(method = "tools/call")]  // ❌ NO METHOD STRINGS!
+async fn calculator() -> Result<String, String> { Ok("result".to_string()) }
+```
+
+### Why This Matters
+
+1. **MCP Compliance Guaranteed**: Impossible to use wrong/invalid methods
+2. **Zero Configuration**: Developers focus on logic, not protocol details  
+3. **Type Safety**: Method mapping happens at compile time
+4. **Future Proof**: Framework can update methods without breaking user code
+5. **Developer Experience**: IntelliSense works perfectly, no memorizing method strings
+
+### Implementation Rule
+
+When creating examples or documentation:
+- ✅ Use derive macros WITHOUT method attributes
+- ✅ Use builder methods that accept types, not strings
+- ✅ Let framework determine methods automatically
+- ❌ NEVER show users specifying method strings
+- ❌ NEVER use method constants or manual method mapping
+
+## 🚨 CRITICAL: Component Extension Principle
+
+### Extend Existing Components, NEVER Create "Enhanced" Versions
+
+**ABSOLUTE RULE**: Improve existing framework components by extending their capabilities. NEVER create parallel "enhanced" or "advanced" versions that fragment the API.
+
+**❌ WRONG - Architecture Bloat**:
+```
+session_handler.rs (basic)
+enhanced_session_handler.rs (with SessionStorage)
+
+server.rs (basic)
+enhanced_server.rs (with SessionStorage)
+```
+
+**✅ CORRECT - Single Extensible Components**:
+```
+session_handler.rs (automatically works with SessionStorage, defaults to InMemory)
+server.rs (automatically works with SessionStorage, defaults to InMemory)
+```
+
+### Why This Matters
+
+1. **Zero Configuration**: Users get best implementation by default, no choice paralysis
+2. **No API Fragmentation**: One way to do things, not multiple competing approaches
+3. **Backward Compatibility**: Existing code continues working with improvements
+4. **Maintainability**: One component to maintain, not multiple parallel versions
+
+### Implementation Pattern
+
+```rust
+// ✅ CORRECT - Single component with pluggable backend
+pub struct SessionMcpHandler<S: SessionStorage = InMemorySessionStorage> {
+    storage: Arc<S>,
+    // ... other fields
+}
+
+// Zero-config constructor (defaults to InMemory)
+impl SessionMcpHandler<InMemorySessionStorage> {
+    pub fn new(config: ServerConfig, dispatcher: Arc<JsonRpcDispatcher>) -> Self {
+        let storage = Arc::new(InMemorySessionStorage::new());
+        Self::with_storage(config, dispatcher, storage)
+    }
+}
+
+// Extensible constructor for other storage backends
+impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
+    pub fn with_storage(config: ServerConfig, dispatcher: Arc<JsonRpcDispatcher>, storage: Arc<S>) -> Self {
+        Self { config, dispatcher, storage }
+    }
+}
+```
+
+### Architecture Decision Record
+
+**Decision**: All framework components use the extension pattern, not duplication
+**Rationale**: 
+- Prevents API fragmentation and choice paralysis
+- Maintains zero-configuration while allowing extensibility  
+- Reduces maintenance burden
+- Aligns with framework philosophy of "one way to do things"
+
+**Implementation**: 
+- Use generic parameters with defaults for pluggable behavior
+- Provide both zero-config and extensible constructors
+- Extend existing components, never create parallel "enhanced" versions
 
 ## MCP Trait-Based Architecture Pattern
 
@@ -138,6 +290,7 @@ This pattern must be applied consistently across:
 5. **Testability**: Easy to mock trait interfaces for testing
 6. **Performance**: Trait dispatch vs runtime type checking
 7. **Extensibility**: Add new fine-grained traits and compose automatically
+8. **Zero-Configuration**: Framework auto-determines methods from trait implementations, never requiring user method strings
 
 ### Implementation Checklist
 

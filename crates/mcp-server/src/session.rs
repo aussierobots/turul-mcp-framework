@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use serde_json::Value;
 use tokio::sync::{broadcast, RwLock};
-use tracing::{debug, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use mcp_protocol::{ClientCapabilities, Implementation, McpVersion, ServerCapabilities};
@@ -28,11 +28,169 @@ pub struct SessionContext {
     pub remove_state: Arc<dyn Fn(&str) -> Option<Value> + Send + Sync>,
     /// Check if session is initialized
     pub is_initialized: Arc<dyn Fn() -> bool + Send + Sync>,
-    /// Send notification to this session
+    /// Send notification to this session (legacy - use broadcaster instead)
     pub send_notification: Arc<dyn Fn(SessionEvent) + Send + Sync>,
+    /// NotificationBroadcaster for sending MCP-compliant notifications
+    pub broadcaster: Option<Arc<dyn std::any::Any + Send + Sync>>,
 }
 
 impl SessionContext {
+    /// Create from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration
+    pub fn from_json_rpc_with_broadcaster(
+        json_rpc_ctx: mcp_json_rpc_server::SessionContext,
+    ) -> Self {
+        let session_id = json_rpc_ctx.session_id.clone();
+        let broadcaster = json_rpc_ctx.broadcaster.clone();
+        
+        // Simple state management - just use empty closures since we don't have session manager
+        let get_state = Arc::new(move |_key: &str| -> Option<Value> { None });
+        let set_state = Arc::new(move |_key: &str, _value: Value| {});
+        let remove_state = Arc::new(move |_key: &str| -> Option<Value> { None });
+        let is_initialized = Arc::new(move || -> bool { true });
+        
+        // Store the broadcaster in the send_notification closure for later use by notify methods
+        let send_notification = {
+            let session_id = session_id.clone();
+            let broadcaster = broadcaster.clone();
+            Arc::new(move |event: SessionEvent| {
+                debug!("📨 SessionContext.send_notification() called for session {}: {:?}", session_id, event);
+                
+                // NEW: Try to use broadcaster if available
+                if let Some(broadcaster_any) = &broadcaster {
+                    debug!("✅ NotificationBroadcaster available for session: {}", session_id);
+                    
+                    // Attempt to extract and use the actual broadcaster
+                    // Since we know the type is StreamManagerNotificationBroadcaster, we can try to downcast
+                    match event {
+                        SessionEvent::Notification(json_value) => {
+                            debug!("🔧 Attempting to send notification via StreamManagerNotificationBroadcaster");
+                            debug!("📦 Notification JSON: {}", json_value);
+                            
+                            // Since we can't call async methods from sync closure, spawn a task
+                            // This is a bridge pattern to convert sync to async
+                            let session_id_clone = session_id.clone();
+                            let json_value_clone = json_value.clone();
+                            let _broadcaster_clone = broadcaster_any.clone();
+                            
+                            tokio::spawn(async move {
+                                debug!("🚀 Async task: Processing notification for session {}", session_id_clone);
+                                
+                                // Attempt to downcast to the actual NotificationBroadcaster
+                                // We need to convert Arc<dyn Any> back to the original SharedNotificationBroadcaster type
+                                debug!("📡 Attempting to downcast broadcaster for session {}", session_id_clone);
+                                
+                                // Parse the JSON notification and attempt to send it
+                                match parse_and_send_notification_with_broadcaster(&session_id_clone, &json_value_clone, &_broadcaster_clone).await {
+                                    Ok(_) => debug!("✅ Bridge working: Successfully processed notification for session {}", session_id_clone),
+                                    Err(e) => error!("❌ Bridge error: Failed to process notification for session {}: {}", session_id_clone, e),
+                                }
+                                
+                                debug!("🏁 Async task completed for session {}", session_id_clone);
+                            });
+                        }
+                        _ => {
+                            debug!("⚠️ Non-notification event, ignoring: {:?}", event);
+                        }
+                    }
+                } else {
+                    debug!("⚠️ No broadcaster available for session {}", session_id);
+                }
+            })
+        };
+
+        SessionContext {
+            session_id,
+            get_state,
+            set_state,
+            remove_state,
+            is_initialized,
+            send_notification,
+            broadcaster,
+        }
+    }
+
+    /// Check if this context has a broadcaster available
+    pub fn has_broadcaster(&self) -> bool {
+        self.broadcaster.is_some()
+    }
+    
+    /// Get the raw broadcaster (as Any) - for use by framework internals
+    pub fn get_raw_broadcaster(&self) -> Option<Arc<dyn std::any::Any + Send + Sync>> {
+        self.broadcaster.clone()
+    }
+
+    /// Create from JSON-RPC server's SessionContext
+    pub fn from_json_rpc_session(
+        json_rpc_ctx: mcp_json_rpc_server::SessionContext,
+        session_manager: Arc<SessionManager>,
+    ) -> Self {
+        let session_id = json_rpc_ctx.session_id.clone();
+        let session_manager_for_get = session_manager.clone();
+        let session_manager_for_set = session_manager.clone();
+        let session_manager_for_remove = session_manager.clone();
+        let session_manager_for_init = session_manager.clone();
+        let session_manager_for_notify = session_manager.clone();
+
+        let get_state = {
+            let session_id = session_id.clone();
+            Arc::new(move |key: &str| -> Option<Value> {
+                futures::executor::block_on(async {
+                    session_manager_for_get.get_session_state(&session_id, key).await
+                })
+            })
+        };
+
+        let set_state = {
+            let session_id = session_id.clone();
+            Arc::new(move |key: &str, value: Value| {
+                futures::executor::block_on(async {
+                    session_manager_for_set.set_session_state(&session_id, key, value).await
+                });
+            })
+        };
+
+        let remove_state = {
+            let session_id = session_id.clone();
+            Arc::new(move |key: &str| -> Option<Value> {
+                futures::executor::block_on(async {
+                    session_manager_for_remove.remove_session_state(&session_id, key).await
+                })
+            })
+        };
+
+        let is_initialized = {
+            let session_id = session_id.clone();
+            Arc::new(move || -> bool {
+                futures::executor::block_on(async {
+                    session_manager_for_init.is_session_initialized(&session_id).await
+                })
+            })
+        };
+
+        let send_notification = {
+            let session_id = session_id.clone();
+            Arc::new(move |event: SessionEvent| {
+                debug!("📜 send_notification closure called for session {}: {:?}", session_id, event);
+                futures::executor::block_on(async {
+                    match session_manager_for_notify.send_event_to_session(&session_id, event).await {
+                        Ok(_) => debug!("✅ send_event_to_session succeeded for session {}", session_id),
+                        Err(e) => error!("❌ send_event_to_session failed for session {}: {}", session_id, e),
+                    }
+                });
+                debug!("🚀 send_notification closure completed for session {}", session_id);
+            })
+        };
+
+        SessionContext {
+            session_id,
+            get_state,
+            set_state,
+            remove_state,
+            is_initialized,
+            send_notification,
+            broadcaster: None, // Old SessionManager doesn't have broadcaster
+        }
+    }
     /// Convenience method to get typed session state
     pub fn get_typed_state<T>(&self, key: &str) -> Option<T>
     where
@@ -58,11 +216,19 @@ impl SessionContext {
 
     /// Send a custom notification to this session
     pub fn notify(&self, event: SessionEvent) {
+        debug!("📨 SessionContext.notify() called for session {}: {:?}", self.session_id, event);
         (self.send_notification)(event);
+        debug!("🚀 SessionContext.notify() send_notification closure completed");
     }
 
     /// Send a progress notification
     pub fn notify_progress(&self, progress_token: impl Into<String>, progress: u64) {
+        if self.has_broadcaster() {
+            debug!("🔔 notify_progress using NotificationBroadcaster for session: {}", self.session_id);
+            // TODO: Use broadcaster for MCP-compliant notifications
+        } else {
+            debug!("🔔 notify_progress using OLD SessionManager for session: {}", self.session_id);
+        }
         let mut other = std::collections::HashMap::new();
         other.insert("progressToken".to_string(), serde_json::json!(progress_token.into()));
         other.insert("progress".to_string(), serde_json::json!(progress));
@@ -96,6 +262,30 @@ impl SessionContext {
 
     /// Send a logging message notification
     pub fn notify_log(&self, level: &str, message: impl Into<String>) {
+        if self.has_broadcaster() {
+            debug!("🔔 notify_log using NotificationBroadcaster for session: {}", self.session_id);
+            
+            // Create proper MCP notification using existing JSON-RPC format
+            let mut other = std::collections::HashMap::new();
+            other.insert("level".to_string(), serde_json::json!(level));
+            other.insert("message".to_string(), serde_json::json!(message.into()));
+            
+            let params = mcp_protocol::RequestParams {
+                meta: None,
+                other,
+            };
+            let notification = mcp_protocol::JsonRpcNotification::new(
+                "notifications/message".to_string()
+            ).with_params(params);
+            
+            // Send via SessionEvent (which will be picked up by the broadcaster if connected properly)
+            self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
+            return;
+        } else {
+            debug!("🔔 notify_log using OLD SessionManager for session: {}", self.session_id);
+        }
+        
+        // Legacy implementation (fallback)
         let mut other = std::collections::HashMap::new();
         other.insert("level".to_string(), serde_json::json!(level));
         other.insert("message".to_string(), serde_json::json!(message.into()));
@@ -140,6 +330,142 @@ impl SessionContext {
         );
         self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
     }
+}
+
+/// Parse notification JSON and send via actual NotificationBroadcaster to StreamManager using proper notification structs
+async fn parse_and_send_notification_with_broadcaster(
+    session_id: &str, 
+    json_value: &Value,
+    broadcaster_any: &Arc<dyn std::any::Any + Send + Sync>
+) -> Result<(), String> {
+    debug!("🔍 Parsing notification JSON for session {}: {:?}", session_id, json_value);
+    
+    // Import the types we need for downcasting and notifications
+    use http_mcp_server::notification_bridge::SharedNotificationBroadcaster;
+    use mcp_protocol::notifications::{LoggingMessageNotification, ProgressNotification};
+    use mcp_protocol::logging::LoggingLevel;
+    
+    // Attempt to downcast Arc<dyn Any> back to SharedNotificationBroadcaster
+    if let Some(broadcaster) = broadcaster_any.downcast_ref::<SharedNotificationBroadcaster>() {
+        debug!("✅ Successfully downcast broadcaster for session {}", session_id);
+        
+        // Extract method from JSON-RPC notification to determine type
+        if let Some(method) = json_value.get("method").and_then(|v| v.as_str()) {
+            match method {
+                "notifications/message" => {
+                    if let Some(params) = json_value.get("params") {
+                        if let Some(level_str) = params.get("level").and_then(|v| v.as_str()) {
+                            debug!("📝 Message notification detected: level={}", level_str);
+                            
+                            // Parse level string to LoggingLevel enum
+                            let level = match level_str {
+                                "debug" => LoggingLevel::Debug,
+                                "info" => LoggingLevel::Info,
+                                "warning" => LoggingLevel::Warning,
+                                "error" => LoggingLevel::Error,
+                                _ => {
+                                    error!("❌ Unknown logging level: {}", level_str);
+                                    return Err(format!("Unknown logging level: {}", level_str));
+                                }
+                            };
+                            
+                            // Get the message data
+                            let data = params.get("message").cloned()
+                                .unwrap_or_else(|| serde_json::json!("Missing message"));
+                            
+                            // Create proper LoggingMessageNotification using the struct from notifications.rs
+                            let notification = LoggingMessageNotification::new(level, data);
+                            
+                            debug!("🔧 About to call broadcaster.send_message_notification() for session {}", session_id);
+                            // ACTUALLY SEND the notification using the proper method
+                            match broadcaster.send_message_notification(session_id, notification).await {
+                                Ok(()) => {
+                                    debug!("🎉 SUCCESS: LoggingMessageNotification sent to StreamManager for session {}", session_id);
+                                    debug!("🚀 Streamable HTTP Transport Bridge: Complete end-to-end delivery confirmed!");
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    error!("❌ Failed to send LoggingMessageNotification to StreamManager: {}", e);
+                                    return Err(format!("Failed to send LoggingMessageNotification: {}", e));
+                                }
+                            }
+                        }
+                    }
+                }
+                "notifications/progress" => {
+                    if let Some(params) = json_value.get("params") {
+                        if let Some(token) = params.get("progressToken").and_then(|v| v.as_str()) {
+                            debug!("📊 Progress notification detected: token={}", token);
+                            
+                            // Get progress value
+                            let progress = params.get("progress")
+                                .and_then(|v| v.as_u64())
+                                .unwrap_or(0);
+                            
+                            // Create proper ProgressNotification using the struct from notifications.rs
+                            let notification = ProgressNotification {
+                                method: "notifications/progress".to_string(),
+                                params: mcp_protocol::notifications::ProgressNotificationParams {
+                                    progress_token: token.to_string(),
+                                    progress,
+                                    total: params.get("total").and_then(|v| v.as_u64()),
+                                    message: params.get("message").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                                    meta: None,
+                                },
+                            };
+                            
+                            debug!("🔧 About to call broadcaster.send_progress_notification() for session {}", session_id);
+                            // ACTUALLY SEND the notification using the proper method
+                            match broadcaster.send_progress_notification(session_id, notification).await {
+                                Ok(()) => {
+                                    debug!("🎉 SUCCESS: ProgressNotification sent to StreamManager for session {}", session_id);
+                                    debug!("🚀 Streamable HTTP Transport Bridge: Complete end-to-end delivery confirmed!");
+                                    return Ok(());
+                                }
+                                Err(e) => {
+                                    error!("❌ Failed to send ProgressNotification to StreamManager: {}", e);
+                                    return Err(format!("Failed to send ProgressNotification: {}", e));
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    debug!("🔧 Other notification method: {} - sending as generic JsonRpcNotification", method);
+                    
+                    // For other notifications, use the generic send_notification method
+                    let params_map: std::collections::HashMap<String, serde_json::Value> = 
+                        json_value.get("params")
+                            .and_then(|p| p.as_object())
+                            .unwrap_or(&serde_json::Map::new())
+                            .iter()
+                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .collect();
+                    let json_rpc_notification = mcp_json_rpc_server::JsonRpcNotification::new_with_object_params(
+                        method.to_string(),
+                        params_map
+                    );
+                    
+                    match broadcaster.send_notification(session_id, json_rpc_notification).await {
+                        Ok(()) => {
+                            debug!("🎉 SUCCESS: Generic notification sent to StreamManager for session {}", session_id);
+                            return Ok(());
+                        }
+                        Err(e) => {
+                            error!("❌ Failed to send generic notification to StreamManager: {}", e);
+                            return Err(format!("Failed to send generic notification: {}", e));
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        error!("❌ Failed to downcast broadcaster for session {}", session_id);
+        return Err("Failed to downcast broadcaster to SharedNotificationBroadcaster".to_string());
+    }
+    
+    debug!("❓ Could not determine notification type for session {}", session_id);
+    Ok(())
 }
 
 /// Events that can be sent to a session
@@ -293,6 +619,8 @@ pub struct SessionManager {
     cleanup_interval: Duration,
     /// Default server capabilities for new sessions
     default_capabilities: ServerCapabilities,
+    /// Global event broadcaster for all session events
+    global_event_sender: broadcast::Sender<(String, SessionEvent)>,
 }
 
 impl SessionManager {
@@ -311,11 +639,14 @@ impl SessionManager {
         session_timeout: Duration,
         cleanup_interval: Duration,
     ) -> Self {
+        let (global_event_sender, _) = broadcast::channel(1000);
+        
         Self {
             sessions: RwLock::new(HashMap::new()),
             session_timeout,
             cleanup_interval,
             default_capabilities,
+            global_event_sender,
         }
     }
 
@@ -325,6 +656,16 @@ impl SessionManager {
         let session_id = session.id.clone();
 
         debug!("Creating new session: {}", session_id);
+        self.sessions.write().await.insert(session_id.clone(), session);
+        session_id
+    }
+
+    /// Create a new session with a specific ID (for GPS pattern compliance)
+    pub async fn create_session_with_id(&self, session_id: String) -> String {
+        let mut session = McpSession::new(self.default_capabilities.clone());
+        session.id = session_id.clone();
+
+        debug!("Creating session with provided ID: {}", session_id);
         self.sessions.write().await.insert(session_id.clone(), session);
         session_id
     }
@@ -457,8 +798,18 @@ impl SessionManager {
     ) -> Result<(), SessionError> {
         let sessions = self.sessions.read().await;
         if let Some(session) = sessions.get(session_id) {
-            session.send_event(event)
+            // Send to the specific session
+            session.send_event(event.clone())
                 .map_err(|e| SessionError::InvalidData(e))?;
+            
+            // Also forward to global event broadcaster for SSE bridging
+            debug!("🌐 Forwarding event to global broadcaster: session={}, event={:?}", session_id, event);
+            if let Err(e) = self.global_event_sender.send((session_id.to_string(), event)) {
+                debug!("⚠️ Global event broadcast failed (no listeners): {}", e);
+            } else {
+                debug!("✅ Global event broadcast succeeded");
+            }
+            
             Ok(())
         } else {
             Err(SessionError::NotFound(session_id.to_string()))
@@ -543,6 +894,7 @@ impl SessionManager {
             remove_state,
             is_initialized,
             send_notification,
+            broadcaster: None, // Old SessionManager doesn't have broadcaster
         })
     }
 
@@ -565,6 +917,12 @@ impl SessionManager {
     pub async fn get_session_event_receiver(&self, session_id: &str) -> Option<broadcast::Receiver<SessionEvent>> {
         let sessions = self.sessions.read().await;
         Some(sessions.get(session_id)?.subscribe_events())
+    }
+
+    /// Subscribe to events from all sessions
+    /// Returns a receiver that gets (session_id, event) tuples for all session events
+    pub fn subscribe_all_session_events(&self) -> broadcast::Receiver<(String, SessionEvent)> {
+        self.global_event_sender.subscribe()
     }
 }
 

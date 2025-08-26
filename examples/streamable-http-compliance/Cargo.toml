@@ -1,0 +1,54 @@
+[package]
+name = "streamable-http-compliance"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "streamable-http-compliance"
+path = "src/main.rs"
+
+[[bin]]
+name = "client"
+path = "src/client.rs"
+
+[[bin]]
+name = "client-initialise-report"
+path = "src/bin/client-initialise-report.rs"
+
+[dependencies]
+# Core MCP Framework
+mcp-server.workspace = true
+http-mcp-server.workspace = true
+mcp-protocol.workspace = true
+mcp-derive.workspace = true
+mcp-session-storage.workspace = true
+
+# Async Runtime
+tokio.workspace = true
+tokio-stream.workspace = true
+futures.workspace = true
+async-trait.workspace = true
+
+# HTTP and Serialization
+hyper.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest.workspace = true
+
+# Utilities
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+anyhow.workspace = true
+
+# Testing
+tokio-test.workspace = true
+tracing-test.workspace = true
+rand.workspace = true
+
+# Error handling
+thiserror.workspace = true
+
+# CLI
+clap = { version = "4.0", features = ["derive"] }

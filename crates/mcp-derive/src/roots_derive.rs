@@ -107,7 +107,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
                 // Default implementation - this should be overridden by implementing list_roots_impl
                 match self.list_roots_impl(request).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(mcp_protocol::McpError::roots(&e)),
+                    Err(e) => Err(mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
 
@@ -115,7 +115,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
                 // Default implementation - this should be overridden by implementing list_files_impl
                 match self.list_files_impl(path).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(mcp_protocol::McpError::roots(&e)),
+                    Err(e) => Err(mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
 

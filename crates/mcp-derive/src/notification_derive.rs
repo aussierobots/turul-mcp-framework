@@ -6,12 +6,58 @@ use syn::{DeriveInput, Result};
 
 use crate::utils::extract_string_attribute;
 
+/// Auto-determine notification method from struct name (ZERO CONFIGURATION!)
+/// Examples:
+/// - `ProgressNotification` → `"notifications/progress"`
+/// - `ResourcesListChangedNotification` → `"notifications/resources/list_changed"`
+/// - `MessageNotification` → `"notifications/message"`
+fn auto_determine_notification_method(struct_name: String) -> String {
+    // Remove "Notification" suffix if present
+    let base_name = if struct_name.ends_with("Notification") {
+        &struct_name[..struct_name.len() - 12] // Remove "Notification"
+    } else {
+        &struct_name
+    };
+    
+    // Convert CamelCase to snake_case and build method
+    let snake_case = camel_to_snake_case(base_name);
+    
+    // Handle known patterns
+    match snake_case.as_str() {
+        "progress" => "notifications/progress".to_string(),
+        "message" => "notifications/message".to_string(),
+        "resources_list_changed" | "resources_changed" => "notifications/resources/list_changed".to_string(),
+        "roots_list_changed" | "roots_changed" => "notifications/roots/list_changed".to_string(),
+        "prompts_list_changed" | "prompts_changed" => "notifications/prompts/list_changed".to_string(),
+        "tools_list_changed" | "tools_changed" => "notifications/tools/list_changed".to_string(),
+        _ => {
+            // For custom notifications, use notifications/{snake_case}
+            format!("notifications/{}", snake_case)
+        }
+    }
+}
+
+/// Convert CamelCase to snake_case
+fn camel_to_snake_case(input: &str) -> String {
+    let mut result = String::new();
+    for (i, ch) in input.chars().enumerate() {
+        if ch.is_uppercase() && i > 0 {
+            result.push('_');
+        }
+        result.push(ch.to_lowercase().next().unwrap());
+    }
+    result
+}
+
 pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
     let struct_name = &input.ident;
 
-    // Extract struct-level attributes
+    // AUTO-DETERMINE method from struct name (ZERO CONFIGURATION!)
+    let method = auto_determine_notification_method(struct_name.to_string());
+    
+    // Optional: Allow override with attribute (for edge cases)
     let method = extract_string_attribute(&input.attrs, "method")
-        .ok_or_else(|| syn::Error::new_spanned(&input, "McpNotification derive requires #[notification(method = \"...\")] attribute"))?;
+        .unwrap_or(method);
     
     let priority = extract_string_attribute(&input.attrs, "priority")
         .and_then(|s| s.parse::<u32>().ok())
@@ -94,7 +140,7 @@ pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
                 // Default implementation - this should be overridden by implementing send_impl
                 match self.send_impl(payload).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(mcp_protocol::McpError::notification(&e)),
+                    Err(e) => Err(mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
         }
@@ -129,13 +175,28 @@ mod tests {
     use syn::parse_quote;
 
     #[test]
-    fn test_simple_notification() {
+    fn test_zero_config_notification() {
+        // ✅ ZERO CONFIGURATION - No method attribute needed!
         let input: DeriveInput = parse_quote! {
-            #[notification(method = "notifications/custom/alert")]
-            struct AlertNotification {
+            #[derive(McpNotification)]
+            struct ProgressNotification {
                 message: String,
                 severity: String,
             }
+        };
+
+        let result = derive_mcp_notification_impl(input);
+        assert!(result.is_ok());
+        
+        // Framework auto-determines method as "notifications/progress"
+    }
+    
+    #[test]
+    fn test_resources_changed_notification() {
+        // ✅ ZERO CONFIGURATION - Auto-determines "notifications/resources/list_changed"
+        let input: DeriveInput = parse_quote! {
+            #[derive(McpNotification)]
+            struct ResourcesListChangedNotification;
         };
 
         let result = derive_mcp_notification_impl(input);

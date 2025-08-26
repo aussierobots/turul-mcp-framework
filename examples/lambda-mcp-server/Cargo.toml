@@ -25,7 +25,7 @@ mcp-server = { workspace = true }
 http-mcp-server = { workspace = true }
 mcp-protocol = { workspace = true }
 mcp-derive = { workspace = true }
-json-rpc-server = { workspace = true }
+mcp-json-rpc-server = { workspace = true }
 async-trait = { workspace = true }
 
 # HTTP and JSON handling

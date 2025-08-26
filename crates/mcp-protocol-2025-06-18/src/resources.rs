@@ -595,6 +595,7 @@ impl HasResourceUpdatedParams for ResourceSubscription {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::ListResourcesResult;
 
     #[test]
     fn test_resource_creation() {
@@ -624,7 +625,7 @@ mod tests {
             Resource::new("file:///test2.txt", "Test 2"),
         ];
 
-        let response = ListResourcesResult::new(resources);
+        let response = super::ListResourcesResult::new(resources);
         assert_eq!(response.resources.len(), 2);
         assert!(response.next_cursor.is_none());
     }
@@ -654,7 +655,7 @@ mod tests {
         assert!(request.params.cursor.is_none());
         
         let resources = vec![Resource::new("test://resource", "Test Resource")];
-        let response = ListResourcesResult::new(resources);
+        let response = super::ListResourcesResult::new(resources);
         assert_eq!(response.resources().len(), 1);
         assert!(response.next_cursor().is_none());
         

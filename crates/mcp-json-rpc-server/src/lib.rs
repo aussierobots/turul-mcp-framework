@@ -28,7 +28,7 @@ pub use notification::JsonRpcNotification;
 pub use types::{RequestId, JsonRpcVersion};
 
 #[cfg(feature = "async")]
-pub use r#async::{JsonRpcHandler, JsonRpcDispatcher};
+pub use r#async::{JsonRpcHandler, JsonRpcDispatcher, SessionContext};
 
 /// JSON-RPC 2.0 version constant
 pub const JSONRPC_VERSION: &str = "2.0";

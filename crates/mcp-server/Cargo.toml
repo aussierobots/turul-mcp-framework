@@ -15,9 +15,10 @@ sse = ["http-mcp-server/sse"]
 
 [dependencies]
 # Framework dependencies
-json-rpc-server.workspace = true
+mcp-json-rpc-server.workspace = true
 mcp-protocol.workspace = true
 mcp-protocol-2025-06-18.workspace = true
+mcp-session-storage.workspace = true
 http-mcp-server = { workspace = true, optional = true }
 
 # Core dependencies
@@ -28,7 +29,23 @@ thiserror.workspace = true
 futures.workspace = true
 tracing.workspace = true
 tokio.workspace = true
-uuid = { version = "1.0", features = ["v4"] }
+uuid = { version = "1.0", features = ["v4", "v7"] }
+chrono = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
+# Dependencies for examples
+anyhow.workspace = true
+clap.workspace = true  
+reqwest.workspace = true
+tracing-subscriber.workspace = true
+chrono.workspace = true
+futures.workspace = true
+
+[[example]]
+name = "client-initialise-server"
+path = "examples/client-initialise-server.rs"
+
+[[example]]
+name = "client-initialise-report"
+path = "examples/client-initialise-report.rs"

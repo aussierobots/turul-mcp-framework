@@ -14,7 +14,7 @@ use futures::Stream;
 use http_body::Body;
 
 use crate::{Result, ServerConfig, sse::SseManager};
-use json_rpc_server::{JsonRpcDispatcher, dispatch::parse_json_rpc_message};
+use mcp_json_rpc_server::{JsonRpcDispatcher, dispatch::parse_json_rpc_message};
 
 /// SSE stream body that implements hyper's Body trait
 pub struct SseStreamBody {
@@ -170,7 +170,7 @@ impl McpHttpHandler {
 
         // Handle the message
         match message {
-            json_rpc_server::dispatch::JsonRpcMessage::Request(request) => {
+            mcp_json_rpc_server::dispatch::JsonRpcMessage::Request(request) => {
                 debug!("Processing JSON-RPC request: method={}", request.method);
                 let response = self.dispatcher.handle_request(request).await;
                 let response_json = serde_json::to_string(&response)?;
@@ -182,7 +182,7 @@ impl McpHttpHandler {
                     .body(Full::new(Bytes::from(response_json)))
                     .unwrap())
             }
-            json_rpc_server::dispatch::JsonRpcMessage::Notification(notification) => {
+            mcp_json_rpc_server::dispatch::JsonRpcMessage::Notification(notification) => {
                 debug!("Processing JSON-RPC notification: method={}", notification.method);
                 if let Err(err) = self.dispatcher.handle_notification(notification).await {
                     error!("Notification handling error: {}", err);
@@ -290,7 +290,7 @@ impl McpHttpHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use json_rpc_server::JsonRpcDispatcher;
+    use mcp_json_rpc_server::JsonRpcDispatcher;
 
     fn create_test_handler() -> McpHttpHandler {
         let config = ServerConfig::default();

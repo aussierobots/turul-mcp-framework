@@ -14,7 +14,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 // Import json-rpc-server framework types for proper MCP spec compliance
-use json_rpc_server::{
+use mcp_json_rpc_server::{
     JsonRpcRequest, JsonRpcResponse, JsonRpcError
 };
 

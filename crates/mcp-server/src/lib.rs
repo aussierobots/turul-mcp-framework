@@ -92,6 +92,8 @@ pub mod notifications;
 pub mod server;
 pub mod handlers;
 pub mod session;
+// Re-export session storage from separate crate (breaks circular dependency)
+pub use mcp_session_storage as session_storage;
 pub mod dispatch;
 
 #[cfg(feature = "http")]
@@ -117,7 +119,7 @@ pub use session::{SessionContext, SessionManager, SessionEvent};
 pub use dispatch::{McpDispatcher, DispatchMiddleware, DispatchContext};
 
 // Re-export foundational types
-pub use json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
+pub use mcp_json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
 pub use mcp_protocol::*;
 
 // Re-export builder pattern for Level 3 tool creation
@@ -139,7 +141,7 @@ pub type McpResult<T> = mcp_protocol::McpResult<T>;
 #[derive(Debug, thiserror::Error)]
 pub enum McpFrameworkError {
     #[error("JSON-RPC error: {0}")]
-    JsonRpc(#[from] json_rpc_server::JsonRpcError),
+    JsonRpc(#[from] mcp_json_rpc_server::JsonRpcError),
     
     #[error("MCP protocol error: {0}")]
     Mcp(#[from] mcp_protocol::McpError),

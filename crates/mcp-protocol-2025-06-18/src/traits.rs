@@ -27,7 +27,7 @@ pub const JSONRPC_VERSION: &str = "2.0";
 pub trait Params {}
 
 pub trait HasRequestId {
-    fn id(&self) -> &json_rpc_server::types::RequestId;
+    fn id(&self) -> &mcp_json_rpc_server::types::RequestId;
 }
 
 pub trait HasResult {
@@ -59,7 +59,7 @@ pub trait HasMeta {
 }
 
 pub trait HasErrorObject {
-    fn error(&self) -> &json_rpc_server::error::JsonRpcErrorObject;
+    fn error(&self) -> &mcp_json_rpc_server::error::JsonRpcErrorObject;
 }
 
 // ==========================
@@ -85,7 +85,7 @@ pub trait JsonRpcErrorTrait: HasJsonRpcVersion + HasRequestId + HasErrorObject {
 // ==========================
 
 pub trait HasRequestIdParam: Params {
-    fn request_id(&self) -> &json_rpc_server::types::RequestId;
+    fn request_id(&self) -> &mcp_json_rpc_server::types::RequestId;
 }
 
 pub trait HasReasonParam: Params {
@@ -426,7 +426,7 @@ pub trait ParamExtractor<T: Params> {
     type Error;
 
     /// Extract parameters from RequestParams using trait-based conversion
-    fn extract(params: json_rpc_server::RequestParams) -> Result<T, Self::Error>;
+    fn extract(params: mcp_json_rpc_server::RequestParams) -> Result<T, Self::Error>;
 }
 
 /// Trait for serde-based parameter extraction (simpler cases)
@@ -434,7 +434,7 @@ pub trait SerdeParamExtractor<T: Params> {
     type Error;
 
     /// Extract parameters using serde deserialization
-    fn extract_serde(params: json_rpc_server::RequestParams) -> Result<T, Self::Error>;
+    fn extract_serde(params: mcp_json_rpc_server::RequestParams) -> Result<T, Self::Error>;
 }
 
 /// Trait for field-by-field parameter extraction (complex cases)
@@ -442,5 +442,5 @@ pub trait FieldParamExtractor<T: Params> {
     type Error;
 
     /// Extract parameters field by field with validation
-    fn extract_fields(params: json_rpc_server::RequestParams) -> Result<T, Self::Error>;
+    fn extract_fields(params: mcp_json_rpc_server::RequestParams) -> Result<T, Self::Error>;
 }

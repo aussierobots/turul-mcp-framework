@@ -85,7 +85,7 @@ pub use json_rpc::{
 };
 
 // JSON-RPC foundation (legacy - prefer our implementations above)
-pub use json_rpc_server::{
+pub use mcp_json_rpc_server::{
     RequestParams as LegacyRequestParams, 
     ResponseResult, 
     types::RequestId
@@ -157,7 +157,7 @@ pub enum McpError {
     SerializationError(#[from] serde_json::Error),
     
     #[error("JSON-RPC error: {0}")]
-    JsonRpcError(#[from] json_rpc_server::JsonRpcError),
+    JsonRpcError(#[from] mcp_json_rpc_server::JsonRpcError),
 }
 
 impl From<String> for McpError {
@@ -212,8 +212,8 @@ impl McpError {
     }
     
     /// Convert to a JsonRpcErrorObject for JSON-RPC 2.0 responses
-    pub fn to_json_rpc_error(&self) -> json_rpc_server::error::JsonRpcErrorObject {
-        use json_rpc_server::error::JsonRpcErrorObject;
+    pub fn to_json_rpc_error(&self) -> mcp_json_rpc_server::error::JsonRpcErrorObject {
+        use mcp_json_rpc_server::error::JsonRpcErrorObject;
         
         match self {
             // Parameter-related errors map to InvalidParams (-32602)
@@ -269,7 +269,7 @@ impl McpError {
     }
     
     /// Create a JSON-RPC error response for this MCP error
-    pub fn to_json_rpc_response(&self, id: Option<json_rpc_server::RequestId>) -> json_rpc_server::JsonRpcError {
-        json_rpc_server::JsonRpcError::new(id, self.to_json_rpc_error())
+    pub fn to_json_rpc_response(&self, id: Option<mcp_json_rpc_server::RequestId>) -> mcp_json_rpc_server::JsonRpcError {
+        mcp_json_rpc_server::JsonRpcError::new(id, self.to_json_rpc_error())
     }
 }

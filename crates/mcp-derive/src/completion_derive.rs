@@ -75,7 +75,7 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
                 // Default implementation - this should be overridden by implementing complete_impl
                 match self.complete_impl(request).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(mcp_protocol::McpError::completion(&e)),
+                    Err(e) => Err(mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
         }

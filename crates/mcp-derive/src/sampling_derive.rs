@@ -75,7 +75,7 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
                 // Default implementation - this should be overridden by implementing sample_impl
                 match self.sample_impl(request).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(mcp_protocol::McpError::sampling(&e)),
+                    Err(e) => Err(mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
         }

@@ -13,7 +13,7 @@ use mcp_derive::McpTool;
 use mcp_server::{McpTool, SessionContext, McpServer};
 use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, Meta, ProgressToken, ResultWithMeta, CallToolResult};
 use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations};
-use json_rpc_server::{JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcNotification, RequestParams};
+use mcp_json_rpc_server::{JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcNotification, RequestParams};
 use serde_json::{json, Value};
 use async_trait::async_trait;
 

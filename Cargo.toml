@@ -1,9 +1,10 @@
 [workspace]
 resolver = "3"
 members = [
-    "crates/json-rpc-server",
+    "crates/mcp-json-rpc-server",
     "crates/mcp-protocol-2025-06-18",
     "crates/mcp-protocol",
+    "crates/mcp-session-storage",
     "crates/http-mcp-server",
     "crates/mcp-server",
     "crates/mcp-derive",
@@ -51,10 +52,16 @@ members = [
     "examples/notifications-server-macro",
     "examples/sampling-server-macro",
     "examples/derive-macro-test",
+    "examples/almost-zero-config-demo",
+    "examples/simple-zero-config-demo", 
+    "examples/zero-config-getting-started",
+    "examples/working-universal-demo", 
+    "examples/streamable-http-compliance",
     "tests",
 ]
 
 [workspace.package]
+version = "0.1.0"
 edition = "2024"
 authors = ["Nick Hortovanyi <nick@aussierobots.com>"]
 license = "MIT OR Apache-2.0"
@@ -84,9 +91,10 @@ http-body = "1"
 bytes = "1"
 
 # Internal crate dependencies
-json-rpc-server = { path = "crates/json-rpc-server" }
+mcp-json-rpc-server = { path = "crates/mcp-json-rpc-server" }
 mcp-protocol-2025-06-18 = { path = "crates/mcp-protocol-2025-06-18" }
 mcp-protocol = { path = "crates/mcp-protocol" }
+mcp-session-storage = { path = "crates/mcp-session-storage" }
 http-mcp-server = { path = "crates/http-mcp-server" }
 mcp-server = { path = "crates/mcp-server" }
 mcp-derive = { path = "crates/mcp-derive" }
@@ -99,7 +107,6 @@ reqwest = { version = "0.12", features = ["json"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
-rand = "0.9"
 criterion = { version = "0.7", features = ["html_reports"] }
 sqlx = { version = "0.8", features = [
     "runtime-tokio-rustls",
@@ -114,6 +121,8 @@ base64 = "0.22"
 urlencoding = "2.1"
 url = "2.5"
 parking_lot = "0.12"
+rand = "0.9"
+tracing-test = "0.2"
 
 # AWS Lambda and AWS SDK dependencies
 lambda_runtime = "0.14"

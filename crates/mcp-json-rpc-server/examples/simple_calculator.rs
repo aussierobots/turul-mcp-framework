@@ -1,4 +1,4 @@
-use json_rpc_server::{
+use mcp_json_rpc_server::{
     JsonRpcHandler, JsonRpcDispatcher, RequestParams,
     r#async::JsonRpcResult, dispatch::parse_json_rpc_message,
 };
@@ -13,7 +13,7 @@ impl JsonRpcHandler for CalculatorHandler {
         match method {
             "add" => {
                 let params = params.ok_or_else(|| {
-                    json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                    mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
                         "Missing parameters".to_string()
                     )
                 })?;
@@ -26,7 +26,7 @@ impl JsonRpcHandler for CalculatorHandler {
             }
             "subtract" => {
                 let params = params.ok_or_else(|| {
-                    json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                    mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
                         "Missing parameters".to_string()
                     )
                 })?;
@@ -37,7 +37,7 @@ impl JsonRpcHandler for CalculatorHandler {
                 
                 Ok(json!({"result": a - b}))
             }
-            _ => Err(json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+            _ => Err(mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
                 format!("Unknown method: {}", method)
             ))
         }
@@ -66,7 +66,7 @@ async fn main() {
     
     // Parse message
     match parse_json_rpc_message(request_json) {
-        Ok(json_rpc_server::dispatch::JsonRpcMessage::Request(request)) => {
+        Ok(mcp_json_rpc_server::dispatch::JsonRpcMessage::Request(request)) => {
             println!("Parsed request: method={}, id={:?}", request.method, request.id);
             
             // Handle request
@@ -81,7 +81,7 @@ async fn main() {
                 Err(e) => println!("Failed to serialize response: {}", e),
             }
         }
-        Ok(json_rpc_server::dispatch::JsonRpcMessage::Notification(_)) => {
+        Ok(mcp_json_rpc_server::dispatch::JsonRpcMessage::Notification(_)) => {
             println!("Received notification (no response needed)");
         }
         Err(e) => {

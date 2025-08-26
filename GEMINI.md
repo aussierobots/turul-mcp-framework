@@ -24,7 +24,7 @@ While the project implements a significant portion of the MCP 2025-06-18 specifi
 - **✅ Development Patterns**: Multiple development patterns are supported (derive macros, function attributes, etc.).
 
 ### Partially Implemented or Missing Features
-- **⚠️ Resources**: The `resources` capability is only partially implemented. The framework currently supports static resources, but lacks support for subscriptions and real-time updates as defined in the specification.
+- **⚠️ Resources**: The `resources` capability is only partially implemented. While the protocol crate has been updated to include the `subscribe` capability, the `mcp-server` crate does not yet support it.
 - **⚠️ Dynamic Capabilities**: The framework does not support dynamic capabilities, where the server's capabilities can change at runtime.
 - **⚠️ `initialize` Request Handling**: The handling of the `initialize` request is not explicitly defined in the `mcp-server` framework, which is a critical part of the MCP specification.
 
@@ -44,9 +44,23 @@ To improve the framework and move closer to full compliance with the MCP 2025-06
 
 *   **Improve the `McpServerBuilder` API:** Create a more consistent and intuitive API for enabling and configuring MCP features.
 *   **Separate Core and Optional Features:** Refactor the builder to clearly distinguish between core and optional features.
-*   **Complete the `resources` Implementation:** Add support for resource subscriptions and real-time updates.
+*   **Complete the `resources` Implementation:** Add support for resource subscriptions and real-time updates to the `mcp-server` crate.
 *   **Implement Dynamic Capabilities:** Allow the server's capabilities to be updated at runtime.
 *   **Add an `initialize` Request Handler:** Implement a dedicated handler for the `initialize` request in the `mcp-server` framework.
+
+## TypeScript Schema Compliance Review
+
+A review of the official MCP 2025-06-18 TypeScript schema has revealed the following discrepancies with the Rust implementation:
+
+*   **`resources.subscribe` Capability Partially Implemented:** The `resources.subscribe` capability has been added to the `mcp-protocol-2025-06-18` crate, but it is not yet supported by the `mcp-server` crate. The `with_resources` method in the `McpServerBuilder` still hardcodes the `subscribe` capability to `false`.
+*   **JSON-RPC 2.0 Fields:** The Rust `InitializeRequest` and `InitializeResult` structs do not include the `jsonrpc`, `id`, `method`, and `result` fields. These fields are part of the JSON-RPC 2.0 protocol and are handled by the `json-rpc-server` crate. While this is a reasonable design choice, it is a difference between the Rust implementation and the TypeScript schema.
+
+### Recommendations
+
+To achieve full compliance with the TypeScript schema, the following actions are recommended:
+
+*   **Implement the `resources.subscribe` Capability in `mcp-server`:** Update the `mcp-server` crate to support the `resources.subscribe` capability. This will involve updating the `McpServerBuilder`, the `ResourcesHandler`, and the `McpResource` trait.
+*   **Clarify JSON-RPC 2.0 Field Handling:** Add a note to the documentation explaining that the JSON-RPC 2.0 fields are handled by the `json-rpc-server` crate and are not part of the MCP-specific structs.
 
 ## Development Patterns
 

@@ -97,7 +97,7 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
                 // Default implementation - this should be overridden by implementing log_impl
                 match self.log_impl(level, data).await {
                     Ok(_) => Ok(()),
-                    Err(e) => Err(mcp_protocol::McpError::logging(&e)),
+                    Err(e) => Err(mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
 
@@ -105,7 +105,7 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
                 // Default implementation - this should be overridden by implementing set_level_impl
                 match self.set_level_impl(request).await {
                     Ok(_) => Ok(()),
-                    Err(e) => Err(mcp_protocol::McpError::logging(&e)),
+                    Err(e) => Err(mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
         }

@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::logging::LoggingLevel;
-use json_rpc_server::types::RequestId;
+use mcp_json_rpc_server::types::RequestId;
 
 /// Base notification parameters that can include _meta
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -546,7 +546,7 @@ mod tests {
 
     #[test]
     fn test_cancelled_notification() {
-        use json_rpc_server::types::RequestId;
+        use mcp_json_rpc_server::types::RequestId;
         let notification = CancelledNotification::new(RequestId::Number(123))
             .with_reason("User cancelled");
         

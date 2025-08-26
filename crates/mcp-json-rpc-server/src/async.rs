@@ -11,19 +11,33 @@ use crate::{
     response::{JsonRpcResponse, ResponseResult},
 };
 
+/// Minimal session context for JSON-RPC handlers
+/// This provides basic session information without circular dependencies
+#[derive(Debug, Clone)]
+pub struct SessionContext {
+    /// Unique session identifier
+    pub session_id: String,
+    /// Session metadata
+    pub metadata: HashMap<String, Value>,
+    /// Optional broadcaster for session notifications
+    pub broadcaster: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    /// Session timestamp (Unix milliseconds)
+    pub timestamp: u64,
+}
+
 /// Result type for JSON-RPC method handlers
 pub type JsonRpcResult<T> = Result<T, JsonRpcProcessingError>;
 
 /// Trait for handling JSON-RPC method calls
 #[async_trait]
 pub trait JsonRpcHandler: Send + Sync {
-    /// Handle a JSON-RPC method call
-    async fn handle(&self, method: &str, params: Option<RequestParams>) -> JsonRpcResult<Value>;
+    /// Handle a JSON-RPC method call with optional session context
+    async fn handle(&self, method: &str, params: Option<RequestParams>, session_context: Option<SessionContext>) -> JsonRpcResult<Value>;
     
-    /// Handle a JSON-RPC notification (optional - default does nothing)
-    async fn handle_notification(&self, method: &str, params: Option<RequestParams>) -> JsonRpcResult<()> {
+    /// Handle a JSON-RPC notification with optional session context (optional - default does nothing)
+    async fn handle_notification(&self, method: &str, params: Option<RequestParams>, session_context: Option<SessionContext>) -> JsonRpcResult<()> {
         // Default implementation - ignore notifications
-        let _ = (method, params);
+        let _ = (method, params, session_context);
         Ok(())
     }
     
@@ -36,8 +50,8 @@ pub trait JsonRpcHandler: Send + Sync {
 /// A simple function-based handler
 pub struct FunctionHandler<F, N> 
 where
-    F: Fn(&str, Option<RequestParams>) -> futures::future::BoxFuture<'static, JsonRpcResult<Value>> + Send + Sync,
-    N: Fn(&str, Option<RequestParams>) -> futures::future::BoxFuture<'static, JsonRpcResult<()>> + Send + Sync,
+    F: Fn(&str, Option<RequestParams>, Option<SessionContext>) -> futures::future::BoxFuture<'static, JsonRpcResult<Value>> + Send + Sync,
+    N: Fn(&str, Option<RequestParams>, Option<SessionContext>) -> futures::future::BoxFuture<'static, JsonRpcResult<()>> + Send + Sync,
 {
     handler_fn: F,
     notification_fn: Option<N>,
@@ -46,8 +60,8 @@ where
 
 impl<F, N> FunctionHandler<F, N>
 where
-    F: Fn(&str, Option<RequestParams>) -> futures::future::BoxFuture<'static, JsonRpcResult<Value>> + Send + Sync,
-    N: Fn(&str, Option<RequestParams>) -> futures::future::BoxFuture<'static, JsonRpcResult<()>> + Send + Sync,
+    F: Fn(&str, Option<RequestParams>, Option<SessionContext>) -> futures::future::BoxFuture<'static, JsonRpcResult<Value>> + Send + Sync,
+    N: Fn(&str, Option<RequestParams>, Option<SessionContext>) -> futures::future::BoxFuture<'static, JsonRpcResult<()>> + Send + Sync,
 {
     pub fn new(handler_fn: F) -> Self {
         Self {
@@ -71,16 +85,16 @@ where
 #[async_trait]
 impl<F, N> JsonRpcHandler for FunctionHandler<F, N>
 where
-    F: Fn(&str, Option<RequestParams>) -> futures::future::BoxFuture<'static, JsonRpcResult<Value>> + Send + Sync,
-    N: Fn(&str, Option<RequestParams>) -> futures::future::BoxFuture<'static, JsonRpcResult<()>> + Send + Sync,
+    F: Fn(&str, Option<RequestParams>, Option<SessionContext>) -> futures::future::BoxFuture<'static, JsonRpcResult<Value>> + Send + Sync,
+    N: Fn(&str, Option<RequestParams>, Option<SessionContext>) -> futures::future::BoxFuture<'static, JsonRpcResult<()>> + Send + Sync,
 {
-    async fn handle(&self, method: &str, params: Option<RequestParams>) -> JsonRpcResult<Value> {
-        (self.handler_fn)(method, params).await
+    async fn handle(&self, method: &str, params: Option<RequestParams>, session_context: Option<SessionContext>) -> JsonRpcResult<Value> {
+        (self.handler_fn)(method, params, session_context).await
     }
 
-    async fn handle_notification(&self, method: &str, params: Option<RequestParams>) -> JsonRpcResult<()> {
+    async fn handle_notification(&self, method: &str, params: Option<RequestParams>, session_context: Option<SessionContext>) -> JsonRpcResult<()> {
         if let Some(ref notification_fn) = self.notification_fn {
-            (notification_fn)(method, params).await
+            (notification_fn)(method, params, session_context).await
         } else {
             Ok(())
         }
@@ -132,14 +146,52 @@ impl JsonRpcDispatcher {
         self.default_handler = Some(Arc::new(handler));
     }
 
-    /// Process a JSON-RPC request and return a response
+    /// Process a JSON-RPC request with session context and return a response
+    pub async fn handle_request_with_context(&self, request: JsonRpcRequest, session_context: SessionContext) -> JsonRpcResponse {
+        let handler = self.handlers.get(&request.method)
+            .or(self.default_handler.as_ref());
+
+        match handler {
+            Some(handler) => {
+                match handler.handle(&request.method, request.params, Some(session_context)).await {
+                    Ok(result) => JsonRpcResponse::new(request.id, ResponseResult::Success(result)),
+                    Err(err) => {
+                        let rpc_error = err.to_rpc_error(Some(request.id.clone()));
+                        // Convert error to response - in practice you'd want to log and return error response
+                        JsonRpcResponse::new(request.id, ResponseResult::Success(
+                            serde_json::json!({
+                                "error": {
+                                    "code": rpc_error.error.code,
+                                    "message": rpc_error.error.message,
+                                    "data": rpc_error.error.data
+                                }
+                            })
+                        ))
+                    }
+                }
+            }
+            None => {
+                let error = JsonRpcError::method_not_found(request.id.clone(), &request.method);
+                JsonRpcResponse::new(request.id, ResponseResult::Success(
+                    serde_json::json!({
+                        "error": {
+                            "code": error.error.code,
+                            "message": error.error.message
+                        }
+                    })
+                ))
+            }
+        }
+    }
+
+    /// Process a JSON-RPC request and return a response (backward compatibility - no session context)
     pub async fn handle_request(&self, request: JsonRpcRequest) -> JsonRpcResponse {
         let handler = self.handlers.get(&request.method)
             .or(self.default_handler.as_ref());
 
         match handler {
             Some(handler) => {
-                match handler.handle(&request.method, request.params).await {
+                match handler.handle(&request.method, request.params, None).await {
                     Ok(result) => JsonRpcResponse::new(request.id, ResponseResult::Success(result)),
                     Err(err) => {
                         let rpc_error = err.to_rpc_error(Some(request.id.clone()));
@@ -177,7 +229,7 @@ impl JsonRpcDispatcher {
 
         match handler {
             Some(handler) => {
-                handler.handle_notification(&notification.method, notification.params).await
+                handler.handle_notification(&notification.method, notification.params, None).await
             }
             None => {
                 // Notifications don't return errors, just ignore unknown methods
@@ -208,7 +260,7 @@ mod tests {
 
     #[async_trait]
     impl JsonRpcHandler for TestHandler {
-        async fn handle(&self, method: &str, _params: Option<RequestParams>) -> JsonRpcResult<Value> {
+        async fn handle(&self, method: &str, _params: Option<RequestParams>, _session_context: Option<SessionContext>) -> JsonRpcResult<Value> {
             match method {
                 "add" => Ok(json!({"result": "addition"})),
                 "error" => Err(JsonRpcProcessingError::HandlerError("test error".to_string())),
@@ -253,7 +305,7 @@ mod tests {
     async fn test_function_handler() {
         // Test FunctionHandler directly without type inference issues
         let handler = TestHandler;
-        let result = handler.handle("add", None).await.unwrap();
+        let result = handler.handle("add", None, None).await.unwrap();
         assert_eq!(result["result"], "addition");
     }
 }

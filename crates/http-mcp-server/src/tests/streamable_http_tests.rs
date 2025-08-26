@@ -14,7 +14,7 @@ use serde_json::json;
 
 use crate::streamable_http::{StreamableHttpHandler, StreamableHttpContext, McpProtocolVersion};
 use crate::server::ServerConfig;
-use json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
+use mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
 use mcp_protocol::{JsonRpcRequest, JsonRpcResponse, JsonRpcError};
 
 /// Mock handler for streamable HTTP testing

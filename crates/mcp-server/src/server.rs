@@ -10,9 +10,9 @@ use async_trait::async_trait;
 use tracing::{debug, error, info};
 
 use crate::handlers::McpHandler;
-use crate::session::SessionManager;
+use crate::session::{SessionManager, SessionContext};
 use crate::{McpServerBuilder, McpTool, Result, tool::tool_to_descriptor};
-use json_rpc_server::JsonRpcHandler;
+use mcp_json_rpc_server::JsonRpcHandler;
 use mcp_protocol::*;
 
 /// Main MCP server
@@ -136,8 +136,9 @@ impl McpServer {
             self.session_manager.clone(),
         );
 
-        // Build HTTP server
-        let mut builder = http_mcp_server::HttpMcpServer::builder()
+        // Build HTTP server with session storage
+        let session_storage = Arc::new(mcp_session_storage::InMemorySessionStorage::new());
+        let mut builder = http_mcp_server::HttpMcpServer::builder_with_storage(session_storage)
             .bind_address(self.bind_address)
             .mcp_path(&self.mcp_path)
             .cors(self.enable_cors)
@@ -161,10 +162,57 @@ impl McpServer {
         // SSE is now integrated directly into the session management
         if self.enable_sse {
             debug!("SSE support enabled with integrated session management");
+            
+            // Set up event forwarding bridge between SessionManager and StreamManager
+            self.setup_sse_event_bridge(&http_server).await;
         }
 
         http_server.run().await?;
         Ok(())
+    }
+
+    /// Set up event forwarding bridge between SessionManager and StreamManager
+    async fn setup_sse_event_bridge(
+        &self,
+        http_server: &http_mcp_server::HttpMcpServer<mcp_session_storage::InMemorySessionStorage>,
+    ) {
+        debug!("🌉 Setting up SSE event bridge between SessionManager and StreamManager");
+        
+        let stream_manager = http_server.create_stream_manager();
+        let mut global_events = self.session_manager.subscribe_all_session_events();
+        
+        tokio::spawn(async move {
+            debug!("🌐 SSE Event Bridge: Started listening for session events");
+            
+            while let Ok((session_id, event)) = global_events.recv().await {
+                debug!("📡 SSE Bridge: Received event from session {}: {:?}", session_id, event);
+                
+                // Convert SessionEvent to StreamManager event format
+                match event {
+                    crate::session::SessionEvent::Custom { event_type, data } => {
+                        debug!("📤 SSE Bridge: Broadcasting custom event '{}' to StreamManager", event_type);
+                        
+                        if let Err(e) = stream_manager.broadcast_to_session(
+                            &session_id,
+                            "main",
+                            event_type,
+                            data,
+                        ).await {
+                            error!("❌ SSE Bridge: Failed to broadcast to session {}: {}", session_id, e);
+                        } else {
+                            debug!("✅ SSE Bridge: Successfully broadcast to session {}", session_id);
+                        }
+                    },
+                    other_event => {
+                        debug!("⏭ SSE Bridge: Skipping non-custom event: {:?}", other_event);
+                    }
+                }
+            }
+            
+            debug!("🚫 SSE Event Bridge: Global event receiver closed");
+        });
+        
+        info!("✅ SSE event bridge established successfully");
     }
 
     /// Run the server and return the HTTP server handle for SSE access (requires "http" feature)
@@ -172,7 +220,7 @@ impl McpServer {
     pub async fn run_with_sse_access(
         &self,
     ) -> Result<(
-        http_mcp_server::HttpMcpServer,
+        http_mcp_server::HttpMcpServer<mcp_session_storage::InMemorySessionStorage>,
         tokio::task::JoinHandle<http_mcp_server::Result<()>>,
     )> {
         info!(
@@ -200,8 +248,9 @@ impl McpServer {
             self.session_manager.clone(),
         );
 
-        // Build HTTP server
-        let mut builder = http_mcp_server::HttpMcpServer::builder()
+        // Build HTTP server with session storage
+        let session_storage = Arc::new(mcp_session_storage::InMemorySessionStorage::new());
+        let mut builder = http_mcp_server::HttpMcpServer::builder_with_storage(session_storage)
             .bind_address(self.bind_address)
             .mcp_path(&self.mcp_path)
             .cors(self.enable_cors)
@@ -252,19 +301,24 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
     async fn handle(
         &self,
         method: &str,
-        params: Option<json_rpc_server::RequestParams>,
-    ) -> json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
+        params: Option<mcp_json_rpc_server::RequestParams>,
+        session_context: Option<mcp_json_rpc_server::r#async::SessionContext>,
+    ) -> mcp_json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
         debug!("Handling {} request via session-aware bridge", method);
 
-        // Extract session ID from request (would come from headers in real implementation)
-        // For now, we'll extract it from params if available
-        let session_id = extract_session_id_from_params(&params);
-
-        // Create session context if session exists
-        let session_context = if let Some(sid) = session_id {
-            self.session_manager.create_session_context(&sid)
+        // Convert JSON-RPC SessionContext to MCP SessionContext
+        let mcp_session_context = if let Some(json_rpc_ctx) = session_context {
+            debug!("Converting JSON-RPC session context: session_id={}", json_rpc_ctx.session_id);
+            Some(SessionContext::from_json_rpc_with_broadcaster(json_rpc_ctx))
         } else {
-            None
+            // Fallback: extract session ID from params (legacy behavior)
+            let session_id = extract_session_id_from_params(&params);
+            if let Some(sid) = session_id {
+                debug!("Fallback: extracted session_id from params: {}", sid);
+                self.session_manager.create_session_context(&sid)
+            } else {
+                None
+            }
         };
 
         // Convert JSON-RPC params to Value
@@ -273,14 +327,14 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
         // Call the MCP handler with session context
         match self
             .handler
-            .handle_with_session(mcp_params, session_context)
+            .handle_with_session(mcp_params, mcp_session_context)
             .await
         {
             Ok(result) => Ok(result),
             Err(error_msg) => {
                 error!("MCP handler error: {}", error_msg);
                 Err(
-                    json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                    mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
                         error_msg.to_string(),
                     ),
                 )
@@ -295,7 +349,7 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
 
 /// Extract session ID from request parameters (placeholder implementation)
 fn extract_session_id_from_params(
-    _params: &Option<json_rpc_server::RequestParams>,
+    _params: &Option<mcp_json_rpc_server::RequestParams>,
 ) -> Option<String> {
     // In a real implementation, this would extract session ID from HTTP headers
     // For now, return None as we'll implement proper session extraction later
@@ -410,13 +464,14 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
     async fn handle(
         &self,
         method: &str,
-        params: Option<json_rpc_server::RequestParams>,
-    ) -> json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
+        params: Option<mcp_json_rpc_server::RequestParams>,
+        session_context: Option<mcp_json_rpc_server::r#async::SessionContext>,
+    ) -> mcp_json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
         debug!("Handling {} request with session support", method);
 
         if method != "initialize" {
             return Err(
-                json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
+                mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
                     "Method not supported: {}",
                     method
                 )),
@@ -427,14 +482,14 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
         let request = if let Some(params) = params {
             let params_value = params.to_value();
             serde_json::from_value::<InitializeRequest>(params_value).map_err(|e| {
-                json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
+                mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
                     "Invalid initialize request: {}",
                     e
                 ))
             })?
         } else {
             return Err(
-                json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
                     "Missing parameters for initialize".to_string(),
                 ),
             );
@@ -452,7 +507,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             Err(e) => {
                 error!("Protocol version negotiation failed: {}", e);
                 return Err(
-                    json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
+                    mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
                         "Version negotiation failed: {}",
                         e
                     )),
@@ -460,8 +515,15 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             }
         };
 
-        // Create new session for this initialization
-        let session_id = self.session_manager.create_session().await;
+        // Use session ID provided by HTTP layer, or create new one if not provided (GPS pattern)
+        let session_id = if let Some(ctx) = &session_context {
+            debug!("Using session ID from HTTP layer: {}", ctx.session_id);
+            // Create session with the provided session ID
+            self.session_manager.create_session_with_id(ctx.session_id.clone()).await
+        } else {
+            debug!("No session context provided, creating new session");
+            self.session_manager.create_session().await
+        };
 
         // Initialize the session with client info and negotiated version
         if let Err(e) = self
@@ -476,7 +538,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
         {
             error!("Failed to initialize session: {}", e);
             return Err(
-                json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
+                mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
                     "Session initialization failed: {}",
                     e
                 )),
@@ -509,12 +571,14 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             response = response.with_instructions(instructions.clone());
         }
 
-        // TODO: Add session ID to response headers for Streamable HTTP transport
-        // This will enable proper session management as specified in MCP 2025-03-26+
-        // Session IDs should be cryptographically secure and globally unique
+        // TODO: The session ID needs to be communicated to the HTTP layer
+        // for proper MCP session management (GPS pattern)
+        // For now, the HTTP layer will need to extract it from the session manager
+        
+        info!("Session {} created and initialized successfully", session_id);
 
         serde_json::to_value(response).map_err(|e| {
-            json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
+            mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
         })
     }
 
@@ -539,16 +603,17 @@ impl JsonRpcHandler for ListToolsHandler {
     async fn handle(
         &self,
         method: &str,
-        params: Option<json_rpc_server::RequestParams>,
-    ) -> json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
+        params: Option<mcp_json_rpc_server::RequestParams>,
+        _session_context: Option<mcp_json_rpc_server::r#async::SessionContext>,
+    ) -> mcp_json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
         use mcp_protocol_2025_06_18::meta::{Cursor, PaginatedResponse};
 
         debug!("Handling {} request", method);
 
         if method != "tools/list" {
-            return Err(json_rpc_server::error::JsonRpcProcessingError::RpcError(
-                json_rpc_server::JsonRpcError::method_not_found(
-                    json_rpc_server::types::RequestId::Number(0),
+            return Err(mcp_json_rpc_server::error::JsonRpcProcessingError::RpcError(
+                mcp_json_rpc_server::JsonRpcError::method_not_found(
+                    mcp_json_rpc_server::types::RequestId::Number(0),
                     method,
                 ),
             ));
@@ -583,7 +648,7 @@ impl JsonRpcHandler for ListToolsHandler {
         );
 
         serde_json::to_value(paginated_response).map_err(|e| {
-            json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
+            mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
         })
     }
 
@@ -595,14 +660,12 @@ impl JsonRpcHandler for ListToolsHandler {
 /// Session-aware handler for tool execution
 struct SessionAwareToolHandler {
     tools: HashMap<String, Arc<dyn McpTool>>,
-    session_manager: Arc<SessionManager>,
 }
 
 impl SessionAwareToolHandler {
-    fn new(tools: HashMap<String, Arc<dyn McpTool>>, session_manager: Arc<SessionManager>) -> Self {
+    fn new(tools: HashMap<String, Arc<dyn McpTool>>, _session_manager: Arc<SessionManager>) -> Self {
         Self {
             tools,
-            session_manager,
         }
     }
 }
@@ -612,14 +675,15 @@ impl JsonRpcHandler for SessionAwareToolHandler {
     async fn handle(
         &self,
         method: &str,
-        params: Option<json_rpc_server::RequestParams>,
-    ) -> json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
+        params: Option<mcp_json_rpc_server::RequestParams>,
+        session_context: Option<mcp_json_rpc_server::r#async::SessionContext>,
+    ) -> mcp_json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
         debug!("Handling {} request with session support", method);
 
         if method != "tools/call" {
-            return Err(json_rpc_server::error::JsonRpcProcessingError::RpcError(
-                json_rpc_server::JsonRpcError::method_not_found(
-                    json_rpc_server::types::RequestId::Number(0),
+            return Err(mcp_json_rpc_server::error::JsonRpcProcessingError::RpcError(
+                mcp_json_rpc_server::JsonRpcError::method_not_found(
+                    mcp_json_rpc_server::types::RequestId::Number(0),
                     method,
                 ),
             ));
@@ -627,36 +691,35 @@ impl JsonRpcHandler for SessionAwareToolHandler {
 
         let params = params.ok_or_else(|| {
             let mcp_error = mcp_protocol::McpError::MissingParameter("CallToolRequest".to_string());
-            json_rpc_server::error::JsonRpcProcessingError::RpcError(
-                json_rpc_server::JsonRpcError::new(None, mcp_error.to_json_rpc_error()),
+            mcp_json_rpc_server::error::JsonRpcProcessingError::RpcError(
+                mcp_json_rpc_server::JsonRpcError::new(None, mcp_error.to_json_rpc_error()),
             )
         })?;
-
-        // Extract session ID first (before consuming params)
-        let session_id = extract_session_id_from_params(&Some(params.clone()));
 
         // Use the parameter extraction pattern from the other project
         use mcp_protocol::param_extraction::extract_params;
 
         let call_params: mcp_protocol::tools::CallToolParams =
             extract_params(params).map_err(|mcp_error| {
-                json_rpc_server::error::JsonRpcProcessingError::RpcError(
-                    json_rpc_server::JsonRpcError::new(None, mcp_error.to_json_rpc_error()),
+                mcp_json_rpc_server::error::JsonRpcProcessingError::RpcError(
+                    mcp_json_rpc_server::JsonRpcError::new(None, mcp_error.to_json_rpc_error()),
                 )
             })?;
 
         // Find the tool
         let tool = self.tools.get(&call_params.name).ok_or_else(|| {
             let mcp_error = mcp_protocol::McpError::ToolNotFound(call_params.name.clone());
-            json_rpc_server::error::JsonRpcProcessingError::RpcError(
-                json_rpc_server::JsonRpcError::new(None, mcp_error.to_json_rpc_error()),
+            mcp_json_rpc_server::error::JsonRpcProcessingError::RpcError(
+                mcp_json_rpc_server::JsonRpcError::new(None, mcp_error.to_json_rpc_error()),
             )
         })?;
 
-        // Create session context if session exists
-        let session_context = if let Some(sid) = session_id {
-            self.session_manager.create_session_context(&sid)
+        // Convert JSON-RPC SessionContext to MCP SessionContext for tool execution
+        let mcp_session_context = if let Some(json_rpc_ctx) = session_context {
+            debug!("Converting JSON-RPC session context for tool call: session_id={}", json_rpc_ctx.session_id);
+            Some(SessionContext::from_json_rpc_with_broadcaster(json_rpc_ctx))
         } else {
+            debug!("No session context provided for tool call");
             None
         };
 
@@ -664,16 +727,16 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         let args = call_params
             .arguments
             .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
-        match tool.call(args, session_context).await {
+        match tool.call(args, mcp_session_context).await {
             Ok(response) => serde_json::to_value(response).map_err(|e| {
-                json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
+                mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
             }),
             Err(error_msg) => {
                 error!("Tool execution error: {}", error_msg);
                 let error_content = vec![ToolResult::text(format!("Error: {}", error_msg))];
                 let response = CallToolResult::error(error_content);
                 serde_json::to_value(response).map_err(|e| {
-                    json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
+                    mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
                 })
             }
         }
@@ -702,26 +765,25 @@ mod tests {
     use async_trait::async_trait;
     use mcp_protocol::{ToolResult, ToolSchema};
     use serde_json::Value;
+    use mcp_protocol::tools::{CallToolResult, ToolResult};
 
     struct TestTool;
+    
+    impl mcp_protocol::tools::ToolDefinition for TestTool {
+        fn to_tool(&self) -> mcp_protocol::Tool {
+            mcp_protocol::Tool::new("test", ToolSchema::object())
+                .with_description("Test tool")
+        }
+    }
 
     #[async_trait]
     impl McpTool for TestTool {
-        fn name(&self) -> &str {
-            "test"
-        }
-        fn description(&self) -> &str {
-            "Test tool"
-        }
-        fn input_schema(&self) -> ToolSchema {
-            ToolSchema::object()
-        }
         async fn call(
             &self,
             _args: Value,
             _session: Option<crate::SessionContext>,
-        ) -> crate::McpResult<Vec<ToolResult>> {
-            Ok(vec![ToolResult::text("test result")])
+        ) -> crate::McpResult<CallToolResult> {
+            Ok(CallToolResult::success(vec![ToolResult::text("test result")]))
         }
     }
 
@@ -760,7 +822,7 @@ mod tests {
         let session_manager = Arc::new(SessionManager::new(ServerCapabilities::default()));
         let handler = SessionAwareToolHandler::new(tools, session_manager);
         // Create params matching the CallToolParams structure
-        let params = json_rpc_server::RequestParams::Object(
+        let params = mcp_json_rpc_server::RequestParams::Object(
             [
                 ("name".to_string(), serde_json::json!("test")),
                 ("arguments".to_string(), serde_json::json!({})),

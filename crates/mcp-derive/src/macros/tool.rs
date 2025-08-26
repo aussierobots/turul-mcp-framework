@@ -284,7 +284,7 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                         Ok(result) => {
                             Ok(mcp_protocol::tools::CallToolResult::success(vec![mcp_protocol::ToolResult::text(result)]))
                         }
-                        Err(e) => Err(mcp_protocol::McpError::ToolExecutionError(e.to_string()))
+                        Err(e) => Err(mcp_protocol::McpError::tool_execution(e.to_string()))
                     }
                 }
             }

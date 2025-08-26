@@ -14,7 +14,7 @@ use serde_json::json;
 use tokio::net::TcpListener;
 
 use crate::server::{HttpMcpServer, HttpMcpServerBuilder, ServerConfig};
-use json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
+use mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
 use mcp_protocol::{JsonRpcRequest, JsonRpcResponse, JsonRpcError};
 
 /// Mock JSON-RPC handler for testing

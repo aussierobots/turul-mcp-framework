@@ -56,7 +56,7 @@ pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
                 // Default implementation - this should be overridden by implementing elicit_impl
                 match self.elicit_impl(request).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(mcp_protocol::McpError::elicitation(&e)),
+                    Err(e) => Err(mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
         }

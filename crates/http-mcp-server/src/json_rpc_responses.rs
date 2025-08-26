@@ -9,7 +9,7 @@ use bytes::Bytes;
 use serde_json::Value;
 use tracing::error;
 
-use json_rpc_server::{
+use mcp_json_rpc_server::{
     JsonRpcResponse, JsonRpcError,
     error::JsonRpcErrorObject,
     types::RequestId
@@ -47,10 +47,10 @@ pub fn jsonrpc_error_response(
         .unwrap())
 }
 
-/// Build an HTTP response for JSON-RPC notifications (204 No Content).
+/// Build an HTTP response for JSON-RPC notifications (202 Accepted per MCP 2025-06-18).
 pub fn jsonrpc_notification_response() -> Result<Response<JsonRpcBody>, hyper::Error> {
     Ok(Response::builder()
-        .status(StatusCode::NO_CONTENT)
+        .status(StatusCode::ACCEPTED) // MCP 2025-06-18: 202 Accepted for notifications
         .header(header::CONTENT_TYPE, "application/json")
         .body(Full::new(Bytes::new()))
         .unwrap())
@@ -142,8 +142,18 @@ pub fn options_response() -> Response<JsonRpcBody> {
     Response::builder()
         .status(StatusCode::OK)
         .header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-        .header("Access-Control-Allow-Headers", "Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id")
+        .header("Access-Control-Allow-Headers", "Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id, Last-Event-ID")
         .header("Access-Control-Max-Age", "86400")
         .body(Full::new(Bytes::new()))
         .unwrap()
+}
+
+/// Build HTTP response for SSE stream (proper headers for text/event-stream).
+pub fn sse_response_headers() -> http::response::Builder {
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/event-stream")
+        .header(header::CACHE_CONTROL, "no-cache")
+        .header("Connection", "keep-alive")
+        .header("Access-Control-Allow-Origin", "*")
 }

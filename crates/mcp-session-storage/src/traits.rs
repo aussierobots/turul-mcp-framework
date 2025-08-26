@@ -1,0 +1,313 @@
+//! Session Storage Trait and Implementations
+//!
+//! This module provides the core SessionStorage trait abstraction that enables
+//! pluggable session backends for different deployment scenarios:
+//! - InMemory: Development and testing
+//! - SQLite: Single-instance production  
+//! - PostgreSQL: Multi-instance production
+//! - NATS: Distributed with JetStream
+//! - AWS: DynamoDB + SNS for Lambda/serverless
+
+use std::collections::HashMap;
+use std::time::SystemTime;
+use async_trait::async_trait;
+use serde::{Serialize, Deserialize};
+use serde_json::Value;
+use uuid::Uuid;
+
+use mcp_protocol::{ClientCapabilities, ServerCapabilities};
+
+// Note: SessionEvent removed to avoid circular dependency
+
+/// Comprehensive session information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionInfo {
+    /// Unique session identifier (UUID v7 for temporal ordering)
+    pub session_id: String,
+    /// Client capabilities negotiated during initialization
+    pub client_capabilities: Option<ClientCapabilities>,
+    /// Server capabilities provided during initialization  
+    pub server_capabilities: Option<ServerCapabilities>,
+    /// Session state key-value store
+    pub state: HashMap<String, Value>,
+    /// Session creation timestamp (Unix millis)
+    pub created_at: u64,
+    /// Last activity timestamp (Unix millis)
+    pub last_activity: u64,
+    /// Whether session has completed MCP initialization
+    pub is_initialized: bool,
+    /// Session metadata (connection info, user agent, etc.)
+    pub metadata: HashMap<String, Value>,
+}
+
+impl SessionInfo {
+    /// Create a new session with UUID v7 for temporal ordering
+    pub fn new() -> Self {
+        let now = chrono::Utc::now().timestamp_millis() as u64;
+        Self {
+            session_id: Uuid::now_v7().to_string(),
+            client_capabilities: None,
+            server_capabilities: None,
+            state: HashMap::new(),
+            created_at: now,
+            last_activity: now,
+            is_initialized: false,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Create session with specific ID (for testing)
+    pub fn with_id(session_id: String) -> Self {
+        let now = chrono::Utc::now().timestamp_millis() as u64;
+        Self {
+            session_id,
+            client_capabilities: None,
+            server_capabilities: None,
+            state: HashMap::new(),
+            created_at: now,
+            last_activity: now,
+            is_initialized: false,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Update last activity timestamp
+    pub fn touch(&mut self) {
+        self.last_activity = chrono::Utc::now().timestamp_millis() as u64;
+    }
+
+    /// Check if session is expired based on timeout
+    pub fn is_expired(&self, timeout_minutes: u64) -> bool {
+        let now = chrono::Utc::now().timestamp_millis() as u64;
+        let timeout_millis = timeout_minutes * 60 * 1000;
+        now - self.last_activity > timeout_millis
+    }
+}
+
+/// Stream information for SSE management
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StreamInfo {
+    /// Stream identifier within session
+    pub stream_id: String,
+    /// Session this stream belongs to
+    pub session_id: String,
+    /// Stream creation timestamp
+    pub created_at: u64,
+    /// Last event ID sent on this stream (for resumability)
+    pub last_event_id: u64,
+    /// Stream metadata
+    pub metadata: HashMap<String, Value>,
+}
+
+impl StreamInfo {
+    pub fn new(session_id: String, stream_id: String) -> Self {
+        Self {
+            session_id,
+            stream_id,
+            created_at: chrono::Utc::now().timestamp_millis() as u64,
+            last_event_id: 0,
+            metadata: HashMap::new(),
+        }
+    }
+}
+
+/// Enhanced SSE event with proper metadata for resumability
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SseEvent {
+    /// Monotonic event ID for ordering and resumability
+    pub id: u64,
+    /// Event timestamp (Unix millis)
+    pub timestamp: u64,
+    /// Stream ID this event belongs to
+    pub stream_id: String,
+    /// Event type for client-side filtering
+    pub event_type: String,
+    /// Event data payload
+    pub data: Value,
+    /// Retry timeout in milliseconds (optional)
+    pub retry: Option<u32>,
+}
+
+impl SseEvent {
+    /// Create new event with auto-generated ID
+    pub fn new(stream_id: String, event_type: String, data: Value) -> Self {
+        Self {
+            id: 0, // Will be set by SessionStorage when storing
+            timestamp: chrono::Utc::now().timestamp_millis() as u64,
+            stream_id,
+            event_type,
+            data,
+            retry: None,
+        }
+    }
+
+    /// Format as SSE message for HTTP response
+    pub fn format(&self) -> String {
+        let mut result = String::new();
+        
+        // Event ID for resumability
+        result.push_str(&format!("id: {}\n", self.id));
+        
+        // Event type
+        result.push_str(&format!("event: {}\n", self.event_type));
+        
+        // Event data (JSON)
+        if let Ok(data_str) = serde_json::to_string(&self.data) {
+            result.push_str(&format!("data: {}\n", data_str));
+        } else {
+            result.push_str("data: {}\n");
+        }
+        
+        // Retry timeout if specified
+        if let Some(retry) = self.retry {
+            result.push_str(&format!("retry: {}\n", retry));
+        }
+        
+        // End of event
+        result.push('\n');
+        
+        result
+    }
+}
+
+/// Core trait for session storage backends
+#[async_trait]
+pub trait SessionStorage: Send + Sync {
+    /// Error type for storage operations
+    type Error: std::error::Error + Send + Sync + 'static;
+
+    // ============================================================================
+    // Session Management
+    // ============================================================================
+
+    /// Create a new session with generated UUID v7
+    async fn create_session(&self, capabilities: ServerCapabilities) -> Result<SessionInfo, Self::Error>;
+
+    /// Create session with specific ID (for testing)
+    async fn create_session_with_id(&self, session_id: String, capabilities: ServerCapabilities) -> Result<SessionInfo, Self::Error>;
+
+    /// Get session by ID
+    async fn get_session(&self, session_id: &str) -> Result<Option<SessionInfo>, Self::Error>;
+
+    /// Update entire session info
+    async fn update_session(&self, session_info: SessionInfo) -> Result<(), Self::Error>;
+
+    /// Update session state value
+    async fn set_session_state(&self, session_id: &str, key: &str, value: Value) -> Result<(), Self::Error>;
+
+    /// Get session state value  
+    async fn get_session_state(&self, session_id: &str, key: &str) -> Result<Option<Value>, Self::Error>;
+
+    /// Remove session state value
+    async fn remove_session_state(&self, session_id: &str, key: &str) -> Result<Option<Value>, Self::Error>;
+
+    /// Delete session completely
+    async fn delete_session(&self, session_id: &str) -> Result<bool, Self::Error>;
+
+    /// List all session IDs
+    async fn list_sessions(&self) -> Result<Vec<String>, Self::Error>;
+
+    // ============================================================================
+    // Stream Management (for SSE)
+    // ============================================================================
+
+    /// Create a new stream within a session
+    async fn create_stream(&self, session_id: &str, stream_id: String) -> Result<StreamInfo, Self::Error>;
+
+    /// Get stream information
+    async fn get_stream(&self, session_id: &str, stream_id: &str) -> Result<Option<StreamInfo>, Self::Error>;
+
+    /// Update stream information
+    async fn update_stream(&self, stream_info: StreamInfo) -> Result<(), Self::Error>;
+
+    /// Delete a stream
+    async fn delete_stream(&self, session_id: &str, stream_id: &str) -> Result<bool, Self::Error>;
+
+    /// List all streams for a session
+    async fn list_streams(&self, session_id: &str) -> Result<Vec<String>, Self::Error>;
+
+    // ============================================================================
+    // Event Management (for SSE resumability)
+    // ============================================================================
+
+    /// Store an event for a specific stream (assigns unique event ID)
+    async fn store_event(&self, session_id: &str, stream_id: &str, mut event: SseEvent) -> Result<SseEvent, Self::Error>;
+
+    /// Get events after a specific event ID (for resumability)
+    async fn get_events_after(&self, session_id: &str, stream_id: &str, after_event_id: u64) -> Result<Vec<SseEvent>, Self::Error>;
+
+    /// Get recent events (for initial connection)  
+    async fn get_recent_events(&self, session_id: &str, stream_id: &str, limit: usize) -> Result<Vec<SseEvent>, Self::Error>;
+
+    /// Delete old events (cleanup)
+    async fn delete_events_before(&self, session_id: &str, stream_id: &str, before_event_id: u64) -> Result<u64, Self::Error>;
+
+    // ============================================================================
+    // Cleanup and Maintenance
+    // ============================================================================
+
+    /// Remove expired sessions (returns list of removed session IDs)
+    async fn expire_sessions(&self, older_than: SystemTime) -> Result<Vec<String>, Self::Error>;
+
+    /// Get session count for monitoring
+    async fn session_count(&self) -> Result<usize, Self::Error>;
+
+    /// Get total event count across all sessions
+    async fn event_count(&self) -> Result<usize, Self::Error>;
+
+    /// Perform maintenance tasks (compaction, cleanup, etc.)
+    async fn maintenance(&self) -> Result<(), Self::Error>;
+}
+
+/// Result type for session storage operations
+pub type SessionResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+
+/// Convenience trait for creating session storage instances
+pub trait SessionStorageBuilder {
+    type Storage: SessionStorage;
+    type Config;
+    type Error: std::error::Error + Send + Sync + 'static;
+
+    fn build(config: Self::Config) -> Result<Self::Storage, Self::Error>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_session_info_creation() {
+        let session = SessionInfo::new();
+        assert!(!session.session_id.is_empty());
+        assert!(!session.is_initialized);
+        assert!(session.state.is_empty());
+    }
+
+    #[test]
+    fn test_session_expiration() {
+        let mut session = SessionInfo::new();
+        assert!(!session.is_expired(30)); // 30 minute timeout
+        
+        // Simulate old session
+        session.last_activity = chrono::Utc::now().timestamp_millis() as u64 - (31 * 60 * 1000);
+        assert!(session.is_expired(30));
+    }
+
+    #[test]
+    fn test_sse_event_formatting() {
+        let event = SseEvent {
+            id: 123,
+            timestamp: 1234567890,
+            stream_id: "stream1".to_string(),
+            event_type: "data".to_string(),
+            data: serde_json::json!({"message": "test"}),
+            retry: Some(1000),
+        };
+
+        let formatted = event.format();
+        assert!(formatted.contains("id: 123"));
+        assert!(formatted.contains("event: data"));
+        assert!(formatted.contains("retry: 1000"));
+        assert!(formatted.contains("data: {\"message\":\"test\"}"));
+    }
+}

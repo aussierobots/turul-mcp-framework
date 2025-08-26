@@ -331,6 +331,30 @@ impl McpServerBuilder {
         self
     }
 
+    // =============================================================================
+    // ZERO-CONFIGURATION CONVENIENCE METHODS
+    // These aliases make the API more intuitive and match the zero-config vision
+    // =============================================================================
+
+    /// Register a sampler - convenient alias for sampling_provider
+    /// Automatically uses "sampling/createMessage" method
+    pub fn sampler<S: McpSampling + 'static>(self, sampling: S) -> Self {
+        self.sampling_provider(sampling)
+    }
+
+    /// Register a completer - convenient alias for completion_provider  
+    /// Automatically uses "completion/complete" method
+    pub fn completer<C: McpCompletion + 'static>(self, completion: C) -> Self {
+        self.completion_provider(completion)
+    }
+
+    /// Register a notification by type - type determines method automatically
+    /// This enables the `.notification::<T>()` pattern from universal-mcp-server
+    pub fn notification_type<N: McpNotification + 'static + Default>(self) -> Self {
+        let notification = N::default();
+        self.notification_provider(notification)  
+    }
+
     /// Register a handler with the server
     pub fn handler<H: McpHandler + 'static>(mut self, handler: H) -> Self {
         let handler_arc = Arc::new(handler);
@@ -547,7 +571,7 @@ mod tests {
     use super::*;
     use crate::{McpTool, SessionContext};
     use async_trait::async_trait;
-    use mcp_protocol::{ToolSchema, CallToolResponse};
+    use mcp_protocol::{ToolSchema, CallToolResult};
     use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations};
     use serde_json::Value;
     use std::collections::HashMap;
@@ -592,8 +616,8 @@ mod tests {
 
     #[async_trait]
     impl McpTool for TestTool {
-        async fn call(&self, _args: Value, _session: Option<SessionContext>) -> crate::McpResult<CallToolResponse> {
-            Ok(CallToolResponse::from_text("test"))
+        async fn call(&self, _args: Value, _session: Option<SessionContext>) -> crate::McpResult<CallToolResult> {
+            Ok(CallToolResult::success(vec![mcp_protocol::ToolResult::text("test")]))
         }
     }
 

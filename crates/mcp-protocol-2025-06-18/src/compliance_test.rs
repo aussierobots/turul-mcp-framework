@@ -57,7 +57,7 @@ mod tests {
         let mut meta = HashMap::new();
         meta.insert("executionTime".to_string(), json!(42));
 
-        let response = CallToolResponse::success(vec![ToolResult::text("Success!")])
+        let response = CallToolResult::success(vec![ToolResult::text("Success!")])
             .with_meta(meta);
 
         let json_value = serde_json::to_value(&response).unwrap();
@@ -74,12 +74,12 @@ mod tests {
         let mut meta = HashMap::new();
         meta.insert("timestamp".to_string(), json!("2025-01-01T00:00:00Z"));
 
-        let notification = ResourcesListChangedNotification::new()
+        let notification = ResourceListChangedNotification::new()
             .with_meta(meta);
 
         let json_value = serde_json::to_value(&notification).unwrap();
 
-        assert_eq!(json_value["method"], "notifications/resources/listChanged");
+        assert_eq!(json_value["method"], "notifications/resources/list_changed");
         assert!(json_value["params"].is_object());
         assert_eq!(json_value["params"]["_meta"]["timestamp"], "2025-01-01T00:00:00Z");
     }
@@ -124,10 +124,10 @@ mod tests {
     #[test]
     fn test_optional_params_serialization() {
         // Test that empty notifications don't serialize params if None
-        let notification = ResourcesListChangedNotification::new();
+        let notification = ResourceListChangedNotification::new();
         let json_value = serde_json::to_value(&notification).unwrap();
 
-        assert_eq!(json_value["method"], "notifications/resources/listChanged");
+        assert_eq!(json_value["method"], "notifications/resources/list_changed");
         // params should be null/absent since it's None
         assert!(json_value["params"].is_null() || !json_value.as_object().unwrap().contains_key("params"));
     }

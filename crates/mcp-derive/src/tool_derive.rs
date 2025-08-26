@@ -6,9 +6,53 @@ use syn::{Data, DeriveInput, Fields, Result};
 
 use crate::utils::{extract_tool_meta, extract_param_meta, type_to_schema, generate_param_extraction, generate_output_schema_for_type, generate_result_conversion};
 
+/// Auto-determine tool name from struct name (ZERO CONFIGURATION!)
+/// Examples:
+/// - `CalculatorTool` → `"calculator"`
+/// - `FileReaderTool` → `"file_reader"`
+/// - `Calculator` → `"calculator"`
+fn auto_determine_tool_name(struct_name: String) -> String {
+    // Remove "Tool" suffix if present
+    let base_name = if struct_name.ends_with("Tool") {
+        &struct_name[..struct_name.len() - 4] // Remove "Tool"
+    } else {
+        &struct_name
+    };
+    
+    // Convert CamelCase to snake_case
+    camel_to_snake_case(base_name)
+}
+
+/// Convert CamelCase to snake_case
+fn camel_to_snake_case(input: &str) -> String {
+    let mut result = String::new();
+    for (i, ch) in input.chars().enumerate() {
+        if ch.is_uppercase() && i > 0 {
+            result.push('_');
+        }
+        result.push(ch.to_lowercase().next().unwrap());
+    }
+    result
+}
+
 pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     let name = &input.ident;
-    let tool_meta = extract_tool_meta(&input.attrs)?;
+    
+    // AUTO-DETERMINE tool name from struct name (ZERO CONFIGURATION!)
+    let auto_name = auto_determine_tool_name(name.to_string());
+    
+    // Try to extract attributes, but use auto-determined values as defaults
+    let tool_meta = match extract_tool_meta(&input.attrs) {
+        Ok(meta) => meta,
+        Err(_) => {
+            // No attributes found - use zero-configuration defaults
+            crate::utils::ToolMeta {
+                name: auto_name,
+                description: format!("Auto-generated tool for {}", name),
+                output_type: None,
+            }
+        }
+    };
     
     // Only support named structs for now
     let fields = match &input.data {
@@ -194,14 +238,37 @@ mod tests {
     }
 
     #[test]
-    fn test_missing_tool_attribute() {
+    fn test_zero_config_tool() {
+        // ✅ ZERO CONFIGURATION - No attributes needed!
         let input: DeriveInput = parse_quote! {
-            struct TestTool {
-                message: String,
+            #[derive(McpTool)]
+            struct CalculatorTool {
+                #[param(description = "First number")]
+                a: f64,
+                #[param(description = "Second number")]  
+                b: f64,
             }
         };
 
         let result = derive_mcp_tool_impl(input);
-        assert!(result.is_err());
+        assert!(result.is_ok());
+        
+        // Framework auto-determines name as "calculator"
+    }
+    
+    #[test]
+    fn test_zero_config_without_tool_suffix() {
+        // ✅ ZERO CONFIGURATION - Works without "Tool" suffix
+        let input: DeriveInput = parse_quote! {
+            #[derive(McpTool)]
+            struct Calculator {
+                value: f64,
+            }
+        };
+
+        let result = derive_mcp_tool_impl(input);
+        assert!(result.is_ok());
+        
+        // Framework auto-determines name as "calculator"
     }
 }

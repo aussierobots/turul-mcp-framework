@@ -23,20 +23,24 @@ pub mod protocol;
 pub mod mcp_session;
 pub mod session_handler;
 pub mod json_rpc_responses;
+pub mod stream_manager;
+pub mod notification_bridge;
 
 #[cfg(test)]
 mod tests;
 
 // Re-export main types
-pub use server::{HttpMcpServer, HttpMcpServerBuilder, ServerConfig};
+pub use server::{HttpMcpServer, HttpMcpServerBuilder, ServerConfig, ServerStats};
 pub use handler::McpHttpHandler;
 pub use cors::CorsLayer;
 pub use streamable_http::{StreamableHttpHandler, StreamableHttpContext};
-pub use protocol::{McpProtocolVersion, extract_protocol_version, extract_session_id};
+pub use protocol::{McpProtocolVersion, extract_protocol_version, extract_session_id, extract_last_event_id};
 pub use session_handler::{SessionMcpHandler, SessionSseStream};
+pub use stream_manager::{StreamManager, StreamConfig, StreamStats, StreamError};
+pub use notification_bridge::{NotificationBroadcaster, BroadcastError, StreamManagerNotificationBroadcaster, SharedNotificationBroadcaster};
 
 // Re-export foundational types
-pub use json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
+pub use mcp_json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
 pub use mcp_protocol::*;
 
 /// Result type for HTTP MCP operations
@@ -49,7 +53,7 @@ pub enum HttpMcpError {
     Http(#[from] hyper::Error),
     
     #[error("JSON-RPC error: {0}")]
-    JsonRpc(#[from] json_rpc_server::JsonRpcError),
+    JsonRpc(#[from] mcp_json_rpc_server::JsonRpcError),
     
     #[error("MCP protocol error: {0}")]
     Mcp(#[from] mcp_protocol::McpError),

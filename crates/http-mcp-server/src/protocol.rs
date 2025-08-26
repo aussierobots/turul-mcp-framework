@@ -106,6 +106,14 @@ pub fn extract_session_id(headers: &hyper::HeaderMap) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+/// Extract Last-Event-ID from HTTP request headers for SSE resumability
+pub fn extract_last_event_id(headers: &hyper::HeaderMap) -> Option<u64> {
+    headers
+        .get("Last-Event-ID")
+        .and_then(|h| h.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

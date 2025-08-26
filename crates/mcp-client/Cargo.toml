@@ -9,7 +9,7 @@ repository = "https://github.com/aussierobots/mcp-framework"
 [dependencies]
 # MCP framework dependencies
 mcp-protocol-2025-06-18 = { workspace = true }
-json-rpc-server = { workspace = true }
+mcp-json-rpc-server = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true, features = ["full"] }

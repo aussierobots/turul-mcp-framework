@@ -86,7 +86,7 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
                 // Default implementation - this should be overridden by implementing render_impl
                 match self.render_impl(args).await {
                     Ok(result) => Ok(result),
-                    Err(e) => Err(mcp_protocol::McpError::prompt(&e)),
+                    Err(e) => Err(mcp_protocol::McpError::tool_execution(&e)),
                 }
             }
         }

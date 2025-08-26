@@ -1,0 +1,26 @@
+[package]
+name = "mcp-session-storage"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Session storage abstractions for Model Context Protocol (MCP) servers"
+
+[dependencies]
+# Core dependencies
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+uuid = { version = "1.0", features = ["v4", "v7"] }
+chrono = { workspace = true, features = ["serde"] }
+
+# Protocol types
+mcp-protocol.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

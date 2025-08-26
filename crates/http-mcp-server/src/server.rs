@@ -1,18 +1,26 @@
-//! HTTP MCP Server implementation
+//! HTTP MCP Server with SessionStorage integration
+//!
+//! This server provides MCP 2025-06-18 compliant HTTP transport with
+//! pluggable session storage backends and proper SSE resumability.
 
 use std::net::SocketAddr;
 use std::sync::Arc;
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
-use hyper::{Request, Response, StatusCode};
+use hyper::{Request, Response};
 use http_body_util::Full;
 use bytes::Bytes;
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
 use tracing::{info, error, debug};
 
-use crate::{Result, CorsLayer, SessionMcpHandler, mcp_session};
-use json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
+use mcp_json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
+use mcp_session_storage::{SessionStorage, InMemorySessionStorage};
+
+use crate::{
+    Result, SessionMcpHandler, StreamConfig, 
+    CorsLayer
+};
 
 /// Configuration for the HTTP MCP server
 #[derive(Debug, Clone)]
@@ -41,18 +49,34 @@ impl Default for ServerConfig {
     }
 }
 
-/// Builder for HTTP MCP server
-pub struct HttpMcpServerBuilder {
+/// Builder for HTTP MCP server with pluggable storage
+pub struct HttpMcpServerBuilder<S: SessionStorage = InMemorySessionStorage> {
     config: ServerConfig,
     dispatcher: JsonRpcDispatcher,
+    session_storage: Option<Arc<S>>,
+    stream_config: StreamConfig,
 }
 
-impl HttpMcpServerBuilder {
-    /// Create a new builder with default configuration
+impl HttpMcpServerBuilder<InMemorySessionStorage> {
+    /// Create a new builder with in-memory storage (zero-configuration)
     pub fn new() -> Self {
         Self {
             config: ServerConfig::default(),
             dispatcher: JsonRpcDispatcher::new(),
+            session_storage: None,
+            stream_config: StreamConfig::default(),
+        }
+    }
+}
+
+impl<S: SessionStorage + 'static> HttpMcpServerBuilder<S> {
+    /// Create a new builder with specific session storage
+    pub fn with_storage(session_storage: Arc<S>) -> Self {
+        Self {
+            config: ServerConfig::default(),
+            dispatcher: JsonRpcDispatcher::new(),
+            session_storage: Some(session_storage),
+            stream_config: StreamConfig::default(),
         }
     }
 
@@ -86,6 +110,12 @@ impl HttpMcpServerBuilder {
         self
     }
 
+    /// Configure SSE streaming settings
+    pub fn stream_config(mut self, config: StreamConfig) -> Self {
+        self.stream_config = config;
+        self
+    }
+
     /// Register a JSON-RPC handler for specific methods
     pub fn register_handler<H>(mut self, methods: Vec<String>, handler: H) -> Self
     where
@@ -105,53 +135,80 @@ impl HttpMcpServerBuilder {
     }
 
     /// Build the HTTP MCP server
-    pub fn build(self) -> HttpMcpServer {
+    pub fn build(self) -> HttpMcpServer<S> {
+        let session_storage = self.session_storage.expect("Session storage must be provided");
+
         HttpMcpServer {
             config: self.config,
             dispatcher: Arc::new(self.dispatcher),
+            session_storage,
+            stream_config: self.stream_config,
         }
     }
 }
 
-impl Default for HttpMcpServerBuilder {
+impl<S: SessionStorage + 'static> Default for HttpMcpServerBuilder<S>
+where
+    S: Default + SessionStorage,
+{
     fn default() -> Self {
-        Self::new()
+        Self::with_storage(Arc::new(S::default()))
     }
 }
 
-/// HTTP MCP Server
+/// HTTP MCP Server with SessionStorage integration
 #[derive(Clone)]
-pub struct HttpMcpServer {
+pub struct HttpMcpServer<S: SessionStorage> {
     config: ServerConfig,
     dispatcher: Arc<JsonRpcDispatcher>,
+    session_storage: Arc<S>,
+    stream_config: StreamConfig,
 }
 
-impl HttpMcpServer {
-    /// Create a new builder
-    pub fn builder() -> HttpMcpServerBuilder {
+impl HttpMcpServer<InMemorySessionStorage> {
+    /// Create a new builder with default in-memory storage
+    pub fn builder() -> HttpMcpServerBuilder<InMemorySessionStorage> {
         HttpMcpServerBuilder::new()
     }
+}
 
-    /// Run the server
+impl<S: SessionStorage + 'static> HttpMcpServer<S> {
+    /// Create a new builder with specific session storage
+    pub fn builder_with_storage(session_storage: Arc<S>) -> HttpMcpServerBuilder<S> {
+        HttpMcpServerBuilder::with_storage(session_storage)
+    }
+
+    /// Get a StreamManager instance for event forwarding bridge
+    /// Creates a shared StreamManager using the same session storage
+    pub fn create_stream_manager(&self) -> crate::StreamManager<S> {
+        crate::StreamManager::with_config(Arc::clone(&self.session_storage), self.stream_config.clone())
+    }
+
+    /// Run the server with session management
     pub async fn run(&self) -> Result<()> {
         // Start session cleanup task
-        mcp_session::spawn_session_cleanup();
+        self.start_session_cleanup().await;
         
         let listener = TcpListener::bind(&self.config.bind_address).await?;
         info!("HTTP MCP server listening on {}", self.config.bind_address);
         info!("MCP endpoint available at: {}", self.config.mcp_path);
+        info!("Session storage: {}", std::any::type_name::<S>());
 
         loop {
             let (stream, peer_addr) = listener.accept().await?;
             debug!("New connection from {}", peer_addr);
 
-            let config = self.config.clone();
-            let dispatcher = Arc::clone(&self.dispatcher);
+            let handler = SessionMcpHandler::with_storage(
+                self.config.clone(),
+                Arc::clone(&self.dispatcher),
+                Arc::clone(&self.session_storage),
+                self.stream_config.clone(),
+            );
 
             tokio::spawn(async move {
                 let io = TokioIo::new(stream);
                 let service = service_fn(move |req| {
-                    handle_request(req, config.clone(), Arc::clone(&dispatcher))
+                    handle_request(req, handler.clone())
                 });
 
                 if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
@@ -160,13 +217,50 @@ impl HttpMcpServer {
             });
         }
     }
+
+    /// Start background session cleanup task
+    async fn start_session_cleanup(&self) {
+        let storage = Arc::clone(&self.session_storage);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                
+                let expire_time = std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 60); // 30 minutes
+                match storage.expire_sessions(expire_time).await {
+                    Ok(expired) => {
+                        if !expired.is_empty() {
+                            info!("Expired {} sessions", expired.len());
+                            for session_id in expired {
+                                debug!("Expired session: {}", session_id);
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        error!("Session cleanup error: {}", err);
+                    }
+                }
+            }
+        });
+    }
+
+    /// Get server statistics
+    pub async fn get_stats(&self) -> ServerStats {
+        let session_count = self.session_storage.session_count().await.unwrap_or(0);
+        let event_count = self.session_storage.event_count().await.unwrap_or(0);
+        
+        ServerStats {
+            sessions: session_count,
+            events: event_count,
+            storage_type: std::any::type_name::<S>().to_string(),
+        }
+    }
 }
 
-/// Handle HTTP requests with session-integrated handler
-async fn handle_request(
+/// Handle requests with MCP 2025-06-18 compliance
+async fn handle_request<S: SessionStorage + 'static>(
     req: Request<hyper::body::Incoming>,
-    config: ServerConfig,
-    dispatcher: Arc<JsonRpcDispatcher>,
+    handler: SessionMcpHandler<S>,
 ) -> std::result::Result<Response<Full<Bytes>>, hyper::Error> {
     let method = req.method().clone();
     let uri = req.uri().clone();
@@ -174,17 +268,14 @@ async fn handle_request(
 
     debug!("Handling {} {}", method, path);
 
-    // Create the JSON-RPC 2.0 over HTTP handler  
-    let handler = SessionMcpHandler::new(config.clone(), dispatcher);
-
-    // Route the request - handler now returns proper JSON-RPC responses
-    let response = if path == &config.mcp_path {
+    // Route the request
+    let response = if path == &handler.config.mcp_path {
         match handler.handle_mcp_request(req).await {
-            Ok(json_rpc_response) => json_rpc_response,
+            Ok(mcp_response) => mcp_response,
             Err(err) => {
                 error!("Request handling error: {}", err);
                 Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
+                    .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
                     .body(Full::new(Bytes::from(format!("Internal Server Error: {}", err))))
                     .unwrap()
             }
@@ -192,18 +283,26 @@ async fn handle_request(
     } else {
         // 404 for other paths
         Response::builder()
-            .status(StatusCode::NOT_FOUND)
+            .status(hyper::StatusCode::NOT_FOUND)
             .body(Full::new(Bytes::from("Not Found")))
             .unwrap()
     };
 
     // Apply CORS if enabled
     let mut final_response = response;
-    if config.enable_cors {
+    if handler.config.enable_cors {
         CorsLayer::apply_cors_headers(final_response.headers_mut());
     }
     
     Ok(final_response)
+}
+
+/// Server statistics
+#[derive(Debug, Clone)]
+pub struct ServerStats {
+    pub sessions: usize,
+    pub events: usize,
+    pub storage_type: String,
 }
 
 #[cfg(test)]
@@ -233,5 +332,15 @@ mod tests {
         assert_eq!(server.config.mcp_path, "/api/mcp");
         assert!(!server.config.enable_cors);
         assert_eq!(server.config.max_body_size, 2048);
+    }
+
+    #[tokio::test]
+    async fn test_server_stats() {
+        let server = HttpMcpServer::builder().build();
+        
+        let stats = server.get_stats().await;
+        assert_eq!(stats.sessions, 0);
+        assert_eq!(stats.events, 0);
+        assert!(stats.storage_type.contains("InMemorySessionStorage"));
     }
 }

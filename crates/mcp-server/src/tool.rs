@@ -39,7 +39,7 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
     use mcp_protocol::schema::JsonSchema;
-    use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolSchema, ToolAnnotations, ToolResult, CallToolResponse};
+    use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolSchema, ToolAnnotations, ToolResult, CallToolResult};
 
     struct TestTool {
         input_schema: ToolSchema,
@@ -86,13 +86,13 @@ mod tests {
 
     #[async_trait]
     impl McpTool for TestTool {
-        async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResponse> {
+        async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
             let message = args.get("message")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| mcp_protocol::McpError::missing_param("message"))?;
 
             let result = format!("Test: {}", message);
-            Ok(CallToolResponse::from_text(result))
+            Ok(CallToolResult::success(vec![ToolResult::text(result)]))
         }
     }
 
