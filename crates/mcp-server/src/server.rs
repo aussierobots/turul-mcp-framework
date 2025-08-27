@@ -29,6 +29,8 @@ pub struct McpServer {
     session_manager: Arc<SessionManager>,
     /// Optional client instructions
     instructions: Option<String>,
+    /// Strict MCP lifecycle enforcement
+    strict_lifecycle: bool,
 
     // HTTP configuration (if enabled)
     #[cfg(feature = "http")]
@@ -51,6 +53,7 @@ impl McpServer {
         instructions: Option<String>,
         session_timeout_minutes: Option<u64>,
         session_cleanup_interval_seconds: Option<u64>,
+        strict_lifecycle: bool,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
@@ -76,6 +79,7 @@ impl McpServer {
             handlers,
             session_manager,
             instructions,
+            strict_lifecycle,
             #[cfg(feature = "http")]
             bind_address,
             #[cfg(feature = "http")]
@@ -126,7 +130,7 @@ impl McpServer {
 
         // Create session-aware tool handler
         let tool_handler =
-            SessionAwareToolHandler::new(self.tools.clone(), self.session_manager.clone());
+            SessionAwareToolHandler::new(self.tools.clone(), self.session_manager.clone(), self.strict_lifecycle);
 
         // Create session-aware initialize handler
         let init_handler = SessionAwareInitializeHandler::new(
@@ -157,6 +161,15 @@ impl McpServer {
             builder = builder.register_handler(vec![method.clone()], bridge_handler);
         }
 
+        // Register special initialized notification handler that can mark sessions as initialized
+        use crate::handlers::InitializedNotificationHandler;
+        let initialized_handler = InitializedNotificationHandler::new(self.session_manager.clone());
+        let initialized_bridge = SessionAwareMcpHandlerBridge::new(
+            Arc::new(initialized_handler), 
+            self.session_manager.clone()
+        );
+        builder = builder.register_handler(vec!["notifications/initialized".to_string()], initialized_bridge);
+
         let http_server = builder.build();
 
         // SSE is now integrated directly into the session management
@@ -178,7 +191,7 @@ impl McpServer {
     ) {
         debug!("🌉 Setting up SSE event bridge between SessionManager and StreamManager");
         
-        let stream_manager = http_server.create_stream_manager();
+        let stream_manager = http_server.get_stream_manager();
         let mut global_events = self.session_manager.subscribe_all_session_events();
         
         tokio::spawn(async move {
@@ -237,7 +250,7 @@ impl McpServer {
 
         // Create session-aware tool handler
         let tool_handler =
-            SessionAwareToolHandler::new(self.tools.clone(), self.session_manager.clone());
+            SessionAwareToolHandler::new(self.tools.clone(), self.session_manager.clone(), self.strict_lifecycle);
 
         // Create session-aware initialize handler
         let init_handler = SessionAwareInitializeHandler::new(
@@ -267,6 +280,15 @@ impl McpServer {
                 SessionAwareMcpHandlerBridge::new(handler.clone(), self.session_manager.clone());
             builder = builder.register_handler(vec![method.clone()], bridge_handler);
         }
+
+        // Register special initialized notification handler that can mark sessions as initialized
+        use crate::handlers::InitializedNotificationHandler;
+        let initialized_handler = InitializedNotificationHandler::new(self.session_manager.clone());
+        let initialized_bridge = SessionAwareMcpHandlerBridge::new(
+            Arc::new(initialized_handler), 
+            self.session_manager.clone()
+        );
+        builder = builder.register_handler(vec!["notifications/initialized".to_string()], initialized_bridge);
 
         let http_server = builder.build();
 
@@ -524,25 +546,48 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             self.session_manager.create_session().await
         };
 
-        // Initialize the session with client info and negotiated version
-        if let Err(e) = self
-            .session_manager
-            .initialize_session_with_version(
+        // Store client info and capabilities in session state for later initialization
+        // Per MCP spec, session is NOT initialized until client sends notifications/initialized
+        self.session_manager
+            .set_session_state(
                 &session_id,
-                request.client_info,
-                request.capabilities,
-                negotiated_version,
+                "client_info",
+                serde_json::to_value(&request.client_info).map_err(|e| {
+                    mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
+                        "Failed to serialize client info: {}",
+                        e
+                    ))
+                })?,
             )
-            .await
-        {
-            error!("Failed to initialize session: {}", e);
-            return Err(
-                mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
-                    "Session initialization failed: {}",
-                    e
-                )),
-            );
-        }
+            .await;
+
+        self.session_manager
+            .set_session_state(
+                &session_id,
+                "client_capabilities",
+                serde_json::to_value(&request.capabilities).map_err(|e| {
+                    mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
+                        "Failed to serialize client capabilities: {}",
+                        e
+                    ))
+                })?,
+            )
+            .await;
+
+        self.session_manager
+            .set_session_state(
+                &session_id,
+                "negotiated_version",
+                serde_json::to_value(&negotiated_version).map_err(|e| {
+                    mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
+                        "Failed to serialize negotiated version: {}",
+                        e
+                    ))
+                })?,
+            )
+            .await;
+
+        // Session is NOT marked as initialized yet - waiting for notifications/initialized
 
         // Store the negotiated version in session state for tools to access
         self.session_manager
@@ -554,7 +599,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             .await;
 
         info!(
-            "Session {} initialized for client with protocol version {}",
+            "Session {} created and ready for client with protocol version {} (waiting for notifications/initialized)",
             session_id, negotiated_version
         );
 
@@ -574,7 +619,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
         // for proper MCP session management (GPS pattern)
         // For now, the HTTP layer will need to extract it from the session manager
         
-        info!("Session {} created and initialized successfully", session_id);
+        info!("Session {} created successfully (not yet initialized - waiting for notifications/initialized)", session_id);
 
         serde_json::to_value(response).map_err(|e| {
             mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
@@ -659,12 +704,16 @@ impl JsonRpcHandler for ListToolsHandler {
 /// Session-aware handler for tool execution
 struct SessionAwareToolHandler {
     tools: HashMap<String, Arc<dyn McpTool>>,
+    session_manager: Arc<SessionManager>,
+    strict_lifecycle: bool,
 }
 
 impl SessionAwareToolHandler {
-    fn new(tools: HashMap<String, Arc<dyn McpTool>>, _session_manager: Arc<SessionManager>) -> Self {
+    fn new(tools: HashMap<String, Arc<dyn McpTool>>, session_manager: Arc<SessionManager>, strict_lifecycle: bool) -> Self {
         Self {
             tools,
+            session_manager,
+            strict_lifecycle,
         }
     }
 }
@@ -686,6 +735,25 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                     method,
                 ),
             ));
+        }
+
+        // MCP Lifecycle Guard: Ensure session is initialized before allowing tool operations (if strict mode enabled)
+        if self.strict_lifecycle {
+            if let Some(ref session_ctx) = session_context {
+                let session_initialized = futures::executor::block_on(
+                    self.session_manager.is_session_initialized(&session_ctx.session_id)
+                );
+                if !session_initialized {
+                    debug!("🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)", method, session_ctx.session_id);
+                    let mcp_error = mcp_protocol::McpError::configuration("Session not initialized - client must send notifications/initialized first (strict lifecycle mode)");
+                    return Err(mcp_json_rpc_server::error::JsonRpcProcessingError::RpcError(
+                        mcp_json_rpc_server::JsonRpcError::new(None, mcp_error.to_json_rpc_error()),
+                    ));
+                }
+                debug!("✅ STRICT MODE: Session {} is initialized - allowing {} request", session_ctx.session_id, method);
+            }
+        } else {
+            debug!("📝 LENIENT MODE: Allowing {} request without lifecycle check (strict_lifecycle=false)", method);
         }
 
         let params = params.ok_or_else(|| {
@@ -819,7 +887,7 @@ mod tests {
         tools.insert("test".to_string(), Arc::new(TestTool));
 
         let session_manager = Arc::new(SessionManager::new(ServerCapabilities::default()));
-        let handler = SessionAwareToolHandler::new(tools, session_manager);
+        let handler = SessionAwareToolHandler::new(tools, session_manager, false);
         // Create params matching the CallToolParams structure
         let params = mcp_json_rpc_server::RequestParams::Object(
             [

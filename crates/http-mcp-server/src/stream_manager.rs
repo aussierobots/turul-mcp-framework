@@ -16,19 +16,24 @@ use http_body_util::{StreamBody, BodyExt};
 use bytes::Bytes;
 use hyper::header::{CONTENT_TYPE, CACHE_CONTROL, ACCESS_CONTROL_ALLOW_ORIGIN};
 use serde_json::Value;
-use tokio::sync::{broadcast, RwLock};
+use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, info, error, warn};
 
 use mcp_session_storage::{SessionStorage, SseEvent};
 
-/// Enhanced stream manager with resumability support
+/// Connection ID for tracking individual SSE streams
+pub type ConnectionId = String;
+
+/// Enhanced stream manager with resumability support (MCP spec compliant)
 pub struct StreamManager<S: SessionStorage> {
     /// Session storage backend for persistence
     storage: Arc<S>,
-    /// Per-session broadcasters for real-time events
-    broadcasters: Arc<RwLock<HashMap<String, broadcast::Sender<SseEvent>>>>,
+    /// Per-session connections for real-time events (MCP compliant - no broadcasting)
+    connections: Arc<RwLock<HashMap<String, HashMap<ConnectionId, mpsc::Sender<SseEvent>>>>>,
     /// Configuration
     config: StreamConfig,
+    /// Unique instance ID for debugging
+    instance_id: String,
 }
 
 /// Configuration for stream management
@@ -55,12 +60,14 @@ impl Default for StreamConfig {
     }
 }
 
-/// SSE stream wrapper that formats events properly (one per session)
+/// SSE stream wrapper that formats events properly (MCP compliant - one connection per stream)
 pub struct SseStream {
     /// Underlying event stream
-    stream: Pin<Box<dyn Stream<Item = SseEvent> + Send>>,
+    stream: Option<Pin<Box<dyn Stream<Item = SseEvent> + Send>>>,
     /// Session metadata
     session_id: String,
+    /// Connection identifier (for MCP spec compliance)
+    connection_id: ConnectionId,
 }
 
 impl SseStream {
@@ -69,9 +76,26 @@ impl SseStream {
         &self.session_id
     }
     
-    /// Get stream identifier for logging (same as session_id)
+    /// Get the connection ID for this stream
+    pub fn connection_id(&self) -> &str {
+        &self.connection_id
+    }
+    
+    /// Get stream identifier for logging (session + connection)
     pub fn stream_identifier(&self) -> String {
-        self.session_id.clone()
+        format!("{}:{}", self.session_id, self.connection_id)
+    }
+}
+
+impl Drop for SseStream {
+    fn drop(&mut self) {
+        debug!("🔥 DROP: SseStream - session={}, connection={}", 
+               self.session_id, self.connection_id);
+        if self.stream.is_some() {
+            debug!("🔥 Stream still present during drop - this indicates early cleanup");
+        } else {
+            debug!("🔥 Stream was properly extracted before drop");
+        }
     }
 }
 
@@ -84,8 +108,8 @@ pub enum StreamError {
     StreamNotFound(String, String),
     #[error("Storage error: {0}")]
     StorageError(String),
-    #[error("Broadcast error: {0}")]
-    BroadcastError(#[from] broadcast::error::SendError<SseEvent>),
+    #[error("Connection error: {0}")]
+    ConnectionError(String),
 }
 
 impl<S: SessionStorage + 'static> StreamManager<S> {
@@ -96,10 +120,14 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
 
     /// Create stream manager with custom configuration
     pub fn with_config(storage: Arc<S>, config: StreamConfig) -> Self {
+        use uuid::Uuid;
+        let instance_id = Uuid::now_v7().to_string();
+        debug!("🔧 Creating StreamManager instance: {}", instance_id);
         Self {
             storage,
-            broadcasters: Arc::new(RwLock::new(HashMap::new())),
+            connections: Arc::new(RwLock::new(HashMap::new())),
             config,
+            instance_id,
         }
     }
 
@@ -107,6 +135,7 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
     pub async fn handle_sse_connection(
         &self,
         session_id: String,
+        connection_id: ConnectionId,
         last_event_id: Option<u64>,
     ) -> Result<Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>, StreamError> {
         // Verify session exists
@@ -117,37 +146,42 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
             return Err(StreamError::SessionNotFound(session_id));
         }
 
-        // Create the SSE stream (one per session, as per SSE standard)
-        let sse_stream = self.create_sse_stream(session_id.clone(), last_event_id).await?;
+        // Create the SSE stream (one per connection, MCP compliant)
+        let sse_stream = self.create_sse_stream(session_id.clone(), connection_id.clone(), last_event_id).await?;
 
         // Convert to HTTP response
         let response = self.stream_to_response(sse_stream).await;
 
-        info!("Created SSE connection: session={}, last_event_id={:?}", 
-              session_id, last_event_id);
+        info!("Created SSE connection: session={}, connection={}, last_event_id={:?}", 
+              session_id, connection_id, last_event_id);
 
         Ok(response)
     }
 
-    /// Create SSE stream with resumability support
+    /// Create SSE stream with resumability support (MCP compliant - no broadcast)
     async fn create_sse_stream(
         &self,
         session_id: String,
+        connection_id: ConnectionId,
         last_event_id: Option<u64>,
     ) -> Result<SseStream, StreamError> {
-        // Get or create broadcaster for this session
-        let broadcaster = self.get_or_create_broadcaster(&session_id).await;
+        // Create mpsc channel for this specific connection (MCP compliant)
+        let (sender, mut receiver) = mpsc::channel(self.config.channel_buffer_size);
+
+        // Register this connection with the session
+        self.register_connection(&session_id, connection_id.clone(), sender).await;
 
         // Create the combined stream
         let storage = self.storage.clone();
         let session_id_clone = session_id.clone();
+        let connection_id_clone = connection_id.clone();
         let config = self.config.clone();
 
         let combined_stream = async_stream::stream! {
             // 1. First, yield any historical events (resumability)
             if let Some(after_event_id) = last_event_id {
-                debug!("Replaying events after ID {} for session={}", 
-                       after_event_id, session_id_clone);
+                debug!("Replaying events after ID {} for session={}, connection={}", 
+                       after_event_id, session_id_clone, connection_id_clone);
                 
                 match storage.get_events_after(&session_id_clone, after_event_id).await {
                     Ok(events) => {
@@ -162,28 +196,23 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
                 }
             }
 
-            // 2. Then, stream real-time events from broadcaster
-            let mut receiver = broadcaster.subscribe();
+            // 2. Then, stream real-time events from dedicated channel
             let mut keepalive_interval = tokio::time::interval(
                 tokio::time::Duration::from_secs(config.keepalive_interval_seconds)
             );
 
             loop {
                 tokio::select! {
-                    // Real-time events
+                    // Real-time events from this connection's channel
                     event = receiver.recv() => {
                         match event {
-                            Ok(event) => {
-                                // All events for this session (no stream filtering needed)
+                            Some(event) => {
+                                debug!("📨 Received event for connection {}: {}", connection_id_clone, event.event_type);
                                 yield event;
                             },
-                            Err(broadcast::error::RecvError::Closed) => {
-                                debug!("Broadcaster closed for session={}", session_id_clone);
+                            None => {
+                                debug!("Connection channel closed for session={}, connection={}", session_id_clone, connection_id_clone);
                                 break;
-                            },
-                            Err(broadcast::error::RecvError::Lagged(count)) => {
-                                warn!("SSE stream lagged by {} events for session={}", count, session_id_clone);
-                                // Continue streaming - client can reconnect with Last-Event-ID if needed
                             }
                         }
                     },
@@ -201,30 +230,72 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
                     }
                 }
             }
+            
+            // Clean up connection when stream ends
+            debug!("🧹 Cleaning up connection: session={}, connection={}", session_id_clone, connection_id_clone);
         };
 
         Ok(SseStream {
-            stream: Box::pin(combined_stream),
+            stream: Some(Box::pin(combined_stream)),
             session_id,
+            connection_id,
         })
     }
 
-    /// Get or create broadcaster for a session
-    async fn get_or_create_broadcaster(&self, session_id: &str) -> broadcast::Sender<SseEvent> {
-        let mut broadcasters = self.broadcasters.write().await;
+    /// Register a new connection for a session (MCP compliant)
+    async fn register_connection(
+        &self,
+        session_id: &str, 
+        connection_id: ConnectionId,
+        sender: mpsc::Sender<SseEvent>
+    ) {
+        let mut connections = self.connections.write().await;
         
-        if let Some(sender) = broadcasters.get(session_id) {
-            sender.clone()
-        } else {
-            let (sender, _) = broadcast::channel(self.config.channel_buffer_size);
-            broadcasters.insert(session_id.to_string(), sender.clone());
-            debug!("Created broadcaster for session: {}", session_id);
-            sender
+        debug!("[{}] 🔍 BEFORE registration: HashMap has {} sessions", self.instance_id, connections.len());
+        for (sid, conns) in connections.iter() {
+            debug!("[{}] 🔍 Existing session before: {} with {} connections", self.instance_id, sid, conns.len());
+        }
+        
+        // Get or create session entry
+        let session_connections = connections.entry(session_id.to_string())
+            .or_insert_with(HashMap::new);
+            
+        // Add this connection
+        session_connections.insert(connection_id.clone(), sender);
+        
+        debug!("[{}] 🔗 Registered connection: session={}, connection={}, total_connections={}", 
+               self.instance_id, session_id, connection_id, session_connections.len());
+               
+        debug!("[{}] 🔍 AFTER registration: HashMap has {} sessions", self.instance_id, connections.len());
+        for (sid, conns) in connections.iter() {
+            debug!("[{}] 🔍 Session after: {} with {} connections", self.instance_id, sid, conns.len());
         }
     }
 
+    /// Remove a connection when it's closed
+    pub async fn unregister_connection(&self, session_id: &str, connection_id: &ConnectionId) {
+        debug!("🔴 UNREGISTER called for session={}, connection={}", session_id, connection_id);
+        let mut connections = self.connections.write().await;
+        
+        debug!("🔍 BEFORE unregister: HashMap has {} sessions", connections.len());
+        
+        if let Some(session_connections) = connections.get_mut(session_id) {
+            if session_connections.remove(connection_id).is_some() {
+                debug!("🔌 Unregistered connection: session={}, connection={}", session_id, connection_id);
+                
+                // Clean up empty sessions
+                if session_connections.is_empty() {
+                    connections.remove(session_id);
+                    debug!("🧹 Removed empty session: {}", session_id);
+                }
+            }
+        }
+        
+        debug!("🔍 AFTER unregister: HashMap has {} sessions", connections.len());
+    }
+
     /// Convert SSE stream to HTTP response with proper headers
-    async fn stream_to_response(&self, sse_stream: SseStream) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>> {
+    async fn stream_to_response(&self, mut sse_stream: SseStream) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>> {
         // Extract session info before moving the stream
         let session_id = sse_stream.session_id().to_string();
         let stream_identifier = sse_stream.stream_identifier();
@@ -234,7 +305,10 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
         debug!("Stream details: session_id={}", session_id);
         
         // Transform events to SSE format and create proper HTTP frames
-        let formatted_stream = sse_stream.stream.map(|event| {
+        // Extract stream from Option wrapper
+        let stream = sse_stream.stream.take().expect("Stream should be present in SseStream");
+        
+        let formatted_stream = stream.map(|event| {
             let sse_formatted = event.format();
             debug!("📡 Streaming SSE event: id={}, event_type={}", event.id, event.event_type);
             Ok(hyper::body::Frame::data(Bytes::from(sse_formatted)))
@@ -254,36 +328,67 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
             .unwrap()
     }
 
-    /// Broadcast event to specific session with persistence
+    /// Send event to specific session (MCP compliant - ONE connection only)
     pub async fn broadcast_to_session(
         &self,
         session_id: &str,
         event_type: String,
         data: Value,
     ) -> Result<u64, StreamError> {
-        // Create the event (no stream_id needed)
+        // Create the event
         let event = SseEvent::new(event_type, data);
 
         // Store event for resumability
         let stored_event = self.storage.store_event(session_id, event).await
             .map_err(|e| StreamError::StorageError(e.to_string()))?;
 
-        // Get or create broadcaster for this session (ensure it exists for all events)
-        let broadcaster = self.get_or_create_broadcaster(session_id).await;
+        // DEBUG: Check connection state more thoroughly
+        let connections = self.connections.read().await;
+        debug!("[{}] 🔍 Checking connections for session {}: connections hashmap has {} sessions", 
+               self.instance_id, session_id, connections.len());
         
-        // Broadcast to real-time subscribers
-        if let Err(e) = broadcaster.send(stored_event.clone()) {
-            match e {
-                broadcast::error::SendError(_) => {
-                    debug!("No active SSE subscribers for session: {} (event will be available for reconnection)", session_id);
-                    // DON'T remove broadcaster - keep it for reconnections
-                    // Events are stored in session storage and will be replayed on reconnect
+        if let Some(session_connections) = connections.get(session_id) {
+            debug!("🔍 Session {} found with {} connections", session_id, session_connections.len());
+            
+            if !session_connections.is_empty() {
+                // Pick the FIRST available connection (MCP compliant)
+                let (selected_connection_id, selected_sender) = session_connections.iter().next().unwrap();
+                
+                // Check if sender is closed
+                if selected_sender.is_closed() {
+                    warn!("🔌 Sender is closed for connection: session={}, connection={}", 
+                          session_id, selected_connection_id);
+                    debug!("📭 Connection sender was closed, event stored for reconnection");
+                } else {
+                    debug!("✅ Sender is open, attempting to send to connection: session={}, connection={}", 
+                           session_id, selected_connection_id);
+                
+                    match selected_sender.try_send(stored_event.clone()) {
+                        Ok(()) => {
+                            info!("✅ Sent notification to ONE connection: session={}, connection={}, event_id={}, method={}", 
+                                  session_id, selected_connection_id, stored_event.id, stored_event.event_type);
+                        },
+                        Err(mpsc::error::TrySendError::Full(_)) => {
+                            warn!("⚠️ Connection buffer full: session={}, connection={}", session_id, selected_connection_id);
+                            // Event is still stored for reconnection
+                        },
+                        Err(mpsc::error::TrySendError::Closed(_)) => {
+                            warn!("🔌 Connection closed during send: session={}, connection={}", session_id, selected_connection_id);
+                            // Event is still stored for reconnection
+                        }
+                    }
                 }
+            } else {
+                debug!("📭 No active connections for session: {} (event stored for reconnection)", session_id);
+            }
+        } else {
+            debug!("📭 No connections registered for session: {} (event stored for reconnection)", session_id);
+            
+            // DEBUG: List all sessions in connections
+            for (sid, conns) in connections.iter() {
+                debug!("🔍 Available session: {} with {} connections", sid, conns.len());
             }
         }
-
-        debug!("Broadcast event to session={}, event_id={}", 
-               session_id, stored_event.id);
 
         Ok(stored_event.id)
     }
@@ -310,26 +415,40 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
         Ok(failed_sessions)
     }
 
-    /// Clean up closed broadcasters
-    pub async fn cleanup_broadcasters(&self) -> usize {
-        let mut broadcasters = self.broadcasters.write().await;
-        let initial_count = broadcasters.len();
+    /// Clean up closed connections
+    pub async fn cleanup_connections(&self) -> usize {
+        debug!("🧹 CLEANUP_CONNECTIONS called");
+        let mut connections = self.connections.write().await;
+        let mut total_cleaned = 0;
         
-        // Remove broadcasters with no active receivers
-        broadcasters.retain(|session_id, sender| {
-            let has_receivers = sender.receiver_count() > 0;
-            if !has_receivers {
-                debug!("Cleaned up broadcaster for session: {}", session_id);
-            }
-            has_receivers
+        debug!("🔍 BEFORE cleanup: HashMap has {} sessions", connections.len());
+        
+        // Clean up closed connections
+        connections.retain(|session_id, session_connections| {
+            let initial_count = session_connections.len();
+            
+            // Remove closed connections
+            session_connections.retain(|connection_id, sender| {
+                if sender.is_closed() {
+                    debug!("🧹 Cleaned up closed connection: session={}, connection={}", session_id, connection_id);
+                    false
+                } else {
+                    true
+                }
+            });
+            
+            let cleaned_count = initial_count - session_connections.len();
+            total_cleaned += cleaned_count;
+            
+            // Keep session if it has active connections
+            !session_connections.is_empty()
         });
         
-        let cleaned_count = initial_count - broadcasters.len();
-        if cleaned_count > 0 {
-            info!("Cleaned up {} inactive broadcasters", cleaned_count);
+        if total_cleaned > 0 {
+            info!("Cleaned up {} inactive connections", total_cleaned);
         }
         
-        cleaned_count
+        total_cleaned
     }
 
     /// Create SSE stream for POST requests (MCP Streamable HTTP)
@@ -401,16 +520,29 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
 
     /// Get statistics about active streams
     pub async fn get_stats(&self) -> StreamStats {
-        let broadcasters = self.broadcasters.read().await;
+        let connections = self.connections.read().await;
         let session_count = self.storage.session_count().await.unwrap_or(0);
         let event_count = self.storage.event_count().await.unwrap_or(0);
         
+        // Count total active connections
+        let total_connections: usize = connections.values()
+            .map(|session_connections| session_connections.len())
+            .sum();
+        
         StreamStats {
-            active_broadcasters: broadcasters.len(),
+            active_broadcasters: total_connections, // Now tracks active connections
             total_sessions: session_count,
             total_events: event_count,
             channel_buffer_size: self.config.channel_buffer_size,
         }
+    }
+}
+
+impl<S: SessionStorage> Drop for StreamManager<S> {
+    fn drop(&mut self) {
+        debug!("🔥 DROP: StreamManager instance {} - this may cause connection loss!", 
+               self.instance_id);
+        debug!("🔥 If this appears during request processing, it indicates architecture problem");
     }
 }
 

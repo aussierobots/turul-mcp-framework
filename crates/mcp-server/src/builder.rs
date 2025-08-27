@@ -65,6 +65,9 @@ pub struct McpServerBuilder {
     session_timeout_minutes: Option<u64>,
     session_cleanup_interval_seconds: Option<u64>,
     
+    /// MCP Lifecycle enforcement configuration
+    strict_lifecycle: bool,
+    
     /// HTTP configuration (if enabled)
     #[cfg(feature = "http")]
     bind_address: SocketAddr,
@@ -94,16 +97,17 @@ impl McpServerBuilder {
         handlers.insert("resources/templates/list".to_string(), Arc::new(ResourceTemplatesHandler));
         handlers.insert("elicitation/create".to_string(), Arc::new(ElicitationHandler::with_mock_provider()));
         
-        // Add all notification handlers
+        // Add all notification handlers (except notifications/initialized which is handled specially)
         let notifications_handler = Arc::new(NotificationsHandler);
         handlers.insert("notifications/message".to_string(), notifications_handler.clone());
-        handlers.insert("notifications/initialized".to_string(), notifications_handler.clone());
         handlers.insert("notifications/progress".to_string(), notifications_handler.clone());
         handlers.insert("notifications/resources/listChanged".to_string(), notifications_handler.clone());
         handlers.insert("notifications/resources/updated".to_string(), notifications_handler.clone());
         handlers.insert("notifications/tools/listChanged".to_string(), notifications_handler.clone());
         handlers.insert("notifications/prompts/listChanged".to_string(), notifications_handler.clone());
         handlers.insert("notifications/roots/listChanged".to_string(), notifications_handler);
+        
+        // Note: notifications/initialized is handled by InitializedNotificationHandler in server.rs
         
         
         
@@ -131,6 +135,7 @@ impl McpServerBuilder {
             instructions: None,
             session_timeout_minutes: None,
             session_cleanup_interval_seconds: None,
+            strict_lifecycle: false, // Default: lenient mode for compatibility
             #[cfg(feature = "http")]
             bind_address: "127.0.0.1:8000".parse().unwrap(),
             #[cfg(feature = "http")]
@@ -468,6 +473,39 @@ impl McpServerBuilder {
         self.session_cleanup_interval_seconds = Some(seconds);
         self
     }
+
+    /// Enable strict MCP lifecycle enforcement
+    /// 
+    /// When enabled, the server will reject all operations (tools, resources, etc.) 
+    /// until the client sends `notifications/initialized` after receiving the 
+    /// initialize response.
+    /// 
+    /// **Default: false (lenient mode)** - for compatibility with existing clients
+    /// **Production: consider true** - for strict MCP spec compliance
+    /// 
+    /// # Example
+    /// ```rust,no_run
+    /// use mcp_server::McpServer;
+    /// 
+    /// let server = McpServer::builder()
+    ///     .name("strict-server")
+    ///     .version("1.0.0")
+    ///     .strict_lifecycle(true)  // Enable strict enforcement
+    ///     .build()?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    pub fn strict_lifecycle(mut self, strict: bool) -> Self {
+        self.strict_lifecycle = strict;
+        self
+    }
+
+    /// Enable strict MCP lifecycle enforcement (convenience method)
+    /// 
+    /// Equivalent to `.strict_lifecycle(true)`. Enables strict enforcement where
+    /// all operations are rejected until `notifications/initialized` is received.
+    pub fn with_strict_lifecycle(self) -> Self {
+        self.strict_lifecycle(true)
+    }
     
     /// Configure sessions with recommended defaults for long-running sessions
     pub fn with_long_sessions(mut self) -> Self {
@@ -548,6 +586,7 @@ impl McpServerBuilder {
             self.instructions,
             self.session_timeout_minutes,
             self.session_cleanup_interval_seconds,
+            self.strict_lifecycle,
             #[cfg(feature = "http")]
             self.bind_address,
             #[cfg(feature = "http")]

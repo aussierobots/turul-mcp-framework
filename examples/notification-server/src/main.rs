@@ -26,6 +26,7 @@ pub struct DevAlertNotification {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)] // This struct is used for demonstration purposes
 struct AlertMessage {
     id: String,
     alert_type: String,

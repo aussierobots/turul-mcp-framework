@@ -18,7 +18,7 @@ use mcp_json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
 use mcp_session_storage::{SessionStorage, InMemorySessionStorage};
 
 use crate::{
-    Result, SessionMcpHandler, StreamConfig, 
+    Result, SessionMcpHandler, StreamConfig, StreamManager,
     CorsLayer
 };
 
@@ -137,12 +137,19 @@ impl<S: SessionStorage + 'static> HttpMcpServerBuilder<S> {
     /// Build the HTTP MCP server
     pub fn build(self) -> HttpMcpServer<S> {
         let session_storage = self.session_storage.expect("Session storage must be provided");
+        
+        // ✅ CORRECTED ARCHITECTURE: Create single shared StreamManager instance
+        let stream_manager = Arc::new(StreamManager::with_config(
+            Arc::clone(&session_storage),
+            self.stream_config.clone()
+        ));
 
         HttpMcpServer {
             config: self.config,
             dispatcher: Arc::new(self.dispatcher),
             session_storage,
             stream_config: self.stream_config,
+            stream_manager,
         }
     }
 }
@@ -163,6 +170,8 @@ pub struct HttpMcpServer<S: SessionStorage> {
     dispatcher: Arc<JsonRpcDispatcher>,
     session_storage: Arc<S>,
     stream_config: StreamConfig,
+    // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance
+    stream_manager: Arc<StreamManager<S>>,
 }
 
 impl HttpMcpServer<InMemorySessionStorage> {
@@ -178,10 +187,10 @@ impl<S: SessionStorage + 'static> HttpMcpServer<S> {
         HttpMcpServerBuilder::with_storage(session_storage)
     }
 
-    /// Get a StreamManager instance for event forwarding bridge
-    /// Creates a shared StreamManager using the same session storage
-    pub fn create_stream_manager(&self) -> crate::StreamManager<S> {
-        crate::StreamManager::with_config(Arc::clone(&self.session_storage), self.stream_config.clone())
+    /// Get the shared StreamManager instance for event forwarding bridge
+    /// Returns reference to the same StreamManager used by HTTP server
+    pub fn get_stream_manager(&self) -> Arc<crate::StreamManager<S>> {
+        Arc::clone(&self.stream_manager)
     }
 
     /// Run the server with session management
@@ -194,21 +203,24 @@ impl<S: SessionStorage + 'static> HttpMcpServer<S> {
         info!("MCP endpoint available at: {}", self.config.mcp_path);
         info!("Session storage: {}", std::any::type_name::<S>());
 
+        // ✅ CORRECTED ARCHITECTURE: Create single SessionMcpHandler instance outside the loop
+        let handler = SessionMcpHandler::with_shared_stream_manager(
+            self.config.clone(),
+            Arc::clone(&self.dispatcher),
+            Arc::clone(&self.session_storage),
+            self.stream_config.clone(),
+            Arc::clone(&self.stream_manager),
+        );
+
         loop {
             let (stream, peer_addr) = listener.accept().await?;
             debug!("New connection from {}", peer_addr);
 
-            let handler = SessionMcpHandler::with_storage(
-                self.config.clone(),
-                Arc::clone(&self.dispatcher),
-                Arc::clone(&self.session_storage),
-                self.stream_config.clone(),
-            );
-
+            let handler_clone = handler.clone();
             tokio::spawn(async move {
                 let io = TokioIo::new(stream);
                 let service = service_fn(move |req| {
-                    handle_request(req, handler.clone())
+                    handle_request(req, handler_clone.clone())
                 });
 
                 if let Err(err) = http1::Builder::new().serve_connection(io, service).await {

@@ -11,6 +11,10 @@ use mcp_server::{McpServer, McpTool, SessionContext};
 use mcp_protocol::{ToolSchema, ToolResult, McpError, McpResult};
 use mcp_protocol::schema::JsonSchema;
 use mcp_protocol::meta::{Meta, Cursor};
+use mcp_protocol::tools::{
+    HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, 
+    HasAnnotations, HasToolMeta, CallToolResult
+};
 use serde_json::{json, Value};
 use tracing::{info, error};
 use chrono::{DateTime, Utc};
@@ -353,26 +357,12 @@ struct User {
 /// Tool for listing users with database pagination
 struct ListUsersTool {
     db: DatabaseManager,
+    input_schema: ToolSchema,
 }
 
 impl ListUsersTool {
     fn new(db: DatabaseManager) -> Self {
-        Self { db }
-    }
-}
-
-#[async_trait]
-impl McpTool for ListUsersTool {
-    fn name(&self) -> &str {
-        "list_users"
-    }
-
-    fn description(&self) -> &str {
-        "List users with SQLite-based cursor pagination, filtering, and department selection"
-    }
-
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
+        let input_schema = ToolSchema::object()
             .with_properties(HashMap::from([
                 ("cursor".to_string(), JsonSchema::String {
                     description: Some("Pagination cursor (offset) for next page".to_string()),
@@ -412,10 +402,50 @@ impl McpTool for ListUsersTool {
                 ("active_only".to_string(), JsonSchema::Boolean {
                     description: Some("Show only active users".to_string()),
                 }),
-            ]))
+            ]));
+        
+        Self { db, input_schema }
     }
+}
 
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+// Implement fine-grained traits for ListUsersTool
+impl HasBaseMetadata for ListUsersTool {
+    fn name(&self) -> &str {
+        "list_users"
+    }
+    fn title(&self) -> Option<&str> {
+        Some("List Users")
+    }
+}
+
+impl HasDescription for ListUsersTool {
+    fn description(&self) -> Option<&str> {
+        Some("List users with SQLite-based cursor pagination, filtering, and department selection")
+    }
+}
+
+impl HasInputSchema for ListUsersTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+
+impl HasOutputSchema for ListUsersTool {
+    fn output_schema(&self) -> Option<&ToolSchema> { None }
+}
+
+impl HasAnnotations for ListUsersTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> { None }
+}
+
+impl HasToolMeta for ListUsersTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+}
+
+#[async_trait]
+impl McpTool for ListUsersTool {
+
+    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let cursor = args.get("cursor").and_then(|v| v.as_str());
         let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(25);
         let filter = args.get("filter").and_then(|v| v.as_str());
@@ -475,10 +505,10 @@ impl McpTool for ListUsersTool {
                     total
                 );
 
-                Ok(vec![
+                Ok(CallToolResult::success(vec![
                     ToolResult::text(result_text),
                     ToolResult::resource(pagination_info),
-                ])
+                ]))
             }
             Err(e) => {
                 error!("Database error in list_users: {}", e);
@@ -491,11 +521,36 @@ impl McpTool for ListUsersTool {
 /// Tool for searching users with database queries
 struct SearchUsersTool {
     db: DatabaseManager,
+    input_schema: ToolSchema,
 }
 
 impl SearchUsersTool {
     fn new(db: DatabaseManager) -> Self {
-        Self { db }
+        let input_schema = ToolSchema::object()
+            .with_properties(HashMap::from([
+                ("query".to_string(), JsonSchema::String {
+                    description: Some("Search query for name, email, or department".to_string()),
+                    pattern: None,
+                    min_length: Some(1),
+                    max_length: None,
+                    enum_values: None,
+                }),
+                ("cursor".to_string(), JsonSchema::String {
+                    description: Some("Pagination cursor for next page".to_string()),
+                    pattern: None,
+                    min_length: None,
+                    max_length: None,
+                    enum_values: None,
+                }),
+                ("limit".to_string(), JsonSchema::Integer {
+                    description: Some("Number of results per page (1-50)".to_string()),
+                    minimum: Some(1),
+                    maximum: Some(50),
+                }),
+            ]))
+            .with_required(vec!["query".to_string()]);
+            
+        Self { db, input_schema }
     }
 }
 

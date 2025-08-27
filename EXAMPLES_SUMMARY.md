@@ -1,6 +1,6 @@
 # MCP Framework Examples Summary
 
-This document provides a comprehensive overview of all 26 examples in the MCP Framework, showcasing the complete range of capabilities from basic tools to advanced features like real-time notifications, AI integration, and secure file system access.
+This document provides a comprehensive overview of all 27 examples in the MCP Framework, showcasing the complete range of capabilities from basic tools to advanced features like real-time notifications, AI integration, and secure file system access.
 
 ## 📋 Examples Overview Table
 
@@ -22,16 +22,17 @@ This document provides a comprehensive overview of all 26 examples in the MCP Fr
 | 14 | **resources-server** | 8041 | Various resource types demonstration | Multiple resource patterns, structured data | Custom resource implementation | `fs://`, `docs://`, `config://`, `schema://`, `status://` resources |
 | 15 | **resource-server** | 8045 | Resource handling with derive macros | `#[derive(McpResource)]` macro, multiple content types | Derive macro resources | `config`, `system`, `user` resources |
 | 16 | **resource-macro-example** | 8047 | Declarative resource creation with inline closures | `resource!` declarative macro, dynamic content | Inline content generation | `config`, `status`, `data` resources |
-| 17 | **dynamic-resource-server** | 8048 | Dynamic resources with parameterized URIs | Dynamic URI patterns, multiple content types | Parameterized resource access | `users://`, `products://`, `documents://`, `orders://` resources |
+| 17 | **dynamic-resource-server** ⚠️ | 8048 | Dynamic resources with parameterized URIs | Dynamic URI patterns, multiple content types | Parameterized resource access | `users://`, `products://`, `documents://`, `orders://` resources |
 | 18 | **prompts-server** | 8040 | Dynamic prompt generation for AI interactions | Prompts protocol, dynamic generation | Custom prompt implementation | `code-generation`, `documentation`, `code-review`, `debugging`, `architecture-design` |
-| 19 | **completion-server** | 8042 | AI-assisted text completion with context-aware suggestions | Completion endpoint, intelligent filtering | Custom completion handler | Language, extension, command, framework completions |
-| 20 | **logging-server** | 8043 | Dynamic log level management | Logging protocol, level management | Enhanced logging handler | `generate_logs`, `view_logs`, `log_config` |
-| 21 | **pagination-server** | 8044 | Cursor-based pagination for large datasets | Cursor-based pagination, MCP 2025-06-18 `_meta` fields | Advanced pagination patterns | `list_users`, `search_users`, `batch_process` |
+| 19 | **completion-server** ⚠️ | 8042 | AI-assisted text completion with context-aware suggestions | Completion endpoint, intelligent filtering | Custom completion handler | Language, extension, command, framework completions |
+| 20 | **logging-server** ⚠️ | 8043 | Dynamic log level management | Logging protocol, level management | Enhanced logging handler | `generate_logs`, `view_logs`, `log_config` |
+| 21 | **pagination-server** ⚠️ | 8044 | Cursor-based pagination for large datasets | Cursor-based pagination, MCP 2025-06-18 `_meta` fields | Advanced pagination patterns | `list_users`, `search_users`, `batch_process` |
 | 22 | **roots-server** | 8050 | Root directory management and file system security | Roots protocol, security boundaries, access control | Root directory configuration | `list_roots`, `inspect_root`, `simulate_file_operation`, `demonstrate_root_security` |
 | 23 | **sampling-server** | 8051 | AI model sampling through MCP | Sampling protocol, AI model integration | AI sampling requests | `basic_sampling`, `conversational_sampling`, `code_generation_sampling`, `creative_writing_sampling` |
-| 24 | **elicitation-server** | 8053 | Structured user input collection via JSON Schema | Elicitation protocol, interactive forms, progress tracking | `ElicitationBuilder` utility | `simple_text_input`, `number_input_validation`, `choice_selection`, `confirmation_dialog`, `complex_form`, `progress_tracking`, `error_handling` |
+| 24 | **elicitation-server** ⚠️ | 8053 | Structured user input collection via JSON Schema | Elicitation protocol, interactive forms, progress tracking | `ElicitationBuilder` utility | `simple_text_input`, `number_input_validation`, `choice_selection`, `confirmation_dialog`, `complex_form`, `progress_tracking`, `error_handling` |
 | 25 | **performance-testing** | 8080 | Comprehensive performance testing suite | Load testing, stress testing, benchmarking | Performance analysis tools | Multiple performance testing tools and benchmarks |
 | 26 | **lambda-mcp-server** | N/A (Lambda) | Serverless MCP server with dual event sources | Streaming responses, session persistence, SQS integration | AWS Lambda serverless architecture | `aws_real_time_monitor`, `publish_test_event`, `lambda_diagnostics` |
+| 27 | **client-initialise-report** | 52935 | MCP Streamable HTTP compliance testing | Complete end-to-end testing, session management, SSE streaming | Integration testing and compliance validation | `long_calculation`, `system_health_check` with real-time notifications |
 
 ## 🏗️ Development Approaches Showcased
 
@@ -159,6 +160,11 @@ curl -X POST http://127.0.0.1:8000/mcp \
 cargo run -p performance-testing --bin performance_client -- throughput --requests-per-second 100
 cargo run -p performance-testing --bin stress_test -- memory --max-concurrent 50
 
+# MCP Streamable HTTP compliance testing
+export RUST_LOG=debug
+cargo run --example client-initialise-server -- --port 52935
+cargo run --example client-initialise-report -- --url http://127.0.0.1:52935/mcp
+
 # Lambda serverless testing
 cd examples/lambda-mcp-server
 cargo lambda watch  # Local development
@@ -181,9 +187,28 @@ cargo lambda invoke --data-file events/api_gateway_event.json  # Test HTTP event
 - **Real-time Updates**: Use `notification-server` patterns
 
 ### For Testing and Validation
+- **MCP Compliance**: `client-initialise-report` - Complete Streamable HTTP testing
 - **Load Testing**: `performance-testing` suite
 - **Protocol Compliance**: `spec-compliant-server`
 - **Version Compatibility**: `version-negotiation-server`
+
+## ⚠️ **BROKEN EXAMPLES STATUS**
+
+**Note**: Some examples are marked with ⚠️ due to framework trait refactoring. These examples use outdated trait methods and need updates to work with the current framework.
+
+**Broken Examples**:
+- **completion-server** ⚠️ - Import errors, needs updated completion types
+- **pagination-server** ⚠️ - Uses old manual trait methods, needs ToolDefinition trait
+- **elicitation-server** ⚠️ - ElicitationBuilder API changed
+- **dynamic-resource-server** ⚠️ - Missing ToolDefinition trait implementation
+- **logging-server** ⚠️ - Uses old manual trait methods
+
+**Working Examples** (Verified):
+- **client-initialise-report** ✅ - Complete MCP Streamable HTTP compliance testing
+- **notification-server** ✅ - Real-time SSE notifications
+- **minimal-server** ✅ - Basic tool implementation
+
+**Status**: See `BROKEN_EXAMPLES_STATUS.md` for detailed fix requirements and implementation patterns.
 
 ## 📚 Framework Capabilities Summary
 

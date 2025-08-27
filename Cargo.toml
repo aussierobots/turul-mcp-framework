@@ -56,7 +56,6 @@ members = [
     "examples/simple-zero-config-demo", 
     "examples/zero-config-getting-started",
     "examples/working-universal-demo", 
-    "examples/streamable-http-compliance",
     "tests",
 ]
 

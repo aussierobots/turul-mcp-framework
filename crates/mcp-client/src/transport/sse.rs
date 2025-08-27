@@ -475,8 +475,12 @@ impl Transport for SseTransport {
 
 impl Drop for SseTransport {
     fn drop(&mut self) {
+        debug!("🔥 DROP: SseTransport (CLIENT) - SSE transport being cleaned up");
         if let Some(handle) = self.sse_handle.take() {
+            debug!("🔥 Aborting SSE handle - this will close the SSE connection");
             handle.abort();
+        } else {
+            debug!("🔥 No SSE handle to abort - connection may already be closed");
         }
     }
 }

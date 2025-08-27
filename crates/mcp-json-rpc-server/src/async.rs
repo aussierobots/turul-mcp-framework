@@ -238,6 +238,22 @@ impl JsonRpcDispatcher {
         }
     }
 
+    /// Process a JSON-RPC notification with session context
+    pub async fn handle_notification_with_context(&self, notification: JsonRpcNotification, session_context: Option<SessionContext>) -> JsonRpcResult<()> {
+        let handler = self.handlers.get(&notification.method)
+            .or(self.default_handler.as_ref());
+
+        match handler {
+            Some(handler) => {
+                handler.handle_notification(&notification.method, notification.params, session_context).await
+            }
+            None => {
+                // Notifications don't return errors, just ignore unknown methods
+                Ok(())
+            }
+        }
+    }
+
     /// Get all registered methods
     pub fn registered_methods(&self) -> Vec<String> {
         self.handlers.keys().cloned().collect()

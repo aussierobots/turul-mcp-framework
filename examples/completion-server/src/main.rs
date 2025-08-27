@@ -1,377 +1,173 @@
 //! # IDE Auto-Completion Server Example
 //!
-//! This example demonstrates a real-world MCP completion server that provides intelligent
+//! This example demonstrates a simple MCP tool that provides intelligent
 //! auto-completion suggestions for developers working in IDEs and code editors.
-//! The server loads completion data from external JSON files and provides context-aware
-//! suggestions for programming languages, frameworks, commands, and development tools.
+//! The server provides context-aware suggestions for programming languages, 
+//! frameworks, file extensions, and development commands.
 
 use async_trait::async_trait;
-use mcp_protocol::{
-    McpError,
-    completion::{CompleteRequest, CompletionResponse, CompletionSuggestion},
-};
-use mcp_server::{McpHandler, McpResult, McpServer};
-use serde::{Deserialize, Serialize};
-use serde_json::{Value, from_str};
-use std::fs;
-use std::path::Path;
+use mcp_protocol::{McpError, tools::{
+    HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, 
+    HasAnnotations, HasToolMeta, ToolSchema, ToolResult, CallToolResult
+}, schema::JsonSchema};
+use mcp_server::{McpResult, McpServer, McpTool, SessionContext};
+use serde_json::{json, Value};
+use std::collections::HashMap;
 use tracing::info;
 
-#[derive(Debug, Deserialize, Serialize)]
-struct Language {
-    name: String,
-    label: String,
-    description: String,
-    category: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct Framework {
-    name: String,
-    label: String,
-    description: String,
-    category: String,
-    language: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-struct DevelopmentCommand {
-    name: String,
-    label: String,
-    description: String,
-    category: String,
-    common_tools: Vec<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct LanguageData {
-    programming_languages: Vec<Language>,
-}
-
-#[derive(Debug, Deserialize)]
-struct FrameworkData {
-    web_frameworks: Vec<Framework>,
-}
-
-#[derive(Debug, Deserialize)]
-struct CommandData {
-    development_commands: Vec<DevelopmentCommand>,
-}
-
-/// IDE Auto-Completion Handler that loads data from external files
-/// Real-world use case: Provides intelligent auto-completion for developers in IDEs and editors
-pub struct IdeCompletionHandler {
-    languages: Vec<Language>,
-    frameworks: Vec<Framework>,
-    commands: Vec<DevelopmentCommand>,
+/// IDE Auto-Completion Tool that provides intelligent suggestions
+#[derive(Clone)]
+pub struct IdeCompletionTool {
+    input_schema: ToolSchema,
+    languages: Vec<String>,
+    frameworks: Vec<String>,
+    commands: Vec<String>,
     file_extensions: Vec<String>,
 }
 
-impl IdeCompletionHandler {
-    /// Load completion data from external JSON files
-    /// Real-world pattern: Configuration and data externalization for maintainability
-    pub fn new() -> Result<Self, Box<dyn std::error::Error>> {
-        let data_dir = Path::new("data");
-
-        // Load programming languages
-        let languages = Self::load_languages(data_dir)?;
-
-        // Load web frameworks
-        let frameworks = Self::load_frameworks(data_dir)?;
-
-        // Load development commands
-        let commands = Self::load_commands(data_dir)?;
-
-        // Common file extensions (could also be externalized)
-        let file_extensions = vec![
-            ".rs".to_string(),
-            ".py".to_string(),
-            ".js".to_string(),
-            ".ts".to_string(),
-            ".java".to_string(),
-            ".go".to_string(),
-            ".cpp".to_string(),
-            ".c".to_string(),
-            ".kt".to_string(),
-            ".swift".to_string(),
-            ".php".to_string(),
-            ".rb".to_string(),
-            ".json".to_string(),
-            ".yaml".to_string(),
-            ".toml".to_string(),
-            ".md".to_string(),
-            ".txt".to_string(),
-            ".html".to_string(),
-            ".css".to_string(),
-            ".scss".to_string(),
-            ".sql".to_string(),
+impl IdeCompletionTool {
+    /// Create a new IDE completion tool with predefined data
+    pub fn new() -> Self {
+        let languages = vec![
+            "rust".to_string(), "python".to_string(), "javascript".to_string(),
+            "typescript".to_string(), "java".to_string(), "go".to_string(),
+            "cpp".to_string(), "c".to_string(), "kotlin".to_string(), "swift".to_string(),
+            "php".to_string(), "ruby".to_string(), "csharp".to_string(),
         ];
 
-        info!(
-            "Loaded {} languages, {} frameworks, {} commands",
-            languages.len(),
-            frameworks.len(),
-            commands.len()
-        );
+        let frameworks = vec![
+            "react".to_string(), "vue".to_string(), "angular".to_string(),
+            "express".to_string(), "django".to_string(), "flask".to_string(),
+            "spring".to_string(), "rails".to_string(), "laravel".to_string(),
+            "tokio".to_string(), "actix".to_string(), "axum".to_string(),
+        ];
 
-        Ok(Self {
+        let commands = vec![
+            "build".to_string(), "test".to_string(), "run".to_string(), "deploy".to_string(),
+            "install".to_string(), "update".to_string(), "lint".to_string(), "format".to_string(),
+            "check".to_string(), "clean".to_string(), "serve".to_string(),
+        ];
+
+        let file_extensions = vec![
+            ".rs".to_string(), ".py".to_string(), ".js".to_string(), ".ts".to_string(),
+            ".java".to_string(), ".go".to_string(), ".cpp".to_string(), ".c".to_string(),
+            ".json".to_string(), ".yaml".to_string(), ".toml".to_string(), ".md".to_string(),
+        ];
+
+        let input_schema = ToolSchema::object()
+            .with_properties(HashMap::from([
+                ("category".to_string(), 
+                    JsonSchema::string_enum(vec![
+                        "language".to_string(),
+                        "framework".to_string(), 
+                        "command".to_string(),
+                        "extension".to_string(),
+                        "all".to_string(),
+                    ]).with_description("Category of completions to get")),
+                ("prefix".to_string(), 
+                    JsonSchema::string().with_description("Prefix to filter completions")),
+            ]))
+            .with_required(vec!["category".to_string()]);
+
+        Self {
+            input_schema,
             languages,
             frameworks,
             commands,
             file_extensions,
-        })
-    }
-
-    fn load_languages(data_dir: &Path) -> Result<Vec<Language>, Box<dyn std::error::Error>> {
-        let file_path = data_dir.join("languages.json");
-        let content = fs::read_to_string(file_path)?;
-        let data: LanguageData = from_str(&content)?;
-        Ok(data.programming_languages)
-    }
-
-    fn load_frameworks(data_dir: &Path) -> Result<Vec<Framework>, Box<dyn std::error::Error>> {
-        let file_path = data_dir.join("frameworks.json");
-        let content = fs::read_to_string(file_path)?;
-        let data: FrameworkData = from_str(&content)?;
-        Ok(data.web_frameworks)
-    }
-
-    fn load_commands(
-        data_dir: &Path,
-    ) -> Result<Vec<DevelopmentCommand>, Box<dyn std::error::Error>> {
-        let file_path = data_dir.join("development_commands.json");
-        let content = fs::read_to_string(file_path)?;
-        let data: CommandData = from_str(&content)?;
-        Ok(data.development_commands)
-    }
-
-    fn get_language_completions(&self, prefix: &str) -> Vec<CompletionSuggestion> {
-        self.languages
-            .iter()
-            .filter(|lang| lang.name.starts_with(prefix))
-            .map(|lang| CompletionSuggestion {
-                value: lang.name.clone(),
-                label: Some(lang.label.clone()),
-                description: Some(format!("{} ({})", lang.description, lang.category)),
-                annotations: None,
-            })
-            .collect()
-    }
-
-    fn get_extension_completions(&self, prefix: &str) -> Vec<CompletionSuggestion> {
-        self.file_extensions
-            .iter()
-            .filter(|ext| ext.starts_with(prefix))
-            .map(|ext| CompletionSuggestion {
-                value: ext.clone(),
-                label: Some(format!("{} file", ext)),
-                description: Some(
-                    match ext.as_str() {
-                        ".rs" => "Rust source file",
-                        ".py" => "Python script file",
-                        ".js" => "JavaScript file",
-                        ".ts" => "TypeScript file",
-                        ".json" => "JSON data file",
-                        ".yaml" => "YAML configuration file",
-                        ".md" => "Markdown documentation",
-                        _ => "File extension",
-                    }
-                    .to_string(),
-                ),
-                annotations: None,
-            })
-            .collect()
-    }
-
-    fn get_command_completions(&self, prefix: &str) -> Vec<CompletionSuggestion> {
-        self.commands
-            .iter()
-            .filter(|cmd| cmd.name.starts_with(prefix))
-            .map(|cmd| CompletionSuggestion {
-                value: cmd.name.clone(),
-                label: Some(cmd.label.clone()),
-                description: Some(format!(
-                    "{} - Tools: {}",
-                    cmd.description,
-                    cmd.common_tools.join(", ")
-                )),
-                annotations: None,
-            })
-            .collect()
-    }
-
-    fn get_framework_completions(&self, prefix: &str) -> Vec<CompletionSuggestion> {
-        self.frameworks
-            .iter()
-            .filter(|fw| fw.name.starts_with(prefix))
-            .map(|fw| CompletionSuggestion {
-                value: fw.name.clone(),
-                label: Some(fw.label.clone()),
-                description: Some(format!(
-                    "{} ({} - {})",
-                    fw.description, fw.language, fw.category
-                )),
-                annotations: None,
-            })
-            .collect()
-    }
-
-    fn get_smart_completions(
-        &self,
-        argument_name: &str,
-        current_value: &str,
-    ) -> Vec<CompletionSuggestion> {
-        let prefix = current_value.to_lowercase();
-
-        // Context-aware completion based on argument name
-        match argument_name.to_lowercase().as_str() {
-            "language" | "lang" | "programming_language" => self.get_language_completions(&prefix),
-            "extension" | "ext" | "file_extension" => self.get_extension_completions(&prefix),
-            "command" | "cmd" | "action" => self.get_command_completions(&prefix),
-            "framework" | "library" | "lib" => self.get_framework_completions(&prefix),
-            "filename" | "file" | "path" => {
-                // Suggest common file patterns
-                let mut suggestions = Vec::new();
-                if prefix.is_empty() || "main".starts_with(&prefix) {
-                    suggestions.push(CompletionSuggestion {
-                        value: "main.rs".to_string(),
-                        label: Some("main.rs".to_string()),
-                        description: Some("Main Rust source file".to_string()),
-                        annotations: None,
-                    });
-                }
-                if prefix.is_empty() || "readme".starts_with(&prefix) {
-                    suggestions.push(CompletionSuggestion {
-                        value: "README.md".to_string(),
-                        label: Some("README.md".to_string()),
-                        description: Some("Project documentation file".to_string()),
-                        annotations: None,
-                    });
-                }
-                if prefix.is_empty() || "cargo".starts_with(&prefix) {
-                    suggestions.push(CompletionSuggestion {
-                        value: "Cargo.toml".to_string(),
-                        label: Some("Cargo.toml".to_string()),
-                        description: Some("Rust package configuration".to_string()),
-                        annotations: None,
-                    });
-                }
-                suggestions
-            }
-            "version" => {
-                // Suggest semantic version patterns
-                vec![
-                    CompletionSuggestion {
-                        value: "1.0.0".to_string(),
-                        label: Some("1.0.0".to_string()),
-                        description: Some("Major release version".to_string()),
-                        annotations: None,
-                    },
-                    CompletionSuggestion {
-                        value: "0.1.0".to_string(),
-                        label: Some("0.1.0".to_string()),
-                        description: Some("Initial development version".to_string()),
-                        annotations: None,
-                    },
-                    CompletionSuggestion {
-                        value: "2.0.0-beta".to_string(),
-                        label: Some("2.0.0-beta".to_string()),
-                        description: Some("Beta pre-release version".to_string()),
-                        annotations: None,
-                    },
-                ]
-            }
-            "environment" | "env" => {
-                vec![
-                    CompletionSuggestion {
-                        value: "development".to_string(),
-                        label: Some("Development".to_string()),
-                        description: Some("Development environment".to_string()),
-                        annotations: None,
-                    },
-                    CompletionSuggestion {
-                        value: "staging".to_string(),
-                        label: Some("Staging".to_string()),
-                        description: Some("Staging environment".to_string()),
-                        annotations: None,
-                    },
-                    CompletionSuggestion {
-                        value: "production".to_string(),
-                        label: Some("Production".to_string()),
-                        description: Some("Production environment".to_string()),
-                        annotations: None,
-                    },
-                ]
-            }
-            _ => {
-                // Fallback: combine all relevant completions
-                let mut all_suggestions = Vec::new();
-                all_suggestions.extend(self.get_language_completions(&prefix).into_iter().take(3));
-                all_suggestions.extend(self.get_command_completions(&prefix).into_iter().take(3));
-                all_suggestions.extend(self.get_framework_completions(&prefix).into_iter().take(2));
-                all_suggestions
-            }
         }
+    }
+
+    fn get_completions(&self, category: &str, prefix: &str) -> Vec<String> {
+        let prefix = prefix.to_lowercase();
+        
+        let source: &Vec<String> = match category {
+            "language" => &self.languages,
+            "framework" => &self.frameworks,
+            "command" => &self.commands,
+            "extension" => &self.file_extensions,
+            "all" => {
+                // Combine all categories
+                let mut all = Vec::new();
+                all.extend(self.languages.iter().cloned());
+                all.extend(self.frameworks.iter().cloned());
+                all.extend(self.commands.iter().cloned());
+                all.extend(self.file_extensions.iter().cloned());
+                return all.into_iter()
+                    .filter(|item| item.to_lowercase().starts_with(&prefix))
+                    .take(20)
+                    .collect();
+            }
+            _ => return vec![], // Invalid category
+        };
+
+        source.iter()
+            .filter(|item| prefix.is_empty() || item.to_lowercase().starts_with(&prefix))
+            .take(10)
+            .cloned()
+            .collect()
     }
 }
 
-#[async_trait]
-impl McpHandler for IdeCompletionHandler {
-    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
-        if let Some(params) = params {
-            let request: CompleteRequest = serde_json::from_value(params).map_err(|e| {
-                McpError::invalid_param_type("params", "CompleteRequest", &e.to_string())
-            })?;
-
-            let suggestions =
-                self.get_smart_completions(&request.params.argument.name, &request.params.argument.value);
-
-            // Limit to 10 suggestions for better UX
-            let limited_suggestions: Vec<_> = suggestions.into_iter().take(10).collect();
-
-            let response = CompletionResponse::new(limited_suggestions);
-            serde_json::to_value(response).map_err(|e| {
-                McpError::tool_execution(&format!("Failed to serialize completion response: {}", e))
-            })
-        } else {
-            // Return example completions when no params provided
-            let suggestions = vec![
-                CompletionSuggestion {
-                    value: "rust".to_string(),
-                    label: Some("Rust programming language".to_string()),
-                    description: Some(
-                        "Systems programming language focused on safety and performance"
-                            .to_string(),
-                    ),
-                    annotations: None,
-                },
-                CompletionSuggestion {
-                    value: "python".to_string(),
-                    label: Some("Python programming language".to_string()),
-                    description: Some(
-                        "High-level programming language with elegant syntax".to_string(),
-                    ),
-                    annotations: None,
-                },
-                CompletionSuggestion {
-                    value: "javascript".to_string(),
-                    label: Some("JavaScript programming language".to_string()),
-                    description: Some(
-                        "Dynamic programming language for web development".to_string(),
-                    ),
-                    annotations: None,
-                },
-            ];
-
-            let response = CompletionResponse::new(suggestions);
-            serde_json::to_value(response).map_err(|e| {
-                McpError::tool_execution(&format!("Failed to serialize completion response: {}", e))
-            })
-        }
+// Implement fine-grained traits for ToolDefinition
+impl HasBaseMetadata for IdeCompletionTool {
+    fn name(&self) -> &str {
+        "ide_completion"
     }
+    fn title(&self) -> Option<&str> {
+        Some("IDE Auto-Completion")
+    }
+}
 
-    fn supported_methods(&self) -> Vec<String> {
-        vec!["completion/complete".to_string()]
+impl HasDescription for IdeCompletionTool {
+    fn description(&self) -> Option<&str> {
+        Some("Provides intelligent auto-completion suggestions for programming languages, frameworks, commands, and file extensions")
+    }
+}
+
+impl HasInputSchema for IdeCompletionTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
+}
+
+impl HasOutputSchema for IdeCompletionTool {
+    fn output_schema(&self) -> Option<&ToolSchema> { None }
+}
+
+impl HasAnnotations for IdeCompletionTool {
+    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> { None }
+}
+
+impl HasToolMeta for IdeCompletionTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+}
+
+#[async_trait]
+impl McpTool for IdeCompletionTool {
+    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+        let category = args.get("category")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::missing_param("category"))?;
+            
+        let prefix = args.get("prefix")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        let completions = self.get_completions(category, prefix);
+        
+        let result = json!({
+            "category": category,
+            "prefix": prefix,
+            "completions": completions,
+            "count": completions.len()
+        });
+        
+        Ok(CallToolResult::success(vec![
+            ToolResult::text(format!("Found {} completions for '{}' in category '{}'", 
+                completions.len(), prefix, category)),
+            ToolResult::text(result.to_string())
+        ]))
     }
 }
 
@@ -383,30 +179,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Starting IDE Auto-Completion Server Example");
 
-    let completion_handler = IdeCompletionHandler::new()
-        .map_err(|e| format!("Failed to initialize completion handler: {}", e))?;
+    let completion_tool = IdeCompletionTool::new();
 
     let server = McpServer::builder()
         .name("ide-completion-server")
         .version("1.0.0")
         .title("IDE Auto-Completion Server")
-        .instructions("Real-world IDE completion server that provides intelligent auto-completion suggestions for developers. Loads data from external JSON files for programming languages, frameworks, and development commands.")
-        .handler(completion_handler)
+        .instructions("Provides intelligent auto-completion suggestions for developers. Use the ide_completion tool with category (language/framework/command/extension/all) and optional prefix parameters.")
+        .tool(completion_tool)
         .bind_address("127.0.0.1:8042".parse()?)
         .build()?;
 
     info!("IDE completion server running at: http://127.0.0.1:8042/mcp");
-    info!("Real-world completion features for developers:");
-    info!(
-        "  - Programming language suggestions with categories (language, lang, programming_language)"
-    );
-    info!("  - File extension completions with descriptions (extension, ext, file_extension)");
-    info!("  - Development command completions with tool examples (command, cmd, action)");
-    info!("  - Framework suggestions with language and category info (framework, library, lib)");
-    info!("  - File path suggestions for common project files (filename, file, path)");
-    info!("  - Version pattern suggestions for semantic versioning (version)");
-    info!("  - Environment completions for deployment contexts (environment, env)");
-    info!("Data loaded from external JSON files in data/ directory");
+    info!("Available completion categories:");
+    info!("  - language: Programming language suggestions");
+    info!("  - framework: Web and application framework suggestions");
+    info!("  - command: Development command suggestions");
+    info!("  - extension: File extension suggestions");
+    info!("  - all: Combined suggestions from all categories");
+    info!("Use prefix parameter to filter results");
 
     server.run().await?;
     Ok(())

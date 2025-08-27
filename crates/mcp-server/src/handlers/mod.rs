@@ -553,7 +553,9 @@ impl McpHandler for ElicitationHandler {
     }
 }
 
-/// Notifications handler for various notification endpoints
+use crate::session::SessionManager;
+
+/// Generic notifications handler for most notification endpoints
 pub struct NotificationsHandler;
 
 #[async_trait]
@@ -567,7 +569,6 @@ impl McpHandler for NotificationsHandler {
     fn supported_methods(&self) -> Vec<String> {
         vec![
             "notifications/message".to_string(),
-            "notifications/initialized".to_string(),
             "notifications/progress".to_string(),
             "notifications/resources/listChanged".to_string(),
             "notifications/resources/updated".to_string(),
@@ -575,5 +576,84 @@ impl McpHandler for NotificationsHandler {
             "notifications/prompts/listChanged".to_string(),
             "notifications/roots/listChanged".to_string(),
         ]
+    }
+}
+
+/// Special handler for notifications/initialized that manages session lifecycle
+pub struct InitializedNotificationHandler {
+    session_manager: Arc<SessionManager>,
+}
+
+impl InitializedNotificationHandler {
+    pub fn new(session_manager: Arc<SessionManager>) -> Self {
+        Self { session_manager }
+    }
+}
+
+#[async_trait]
+impl McpHandler for InitializedNotificationHandler {
+    async fn handle(&self, _params: Option<Value>) -> McpResult<Value> {
+        // This should not be called directly without session context
+        tracing::warn!("notifications/initialized received without session context");
+        Ok(Value::Null)
+    }
+
+    async fn handle_with_session(&self, params: Option<Value>, session: Option<SessionContext>) -> McpResult<Value> {
+        tracing::info!("📨 Received notifications/initialized: {:?}", params);
+        
+        if let Some(session_ctx) = session {
+            tracing::info!("🔄 Processing notifications/initialized for session: {}", session_ctx.session_id);
+            
+            // Check if session is already initialized
+            if self.session_manager.is_session_initialized(&session_ctx.session_id).await {
+                tracing::info!("ℹ️ Session {} already initialized, ignoring duplicate notifications/initialized", session_ctx.session_id);
+                return Ok(Value::Null);
+            }
+            
+            // Get client info from session state (it should have been stored during the initialize request)
+            let client_info_value = self.session_manager.get_session_state(&session_ctx.session_id, "client_info").await;
+            let capabilities_value = self.session_manager.get_session_state(&session_ctx.session_id, "client_capabilities").await;
+            let negotiated_version_value = self.session_manager.get_session_state(&session_ctx.session_id, "negotiated_version").await;
+            
+            if let (Some(client_info_value), Some(capabilities_value), Some(negotiated_version_value)) = 
+                (client_info_value, capabilities_value, negotiated_version_value) {
+                
+                // Deserialize the stored values
+                use mcp_protocol::{Implementation, ClientCapabilities, McpVersion};
+                
+                if let (Ok(client_info), Ok(client_capabilities), Ok(negotiated_version)) = (
+                    serde_json::from_value::<Implementation>(client_info_value),
+                    serde_json::from_value::<ClientCapabilities>(capabilities_value),
+                    serde_json::from_value::<McpVersion>(negotiated_version_value)
+                ) {
+                    // Mark session as initialized now that we received the notification
+                    if let Err(e) = self.session_manager.initialize_session_with_version(
+                        &session_ctx.session_id, 
+                        client_info, 
+                        client_capabilities, 
+                        negotiated_version
+                    ).await {
+                        tracing::error!("❌ Failed to initialize session {}: {}", session_ctx.session_id, e);
+                        return Err(mcp_protocol::McpError::configuration(&format!("Failed to initialize session: {}", e)));
+                    }
+                    
+                    tracing::info!("✅ Session {} successfully initialized after receiving notifications/initialized", session_ctx.session_id);
+                } else {
+                    tracing::error!("❌ Failed to deserialize stored client info/capabilities/version for session {}", session_ctx.session_id);
+                    return Err(mcp_protocol::McpError::configuration("Failed to deserialize stored client info"));
+                }
+            } else {
+                tracing::error!("❌ Missing stored client info/capabilities/version for session {}", session_ctx.session_id);
+                return Err(mcp_protocol::McpError::configuration("Missing stored client info - session must call initialize first"));
+            }
+        } else {
+            tracing::warn!("⚠️ notifications/initialized received without session context");
+        }
+        
+        Ok(Value::Null)
+    }
+    
+    fn supported_methods(&self) -> Vec<String> {
+        vec!["notifications/initialized".to_string()]
     }
 }

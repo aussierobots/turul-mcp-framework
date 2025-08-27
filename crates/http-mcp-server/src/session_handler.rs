@@ -12,32 +12,32 @@ use std::sync::Arc;
 use std::convert::Infallible;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use tracing::{debug, warn, error};
 
 use hyper::{Request, Response, Method, StatusCode};
 use bytes::Bytes;
 use hyper::header::{CONTENT_TYPE, ACCEPT};
 use http_body_util::{BodyExt, Full};
 use http_body::{Body, Frame};
-use tracing::{debug, warn, error};
 use futures::Stream;
 
 use mcp_json_rpc_server::{
     JsonRpcDispatcher,
     r#async::SessionContext,
     dispatch::{parse_json_rpc_message, JsonRpcMessage, JsonRpcMessageResult},
-    error::{JsonRpcError, JsonRpcErrorObject},
-    JsonRpcResponse
+    error::{JsonRpcError, JsonRpcErrorObject}
 };
 use mcp_session_storage::{SessionStorage, InMemorySessionStorage};
 use mcp_protocol::ServerCapabilities;
 use chrono;
+use uuid::Uuid;
 
 use crate::{
     Result, ServerConfig, StreamConfig,
     protocol::{extract_protocol_version, extract_session_id, extract_last_event_id}, 
     json_rpc_responses::*,
     StreamManager,
-    notification_bridge::{SharedNotificationBroadcaster, StreamManagerNotificationBroadcaster}
+    notification_bridge::{StreamManagerNotificationBroadcaster, SharedNotificationBroadcaster}
 };
 
 /// SSE stream body that implements hyper's Body trait
@@ -53,6 +53,13 @@ impl SessionSseStream {
         Self {
             stream: Box::pin(stream),
         }
+    }
+}
+
+impl Drop for SessionSseStream {
+    fn drop(&mut self) {
+        debug!("🔥 DROP: SessionSseStream - HTTP response body being cleaned up");
+        debug!("🔥 This may indicate early cleanup of SSE response stream");
     }
 }
 
@@ -96,14 +103,16 @@ fn jsonrpc_error_to_unified_body(error: JsonRpcError) -> Result<Response<Unified
         .unwrap())
 }
 
-/// JSON-RPC 2.0 over HTTP handler with SessionStorage integration and SSE streaming bridge
+// ✅ CORRECTED ARCHITECTURE: Remove complex registry - use single shared StreamManager
+
+/// JSON-RPC 2.0 over HTTP handler with shared StreamManager
 pub struct SessionMcpHandler<S: SessionStorage = InMemorySessionStorage> {
     pub(crate) config: ServerConfig,
     pub(crate) dispatcher: Arc<JsonRpcDispatcher>,
     pub(crate) session_storage: Arc<S>,
     pub(crate) stream_config: StreamConfig,
+    // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance with internal session management
     pub(crate) stream_manager: Arc<StreamManager<S>>,
-    pub(crate) notification_broadcaster: SharedNotificationBroadcaster,
 }
 
 impl<S: SessionStorage + 'static> Clone for SessionMcpHandler<S> {
@@ -114,7 +123,6 @@ impl<S: SessionStorage + 'static> Clone for SessionMcpHandler<S> {
             session_storage: Arc::clone(&self.session_storage),
             stream_config: self.stream_config.clone(),
             stream_manager: Arc::clone(&self.stream_manager),
-            notification_broadcaster: Arc::clone(&self.notification_broadcaster),
         }
     }
 }
@@ -127,65 +135,54 @@ impl SessionMcpHandler<InMemorySessionStorage> {
         stream_config: StreamConfig,
     ) -> Self {
         let storage = Arc::new(InMemorySessionStorage::new());
-        let stream_manager = Arc::new(StreamManager::with_config(Arc::clone(&storage), stream_config.clone()));
-        
-        // 🔑 THE CRITICAL BRIDGE: Connect NotificationBroadcaster to StreamManager
-        let notification_broadcaster: SharedNotificationBroadcaster = Arc::new(
-            StreamManagerNotificationBroadcaster::new(Arc::clone(&stream_manager))
-        );
-        
-        Self { 
-            config, 
-            dispatcher, 
-            session_storage: storage, 
-            stream_config, 
-            stream_manager, 
-            notification_broadcaster 
-        }
+        Self::with_storage(config, dispatcher, storage, stream_config)
     }
 }
 
 impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
-    /// Create handler with specific session storage backend
+    /// Create handler with shared StreamManager instance (corrected architecture)
+    pub fn with_shared_stream_manager(
+        config: ServerConfig, 
+        dispatcher: Arc<JsonRpcDispatcher>,
+        session_storage: Arc<S>,
+        stream_config: StreamConfig,
+        stream_manager: Arc<StreamManager<S>>,
+    ) -> Self {
+        Self { 
+            config, 
+            dispatcher, 
+            session_storage, 
+            stream_config,
+            stream_manager,
+        }
+    }
+
+    /// Create handler with specific session storage backend (creates own StreamManager)
+    /// Note: Use with_shared_stream_manager for correct architecture  
     pub fn with_storage(
         config: ServerConfig, 
         dispatcher: Arc<JsonRpcDispatcher>,
         session_storage: Arc<S>,
         stream_config: StreamConfig,
     ) -> Self {
-        let stream_manager = Arc::new(StreamManager::with_config(Arc::clone(&session_storage), stream_config.clone()));
-        
-        // 🔑 THE CRITICAL BRIDGE: Connect NotificationBroadcaster to StreamManager
-        let notification_broadcaster: SharedNotificationBroadcaster = Arc::new(
-            StreamManagerNotificationBroadcaster::new(Arc::clone(&stream_manager))
-        );
+        // Create own StreamManager instance (not recommended for production)
+        let stream_manager = Arc::new(StreamManager::with_config(
+            Arc::clone(&session_storage),
+            stream_config.clone()
+        ));
         
         Self { 
             config, 
             dispatcher, 
             session_storage, 
-            stream_config, 
-            stream_manager, 
-            notification_broadcaster 
+            stream_config,
+            stream_manager,
         }
     }
 
-    /// Get access to the StreamManager for external event forwarding
-    /// This allows the mcp-server layer to forward session events to SSE streams
+    /// Get access to the StreamManager for notifications
     pub fn get_stream_manager(&self) -> &Arc<StreamManager<S>> {
         &self.stream_manager
-    }
-    
-    /// Get access to the NotificationBroadcaster for tools to send notifications
-    /// This is the bridge that connects tool notifications to SSE streams
-    pub fn get_notification_broadcaster(&self) -> &SharedNotificationBroadcaster {
-        &self.notification_broadcaster
-    }
-    
-    /// Helper to get broadcaster as Any for SessionContext
-    fn get_broadcaster_as_any(&self) -> Arc<dyn std::any::Any + Send + Sync> {
-        // Create a new Arc that implements Any
-        Arc::new(Arc::clone(&self.notification_broadcaster))
     }
 
 
@@ -241,9 +238,10 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
         let accept_header = req.headers()
             .get(ACCEPT)
             .and_then(|accept| accept.to_str().ok())
-            .unwrap_or("");
+            .unwrap_or("application/json");
         
         let accepts_sse = accept_header.contains("text/event-stream");
+        debug!("POST request Accept header: '{}', will use SSE for tool calls: {}", accept_header, accepts_sse);
 
         // Read request body
         let body = req.into_body();
@@ -293,9 +291,10 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
         };
 
         // Handle the message using proper JSON-RPC enums
-        let (message_result, response_session_id) = match message {
+        let (message_result, response_session_id, method_name) = match message {
             JsonRpcMessage::Request(request) => {
                 debug!("Processing JSON-RPC request: method={}", request.method);
+                let method_name = request.method.clone();
                 
                 // Special handling for initialize requests - they create new sessions
                 let (response, response_session_id) = if request.method == "initialize" {
@@ -307,10 +306,16 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
                         Ok(session_info) => {
                             debug!("Created new session via session storage: {}", session_info.session_id);
                             
+                            // ✅ CORRECTED ARCHITECTURE: Create session-specific notification broadcaster from shared StreamManager
+                            let broadcaster: SharedNotificationBroadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(
+                                Arc::clone(&self.stream_manager)
+                            ));
+                            let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+                            
                             let session_context = SessionContext {
                                 session_id: session_info.session_id.clone(),
                                 metadata: std::collections::HashMap::new(),
-                                broadcaster: Some(self.get_broadcaster_as_any()),
+                                broadcaster: Some(broadcaster_any),
                                 timestamp: chrono::Utc::now().timestamp_millis() as u64,
                             };
                             
@@ -331,11 +336,17 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
                         }
                     }
                 } else {
-                    // Regular requests use existing session context
+                    // ✅ CORRECTED ARCHITECTURE: Use shared StreamManager for notification broadcaster
+                    let session_id_str = session_id.clone().unwrap_or("unknown".to_string());
+                    let broadcaster: SharedNotificationBroadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(
+                        Arc::clone(&self.stream_manager)
+                    ));
+                    let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+                    
                     let session_context = SessionContext {
-                        session_id: session_id.clone().unwrap_or("unknown".to_string()),
+                        session_id: session_id_str,
                         metadata: std::collections::HashMap::new(),
-                        broadcaster: Some(self.get_broadcaster_as_any()),
+                        broadcaster: Some(broadcaster_any),
                         timestamp: chrono::Utc::now().timestamp_millis() as u64,
                     };
                     
@@ -343,29 +354,50 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
                     (response, session_id)
                 };
                 
-                (JsonRpcMessageResult::Response(response), response_session_id)
+                (JsonRpcMessageResult::Response(response), response_session_id, Some(method_name))
             }
             JsonRpcMessage::Notification(notification) => {
                 debug!("Processing JSON-RPC notification: method={}", notification.method);
-                if let Err(err) = self.dispatcher.handle_notification(notification).await {
+                let method_name = notification.method.clone();
+                
+                // ✅ CORRECTED ARCHITECTURE: Create session context with shared StreamManager broadcaster
+                let session_context = if let Some(ref session_id) = session_id {
+                    let broadcaster: SharedNotificationBroadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(
+                        Arc::clone(&self.stream_manager)
+                    ));
+                    let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+                    
+                    Some(SessionContext {
+                        session_id: session_id.clone(),
+                        metadata: std::collections::HashMap::new(),
+                        broadcaster: Some(broadcaster_any),
+                        timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                    })
+                } else {
+                    None
+                };
+                
+                if let Err(err) = self.dispatcher.handle_notification_with_context(notification, session_context).await {
                     error!("Notification handling error: {}", err);
                 }
-                (JsonRpcMessageResult::NoResponse, None)
+                (JsonRpcMessageResult::NoResponse, session_id.clone(), Some(method_name))
             }
         };
 
         // Convert message result to HTTP response
         match message_result {
             JsonRpcMessageResult::Response(response) => {
-                if accepts_sse && response_session_id.is_some() {
-                    // MCP Streamable HTTP: Return SSE stream with the response
-                    debug!("Client accepts SSE - creating streaming response");
-                    self.create_post_sse_response(response, response_session_id.unwrap()).await
-                } else {
-                    // Standard JSON response
-                    debug!("Sending JSON-RPC response");
-                    Ok(jsonrpc_response_with_session(response, response_session_id)?)
-                }
+                // Check if this is a tool call that should return SSE
+                // Only use SSE if explicitly requested via Accept: text/event-stream header
+                let is_tool_call = method_name.as_ref().map_or(false, |m| m == "tools/call");
+                
+                debug!("Decision point: method={:?}, accepts_sse={}, session_id={:?}, is_tool_call={}", 
+                       method_name, accepts_sse, response_session_id, is_tool_call);
+                
+                // TEMPORARY FIX: Disable MCP Streamable HTTP for tool calls to ensure MCP Inspector compatibility
+                // Always return JSON responses for all operations until SSE implementation is fixed
+                debug!("🔧 COMPATIBILITY MODE: Always returning JSON response for method: {:?} (SSE disabled for tool calls)", method_name);
+                Ok(jsonrpc_response_with_session(response, response_session_id)?)
             }
             JsonRpcMessageResult::Error(error) => {
                 warn!("Sending JSON-RPC error response");
@@ -384,34 +416,8 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
         }
     }
 
-    /// Create SSE response for POST request (MCP Streamable HTTP)
-    async fn create_post_sse_response(
-        &self,
-        response: JsonRpcResponse,
-        session_id: String,
-    ) -> Result<Response<JsonRpcBody>> {
-        debug!("Creating POST SSE stream for session: {}", session_id);
-        
-        // Create the SSE stream using StreamManager
-        // For POST requests, we return a stream that:
-        // 1. Sends any notifications related to the request
-        // 2. Sends the JSON-RPC response
-        // 3. Closes the stream after response
-        match self.stream_manager.create_post_sse_stream(
-            session_id.clone(),
-            response.clone(),
-        ).await {
-            Ok(sse_response) => {
-                debug!("Created POST SSE stream for session: {}", session_id);
-                Ok(sse_response)
-            }
-            Err(err) => {
-                error!("Failed to create POST SSE stream: {}", err);
-                // Fall back to JSON response
-                Ok(jsonrpc_response_with_session(response, Some(session_id))?)
-            }
-        }
-    }
+    // Note: create_post_sse_response method removed as it's unused in MCP Inspector compatibility mode
+    // SSE for tool calls is temporarily disabled - see WORKING_MEMORY.md for details
 
     /// Handle Server-Sent Events requests (SSE for streaming)
     async fn handle_sse_request(
@@ -478,11 +484,16 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
         // Extract Last-Event-ID for resumability
         let last_event_id = extract_last_event_id(headers);
         
-        debug!("Creating SSE stream for session: {} with last_event_id: {:?}", session_id, last_event_id);
+        // Generate unique connection ID for MCP spec compliance
+        let connection_id = Uuid::now_v7().to_string();
         
-        // Use StreamManager to create proper SSE connection (one per session per SSE spec)
+        debug!("Creating SSE stream for session: {} with connection: {}, last_event_id: {:?}", 
+               session_id, connection_id, last_event_id);
+        
+        // ✅ CORRECTED ARCHITECTURE: Use shared StreamManager directly (no registry needed)
         match self.stream_manager.handle_sse_connection(
             session_id,
+            connection_id,
             last_event_id,
         ).await {
             Ok(response) => Ok(response),
