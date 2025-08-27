@@ -420,3 +420,185 @@ pub fn tool(input: TokenStream) -> TokenStream {
         Err(err) => err.to_compile_error().into(),
     }
 }
+
+/// Declarative macro for creating simple prompts
+/// 
+/// This provides a concise syntax for prompt creation.
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::prompt;
+/// 
+/// let code_review_prompt = prompt! {
+///     name: "code_review",
+///     description: "Review code for quality and best practices",
+///     arguments: {
+///         code: String => "Code to review",
+///         language: String => "Programming language", required,
+///     },
+///     template: |args| async move {
+///         let code = args.get("code").and_then(|v| v.as_str()).unwrap_or("");
+///         let lang = args.get("language").and_then(|v| v.as_str()).unwrap_or("text");
+///         
+///         Ok(vec![
+///             mcp_protocol::prompts::PromptMessage::user(format!(
+///                 "Please review this {} code for quality, security, and best practices:\n\n```{}\n{}\n```",
+///                 lang, lang, code
+///             ))
+///         ])
+///     }
+/// };
+/// ```
+#[proc_macro]
+pub fn prompt(input: TokenStream) -> TokenStream {
+    match macros::prompt_declarative_impl(input) {
+        Ok(tokens) => tokens,
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Declarative macro for creating sampling configurations
+/// 
+/// This provides a concise syntax for sampling configuration.
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::sampling;
+/// 
+/// let text_generator = sampling! {
+///     max_tokens: 1000,
+///     temperature: 0.7,
+///     system_prompt: "You are a helpful AI assistant",
+///     handler: |request| async move {
+///         // Implementation would call actual model API
+///         let response_text = "Generated response based on the input";
+///         Ok(mcp_protocol::sampling::CreateMessageResult::new(
+///             mcp_protocol::sampling::SamplingMessage {
+///                 role: "assistant".to_string(),
+///                 content: mcp_protocol::sampling::MessageContent::Text {
+///                     text: response_text.to_string()
+///                 }
+///             },
+///             "claude-3-haiku"
+///         ))
+///     }
+/// };
+/// ```
+#[proc_macro]
+pub fn sampling(input: TokenStream) -> TokenStream {
+    match macros::sampling_declarative_impl(input) {
+        Ok(tokens) => tokens,
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Declarative macro for creating MCP notifications with concise syntax.
+/// 
+/// Supports zero-configuration method generation based on struct name.
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::notification;
+/// 
+/// notification! {
+///     progress {
+///         message: String = "Progress message",
+///         percent: u32 = "Completion percentage"
+///     }
+/// };
+/// ```
+#[proc_macro]
+pub fn notification(input: TokenStream) -> TokenStream {
+    match macros::notification_declarative_impl(input) {
+        Ok(tokens) => tokens,
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Declarative macro for creating MCP completion handlers with concise syntax.
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::completion;
+/// 
+/// completion! {
+///     text_editor {
+///         context: String = "Editor context",
+///         cursor_position: u32 = "Cursor position"
+///     }
+/// };
+/// ```
+#[proc_macro]
+pub fn completion(input: TokenStream) -> TokenStream {
+    match macros::completion_declarative_impl(input) {
+        Ok(tokens) => tokens,
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Declarative macro for creating MCP elicitation handlers with concise syntax.
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::elicitation;
+/// 
+/// elicitation! {
+///     user_details, "Please provide your information" {
+///         name: String = "Full name",
+///         email: String = "Email address"
+///     }
+/// };
+/// ```
+#[proc_macro]
+pub fn elicitation(input: TokenStream) -> TokenStream {
+    match macros::elicitation_declarative_impl(input) {
+        Ok(tokens) => tokens,
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Declarative macro for creating MCP root handlers with concise syntax.
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::roots;
+/// 
+/// roots! {
+///     project, "/path/to/project", name = "Project Files", read_only = false
+/// };
+/// ```
+#[proc_macro]
+pub fn roots(input: TokenStream) -> TokenStream {
+    match macros::roots_declarative_impl(input) {
+        Ok(tokens) => tokens,
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Declarative macro for creating MCP logging handlers with concise syntax.
+/// 
+/// # Example
+/// 
+/// ```rust
+/// use mcp_derive::logging;
+/// 
+/// logging! {
+///     file_logger {
+///         log_level: String = "Logging level",
+///         file_path: String = "Log file path"
+///     }
+/// };
+/// ```
+#[proc_macro]
+pub fn logging(input: TokenStream) -> TokenStream {
+    match macros::logging_declarative_impl(input) {
+        Ok(tokens) => tokens,
+        Err(err) => err.to_compile_error().into(),
+    }
+}

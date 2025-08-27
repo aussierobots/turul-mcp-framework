@@ -21,7 +21,6 @@ pub mod completion;
 pub mod logging;
 pub mod roots;
 pub mod sampling;
-pub mod templates;
 pub mod elicitation;
 pub mod notifications;
 pub mod ping;
@@ -55,10 +54,8 @@ pub use prompts::{
     GetPromptRequest, GetPromptResult,
     ListPromptsRequest, ListPromptsResult
 };
-pub use templates::{
-    Template, TemplateVariable, ListResourceTemplatesRequest, ListResourceTemplatesResult,
-    GetTemplateRequest, GetTemplateResponse, RenderTemplateRequest, RenderTemplateResponse
-};
+// ResourceTemplate functionality is now part of resources module
+// pub use resources::{ResourceTemplate, ListResourceTemplatesRequest, ListResourceTemplatesResult};
 pub use elicitation::{
     ElicitCreateRequest, ElicitCreateParams, ElicitResult, ElicitAction,
     PrimitiveSchemaDefinition, ElicitationSchema, StringFormat, ElicitationBuilder

@@ -13,6 +13,9 @@ use std::path::Path;
 
 use async_trait::async_trait;
 use mcp_protocol::{schema::JsonSchema, ToolResult, ToolSchema, McpError, McpResult};
+use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations, CallToolResult};
+use mcp_protocol::resources::{HasResourceMetadata, HasResourceDescription, HasResourceUri, HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta, ResourceAnnotations, ResourceContent};
+use mcp_protocol::prompts::{PromptMessage, HasPromptMetadata, HasPromptDescription, HasPromptArguments, HasPromptAnnotations, HasPromptMeta, PromptAnnotations, PromptArgument};
 use mcp_server::handlers::{McpPrompt, McpTemplate};
 use mcp_server::{McpServer, McpTool, McpResource, SessionContext};
 use serde::{Deserialize, Serialize};
@@ -266,33 +269,55 @@ impl TeamManagementTool {
     }
 }
 
-#[async_trait]
-impl McpTool for TeamManagementTool {
+// Fine-grained trait implementations for TeamManagementTool
+impl HasBaseMetadata for TeamManagementTool {
     fn name(&self) -> &str {
         "manage_teams"
     }
+}
 
-    fn description(&self) -> &str {
-        "Manage development teams, members, and team information including skills, projects, and on-call rotations"
+impl HasDescription for TeamManagementTool {
+    fn description(&self) -> Option<&str> {
+        Some("Manage development teams, members, and team information including skills, projects, and on-call rotations")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("action".to_string(), JsonSchema::string_enum(vec![
-                    "list_teams".to_string(), "get_team_details".to_string(), 
-                    "get_team_members".to_string(), "get_on_call_rotation".to_string(),
-                    "team_workload".to_string()
-                ]).with_description("Team management action to perform")),
-                ("team_id".to_string(), JsonSchema::string()
-                    .with_description("Team ID for team-specific operations")),
-                ("include_projects".to_string(), JsonSchema::boolean()
-                    .with_description("Include project assignments in team details")),
-            ]))
-            .with_required(vec!["action".to_string()])
+impl HasInputSchema for TeamManagementTool {
+    fn input_schema(&self) -> &ToolSchema {
+        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+        INPUT_SCHEMA.get_or_init(|| {
+            ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("action".to_string(), JsonSchema::string_enum(vec![
+                        "list_teams".to_string(), "get_team_details".to_string(), 
+                        "get_team_members".to_string(), "get_on_call_rotation".to_string(),
+                        "team_workload".to_string()
+                    ]).with_description("Team management action to perform")),
+                    ("team_id".to_string(), JsonSchema::string()
+                        .with_description("Team ID for team-specific operations")),
+                    ("include_projects".to_string(), JsonSchema::boolean()
+                        .with_description("Include project assignments in team details")),
+                ]))
+                .with_required(vec!["action".to_string()])
+        })
     }
+}
 
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+impl HasOutputSchema for TeamManagementTool {
+    fn output_schema(&self) -> Option<&ToolSchema> { None }
+}
+
+impl HasAnnotations for TeamManagementTool {
+    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+}
+
+impl HasToolMeta for TeamManagementTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+}
+
+#[async_trait]
+impl McpTool for TeamManagementTool {
+    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let action = args.get("action")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("action"))?;
@@ -495,7 +520,7 @@ impl McpTool for TeamManagementTool {
             }
         };
 
-        Ok(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)])
+        Ok(CallToolResult::success(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)]))
     }
 }
 
@@ -510,35 +535,57 @@ impl ProjectManagementTool {
     }
 }
 
-#[async_trait]
-impl McpTool for ProjectManagementTool {
+// Fine-grained trait implementations for ProjectManagementTool
+impl HasBaseMetadata for ProjectManagementTool {
     fn name(&self) -> &str {
         "manage_projects"
     }
+}
 
-    fn description(&self) -> &str {
-        "Manage development projects including status tracking, milestone management, and resource allocation"
+impl HasDescription for ProjectManagementTool {
+    fn description(&self) -> Option<&str> {
+        Some("Manage development projects including status tracking, milestone management, and resource allocation")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("action".to_string(), JsonSchema::string_enum(vec![
-                    "list_projects".to_string(), "get_project_details".to_string(),
-                    "project_status_summary".to_string(), "milestone_tracking".to_string(),
-                    "resource_allocation".to_string(), "project_timeline".to_string()
-                ]).with_description("Project management action to perform")),
-                ("project_id".to_string(), JsonSchema::string()
-                    .with_description("Project ID for project-specific operations")),
-                ("status_filter".to_string(), JsonSchema::string()
-                    .with_description("Filter projects by status (in_progress, planning, completed, etc.)")),
-                ("priority_filter".to_string(), JsonSchema::string()
-                    .with_description("Filter projects by priority (critical, high, medium, low)")),
-            ]))
-            .with_required(vec!["action".to_string()])
+impl HasInputSchema for ProjectManagementTool {
+    fn input_schema(&self) -> &ToolSchema {
+        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+        INPUT_SCHEMA.get_or_init(|| {
+            ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("action".to_string(), JsonSchema::string_enum(vec![
+                        "list_projects".to_string(), "get_project_details".to_string(),
+                        "project_status_summary".to_string(), "milestone_tracking".to_string(),
+                        "resource_allocation".to_string(), "project_timeline".to_string()
+                    ]).with_description("Project management action to perform")),
+                    ("project_id".to_string(), JsonSchema::string()
+                        .with_description("Project ID for project-specific operations")),
+                    ("status_filter".to_string(), JsonSchema::string()
+                        .with_description("Filter projects by status (in_progress, planning, completed, etc.)")),
+                    ("priority_filter".to_string(), JsonSchema::string()
+                        .with_description("Filter projects by priority (critical, high, medium, low)")),
+                ]))
+                .with_required(vec!["action".to_string()])
+        })
     }
+}
 
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+impl HasOutputSchema for ProjectManagementTool {
+    fn output_schema(&self) -> Option<&ToolSchema> { None }
+}
+
+impl HasAnnotations for ProjectManagementTool {
+    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+}
+
+impl HasToolMeta for ProjectManagementTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+}
+
+#[async_trait]
+impl McpTool for ProjectManagementTool {
+    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let action = args.get("action")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("action"))?;
@@ -740,7 +787,7 @@ impl McpTool for ProjectManagementTool {
             }
         };
 
-        Ok(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)])
+        Ok(CallToolResult::success(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)]))
     }
 }
 
@@ -757,6 +804,31 @@ impl WorkflowGeneratorPrompt {
     }
 }
 
+// Fine-grained trait implementations for WorkflowGeneratorPrompt
+impl HasPromptMetadata for WorkflowGeneratorPrompt {
+    fn name(&self) -> &str {
+        "generate_workflow"
+    }
+}
+
+impl HasPromptDescription for WorkflowGeneratorPrompt {
+    fn description(&self) -> Option<&str> {
+        Some("Generate standardized development workflows based on team practices and project requirements")
+    }
+}
+
+impl HasPromptArguments for WorkflowGeneratorPrompt {
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> { None }
+}
+
+impl HasPromptAnnotations for WorkflowGeneratorPrompt {
+    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+}
+
+impl HasPromptMeta for WorkflowGeneratorPrompt {
+    fn prompt_meta(&self) -> Option<&HashMap<String, Value>> { None }
+}
+
 #[async_trait]
 impl McpPrompt for WorkflowGeneratorPrompt {
     fn name(&self) -> &str {
@@ -770,7 +842,7 @@ impl McpPrompt for WorkflowGeneratorPrompt {
     async fn generate(
         &self,
         args: HashMap<String, Value>,
-    ) -> McpResult<Vec<mcp_protocol::prompts::PromptMessage>> {
+    ) -> McpResult<Vec<PromptMessage>> {
         let workflow_type = args
             .get("workflow_type")
             .and_then(|v| v.as_str())
@@ -832,7 +904,7 @@ Consider our organization's focus on:
             workflow_type, project_type, team_size, workflow_details
         );
 
-        Ok(vec![mcp_protocol::prompts::PromptMessage::text(content)])
+        Ok(vec![PromptMessage::text(content)])
     }
 }
 
@@ -849,21 +921,46 @@ impl ProjectResourcesHandler {
     }
 }
 
-#[async_trait]
-impl McpResource for ProjectResourcesHandler {
-    fn uri(&self) -> &str {
-        "platform://development-resources"
-    }
-    
+// Fine-grained trait implementations for ProjectResourcesHandler
+impl HasResourceMetadata for ProjectResourcesHandler {
     fn name(&self) -> &str {
         "Development Resources"
     }
-    
-    fn description(&self) -> &str {
-        "Access to development team resources including repositories, APIs, documentation, and tools"
-    }
+}
 
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<mcp_protocol::resources::ResourceContent>> {
+impl HasResourceDescription for ProjectResourcesHandler {
+    fn description(&self) -> Option<&str> {
+        Some("Access to development team resources including repositories, APIs, documentation, and tools")
+    }
+}
+
+impl HasResourceUri for ProjectResourcesHandler {
+    fn uri(&self) -> &str {
+        "platform://development-resources"
+    }
+}
+
+impl HasResourceMimeType for ProjectResourcesHandler {
+    fn mime_type(&self) -> Option<&str> {
+        Some("text/plain")
+    }
+}
+
+impl HasResourceSize for ProjectResourcesHandler {
+    fn size(&self) -> Option<u64> { None }
+}
+
+impl HasResourceAnnotations for ProjectResourcesHandler {
+    fn annotations(&self) -> Option<&ResourceAnnotations> { None }
+}
+
+impl HasResourceMeta for ProjectResourcesHandler {
+    fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+}
+
+#[async_trait]
+impl McpResource for ProjectResourcesHandler {
+    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
         let mut content = Vec::new();
 
         // Repository information
@@ -871,35 +968,35 @@ impl McpResource for ProjectResourcesHandler {
             "# Code Repositories\n\n{}\n",
             serde_json::to_string_pretty(&self.state.resources.development_resources.code_repositories)?
         );
-        content.push(mcp_protocol::resources::ResourceContent::text(repos_content));
+        content.push(ResourceContent::text(repos_content));
 
         // API documentation
         let api_content = format!(
             "# API Documentation\n\n{}\n",
             serde_json::to_string_pretty(&self.state.resources.development_resources.api_documentation)?
         );
-        content.push(mcp_protocol::resources::ResourceContent::text(api_content));
+        content.push(ResourceContent::text(api_content));
 
         // Database schemas
         let db_content = format!(
             "# Database Schemas\n\n{}\n",
             serde_json::to_string_pretty(&self.state.resources.development_resources.database_schemas)?
         );
-        content.push(mcp_protocol::resources::ResourceContent::text(db_content));
+        content.push(ResourceContent::text(db_content));
 
         // Team tools and integrations
         let tools_content = format!(
             "# Team Tools and Integrations\n\n{}\n",
             serde_json::to_string_pretty(&self.state.resources.team_tools_and_integrations)?
         );
-        content.push(mcp_protocol::resources::ResourceContent::text(tools_content));
+        content.push(ResourceContent::text(tools_content));
 
         // Learning resources
         let learning_content = format!(
             "# Learning Resources\n\n{}\n",
             serde_json::to_string_pretty(&self.state.resources.learning_resources)?
         );
-        content.push(mcp_protocol::resources::ResourceContent::text(learning_content));
+        content.push(ResourceContent::text(learning_content));
 
         Ok(content)
     }

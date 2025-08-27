@@ -4,6 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// Logging levels (per MCP spec)
 /// Maps to syslog message severities as specified in RFC-5424
@@ -34,6 +35,9 @@ pub struct LoggingMessageParams {
     pub logger: Option<String>,
     /// Log data (any serializable type)
     pub data: Value,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 /// Complete logging message notification (per MCP spec)
@@ -52,11 +56,17 @@ impl LoggingMessageParams {
             level,
             logger: None,
             data,
+            meta: None,
         }
     }
 
     pub fn with_logger(mut self, logger: impl Into<String>) -> Self {
         self.logger = Some(logger.into());
+        self
+    }
+    
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
         self
     }
 }
@@ -73,6 +83,11 @@ impl LoggingMessageNotification {
         self.params = self.params.with_logger(logger);
         self
     }
+    
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.params = self.params.with_meta(meta);
+        self
+    }
 }
 
 /// Parameters for logging/setLevel request (per MCP spec)
@@ -81,13 +96,22 @@ impl LoggingMessageNotification {
 pub struct SetLevelParams {
     /// The log level to set
     pub level: LoggingLevel,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 impl SetLevelParams {
     pub fn new(level: LoggingLevel) -> Self {
         Self { 
             level,
+            meta: None,
         }
+    }
+    
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
     }
 }
 
@@ -107,6 +131,11 @@ impl SetLevelRequest {
             method: "logging/setLevel".to_string(),
             params: SetLevelParams::new(level),
         }
+    }
+    
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.params = self.params.with_meta(meta);
+        self
     }
 }
 
@@ -133,8 +162,69 @@ impl LoggingLevel {
 }
 
 // Trait implementations for protocol compliance
-use crate::traits::Params;
+use crate::traits::*;
+
+// Params trait implementations
 impl Params for SetLevelParams {}
+impl Params for LoggingMessageParams {}
+
+// SetLevelParams specific traits
+impl HasLevelParam for SetLevelParams {
+    fn level(&self) -> &LoggingLevel {
+        &self.level
+    }
+}
+
+impl HasMetaParam for SetLevelParams {
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
+}
+
+// SetLevelRequest traits
+impl HasMethod for SetLevelRequest {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+impl HasParams for SetLevelRequest {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params)
+    }
+}
+
+// LoggingMessageParams specific traits  
+impl HasLevelParam for LoggingMessageParams {
+    fn level(&self) -> &LoggingLevel {
+        &self.level
+    }
+}
+
+impl HasLoggerParam for LoggingMessageParams {
+    fn logger(&self) -> Option<&String> {
+        self.logger.as_ref()
+    }
+}
+
+impl HasMetaParam for LoggingMessageParams {
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
+}
+
+// LoggingMessageNotification traits
+impl HasMethod for LoggingMessageNotification {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+impl HasParams for LoggingMessageNotification {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params)
+    }
+}
 
 // ===========================================
 // === Fine-Grained Logging Traits ===

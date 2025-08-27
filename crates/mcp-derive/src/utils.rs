@@ -470,6 +470,130 @@ impl Default for FieldMeta {
     }
 }
 
+/// Prompt metadata extracted from attributes
+#[derive(Debug)]
+pub struct PromptMeta {
+    pub name: String,
+    pub description: String,
+}
+
+/// Extract prompt metadata from #[prompt(...)] attributes
+pub fn extract_prompt_meta(attrs: &[Attribute]) -> Result<PromptMeta> {
+    let mut name = None;
+    let mut description = None;
+
+    for attr in attrs {
+        if attr.path().is_ident("prompt") {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("name") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    name = Some(s.value());
+                } else if meta.path.is_ident("description") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    description = Some(s.value());
+                }
+                Ok(())
+            })?;
+        }
+    }
+
+    let name = name.ok_or_else(|| {
+        syn::Error::new(proc_macro2::Span::call_site(), "Missing 'name' in #[prompt(name = \"...\")]")
+    })?;
+    
+    let description = description.unwrap_or_else(|| "Generated prompt".to_string());
+
+    Ok(PromptMeta { name, description })
+}
+
+/// Root metadata extracted from attributes
+#[derive(Debug)]
+pub struct RootMeta {
+    pub uri: String,
+    pub name: String,
+    pub description: String,
+    pub read_only: bool,
+}
+
+/// Extract root metadata from #[root(...)] attributes
+pub fn extract_root_meta(attrs: &[Attribute]) -> Result<RootMeta> {
+    let mut uri = None;
+    let mut name = None;
+    let mut description = None;
+    let mut read_only = None;
+
+    for attr in attrs {
+        if attr.path().is_ident("root") {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("uri") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    uri = Some(s.value());
+                } else if meta.path.is_ident("name") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    name = Some(s.value());
+                } else if meta.path.is_ident("description") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    description = Some(s.value());
+                } else if meta.path.is_ident("read_only") {
+                    let value = meta.value()?;
+                    // Handle both boolean literals and string literals
+                    if let Ok(b) = value.parse::<syn::LitBool>() {
+                        read_only = Some(b.value);
+                    } else if let Ok(s) = value.parse::<syn::LitStr>() {
+                        read_only = Some(s.value().parse::<bool>().unwrap_or(false));
+                    }
+                }
+                Ok(())
+            })?;
+        }
+    }
+
+    let uri = uri.ok_or_else(|| {
+        syn::Error::new(proc_macro2::Span::call_site(), "Missing 'uri' in #[root(uri = \"...\")]")
+    })?;
+    
+    let name = name.unwrap_or_else(|| "Unnamed Root".to_string());
+    let description = description.unwrap_or_else(|| "Root directory".to_string());
+    let read_only = read_only.unwrap_or(false);
+
+    Ok(RootMeta { uri, name, description, read_only })
+}
+
+/// Elicitation metadata extracted from attributes
+#[derive(Debug)]
+pub struct ElicitationMeta {
+    pub message: String,
+}
+
+/// Extract elicitation metadata from #[elicitation(...)] attributes
+pub fn extract_elicitation_meta(attrs: &[Attribute]) -> Result<ElicitationMeta> {
+    let mut message = None;
+
+    for attr in attrs {
+        if attr.path().is_ident("elicitation") {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("message") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    message = Some(s.value());
+                }
+                Ok(())
+            })?;
+        }
+    }
+
+    let message = message.ok_or_else(|| {
+        syn::Error::new(proc_macro2::Span::call_site(), "Missing 'message' in #[elicitation(message = \"...\")]")
+    })?;
+
+    Ok(ElicitationMeta { message })
+}
+
 /// Extract field metadata from attributes
 pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
     let mut meta = FieldMeta::default();

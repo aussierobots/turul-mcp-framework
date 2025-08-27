@@ -31,6 +31,7 @@ macro_rules! impl_serde_extractor {
 impl_serde_extractor!(crate::tools::CallToolParams);
 impl_serde_extractor!(crate::tools::ListToolsParams);
 impl_serde_extractor!(crate::resources::ListResourcesParams);
+impl_serde_extractor!(crate::resources::ListResourceTemplatesParams);
 impl_serde_extractor!(crate::resources::ReadResourceParams);
 // Note: Subscribe/Unsubscribe don't have separate params types
 impl_serde_extractor!(crate::prompts::ListPromptsParams);
@@ -38,14 +39,14 @@ impl_serde_extractor!(crate::prompts::GetPromptParams);
 impl_serde_extractor!(crate::completion::CompleteParams);
 impl_serde_extractor!(crate::logging::SetLevelParams);
 // Note: ListRootsRequest has no params per MCP spec
-impl_serde_extractor!(crate::templates::ListResourceTemplatesRequest);
-impl_serde_extractor!(crate::templates::GetTemplateRequest);
-impl_serde_extractor!(crate::templates::RenderTemplateRequest);
+// Note: ResourceTemplate functionality is now in resources module
+// ListResourceTemplatesParams is already handled above in resources section
+// GetTemplateRequest and RenderTemplateRequest were template-specific, not part of MCP spec
 impl_serde_extractor!(crate::elicitation::ElicitCreateParams);
 impl_serde_extractor!(crate::sampling::CreateMessageParams);
 impl_serde_extractor!(crate::ping::EmptyParams);
-impl_serde_extractor!(crate::resources::SubscribeRequest);
-impl_serde_extractor!(crate::resources::UnsubscribeRequest);
+impl_serde_extractor!(crate::resources::SubscribeParams);
+impl_serde_extractor!(crate::resources::UnsubscribeParams);
 
 /// Generic parameter extractor function that works with any type implementing SerdeParamExtractor
 pub fn extract_params<T>(params: mcp_json_rpc_server::RequestParams) -> Result<T, crate::McpError>

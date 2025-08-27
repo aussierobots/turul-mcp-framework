@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use mcp_server::{McpServer, McpResult};
 use mcp_protocol::{
     McpError,
-    prompts::{HasPromptMetadata, HasPromptArguments, HasPromptMessages, HasPromptAnnotations, PromptArgument, PromptMessage},
+    prompts::{HasPromptMetadata, HasPromptDescription, HasPromptArguments, HasPromptAnnotations, HasPromptMeta, PromptAnnotations, PromptArgument, PromptMessage},
 };
 use mcp_server::prompt::{McpPrompt};
 use serde_json::Value;
@@ -106,7 +106,9 @@ impl HasPromptMetadata for CodeGenerationPrompt {
     fn name(&self) -> &str {
         &self.name
     }
+}
 
+impl HasPromptDescription for CodeGenerationPrompt {
     fn description(&self) -> Option<&str> {
         Some(&self.description)
     }
@@ -118,38 +120,31 @@ impl HasPromptArguments for CodeGenerationPrompt {
     }
 }
 
-impl HasPromptMessages for CodeGenerationPrompt {
-    fn render_messages(&self, args: Option<&HashMap<String, Value>>) -> Result<Vec<PromptMessage>, String> {
-        let empty_map = HashMap::new();
-        let args = args.unwrap_or(&empty_map);
-        
-        // Validate required arguments
-        for arg in &self.arguments {
-            if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(format!("Missing required argument: {}", arg.name));
-            }
-        }
-        
-        let rendered_content = self.render_template(args);
-        Ok(vec![PromptMessage::text(rendered_content)])
-    }
-}
-
 impl HasPromptAnnotations for CodeGenerationPrompt {
-    fn annotations(&self) -> Option<&Value> {
+    fn annotations(&self) -> Option<&PromptAnnotations> {
         None
     }
 }
+
+impl HasPromptMeta for CodeGenerationPrompt {}
 
 // PromptDefinition automatically implemented via blanket impl
 
 #[async_trait]
 impl McpPrompt for CodeGenerationPrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
-        match self.render_messages(args.as_ref()) {
-            Ok(messages) => Ok(messages),
-            Err(msg) => Err(McpError::validation(&msg)),
+        let empty_map = HashMap::new();
+        let args = args.as_ref().unwrap_or(&empty_map);
+        
+        // Check required arguments
+        for arg in &self.arguments {
+            if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
+                return Err(McpError::validation(&format!("Missing required argument: {}", arg.name)));
+            }
         }
+        
+        let rendered_content = self.render_template(args);
+        Ok(vec![PromptMessage::text(rendered_content)])
     }
     
     async fn validate_args(&self, args: &HashMap<String, Value>) -> McpResult<()> {
@@ -279,7 +274,9 @@ impl HasPromptMetadata for CodeReviewPrompt {
     fn name(&self) -> &str {
         &self.name
     }
+}
 
+impl HasPromptDescription for CodeReviewPrompt {
     fn description(&self) -> Option<&str> {
         Some(&self.description)
     }
@@ -291,35 +288,30 @@ impl HasPromptArguments for CodeReviewPrompt {
     }
 }
 
-impl HasPromptMessages for CodeReviewPrompt {
-    fn render_messages(&self, args: Option<&HashMap<String, Value>>) -> Result<Vec<PromptMessage>, String> {
+
+impl HasPromptAnnotations for CodeReviewPrompt {
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
+}
+
+impl HasPromptMeta for CodeReviewPrompt {}
+
+#[async_trait]
+impl McpPrompt for CodeReviewPrompt {
+    async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let empty_map = HashMap::new();
-        let args = args.unwrap_or(&empty_map);
+        let args = args.as_ref().unwrap_or(&empty_map);
         
+        // Check required arguments
         for arg in &self.arguments {
             if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(format!("Missing required argument: {}", arg.name));
+                return Err(McpError::validation(&format!("Missing required argument: {}", arg.name)));
             }
         }
         
         let rendered_content = self.render_template(args);
         Ok(vec![PromptMessage::text(rendered_content)])
-    }
-}
-
-impl HasPromptAnnotations for CodeReviewPrompt {
-    fn annotations(&self) -> Option<&Value> {
-        None
-    }
-}
-
-#[async_trait]
-impl McpPrompt for CodeReviewPrompt {
-    async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
-        match self.render_messages(args.as_ref()) {
-            Ok(messages) => Ok(messages),
-            Err(msg) => Err(McpError::validation(&msg)),
-        }
     }
     
     async fn validate_args(&self, args: &HashMap<String, Value>) -> McpResult<()> {
@@ -375,7 +367,9 @@ impl HasPromptMetadata for ArchitecturePrompt {
     fn name(&self) -> &str {
         &self.name
     }
+}
 
+impl HasPromptDescription for ArchitecturePrompt {
     fn description(&self) -> Option<&str> {
         Some(&self.description)
     }
@@ -387,10 +381,27 @@ impl HasPromptArguments for ArchitecturePrompt {
     }
 }
 
-impl HasPromptMessages for ArchitecturePrompt {
-    fn render_messages(&self, args: Option<&HashMap<String, Value>>) -> Result<Vec<PromptMessage>, String> {
+
+impl HasPromptAnnotations for ArchitecturePrompt {
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
+}
+
+impl HasPromptMeta for ArchitecturePrompt {}
+
+#[async_trait]
+impl McpPrompt for ArchitecturePrompt {
+    async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let empty_map = HashMap::new();
-        let args = args.unwrap_or(&empty_map);
+        let args = args.as_ref().unwrap_or(&empty_map);
+        
+        // Check required arguments
+        for arg in &self.arguments {
+            if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
+                return Err(McpError::validation(&format!("Missing required argument: {}", arg.name)));
+            }
+        }
         
         let project_type = args.get("project_type")
             .and_then(|v| v.as_str())
@@ -458,22 +469,6 @@ Please provide detailed, actionable recommendations:"#,
         );
 
         Ok(vec![PromptMessage::text(template)])
-    }
-}
-
-impl HasPromptAnnotations for ArchitecturePrompt {
-    fn annotations(&self) -> Option<&Value> {
-        None
-    }
-}
-
-#[async_trait]
-impl McpPrompt for ArchitecturePrompt {
-    async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
-        match self.render_messages(args.as_ref()) {
-            Ok(messages) => Ok(messages),
-            Err(msg) => Err(McpError::validation(&msg)),
-        }
     }
     
     async fn validate_args(&self, args: &HashMap<String, Value>) -> McpResult<()> {

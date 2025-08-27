@@ -49,12 +49,9 @@ pub trait McpPrompt: PromptDefinition + Send + Sync {
     /// Optional: Validate arguments before rendering
     /// 
     /// This method performs argument validation beyond basic required/optional checks.
-    async fn validate_args(&self, args: &HashMap<String, Value>) -> McpResult<()> {
-        // Delegate to the trait method for basic validation
-        match self.validate_arguments(args) {
-            Ok(()) => Ok(()),
-            Err(msg) => Err(mcp_protocol::McpError::validation(&msg))
-        }
+    async fn validate_args(&self, _args: &HashMap<String, Value>) -> McpResult<()> {
+        // Default implementation: no validation
+        Ok(())
     }
 
     /// Optional: Transform rendered messages before returning

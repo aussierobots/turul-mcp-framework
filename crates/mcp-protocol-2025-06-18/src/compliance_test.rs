@@ -19,7 +19,7 @@ mod tests {
         meta.insert("clientId".to_string(), json!("test-client"));
 
         let request = CallToolRequest::new("echo")
-            .with_arguments(json!(args))
+            .with_arguments_value(json!(args))
             .with_meta(meta);
 
         // Serialize to JSON to check structure

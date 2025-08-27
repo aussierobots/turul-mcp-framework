@@ -7,9 +7,14 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use serde_json::Value;
-use crate::schema::JsonSchema; // Keep for schema generation methods
-use crate::tools::{ToolSchema, ToolAnnotations};
-use crate::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
+
+// Import from protocol via alias
+use mcp_protocol::schema::JsonSchema;
+use mcp_protocol::tools::{ToolSchema, ToolAnnotations};
+use mcp_protocol::tools::{
+    HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, 
+    HasAnnotations, HasToolMeta
+};
 
 /// Type alias for dynamic tool execution function
 pub type DynamicToolFn = Box<dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send>> + Send + Sync>;
@@ -237,3 +242,55 @@ impl HasToolMeta for DynamicTool {
 
 // Note: McpTool implementation will be provided by the mcp-server crate
 // since it depends on types from that crate (SessionContext, etc.)
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[tokio::test]
+    async fn test_tool_builder_basic() {
+        let tool = ToolBuilder::new("test_tool")
+            .description("A test tool")
+            .string_param("input", "Test input parameter")
+            .execute(|args| async move {
+                let input = args.get("input").and_then(|v| v.as_str())
+                    .ok_or("Missing input parameter")?;
+                Ok(json!({"result": format!("Hello, {}", input)}))
+            })
+            .build()
+            .expect("Failed to build tool");
+
+        assert_eq!(tool.name(), "test_tool");
+        assert_eq!(tool.description(), Some("A test tool"));
+
+        let result = tool.execute(json!({"input": "World"})).await
+            .expect("Tool execution failed");
+        
+        assert_eq!(result, json!({"result": "Hello, World"}));
+    }
+
+    #[test]
+    fn test_tool_builder_schema_generation() {
+        let tool = ToolBuilder::new("calculator")
+            .description("Simple calculator")
+            .number_param("a", "First number")
+            .number_param("b", "Second number")
+            .number_output()
+            .execute(|args| async move {
+                let a = args.get("a").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                let b = args.get("b").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                Ok(json!({"result": a + b}))
+            })
+            .build()
+            .expect("Failed to build calculator tool");
+
+        // Verify schema was generated correctly
+        let input_schema = tool.input_schema();
+        assert!(input_schema.properties.is_some());
+        assert_eq!(input_schema.required.as_ref().unwrap().len(), 2);
+        
+        let output_schema = tool.output_schema();
+        assert!(output_schema.is_some());
+    }
+}

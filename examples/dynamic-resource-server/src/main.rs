@@ -10,7 +10,8 @@ use std::fs;
 use std::path::Path;
 use async_trait::async_trait;
 use mcp_server::{McpServer, McpTool, SessionContext};
-use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
+use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult, CallToolResult};
+use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use serde_yaml;
@@ -539,37 +540,58 @@ impl EnterpriseApiGateway {
 }
 
 /// Tool for calling enterprise API endpoints
+#[derive(Clone)]
 struct EnterpriseApiTool {
     gateway: EnterpriseApiGateway,
 }
 
-#[async_trait]
-impl McpTool for EnterpriseApiTool {
+impl HasBaseMetadata for EnterpriseApiTool {
     fn name(&self) -> &str {
         "call_enterprise_api"
     }
+}
 
-    fn description(&self) -> &str {
-        "Call enterprise API endpoints with parameter validation and response transformation"
+impl HasDescription for EnterpriseApiTool {
+    fn description(&self) -> Option<&str> {
+        Some("Call enterprise API endpoints with parameter validation and response transformation")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        let mut properties = HashMap::new();
-        properties.insert("service".to_string(), JsonSchema::string());
-        properties.insert("endpoint_id".to_string(), JsonSchema::string());
-        properties.insert("parameters".to_string(), JsonSchema::object());
-        properties.insert("apply_transformation".to_string(), JsonSchema::boolean());
-        
-        ToolSchema::object()
-            .with_properties(properties)
-            .with_required(vec!["service".to_string(), "endpoint_id".to_string()])
+impl HasInputSchema for EnterpriseApiTool {
+    fn input_schema(&self) -> &ToolSchema {
+        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+        INPUT_SCHEMA.get_or_init(|| {
+            ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("service".to_string(), JsonSchema::string()),
+                    ("endpoint_id".to_string(), JsonSchema::string()),
+                    ("parameters".to_string(), JsonSchema::object()),
+                    ("apply_transformation".to_string(), JsonSchema::boolean()),
+                ]))
+                .with_required(vec!["service".to_string(), "endpoint_id".to_string()])
+        })
     }
+}
 
+impl HasOutputSchema for EnterpriseApiTool {
+    fn output_schema(&self) -> Option<&ToolSchema> { None }
+}
+
+impl HasAnnotations for EnterpriseApiTool {
+    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+}
+
+impl HasToolMeta for EnterpriseApiTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+}
+
+#[async_trait]
+impl McpTool for EnterpriseApiTool {
     async fn call(
         &self,
         args: Value,
         _session: Option<SessionContext>,
-    ) -> McpResult<Vec<ToolResult>> {
+    ) -> McpResult<CallToolResult> {
         let service = args.get("service")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("service"))?;
@@ -608,41 +630,64 @@ impl McpTool for EnterpriseApiTool {
             "timestamp": Utc::now().to_rfc3339()
         });
         
-        Ok(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)])
+        Ok(CallToolResult::success(vec![
+            ToolResult::text(serde_json::to_string_pretty(&result)?)
+        ]))
     }
 }
 
 /// Tool for querying data sources and connections
+#[derive(Clone)]
 struct DataSourceQueryTool {
     gateway: EnterpriseApiGateway,
 }
 
-#[async_trait]
-impl McpTool for DataSourceQueryTool {
+impl HasBaseMetadata for DataSourceQueryTool {
     fn name(&self) -> &str {
         "query_data_sources"
     }
+}
 
-    fn description(&self) -> &str {
-        "Query information about available data sources, connections, and schemas"
+impl HasDescription for DataSourceQueryTool {
+    fn description(&self) -> Option<&str> {
+        Some("Query information about available data sources, connections, and schemas")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        let mut properties = HashMap::new();
-        properties.insert("source_type".to_string(), JsonSchema::string());
-        properties.insert("include_schema_details".to_string(), JsonSchema::boolean());
-        properties.insert("filter_by_classification".to_string(), JsonSchema::string());
-        
-        ToolSchema::object()
-            .with_properties(properties)
-            .with_required(vec!["source_type".to_string()])
+impl HasInputSchema for DataSourceQueryTool {
+    fn input_schema(&self) -> &ToolSchema {
+        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+        INPUT_SCHEMA.get_or_init(|| {
+            ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("source_type".to_string(), JsonSchema::string()),
+                    ("include_schema_details".to_string(), JsonSchema::boolean()),
+                    ("filter_by_classification".to_string(), JsonSchema::string()),
+                ]))
+                .with_required(vec!["source_type".to_string()])
+        })
     }
+}
 
+impl HasOutputSchema for DataSourceQueryTool {
+    fn output_schema(&self) -> Option<&ToolSchema> { None }
+}
+
+impl HasAnnotations for DataSourceQueryTool {
+    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+}
+
+impl HasToolMeta for DataSourceQueryTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+}
+
+#[async_trait]
+impl McpTool for DataSourceQueryTool {
     async fn call(
         &self,
         args: Value,
         _session: Option<SessionContext>,
-    ) -> McpResult<Vec<ToolResult>> {
+    ) -> McpResult<CallToolResult> {
         let source_type = args.get("source_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("source_type"))?;
@@ -676,40 +721,63 @@ impl McpTool for DataSourceQueryTool {
             }
         }
         
-        Ok(vec![ToolResult::text(serde_json::to_string_pretty(&response)?)])
+        Ok(CallToolResult::success(vec![
+            ToolResult::text(serde_json::to_string_pretty(&response)?)
+        ]))
     }
 }
 
 /// Tool for listing available APIs and integrations
+#[derive(Clone)]
 struct ApiDiscoveryTool {
     gateway: EnterpriseApiGateway,
 }
 
-#[async_trait]
-impl McpTool for ApiDiscoveryTool {
+impl HasBaseMetadata for ApiDiscoveryTool {
     fn name(&self) -> &str {
         "discover_apis"
     }
+}
 
-    fn description(&self) -> &str {
-        "Discover available enterprise APIs and third-party integrations with their capabilities"
+impl HasDescription for ApiDiscoveryTool {
+    fn description(&self) -> Option<&str> {
+        Some("Discover available enterprise APIs and third-party integrations with their capabilities")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        let mut properties = HashMap::new();
-        properties.insert("category".to_string(), JsonSchema::string());
-        properties.insert("include_endpoints".to_string(), JsonSchema::boolean());
-        properties.insert("include_auth_info".to_string(), JsonSchema::boolean());
-        
-        ToolSchema::object()
-            .with_properties(properties)
+impl HasInputSchema for ApiDiscoveryTool {
+    fn input_schema(&self) -> &ToolSchema {
+        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+        INPUT_SCHEMA.get_or_init(|| {
+            ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("category".to_string(), JsonSchema::string()),
+                    ("include_endpoints".to_string(), JsonSchema::boolean()),
+                    ("include_auth_info".to_string(), JsonSchema::boolean()),
+                ]))
+        })
     }
+}
 
+impl HasOutputSchema for ApiDiscoveryTool {
+    fn output_schema(&self) -> Option<&ToolSchema> { None }
+}
+
+impl HasAnnotations for ApiDiscoveryTool {
+    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+}
+
+impl HasToolMeta for ApiDiscoveryTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+}
+
+#[async_trait]
+impl McpTool for ApiDiscoveryTool {
     async fn call(
         &self,
         args: Value,
         _session: Option<SessionContext>,
-    ) -> McpResult<Vec<ToolResult>> {
+    ) -> McpResult<CallToolResult> {
         let category = args.get("category")
             .and_then(|v| v.as_str())
             .unwrap_or("all");
@@ -798,40 +866,63 @@ impl McpTool for ApiDiscoveryTool {
             result["data_transformations"] = json!(transformations);
         }
         
-        Ok(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)])
+        Ok(CallToolResult::success(vec![
+            ToolResult::text(serde_json::to_string_pretty(&result)?)
+        ]))
     }
 }
 
 /// Tool for testing API connectivity and health
+#[derive(Clone)]
 struct ApiHealthCheckTool {
     gateway: EnterpriseApiGateway,
 }
 
-#[async_trait]
-impl McpTool for ApiHealthCheckTool {
+impl HasBaseMetadata for ApiHealthCheckTool {
     fn name(&self) -> &str {
         "check_api_health"
     }
+}
 
-    fn description(&self) -> &str {
-        "Perform health checks on enterprise APIs and data source connections"
+impl HasDescription for ApiHealthCheckTool {
+    fn description(&self) -> Option<&str> {
+        Some("Perform health checks on enterprise APIs and data source connections")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        let mut properties = HashMap::new();
-        properties.insert("services".to_string(), JsonSchema::array(JsonSchema::string()));
-        properties.insert("include_performance_metrics".to_string(), JsonSchema::boolean());
-        properties.insert("detailed_diagnostics".to_string(), JsonSchema::boolean());
-        
-        ToolSchema::object()
-            .with_properties(properties)
+impl HasInputSchema for ApiHealthCheckTool {
+    fn input_schema(&self) -> &ToolSchema {
+        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+        INPUT_SCHEMA.get_or_init(|| {
+            ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("services".to_string(), JsonSchema::array(JsonSchema::string())),
+                    ("include_performance_metrics".to_string(), JsonSchema::boolean()),
+                    ("detailed_diagnostics".to_string(), JsonSchema::boolean()),
+                ]))
+        })
     }
+}
 
+impl HasOutputSchema for ApiHealthCheckTool {
+    fn output_schema(&self) -> Option<&ToolSchema> { None }
+}
+
+impl HasAnnotations for ApiHealthCheckTool {
+    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+}
+
+impl HasToolMeta for ApiHealthCheckTool {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+}
+
+#[async_trait]
+impl McpTool for ApiHealthCheckTool {
     async fn call(
         &self,
         args: Value,
         _session: Option<SessionContext>,
-    ) -> McpResult<Vec<ToolResult>> {
+    ) -> McpResult<CallToolResult> {
         let services = args.get("services")
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
@@ -947,7 +1038,9 @@ impl McpTool for ApiHealthCheckTool {
             "service_health_details": health_results
         });
         
-        Ok(vec![ToolResult::text(serde_json::to_string_pretty(&summary)?)])
+        Ok(CallToolResult::success(vec![
+            ToolResult::text(serde_json::to_string_pretty(&summary)?)
+        ]))
     }
 }
 

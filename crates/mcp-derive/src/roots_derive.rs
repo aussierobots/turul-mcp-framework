@@ -4,24 +4,17 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Result};
 
-use crate::utils::extract_string_attribute;
+use crate::utils::extract_root_meta;
 
 pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
     let struct_name = &input.ident;
 
-    // Extract struct-level attributes
-    let uri = extract_string_attribute(&input.attrs, "uri")
-        .ok_or_else(|| syn::Error::new_spanned(&input, "McpRoot derive requires #[root(uri = \"...\", name = \"...\")] attribute"))?;
-    
-    let name = extract_string_attribute(&input.attrs, "name")
-        .unwrap_or_else(|| "Unnamed Root".to_string());
-    
-    let description = extract_string_attribute(&input.attrs, "description")
-        .unwrap_or_else(|| "Root directory".to_string());
-    
-    let read_only = extract_string_attribute(&input.attrs, "read_only")
-        .map(|s| s.parse::<bool>().unwrap_or(false))
-        .unwrap_or(false);
+    // Extract struct-level attributes from #[root(...)]
+    let root_meta = extract_root_meta(&input.attrs)?;
+    let uri = &root_meta.uri;
+    let name = &root_meta.name;
+    let description = &root_meta.description;
+    let read_only = root_meta.read_only;
 
     let expanded = quote! {
         #[automatically_derived]
@@ -256,5 +249,45 @@ mod tests {
 
         let result = derive_mcp_root_impl(input);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_complex_root_with_all_attributes() {
+        let input: DeriveInput = parse_quote! {
+            #[root(uri = "file:///project", name = "Project Files", description = "Project workspace", read_only = false)]
+            struct ProjectRoot;
+        };
+
+        let result = derive_mcp_root_impl(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]  
+    fn test_root_with_boolean_literal() {
+        let input: DeriveInput = parse_quote! {
+            #[root(uri = "file:///readonly", name = "Read Only", read_only = true)]
+            struct ReadOnlyRoot;
+        };
+
+        let result = derive_mcp_root_impl(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_root_trait_implementations() {
+        // This is a compile-time test - ensuring traits are properly implemented
+        let input: DeriveInput = parse_quote! {
+            #[root(uri = "file:///test")]
+            struct TestTraitRoot;
+        };
+
+        let result = derive_mcp_root_impl(input);
+        assert!(result.is_ok());
+        
+        // Check that the generated code contains required trait implementations
+        let code = result.unwrap().to_string();
+        assert!(code.contains("HasRootMetadata"));
+        assert!(code.contains("HasRootPermissions"));
+        assert!(code.contains("McpRoot"));
     }
 }

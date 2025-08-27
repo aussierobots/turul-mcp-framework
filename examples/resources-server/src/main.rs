@@ -10,8 +10,8 @@ use mcp_server::{McpServer, McpResult};
 use mcp_server::McpResource;
 use mcp_protocol::resources::ResourceContent;
 use mcp_protocol::resources::{
-    HasResourceMetadata, HasResourceDescription, HasResourceContent, 
-    HasResourceAccess, HasResourceAnnotations, HasResourceMeta
+    HasResourceMetadata, HasResourceDescription, HasResourceUri, 
+    HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta, ResourceAnnotations
 };
 use serde_json::json;
 use std::fs;
@@ -25,12 +25,14 @@ struct ProjectDocumentationResource;
 
 // Fine-grained trait implementations
 impl HasResourceMetadata for ProjectDocumentationResource {
-    fn uri(&self) -> &str {
-        "docs://project"
-    }
-
     fn name(&self) -> &str {
         "Project Documentation"
+    }
+}
+
+impl HasResourceUri for ProjectDocumentationResource {
+    fn uri(&self) -> &str {
+        "docs://project"
     }
 }
 
@@ -40,15 +42,15 @@ impl HasResourceDescription for ProjectDocumentationResource {
     }
 }
 
-impl HasResourceContent for ProjectDocumentationResource {
+impl HasResourceMimeType for ProjectDocumentationResource {
     fn mime_type(&self) -> Option<&str> {
         Some("text/markdown")
     }
 }
 
-impl HasResourceAccess for ProjectDocumentationResource {}
+impl HasResourceSize for ProjectDocumentationResource {}
 impl HasResourceAnnotations for ProjectDocumentationResource {
-    fn annotations(&self) -> Option<&serde_json::Value> {
+    fn annotations(&self) -> Option<&ResourceAnnotations> {
         None
     }
 }
@@ -131,12 +133,14 @@ struct ApiDocumentationResource;
 
 // Fine-grained trait implementations
 impl HasResourceMetadata for ApiDocumentationResource {
-    fn uri(&self) -> &str {
-        "docs://api"
-    }
-
     fn name(&self) -> &str {
         "API Documentation"
+    }
+}
+
+impl HasResourceUri for ApiDocumentationResource {
+    fn uri(&self) -> &str {
+        "docs://api"
     }
 }
 
@@ -146,15 +150,15 @@ impl HasResourceDescription for ApiDocumentationResource {
     }
 }
 
-impl HasResourceContent for ApiDocumentationResource {
+impl HasResourceMimeType for ApiDocumentationResource {
     fn mime_type(&self) -> Option<&str> {
         Some("text/markdown")
     }
 }
 
-impl HasResourceAccess for ApiDocumentationResource {}
+impl HasResourceSize for ApiDocumentationResource {}
 impl HasResourceAnnotations for ApiDocumentationResource {
-    fn annotations(&self) -> Option<&serde_json::Value> {
+    fn annotations(&self) -> Option<&ResourceAnnotations> {
         None
     }
 }
@@ -200,12 +204,14 @@ struct ConfigurationResource;
 
 // Fine-grained trait implementations
 impl HasResourceMetadata for ConfigurationResource {
-    fn uri(&self) -> &str {
-        "config://app"
-    }
-
     fn name(&self) -> &str {
         "Application Configuration"
+    }
+}
+
+impl HasResourceUri for ConfigurationResource {
+    fn uri(&self) -> &str {
+        "config://app"
     }
 }
 
@@ -215,15 +221,15 @@ impl HasResourceDescription for ConfigurationResource {
     }
 }
 
-impl HasResourceContent for ConfigurationResource {
+impl HasResourceMimeType for ConfigurationResource {
     fn mime_type(&self) -> Option<&str> {
         Some("application/json")
     }
 }
 
-impl HasResourceAccess for ConfigurationResource {}
+impl HasResourceSize for ConfigurationResource {}
 impl HasResourceAnnotations for ConfigurationResource {
-    fn annotations(&self) -> Option<&serde_json::Value> {
+    fn annotations(&self) -> Option<&ResourceAnnotations> {
         None
     }
 }
@@ -308,12 +314,14 @@ struct DatabaseSchemaResource;
 
 // Fine-grained trait implementations
 impl HasResourceMetadata for DatabaseSchemaResource {
-    fn uri(&self) -> &str {
-        "schema://database"
-    }
-
     fn name(&self) -> &str {
         "Database Schema"
+    }
+}
+
+impl HasResourceUri for DatabaseSchemaResource {
+    fn uri(&self) -> &str {
+        "schema://database"
     }
 }
 
@@ -323,15 +331,15 @@ impl HasResourceDescription for DatabaseSchemaResource {
     }
 }
 
-impl HasResourceContent for DatabaseSchemaResource {
+impl HasResourceMimeType for DatabaseSchemaResource {
     fn mime_type(&self) -> Option<&str> {
         Some("application/sql")
     }
 }
 
-impl HasResourceAccess for DatabaseSchemaResource {}
+impl HasResourceSize for DatabaseSchemaResource {}
 impl HasResourceAnnotations for DatabaseSchemaResource {
-    fn annotations(&self) -> Option<&serde_json::Value> {
+    fn annotations(&self) -> Option<&ResourceAnnotations> {
         None
     }
 }
@@ -410,12 +418,14 @@ struct SystemStatusResource;
 
 // Fine-grained trait implementations
 impl HasResourceMetadata for SystemStatusResource {
-    fn uri(&self) -> &str {
-        "status://system"
-    }
-
     fn name(&self) -> &str {
         "System Status"
+    }
+}
+
+impl HasResourceUri for SystemStatusResource {
+    fn uri(&self) -> &str {
+        "status://system"
     }
 }
 
@@ -425,15 +435,15 @@ impl HasResourceDescription for SystemStatusResource {
     }
 }
 
-impl HasResourceContent for SystemStatusResource {
+impl HasResourceMimeType for SystemStatusResource {
     fn mime_type(&self) -> Option<&str> {
         Some("application/json")
     }
 }
 
-impl HasResourceAccess for SystemStatusResource {}
+impl HasResourceSize for SystemStatusResource {}
 impl HasResourceAnnotations for SystemStatusResource {
-    fn annotations(&self) -> Option<&serde_json::Value> {
+    fn annotations(&self) -> Option<&ResourceAnnotations> {
         None
     }
 }

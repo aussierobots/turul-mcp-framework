@@ -7,6 +7,33 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+/// Generic annotations structure (matches TypeScript Annotations)
+/// Used across all MCP types that support client annotations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Annotations {
+    /// Display name override for clients
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    // Additional annotation fields can be added here as needed
+}
+
+impl Annotations {
+    pub fn new() -> Self {
+        Self { title: None }
+    }
+    
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
+        self
+    }
+}
+
+impl Default for Annotations {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Progress token for tracking long-running operations
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(transparent)]

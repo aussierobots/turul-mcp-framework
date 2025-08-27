@@ -25,6 +25,65 @@ pub fn derive_json_schema(input: DeriveInput) -> TokenStream {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn test_simple_struct_schema() {
+        let input: DeriveInput = parse_quote! {
+            struct TestStruct {
+                name: String,
+                age: i32,
+            }
+        };
+
+        let result = derive_json_schema(input);
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_unit_struct_schema() {
+        let input: DeriveInput = parse_quote! {
+            struct UnitStruct;
+        };
+
+        let result = derive_json_schema(input);
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_complex_struct_schema() {
+        let input: DeriveInput = parse_quote! {
+            struct ComplexStruct {
+                title: String,
+                count: Option<u32>,
+                active: bool,
+                tags: Vec<String>,
+            }
+        };
+
+        let result = derive_json_schema(input);
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_enum_should_error() {
+        let input: DeriveInput = parse_quote! {
+            enum TestEnum {
+                Variant1,
+                Variant2,
+            }
+        };
+
+        let result = derive_json_schema(input);
+        // Should contain error message about enums not being supported
+        let result_string = result.to_string();
+        assert!(result_string.contains("JsonSchema can only be derived for structs"));
+    }
+}
+
 fn generate_struct_schema(struct_name: &syn::Ident, fields: &Fields) -> TokenStream {
     let _schema_comment = format!("Schema for {}", struct_name);
     match fields {

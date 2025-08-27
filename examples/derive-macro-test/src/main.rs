@@ -7,6 +7,7 @@
 
 use mcp_derive::{McpTool, McpResource, McpNotification};
 use mcp_server::{McpServer, McpResult};
+use mcp_protocol::resources::HasResourceUri; // Import trait for .uri() method
 use tracing::info;
 
 // =============================================================================
@@ -76,7 +77,7 @@ impl ConfigResource {
 // =============================================================================
 
 #[derive(McpNotification, Clone, Debug)]
-#[notification(method = "notifications/progress")]
+// Framework auto-determines method from notification type - NO method strings!
 pub struct ProgressUpdate {
     #[payload]
     pub stage: String,
@@ -148,7 +149,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("✨ Derive Macro Examples:");
     info!("   • Calculator → #[derive(McpTool)] → tools/call (AUTOMATIC)");
     info!("   • ConfigResource → #[derive(McpResource)] → resources/read (AUTOMATIC)");
-    info!("   • ProgressUpdate → #[derive(McpNotification)] → notifications/progress (AUTOMATIC)");
+    info!("   • ProgressUpdate → #[derive(McpNotification)] → notifications/[auto] (AUTOMATIC)");
     
     // Create server with derive macro instances
     let server = McpServer::builder()

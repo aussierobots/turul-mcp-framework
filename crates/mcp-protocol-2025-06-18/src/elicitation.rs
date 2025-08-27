@@ -5,54 +5,81 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::meta::Meta;
 use std::collections::HashMap;
+
+/// StringSchema (per MCP spec)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StringSchema {
+    #[serde(rename = "type")]
+    pub schema_type: String, // "string"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub min_length: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_length: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<StringFormat>,
+}
+
+/// NumberSchema (per MCP spec) - handles both "number" and "integer"
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NumberSchema {
+    #[serde(rename = "type")]
+    pub schema_type: String, // "number" or "integer"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub minimum: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub maximum: Option<f64>,
+}
+
+/// BooleanSchema (per MCP spec)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BooleanSchema {
+    #[serde(rename = "type")]
+    pub schema_type: String, // "boolean"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<bool>,
+}
+
+/// EnumSchema (per MCP spec) - string type with enum values
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnumSchema {
+    #[serde(rename = "type")]
+    pub schema_type: String, // "string"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(rename = "enum")]
+    pub enum_values: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enum_names: Option<Vec<String>>, // Display names for enum values
+}
 
 /// Restricted schema definitions that only allow primitive types
 /// without nested objects or arrays (per MCP spec).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(untagged)]
 pub enum PrimitiveSchemaDefinition {
-    String {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        title: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        description: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        min_length: Option<usize>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        max_length: Option<usize>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        format: Option<StringFormat>,
-    },
-    Number {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        title: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        description: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        minimum: Option<f64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        maximum: Option<f64>,
-    },
-    Integer {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        title: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        description: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        minimum: Option<i64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        maximum: Option<i64>,
-    },
-    Boolean {
-        #[serde(skip_serializing_if = "Option::is_none")]
-        title: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        description: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        default: Option<bool>,
-    },
+    String(StringSchema),
+    Number(NumberSchema),
+    Boolean(BooleanSchema),
+    Enum(EnumSchema),
 }
 
 /// String format constraints
@@ -62,26 +89,16 @@ pub enum StringFormat {
     Email,
     Uri,
     Date,
+    #[serde(rename = "date-time")]
     DateTime,
 }
 
-/// String enum schema (special case of string type)
+/// Restricted schema for elicitation (only primitive types, no nesting) - per MCP spec
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EnumSchema {
-    pub r#type: String, // Always "string"
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    pub r#enum: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub enum_names: Option<Vec<String>>, // Display names for enum values
-}
-
-/// Restricted schema for elicitation (only primitive types, no nesting)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ElicitationSchema {
-    pub r#type: String, // Always "object"
+    #[serde(rename = "type")]
+    pub schema_type: String, // Always "object"
     pub properties: HashMap<String, PrimitiveSchemaDefinition>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub required: Option<Vec<String>>,
@@ -95,6 +112,9 @@ pub struct ElicitCreateParams {
     pub message: String,
     /// A restricted subset of JSON Schema - only top-level properties, no nesting
     pub requested_schema: ElicitationSchema,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 /// Complete elicitation/create request (matches TypeScript ElicitRequest interface)
@@ -114,8 +134,14 @@ impl ElicitCreateRequest {
             params: ElicitCreateParams {
                 message: message.into(),
                 requested_schema,
+                meta: None,
             },
         }
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.params.meta = Some(meta);
+        self
     }
 }
 
@@ -124,18 +150,62 @@ impl ElicitCreateParams {
         Self {
             message: message.into(),
             requested_schema,
+            meta: None,
         }
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
     }
 }
 
 // Trait implementations for protocol compliance
-use crate::traits::Params;
+use crate::traits::*;
+
 impl Params for ElicitCreateParams {}
+
+impl HasMetaParam for ElicitCreateParams {
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
+}
+
+impl HasMethod for ElicitCreateRequest {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+impl HasParams for ElicitCreateRequest {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params)
+    }
+}
+
+impl HasData for ElicitResult {
+    fn data(&self) -> HashMap<String, Value> {
+        let mut data = HashMap::new();
+        data.insert("action".to_string(), serde_json::to_value(&self.action).unwrap_or(Value::String("cancel".to_string())));
+        if let Some(ref content) = self.content {
+            data.insert("content".to_string(), serde_json::to_value(content).unwrap_or(Value::Null));
+        }
+        data
+    }
+}
+
+impl HasMeta for ElicitResult {
+    fn meta(&self) -> Option<HashMap<String, Value>> {
+        self.meta.clone()
+    }
+}
+
+impl RpcResult for ElicitResult {}
 
 impl ElicitationSchema {
     pub fn new() -> Self {
         Self {
-            r#type: "object".to_string(),
+            schema_type: "object".to_string(),
             properties: HashMap::new(),
             required: None,
         }
@@ -176,7 +246,7 @@ pub struct ElicitResult {
     pub content: Option<HashMap<String, Value>>,
     /// Optional metadata
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<Meta>,
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 impl ElicitResult {
@@ -204,16 +274,17 @@ impl ElicitResult {
         }
     }
 
-    pub fn with_meta(mut self, meta: Meta) -> Self {
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
     }
 }
 
-// Convenience constructors for PrimitiveSchemaDefinition
-impl PrimitiveSchemaDefinition {
-    pub fn string() -> Self {
-        Self::String {
+// Convenience constructors for schema types
+impl StringSchema {
+    pub fn new() -> Self {
+        Self {
+            schema_type: "string".to_string(),
             title: None,
             description: None,
             min_length: None,
@@ -222,18 +293,16 @@ impl PrimitiveSchemaDefinition {
         }
     }
 
-    pub fn string_with_description(description: impl Into<String>) -> Self {
-        Self::String {
-            title: None,
-            description: Some(description.into()),
-            min_length: None,
-            max_length: None,
-            format: None,
-        }
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
     }
+}
 
-    pub fn number() -> Self {
-        Self::Number {
+impl NumberSchema {
+    pub fn new() -> Self {
+        Self {
+            schema_type: "number".to_string(),
             title: None,
             description: None,
             minimum: None,
@@ -242,7 +311,8 @@ impl PrimitiveSchemaDefinition {
     }
 
     pub fn integer() -> Self {
-        Self::Integer {
+        Self {
+            schema_type: "integer".to_string(),
             title: None,
             description: None,
             minimum: None,
@@ -250,12 +320,74 @@ impl PrimitiveSchemaDefinition {
         }
     }
 
-    pub fn boolean() -> Self {
-        Self::Boolean {
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+}
+
+impl BooleanSchema {
+    pub fn new() -> Self {
+        Self {
+            schema_type: "boolean".to_string(),
             title: None,
             description: None,
             default: None,
         }
+    }
+
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+}
+
+impl EnumSchema {
+    pub fn new(enum_values: Vec<String>) -> Self {
+        Self {
+            schema_type: "string".to_string(),
+            title: None,
+            description: None,
+            enum_values,
+            enum_names: None,
+        }
+    }
+
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+
+    pub fn with_enum_names(mut self, enum_names: Vec<String>) -> Self {
+        self.enum_names = Some(enum_names);
+        self
+    }
+}
+
+// Convenience constructors for PrimitiveSchemaDefinition
+impl PrimitiveSchemaDefinition {
+    pub fn string() -> Self {
+        Self::String(StringSchema::new())
+    }
+
+    pub fn string_with_description(description: impl Into<String>) -> Self {
+        Self::String(StringSchema::new().with_description(description))
+    }
+
+    pub fn number() -> Self {
+        Self::Number(NumberSchema::new())
+    }
+
+    pub fn integer() -> Self {
+        Self::Number(NumberSchema::integer())
+    }
+
+    pub fn boolean() -> Self {
+        Self::Boolean(BooleanSchema::new())
+    }
+
+    pub fn enum_values(values: Vec<String>) -> Self {
+        Self::Enum(EnumSchema::new(values))
     }
 }
 
@@ -286,12 +418,10 @@ impl ElicitationBuilder {
         max: Option<f64>
     ) -> ElicitCreateRequest {
         let field_name = field_name.into();
-        let number_schema = PrimitiveSchemaDefinition::Number {
-            title: None,
-            description: Some(field_description.into()),
-            minimum: min,
-            maximum: max,
-        };
+        let mut number_schema = NumberSchema::new().with_description(field_description);
+        number_schema.minimum = min;
+        number_schema.maximum = max;
+        let number_schema = PrimitiveSchemaDefinition::Number(number_schema);
         
         let schema = ElicitationSchema::new()
             .with_property(field_name.clone(), number_schema)
@@ -393,7 +523,7 @@ mod tests {
             .with_property("age".to_string(), PrimitiveSchemaDefinition::integer())
             .with_required(vec!["name".to_string()]);
         
-        assert_eq!(schema.r#type, "object");
+        assert_eq!(schema.schema_type, "object");
         assert_eq!(schema.properties.len(), 2);
         assert_eq!(schema.required, Some(vec!["name".to_string()]));
     }
@@ -458,5 +588,90 @@ mod tests {
         let parsed: ElicitCreateRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.method, "elicitation/create");
         assert_eq!(parsed.params.message, "Test message");
+    }
+
+    #[test]
+    fn test_elicit_request_matches_typescript_spec() {
+        // Test ElicitRequest matches: { method: string, params: { message: string, requestedSchema: {...}, _meta?: {...} } }
+        let mut meta = HashMap::new();
+        meta.insert("requestId".to_string(), json!("req-123"));
+        
+        let schema = ElicitationSchema::new()
+            .with_property("name".to_string(), PrimitiveSchemaDefinition::string_with_description("Your name"))
+            .with_property("age".to_string(), PrimitiveSchemaDefinition::integer())
+            .with_required(vec!["name".to_string()]);
+        
+        let request = ElicitCreateRequest::new("Please provide your details", schema)
+            .with_meta(meta);
+        
+        let json_value = serde_json::to_value(&request).unwrap();
+        
+        assert_eq!(json_value["method"], "elicitation/create");
+        assert!(json_value["params"].is_object());
+        assert_eq!(json_value["params"]["message"], "Please provide your details");
+        assert!(json_value["params"]["requestedSchema"].is_object());
+        assert_eq!(json_value["params"]["requestedSchema"]["type"], "object");
+        assert!(json_value["params"]["requestedSchema"]["properties"].is_object());
+        assert_eq!(json_value["params"]["_meta"]["requestId"], "req-123");
+    }
+
+    #[test]
+    fn test_elicit_result_matches_typescript_spec() {
+        // Test ElicitResult matches: { action: "accept" | "decline" | "cancel", content?: {...}, _meta?: {...} }
+        let mut meta = HashMap::new();
+        meta.insert("responseTime".to_string(), json!(1234));
+        
+        let mut content = HashMap::new();
+        content.insert("name".to_string(), json!("John Doe"));
+        content.insert("age".to_string(), json!(30));
+        
+        let result = ElicitResult::accept(content.clone())
+            .with_meta(meta);
+        
+        let json_value = serde_json::to_value(&result).unwrap();
+        
+        assert_eq!(json_value["action"], "accept");
+        assert!(json_value["content"].is_object());
+        assert_eq!(json_value["content"]["name"], "John Doe");
+        assert_eq!(json_value["content"]["age"], 30);
+        assert_eq!(json_value["_meta"]["responseTime"], 1234);
+        
+        // Test decline without content
+        let decline_result = ElicitResult::decline();
+        let decline_json = serde_json::to_value(&decline_result).unwrap();
+        
+        assert_eq!(decline_json["action"], "decline");
+        assert!(decline_json["content"].is_null() || !decline_json.as_object().unwrap().contains_key("content"));
+    }
+
+    #[test]
+    fn test_primitive_schema_definitions_match_typescript() {
+        // Test StringSchema
+        let string_schema = PrimitiveSchemaDefinition::string_with_description("Enter text");
+        let string_json = serde_json::to_value(&string_schema).unwrap();
+        assert_eq!(string_json["type"], "string");
+        assert_eq!(string_json["description"], "Enter text");
+        
+        // Test NumberSchema
+        let number_schema = PrimitiveSchemaDefinition::number();
+        let number_json = serde_json::to_value(&number_schema).unwrap();
+        assert_eq!(number_json["type"], "number");
+        
+        // Test IntegerSchema  
+        let integer_schema = PrimitiveSchemaDefinition::integer();
+        let integer_json = serde_json::to_value(&integer_schema).unwrap();
+        assert_eq!(integer_json["type"], "integer");
+        
+        // Test BooleanSchema
+        let boolean_schema = PrimitiveSchemaDefinition::boolean();
+        let boolean_json = serde_json::to_value(&boolean_schema).unwrap();
+        assert_eq!(boolean_json["type"], "boolean");
+        
+        // Test EnumSchema
+        let enum_schema = PrimitiveSchemaDefinition::enum_values(vec!["red".to_string(), "green".to_string(), "blue".to_string()]);
+        let enum_json = serde_json::to_value(&enum_schema).unwrap();
+        assert_eq!(enum_json["type"], "string");
+        assert!(enum_json["enum"].is_array());
+        assert_eq!(enum_json["enum"].as_array().unwrap().len(), 3);
     }
 }

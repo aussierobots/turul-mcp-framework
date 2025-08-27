@@ -4,25 +4,177 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use crate::meta::Cursor;
 
-/// A resource descriptor
+// ===========================================
+// === Resource Definition Trait Hierarchy ===
+// ===========================================
+
+/// Base metadata trait - matches TypeScript BaseMetadata interface
+pub trait HasResourceMetadata {
+    /// Programmatic identifier (fallback display name)
+    fn name(&self) -> &str;
+    
+    /// Human-readable display name (UI contexts)
+    fn title(&self) -> Option<&str> { None }
+}
+
+/// Resource description trait
+pub trait HasResourceDescription {
+    fn description(&self) -> Option<&str> { None }
+}
+
+/// Resource URI trait
+pub trait HasResourceUri {
+    fn uri(&self) -> &str;
+}
+
+/// Resource MIME type trait  
+pub trait HasResourceMimeType {
+    fn mime_type(&self) -> Option<&str> { None }
+}
+
+/// Resource size trait
+pub trait HasResourceSize {
+    fn size(&self) -> Option<u64> { None }
+}
+
+/// Resource annotations trait
+pub trait HasResourceAnnotations {
+    fn annotations(&self) -> Option<&crate::meta::Annotations> { None }
+}
+
+/// Resource-specific meta trait (separate from RPC _meta)
+pub trait HasResourceMeta {
+    fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+}
+
+/// Complete resource definition - composed from fine-grained traits
+pub trait ResourceDefinition: 
+    HasResourceMetadata +       // name, title (from BaseMetadata)
+    HasResourceDescription +    // description
+    HasResourceUri +           // uri
+    HasResourceMimeType +      // mimeType
+    HasResourceSize +          // size
+    HasResourceAnnotations +   // annotations
+    HasResourceMeta +          // _meta (resource-specific)
+    Send + 
+    Sync 
+{
+    /// Display name precedence: title > name (matches TypeScript spec)
+    fn display_name(&self) -> &str {
+        self.title().unwrap_or_else(|| self.name())
+    }
+    
+    /// Convert to concrete Resource struct for protocol serialization
+    fn to_resource(&self) -> Resource {
+        Resource {
+            uri: self.uri().to_string(),
+            name: self.name().to_string(),
+            title: self.title().map(String::from),
+            description: self.description().map(String::from),
+            mime_type: self.mime_type().map(String::from),
+            size: self.size(),
+            annotations: self.annotations().cloned(),
+            meta: self.resource_meta().cloned(),
+        }
+    }
+}
+
+/// A template description for resources available on the server
+/// ResourceTemplate extends BaseMetadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceTemplate {
+    /// Programmatic identifier (from BaseMetadata)
+    pub name: String,
+    /// Human-readable display name (from BaseMetadata)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// A URI template (according to RFC 6570) that can be used to construct resource URIs (format: uri-template)
+    #[serde(rename = "uriTemplate")]
+    pub uri_template: String,
+    /// A description of what this template is for
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// The MIME type for all resources that match this template
+    #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    /// Optional annotations for the client
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub annotations: Option<crate::meta::Annotations>,
+    /// See General fields: _meta for notes on _meta usage
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
+}
+
+impl ResourceTemplate {
+    pub fn new(name: impl Into<String>, uri_template: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            title: None,
+            uri_template: uri_template.into(),
+            description: None,
+            mime_type: None,
+            annotations: None,
+            meta: None,
+        }
+    }
+    
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
+        self
+    }
+    
+    pub fn with_description(mut self, description: impl Into<String>) -> Self {
+        self.description = Some(description.into());
+        self
+    }
+    
+    pub fn with_mime_type(mut self, mime_type: impl Into<String>) -> Self {
+        self.mime_type = Some(mime_type.into());
+        self
+    }
+    
+    pub fn with_annotations(mut self, annotations: crate::meta::Annotations) -> Self {
+        self.annotations = Some(annotations);
+        self
+    }
+    
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
+}
+
+/// A resource descriptor (matches TypeScript Resource interface)
+/// Resource extends BaseMetadata, so it includes name and title fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Resource {
-    /// URI identifier for the resource
+    /// The URI of this resource (format: uri)
     pub uri: String,
-    /// Human-readable name
+    /// Programmatic identifier (from BaseMetadata)
     pub name: String,
-    /// Optional description
+    /// Human-readable display name (from BaseMetadata)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// A description of what this resource represents
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    /// MIME type of the resource
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// The MIME type of this resource, if known
+    #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
-    /// Optional annotations
+    /// The size of the raw resource content, in bytes
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub annotations: Option<Value>,
+    pub size: Option<u64>,
+    /// Optional annotations for the client
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub annotations: Option<crate::meta::Annotations>,
+    /// See General fields: _meta for notes on _meta usage
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 impl Resource {
@@ -30,10 +182,18 @@ impl Resource {
         Self {
             uri: uri.into(),
             name: name.into(),
+            title: None,
             description: None,
             mime_type: None,
+            size: None,
             annotations: None,
+            meta: None,
         }
+    }
+
+    pub fn with_title(mut self, title: impl Into<String>) -> Self {
+        self.title = Some(title.into());
+        self
     }
 
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
@@ -46,11 +206,60 @@ impl Resource {
         self
     }
 
-    pub fn with_annotations(mut self, annotations: Value) -> Self {
+    pub fn with_size(mut self, size: u64) -> Self {
+        self.size = Some(size);
+        self
+    }
+
+    pub fn with_annotations(mut self, annotations: crate::meta::Annotations) -> Self {
         self.annotations = Some(annotations);
         self
     }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
 }
+
+// ================== TRAIT IMPLEMENTATIONS ==================
+// Implement fine-grained traits for the concrete Resource struct
+
+impl HasResourceMetadata for Resource {
+    fn name(&self) -> &str { &self.name }
+    fn title(&self) -> Option<&str> { self.title.as_deref() }
+}
+
+impl HasResourceDescription for Resource {
+    fn description(&self) -> Option<&str> { self.description.as_deref() }
+}
+
+impl HasResourceUri for Resource {
+    fn uri(&self) -> &str { &self.uri }
+}
+
+impl HasResourceMimeType for Resource {
+    fn mime_type(&self) -> Option<&str> { self.mime_type.as_deref() }
+}
+
+impl HasResourceSize for Resource {
+    fn size(&self) -> Option<u64> { self.size }
+}
+
+impl HasResourceAnnotations for Resource {
+    fn annotations(&self) -> Option<&crate::meta::Annotations> { self.annotations.as_ref() }
+}
+
+impl HasResourceMeta for Resource {
+    fn resource_meta(&self) -> Option<&HashMap<String, Value>> { self.meta.as_ref() }
+}
+
+// Blanket implementation: any type implementing all fine-grained traits automatically implements ResourceDefinition
+impl<T> ResourceDefinition for T 
+where 
+    T: HasResourceMetadata + HasResourceDescription + HasResourceUri + HasResourceMimeType + 
+       HasResourceSize + HasResourceAnnotations + HasResourceMeta + Send + Sync 
+{}
 
 /// Parameters for resources/list request
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -206,35 +415,162 @@ impl ReadResourceRequest {
     }
 }
 
-/// Content types that can be returned by resources
+/// The contents of a specific resource or sub-resource (base interface)
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceContents {
+    /// The URI of this resource (format: uri)
+    pub uri: String,
+    /// The MIME type of this resource, if known
+    #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    /// See General fields: _meta for notes on _meta usage
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
+}
+
+/// Text resource contents
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TextResourceContents {
+    /// The URI of this resource (format: uri)
+    pub uri: String,
+    /// The MIME type of this resource, if known
+    #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    /// See General fields: _meta for notes on _meta usage
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
+    /// The text of the item. This must only be set if the item can actually be represented as text (not binary data)
+    pub text: String,
+}
+
+/// Blob resource contents
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlobResourceContents {
+    /// The URI of this resource (format: uri)
+    pub uri: String,
+    /// The MIME type of this resource, if known
+    #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    /// See General fields: _meta for notes on _meta usage
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
+    /// A base64-encoded string representing the binary data of the item (format: byte)
+    pub blob: String,
+}
+
+/// Union type for resource contents (matches TypeScript union)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum ResourceContent {
-    /// Text content
-    Text {
-        text: String,
-    },
-    /// Binary content (base64 encoded)
-    Blob {
-        #[serde(rename = "blob")]
-        data: String,
-        #[serde(rename = "mimeType")]
-        mime_type: String,
-    },
+    Text(TextResourceContents),
+    Blob(BlobResourceContents),
 }
 
 impl ResourceContent {
-    pub fn text(content: impl Into<String>) -> Self {
-        Self::Text {
-            text: content.into(),
+    pub fn text(uri: impl Into<String>, text: impl Into<String>) -> Self {
+        Self::Text(TextResourceContents {
+            uri: uri.into(),
+            mime_type: Some("text/plain".to_string()),
+            meta: None,
+            text: text.into(),
+        })
+    }
+
+    pub fn blob(uri: impl Into<String>, blob: impl Into<String>, mime_type: impl Into<String>) -> Self {
+        Self::Blob(BlobResourceContents {
+            uri: uri.into(),
+            mime_type: Some(mime_type.into()),
+            meta: None,
+            blob: blob.into(),
+        })
+    }
+}
+
+/// Parameters for resources/templates/list request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListResourceTemplatesParams {
+    /// Optional cursor for pagination
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<Cursor>,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
+}
+
+impl ListResourceTemplatesParams {
+    pub fn new() -> Self {
+        Self { 
+            cursor: None,
+            meta: None,
         }
     }
 
-    pub fn blob(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
-        Self::Blob {
-            data: data.into(),
-            mime_type: mime_type.into(),
+    pub fn with_cursor(mut self, cursor: Cursor) -> Self {
+        self.cursor = Some(cursor);
+        self
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
+}
+
+/// Complete resources/templates/list request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListResourceTemplatesRequest {
+    /// Method name (always "resources/templates/list")
+    pub method: String,
+    /// Request parameters
+    pub params: ListResourceTemplatesParams,
+}
+
+impl ListResourceTemplatesRequest {
+    pub fn new() -> Self {
+        Self {
+            method: "resources/templates/list".to_string(),
+            params: ListResourceTemplatesParams::new(),
         }
+    }
+}
+
+/// Result for resources/templates/list
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ListResourceTemplatesResult {
+    /// Available resource templates
+    #[serde(rename = "resourceTemplates")]
+    pub resource_templates: Vec<ResourceTemplate>,
+    /// Optional cursor for next page
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<Cursor>,
+    /// Meta information
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
+}
+
+impl ListResourceTemplatesResult {
+    pub fn new(resource_templates: Vec<ResourceTemplate>) -> Self {
+        Self {
+            resource_templates,
+            next_cursor: None,
+            meta: None,
+        }
+    }
+
+    pub fn with_next_cursor(mut self, cursor: Cursor) -> Self {
+        self.next_cursor = Some(cursor);
+        self
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
     }
 }
 
@@ -242,8 +578,11 @@ impl ResourceContent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubscribeParams {
-    /// Resource URI to subscribe to
+    /// Resource URI to subscribe to (format: uri)
     pub uri: String,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 /// Complete resources/subscribe request (per MCP spec)
@@ -262,8 +601,14 @@ impl SubscribeRequest {
             method: "resources/subscribe".to_string(),
             params: SubscribeParams {
                 uri: uri.into(),
+                meta: None,
             },
         }
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.params.meta = Some(meta);
+        self
     }
 }
 
@@ -271,8 +616,11 @@ impl SubscribeRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UnsubscribeParams {
-    /// Resource URI to unsubscribe from
+    /// Resource URI to unsubscribe from (format: uri)
     pub uri: String,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 /// Complete resources/unsubscribe request (per MCP spec)
@@ -291,8 +639,14 @@ impl UnsubscribeRequest {
             method: "resources/unsubscribe".to_string(),
             params: UnsubscribeParams {
                 uri: uri.into(),
+                meta: None,
             },
         }
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.params.meta = Some(meta);
+        self
     }
 }
 
@@ -300,16 +654,11 @@ impl UnsubscribeRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadResourceResult {
-    /// The resource content
+    /// The resource content (TextResourceContents | BlobResourceContents)[]
     pub contents: Vec<ResourceContent>,
     /// Meta information (follows MCP Result interface)
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        alias = "_meta",
-        rename = "_meta"
-    )]
-    pub meta: Option<std::collections::HashMap<String, Value>>,
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 impl ReadResourceResult {
@@ -324,9 +673,32 @@ impl ReadResourceResult {
         Self::new(vec![content])
     }
 
-    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
+    }
+}
+
+// Add trait implementations for ReadResourceResult
+impl HasData for ReadResourceResult {
+    fn data(&self) -> HashMap<String, Value> {
+        let mut data = HashMap::new();
+        data.insert("contents".to_string(), serde_json::to_value(&self.contents).unwrap_or(Value::Null));
+        data
+    }
+}
+
+impl HasMeta for ReadResourceResult {
+    fn meta(&self) -> Option<HashMap<String, Value>> {
+        self.meta.clone()
+    }
+}
+
+impl crate::traits::RpcResult for ReadResourceResult {}
+
+impl crate::traits::ReadResourceResult for ReadResourceResult {
+    fn contents(&self) -> &Vec<ResourceContent> {
+        &self.contents
     }
 }
 
@@ -347,10 +719,13 @@ impl ResourceSubscription {
 // Trait implementations for resources
 
 use crate::traits::*;
-use std::collections::HashMap;
 
-// Trait implementations for ListResourcesParams
+// Trait implementations for all params types
 impl Params for ListResourcesParams {}
+impl Params for ReadResourceParams {}
+impl Params for SubscribeParams {}
+impl Params for UnsubscribeParams {}
+impl Params for ListResourceTemplatesParams {}
 
 impl HasListResourcesParams for ListResourcesParams {
     fn cursor(&self) -> Option<&Cursor> {
@@ -377,10 +752,35 @@ impl HasParams for ListResourcesRequest {
     }
 }
 
-// Trait implementations for protocol compliance
-use crate::traits::Params;
-impl Params for SubscribeParams {}
-impl Params for UnsubscribeParams {}
+// Additional trait implementations for ListResourceTemplatesResult
+impl HasData for ListResourceTemplatesResult {
+    fn data(&self) -> HashMap<String, Value> {
+        let mut data = HashMap::new();
+        data.insert("resourceTemplates".to_string(), serde_json::to_value(&self.resource_templates).unwrap_or(Value::Null));
+        if let Some(ref next_cursor) = self.next_cursor {
+            data.insert("nextCursor".to_string(), Value::String(next_cursor.as_str().to_string()));
+        }
+        data
+    }
+}
+
+impl HasMeta for ListResourceTemplatesResult {
+    fn meta(&self) -> Option<HashMap<String, Value>> {
+        self.meta.clone()
+    }
+}
+
+impl crate::traits::RpcResult for ListResourceTemplatesResult {}
+
+impl crate::traits::ListResourceTemplatesResult for ListResourceTemplatesResult {
+    fn resource_templates(&self) -> &Vec<ResourceTemplate> {
+        &self.resource_templates
+    }
+    
+    fn next_cursor(&self) -> Option<&Cursor> {
+        self.next_cursor.as_ref()
+    }
+}
 
 // Trait implementations for ListResourcesResult
 impl HasData for ListResourcesResult {
@@ -400,125 +800,8 @@ impl HasMeta for ListResourcesResult {
     }
 }
 
-// ===========================================
-// === Fine-Grained Resource Traits ===
-// ===========================================
-
-/// Trait for basic resource metadata (uri, name, title)
-pub trait HasResourceMetadata {
-    /// The URI identifier for this resource
-    fn uri(&self) -> &str;
-    
-    /// Human-readable name
-    fn name(&self) -> &str;
-    
-    /// Optional title for display
-    fn title(&self) -> Option<&str> {
-        None
-    }
-}
-
-/// Trait for resource description
-pub trait HasResourceDescription {
-    /// Description of the resource
-    fn description(&self) -> Option<&str>;
-}
-
-/// Trait for resource content information
-pub trait HasResourceContent {
-    /// Optional MIME type hint
-    fn mime_type(&self) -> Option<&str>;
-    
-    /// Content encoding information
-    fn encoding(&self) -> Option<&str> {
-        None
-    }
-    
-    /// Content size hint if known
-    fn content_size(&self) -> Option<u64> {
-        None
-    }
-}
-
-/// Trait for resource access capabilities
-pub trait HasResourceAccess {
-    /// Whether this resource supports real-time subscriptions
-    fn supports_subscriptions(&self) -> bool {
-        false
-    }
-    
-    /// Whether this resource requires authentication
-    fn requires_auth(&self) -> bool {
-        false
-    }
-    
-    /// Access permissions level
-    fn access_level(&self) -> ResourceAccessLevel {
-        ResourceAccessLevel::Read
-    }
-}
-
-/// Trait for resource annotations and custom metadata
-pub trait HasResourceAnnotations {
-    /// Optional annotations for client hints
-    fn annotations(&self) -> Option<&serde_json::Value>;
-}
-
-/// Trait for resource-specific metadata
-pub trait HasResourceMeta {
-    /// Optional resource-specific metadata
-    fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> {
-        None
-    }
-}
-
-/// Access levels for resources
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ResourceAccessLevel {
-    /// Read-only access
-    Read,
-    /// Read and subscribe access
-    ReadSubscribe,
-    /// Full access (if resource supports modifications)
-    Full,
-}
-
-/// Composed resource definition trait (automatically implemented via blanket impl)
-pub trait ResourceDefinition: 
-    HasResourceMetadata + 
-    HasResourceDescription + 
-    HasResourceContent + 
-    HasResourceAccess + 
-    HasResourceAnnotations + 
-    HasResourceMeta 
-{
-    /// Convert this resource definition to a protocol Resource struct
-    fn to_resource(&self) -> Resource {
-        let mut resource = Resource::new(self.uri(), self.name());
-        
-        if let Some(description) = self.description() {
-            resource = resource.with_description(description);
-        }
-        
-        if let Some(mime_type) = self.mime_type() {
-            resource = resource.with_mime_type(mime_type);
-        }
-        
-        if let Some(annotations) = self.annotations() {
-            resource = resource.with_annotations(annotations.clone());
-        }
-        
-        resource
-    }
-}
-
-// Blanket implementation: any type implementing the fine-grained traits automatically gets ResourceDefinition
-impl<T> ResourceDefinition for T 
-where 
-    T: HasResourceMetadata + HasResourceDescription + HasResourceContent + HasResourceAccess + HasResourceAnnotations + HasResourceMeta 
-{}
-
-impl RpcResult for ListResourcesResult {}
+// RpcResult automatically implemented via blanket impl (HasMeta + HasData)
+impl crate::traits::RpcResult for ListResourcesResult {}
 
 impl crate::traits::ListResourcesResult for ListResourcesResult {
     fn resources(&self) -> &Vec<Resource> {
@@ -527,68 +810,6 @@ impl crate::traits::ListResourcesResult for ListResourcesResult {
     
     fn next_cursor(&self) -> Option<&Cursor> {
         self.next_cursor.as_ref()
-    }
-}
-
-// Trait implementations for ReadResourceParams
-impl Params for ReadResourceParams {}
-impl Params for SubscribeRequest {}
-impl Params for UnsubscribeRequest {}
-
-impl HasReadResourceParams for ReadResourceParams {
-    fn uri(&self) -> &String {
-        &self.uri
-    }
-}
-
-impl HasMetaParam for ReadResourceParams {
-    fn meta(&self) -> Option<&std::collections::HashMap<String, Value>> {
-        self.meta.as_ref()
-    }
-}
-
-// Trait implementations for ReadResourceRequest
-impl HasMethod for ReadResourceRequest {
-    fn method(&self) -> &str {
-        &self.method
-    }
-}
-
-impl HasParams for ReadResourceRequest {
-    fn params(&self) -> Option<&dyn Params> {
-        Some(&self.params)
-    }
-}
-
-// Trait implementations for ReadResourceResult
-impl HasData for ReadResourceResult {
-    fn data(&self) -> HashMap<String, Value> {
-        let mut data = HashMap::new();
-        data.insert("contents".to_string(), serde_json::to_value(&self.contents).unwrap_or(Value::Null));
-        data
-    }
-}
-
-impl HasMeta for ReadResourceResult {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
-    }
-}
-
-impl RpcResult for ReadResourceResult {}
-
-impl crate::traits::ReadResourceResult for ReadResourceResult {
-    fn contents(&self) -> &Vec<ResourceContent> {
-        &self.contents
-    }
-}
-
-// Trait implementations for ResourceSubscription
-impl Params for ResourceSubscription {}
-
-impl HasResourceUpdatedParams for ResourceSubscription {
-    fn uri(&self) -> &String {
-        &self.uri
     }
 }
 
@@ -611,11 +832,11 @@ mod tests {
 
     #[test]
     fn test_resource_content() {
-        let text_content = ResourceContent::text("Hello, world!");
-        let blob_content = ResourceContent::blob("base64data", "image/png");
+        let text_content = ResourceContent::text("file:///test.txt", "Hello, world!");
+        let blob_content = ResourceContent::blob("file:///image.png", "base64data", "image/png");
 
-        assert!(matches!(text_content, ResourceContent::Text { .. }));
-        assert!(matches!(blob_content, ResourceContent::Blob { .. }));
+        assert!(matches!(text_content, ResourceContent::Text(_)));
+        assert!(matches!(blob_content, ResourceContent::Blob(_)));
     }
 
     #[test]
@@ -632,7 +853,7 @@ mod tests {
 
     #[test]
     fn test_read_resource_response() {
-        let content = ResourceContent::text("File contents");
+        let content = ResourceContent::text("file:///test.txt", "File contents");
         let response = ReadResourceResult::single(content);
 
         assert_eq!(response.contents.len(), 1);

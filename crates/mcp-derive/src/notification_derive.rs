@@ -231,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn test_missing_method() {
+    fn test_auto_method_generation() {
         let input: DeriveInput = parse_quote! {
             struct GenericNotification {
                 data: String,
@@ -239,7 +239,7 @@ mod tests {
         };
 
         let result = derive_mcp_notification_impl(input);
-        assert!(result.is_err());
+        assert!(result.is_ok()); // Should succeed with auto-generated method "notifications/generic"
     }
 
     #[test]
@@ -251,5 +251,71 @@ mod tests {
 
         let result = derive_mcp_notification_impl(input);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_zero_config_method_generation() {
+        // Test zero-configuration method generation for different naming patterns
+        let test_cases = vec![
+            ("ProgressNotification", "notifications/progress"),
+            ("ResourcesListChangedNotification", "notifications/resources/list_changed"),
+            ("ToolsChangedNotification", "notifications/tools/list_changed"),
+            ("CustomEventNotification", "notifications/custom_event"),
+        ];
+
+        for (struct_name, expected_method) in test_cases {
+            let method = auto_determine_notification_method(struct_name.to_string());
+            assert_eq!(method, expected_method, "Failed for struct: {}", struct_name);
+        }
+    }
+
+    #[test]
+    fn test_notification_trait_implementations() {
+        let input: DeriveInput = parse_quote! {
+            struct TestNotification {
+                data: String,
+            }
+        };
+
+        let result = derive_mcp_notification_impl(input);
+        assert!(result.is_ok());
+        
+        // Check that the generated code contains required trait implementations
+        let code = result.unwrap().to_string();
+        assert!(code.contains("HasNotificationMetadata"));
+        assert!(code.contains("HasNotificationPayload"));
+        assert!(code.contains("McpNotification"));
+    }
+
+    #[test]
+    fn test_camel_to_snake_case_conversion() {
+        let test_cases = vec![
+            ("SimpleCase", "simple_case"),
+            ("ComplexCamelCase", "complex_camel_case"),
+            ("XMLParser", "x_m_l_parser"),
+            ("IOBuffer", "i_o_buffer"),
+            ("lowercase", "lowercase"),
+        ];
+
+        for (input, expected) in test_cases {
+            let result = camel_to_snake_case(input);
+            assert_eq!(result, expected, "Failed for input: {}", input);
+        }
+    }
+
+    #[test]
+    fn test_special_notification_types() {
+        // Test standard MCP notification types get proper method names
+        let test_cases = vec![
+            ("ResourcesListChangedNotification", "notifications/resources/list_changed"),
+            ("PromptsChangedNotification", "notifications/prompts/list_changed"),
+            ("ToolsChangedNotification", "notifications/tools/list_changed"),
+            ("RootsListChangedNotification", "notifications/roots/list_changed"),
+        ];
+
+        for (struct_name, expected_method) in test_cases {
+            let method = auto_determine_notification_method(struct_name.to_string());
+            assert_eq!(method, expected_method, "Failed for struct: {}", struct_name);
+        }
     }
 }

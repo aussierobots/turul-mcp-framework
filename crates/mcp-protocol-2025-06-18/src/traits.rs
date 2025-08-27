@@ -8,11 +8,12 @@ use crate::{
     completion::CompleteArgument,
     initialize::{ClientCapabilities, Implementation, ServerCapabilities},
     logging::LogLevel,
+    prompts::ContentBlock,
     meta::{Cursor, ProgressToken},
     prompts::{Prompt, PromptMessage},
     resources::Resource,
     roots::Root,
-    sampling::{MessageContent, SamplingMessage},
+    sampling::{Role, SamplingMessage, ModelPreferences},
     tools::{Tool, ToolResult},
     version::McpVersion,
 };
@@ -220,7 +221,7 @@ pub trait ListPromptsResult: RpcResult {
 
 pub trait HasGetPromptParams: Params {
     fn name(&self) -> &String;
-    fn arguments(&self) -> Option<&HashMap<String, Value>>;
+    fn arguments(&self) -> Option<&HashMap<String, String>>; // MCP spec: { [key: string]: string }
 }
 
 pub trait GetPromptRequest: JsonRpcRequestTrait + HasGetPromptParams {
@@ -259,7 +260,7 @@ pub trait ListToolsResult: RpcResult {
 
 pub trait HasCallToolParams: Params {
     fn name(&self) -> &String;
-    fn arguments(&self) -> Option<&Value>;
+    fn arguments(&self) -> Option<&Value>; // Keep as Value for now for compatibility
     fn meta(&self) -> Option<&HashMap<String, Value>>;
 }
 
@@ -286,7 +287,7 @@ pub trait ToolListChangedNotification: JsonRpcNotificationTrait {
 
 pub trait HasCreateMessageParams: Params {
     fn messages(&self) -> &Vec<SamplingMessage>;
-    fn model_preferences(&self) -> Option<&Value>;
+    fn model_preferences(&self) -> Option<&ModelPreferences>;
     fn system_prompt(&self) -> Option<&String>;
     fn include_context(&self) -> Option<&String>;
     fn temperature(&self) -> Option<&f64>;
@@ -302,8 +303,8 @@ pub trait CreateMessageRequest: JsonRpcRequestTrait + HasCreateMessageParams {
 }
 
 pub trait CreateMessageResult: RpcResult {
-    fn role(&self) -> &str;
-    fn content(&self) -> &MessageContent;
+    fn role(&self) -> &Role;
+    fn content(&self) -> &ContentBlock;
     fn model(&self) -> &String;
     fn stop_reason(&self) -> Option<&String>;
 }
@@ -351,7 +352,7 @@ pub trait ListResourceTemplatesRequest:
 }
 
 pub trait ListResourceTemplatesResult: RpcResult {
-    fn resource_templates(&self) -> &Vec<Value>;
+    fn resource_templates(&self) -> &Vec<crate::resources::ResourceTemplate>;
     fn next_cursor(&self) -> Option<&Cursor>;
 }
 

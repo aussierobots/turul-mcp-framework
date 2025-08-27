@@ -10,6 +10,7 @@ members = [
     "crates/mcp-derive",
     "crates/mcp-client",
     "examples/calculator-add-simple-server-derive",
+    "examples/calculator-add-simple-server",
     "examples/calculator-add-manual-server",
     "examples/calculator-add-function-server",
     "examples/calculator-add-builder-server",
@@ -56,7 +57,7 @@ members = [
     "examples/simple-zero-config-demo", 
     "examples/zero-config-getting-started",
     "examples/working-universal-demo", 
-    "tests",
+    "tests", "crates/mcp-builders",
 ]
 
 [workspace.package]

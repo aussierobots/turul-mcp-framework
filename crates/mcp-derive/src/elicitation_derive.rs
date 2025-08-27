@@ -4,15 +4,14 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Data, Fields, Result, Field};
 
-use crate::utils::{extract_string_attribute, extract_field_meta};
+use crate::utils::{extract_elicitation_meta, extract_field_meta};
 
 pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
     let struct_name = &input.ident;
 
-    // Extract struct-level attributes
-    let message = extract_string_attribute(&input.attrs, "elicitation")
-        .or_else(|| extract_string_attribute(&input.attrs, "message"))
-        .ok_or_else(|| syn::Error::new_spanned(&input, "McpElicitation derive requires #[elicitation(message = \"...\")] attribute"))?;
+    // Extract struct-level attributes from #[elicitation(...)]
+    let elicitation_meta = extract_elicitation_meta(&input.attrs)?;
+    let message = &elicitation_meta.message;
 
     // Check if it's a struct
     let data = match &input.data {
@@ -203,5 +202,55 @@ mod tests {
 
         let result = derive_mcp_elicitation_impl(input);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_elicitation_trait_implementations() {
+        let input: DeriveInput = parse_quote! {
+            #[elicitation(message = "Please provide information")]
+            struct InfoRequest {
+                field: String,
+            }
+        };
+
+        let result = derive_mcp_elicitation_impl(input);
+        assert!(result.is_ok());
+        
+        // Check that the generated code contains required trait implementations
+        let code = result.unwrap().to_string();
+        assert!(code.contains("HasElicitationMetadata"));
+        assert!(code.contains("HasElicitationSchema"));
+        assert!(code.contains("McpElicitation"));
+    }
+
+    #[test]
+    fn test_missing_elicitation_attribute() {
+        let input: DeriveInput = parse_quote! {
+            struct PlainStruct {
+                data: String,
+            }
+        };
+
+        let result = derive_mcp_elicitation_impl(input);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing 'message'"));
+    }
+
+    #[test]
+    fn test_empty_elicitation_message() {
+        let input: DeriveInput = parse_quote! {
+            #[elicitation(message = "")]
+            struct EmptyMessageElicitation;
+        };
+
+        let result = derive_mcp_elicitation_impl(input);
+        // Empty messages should be allowed - just verify it doesn't panic
+        match result {
+            Ok(_) => {}, // Success is fine
+            Err(e) => {
+                println!("Empty message error: {}", e);
+                // Error is also acceptable for edge case testing
+            }
+        }
     }
 }

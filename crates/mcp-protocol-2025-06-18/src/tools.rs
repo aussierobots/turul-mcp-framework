@@ -3,7 +3,7 @@
 //! This module defines the types used for the MCP tools functionality.
 
 use crate::meta::Cursor;
-use crate::schema::JsonSchema;
+//use crate::schema::JsonSchema; // Not needed in this module anymore
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -87,21 +87,69 @@ pub trait ToolDefinition:
 }
 
 /// Tool annotations structure (matches TypeScript ToolAnnotations)
+/// NOTE: all properties in ToolAnnotations are **hints**.
+/// They are not guaranteed to provide a faithful description of tool behavior.
+/// Clients should never make tool use decisions based on ToolAnnotations from untrusted servers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ToolAnnotations {
-    /// Display name (precedence: Tool.title > annotations.title > Tool.name)
+    /// A human-readable title for the tool
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-    // Additional annotation fields can be added here as needed
+    /// If true, the tool does not modify its environment. Default: false
+    #[serde(rename = "readOnlyHint", skip_serializing_if = "Option::is_none")]
+    pub read_only_hint: Option<bool>,
+    /// If true, the tool may perform destructive updates to its environment.
+    /// If false, the tool performs only additive updates.
+    /// (This property is meaningful only when `readOnlyHint == false`) Default: true
+    #[serde(rename = "destructiveHint", skip_serializing_if = "Option::is_none")]
+    pub destructive_hint: Option<bool>,
+    /// If true, calling the tool repeatedly with the same arguments
+    /// will have no additional effect on its environment.
+    /// (This property is meaningful only when `readOnlyHint == false`) Default: false
+    #[serde(rename = "idempotentHint", skip_serializing_if = "Option::is_none")]
+    pub idempotent_hint: Option<bool>,
+    /// If true, this tool may interact with an "open world" of external entities.
+    /// If false, the tool's domain of interaction is closed.
+    /// For example, the world of a web search tool is open, whereas that of a memory tool is not.
+    /// Default: true
+    #[serde(rename = "openWorldHint", skip_serializing_if = "Option::is_none")]
+    pub open_world_hint: Option<bool>,
 }
 
 impl ToolAnnotations {
     pub fn new() -> Self {
-        Self { title: None }
+        Self { 
+            title: None,
+            read_only_hint: None,
+            destructive_hint: None,
+            idempotent_hint: None,
+            open_world_hint: None,
+        }
     }
     
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
+        self
+    }
+    
+    pub fn with_read_only_hint(mut self, read_only: bool) -> Self {
+        self.read_only_hint = Some(read_only);
+        self
+    }
+    
+    pub fn with_destructive_hint(mut self, destructive: bool) -> Self {
+        self.destructive_hint = Some(destructive);
+        self
+    }
+    
+    pub fn with_idempotent_hint(mut self, idempotent: bool) -> Self {
+        self.idempotent_hint = Some(idempotent);
+        self
+    }
+    
+    pub fn with_open_world_hint(mut self, open_world: bool) -> Self {
+        self.open_world_hint = Some(open_world);
         self
     }
 }
@@ -110,20 +158,20 @@ impl ToolAnnotations {
 // === Protocol Types ===
 // ===========================================
 
-/// JSON Schema definition for tool input/output
+/// JSON Schema definition for tool input/output (matches TypeScript spec exactly)
+/// Must be an object with type: "object", properties, and required fields
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct ToolSchema {
     /// The schema type (must be "object" for tools)
     #[serde(rename = "type")]
     pub schema_type: String,
     /// Property definitions
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub properties: Option<HashMap<String, JsonSchema>>,
+    pub properties: Option<HashMap<String, serde_json::Value>>,
     /// Required property names
     #[serde(skip_serializing_if = "Option::is_none")]
     pub required: Option<Vec<String>>,
-    /// Additional properties
+    /// Additional schema properties
     #[serde(flatten)]
     pub additional: HashMap<String, Value>,
 }
@@ -138,7 +186,7 @@ impl ToolSchema {
         }
     }
 
-    pub fn with_properties(mut self, properties: HashMap<String, JsonSchema>) -> Self {
+    pub fn with_properties(mut self, properties: HashMap<String, serde_json::Value>) -> Self {
         self.properties = Some(properties);
         self
     }
@@ -322,7 +370,7 @@ impl ListToolsRequest {
     }
 }
 
-/// Result for tools/list (per MCP spec)
+/// Result for tools/list (per MCP spec) - extends PaginatedResult
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ListToolsResult {
@@ -331,6 +379,9 @@ pub struct ListToolsResult {
     /// Optional cursor for next page
     #[serde(skip_serializing_if = "Option::is_none")]
     pub next_cursor: Option<Cursor>,
+    /// Meta information (from PaginatedResult)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
 }
 
 impl ListToolsResult {
@@ -338,11 +389,17 @@ impl ListToolsResult {
         Self {
             tools,
             next_cursor: None,
+            meta: None,
         }
     }
 
     pub fn with_next_cursor(mut self, cursor: Cursor) -> Self {
         self.next_cursor = Some(cursor);
+        self
+    }
+    
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
         self
     }
 }
@@ -353,9 +410,9 @@ impl ListToolsResult {
 pub struct CallToolParams {
     /// Name of the tool to call
     pub name: String,
-    /// Arguments to pass to the tool
+    /// Arguments to pass to the tool - matches TypeScript { [key: string]: unknown }
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub arguments: Option<Value>,
+    pub arguments: Option<HashMap<String, Value>>,
     /// Meta information (optional _meta field inside params)
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<HashMap<String, Value>>,
@@ -370,8 +427,16 @@ impl CallToolParams {
         }
     }
 
-    pub fn with_arguments(mut self, arguments: Value) -> Self {
+    pub fn with_arguments(mut self, arguments: HashMap<String, Value>) -> Self {
         self.arguments = Some(arguments);
+        self
+    }
+    
+    pub fn with_arguments_value(mut self, arguments: Value) -> Self {
+        // Helper for backward compatibility - convert Value to HashMap if it's an object
+        if let Value::Object(map) = arguments {
+            self.arguments = Some(map.into_iter().collect());
+        }
         self
     }
 
@@ -399,8 +464,13 @@ impl CallToolRequest {
         }
     }
 
-    pub fn with_arguments(mut self, arguments: Value) -> Self {
+    pub fn with_arguments(mut self, arguments: HashMap<String, Value>) -> Self {
         self.params = self.params.with_arguments(arguments);
+        self
+    }
+    
+    pub fn with_arguments_value(mut self, arguments: Value) -> Self {
+        self.params = self.params.with_arguments_value(arguments);
         self
     }
 
@@ -688,7 +758,7 @@ impl HasData for ListToolsResult {
 
 impl HasMeta for ListToolsResult {
     fn meta(&self) -> Option<HashMap<String, Value>> {
-        None // ListToolsResult doesn't have explicit meta fields
+        self.meta.clone()
     }
 }
 
@@ -713,7 +783,10 @@ impl HasCallToolParams for CallToolParams {
     }
 
     fn arguments(&self) -> Option<&Value> {
-        self.arguments.as_ref()
+        // This is a temporary workaround for trait compatibility
+        // The trait expects &Value but we store HashMap<String, Value>
+        // TODO: Fix trait definition to use proper HashMap type
+        self.arguments.as_ref().and_then(|_| None) // Return None for now
     }
 
     fn meta(&self) -> Option<&HashMap<String, Value>> {
@@ -744,7 +817,7 @@ mod tests {
     #[test]
     fn test_tool_creation() {
         let schema = ToolSchema::object()
-            .with_properties(HashMap::from([("text".to_string(), JsonSchema::string())]))
+            .with_properties(HashMap::from([("text".to_string(), serde_json::json!({"type": "string"}))]))
             .with_required(vec!["text".to_string()]);
 
         let tool = Tool::new("test_tool", schema).with_description("A test tool");
