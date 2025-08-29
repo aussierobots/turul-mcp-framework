@@ -246,14 +246,14 @@ mod tests {
 
     #[test]
     fn test_sse_event_formatting() {
-        let event = SseEvent {
+        let mut event = SseEvent {
             id: 123,
             timestamp: 1234567890,
-            stream_id: "stream1".to_string(),
             event_type: "data".to_string(),
             data: serde_json::json!({"message": "test"}),
             retry: Some(1000),
         };
+        event.id = 123; // Set ID directly
 
         let formatted = event.format();
         assert!(formatted.contains("id: 123"));

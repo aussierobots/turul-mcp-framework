@@ -368,16 +368,24 @@ pub fn derive_mcp_root(input: TokenStream) -> TokenStream {
 
 /// Derive macro for automatically implementing McpNotification
 /// 
+/// ZERO CONFIGURATION - Framework auto-determines method from struct name for MCP spec notifications:
+/// - `ProgressNotification` → `"notifications/progress"`
+/// - `LoggingMessageNotification` → `"notifications/logging/message"`
+/// - `ResourceUpdatedNotification` → `"notifications/resources/updated"`
+/// - `ResourceListChangedNotification` → `"notifications/resources/list_changed"`
+/// - `ToolListChangedNotification` → `"notifications/tools/list_changed"`
+/// 
 /// # Example
 /// 
 /// ```rust
 /// use mcp_derive::McpNotification;
 /// 
-/// #[derive(McpNotification)]
-/// #[notification(method = "notifications/custom/alert")]
-/// struct AlertNotification {
-///     message: String,
-///     severity: String,
+/// #[derive(McpNotification, Default)]
+/// struct ProgressNotification {
+///     progress_token: String,
+///     progress: u64,
+///     total: Option<u64>,
+///     message: Option<String>,
 /// }
 /// ```
 #[proc_macro_derive(McpNotification, attributes(notification, payload))]

@@ -38,7 +38,7 @@ pub fn notification_declarative_impl_inner(input: NotificationMacroInput) -> pro
 }
 
 /// Parse input for the notification!{} macro
-struct NotificationMacroInput {
+pub struct NotificationMacroInput {
     name: String,
     fields: Vec<NotificationField>,
 }

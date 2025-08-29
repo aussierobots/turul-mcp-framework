@@ -11,7 +11,7 @@ use mcp_server::McpResource;
 use mcp_protocol::resources::ResourceContent;
 use mcp_protocol::resources::{
     HasResourceMetadata, HasResourceDescription, HasResourceUri, 
-    HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta, ResourceAnnotations
+    HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta
 };
 use serde_json::json;
 use std::fs;
@@ -50,7 +50,7 @@ impl HasResourceMimeType for ProjectDocumentationResource {
 
 impl HasResourceSize for ProjectDocumentationResource {}
 impl HasResourceAnnotations for ProjectDocumentationResource {
-    fn annotations(&self) -> Option<&ResourceAnnotations> {
+    fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> {
         None
     }
 }
@@ -69,20 +69,20 @@ impl McpResource for ProjectDocumentationResource {
         if readme_path.exists() {
             match fs::read_to_string(readme_path) {
                 Ok(content) => {
-                    contents.push(ResourceContent::text(format!(
+                    contents.push(ResourceContent::text("docs://project", format!(
                         "# Main Project Documentation\n\n{}", content
                     )));
                 },
                 Err(_) => {
                     contents.push(ResourceContent::text(
-                        "# Project Documentation\n\nMain README file not accessible".to_string()
+                        "docs://project", "# Project Documentation\n\nMain README file not accessible".to_string()
                     ));
                 }
             }
         }
         
         // Add project structure overview
-        contents.push(ResourceContent::text(
+        contents.push(ResourceContent::text("docs://project",
             "# MCP Framework Project Structure\n\n\
              ## Core Crates\n\
              - `mcp-server/` - Main MCP server framework\n\
@@ -103,7 +103,7 @@ impl McpResource for ProjectDocumentationResource {
         ));
         
         // Add architectural overview
-        contents.push(ResourceContent::text(
+        contents.push(ResourceContent::text("docs://project",
             "# Architecture Overview\n\n\
              ## MCP Protocol Implementation\n\
              The framework implements the Model Context Protocol (MCP) 2025-06-18 specification:\n\n\
@@ -158,7 +158,7 @@ impl HasResourceMimeType for ApiDocumentationResource {
 
 impl HasResourceSize for ApiDocumentationResource {}
 impl HasResourceAnnotations for ApiDocumentationResource {
-    fn annotations(&self) -> Option<&ResourceAnnotations> {
+    fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> {
         None
     }
 }
@@ -172,12 +172,12 @@ impl McpResource for ApiDocumentationResource {
         
         match fs::read_to_string(api_docs_path) {
             Ok(content) => {
-                Ok(vec![ResourceContent::text(content)])
+                Ok(vec![ResourceContent::text("docs://api", content)])
             },
             Err(_) => {
                 // Fallback content if file is not accessible
                 Ok(vec![
-                    ResourceContent::text(
+                    ResourceContent::text("docs://api",
                         "# API Documentation\n\n\
                          Documentation file not found at data/api_docs.md\n\n\
                          This resource loads API documentation from external markdown files,\n\
@@ -229,7 +229,7 @@ impl HasResourceMimeType for ConfigurationResource {
 
 impl HasResourceSize for ConfigurationResource {}
 impl HasResourceAnnotations for ConfigurationResource {
-    fn annotations(&self) -> Option<&ResourceAnnotations> {
+    fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> {
         None
     }
 }
@@ -248,17 +248,17 @@ impl McpResource for ConfigurationResource {
                 // Parse and pretty-print the JSON for better readability
                 match serde_json::from_str::<serde_json::Value>(&config_content) {
                     Ok(config_json) => {
-                        contents.push(ResourceContent::text(
+                        contents.push(ResourceContent::text("config://app",
                             serde_json::to_string_pretty(&config_json).unwrap()
                         ));
                     },
                     Err(_) => {
-                        contents.push(ResourceContent::text(config_content));
+                        contents.push(ResourceContent::text("config://app", config_content));
                     }
                 }
             },
             Err(_) => {
-                contents.push(ResourceContent::text(
+                contents.push(ResourceContent::text("config://app",
                     "# Application Configuration\n\n\
                      Configuration file not found at data/app_config.json\n\n\
                      This resource demonstrates production configuration management\n\
@@ -280,7 +280,7 @@ impl McpResource for ConfigurationResource {
         }
         
         // Add environment variables documentation
-        contents.push(ResourceContent::text(
+        contents.push(ResourceContent::text("config://app",
             "# Environment Variables Guide\n\n\
              ## Security Best Practices\n\
              Never commit sensitive values to configuration files. Use environment variables:\n\n\
@@ -339,7 +339,7 @@ impl HasResourceMimeType for DatabaseSchemaResource {
 
 impl HasResourceSize for DatabaseSchemaResource {}
 impl HasResourceAnnotations for DatabaseSchemaResource {
-    fn annotations(&self) -> Option<&ResourceAnnotations> {
+    fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> {
         None
     }
 }
@@ -355,10 +355,10 @@ impl McpResource for DatabaseSchemaResource {
         
         match fs::read_to_string(schema_path) {
             Ok(schema_content) => {
-                contents.push(ResourceContent::text(schema_content));
+                contents.push(ResourceContent::text("schema://database", schema_content));
             },
             Err(_) => {
-                contents.push(ResourceContent::text(
+                contents.push(ResourceContent::text("schema://database",
                     "-- Database Schema\n\
                      -- Schema file not found at data/database_schema.sql\n\n\
                      /*\n\
@@ -384,7 +384,7 @@ impl McpResource for DatabaseSchemaResource {
         }
         
         // Add database documentation
-        contents.push(ResourceContent::text(
+        contents.push(ResourceContent::text("schema://database",
             "# Database Architecture Guide\n\n\
              ## Schema Management Best Practices\n\n\
              ### 1. Migration Strategy\n\
@@ -443,7 +443,7 @@ impl HasResourceMimeType for SystemStatusResource {
 
 impl HasResourceSize for SystemStatusResource {}
 impl HasResourceAnnotations for SystemStatusResource {
-    fn annotations(&self) -> Option<&ResourceAnnotations> {
+    fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> {
         None
     }
 }
@@ -498,8 +498,8 @@ impl McpResource for SystemStatusResource {
         });
 
         Ok(vec![
-            ResourceContent::text(serde_json::to_string_pretty(&status).unwrap()),
-            ResourceContent::text(
+            ResourceContent::text("status://system", serde_json::to_string_pretty(&status).unwrap()),
+            ResourceContent::text("status://system",
                 "# System Health Report\n\n\
                  ## Overall Status: ✅ HEALTHY\n\n\
                  ### Services\n\

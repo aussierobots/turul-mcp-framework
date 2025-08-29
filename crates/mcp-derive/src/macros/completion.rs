@@ -38,7 +38,7 @@ pub fn completion_declarative_impl_inner(input: CompletionMacroInput) -> proc_ma
 }
 
 /// Parse input for the completion!{} macro
-struct CompletionMacroInput {
+pub struct CompletionMacroInput {
     name: String,
     fields: Vec<CompletionField>,
 }

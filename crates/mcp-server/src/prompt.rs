@@ -99,7 +99,7 @@ pub fn prompt_to_descriptor(prompt: &dyn McpPrompt) -> mcp_protocol::prompts::Pr
 mod tests {
     use super::*;
     use mcp_protocol::prompts::{
-        HasPromptMetadata, HasPromptArguments, HasPromptMessages, HasPromptAnnotations,
+        HasPromptMetadata, HasPromptArguments, HasPromptDescription, HasPromptAnnotations,
         PromptArgument, PromptMessage
     };
     use serde_json::{json, Value};

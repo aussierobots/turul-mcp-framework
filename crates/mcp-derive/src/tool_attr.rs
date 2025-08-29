@@ -88,6 +88,13 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                 let param_name = &pat_ident.ident;
                 let param_type = &pat_type.ty;
                 
+                // Check if this is a SessionContext parameter
+                if is_session_context_type(param_type) {
+                    // Add session to function call arguments
+                    fn_call_args.push(quote! { session });
+                    continue; // Don't process SessionContext as a regular parameter
+                }
+                
                 // Collect parameter type for trait implementation
                 param_types.push(param_type);
                 
@@ -96,7 +103,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                 
                 let param_name_str = param_name.to_string();
                 
-                // Generate schema for this parameter based on type
+                // Generate property insertion for this parameter - use same pattern as derive macro
                 let schema = type_to_schema(param_type, &param_meta);
                 
                 schema_properties.push(quote! {
@@ -204,7 +211,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         #[automatically_derived]
         #[async_trait::async_trait]
         impl mcp_server::McpTool for #struct_name {
-            async fn call(&self, args: serde_json::Value, _session: Option<mcp_server::SessionContext>) -> mcp_server::McpResult<mcp_protocol::tools::CallToolResult> {
+            async fn call(&self, args: serde_json::Value, session: Option<mcp_server::SessionContext>) -> mcp_server::McpResult<mcp_protocol::tools::CallToolResult> {
                 use serde_json::Value;
                 use mcp_protocol::tools::HasOutputSchema;
                 
@@ -264,6 +271,31 @@ fn is_option_type(field_type: &syn::Type) -> bool {
         type_path.path.segments[0].ident == "Option"
     } else {
         false
+    }
+}
+
+/// Check if a type is SessionContext or Option<SessionContext>
+fn is_session_context_type(field_type: &syn::Type) -> bool {
+    match field_type {
+        syn::Type::Path(type_path) => {
+            // Check if it's Option<SessionContext>
+            if type_path.path.segments.len() == 1 && 
+               type_path.path.segments[0].ident == "Option" {
+                if let syn::PathArguments::AngleBracketed(args) = &type_path.path.segments[0].arguments {
+                    if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
+                        return is_session_context_type(inner_type);
+                    }
+                }
+            }
+            
+            // Check if it's direct SessionContext (check last segment for qualified paths)
+            if let Some(last_segment) = type_path.path.segments.last() {
+                last_segment.ident == "SessionContext"
+            } else {
+                false
+            }
+        },
+        _ => false,
     }
 }
 

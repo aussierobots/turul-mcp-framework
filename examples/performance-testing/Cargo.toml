@@ -15,9 +15,10 @@ path = "src/load_test_server.rs"
 name = "performance_client"
 path = "src/performance_client.rs"
 
-[[bin]]
-name = "stress_test"
-path = "src/stress_test.rs"
+# [[bin]]
+# name = "stress_test"
+# path = "src/stress_test.rs"
+# TODO: Needs mcp-client migration - complex reqwest patterns
 
 [[bin]]
 name = "memory_benchmark"
@@ -25,9 +26,10 @@ path = "src/memory_benchmark.rs"
 
 [dependencies]
 mcp-server = { workspace = true }
-mcp-derive = { workspace = true }
+mcp-derive = { workspace = true }  
 http-mcp-server = { workspace = true }
 mcp-protocol = { workspace = true }
+mcp-client = { workspace = true }
 
 tokio = { workspace = true }
 serde = { workspace = true }

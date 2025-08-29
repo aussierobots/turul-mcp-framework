@@ -43,7 +43,7 @@ pub fn roots_declarative_impl_inner(input: RootsMacroInput) -> proc_macro2::Toke
 }
 
 /// Parse input for the roots!{} macro
-struct RootsMacroInput {
+pub struct RootsMacroInput {
     name: String,
     uri: String,
     display_name: Option<String>,

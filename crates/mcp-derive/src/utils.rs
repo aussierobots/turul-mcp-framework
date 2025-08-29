@@ -2,7 +2,7 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Attribute, Result};
+use syn::{Attribute, Result, Fields, DeriveInput, Data};
 
 
 /// Extract tool metadata from attributes
@@ -11,12 +11,14 @@ pub struct ToolMeta {
     pub name: String,
     pub description: String,
     pub output_type: Option<syn::Type>,
+    pub output_field: Option<String>,  // Custom field name for output
 }
 
 pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
     let mut name = None;
     let mut description = None;
     let mut output_type = None;
+    let mut output_field = None;
 
     for attr in attrs {
         if attr.path().is_ident("tool") {
@@ -29,11 +31,19 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
                     let value = meta.value()?;
                     let s: syn::LitStr = value.parse()?;
                     description = Some(s.value());
+                } else if meta.path.is_ident("output") {
+                    let value = meta.value()?;
+                    let ty: syn::Type = value.parse()?;
+                    output_type = Some(ty);
+                } else if meta.path.is_ident("field") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    output_field = Some(s.value());
                 }
                 Ok(())
             })?;
         } else if attr.path().is_ident("output_type") {
-            // Parse #[output_type(TypeName)] syntax
+            // Parse #[output_type(TypeName)] syntax for backward compatibility
             if let syn::Meta::List(meta_list) = &attr.meta {
                 let ty: syn::Type = syn::parse2(meta_list.tokens.clone())?;
                 output_type = Some(ty);
@@ -57,7 +67,7 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
         }
     })?;
 
-    Ok(ToolMeta { name, description, output_type })
+    Ok(ToolMeta { name, description, output_type, output_field })
 }
 
 /// Extract parameter metadata from field attributes
@@ -166,6 +176,7 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
         }
     }
 }
+
 
 /// Generate parameter extraction code
 pub fn generate_param_extraction(field_name: &syn::Ident, field_type: &syn::Type, optional: bool) -> TokenStream {
@@ -620,10 +631,6 @@ pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
 }
 
 
-/// Generate output schema from a specific type with struct introspection
-pub fn generate_output_schema_for_type(ty: &syn::Type) -> TokenStream {
-    generate_output_schema_for_type_with_field(ty, "result")
-}
 
 pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &str) -> TokenStream {
     match ty {
@@ -691,17 +698,20 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                         }
                     }
                     _ => {
-                        // For custom struct types, try to generate a detailed schema
-                        // For now, we'll generate a basic object schema but this could be enhanced
-                        // to introspect the struct definition if available
-                        let type_name = ident.to_string();
-                        let _schema_debug = format!("Generating schema for type: {}", type_name);
+                        // For custom struct types, generate a basic object schema
+                        // This will be enhanced by the generate_enhanced_output_schema function 
+                        // when struct introspection is available
                         quote! {
                             fn output_schema(&self) -> Option<&mcp_protocol::tools::ToolSchema> {
                                 static OUTPUT_SCHEMA: std::sync::OnceLock<mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                                 Some(OUTPUT_SCHEMA.get_or_init(|| {
-                                    // Generate schema for custom type: #type_name
-                                    <#ident as mcp_protocol::schema::JsonSchemaGenerator>::json_schema()
+                                    use mcp_protocol::schema::JsonSchema;
+                                    use std::collections::HashMap;
+                                    mcp_protocol::tools::ToolSchema::object()
+                                        .with_properties(HashMap::from([
+                                            (#field_name.to_string(), JsonSchema::object())
+                                        ]))
+                                        .with_required(vec![#field_name.to_string()])
                                 }))
                             }
                         }
@@ -755,102 +765,131 @@ pub fn generate_output_schema_for_return_type_with_field(return_type: &syn::Type
     None
 }
 
-/// Generate tool result conversion from return type
-pub fn generate_result_conversion(ty: &syn::Type, has_output_schema: bool) -> TokenStream {
-    match ty {
-        syn::Type::Path(type_path) => {
-            if let Some(ident) = type_path.path.get_ident() {
-                match ident.to_string().as_str() {
-                    "f64" | "f32" | "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize" | "usize" | "bool" => {
-                        if has_output_schema {
-                            // For tools with output schema, still return Vec<ToolResult> for the call method
-                            // The structured content will be handled by the execute method
-                            quote! {
-                                match instance.execute().await {
-                                    Ok(result) => {
-                                        // Return JSON text that matches the structured content format
-                                        let json_text = serde_json::json!({"value": result}).to_string();
-                                        Ok(vec![mcp_protocol::ToolResult::text(json_text)])
-                                    }
-                                    Err(e) => Err(e)
-                                }
-                            }
-                        } else {
-                            // No output schema - return as text
-                            quote! {
-                                match instance.execute().await {
-                                    Ok(result) => {
-                                        Ok(vec![mcp_protocol::ToolResult::text(result.to_string())])
-                                    }
-                                    Err(e) => Err(e)
-                                }
-                            }
-                        }
-                    }
-                    "String" | "str" => {
-                        if has_output_schema {
-                            quote! {
-                                match instance.execute().await {
-                                    Ok(result) => {
-                                        let structured_result = serde_json::json!(result);
-                                        Ok(vec![
-                                            mcp_protocol::ToolResult::text(structured_result.to_string())
-                                        ])
-                                    }
-                                    Err(e) => Err(e)
-                                }
-                            }
-                        } else {
-                            quote! {
-                                match instance.execute().await {
-                                    Ok(result) => {
-                                        Ok(vec![mcp_protocol::ToolResult::text(result.to_string())])
-                                    }
-                                    Err(e) => Err(e)
-                                }
-                            }
-                        }
-                    }
-                    _ => {
-                        // For complex types, use serde serialization
-                        quote! {
-                            match instance.execute().await {
-                                Ok(result) => {
-                                    let json_result = serde_json::to_value(result)
-                                        .map_err(|e| mcp_protocol::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
-                                    Ok(vec![mcp_protocol::ToolResult::text(json_result.to_string())])
-                                }
-                                Err(e) => Err(e)
-                            }
-                        }
-                    }
-                }
-            } else {
-                // Generic complex type
-                quote! {
-                    match instance.execute().await {
-                        Ok(result) => {
-                            let json_result = serde_json::to_value(result)
-                                .map_err(|e| mcp_protocol::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
-                            Ok(vec![mcp_protocol::ToolResult::text(json_result.to_string())])
-                        }
-                        Err(e) => Err(e)
-                    }
-                }
+/// Determine output field name based on type and user preferences
+pub fn determine_output_field_name(ty: &syn::Type, custom_field: Option<&String>) -> String {
+    // If user specified a custom field name, use it
+    if let Some(field_name) = custom_field {
+        return field_name.clone();
+    }
+    
+    // For struct types, extract the struct name and convert to camelCase
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(ident) = type_path.path.get_ident() {
+            let struct_name = ident.to_string();
+            // Check if this looks like a custom struct (not a primitive)
+            if !matches!(struct_name.as_str(), 
+                "f64" | "f32" | "i64" | "i32" | "i16" | "i8" | 
+                "u64" | "u32" | "u16" | "u8" | "isize" | "usize" |
+                "String" | "str" | "bool"
+            ) {
+                // Convert struct name to camelCase (e.g., CalculationResult -> calculationResult)
+                return struct_to_camel_case(&struct_name);
             }
         }
-        _ => {
-            // Generic type
-            quote! {
-                match instance.execute().await {
-                    Ok(result) => {
-                        let json_result = serde_json::to_value(result)
-                            .map_err(|e| mcp_protocol::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
-                        Ok(vec![mcp_protocol::ToolResult::text(json_result.to_string())])
+    }
+    
+    // Default to "output" for primitives (as requested by user)
+    "output".to_string()
+}
+
+/// Convert struct name to camelCase for field names
+fn struct_to_camel_case(struct_name: &str) -> String {
+    let mut chars: Vec<char> = struct_name.chars().collect();
+    if !chars.is_empty() {
+        chars[0] = chars[0].to_lowercase().next().unwrap_or(chars[0]);
+    }
+    chars.into_iter().collect()
+}
+
+/// Generate enhanced output schema with struct property introspection
+pub fn generate_enhanced_output_schema(ty: &syn::Type, field_name: &str, input: Option<&DeriveInput>) -> TokenStream {
+    // Try to introspect struct properties if we have the DeriveInput
+    if let (syn::Type::Path(type_path), Some(derive_input)) = (ty, input) {
+        if let Some(ident) = type_path.path.get_ident() {
+            // Check if this is the same struct we're deriving for
+            if ident == &derive_input.ident {
+                if let Data::Struct(data_struct) = &derive_input.data {
+                    if let Fields::Named(fields) = &data_struct.fields {
+                        return generate_struct_schema_with_properties(fields, field_name);
                     }
-                    Err(e) => Err(e)
                 }
             }
         }
     }
+    
+    // Fallback to basic type schema generation
+    generate_output_schema_for_type_with_field(ty, field_name)
 }
+
+/// Generate schema for struct with all properties introspected
+fn generate_struct_schema_with_properties(fields: &syn::FieldsNamed, field_name: &str) -> TokenStream {
+    let mut property_definitions = Vec::new();
+    let mut required_fields = Vec::new();
+    
+    for field in &fields.named {
+        if let Some(field_name) = &field.ident {
+            let field_name_str = field_name.to_string();
+            let field_type = &field.ty;
+            
+            // Extract parameter metadata for better schema generation
+            let param_meta = extract_param_meta(&field.attrs).unwrap_or_default();
+            let schema = type_to_schema(field_type, &param_meta);
+            
+            property_definitions.push(quote! {
+                (#field_name_str.to_string(), #schema)
+            });
+            
+            // Check if field is required (not Option<T> and not marked as optional)
+            let is_option = is_option_type(field_type);
+            if !is_option && !param_meta.optional {
+                required_fields.push(quote! {
+                    #field_name_str.to_string()
+                });
+            }
+        }
+    }
+    
+    quote! {
+        fn output_schema(&self) -> Option<&mcp_protocol::tools::ToolSchema> {
+            static OUTPUT_SCHEMA: std::sync::OnceLock<mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+            Some(OUTPUT_SCHEMA.get_or_init(|| {
+                use mcp_protocol::schema::JsonSchema;
+                use std::collections::HashMap;
+                
+                // Create schema for the struct content
+                let struct_schema = mcp_protocol::tools::ToolSchema::object()
+                    .with_properties(HashMap::from([
+                        #(#property_definitions),*
+                    ]))
+                    .with_required(vec![
+                        #(#required_fields),*
+                    ]);
+                
+                // Wrap in outer object with field name
+                mcp_protocol::tools::ToolSchema::object()
+                    .with_properties(HashMap::from([
+                        (#field_name.to_string(), JsonSchema::Object {
+                            properties: struct_schema.properties.clone(),
+                            required: struct_schema.required.clone(),
+                            additional: HashMap::new(),
+                            schema_type: "object".to_string(),
+                            title: None,
+                            description: None,
+                        })
+                    ]))
+                    .with_required(vec![#field_name.to_string()])
+            }))
+        }
+    }
+}
+
+/// Check if a type is Option<T>
+fn is_option_type(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        type_path.path.segments.len() == 1 && 
+        type_path.path.segments[0].ident == "Option"
+    } else {
+        false
+    }
+}
+

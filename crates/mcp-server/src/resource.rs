@@ -46,8 +46,8 @@ pub fn resource_to_descriptor(resource: &dyn McpResource) -> mcp_protocol::resou
 mod tests {
     use super::*;
     use mcp_protocol_2025_06_18::resources::{
-        HasResourceMetadata, HasResourceDescription, HasResourceContent, 
-        HasResourceAccess, HasResourceAnnotations, HasResourceMeta
+        HasResourceMetadata, HasResourceDescription, HasResourceUri, 
+        HasResourceSize, HasResourceAnnotations, HasResourceMeta
     };
     use std::collections::HashMap;
 

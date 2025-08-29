@@ -111,9 +111,11 @@
 //!     .meta_value("session_id", json!("sess-456"))
 //!     .build();
 //!
-//! let performance_log = LoggingBuilder::performance("query_execution", 142.5, None)
-//!     .logger("perf-monitor")
-//!     .build();
+//! let performance_log = LoggingBuilder::structured(
+//!     mcp_protocol::logging::LoggingLevel::Info,
+//!     [("operation", json!("query_execution")), ("duration_ms", json!(142.5))]
+//!         .into_iter().map(|(k, v)| (k.to_string(), v)).collect()
+//! ).logger("perf-monitor").build();
 //! # Ok(())
 //! # }
 //! ```

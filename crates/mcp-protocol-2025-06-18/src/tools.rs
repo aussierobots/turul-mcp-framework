@@ -3,7 +3,7 @@
 //! This module defines the types used for the MCP tools functionality.
 
 use crate::meta::Cursor;
-//use crate::schema::JsonSchema; // Not needed in this module anymore
+use crate::schema::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -167,7 +167,7 @@ pub struct ToolSchema {
     pub schema_type: String,
     /// Property definitions
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub properties: Option<HashMap<String, serde_json::Value>>,
+    pub properties: Option<HashMap<String, JsonSchema>>,
     /// Required property names
     #[serde(skip_serializing_if = "Option::is_none")]
     pub required: Option<Vec<String>>,
@@ -186,7 +186,7 @@ impl ToolSchema {
         }
     }
 
-    pub fn with_properties(mut self, properties: HashMap<String, serde_json::Value>) -> Self {
+    pub fn with_properties(mut self, properties: HashMap<String, JsonSchema>) -> Self {
         self.properties = Some(properties);
         self
     }
@@ -651,6 +651,37 @@ impl CallToolResult {
         }
     }
     
+    /// Create response with automatic structured content for primitives (zero-config)
+    pub fn from_result_auto<T: serde::Serialize>(
+        result: &T,
+        schema: Option<&ToolSchema>
+    ) -> Result<Self, crate::McpError> {
+        let text_content = serde_json::to_string(result)
+            .map_err(|e| crate::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
+        
+        let response = Self::success(vec![ToolResult::text(text_content)]);
+        
+        // Auto-detect structured content for common types
+        let structured = serde_json::to_value(result)
+            .map_err(|e| crate::McpError::tool_execution(&format!("Structured content error: {}", e)))?;
+        
+        let should_add_structured = schema.is_some() || match &structured {
+            // Auto-add structured content for primitive types (zero-config)
+            Value::Number(_) | Value::Bool(_) => true,
+            // Auto-add for arrays and objects (structured data)
+            Value::Array(_) | Value::Object(_) => true,
+            // Skip for plain strings (text is sufficient)
+            Value::String(_) => false,
+            Value::Null => false,
+        };
+        
+        if should_add_structured {
+            Ok(response.with_structured_content(structured))
+        } else {
+            Ok(response)
+        }
+    }
+
     /// Create response from JSON value with automatic structured content
     pub fn from_json_with_schema(
         json_result: Value,

@@ -31,7 +31,7 @@ struct CalculatorAddDeriveTool {
 }
 
 impl CalculatorAddDeriveTool {
-    async fn execute(&self) -> McpResult<AdditionResult> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<AdditionResult> {
         Ok(AdditionResult { sum: self.a + self.b })
     }
 }

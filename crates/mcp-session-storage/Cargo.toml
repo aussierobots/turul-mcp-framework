@@ -22,5 +22,13 @@ chrono = { workspace = true, features = ["serde"] }
 # Protocol types
 mcp-protocol.workspace = true
 
+# Optional database support
+sqlx = { workspace = true, optional = true }
+
+[features]
+default = ["in-memory"]
+in-memory = []
+sqlite = ["sqlx"]
+
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

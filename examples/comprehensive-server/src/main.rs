@@ -14,7 +14,7 @@ use std::path::Path;
 use async_trait::async_trait;
 use mcp_protocol::{schema::JsonSchema, ToolResult, ToolSchema, McpError, McpResult};
 use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations, CallToolResult};
-use mcp_protocol::resources::{HasResourceMetadata, HasResourceDescription, HasResourceUri, HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta, ResourceAnnotations, ResourceContent};
+use mcp_protocol::resources::{HasResourceMetadata, HasResourceDescription, HasResourceUri, HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta, ResourceContent};
 use mcp_protocol::prompts::{PromptMessage, HasPromptMetadata, HasPromptDescription, HasPromptArguments, HasPromptAnnotations, HasPromptMeta, PromptAnnotations, PromptArgument};
 use mcp_server::handlers::{McpPrompt, McpTemplate};
 use mcp_server::{McpServer, McpTool, McpResource, SessionContext};
@@ -951,7 +951,7 @@ impl HasResourceSize for ProjectResourcesHandler {
 }
 
 impl HasResourceAnnotations for ProjectResourcesHandler {
-    fn annotations(&self) -> Option<&ResourceAnnotations> { None }
+    fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> { None }
 }
 
 impl HasResourceMeta for ProjectResourcesHandler {
@@ -968,35 +968,35 @@ impl McpResource for ProjectResourcesHandler {
             "# Code Repositories\n\n{}\n",
             serde_json::to_string_pretty(&self.state.resources.development_resources.code_repositories)?
         );
-        content.push(ResourceContent::text(repos_content));
+        content.push(ResourceContent::text("repos", repos_content));
 
         // API documentation
         let api_content = format!(
             "# API Documentation\n\n{}\n",
             serde_json::to_string_pretty(&self.state.resources.development_resources.api_documentation)?
         );
-        content.push(ResourceContent::text(api_content));
+        content.push(ResourceContent::text("api", api_content));
 
         // Database schemas
         let db_content = format!(
             "# Database Schemas\n\n{}\n",
             serde_json::to_string_pretty(&self.state.resources.development_resources.database_schemas)?
         );
-        content.push(ResourceContent::text(db_content));
+        content.push(ResourceContent::text("database", db_content));
 
         // Team tools and integrations
         let tools_content = format!(
             "# Team Tools and Integrations\n\n{}\n",
             serde_json::to_string_pretty(&self.state.resources.team_tools_and_integrations)?
         );
-        content.push(ResourceContent::text(tools_content));
+        content.push(ResourceContent::text("tools", tools_content));
 
         // Learning resources
         let learning_content = format!(
             "# Learning Resources\n\n{}\n",
             serde_json::to_string_pretty(&self.state.resources.learning_resources)?
         );
-        content.push(ResourceContent::text(learning_content));
+        content.push(ResourceContent::text("learning", learning_content));
 
         Ok(content)
     }

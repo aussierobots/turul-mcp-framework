@@ -22,10 +22,13 @@ fn auto_determine_notification_method(struct_name: String) -> String {
     // Convert CamelCase to snake_case and build method
     let snake_case = camel_to_snake_case(base_name);
     
-    // Handle known patterns
+    // Handle known patterns (MCP specification compliant)
     match snake_case.as_str() {
         "progress" => "notifications/progress".to_string(),
         "message" => "notifications/message".to_string(),
+        "cancelled" => "notifications/cancelled".to_string(),
+        "initialized" => "notifications/initialized".to_string(),
+        "resource_updated" | "resources_updated" => "notifications/resources/updated".to_string(),
         "resources_list_changed" | "resources_changed" => "notifications/resources/list_changed".to_string(),
         "roots_list_changed" | "roots_changed" => "notifications/roots/list_changed".to_string(),
         "prompts_list_changed" | "prompts_changed" => "notifications/prompts/list_changed".to_string(),
@@ -204,12 +207,12 @@ mod tests {
     }
 
     #[test]
-    fn test_high_priority_notification() {
+    fn test_cancelled_notification() {
         let input: DeriveInput = parse_quote! {
-            #[notification(method = "notifications/system/critical", priority = "10", requires_ack = "true")]
-            struct CriticalNotification {
-                error_code: u32,
-                description: String,
+            #[notification(priority = "10", requires_ack = "true")]
+            struct CancelledNotification {
+                request_id: String,
+                reason: Option<String>,
             }
         };
 
@@ -218,11 +221,11 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_notification() {
+    fn test_resource_updated_notification() {
         let input: DeriveInput = parse_quote! {
-            #[notification(method = "notifications/data/batch", can_batch = "true")]
-            struct BatchNotification {
-                items: Vec<String>,
+            #[notification(can_batch = "true")]
+            struct ResourceUpdatedNotification {
+                uri: String,
             }
         };
 
@@ -231,22 +234,24 @@ mod tests {
     }
 
     #[test]
-    fn test_auto_method_generation() {
+    fn test_initialized_notification() {
         let input: DeriveInput = parse_quote! {
-            struct GenericNotification {
-                data: String,
+            struct InitializedNotification {
+                protocol_version: String,
             }
         };
 
         let result = derive_mcp_notification_impl(input);
-        assert!(result.is_ok()); // Should succeed with auto-generated method "notifications/generic"
+        assert!(result.is_ok()); // Should succeed with auto-generated method "notifications/initialized"
     }
 
     #[test]
     fn test_minimal_notification() {
         let input: DeriveInput = parse_quote! {
-            #[notification(method = "notifications/test")]
-            struct TestNotification;
+            struct ProgressNotification {
+                progress_token: String,
+                progress: u64,
+            }
         };
 
         let result = derive_mcp_notification_impl(input);
@@ -260,7 +265,8 @@ mod tests {
             ("ProgressNotification", "notifications/progress"),
             ("ResourcesListChangedNotification", "notifications/resources/list_changed"),
             ("ToolsChangedNotification", "notifications/tools/list_changed"),
-            ("CustomEventNotification", "notifications/custom_event"),
+            ("InitializedNotification", "notifications/initialized"),
+            ("CancelledNotification", "notifications/cancelled"),
         ];
 
         for (struct_name, expected_method) in test_cases {

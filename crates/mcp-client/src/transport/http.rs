@@ -332,7 +332,6 @@ use parking_lot;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio_test;
     
     #[test]
     fn test_http_transport_creation() {

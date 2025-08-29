@@ -28,7 +28,7 @@ struct AddTool {
 }
 
 impl AddTool {
-    async fn execute(&self) -> mcp_server::McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> mcp_server::McpResult<String> {
         tracing::debug!("AddTool executing with values a={}, b={}", self.a, self.b);
         Ok(format!("{} + {} = {}", self.a, self.b, self.a + self.b))
     }

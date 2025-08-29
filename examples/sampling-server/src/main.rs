@@ -10,8 +10,9 @@ use mcp_protocol::{
     McpError,
     sampling::{
         HasSamplingConfig, HasSamplingContext, HasModelPreferences,
-        CreateMessageRequest, CreateMessageResult, SamplingMessage, MessageContent
+        CreateMessageRequest, CreateMessageResult, SamplingMessage, Role, ModelPreferences
     },
+    prompts::ContentBlock,
 };
 use mcp_server::sampling::McpSampling;
 use serde_json::Value;
@@ -32,8 +33,8 @@ impl CreativeWritingSampler {
             temperature: Some(0.8), // Higher temperature for creativity
             messages: vec![
                 SamplingMessage {
-                    role: "system".to_string(),
-                    content: MessageContent::Text {
+                    role: Role::System,
+                    content: ContentBlock::Text {
                         text: r#"You are a creative writing assistant. Help users with:
 
 - Story generation and plot development
@@ -68,7 +69,7 @@ impl HasSamplingContext for CreativeWritingSampler {
 }
 
 impl HasModelPreferences for CreativeWritingSampler {
-    fn model_preferences(&self) -> Option<&Value> {
+    fn model_preferences(&self) -> Option<&ModelPreferences> {
         None // Could return JSON object with model preferences
     }
     
@@ -92,13 +93,15 @@ impl McpSampling for CreativeWritingSampler {
         
         // For demonstration, we'll simulate a creative response based on the context
         let user_messages: Vec<_> = request.params.messages.iter()
-            .filter(|msg| msg.role == "user")
+            .filter(|msg| msg.role == Role::User)
             .collect();
             
         let last_user_message = user_messages.last()
             .map(|msg| match &msg.content {
-                MessageContent::Text { text } => text.as_str(),
-                MessageContent::Image { .. } => "[Image content]",
+                ContentBlock::Text { text } => text.as_str(),
+                ContentBlock::Image { .. } => "[Image content]",
+                ContentBlock::ResourceLink { .. } => "[Resource link content]",
+                ContentBlock::Resource { .. } => "[Resource content]",
             })
             .unwrap_or("No user input provided");
 
@@ -190,8 +193,8 @@ I'd love to help you develop this further! What specific aspect would you like t
         };
 
         let response_message = SamplingMessage {
-            role: "assistant".to_string(),
-            content: MessageContent::Text {
+            role: Role::Assistant,
+            content: ContentBlock::Text {
                 text: creative_response,
             },
         };
@@ -241,8 +244,8 @@ impl TechnicalWritingSampler {
             temperature: Some(0.3), // Lower temperature for precision
             messages: vec![
                 SamplingMessage {
-                    role: "system".to_string(),
-                    content: MessageContent::Text {
+                    role: Role::System,
+                    content: ContentBlock::Text {
                         text: r#"You are a technical writing assistant specializing in:
 
 - Clear, precise documentation
@@ -277,7 +280,7 @@ impl HasSamplingContext for TechnicalWritingSampler {
 }
 
 impl HasModelPreferences for TechnicalWritingSampler {
-    fn model_preferences(&self) -> Option<&Value> {
+    fn model_preferences(&self) -> Option<&ModelPreferences> {
         None // Could return JSON object with technical model preferences
     }
     
@@ -293,10 +296,12 @@ impl McpSampling for TechnicalWritingSampler {
         
         let user_message = request.params.messages.iter()
             .rev()
-            .find(|msg| msg.role == "user")
+            .find(|msg| msg.role == Role::User)
             .map(|msg| match &msg.content {
-                MessageContent::Text { text } => text.as_str(),
-                MessageContent::Image { .. } => "[Image content]",
+                ContentBlock::Text { text } => text.as_str(),
+                ContentBlock::Image { .. } => "[Image content]",
+                ContentBlock::ResourceLink { .. } => "[Resource link content]",
+                ContentBlock::Resource { .. } => "[Resource content]",
             })
             .unwrap_or("No user input provided");
 
@@ -346,8 +351,8 @@ For technical documentation, I recommend following these principles:
 Would you like me to help you develop any specific type of technical documentation? Please provide more details about your project and documentation needs."#);
 
         let response_message = SamplingMessage {
-            role: "assistant".to_string(),
-            content: MessageContent::Text {
+            role: Role::Assistant,
+            content: ContentBlock::Text {
                 text: technical_response,
             },
         };
@@ -372,8 +377,8 @@ impl ConversationalSampler {
             temperature: Some(0.7), // Balanced temperature for natural conversation
             messages: vec![
                 SamplingMessage {
-                    role: "system".to_string(),
-                    content: MessageContent::Text {
+                    role: Role::System,
+                    content: ContentBlock::Text {
                         text: "You are a helpful, friendly, and knowledgeable conversational assistant. Provide thoughtful, engaging responses while being concise and actionable.".to_string(),
                     },
                 },
@@ -399,7 +404,7 @@ impl HasSamplingContext for ConversationalSampler {
 }
 
 impl HasModelPreferences for ConversationalSampler {
-    fn model_preferences(&self) -> Option<&Value> {
+    fn model_preferences(&self) -> Option<&ModelPreferences> {
         None // Default model preferences
     }
 }
@@ -412,8 +417,8 @@ impl McpSampling for ConversationalSampler {
         let conversation_response = "I'm ready to help with whatever you'd like to discuss! As a conversational AI assistant, I can assist with questions, brainstorming, problem-solving, or just have a friendly chat. What's on your mind today?".to_string();
 
         let response_message = SamplingMessage {
-            role: "assistant".to_string(),
-            content: MessageContent::Text {
+            role: Role::Assistant,
+            content: ContentBlock::Text {
                 text: conversation_response,
             },
         };

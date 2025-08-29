@@ -38,7 +38,7 @@ pub fn logging_declarative_impl_inner(input: LoggingMacroInput) -> proc_macro2::
 }
 
 /// Parse input for the logging!{} macro
-struct LoggingMacroInput {
+pub struct LoggingMacroInput {
     name: String,
     fields: Vec<LoggingField>,
 }

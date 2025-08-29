@@ -10,8 +10,14 @@ pub use traits::*;
 // Implementations
 pub mod in_memory;
 
+#[cfg(feature = "sqlite")]
+pub mod sqlite;
+
 // Re-export for convenience
 pub use in_memory::{InMemorySessionStorage, InMemoryConfig, InMemoryError, InMemoryStats};
+
+#[cfg(feature = "sqlite")]
+pub use sqlite::{SqliteSessionStorage, SqliteConfig, SqliteError};
 
 /// Convenience type alias for session storage results
 pub type StorageResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -24,6 +30,18 @@ pub fn create_default_storage() -> InMemorySessionStorage {
 /// Create an in-memory session storage with custom configuration
 pub fn create_memory_storage(config: InMemoryConfig) -> InMemorySessionStorage {
     InMemorySessionStorage::with_config(config)
+}
+
+/// Create a SQLite session storage with default configuration
+#[cfg(feature = "sqlite")]
+pub async fn create_sqlite_storage() -> Result<SqliteSessionStorage, SqliteError> {
+    SqliteSessionStorage::new().await
+}
+
+/// Create a SQLite session storage with custom configuration
+#[cfg(feature = "sqlite")]
+pub async fn create_sqlite_storage_with_config(config: SqliteConfig) -> Result<SqliteSessionStorage, SqliteError> {
+    SqliteSessionStorage::with_config(config).await
 }
 
 #[cfg(test)]
@@ -48,17 +66,12 @@ mod integration_tests {
         let value = storage.get_session_state(&session_id, "test").await.unwrap();
         assert_eq!(value, Some(serde_json::json!("value")));
         
-        // Stream operations
-        let stream = storage.create_stream(&session_id, "stream1".to_string()).await.unwrap();
-        assert_eq!(stream.stream_id, "stream1");
-        
         // Event operations
         let event = crate::SseEvent::new(
-            "stream1".to_string(),
             "test".to_string(), 
             serde_json::json!({"data": "test"})
         );
-        let stored = storage.store_event(&session_id, "stream1", event).await.unwrap();
+        let stored = storage.store_event(&session_id, event).await.unwrap();
         assert!(stored.id > 0);
         
         // Cleanup

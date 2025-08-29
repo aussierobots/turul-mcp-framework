@@ -150,7 +150,7 @@ struct CodeGeneratorTool {
 }
 
 impl CodeGeneratorTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         let templates = load_code_templates()
             .map_err(|e| McpError::tool_execution(&format!("Failed to load templates: {}", e)))?;
         
@@ -212,7 +212,7 @@ struct ProjectValidatorTool {
 }
 
 impl ProjectValidatorTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         let _schemas = load_validation_schemas()
             .map_err(|e| McpError::tool_execution(&format!("Failed to load validation schemas: {}", e)))?;
         
@@ -305,7 +305,7 @@ struct CodeTransformationTool {
 }
 
 impl CodeTransformationTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         let _templates = load_code_templates()
             .map_err(|e| McpError::tool_execution(&format!("Failed to load templates: {}", e)))?;
         
@@ -366,7 +366,7 @@ struct ConfigValidatorTool {
 }
 
 impl ConfigValidatorTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         let schemas = load_validation_schemas()
             .map_err(|e| McpError::tool_execution(&format!("Failed to load schemas: {}", e)))?;
         
@@ -436,7 +436,7 @@ struct TestGeneratorTool {
 }
 
 impl TestGeneratorTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         let language = self.language.as_deref().unwrap_or("rust");
         let framework = self.framework.as_deref().unwrap_or("default");
         let edge_cases = self.include_edge_cases.unwrap_or(true);

@@ -554,43 +554,32 @@ impl SearchUsersTool {
     }
 }
 
-#[async_trait]
-impl McpTool for SearchUsersTool {
+// Implement fine-grained traits for SearchUsersTool
+impl HasBaseMetadata for SearchUsersTool {
     fn name(&self) -> &str {
         "search_users"
     }
+}
 
-    fn description(&self) -> &str {
-        "Search users by name, email, or department with SQLite full-text capabilities"
+impl HasDescription for SearchUsersTool {
+    fn description(&self) -> Option<&str> {
+        Some("Search users by name, email, or department with SQLite full-text capabilities")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("query".to_string(), JsonSchema::String {
-                    description: Some("Search query for name, email, or department".to_string()),
-                    pattern: None,
-                    min_length: Some(1),
-                    max_length: None,
-                    enum_values: None,
-                }),
-                ("cursor".to_string(), JsonSchema::String {
-                    description: Some("Pagination cursor for next page".to_string()),
-                    pattern: None,
-                    min_length: None,
-                    max_length: None,
-                    enum_values: None,
-                }),
-                ("limit".to_string(), JsonSchema::Integer {
-                    description: Some("Number of results per page (1-50)".to_string()),
-                    minimum: Some(1),
-                    maximum: Some(50),
-                }),
-            ]))
-            .with_required(vec!["query".to_string()])
+impl HasInputSchema for SearchUsersTool {
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
     }
+}
 
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+impl HasOutputSchema for SearchUsersTool {}
+impl HasAnnotations for SearchUsersTool {}
+impl HasToolMeta for SearchUsersTool {}
+
+#[async_trait]
+impl McpTool for SearchUsersTool {
+    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let query = args.get("query")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("query"))?;
@@ -645,10 +634,10 @@ impl McpTool for SearchUsersTool {
                     next_cursor.unwrap_or_else(|| "None".to_string())
                 );
 
-                Ok(vec![
+                Ok(CallToolResult::success(vec![
                     ToolResult::text(result_text),
                     ToolResult::resource(response_data),
-                ])
+                ]))
             }
             Err(e) => {
                 error!("Database error in search_users: {}", e);
@@ -669,33 +658,42 @@ impl RefreshDataTool {
     }
 }
 
-#[async_trait]
-impl McpTool for RefreshDataTool {
+// Implement fine-grained traits for RefreshDataTool
+impl HasBaseMetadata for RefreshDataTool {
     fn name(&self) -> &str {
         "refresh_data"
     }
+}
 
-    fn description(&self) -> &str {
-        "Refresh database by updating user activity status and generating new data"
+impl HasDescription for RefreshDataTool {
+    fn description(&self) -> Option<&str> {
+        Some("Refresh database by updating user activity status and generating new data")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("operation".to_string(), JsonSchema::String {
-                    description: Some("Type of refresh operation".to_string()),
-                    pattern: None,
-                    min_length: None,
-                    max_length: None,
-                    enum_values: Some(vec![
+impl HasInputSchema for RefreshDataTool {
+    fn input_schema(&self) -> &ToolSchema {
+        // This needs a stored schema field - will fix differently
+        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+        INPUT_SCHEMA.get_or_init(|| {
+            ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("operation".to_string(), JsonSchema::string_enum(vec![
                         "update_activity".to_string(),
                         "full_stats".to_string(),
-                    ]),
-                }),
-            ]))
+                    ]).with_description("Type of refresh operation")),
+                ]))
+        })
     }
+}
 
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+impl HasOutputSchema for RefreshDataTool {}
+impl HasAnnotations for RefreshDataTool {}
+impl HasToolMeta for RefreshDataTool {}
+
+#[async_trait]
+impl McpTool for RefreshDataTool {
+    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let operation = args.get("operation")
             .and_then(|v| v.as_str())
             .unwrap_or("update_activity");
@@ -711,10 +709,10 @@ impl McpTool for RefreshDataTool {
                             "message": format!("Successfully updated activity status for {} users", updated_count)
                         });
 
-                        Ok(vec![
+                        Ok(CallToolResult::success(vec![
                             ToolResult::text(format!("Data refresh completed: {} users updated", updated_count)),
                             ToolResult::resource(result),
-                        ])
+                        ]))
                     }
                     Err(e) => {
                         error!("Failed to refresh user activity: {}", e);
@@ -732,10 +730,10 @@ impl McpTool for RefreshDataTool {
                             stats["departments"], stats["recent_activity"]
                         );
 
-                        Ok(vec![
+                        Ok(CallToolResult::success(vec![
                             ToolResult::text(result_text),
                             ToolResult::resource(stats),
-                        ])
+                        ]))
                     }
                     Err(e) => {
                         error!("Failed to get database stats: {}", e);

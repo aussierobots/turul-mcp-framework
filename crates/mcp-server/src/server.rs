@@ -793,6 +793,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         // Execute the tool with session context
         let args = call_params
             .arguments
+            .map(|hashmap| serde_json::to_value(hashmap).unwrap_or(serde_json::Value::Object(serde_json::Map::new())))
             .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
         match tool.call(args, mcp_session_context).await {
             Ok(response) => serde_json::to_value(response).map_err(|e| {
@@ -830,17 +831,53 @@ mod tests {
     use super::*;
     use crate::McpTool;
     use async_trait::async_trait;
-    use mcp_protocol::{ToolResult, ToolSchema};
+    use mcp_protocol::ToolSchema;
     use serde_json::Value;
-    use mcp_protocol::tools::{CallToolResult, ToolResult};
+    use mcp_protocol::tools::{
+        CallToolResult, ToolResult, HasBaseMetadata, HasDescription, 
+        HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta
+    };
+    use std::collections::HashMap;
 
-    struct TestTool;
+    struct TestTool {
+        input_schema: ToolSchema,
+    }
     
-    impl mcp_protocol::tools::ToolDefinition for TestTool {
-        fn to_tool(&self) -> mcp_protocol::Tool {
-            mcp_protocol::Tool::new("test", ToolSchema::object())
-                .with_description("Test tool")
+    impl TestTool {
+        fn new() -> Self {
+            Self {
+                input_schema: ToolSchema::object(),
+            }
         }
+    }
+    
+    impl HasBaseMetadata for TestTool {
+        fn name(&self) -> &str { "test" }
+        fn title(&self) -> Option<&str> { Some("Test Tool") }
+    }
+    
+    impl HasDescription for TestTool {
+        fn description(&self) -> Option<&str> {
+            Some("Test tool for unit tests")
+        }
+    }
+    
+    impl HasInputSchema for TestTool {
+        fn input_schema(&self) -> &ToolSchema {
+            &self.input_schema
+        }
+    }
+    
+    impl HasOutputSchema for TestTool {
+        fn output_schema(&self) -> Option<&ToolSchema> { None }
+    }
+    
+    impl HasAnnotations for TestTool {
+        fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> { None }
+    }
+    
+    impl HasToolMeta for TestTool {
+        fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
     }
 
     #[async_trait]
@@ -859,7 +896,7 @@ mod tests {
         let server = McpServer::builder()
             .name("test-server")
             .version("1.0.0")
-            .tool(TestTool)
+            .tool(TestTool::new())
             .build()
             .unwrap();
 

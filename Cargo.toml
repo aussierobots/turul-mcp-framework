@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    # Core crates
     "crates/mcp-json-rpc-server",
     "crates/mcp-protocol-2025-06-18",
     "crates/mcp-protocol",
@@ -9,55 +10,44 @@ members = [
     "crates/mcp-server",
     "crates/mcp-derive",
     "crates/mcp-client",
-    "examples/calculator-add-simple-server-derive",
-    "examples/calculator-add-simple-server",
-    "examples/calculator-add-manual-server",
-    "examples/calculator-add-function-server",
+    "crates/mcp-builders",
+    
+    # Active examples (27 total)
+    "examples/alert-system-server",
+    "examples/audit-trail-server",
+    "examples/builders-showcase",
     "examples/calculator-add-builder-server",
-    "examples/calculator-server",
-    "examples/macro-calculator",
-    "examples/comprehensive-types-example",
-    "examples/mixed-approaches-example",
-    "examples/all-tool-approaches-example",
-    "examples/comprehensive-server",
-    "examples/minimal-server",
-    "examples/manual-tools-server",
-    "examples/derive-macro-server",
-    "examples/function-macro-server",
-    "examples/notification-server",
-    "examples/stateful-server",
-    "examples/resource-server",
-    "examples/tool-macro-example",
-    "examples/enhanced-tool-macro-test",
-    "examples/resource-macro-example",
-    "examples/comprehensive-resource-example",
-    "examples/spec-compliant-server",
-    "examples/prompts-server",
-    "examples/resources-server",
+    "examples/calculator-add-function-server", 
+    "examples/calculator-add-manual-server",
+    "examples/calculator-add-simple-server-derive",
     "examples/completion-server",
-    "examples/logging-server",
+    "examples/comprehensive-server",
+    "examples/derive-macro-server",
+    "examples/dynamic-resource-server",
+    "examples/elicitation-server",
+    "examples/function-macro-server",
+    "examples/lambda-mcp-client",
+    # "examples/lambda-mcp-server", # TODO: Needs trait migration for AWS tools
+    "examples/manual-tools-server",
+    "examples/minimal-server",
+    "examples/notification-server",
     "examples/pagination-server",
     "examples/performance-testing",
-    "examples/dynamic-resource-server",
-    "examples/version-negotiation-server",
-    "examples/roots-server",
+    "examples/prompts-server",
+    "examples/resource-server",
+    "examples/resources-server",
     "examples/sampling-server",
-    "examples/elicitation-server",
-    "examples/lambda-mcp-server",
-    "examples/lambda-mcp-client",
-    "examples/calculator-struct-output-example",
-    "examples/universal-mcp-server",
-    "examples/tools-server-macro",
-    "examples/resources-server-macro",
-    "examples/completion-server-macro",
-    "examples/notifications-server-macro",
-    "examples/sampling-server-macro",
-    "examples/derive-macro-test",
-    "examples/almost-zero-config-demo",
-    "examples/simple-zero-config-demo", 
+    "examples/simple-logging-server",
+    "examples/stateful-server",
     "examples/zero-config-getting-started",
-    "examples/working-universal-demo", 
-    "tests", "crates/mcp-builders",
+    
+    # Tests
+    "tests",
+]
+
+exclude = [
+    # AWS examples for future phase
+    # "examples/lambda-mcp-server", # TODO: Needs trait migration for AWS tools  
 ]
 
 [workspace.package]
@@ -98,6 +88,7 @@ mcp-session-storage = { path = "crates/mcp-session-storage" }
 http-mcp-server = { path = "crates/http-mcp-server" }
 mcp-server = { path = "crates/mcp-server" }
 mcp-derive = { path = "crates/mcp-derive" }
+mcp-client = { path = "crates/mcp-client" }
 
 # Additional dependencies for examples and tests
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

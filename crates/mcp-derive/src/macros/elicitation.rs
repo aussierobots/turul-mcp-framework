@@ -40,7 +40,7 @@ pub fn elicitation_declarative_impl_inner(input: ElicitationMacroInput) -> proc_
 }
 
 /// Parse input for the elicitation!{} macro
-struct ElicitationMacroInput {
+pub struct ElicitationMacroInput {
     name: String,
     message: String,
     fields: Vec<ElicitationField>,

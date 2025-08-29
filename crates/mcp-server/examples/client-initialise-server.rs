@@ -24,13 +24,13 @@ use serde_json::Value;
 use std::collections::HashMap;
 use tracing::info;
 
-use mcp_protocol::schema::JsonSchema;
 use mcp_protocol::tools::ToolResult;
 use mcp_protocol::{CallToolResult, McpResult};
 use mcp_protocol_2025_06_18::tools::{
     HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasToolMeta,
     ToolAnnotations, ToolSchema,
 };
+use mcp_protocol::JsonSchema;
 use mcp_server::{McpServer, McpTool, SessionContext};
 
 /// EchoSSE Tool for testing server-side logging and SSE streaming

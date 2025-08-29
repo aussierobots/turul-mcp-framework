@@ -8,11 +8,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use clap::{Parser, Subcommand};
-use reqwest::Client;
+use mcp_client::{McpClient, McpClientBuilder};
 use serde_json::{json, Value};
 use tokio::time::sleep;
 use tracing::{info, warn};
-use uuid::Uuid;
 use rand::Rng;
 
 #[derive(Parser)]

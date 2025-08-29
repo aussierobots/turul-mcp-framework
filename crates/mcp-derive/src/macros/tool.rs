@@ -77,7 +77,7 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         };
         
         schema_properties.push(quote! {
-            (#param_name_str.to_string(), #base_schema)
+            (#param_name_str.to_string(), serde_json::to_value(&#base_schema).unwrap_or_else(|_| serde_json::json!({"type": "string"})))
         });
         
         // Only add to required fields if not optional
@@ -284,7 +284,7 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                         Ok(result) => {
                             Ok(mcp_protocol::tools::CallToolResult::success(vec![mcp_protocol::ToolResult::text(result)]))
                         }
-                        Err(e) => Err(mcp_protocol::McpError::tool_execution(e.to_string()))
+                        Err(e) => Err(mcp_protocol::McpError::tool_execution(&e.to_string()))
                     }
                 }
             }

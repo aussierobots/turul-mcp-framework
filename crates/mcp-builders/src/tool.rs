@@ -62,15 +62,11 @@ impl ToolBuilder {
     pub fn param<T: Into<String>>(mut self, name: T, schema: JsonSchema) -> Self {
         let param_name = name.into();
         if let Some(properties) = &mut self.input_schema.properties {
-            // Convert JsonSchema to Value for storage
-            let schema_value = serde_json::to_value(&schema)
-                .unwrap_or_else(|_| serde_json::json!({"type": "string"}));
-            properties.insert(param_name, schema_value);
+            // Store JsonSchema directly
+            properties.insert(param_name, schema);
         } else {
-            // Convert JsonSchema to Value for storage
-            let schema_value = serde_json::to_value(&schema)
-                .unwrap_or_else(|_| serde_json::json!({"type": "string"}));
-            self.input_schema.properties = Some(HashMap::from([(param_name, schema_value)]));
+            // Store JsonSchema directly
+            self.input_schema.properties = Some(HashMap::from([(param_name, schema)]));
         }
         self
     }
@@ -118,7 +114,7 @@ impl ToolBuilder {
         self.output_schema = Some(
             ToolSchema::object()
                 .with_properties(HashMap::from([
-                    ("result".to_string(), serde_json::json!({"type": "number"}))
+                    ("result".to_string(), JsonSchema::number())
                 ]))
                 .with_required(vec!["result".to_string()])
         );
@@ -130,7 +126,7 @@ impl ToolBuilder {
         self.output_schema = Some(
             ToolSchema::object()
                 .with_properties(HashMap::from([
-                    ("result".to_string(), serde_json::json!({"type": "string"}))
+                    ("result".to_string(), JsonSchema::string())
                 ]))
                 .with_required(vec!["result".to_string()])
         );

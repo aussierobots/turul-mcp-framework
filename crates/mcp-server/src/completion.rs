@@ -42,14 +42,14 @@ pub trait McpCompletion: CompletionDefinition + Send + Sync {
         use mcp_protocol::completion::CompletionReference;
         
         // Basic validation - ensure reference and argument are present
-        match &request.params.r#ref {
-            CompletionReference::Resource { uri } => {
-                if uri.is_empty() {
-                    return Err(mcp_protocol::McpError::validation("Resource URI cannot be empty"));
+        match &request.params.reference {
+            CompletionReference::ResourceTemplate(template_ref) => {
+                if template_ref.uri.is_empty() {
+                    return Err(mcp_protocol::McpError::validation("Resource template URI cannot be empty"));
                 }
             }
-            CompletionReference::Prompt { name } => {
-                if name.is_empty() {
+            CompletionReference::Prompt(prompt_ref) => {
+                if prompt_ref.name.is_empty() {
                     return Err(mcp_protocol::McpError::validation("Prompt name cannot be empty"));
                 }
             }

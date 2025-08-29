@@ -7,10 +7,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use mcp_derive::McpTool;
-use mcp_server::{McpServer, SessionContext, McpResult};
+use mcp_server::{McpServer, McpResult};
 use mcp_protocol::McpError;
 use serde_json::json;
-use async_trait::async_trait;
 use tokio::time::sleep;
 use tracing::info;
 use rand::Rng;
@@ -28,7 +27,7 @@ struct FastComputeTool {
 }
 
 impl FastComputeTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         let start = Instant::now();
         REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         
@@ -51,7 +50,7 @@ struct CpuIntensiveTool {
 }
 
 impl CpuIntensiveTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         let start = Instant::now();
         REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         
@@ -79,7 +78,7 @@ struct MemoryAllocateTool {
 }
 
 impl MemoryAllocateTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         let start = Instant::now();
         REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         
@@ -111,7 +110,7 @@ struct AsyncIoTool {
 }
 
 impl AsyncIoTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         let start = Instant::now();
         REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         
@@ -127,62 +126,27 @@ impl AsyncIoTool {
 
 /// Session-aware counter tool
 #[derive(Clone)]
+#[derive(mcp_derive::McpTool)]
+#[tool(name = "session_counter", description = "Session-aware counter for session testing")]
 struct SessionCounterTool {
+    #[param(description = "Increment amount")]
     increment: i64,
 }
-
-#[async_trait]
-impl mcp_server::McpTool for SessionCounterTool {
-    fn name(&self) -> &str {
-        "session_counter"
-    }
     
-    fn description(&self) -> &str {
-        "Session-aware counter for session testing"
-    }
-    
-    fn input_schema(&self) -> mcp_protocol::ToolSchema {
-        use mcp_protocol::schema::JsonSchema;
-        use std::collections::HashMap;
-        
-        mcp_protocol::ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("increment".to_string(), JsonSchema::integer().with_description("Increment amount")),
-            ]))
-            .with_required(vec!["increment".to_string()])
-    }
-    
-    async fn call(&self, args: serde_json::Value, session: Option<SessionContext>) -> McpResult<Vec<mcp_protocol::ToolResult>> {
-        let increment = args["increment"].as_i64().ok_or_else(|| McpError::missing_param("increment"))?;
-        let tool = SessionCounterTool { increment };
-        let result = tool.execute(session).await?;
-        Ok(vec![mcp_protocol::ToolResult::text(result)])
-    }
-}
-
 impl SessionCounterTool {
-    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<mcp_protocol::tools::CallToolResult> {
         let start = Instant::now();
         REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         
-        if let Some(session) = session {
-            let current: i64 = (session.get_state)("counter")
-                .and_then(|v| v.as_i64())
-                .unwrap_or(0);
-            
-            let new_value = current + self.increment;
-            (session.set_state)("counter", json!(new_value));
-            
-            let elapsed = start.elapsed().as_micros() as u64;
-            TOTAL_PROCESSING_TIME.fetch_add(elapsed, Ordering::Relaxed);
-            
-            Ok(format!("Session counter: {} (incremented by {})", new_value, self.increment))
-        } else {
-            let elapsed = start.elapsed().as_micros() as u64;
-            TOTAL_PROCESSING_TIME.fetch_add(elapsed, Ordering::Relaxed);
-            
-            Ok(format!("No session - standalone increment: {}", self.increment))
-        }
+        // For derive macro pattern, session handling happens in the framework
+        let result = format!("Standalone increment: {}", self.increment);
+        
+        let elapsed = start.elapsed().as_micros() as u64;
+        TOTAL_PROCESSING_TIME.fetch_add(elapsed, Ordering::Relaxed);
+        
+        Ok(mcp_protocol::tools::CallToolResult::success(vec![
+            mcp_protocol::ToolResult::text(result)
+        ]))
     }
 }
 
@@ -195,7 +159,7 @@ struct PerfStatsTool {
 }
 
 impl PerfStatsTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         let total_requests = REQUEST_COUNTER.load(Ordering::Relaxed);
         let total_time_micros = TOTAL_PROCESSING_TIME.load(Ordering::Relaxed);
         
@@ -225,7 +189,7 @@ struct ErrorSimulationTool {
 }
 
 impl ErrorSimulationTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         
         match self.error_type.as_str() {

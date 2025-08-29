@@ -499,7 +499,7 @@ impl Default for ServerNotificationTool {
 }
 
 impl ServerNotificationTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         // Validate component is not empty
         if self.component.trim().is_empty() {
             return Err(mcp_protocol::McpError::missing_param("component"));
@@ -628,7 +628,7 @@ impl Default for ProgressUpdateTool {
 }
 
 impl ProgressUpdateTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         // Validate tool_name is not empty
         if self.tool_name.trim().is_empty() {
             return Err(mcp_protocol::McpError::missing_param("tool_name"));

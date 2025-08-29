@@ -36,12 +36,12 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             
             // Implement fine-grained traits
             impl mcp_protocol::resources::HasResourceMetadata for #resource_name_ident {
-                fn uri(&self) -> &str {
-                    #uri
-                }
-                
                 fn name(&self) -> &str {
                     #name
+                }
+                
+                fn title(&self) -> Option<&str> {
+                    None
                 }
             }
             
@@ -51,18 +51,26 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 }
             }
             
-            impl mcp_protocol::resources::HasResourceContent for #resource_name_ident {
+            impl mcp_protocol::resources::HasResourceUri for #resource_name_ident {
+                fn uri(&self) -> &str {
+                    #uri
+                }
+            }
+            
+            impl mcp_protocol::resources::HasResourceMimeType for #resource_name_ident {
                 fn mime_type(&self) -> Option<&str> {
                     None
                 }
             }
             
-            impl mcp_protocol::resources::HasResourceAccess for #resource_name_ident {
-                // Default implementations
+            impl mcp_protocol::resources::HasResourceSize for #resource_name_ident {
+                fn size(&self) -> Option<u64> {
+                    None
+                }
             }
             
             impl mcp_protocol::resources::HasResourceAnnotations for #resource_name_ident {
-                fn annotations(&self) -> Option<&serde_json::Value> {
+                fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> {
                     None
                 }
             }

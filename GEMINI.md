@@ -6,12 +6,15 @@ This project provides a Rust framework for building Model Context Protocol (MCP)
 
 The project is a Rust workspace with the following key crates:
 
-*   **`json-rpc-server`**: A transport-agnostic JSON-RPC 2.0 server implementation.
+*   **`mcp-json-rpc-server`**: A transport-agnostic JSON-RPC 2.0 server implementation.
 *   **`mcp-protocol-2025-06-18`**: An implementation of the MCP 2025-06-18 specification.
 *   **`mcp-protocol`**: A crate that aliases the current MCP version.
 *   **`http-mcp-server`**: An HTTP transport layer with CORS and Server-Sent Events (SSE) support.
 *   **`mcp-server`**: A high-level framework for building MCP servers.
 *   **`mcp-derive`**: Procedural and declarative macros for simplified development.
+*   **`mcp-client`**: A client library for interacting with MCP servers.
+*   **`mcp-builders`**: A collection of builders for programmatically constructing MCP messages and requests.
+*   **`mcp-session-storage`**: A crate that provides abstractions for session storage.
 
 ## Specification Compliance
 
@@ -26,7 +29,6 @@ While the project implements a significant portion of the MCP 2025-06-18 specifi
 ### Partially Implemented or Missing Features
 - **⚠️ Resources**: The `resources` capability is only partially implemented. While the protocol crate has been updated to include the `subscribe` capability, the `mcp-server` crate does not yet support it.
 - **⚠️ Dynamic Capabilities**: The framework does not support dynamic capabilities, where the server's capabilities can change at runtime.
-- **⚠️ `initialize` Request Handling**: The handling of the `initialize` request is not explicitly defined in the `mcp-server` framework, which is a critical part of the MCP specification.
 
 ## Architecture Review
 
@@ -36,7 +38,7 @@ The framework is generally well-structured, with a clear separation of concerns 
 *   **Lack of Clear Separation between Core and Optional Features:** The builder mixes core and optional MCP features, making it difficult to create minimal, compliant servers.
 *   **Incomplete `resources` Implementation:** The `resources` feature is not fully implemented, lacking support for subscriptions and real-time updates.
 *   **No Support for Dynamic Capabilities:** The framework does not support dynamic capabilities, which is a key feature of the MCP specification.
-*   **Missing `initialize` Request Handler:** The `mcp-server` framework lacks a dedicated handler for the `initialize` request.
+*   **`initialize` Request Handler:** The `mcp-server` framework has a dedicated handler for the `initialize` request, `SessionAwareInitializeHandler`.
 
 ## Recommendations
 
@@ -46,7 +48,6 @@ To improve the framework and move closer to full compliance with the MCP 2025-06
 *   **Separate Core and Optional Features:** Refactor the builder to clearly distinguish between core and optional features.
 *   **Complete the `resources` Implementation:** Add support for resource subscriptions and real-time updates to the `mcp-server` crate.
 *   **Implement Dynamic Capabilities:** Allow the server's capabilities to be updated at runtime.
-*   **Add an `initialize` Request Handler:** Implement a dedicated handler for the `initialize` request in the `mcp-server` framework.
 
 ## TypeScript Schema Compliance Review
 

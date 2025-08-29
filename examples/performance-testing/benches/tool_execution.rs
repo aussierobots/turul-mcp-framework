@@ -19,7 +19,7 @@ struct BenchmarkComputeTool {
 }
 
 impl BenchmarkComputeTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         let result = (0..100).fold(self.input, |acc, i| acc.wrapping_mul(i + 1));
         Ok(format!("Result: {}", result))
     }
@@ -34,7 +34,7 @@ struct BenchmarkCpuTool {
 }
 
 impl BenchmarkCpuTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
         let mut result = 0u64;
         for i in 0..self.size {
             for j in 0..100 {

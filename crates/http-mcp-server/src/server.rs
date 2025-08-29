@@ -224,7 +224,13 @@ impl<S: SessionStorage + 'static> HttpMcpServer<S> {
                 });
 
                 if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
-                    error!("Error serving connection: {}", err);
+                    // Filter out common client disconnection errors that aren't actual problems
+                    let err_str = err.to_string();
+                    if err_str.contains("connection closed before message completed") {
+                        debug!("Client disconnected (normal): {}", err);
+                    } else {
+                        error!("Error serving connection: {}", err);
+                    }
                 }
             });
         }

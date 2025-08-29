@@ -6,7 +6,7 @@
 use serde::{Serialize, Deserialize};
 use mcp_derive::McpResource;
 use mcp_server::{McpServer, McpResource};
-// use mcp_protocol::resources::ResourceContent; // TODO: Use for advanced resource content
+use mcp_protocol::resources::HasResourceUri;
 
 /// Simple configuration file resource
 #[derive(McpResource, Serialize, Deserialize, Clone)]

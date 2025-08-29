@@ -8,11 +8,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use clap::{Parser, Subcommand};
-use reqwest::Client;
+use mcp_client::{McpClient, McpClientBuilder};
 use serde_json::{json, Value};
 use tokio::time::sleep;
 use tracing::{info, warn};
-use uuid::Uuid;
+use std::sync::Arc;
 
 /// Custom allocator that tracks memory usage
 struct TrackingAllocator {
@@ -208,34 +208,20 @@ fn get_rss_memory() -> Option<usize> {
 }
 
 async fn send_memory_request(
-    client: &Client,
-    url: &str,
+    client: &McpClient,
     tool_name: &str,
     params: Value,
 ) -> Result<Value, Box<dyn std::error::Error + Send + Sync>> {
-    let request_body = json!({
-        "jsonrpc": "2.0",
-        "method": "tools/call",
-        "params": {
-            "name": tool_name,
-            "arguments": params
-        },
-        "id": Uuid::new_v4().to_string()
-    });
-    
-    let response = client
-        .post(url)
-        .json(&request_body)
-        .send()
+    let results = client
+        .call_tool(tool_name, params)
         .await?;
     
-    let response_json: Value = response.json().await?;
-    Ok(response_json)
+    // Convert tool results to simple value for compatibility
+    Ok(serde_json::to_value(results)?)
 }
 
 async fn baseline_memory_test(
-    client: &Client,
-    url: &str,
+    client: &McpClient,
     request_count: usize,
 ) -> anyhow::Result<()> {
     info!("Starting baseline memory measurement with {} requests", request_count);
@@ -246,7 +232,7 @@ async fn baseline_memory_test(
     // Warm up
     for _ in 0..10 {
         let params = json!({"input": 42});
-        let _ = send_memory_request(client, url, "fast_compute", params).await;
+        let _ = send_memory_request(client, "fast_compute", params).await;
     }
     
     let warmup = MemorySnapshot::new();
@@ -255,7 +241,7 @@ async fn baseline_memory_test(
     // Main test
     for i in 0..request_count {
         let params = json!({"input": i as i64});
-        match send_memory_request(client, url, "fast_compute", params).await {
+        match send_memory_request(client, "fast_compute", params).await {
             Ok(_) => {},
             Err(e) => warn!("Request {} failed: {}", i, e),
         }
@@ -284,8 +270,7 @@ async fn baseline_memory_test(
 }
 
 async fn leak_detection_test(
-    client: &Client,
-    url: &str,
+    client: &McpClient,
     iterations: usize,
 ) -> anyhow::Result<()> {
     info!("Starting memory leak detection with {} iterations", iterations);
@@ -303,7 +288,7 @@ async fn leak_detection_test(
         ];
         
         for (tool_name, params) in &operations {
-            match send_memory_request(client, url, tool_name, params.clone()).await {
+            match send_memory_request(client, tool_name, params.clone()).await {
                 Ok(_) => {},
                 Err(e) => warn!("Operation {} failed: {}", tool_name, e),
             }
@@ -371,8 +356,7 @@ async fn leak_detection_test(
 }
 
 async fn growth_analysis_test(
-    client: &Client,
-    url: &str,
+    client: Arc<McpClient>,
     measurement_interval: Duration,
     total_duration: Duration,
 ) -> anyhow::Result<()> {
@@ -385,7 +369,6 @@ async fn growth_analysis_test(
     // Background load generator
     let load_handle = {
         let client = client.clone();
-        let url = url.to_string();
         tokio::spawn(async move {
             let mut counter = 0;
             loop {
@@ -398,7 +381,7 @@ async fn growth_analysis_test(
                         _ => json!({}),
                     };
                     
-                    let _ = send_memory_request(&client, &url, tool, params).await;
+                    let _ = send_memory_request(&client, tool, params).await;
                     counter += 1;
                     
                     if start_time.elapsed() > total_duration {
@@ -490,9 +473,14 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    let client = Client::builder()
-        .timeout(Duration::from_secs(30))
-        .build()?;
+    
+    // Create MCP client and connect
+    let client = McpClientBuilder::new()
+        .with_url(&cli.server_url)?
+        .build();
+    
+    client.connect().await?;
+    let client = Arc::new(client);
 
     info!("Starting memory benchmark against: {}", cli.server_url);
     
@@ -503,15 +491,15 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::Baseline { request_count } => {
-            baseline_memory_test(&client, &cli.server_url, request_count).await?;
+            baseline_memory_test(&client, request_count).await?;
         }
         Commands::LeakDetection { iterations } => {
-            leak_detection_test(&client, &cli.server_url, iterations).await?;
+            leak_detection_test(&client, iterations).await?;
         }
         Commands::GrowthAnalysis { measurement_interval_seconds } => {
             let measurement_interval = Duration::from_secs(measurement_interval_seconds);
             let total_duration = Duration::from_secs(cli.duration_seconds);
-            growth_analysis_test(&client, &cli.server_url, measurement_interval, total_duration).await?;
+            growth_analysis_test(client.clone(), measurement_interval, total_duration).await?;
         }
         Commands::AllocationPatterns { operations: _ } => {
             info!("Allocation pattern analysis not yet implemented");
