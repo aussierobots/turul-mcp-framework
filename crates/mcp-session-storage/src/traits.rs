@@ -213,6 +213,119 @@ pub trait SessionStorage: Send + Sync {
 /// Result type for session storage operations
 pub type SessionResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+/// Unified error type for all session storage backends
+#[derive(Debug, thiserror::Error)]
+pub enum SessionStorageError {
+    #[error("Session not found: {0}")]
+    SessionNotFound(String),
+    
+    #[error("Maximum sessions limit reached: {0}")]
+    MaxSessionsReached(usize),
+    
+    #[error("Maximum events limit reached: {0}")]
+    MaxEventsReached(usize),
+    
+    #[error("Database error: {0}")]
+    DatabaseError(String),
+    
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
+    
+    #[error("Connection error: {0}")]
+    ConnectionError(String),
+    
+    #[error("Migration error: {0}")]
+    MigrationError(String),
+    
+    #[error("AWS SDK error: {0}")]
+    AwsError(String),
+    
+    #[error("AWS configuration error: {0}")]
+    AwsConfigurationError(String),
+    
+    #[error("DynamoDB table does not exist: {0}")]
+    TableNotFound(String),
+    
+    #[error("Invalid session data: {0}")]
+    InvalidData(String),
+    
+    #[error("Concurrent modification error: {0}")]
+    ConcurrentModification(String),
+    
+    #[error("Generic storage error: {0}")]
+    Generic(String),
+}
+
+// Direct conversions from common error types
+impl From<serde_json::Error> for SessionStorageError {
+    fn from(err: serde_json::Error) -> Self {
+        SessionStorageError::SerializationError(err.to_string())
+    }
+}
+
+#[cfg(feature = "sqlite")]
+impl From<sqlx::Error> for SessionStorageError {
+    fn from(err: sqlx::Error) -> Self {
+        SessionStorageError::DatabaseError(err.to_string())
+    }
+}
+
+// Conversion implementations for backend-specific errors
+impl From<crate::in_memory::InMemoryError> for SessionStorageError {
+    fn from(err: crate::in_memory::InMemoryError) -> Self {
+        match err {
+            crate::in_memory::InMemoryError::SessionNotFound(id) => SessionStorageError::SessionNotFound(id),
+            crate::in_memory::InMemoryError::MaxSessionsReached(limit) => SessionStorageError::MaxSessionsReached(limit),
+            crate::in_memory::InMemoryError::MaxEventsReached(limit) => SessionStorageError::MaxEventsReached(limit),
+            crate::in_memory::InMemoryError::SerializationError(e) => SessionStorageError::SerializationError(e.to_string()),
+        }
+    }
+}
+
+#[cfg(feature = "sqlite")]
+impl From<crate::sqlite::SqliteError> for SessionStorageError {
+    fn from(err: crate::sqlite::SqliteError) -> Self {
+        match err {
+            crate::sqlite::SqliteError::Database(e) => SessionStorageError::DatabaseError(e.to_string()),
+            crate::sqlite::SqliteError::Serialization(e) => SessionStorageError::SerializationError(e.to_string()),
+            crate::sqlite::SqliteError::SessionNotFound(id) => SessionStorageError::SessionNotFound(id),
+            crate::sqlite::SqliteError::Connection(e) => SessionStorageError::ConnectionError(e),
+            crate::sqlite::SqliteError::Migration(e) => SessionStorageError::MigrationError(e),
+        }
+    }
+}
+
+#[cfg(feature = "postgres")]
+impl From<crate::postgres::PostgresError> for SessionStorageError {
+    fn from(err: crate::postgres::PostgresError) -> Self {
+        match err {
+            crate::postgres::PostgresError::Database(e) => SessionStorageError::DatabaseError(e.to_string()),
+            crate::postgres::PostgresError::Serialization(e) => SessionStorageError::SerializationError(e.to_string()),
+            crate::postgres::PostgresError::SessionNotFound(id) => SessionStorageError::SessionNotFound(id),
+            crate::postgres::PostgresError::Connection(e) => SessionStorageError::ConnectionError(e),
+            crate::postgres::PostgresError::Migration(e) => SessionStorageError::MigrationError(e),
+            crate::postgres::PostgresError::ConcurrentModification(e) => SessionStorageError::ConcurrentModification(e),
+        }
+    }
+}
+
+#[cfg(feature = "dynamodb")]
+impl From<crate::dynamodb::DynamoDbError> for SessionStorageError {
+    fn from(err: crate::dynamodb::DynamoDbError) -> Self {
+        match err {
+            crate::dynamodb::DynamoDbError::AwsError(e) => SessionStorageError::AwsError(e),
+            crate::dynamodb::DynamoDbError::SerializationError(e) => SessionStorageError::SerializationError(e.to_string()),
+            crate::dynamodb::DynamoDbError::SessionNotFound(id) => SessionStorageError::SessionNotFound(id),
+            crate::dynamodb::DynamoDbError::InvalidSessionData(e) => SessionStorageError::InvalidData(e),
+            crate::dynamodb::DynamoDbError::TableNotFound(table) => SessionStorageError::TableNotFound(table),
+            crate::dynamodb::DynamoDbError::ConfigError(e) => SessionStorageError::AwsConfigurationError(e),
+        }
+    }
+}
+
+/// Type alias for boxed session storage trait object with unified error type
+pub type BoxedSessionStorage = dyn SessionStorage<Error = SessionStorageError>;
+
 /// Convenience trait for creating session storage instances
 pub trait SessionStorageBuilder {
     type Storage: SessionStorage;

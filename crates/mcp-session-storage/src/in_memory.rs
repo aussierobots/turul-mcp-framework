@@ -16,7 +16,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 use mcp_protocol::ServerCapabilities;
-use crate::{SessionStorage, SessionInfo, SseEvent};
+use crate::{SessionStorage, SessionInfo, SseEvent, SessionStorageError};
 
 /// In-memory storage for sessions and events (SSE compliant)
 #[derive(Debug, Clone)]
@@ -126,7 +126,7 @@ pub struct InMemoryStats {
 
 #[async_trait]
 impl SessionStorage for InMemorySessionStorage {
-    type Error = InMemoryError;
+    type Error = SessionStorageError;
 
     // ============================================================================
     // Session Management
@@ -136,7 +136,7 @@ impl SessionStorage for InMemorySessionStorage {
         let mut sessions = self.sessions.write().await;
         
         if sessions.len() >= self.config.max_sessions {
-            return Err(InMemoryError::MaxSessionsReached(self.config.max_sessions));
+            return Err(SessionStorageError::MaxSessionsReached(self.config.max_sessions));
         }
 
         let mut session = SessionInfo::new();
@@ -153,7 +153,7 @@ impl SessionStorage for InMemorySessionStorage {
         let mut sessions = self.sessions.write().await;
         
         if sessions.len() >= self.config.max_sessions {
-            return Err(InMemoryError::MaxSessionsReached(self.config.max_sessions));
+            return Err(SessionStorageError::MaxSessionsReached(self.config.max_sessions));
         }
 
         let mut session = SessionInfo::with_id(session_id.clone());
@@ -184,7 +184,7 @@ impl SessionStorage for InMemorySessionStorage {
             session.touch(); // Update last activity
             Ok(())
         } else {
-            Err(InMemoryError::SessionNotFound(session_id.to_string()))
+            Err(SessionStorageError::SessionNotFound(session_id.to_string()))
         }
     }
 
@@ -194,7 +194,7 @@ impl SessionStorage for InMemorySessionStorage {
         if let Some(session) = sessions.get(session_id) {
             Ok(session.state.get(key).cloned())
         } else {
-            Err(InMemoryError::SessionNotFound(session_id.to_string()))
+            Err(SessionStorageError::SessionNotFound(session_id.to_string()))
         }
     }
 
@@ -206,7 +206,7 @@ impl SessionStorage for InMemorySessionStorage {
             session.touch(); // Update last activity
             Ok(removed)
         } else {
-            Err(InMemoryError::SessionNotFound(session_id.to_string()))
+            Err(SessionStorageError::SessionNotFound(session_id.to_string()))
         }
     }
 
@@ -247,7 +247,7 @@ impl SessionStorage for InMemorySessionStorage {
         
         // Check event limit
         if event_list.len() >= self.config.max_events_per_session {
-            return Err(InMemoryError::MaxEventsReached(self.config.max_events_per_session));
+            return Err(SessionStorageError::MaxEventsReached(self.config.max_events_per_session));
         }
         
         event_list.push(event.clone());

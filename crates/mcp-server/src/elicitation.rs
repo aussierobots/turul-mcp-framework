@@ -70,9 +70,9 @@ mod tests {
     use super::*;
     use mcp_protocol::elicitation::{
         HasElicitationMetadata, HasElicitationSchema, HasElicitationHandling,
-        ElicitationSchema, PrimitiveSchemaDefinition, ElicitAction
+        ElicitationSchema, PrimitiveSchemaDefinition
     };
-    use serde_json::{json, Value};
+    use serde_json::json;
     use std::collections::HashMap;
 
     struct TestElicitation {
@@ -99,7 +99,7 @@ mod tests {
 
     #[async_trait]
     impl McpElicitation for TestElicitation {
-        async fn elicit(&self, request: ElicitCreateRequest) -> McpResult<ElicitResult> {
+        async fn elicit(&self, _request: ElicitCreateRequest) -> McpResult<ElicitResult> {
             // Simulate user input collection (MCP spec compliant)
             let mut content = HashMap::new();
             content.insert("name".to_string(), json!("Test User"));

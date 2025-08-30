@@ -1,0 +1,32 @@
+[package]
+name = "simple-postgres-session"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
+
+[[bin]]
+name = "postgres-setup"
+path = "src/bin/postgres-setup.rs"
+
+[[bin]]
+name = "postgres-teardown"
+path = "src/bin/postgres-teardown.rs"
+
+[dependencies]
+mcp-server = { path = "../../crates/mcp-server", features = ["http", "sse"] }
+mcp-session-storage = { path = "../../crates/mcp-session-storage", features = ["postgres"] }
+mcp-derive = { path = "../../crates/mcp-derive" }
+mcp-protocol = { path = "../../crates/mcp-protocol" }
+
+tokio = { version = "1.0", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+async-trait = "0.1"
+
+[features]
+default = []

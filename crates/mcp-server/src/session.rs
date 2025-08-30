@@ -55,29 +55,23 @@ impl SessionContext {
             Arc::new(move |event: SessionEvent| {
                 debug!("📨 SessionContext.send_notification() called for session {}: {:?}", session_id, event);
                 
-                // NEW: Try to use broadcaster if available
+                // Try to use broadcaster if available
                 if let Some(broadcaster_any) = &broadcaster {
                     debug!("✅ NotificationBroadcaster available for session: {}", session_id);
                     
                     // Attempt to extract and use the actual broadcaster
-                    // Since we know the type is StreamManagerNotificationBroadcaster, we can try to downcast
                     match event {
                         SessionEvent::Notification(json_value) => {
                             debug!("🔧 Attempting to send notification via StreamManagerNotificationBroadcaster");
                             debug!("📦 Notification JSON: {}", json_value);
                             
                             // Since we can't call async methods from sync closure, spawn a task
-                            // This is a bridge pattern to convert sync to async
                             let session_id_clone = session_id.clone();
                             let json_value_clone = json_value.clone();
                             let _broadcaster_clone = broadcaster_any.clone();
                             
                             tokio::spawn(async move {
                                 debug!("🚀 Async task: Processing notification for session {}", session_id_clone);
-                                
-                                // Attempt to downcast to the actual NotificationBroadcaster
-                                // We need to convert Arc<dyn Any> back to the original SharedNotificationBroadcaster type
-                                debug!("📡 Attempting to downcast broadcaster for session {}", session_id_clone);
                                 
                                 // Parse the JSON notification and attempt to send it
                                 match parse_and_send_notification_with_broadcaster(&session_id_clone, &json_value_clone, &_broadcaster_clone).await {
@@ -108,6 +102,7 @@ impl SessionContext {
             broadcaster,
         }
     }
+
 
     /// Check if this context has a broadcaster available
     pub fn has_broadcaster(&self) -> bool {
@@ -614,7 +609,9 @@ pub enum SessionError {
 
 /// Global session manager for MCP servers
 pub struct SessionManager {
-    /// Active sessions
+    /// Session storage backend
+    storage: Arc<mcp_session_storage::BoxedSessionStorage>,
+    /// Active sessions (cache for performance)
     sessions: RwLock<HashMap<String, McpSession>>,
     /// Default session expiry time
     session_timeout: Duration,
@@ -627,24 +624,56 @@ pub struct SessionManager {
 }
 
 impl SessionManager {
-    /// Create a new session manager
+    /// Create a new session manager with InMemory storage
     pub fn new(default_capabilities: ServerCapabilities) -> Self {
-        Self::with_timeouts(
+        let storage: Arc<mcp_session_storage::BoxedSessionStorage> = Arc::new(mcp_session_storage::InMemorySessionStorage::new());
+        Self::with_storage_and_timeouts(
+            storage,
             default_capabilities,
             Duration::from_secs(30 * 60), // 30 minutes
             Duration::from_secs(60),      // 1 minute
         )
     }
     
-    /// Create a new session manager with custom timeouts
+    /// Create a new session manager with custom timeouts and InMemory storage
     pub fn with_timeouts(
         default_capabilities: ServerCapabilities, 
+        session_timeout: Duration,
+        cleanup_interval: Duration,
+    ) -> Self {
+        let storage: Arc<mcp_session_storage::BoxedSessionStorage> = Arc::new(mcp_session_storage::InMemorySessionStorage::new());
+        Self::with_storage_and_timeouts(
+            storage,
+            default_capabilities,
+            session_timeout,
+            cleanup_interval,
+        )
+    }
+
+    /// Create a new session manager with specific storage backend
+    pub fn with_storage(
+        storage: Arc<mcp_session_storage::BoxedSessionStorage>,
+        default_capabilities: ServerCapabilities,
+    ) -> Self {
+        Self::with_storage_and_timeouts(
+            storage,
+            default_capabilities,
+            Duration::from_secs(30 * 60), // 30 minutes
+            Duration::from_secs(60),      // 1 minute
+        )
+    }
+
+    /// Create a new session manager with custom storage and timeouts
+    pub fn with_storage_and_timeouts(
+        storage: Arc<mcp_session_storage::BoxedSessionStorage>,
+        default_capabilities: ServerCapabilities,
         session_timeout: Duration,
         cleanup_interval: Duration,
     ) -> Self {
         let (global_event_sender, _) = broadcast::channel(1000);
         
         Self {
+            storage,
             sessions: RwLock::new(HashMap::new()),
             session_timeout,
             cleanup_interval,
@@ -659,6 +688,17 @@ impl SessionManager {
         let session_id = session.id.clone();
 
         debug!("Creating new session: {}", session_id);
+        
+        // Store in pluggable storage backend
+        match self.storage.create_session_with_id(
+            session_id.clone(), 
+            self.default_capabilities.clone()
+        ).await {
+            Ok(_) => debug!("Session {} created in storage backend", session_id),
+            Err(e) => error!("Failed to create session {} in storage: {}", session_id, e),
+        }
+        
+        // Also store in memory cache for performance
         self.sessions.write().await.insert(session_id.clone(), session);
         session_id
     }
@@ -669,6 +709,17 @@ impl SessionManager {
         session.id = session_id.clone();
 
         debug!("Creating session with provided ID: {}", session_id);
+        
+        // Store in pluggable storage backend
+        match self.storage.create_session_with_id(
+            session_id.clone(), 
+            self.default_capabilities.clone()
+        ).await {
+            Ok(_) => debug!("Session {} created in storage backend", session_id),
+            Err(e) => error!("Failed to create session {} in storage: {}", session_id, e),
+        }
+        
+        // Also store in memory cache for performance
         self.sessions.write().await.insert(session_id.clone(), session);
         session_id
     }
@@ -695,6 +746,18 @@ impl SessionManager {
         client_info: Implementation,
         client_capabilities: ClientCapabilities,
     ) -> Result<(), SessionError> {
+        // Update storage backend
+        if let Ok(Some(mut session_info)) = self.storage.get_session(session_id).await {
+            session_info.client_capabilities = Some(client_capabilities.clone());
+            session_info.is_initialized = true;
+            session_info.touch();
+            
+            if let Err(e) = self.storage.update_session(session_info).await {
+                error!("Failed to update session in storage: {}", e);
+            }
+        }
+        
+        // Update in-memory cache
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(session_id) {
             session.initialize(client_info, client_capabilities);
@@ -713,6 +776,19 @@ impl SessionManager {
         client_capabilities: ClientCapabilities,
         mcp_version: McpVersion,
     ) -> Result<(), SessionError> {
+        // Update storage backend
+        if let Ok(Some(mut session_info)) = self.storage.get_session(session_id).await {
+            session_info.client_capabilities = Some(client_capabilities.clone());
+            session_info.is_initialized = true;
+            session_info.touch();
+            // Note: mcp_version not stored in SessionInfo, only in memory cache
+            
+            if let Err(e) = self.storage.update_session(session_info).await {
+                error!("Failed to update session in storage: {}", e);
+            }
+        }
+        
+        // Update in-memory cache
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(session_id) {
             session.initialize_with_version(client_info, client_capabilities, mcp_version);
@@ -725,21 +801,48 @@ impl SessionManager {
 
     /// Check if session exists and is valid
     pub async fn session_exists(&self, session_id: &str) -> bool {
-        let sessions = self.sessions.read().await;
-        sessions
-            .get(session_id)
-            .map(|s| !s.is_expired(self.session_timeout))
-            .unwrap_or(false)
+        // Check storage backend first for authoritative answer
+        match self.storage.get_session(session_id).await {
+            Ok(Some(session_info)) => {
+                // Check if session is expired based on storage data
+                let timeout_minutes = self.session_timeout.as_secs() / 60;
+                !session_info.is_expired(timeout_minutes)
+            }
+            Ok(None) => false,
+            Err(e) => {
+                debug!("Storage backend error for session_exists: {}", e);
+                // Fallback to in-memory cache
+                let sessions = self.sessions.read().await;
+                sessions
+                    .get(session_id)
+                    .map(|s| !s.is_expired(self.session_timeout))
+                    .unwrap_or(false)
+            }
+        }
     }
 
     /// Get session state value
     pub async fn get_session_state(&self, session_id: &str, key: &str) -> Option<Value> {
-        let sessions = self.sessions.read().await;
-        sessions.get(session_id)?.get_state(key)
+        // Try storage backend first for consistency
+        match self.storage.get_session_state(session_id, key).await {
+            Ok(value) => value,
+            Err(e) => {
+                debug!("Storage backend error for get_session_state: {}", e);
+                // Fallback to in-memory cache
+                let sessions = self.sessions.read().await;
+                sessions.get(session_id)?.get_state(key)
+            }
+        }
     }
 
     /// Set session state value
     pub async fn set_session_state(&self, session_id: &str, key: &str, value: Value) {
+        // Update storage backend first
+        if let Err(e) = self.storage.set_session_state(session_id, key, value.clone()).await {
+            error!("Failed to set session state in storage: {}", e);
+        }
+        
+        // Update in-memory cache
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(session_id) {
             session.set_state(key, value);
@@ -748,8 +851,21 @@ impl SessionManager {
 
     /// Remove session state value
     pub async fn remove_session_state(&self, session_id: &str, key: &str) -> Option<Value> {
+        // Remove from storage backend first
+        let storage_result = match self.storage.remove_session_state(session_id, key).await {
+            Ok(value) => value,
+            Err(e) => {
+                error!("Failed to remove session state from storage: {}", e);
+                None
+            }
+        };
+        
+        // Remove from in-memory cache
         let mut sessions = self.sessions.write().await;
-        sessions.get_mut(session_id)?.remove_state(key)
+        let memory_result = sessions.get_mut(session_id)?.remove_state(key);
+        
+        // Return storage result if available, otherwise memory result
+        storage_result.or(memory_result)
     }
 
     /// Check if session is initialized
@@ -763,34 +879,74 @@ impl SessionManager {
 
     /// Remove a session
     pub async fn remove_session(&self, session_id: &str) -> bool {
+        // Remove from storage backend first
+        let storage_removed = match self.storage.delete_session(session_id).await {
+            Ok(removed) => {
+                if removed {
+                    debug!("Session {} removed from storage backend", session_id);
+                }
+                removed
+            }
+            Err(e) => {
+                error!("Failed to remove session {} from storage: {}", session_id, e);
+                false
+            }
+        };
+        
+        // Remove from in-memory cache
         let mut sessions = self.sessions.write().await;
-        if let Some(session) = sessions.remove(session_id) {
-            debug!("Session {} removed", session_id);
+        let memory_removed = if let Some(session) = sessions.remove(session_id) {
+            debug!("Session {} removed from memory cache", session_id);
             // Send disconnect event
             let _ = session.send_event(SessionEvent::Disconnect);
             true
         } else {
             false
-        }
+        };
+        
+        // Return true if removed from either storage or memory
+        storage_removed || memory_removed
     }
 
     /// Cleanup expired sessions
     pub async fn cleanup_expired(&self) -> usize {
-        let cutoff = Instant::now() - self.session_timeout;
+        let timeout_duration = self.session_timeout;
+        let cutoff = std::time::SystemTime::now() - timeout_duration;
+        
+        // Clean up expired sessions from storage backend
+        let storage_removed = match self.storage.expire_sessions(cutoff).await {
+            Ok(expired_ids) => {
+                let count = expired_ids.len();
+                if count > 0 {
+                    info!("Storage backend cleaned up {} expired sessions: {:?}", count, expired_ids);
+                }
+                count
+            }
+            Err(e) => {
+                error!("Failed to clean up expired sessions from storage: {}", e);
+                0
+            }
+        };
+        
+        // Clean up expired sessions from memory cache
+        let cutoff_instant = Instant::now() - timeout_duration;
         let mut sessions = self.sessions.write().await;
         let initial_count = sessions.len();
 
         sessions.retain(|id, session| {
-            let keep = session.last_accessed >= cutoff;
+            let keep = session.last_accessed >= cutoff_instant;
             if !keep {
-                info!("Session {} expired and removed", id);
+                info!("Session {} expired and removed from memory cache", id);
                 // Send disconnect event before removal
                 let _ = session.send_event(SessionEvent::Disconnect);
             }
             keep
         });
 
-        initial_count - sessions.len()
+        let memory_removed = initial_count - sessions.len();
+        
+        // Return total cleaned up (storage + memory, avoiding double count)
+        std::cmp::max(storage_removed, memory_removed)
     }
 
     /// Send event to specific session
@@ -831,7 +987,15 @@ impl SessionManager {
 
     /// Get active session count
     pub async fn session_count(&self) -> usize {
-        self.sessions.read().await.len()
+        // Get count from storage backend for authoritative answer
+        match self.storage.session_count().await {
+            Ok(count) => count,
+            Err(e) => {
+                debug!("Storage backend error for session_count: {}", e);
+                // Fallback to in-memory cache
+                self.sessions.read().await.len()
+            }
+        }
     }
 
     /// Create session context for a session

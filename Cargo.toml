@@ -11,13 +11,13 @@ members = [
     "crates/mcp-derive",
     "crates/mcp-client",
     "crates/mcp-builders",
-    
+
     # Active examples (27 total)
     "examples/alert-system-server",
     "examples/audit-trail-server",
     "examples/builders-showcase",
     "examples/calculator-add-builder-server",
-    "examples/calculator-add-function-server", 
+    "examples/calculator-add-function-server",
     "examples/calculator-add-manual-server",
     "examples/calculator-add-simple-server-derive",
     "examples/completion-server",
@@ -37,17 +37,20 @@ members = [
     "examples/resource-server",
     "examples/resources-server",
     "examples/sampling-server",
+    # "examples/simple-dynamodb-session", # TODO: Fix compilation errors
     "examples/simple-logging-server",
+    # "examples/simple-postgres-session", # TODO: Fix compilation errors 
+    # "examples/simple-sqlite-session", # TODO: Fix compilation errors
     "examples/stateful-server",
     "examples/zero-config-getting-started",
-    
+
     # Tests
     "tests",
 ]
 
 exclude = [
     # AWS examples for future phase
-    # "examples/lambda-mcp-server", # TODO: Needs trait migration for AWS tools  
+    # "examples/lambda-mcp-server", # TODO: Needs trait migration for AWS tools
 ]
 
 [workspace.package]
@@ -65,8 +68,10 @@ serde_json = "1.0"
 serde_yml = "0.0.12"
 thiserror = "2.0"
 async-trait = "0.1"
+async-stream = "0.3"
 futures = "0.3"
 tracing = "0.1"
+lazy_static = "1"
 
 # HTTP/Server dependencies
 tokio = { version = "1", features = ["full"] }
@@ -75,6 +80,7 @@ hyper-util = { version = "0.1", features = ["full"] }
 tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.6", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["full"] }
+
 http = "1.3"
 http-body-util = "0.1"
 http-body = "1"
@@ -102,6 +108,7 @@ criterion = { version = "0.7", features = ["html_reports"] }
 sqlx = { version = "0.8", features = [
     "runtime-tokio-rustls",
     "sqlite",
+    "postgres",
     "chrono",
     "uuid",
 ] }
@@ -117,9 +124,9 @@ tracing-test = "0.2"
 
 # AWS Lambda and AWS SDK dependencies
 lambda_runtime = "0.14"
-lambda_http = "0.16"
+lambda_http = "0.17"
 lambda-web = "0.2"
-aws_lambda_events = "0.17"
+aws_lambda_events = "0.18"
 aws-config = "1.8"
 aws-sdk-dynamodb = "1"
 aws-sdk-sqs = "1"

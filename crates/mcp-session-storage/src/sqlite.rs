@@ -13,7 +13,7 @@ use sqlx::{SqlitePool, Row};
 use thiserror::Error;
 use tracing::{info, warn, debug};
 
-use crate::{SessionStorage, SessionInfo, SseEvent};
+use crate::{SessionStorage, SessionInfo, SseEvent, SessionStorageError};
 use mcp_protocol::ServerCapabilities;
 
 /// SQLite-specific error types
@@ -84,7 +84,7 @@ impl SqliteSessionStorage {
         // Ensure parent directory exists
         if let Some(parent) = config.database_path.parent() {
             std::fs::create_dir_all(parent)
-                .map_err(|e| SqliteError::Connection(format!("Failed to create database directory: {}", e)))?;
+                .map_err(|e| crate::sqlite::SqliteError::Connection(format!("Failed to create database directory: {}", e)))?;
         }
         
         // Build connection string
@@ -217,7 +217,7 @@ async fn cleanup_expired_data(pool: &SqlitePool, config: &SqliteConfig) -> Resul
 
 #[async_trait]
 impl SessionStorage for SqliteSessionStorage {
-    type Error = SqliteError;
+    type Error = SessionStorageError;
     
     async fn create_session(&self, capabilities: ServerCapabilities) -> Result<SessionInfo, Self::Error> {
         let mut session = SessionInfo::new();
@@ -351,7 +351,7 @@ impl SessionStorage for SqliteSessionStorage {
         .rows_affected();
         
         if rows_affected == 0 {
-            return Err(SqliteError::SessionNotFound(session_info.session_id));
+            return Err(crate::sqlite::SqliteError::SessionNotFound(session_info.session_id).into());
         }
         
         Ok(())
@@ -363,7 +363,7 @@ impl SessionStorage for SqliteSessionStorage {
             .bind(session_id)
             .fetch_optional(&self.pool)
             .await?
-            .ok_or_else(|| SqliteError::SessionNotFound(session_id.to_string()))?;
+            .ok_or_else(|| crate::sqlite::SqliteError::SessionNotFound(session_id.to_string()))?;
         
         let mut state: HashMap<String, Value> = serde_json::from_str(&current_state_json)?;
         state.insert(key.to_string(), value);
@@ -401,7 +401,7 @@ impl SessionStorage for SqliteSessionStorage {
             .bind(session_id)
             .fetch_optional(&self.pool)
             .await?
-            .ok_or_else(|| SqliteError::SessionNotFound(session_id.to_string()))?;
+            .ok_or_else(|| crate::sqlite::SqliteError::SessionNotFound(session_id.to_string()))?;
         
         let mut state: HashMap<String, Value> = serde_json::from_str(&current_state_json)?;
         let removed_value = state.remove(key);
@@ -446,7 +446,7 @@ impl SessionStorage for SqliteSessionStorage {
             .await?;
         
         if !session_exists {
-            return Err(SqliteError::SessionNotFound(session_id.to_string()));
+            return Err(crate::sqlite::SqliteError::SessionNotFound(session_id.to_string()).into());
         }
         
         let data_json = serde_json::to_string(&event.data)?;

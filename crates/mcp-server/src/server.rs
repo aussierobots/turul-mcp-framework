@@ -13,6 +13,7 @@ use crate::handlers::McpHandler;
 use crate::session::{SessionManager, SessionContext};
 use crate::{McpServerBuilder, McpTool, Result, tool::tool_to_descriptor};
 use mcp_json_rpc_server::JsonRpcHandler;
+
 use mcp_protocol::*;
 
 /// Main MCP server
@@ -53,23 +54,48 @@ impl McpServer {
         instructions: Option<String>,
         session_timeout_minutes: Option<u64>,
         session_cleanup_interval_seconds: Option<u64>,
+        session_storage: Option<Arc<mcp_session_storage::BoxedSessionStorage>>,
         strict_lifecycle: bool,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
         #[cfg(feature = "http")] enable_sse: bool,
     ) -> Self {
-        // Create session manager with server capabilities and custom timeouts
-        let session_manager = if let (Some(timeout_mins), Some(cleanup_secs)) =
-            (session_timeout_minutes, session_cleanup_interval_seconds)
-        {
-            Arc::new(SessionManager::with_timeouts(
-                capabilities.clone(),
-                std::time::Duration::from_secs(timeout_mins * 60),
-                std::time::Duration::from_secs(cleanup_secs),
-            ))
-        } else {
-            Arc::new(SessionManager::new(capabilities.clone()))
+        // Create session manager with server capabilities, custom timeouts, and storage
+        let session_manager = match session_storage {
+            Some(storage) => {
+                if let (Some(timeout_mins), Some(cleanup_secs)) =
+                    (session_timeout_minutes, session_cleanup_interval_seconds)
+                {
+                    Arc::new(SessionManager::with_storage_and_timeouts(
+                        storage,
+                        capabilities.clone(),
+                        std::time::Duration::from_secs(timeout_mins * 60),
+                        std::time::Duration::from_secs(cleanup_secs),
+                    ))
+                } else {
+                    Arc::new(SessionManager::with_storage_and_timeouts(
+                        storage,
+                        capabilities.clone(),
+                        std::time::Duration::from_secs(30 * 60), // Default 30 minutes
+                        std::time::Duration::from_secs(60),      // Default 1 minute
+                    ))
+                }
+            }
+            None => {
+                // Default to InMemory storage
+                if let (Some(timeout_mins), Some(cleanup_secs)) =
+                    (session_timeout_minutes, session_cleanup_interval_seconds)
+                {
+                    Arc::new(SessionManager::with_timeouts(
+                        capabilities.clone(),
+                        std::time::Duration::from_secs(timeout_mins * 60),
+                        std::time::Duration::from_secs(cleanup_secs),
+                    ))
+                } else {
+                    Arc::new(SessionManager::new(capabilities.clone()))
+                }
+            }
         };
 
         Self {
@@ -140,7 +166,7 @@ impl McpServer {
             self.session_manager.clone(),
         );
 
-        // Build HTTP server with session storage
+        // Build HTTP server with default in-memory session storage
         let session_storage = Arc::new(mcp_session_storage::InMemorySessionStorage::new());
         let mut builder = http_mcp_server::HttpMcpServer::builder_with_storage(session_storage)
             .bind_address(self.bind_address)
@@ -260,7 +286,7 @@ impl McpServer {
             self.session_manager.clone(),
         );
 
-        // Build HTTP server with session storage
+        // Build HTTP server with default in-memory session storage
         let session_storage = Arc::new(mcp_session_storage::InMemorySessionStorage::new());
         let mut builder = http_mcp_server::HttpMcpServer::builder_with_storage(session_storage)
             .bind_address(self.bind_address)
@@ -908,10 +934,10 @@ mod tests {
     #[tokio::test]
     async fn test_list_tools_handler() {
         let mut tools: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
-        tools.insert("test".to_string(), Arc::new(TestTool));
+        tools.insert("test".to_string(), Arc::new(TestTool::new()));
 
         let handler = ListToolsHandler::new(tools);
-        let result = handler.handle("tools/list", None).await.unwrap();
+        let result = handler.handle("tools/list", None, None).await.unwrap();
 
         let response: ListToolsResult = serde_json::from_value(result).unwrap();
         assert_eq!(response.tools.len(), 1);
@@ -921,7 +947,7 @@ mod tests {
     #[tokio::test]
     async fn test_tool_handler() {
         let mut tools: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
-        tools.insert("test".to_string(), Arc::new(TestTool));
+        tools.insert("test".to_string(), Arc::new(TestTool::new()));
 
         let session_manager = Arc::new(SessionManager::new(ServerCapabilities::default()));
         let handler = SessionAwareToolHandler::new(tools, session_manager, false);
@@ -935,7 +961,7 @@ mod tests {
             .collect(),
         );
 
-        let result = handler.handle("tools/call", Some(params)).await.unwrap();
+        let result = handler.handle("tools/call", Some(params), None).await.unwrap();
         let response: CallToolResult = serde_json::from_value(result).unwrap();
 
         assert_eq!(response.content.len(), 1);

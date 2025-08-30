@@ -46,10 +46,10 @@ pub fn resource_to_descriptor(resource: &dyn McpResource) -> mcp_protocol::resou
 mod tests {
     use super::*;
     use mcp_protocol_2025_06_18::resources::{
-        HasResourceMetadata, HasResourceDescription, HasResourceUri, 
+        HasResourceMetadata, HasResourceDescription, HasResourceUri, HasResourceMimeType,
         HasResourceSize, HasResourceAnnotations, HasResourceMeta
     };
-    use std::collections::HashMap;
+    use mcp_protocol_2025_06_18::meta;
 
     struct TestResource {
         uri: String,
@@ -59,12 +59,14 @@ mod tests {
 
     // Implement fine-grained traits
     impl HasResourceMetadata for TestResource {
-        fn uri(&self) -> &str {
-            &self.uri
-        }
-
         fn name(&self) -> &str {
             &self.name
+        }
+    }
+
+    impl HasResourceUri for TestResource {
+        fn uri(&self) -> &str {
+            &self.uri
         }
     }
 
@@ -74,37 +76,42 @@ mod tests {
         }
     }
 
-    impl HasResourceContent for TestResource {
+    impl HasResourceMimeType for TestResource {
         fn mime_type(&self) -> Option<&str> {
             Some("text/plain")
         }
     }
 
-    impl HasResourceAccess for TestResource {
-        fn supports_subscriptions(&self) -> bool {
-            false
+    impl HasResourceSize for TestResource {
+        fn size(&self) -> Option<u64> {
+            Some(self.content.len() as u64)
         }
     }
 
-    impl HasResourceAnnotations for TestResource {
-        fn annotations(&self) -> Option<&serde_json::Value> {
+    impl HasResourceMeta for TestResource {
+        fn resource_meta(&self) -> Option<&std::collections::HashMap<String, Value>> {
             None
         }
     }
 
-    impl HasResourceMeta for TestResource {}
+    impl HasResourceAnnotations for TestResource {
+        fn annotations(&self) -> Option<&meta::Annotations> {
+            None
+        }
+    }
+
 
     // ResourceDefinition automatically implemented via blanket impl!
 
     #[async_trait]
     impl McpResource for TestResource {
         async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
-            Ok(vec![ResourceContent::text(&self.content)])
+            Ok(vec![ResourceContent::text(&self.uri, &self.content)])
         }
     }
 
-    #[test]
-    fn test_resource_trait() {
+    #[tokio::test]
+    async fn test_resource_trait() {
         let resource = TestResource {
             uri: "test://example".to_string(),
             name: "Test Resource".to_string(),
@@ -113,9 +120,11 @@ mod tests {
         
         assert_eq!(resource.uri(), "test://example");
         assert_eq!(resource.name(), "Test Resource");
-        assert_eq!(resource.description(), "A test resource");
+        assert_eq!(resource.description(), Some("A test resource"));
         assert_eq!(resource.mime_type(), Some("text/plain"));
-        assert!(!resource.supports_subscriptions());
+        // Test that default subscription methods return errors
+        let subscribe_result = resource.subscribe(None).await;
+        assert!(subscribe_result.is_err());
     }
 
     #[test]
@@ -145,8 +154,8 @@ mod tests {
         let result = resource.read(None).await.unwrap();
         assert_eq!(result.len(), 1);
         
-        if let ResourceContent::Text { text } = &result[0] {
-            assert_eq!(text, "Hello, world!");
+        if let ResourceContent::Text(text_content) = &result[0] {
+            assert_eq!(text_content.text, "Hello, world!");
         } else {
             panic!("Expected text content");
         }

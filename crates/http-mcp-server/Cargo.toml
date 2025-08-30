@@ -22,7 +22,7 @@ async-trait.workspace = true
 thiserror.workspace = true
 futures.workspace = true
 tracing.workspace = true
-async-stream = "0.3"
+async-stream.workspace = true
 
 # HTTP server dependencies
 tokio.workspace = true
@@ -35,8 +35,8 @@ http-body-util.workspace = true
 http-body.workspace = true
 bytes.workspace = true
 uuid = { workspace = true, features = ["v7"] }
-lazy_static = "1.5"
-chrono = { version = "0.4", features = ["serde"] }
+lazy_static.workspace = true
+chrono = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

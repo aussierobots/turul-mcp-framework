@@ -96,8 +96,7 @@ pub fn logger_to_notification(logger: &dyn McpLogger, level: LoggingLevel, data:
 mod tests {
     use super::*;
     use mcp_protocol::logging::{
-        HasLoggingMetadata, HasLogLevel, HasLogFormat, HasLogTransport,
-        LoggingMessageNotification
+        HasLoggingMetadata, HasLogLevel, HasLogFormat, HasLogTransport
     };
     use serde_json::json;
 
@@ -144,7 +143,7 @@ mod tests {
 
     #[async_trait]
     impl McpLogger for TestLogger {
-        async fn log(&self, level: LoggingLevel, data: Value) -> McpResult<()> {
+        async fn log(&self, level: LoggingLevel, _data: Value) -> McpResult<()> {
             // Simulate logging (could send to file, network, etc.)
             if self.can_log(level) {
                 println!("[{}] {}: {}", 

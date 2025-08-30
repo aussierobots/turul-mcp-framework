@@ -327,6 +327,8 @@ pub struct ServerStats {
 mod tests {
     use super::*;
     use std::net::{IpAddr, Ipv4Addr};
+    use std::sync::Arc;
+    use mcp_session_storage::InMemorySessionStorage;
 
     #[test]
     fn test_server_config_default() {
@@ -339,7 +341,8 @@ mod tests {
     #[test]
     fn test_builder() {
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 3000);
-        let server = HttpMcpServer::builder()
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let server = HttpMcpServer::builder_with_storage(session_storage)
             .bind_address(addr)
             .mcp_path("/api/mcp")
             .cors(false)
@@ -354,7 +357,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_stats() {
-        let server = HttpMcpServer::builder().build();
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let server = HttpMcpServer::builder_with_storage(session_storage).build();
         
         let stats = server.get_stats().await;
         assert_eq!(stats.sessions, 0);

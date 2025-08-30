@@ -16,7 +16,7 @@ async-trait.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tokio.workspace = true
-uuid = { version = "1.0", features = ["v4", "v7"] }
+uuid = { workspace = true, features = ["v4", "v7"] }
 chrono = { workspace = true, features = ["serde"] }
 
 # Protocol types
@@ -29,6 +29,7 @@ sqlx = { workspace = true, optional = true }
 default = ["in-memory"]
 in-memory = []
 sqlite = ["sqlx"]
+postgres = ["sqlx"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

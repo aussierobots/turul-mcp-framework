@@ -99,10 +99,11 @@ pub fn prompt_to_descriptor(prompt: &dyn McpPrompt) -> mcp_protocol::prompts::Pr
 mod tests {
     use super::*;
     use mcp_protocol::prompts::{
-        HasPromptMetadata, HasPromptArguments, HasPromptDescription, HasPromptAnnotations,
-        PromptArgument, PromptMessage
+        HasPromptMetadata, HasPromptArguments, HasPromptDescription, HasPromptAnnotations, HasPromptMeta,
+        PromptArgument, PromptAnnotations
     };
     use serde_json::{json, Value};
+    use std::collections::HashMap;
 
     struct TestPrompt {
         name: String,
@@ -116,7 +117,9 @@ mod tests {
         fn name(&self) -> &str {
             &self.name
         }
+    }
 
+    impl HasPromptDescription for TestPrompt {
         fn description(&self) -> Option<&str> {
             Some(&self.description)
         }
@@ -128,25 +131,40 @@ mod tests {
         }
     }
 
-    impl HasPromptMessages for TestPrompt {
-        fn render_messages(&self, args: Option<&HashMap<String, Value>>) -> Result<Vec<PromptMessage>, String> {
-            let topic = args
-                .and_then(|a| a.get("topic"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("general topic");
-            
-            let content = self.template.replace("{topic}", topic);
-            Ok(vec![PromptMessage::text(content)])
+    impl HasPromptAnnotations for TestPrompt {
+        fn annotations(&self) -> Option<&PromptAnnotations> {
+            None
         }
     }
 
-    impl HasPromptAnnotations for TestPrompt {
-        fn annotations(&self) -> Option<&Value> {
+    impl HasPromptMeta for TestPrompt {
+        fn prompt_meta(&self) -> Option<&std::collections::HashMap<String, Value>> {
             None
         }
     }
 
     // PromptDefinition automatically implemented via blanket impl!
+
+    impl TestPrompt {
+        fn render_messages(&self, args: Option<&HashMap<String, Value>>) -> Result<Vec<PromptMessage>, String> {
+            let mut template = self.template.clone();
+            
+            if let Some(args) = args {
+                for (key, value) in args {
+                    let placeholder = format!("{{{}}}", key);
+                    let value_str = match value {
+                        Value::String(s) => s.clone(),
+                        Value::Number(n) => n.to_string(),
+                        Value::Bool(b) => b.to_string(),
+                        _ => value.to_string()
+                    };
+                    template = template.replace(&placeholder, &value_str);
+                }
+            }
+            
+            Ok(vec![PromptMessage::user_text(template)])
+        }
+    }
 
     #[async_trait]
     impl McpPrompt for TestPrompt {
@@ -210,10 +228,12 @@ mod tests {
         let messages = prompt.render(Some(args)).await.unwrap();
         assert_eq!(messages.len(), 1);
         
-        if let PromptMessage::Text { text } = &messages[0] {
-            assert!(text.contains("artificial intelligence"));
-        } else {
-            panic!("Expected text message");
+        // Check the content of the message
+        match &messages[0].content {
+            mcp_protocol::prompts::ContentBlock::Text { text } => {
+                assert!(text.contains("artificial intelligence"));
+            },
+            _ => panic!("Expected text message"),
         }
     }
 
@@ -255,10 +275,12 @@ mod tests {
         assert_eq!(response.messages.len(), 1);
         assert_eq!(response.description, Some("A greeting prompt".to_string()));
         
-        if let PromptMessage::Text { text } = &response.messages[0] {
-            assert_eq!(text, "Hello, world!");
-        } else {
-            panic!("Expected text message");
+        // Check the content of the message
+        match &response.messages[0].content {
+            mcp_protocol::prompts::ContentBlock::Text { text } => {
+                assert_eq!(text, "Hello, world!");
+            },
+            _ => panic!("Expected text message"),
         }
     }
 }

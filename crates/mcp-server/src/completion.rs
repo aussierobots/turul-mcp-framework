@@ -146,7 +146,7 @@ mod tests {
         };
 
         let request = completion.to_complete_request();
-        let result = completion.validate_request(&request).await;
+        let result = McpCompletion::validate_request(&completion, &request).await;
         assert!(result.is_ok());
     }
 
@@ -158,7 +158,7 @@ mod tests {
         };
 
         let request = completion.to_complete_request();
-        let result = completion.validate_request(&request).await;
+        let result = McpCompletion::validate_request(&completion, &request).await;
         assert!(result.is_err());
     }
 }

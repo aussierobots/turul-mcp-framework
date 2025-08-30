@@ -1,0 +1,37 @@
+[package]
+name = "simple-dynamodb-session"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
+
+[[bin]]
+name = "dynamodb-setup"
+path = "src/bin/dynamodb-setup.rs"
+
+[[bin]]
+name = "dynamodb-teardown"
+path = "src/bin/dynamodb-teardown.rs"
+
+[dependencies]
+mcp-server = { path = "../../crates/mcp-server", features = ["http", "sse"] }
+mcp-session-storage = { path = "../../crates/mcp-session-storage", features = ["dynamodb"] }
+mcp-derive = { path = "../../crates/mcp-derive" }
+mcp-protocol = { path = "../../crates/mcp-protocol" }
+
+tokio = { version = "1.0", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4"] }
+async-trait = "0.1"
+
+# Dependencies for AWS DynamoDB management binaries
+aws-sdk-dynamodb = "1.0"
+aws-config = "1.0"
+
+[features]
+default = []

@@ -206,7 +206,7 @@ mod tests {
         };
         
         assert_eq!(notification.method(), "notifications/test");
-        assert_eq!(notification.priority(), 5);
+        assert_eq!(HasNotificationRules::priority(&notification), 5);
         assert!(!notification.requires_ack());
         assert!(notification.can_batch());
         assert_eq!(notification.max_retries(), 3);

@@ -13,11 +13,23 @@ pub mod in_memory;
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
 
+#[cfg(feature = "postgres")]
+pub mod postgres;
+
+#[cfg(feature = "dynamodb")]
+pub mod dynamodb;
+
 // Re-export for convenience
 pub use in_memory::{InMemorySessionStorage, InMemoryConfig, InMemoryError, InMemoryStats};
 
 #[cfg(feature = "sqlite")]
 pub use sqlite::{SqliteSessionStorage, SqliteConfig, SqliteError};
+
+#[cfg(feature = "postgres")]
+pub use postgres::{PostgresSessionStorage, PostgresConfig, PostgresError};
+
+#[cfg(feature = "dynamodb")]
+pub use dynamodb::{DynamoDbSessionStorage, DynamoDbConfig, DynamoDbError};
 
 /// Convenience type alias for session storage results
 pub type StorageResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -42,6 +54,30 @@ pub async fn create_sqlite_storage() -> Result<SqliteSessionStorage, SqliteError
 #[cfg(feature = "sqlite")]
 pub async fn create_sqlite_storage_with_config(config: SqliteConfig) -> Result<SqliteSessionStorage, SqliteError> {
     SqliteSessionStorage::with_config(config).await
+}
+
+/// Create a PostgreSQL session storage with default configuration
+#[cfg(feature = "postgres")]
+pub async fn create_postgres_storage() -> Result<PostgresSessionStorage, PostgresError> {
+    PostgresSessionStorage::new().await
+}
+
+/// Create a PostgreSQL session storage with custom configuration
+#[cfg(feature = "postgres")]
+pub async fn create_postgres_storage_with_config(config: PostgresConfig) -> Result<PostgresSessionStorage, PostgresError> {
+    PostgresSessionStorage::with_config(config).await
+}
+
+/// Create a DynamoDB session storage with default configuration
+#[cfg(feature = "dynamodb")]
+pub async fn create_dynamodb_storage() -> Result<DynamoDbSessionStorage, DynamoDbError> {
+    DynamoDbSessionStorage::new().await
+}
+
+/// Create a DynamoDB session storage with custom configuration
+#[cfg(feature = "dynamodb")]
+pub async fn create_dynamodb_storage_with_config(config: DynamoDbConfig) -> Result<DynamoDbSessionStorage, DynamoDbError> {
+    DynamoDbSessionStorage::with_config(config).await
 }
 
 #[cfg(test)]

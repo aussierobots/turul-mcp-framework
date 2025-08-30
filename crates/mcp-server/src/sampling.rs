@@ -63,9 +63,8 @@ mod tests {
     use super::*;
     use mcp_protocol::sampling::{
         HasSamplingConfig, HasSamplingContext, HasModelPreferences,
-        SamplingMessage, MessageContent
+        SamplingMessage
     };
-    use serde_json::Value;
 
     struct TestSampling {
         messages: Vec<SamplingMessage>,
@@ -99,8 +98,8 @@ mod tests {
         async fn sample(&self, _request: CreateMessageRequest) -> McpResult<CreateMessageResult> {
             // Simulate message generation
             let response_message = SamplingMessage {
-                role: "assistant".to_string(),
-                content: MessageContent::Text {
+                role: mcp_protocol::sampling::Role::Assistant,
+                content: mcp_protocol::prompts::ContentBlock::Text {
                     text: "Generated response".to_string(),
                 },
             };

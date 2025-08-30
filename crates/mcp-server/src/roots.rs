@@ -163,8 +163,7 @@ pub fn root_to_list_request(_root: &dyn McpRoot) -> ListRootsRequest {
 mod tests {
     use super::*;
     use mcp_protocol::roots::{
-        HasRootMetadata, HasRootPermissions, HasRootFiltering, HasRootAnnotations,
-        Root
+        HasRootMetadata, HasRootPermissions, HasRootFiltering, HasRootAnnotations
     };
     use std::collections::HashMap;
 

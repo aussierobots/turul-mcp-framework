@@ -848,7 +848,7 @@ mod tests {
     #[test]
     fn test_tool_creation() {
         let schema = ToolSchema::object()
-            .with_properties(HashMap::from([("text".to_string(), serde_json::json!({"type": "string"}))]))
+            .with_properties(HashMap::from([("text".to_string(), JsonSchema::string())]))
             .with_required(vec!["text".to_string()]);
 
         let tool = Tool::new("test_tool", schema).with_description("A test tool");

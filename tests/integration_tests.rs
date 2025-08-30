@@ -817,7 +817,7 @@ mod calculator_levels_tests {
     // ===========================================
 
     use mcp_protocol_2025_06_18::tools::{
-        ToolResult, CallToolResponse, ToolSchema,
+        ToolResult, CallToolResult, ToolSchema,
         HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, 
         HasAnnotations, HasToolMeta
     };

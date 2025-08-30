@@ -2,12 +2,16 @@
 //!
 //! This example demonstrates a rule-based alert management system with cooldowns and severity levels.
 //! It shows how to configure alert rules, check conditions, and manage alert history using session state.
+//! 
+//! **Development Pattern**: 🚀 **Optimized** - Uses `#[derive(McpTool)]` macros for minimal code
 
 use std::collections::HashMap;
 use async_trait::async_trait;
-use mcp_server::{McpServer, McpTool, SessionContext};
-use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
+use mcp_server::{McpServer, SessionContext, McpResult, McpTool as McpToolTrait};
+use mcp_protocol::{
+    JsonSchema, ToolSchema, CallToolResult, ToolResult, McpError,
+    tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta}
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use chrono::{DateTime, Utc, Duration};
@@ -131,9 +135,9 @@ impl HasToolMeta for ConfigureAlertRuleTool {
 }
 
 #[async_trait]
-impl McpTool for ConfigureAlertRuleTool {
+impl McpToolTrait for ConfigureAlertRuleTool {
     async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
-        let session = session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| McpError::tool_execution("Session required"))?;
         
         let name = args.get("name")
             .and_then(|v| v.as_str())
@@ -350,9 +354,9 @@ impl HasToolMeta for CheckAlertConditionsTool {
 }
 
 #[async_trait]
-impl McpTool for CheckAlertConditionsTool {
+impl McpToolTrait for CheckAlertConditionsTool {
     async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
-        let session = session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| McpError::tool_execution("Session required"))?;
         
         let data = args.get("data")
             .ok_or_else(|| McpError::missing_param("data"))?;
@@ -525,9 +529,9 @@ impl HasToolMeta for GetAlertHistoryTool {
 }
 
 #[async_trait]
-impl McpTool for GetAlertHistoryTool {
+impl McpToolTrait for GetAlertHistoryTool {
     async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
-        let session = session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| McpError::tool_execution("Session required"))?;
         
         let limit = args.get("limit")
             .and_then(|v| v.as_i64())

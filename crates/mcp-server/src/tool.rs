@@ -9,9 +9,6 @@ use serde_json::Value;
 
 use crate::session::SessionContext;
 
-#[cfg(test)]
-use mcp_protocol::McpError;
-
 /// High-level trait for implementing MCP tools
 /// 
 /// McpTool extends ToolDefinition with execution capabilities.

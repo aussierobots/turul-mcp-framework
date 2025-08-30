@@ -9,8 +9,8 @@
 //!
 //! ```rust
 //! use mcp_protocol::{
-//!     McpVersion, InitializeRequest, InitializeResponse,
-//!     Tool, CallToolRequest, CallToolResponse
+//!     McpVersion, InitializeRequest, InitializeResult,
+//!     Tool, CallToolRequest, CallToolResult
 //! };
 //! ```
 

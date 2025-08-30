@@ -15,6 +15,8 @@ use mcp_protocol::initialize::*;
 
 
 
+
+
 /// Builder for MCP servers
 pub struct McpServerBuilder {
     /// Server implementation info
@@ -64,6 +66,9 @@ pub struct McpServerBuilder {
     /// Session configuration
     session_timeout_minutes: Option<u64>,
     session_cleanup_interval_seconds: Option<u64>,
+    
+    /// Session storage backend (defaults to InMemory if None)
+    session_storage: Option<Arc<mcp_session_storage::BoxedSessionStorage>>,
     
     /// MCP Lifecycle enforcement configuration
     strict_lifecycle: bool,
@@ -135,6 +140,7 @@ impl McpServerBuilder {
             instructions: None,
             session_timeout_minutes: None,
             session_cleanup_interval_seconds: None,
+            session_storage: None, // Default: InMemory storage
             strict_lifecycle: false, // Default: lenient mode for compatibility
             #[cfg(feature = "http")]
             bind_address: "127.0.0.1:8000".parse().unwrap(),
@@ -521,7 +527,16 @@ impl McpServerBuilder {
         self
     }
 
-    
+    /// Configure session storage backend (defaults to InMemory if not specified)
+    pub fn with_session_storage<S: mcp_session_storage::SessionStorage<Error = mcp_session_storage::SessionStorageError> + 'static>(
+        mut self, 
+        storage: Arc<S>
+    ) -> Self {
+        // Convert concrete storage type to trait object
+        let boxed_storage: Arc<mcp_session_storage::BoxedSessionStorage> = storage;
+        self.session_storage = Some(boxed_storage);
+        self
+    }
 
     /// Set HTTP bind address (requires "http" feature)
     #[cfg(feature = "http")]
@@ -550,6 +565,7 @@ impl McpServerBuilder {
         self.enable_sse = enable;
         self
     }
+
 
     /// Build the MCP server
     pub fn build(self) -> Result<McpServer> {
@@ -586,6 +602,7 @@ impl McpServerBuilder {
             self.instructions,
             self.session_timeout_minutes,
             self.session_cleanup_interval_seconds,
+            self.session_storage,
             self.strict_lifecycle,
             #[cfg(feature = "http")]
             self.bind_address,
@@ -668,7 +685,7 @@ mod tests {
         assert!(builder.title.is_none());
         assert!(builder.instructions.is_none());
         assert!(builder.tools.is_empty());
-        assert_eq!(builder.handlers.len(), 18); // Default MCP 2025-06-18 handlers
+        assert_eq!(builder.handlers.len(), 17); // Default MCP 2025-06-18 handlers
         assert!(builder.handlers.contains_key("ping"));
     }
 

@@ -452,7 +452,6 @@ impl StreamableHttpHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hyper::HeaderMap;
 
     #[test]
     fn test_protocol_version_parsing() {
