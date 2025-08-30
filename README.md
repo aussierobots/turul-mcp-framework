@@ -99,7 +99,7 @@ impl AuditTool {
 - **`turul-http-turul-mcp-server`** - HTTP/SSE transport with CORS and streaming
 - **`turul-mcp-protocol-2025-06-18`** - Complete MCP specification implementation
 - **`turul-mcp-derive`** - Procedural and declarative macros
-- **`turul-turul-mcp-json-rpc-server`** - Transport-agnostic JSON-RPC 2.0 foundation
+- **`turul-mcp-json-rpc-server`** - Transport-agnostic JSON-RPC 2.0 foundation
 
 ### Fine-Grained Trait Architecture
 **Modern composable design pattern for all MCP areas:**
@@ -122,11 +122,11 @@ impl HasDescription for MyTool {
 
 **Supported Areas:**
 - **Tools** (`ToolDefinition`) - Dynamic tool execution with validation
-- **Resources** (`ResourceDefinition`) - Static and dynamic content serving  
+- **Resources** (`ResourceDefinition`) - Static and dynamic content serving
 - **Prompts** (`PromptDefinition`) - AI interaction template generation
 - **Sampling** (`SamplingDefinition`) - AI model integration patterns
 - **Completion** (`CompletionDefinition`) - Context-aware text completion
-- **Logging** (`LoggerDefinition`) - Dynamic log level management  
+- **Logging** (`LoggerDefinition`) - Dynamic log level management
 - **Roots** (`RootDefinition`) - Secure file system access boundaries
 - **Elicitation** (`ElicitationDefinition`) - Structured user input collection
 - **Notifications** (`NotificationDefinition`) - Real-time event broadcasting
@@ -142,11 +142,11 @@ let server = McpServer::builder()
     // Tools
     .tool(WeatherTool::new())
     .tools(vec![CalculatorTool::new(), ValidationTool::new()])
-    // Resources  
+    // Resources
     .resource(AppConfigResource::new())
     .resources(vec![LogsResource::new(), MetricsResource::new()])
     // Prompts
-    .prompt_provider(CodeReviewPrompt::new()) 
+    .prompt_provider(CodeReviewPrompt::new())
     .prompt_providers(vec![DocumentationPrompt::new(), TestPrompt::new()])
     // Sampling
     .sampling_provider(CreativeSampling::new())
@@ -160,7 +160,7 @@ let server = McpServer::builder()
     // Roots
     .root_provider(WorkspaceRoot::new())
     .root_providers(vec![ConfigRoot::new(), TempRoot::new()])
-    // Elicitation  
+    // Elicitation
     .elicitation_provider(OnboardingElicitation::new())
     .elicitation_providers(vec![SurveyElicitation::new(), FeedbackElicitation::new()])
     // Notifications
@@ -177,7 +177,7 @@ let server = McpServer::builder()
 - ✅ **Tools** (`ToolDefinition`) - Dynamic tool execution with validation, schema generation, and metadata
 - ✅ **Resources** (`ResourceDefinition`) - Static and dynamic content serving with access control
 - ✅ **Prompts** (`PromptDefinition`) - AI interaction template generation with parameter validation
-- ✅ **Completion** (`CompletionDefinition`) - Context-aware text completion with model preferences  
+- ✅ **Completion** (`CompletionDefinition`) - Context-aware text completion with model preferences
 - ✅ **Logging** (`LoggerDefinition`) - Dynamic log level management with structured output
 - ✅ **Notifications** (`NotificationDefinition`) - Real-time SSE event broadcasting with filtering
 - ✅ **Roots** (`RootDefinition`) - Secure file system access boundaries with permissions
@@ -277,13 +277,13 @@ struct WeatherTool {
     unit: Option<String>,
 }
 
-// Resources  
+// Resources
 #[derive(McpResource, Clone)]
 #[resource(uri = "config://app.json", description = "Application configuration")]
 struct AppConfigResource;
 
 // Prompts
-#[derive(McpPrompt, Clone)]  
+#[derive(McpPrompt, Clone)]
 #[prompt(name = "code_review", description = "Generate code review prompts")]
 struct CodeReviewPrompt {
     #[param(description = "Programming language")]
@@ -292,7 +292,7 @@ struct CodeReviewPrompt {
 
 // Sampling
 #[derive(McpSampling, Clone)]
-#[sampling(description = "Creative writing with style controls")]  
+#[sampling(description = "Creative writing with style controls")]
 struct CreativeSampling;
 
 // Completion
@@ -305,7 +305,7 @@ struct IdeCompletion;
 #[logger(name = "audit", description = "Compliance audit logging")]
 struct AuditLogger;
 
-// Roots  
+// Roots
 #[derive(McpRoot, Clone)]
 #[root(uri = "file:///workspace", description = "Project workspace")]
 struct WorkspaceRoot;
@@ -518,6 +518,6 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 ---
 
-**🚀 Ready to build production MCP servers?** Start with our [comprehensive examples](examples/) or check the [getting started guide](EXAMPLES_OVERVIEW.md).
+**🚀 Ready to build production MCP servers?** Start with our [comprehensive examples](examples/) or check the [getting started guide](EXAMPLES.md).
 
 **💡 Need help?** Open an issue or check our [26 working examples](examples/) covering everything from simple calculators to enterprise systems.

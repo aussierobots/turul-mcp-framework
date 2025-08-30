@@ -1,14 +1,14 @@
 # ADR: Session Storage Architecture
 
-**Status**: Implemented  
-**Date**: 2025-08-30  
+**Status**: Implemented
+**Date**: 2025-08-30
 **Decision**: Unified session storage architecture across MCP framework components
 
 ## Context
 
 The MCP framework requires session management for:
 - Tool execution state persistence across requests
-- SSE event storage and resumability 
+- SSE event storage and resumability
 - Multi-instance deployment support
 - Different persistence backends (InMemory, PostgreSQL, SQLite)
 
@@ -16,7 +16,7 @@ The framework consists of multiple crates that need to work together for session
 - `turul-mcp-session-storage`: Storage abstraction and implementations
 - `turul-mcp-server`: Core MCP server with tool execution
 - `turul-mcp-json-rpc-server`: JSON-RPC handling and session contexts
-- `turul-http-turul-mcp-server`: HTTP transport with SSE streaming
+- `turul-http-mcp-server`: HTTP transport with SSE streaming
 
 ## Decision
 
@@ -57,7 +57,7 @@ The framework consists of multiple crates that need to work together for session
   - Manage SSE event storage and resumability
   - Provide session expiration and cleanup
 
-#### 2. `turul-mcp-server` Crate  
+#### 2. `turul-mcp-server` Crate
 - **Purpose**: Core MCP server with tool execution and session management
 - **Responsibilities**:
   - Own the SessionManager that orchestrates session lifecycle
@@ -72,7 +72,7 @@ The framework consists of multiple crates that need to work together for session
   - Bridge between HTTP requests and session state
   - Handle session ID extraction and validation
 
-#### 4. `turul-http-turul-mcp-server` Crate
+#### 4. `turul-http-mcp-server` Crate
 - **Purpose**: HTTP transport layer with SSE streaming
 - **Responsibilities**:
   - Handle HTTP requests and SSE connections
@@ -82,7 +82,7 @@ The framework consists of multiple crates that need to work together for session
 
 ### Data Flow
 
-1. **Session Creation**: 
+1. **Session Creation**:
    - Client sends `initialize` request
    - `turul-mcp-server` creates session via SessionStorage
    - Returns `Mcp-Session-Id` header
@@ -108,11 +108,11 @@ pub trait SessionStorage: Send + Sync {
     async fn get_session(&self, session_id: &str) -> Result<Option<SessionInfo>>;
     async fn set_session_state(&self, session_id: &str, key: &str, value: Value) -> Result<()>;
     async fn get_session_state(&self, session_id: &str, key: &str) -> Result<Option<Value>>;
-    
-    // SSE Event Management  
+
+    // SSE Event Management
     async fn store_event(&self, session_id: &str, event: SseEvent) -> Result<SseEvent>;
     async fn get_events_after(&self, session_id: &str, after_event_id: u64) -> Result<Vec<SseEvent>>;
-    
+
     // Cleanup and Maintenance
     async fn expire_sessions(&self, older_than: SystemTime) -> Result<Vec<String>>;
 }
@@ -128,7 +128,7 @@ pub trait SessionStorage: Send + Sync {
 - **Use Case**: Multi-instance production deployment
 - **Characteristics**: Persistent, shared across instances, ACID transactions
 
-#### SQLite Storage  
+#### SQLite Storage
 - **Use Case**: Single-instance production with persistence
 - **Characteristics**: File-based, persistent, local storage
 
@@ -151,7 +151,7 @@ let server = McpServer::builder()
 ```rust
 let postgres_storage = Arc::new(PostgresSessionStorage::with_config(config).await?);
 let server = McpServer::builder()
-    .name("my-server") 
+    .name("my-server")
     .tool(my_tool)
     .with_session_storage(postgres_storage)
     .build()?;
@@ -162,7 +162,7 @@ let server = McpServer::builder()
 let sqlite_storage = Arc::new(SqliteSessionStorage::with_config(config).await?);
 let server = McpServer::builder()
     .name("my-server")
-    .tool(my_tool) 
+    .tool(my_tool)
     .with_session_storage(sqlite_storage)
     .build()?;
 ```
@@ -186,7 +186,7 @@ let server = McpServer::builder()
 ## Benefits
 
 1. **Pluggable Backends**: Easy to switch between storage implementations
-2. **Clean Separation**: Each crate has focused responsibilities  
+2. **Clean Separation**: Each crate has focused responsibilities
 3. **Scalability**: PostgreSQL backend enables multi-instance deployment
 4. **Developer Experience**: Zero-config default (InMemory) with easy customization
 5. **Persistence**: Session state survives server restarts with persistent backends
@@ -213,6 +213,6 @@ let server = McpServer::builder()
 ## Migration Path
 
 - **Phase 1**: Implement SessionStorage trait in all backends ✅
-- **Phase 2**: Integrate with turul-mcp-server SessionManager ✅  
+- **Phase 2**: Integrate with turul-mcp-server SessionManager ✅
 - **Phase 3**: Update examples to demonstrate different backends 🔄
 - **Phase 4**: Add monitoring and metrics for session storage
