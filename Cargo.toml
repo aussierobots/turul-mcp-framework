@@ -117,20 +117,24 @@ toml = "0.9"
 regex = "1.11"
 base64 = "0.22"
 urlencoding = "2.1"
-url = "2.5"
-parking_lot = "0.12"
-rand = "0.9"
-tracing-test = "0.2"
 
-# AWS Lambda and AWS SDK dependencies
+# AWS SDK dependencies
+aws-config = "1.8"
+aws-sdk-dynamodb = "1.43"
+aws-sdk-sqs = "1"
+aws-sdk-sns = "1"
+
+# AWS Lambda dependencies
 lambda_runtime = "0.14"
 lambda_http = "0.17"
 lambda-web = "0.2"
 aws_lambda_events = "0.18"
-aws-config = "1.8"
-aws-sdk-dynamodb = "1"
-aws-sdk-sqs = "1"
-aws-sdk-sns = "1"
+
+# Other dependencies
+url = "2.5"
+parking_lot = "0.12"
+rand = "0.9"
+tracing-test = "0.2"
 pin-project = "1"
 
 # YAML processing

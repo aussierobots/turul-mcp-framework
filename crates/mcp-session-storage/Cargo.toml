@@ -25,11 +25,16 @@ mcp-protocol.workspace = true
 # Optional database support
 sqlx = { workspace = true, optional = true }
 
+# AWS SDK dependencies  
+aws-config = { workspace = true, optional = true }
+aws-sdk-dynamodb = { workspace = true, optional = true }
+
 [features]
 default = ["in-memory"]
 in-memory = []
 sqlite = ["sqlx"]
 postgres = ["sqlx"]
+dynamodb = ["aws-config", "aws-sdk-dynamodb"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
