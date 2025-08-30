@@ -1,4 +1,4 @@
-# MCP Framework - this is Work In Progress - Rust Implementation
+# Turul MCP Framework - this is Work In Progress - Rust Implementation
 
 A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-06-18 specification**.
 
