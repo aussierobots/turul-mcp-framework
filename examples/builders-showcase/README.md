@@ -1,6 +1,6 @@
 # Builders Showcase - Complete MCP Development Environment
 
-This example demonstrates **all 9 MCP runtime builders** working together to create a sophisticated development environment management server. It showcases the full power of the `mcp-builders` crate for building complex MCP servers entirely at runtime.
+This example demonstrates **all 9 MCP runtime builders** working together to create a sophisticated development environment management server. It showcases the full power of the `turul-mcp-builders` crate for building complex MCP servers entirely at runtime.
 
 ## 🎯 What This Example Demonstrates
 

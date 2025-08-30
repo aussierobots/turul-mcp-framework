@@ -23,9 +23,9 @@
 //! - PostgreSQL-backed state management
 
 use std::sync::Arc;
-use mcp_server::{McpServer, McpResult, SessionContext};
-use mcp_session_storage::{PostgresSessionStorage, PostgresConfig};
-use mcp_derive::McpTool;
+use turul_mcp_server::{McpServer, McpResult, SessionContext};
+use turul_mcp_session_storage::{PostgresSessionStorage, PostgresConfig};
+use turul_mcp_derive::McpTool;
 use serde_json::{json, Value};
 use tracing::{info, error, debug};
 
@@ -41,7 +41,7 @@ struct StorePreferenceTool {
 
 impl StorePreferenceTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         debug!("Storing preference: {} = {}", self.key, self.value);
 
@@ -49,7 +49,7 @@ impl StorePreferenceTool {
         (session.set_state)(&format!("pref_{}", self.key), self.value.clone());
 
         // Send progress notification
-        (session.send_notification)(mcp_server::SessionEvent::Notification(json!({
+        (session.send_notification)(turul_mcp_server::SessionEvent::Notification(json!({
             "jsonrpc": "2.0",
             "method": "notifications/progress",
             "params": {
@@ -79,7 +79,7 @@ struct GetPreferenceTool {
 
 impl GetPreferenceTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         debug!("Getting preference: {}", self.key);
 
@@ -107,7 +107,7 @@ struct ListPreferencesTool {}
 
 impl ListPreferencesTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         debug!("Listing all preferences");
 
@@ -139,7 +139,7 @@ struct SessionInfoTool {}
 
 impl SessionInfoTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         Ok(json!({
             "session_id": session.session_id,

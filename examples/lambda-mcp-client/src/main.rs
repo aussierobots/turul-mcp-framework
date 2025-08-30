@@ -1,6 +1,6 @@
 //! Comprehensive Test Client for Lambda MCP Server
 //!
-//! This client provides comprehensive end-to-end testing of the lambda-mcp-server
+//! This client provides comprehensive end-to-end testing of the lambda-turul-mcp-server
 //! implementation, validating MCP protocol compliance, tool functionality, session
 //! management, and infrastructure integration.
 

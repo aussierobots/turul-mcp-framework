@@ -9,9 +9,9 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use mcp_derive::{McpResource, resource};
-use mcp_server::{McpServer, McpResource};
-use mcp_protocol::resources::ResourceContent;
+use turul_mcp_derive::{McpResource, resource};
+use turul_mcp_server::{McpServer, McpResource};
+use turul_mcp_protocol::resources::ResourceContent;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
@@ -173,12 +173,12 @@ impl McpResource for FileSystemResource {
         }))
     }
 
-    async fn read(&self, params: Option<Value>) -> mcp_server::McpResult<Vec<ResourceContent>> {
+    async fn read(&self, params: Option<Value>) -> turul_mcp_server::McpResult<Vec<ResourceContent>> {
         let file_path = params
             .as_ref()
             .and_then(|p| p.get("path"))
             .and_then(|p| p.as_str())
-            .ok_or_else(|| mcp_protocol::McpError::missing_param("path"))?;
+            .ok_or_else(|| turul_mcp_protocol::McpError::missing_param("path"))?;
 
         // Validate file extension
         let extension = std::path::Path::new(file_path)
@@ -187,7 +187,7 @@ impl McpResource for FileSystemResource {
             .unwrap_or("");
             
         if !self.allowed_extensions.contains(&extension.to_string()) {
-            return Err(mcp_protocol::McpError::param_out_of_range(
+            return Err(turul_mcp_protocol::McpError::param_out_of_range(
                 "path",
                 file_path,
                 &format!("File extension must be one of: {}", self.allowed_extensions.join(", "))
@@ -196,7 +196,7 @@ impl McpResource for FileSystemResource {
 
         // Security check: prevent path traversal
         if file_path.contains("..") || file_path.starts_with('/') {
-            return Err(mcp_protocol::McpError::param_out_of_range(
+            return Err(turul_mcp_protocol::McpError::param_out_of_range(
                 "path",
                 file_path,
                 "Path must be relative and cannot contain '..'"
@@ -299,12 +299,12 @@ impl McpResource for DatabaseResource {
         }))
     }
 
-    async fn read(&self, params: Option<Value>) -> mcp_server::McpResult<Vec<ResourceContent>> {
+    async fn read(&self, params: Option<Value>) -> turul_mcp_server::McpResult<Vec<ResourceContent>> {
         let query = params
             .as_ref()
             .and_then(|p| p.get("query"))
             .and_then(|q| q.as_str())
-            .ok_or_else(|| mcp_protocol::McpError::missing_param("query"))?;
+            .ok_or_else(|| turul_mcp_protocol::McpError::missing_param("query"))?;
 
         let limit = params
             .as_ref()
@@ -313,7 +313,7 @@ impl McpResource for DatabaseResource {
             .unwrap_or(100);
 
         if limit < 1 || limit > 1000 {
-            return Err(mcp_protocol::McpError::param_out_of_range(
+            return Err(turul_mcp_protocol::McpError::param_out_of_range(
                 "limit",
                 &limit.to_string(),
                 "Limit must be between 1 and 1000"
@@ -325,7 +325,7 @@ impl McpResource for DatabaseResource {
         let query_trimmed = query_upper.trim();
         let allowed_prefixes = ["SELECT", "SHOW", "DESCRIBE", "EXPLAIN"];
         if !allowed_prefixes.iter().any(|prefix| query_trimmed.starts_with(prefix)) {
-            return Err(mcp_protocol::McpError::param_out_of_range(
+            return Err(turul_mcp_protocol::McpError::param_out_of_range(
                 "query",
                 query,
                 &format!("Query must start with one of: {}", allowed_prefixes.join(", "))

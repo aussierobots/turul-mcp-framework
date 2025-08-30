@@ -8,14 +8,14 @@
 
 use std::collections::HashMap;
 use serde_json::{json, Value};
-use mcp_server::{McpTool, McpResult, SessionContext};
-use mcp_protocol_2025_06_18::tools::CallToolResponse;
+use turul_mcp_server::{McpTool, McpResult, SessionContext};
+use turul_mcp_protocol::tools::CallToolResponse;
 
 // ===========================================
 // === Level 1: Function Macro ===
 // ===========================================
 
-use mcp_derive::mcp_tool;
+use turul_mcp_derive::mcp_tool;
 
 #[mcp_tool(name = "calculator_add_function_test", description = "Add two numbers using function macro")]
 async fn calculator_add_function(
@@ -48,7 +48,7 @@ async fn test_level1_function_macro() {
 // === Level 2: Derive Macro ===
 // ===========================================
 
-use mcp_derive::McpTool;
+use turul_mcp_derive::McpTool;
 
 #[derive(McpTool)]
 #[tool(name = "calculator_add_derive_test", description = "Add two numbers using derive")]
@@ -84,7 +84,7 @@ async fn test_level2_derive_macro() {
 // === Level 3: Builder Pattern ===
 // ===========================================
 
-use mcp_server::ToolBuilder;
+use turul_mcp_server::ToolBuilder;
 
 #[tokio::test]
 async fn test_level3_builder_pattern() {
@@ -124,12 +124,12 @@ async fn test_level3_builder_pattern() {
 // ===========================================
 
 use async_trait::async_trait;
-use mcp_protocol_2025_06_18::tools::{
+use turul_mcp_protocol::tools::{
     ToolResult, ToolSchema,
     HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, 
     HasAnnotations, HasToolMeta
 };
-use mcp_protocol_2025_06_18::schema::JsonSchema;
+use turul_mcp_protocol::schema::JsonSchema;
 
 #[derive(Clone)]
 struct CalculatorAddManualTool;

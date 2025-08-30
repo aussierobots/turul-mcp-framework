@@ -3,9 +3,9 @@
 //! This example demonstrates the `tool!` declarative macro for creating simple MCP tools
 //! with inline parameter definitions and execute closures.
 
-use mcp_derive::tool;
-use mcp_server::{McpServer, McpTool};
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema};
+use turul_mcp_derive::tool;
+use turul_mcp_server::{McpServer, McpTool};
+use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

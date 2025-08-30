@@ -12,9 +12,9 @@ use std::path::Path;
 use std::net::SocketAddr;
 
 use async_trait::async_trait;
-use mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, McpError, McpResult, CallToolResult};
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
-use mcp_server::{McpServer, McpTool, SessionContext};
+use turul_mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, McpError, McpResult, CallToolResult};
+use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
+use turul_mcp_server::{McpServer, McpTool, SessionContext};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value, from_str};
 use tracing::info;
@@ -170,7 +170,7 @@ impl HasOutputSchema for FinancialCalculatorTool {
 }
 
 impl HasAnnotations for FinancialCalculatorTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -433,7 +433,7 @@ impl HasOutputSchema for BusinessMetricsTool {
 }
 
 impl HasAnnotations for BusinessMetricsTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -693,7 +693,7 @@ impl HasOutputSchema for IndustryBenchmarkTool {
 }
 
 impl HasAnnotations for IndustryBenchmarkTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -832,7 +832,7 @@ impl HasOutputSchema for CalculatorDocumentationTool {
 }
 
 impl HasAnnotations for CalculatorDocumentationTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }

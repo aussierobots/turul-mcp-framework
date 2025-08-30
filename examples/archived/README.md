@@ -38,7 +38,7 @@ The following 23 examples were archived during reorganization:
 - `almost-zero-config-demo` - Duplicate zero-config demo
 - `simple-zero-config-demo` - Redundant with getting-started
 - `working-universal-demo` - Duplicate universal demo
-- `universal-mcp-server` - Redundant server example
+- `universal-turul-mcp-server` - Redundant server example
 
 ### Specialized Examples (2 archived)
 - `simple-resources-demo` - Has target/ directory, redundant

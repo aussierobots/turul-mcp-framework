@@ -11,9 +11,9 @@ use std::collections::HashMap;
 use serde_json::{json, Value};
 use tokio;
 
-use mcp_derive::{McpTool, mcp_tool};
-use mcp_server::{McpResult, SessionContext, McpTool};
-use mcp_protocol::McpError;
+use turul_mcp_derive::{McpTool, mcp_tool};
+use turul_mcp_server::{McpResult, SessionContext, McpTool};
+use turul_mcp_protocol::McpError;
 
 /// Test derive macro with SessionContext support
 #[derive(McpTool, Default)]
@@ -92,8 +92,8 @@ async fn test_function_no_session(
 mod tests {
     use super::*;
     use std::sync::Arc;
-    use mcp_server::session::{SessionManager, SessionEvent};
-    use mcp_protocol::{ServerCapabilities, ClientCapabilities, Implementation};
+    use turul_mcp_server::session::{SessionManager, SessionEvent};
+    use turul_mcp_protocol::{ServerCapabilities, ClientCapabilities, Implementation};
     
     /// Create a test SessionContext
     async fn create_test_session() -> SessionContext {

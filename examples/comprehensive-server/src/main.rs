@@ -12,12 +12,12 @@ use std::fs;
 use std::path::Path;
 
 use async_trait::async_trait;
-use mcp_protocol::{schema::JsonSchema, ToolResult, ToolSchema, McpError, McpResult};
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations, CallToolResult};
-use mcp_protocol::resources::{HasResourceMetadata, HasResourceDescription, HasResourceUri, HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta, ResourceContent};
-use mcp_protocol::prompts::{PromptMessage, HasPromptMetadata, HasPromptDescription, HasPromptArguments, HasPromptAnnotations, HasPromptMeta, PromptAnnotations, PromptArgument};
-use mcp_server::handlers::{McpPrompt, McpTemplate};
-use mcp_server::{McpServer, McpTool, McpResource, SessionContext};
+use turul_mcp_protocol::{schema::JsonSchema, ToolResult, ToolSchema, McpError, McpResult};
+use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations, CallToolResult};
+use turul_mcp_protocol::resources::{HasResourceMetadata, HasResourceDescription, HasResourceUri, HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta, ResourceContent};
+use turul_mcp_protocol::prompts::{PromptMessage, HasPromptMetadata, HasPromptDescription, HasPromptArguments, HasPromptAnnotations, HasPromptMeta, PromptAnnotations, PromptArgument};
+use turul_mcp_server::handlers::{McpPrompt, McpTemplate};
+use turul_mcp_server::{McpServer, McpTool, McpResource, SessionContext};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value, from_str};
 use tracing::info;
@@ -951,7 +951,7 @@ impl HasResourceSize for ProjectResourcesHandler {
 }
 
 impl HasResourceAnnotations for ProjectResourcesHandler {
-    fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
 }
 
 impl HasResourceMeta for ProjectResourcesHandler {

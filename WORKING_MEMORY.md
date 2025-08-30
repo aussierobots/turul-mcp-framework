@@ -21,9 +21,9 @@
 - ✅ **MCP 2025-06-18 Compliance**: Complete with SSE notifications
 - ✅ **Schema Validation**: MCP Inspector compatibility verified
 - ✅ **SessionManager Storage Integration**: Complete - storage backend fully connected
-- ⚠️ **lambda-mcp-server**: Commented out until DynamoDB + Global Fan-Out Notifications complete
-- 🚨 **BLOCKING ADR REQUIRED**: Global fan-out notification architecture (must be approved before lambda-mcp-server)
-- 📋 **Next TODO**: ADR approval → DynamoDB implementation → Global fan-out system → lambda-mcp-server
+- ⚠️ **lambda-turul-mcp-server**: Commented out until DynamoDB + Global Fan-Out Notifications complete
+- 🚨 **BLOCKING ADR REQUIRED**: Global fan-out notification architecture (must be approved before lambda-turul-mcp-server)
+- 📋 **Next TODO**: ADR approval → DynamoDB implementation → Global fan-out system → lambda-turul-mcp-server
 
 ## 📋 **ESSENTIAL DOCUMENTATION** (9 files total)
 
@@ -38,9 +38,9 @@
   - [ADR-SessionContext-Macro-Support.md](./ADR-SessionContext-Macro-Support.md) - Macro session support
 - **AI Assistant**: [CLAUDE.md](./CLAUDE.md) - Development guidance for Claude Code
 
-## 🚨 **CRITICAL ARCHITECTURAL RULE: mcp_protocol Alias Usage**
+## 🚨 **CRITICAL ARCHITECTURAL RULE: turul_mcp_protocol Alias Usage**
 
-**MANDATORY**: ALL code MUST use `mcp_protocol` alias, NEVER direct `mcp_protocol_2025_06_18` paths.
+**MANDATORY**: ALL code MUST use `turul_mcp_protocol` alias, NEVER direct `turul_mcp_protocol_2025_06_18` paths.
 
 This is documented as an ADR in CLAUDE.md and applies to:
 - All example code
@@ -83,7 +83,7 @@ This is documented as an ADR in CLAUDE.md and applies to:
 ### **Phase 8.3 Enhancement: Performance Testing Upgrade** ✅ **MAJOR SUCCESS**
 **Achievement**: Upgraded performance-testing to use proper MCP client instead of raw HTTP
 **Implementation Success**:
-- ✅ **Added dependency**: `mcp-client` workspace dependency 
+- ✅ **Added dependency**: `turul-mcp-client` workspace dependency 
 - ✅ **performance_client.rs**: Complete upgrade to `McpClient` + `HttpTransport` + capability negotiation
 - ✅ **memory_benchmark.rs**: Full MCP client integration with proper session management
 - ⚠️ **stress_test.rs**: Complex reqwest patterns require additional refactoring (defer to future work)
@@ -93,7 +93,7 @@ This is documented as an ADR in CLAUDE.md and applies to:
 **Achievement**: Fixed resources-server compilation errors (was blocking workspace build)
 **Implementation Success**:
 - ✅ **ResourceContent::text**: Fixed 15+ API calls to include URI parameter (e.g., `"docs://project"`, `"config://app"`)
-- ✅ **ResourceAnnotations**: Updated 4 type references to `mcp_protocol::meta::Annotations`
+- ✅ **ResourceAnnotations**: Updated 4 type references to `turul_mcp_protocol::meta::Annotations`
 - ✅ **Compilation**: resources-server now compiles cleanly
 - 🎯 **Impact**: Demonstrates comprehensive resource patterns with proper API usage
 
@@ -101,14 +101,14 @@ This is documented as an ADR in CLAUDE.md and applies to:
 **Achievement**: Achieved clean workspace compilation for production framework usage
 **Implementation Success**:
 - ✅ **elicitation-server**: Fixed all 5 unused schema warnings and description field usage
-- ✅ **Workspace Strategy**: Temporarily excluded 4 examples needing maintenance (pagination-server, resource-server, logging-server, lambda-mcp-server)
+- ✅ **Workspace Strategy**: Temporarily excluded 4 examples needing maintenance (pagination-server, resource-server, logging-server, lambda-turul-mcp-server)
 - ✅ **Core Framework**: All framework crates and 18 working examples compile cleanly 
 - ✅ **Production Ready**: `cargo check --workspace` now succeeds with only 2 minor warnings
 - 🎯 **Impact**: Clean development experience and CI/CD pipeline compatibility
 
 ### Framework Completion Summary  
 - **JsonSchema Standardization**: ✅ **BREAKTHROUGH** - Function macro (`#[mcp_tool]`) issue completely resolved
-- **mcp-builders Crate**: Complete runtime builder library with ALL 9 MCP areas
+- **turul-mcp-builders Crate**: Complete runtime builder library with ALL 9 MCP areas
 - **70 Tests Passing**: Comprehensive test coverage with zero warnings/errors
 - **All Tool Creation Levels**: Function macros, derive macros, builders, manual implementations all working
 - **SSE Notifications**: End-to-end delivery confirmed - Tool → NotificationBroadcaster → SSE → Client
@@ -127,13 +127,13 @@ cargo run -p minimal-server  # Uses #[mcp_tool] function macro
 # Test derive macro (always worked, still working)
 cargo run -p derive-macro-server  # Uses #[derive(McpTool)] derive macro
 
-# Test mcp-builders crate
-cargo test --package mcp-builders  # All 70 tests pass
+# Test turul-mcp-builders crate
+cargo test --package turul-mcp-builders  # All 70 tests pass
 
 # Verify JsonSchema standardization
-cargo check --package mcp-protocol-2025-06-18
-cargo check --package mcp-derive
-cargo check --package mcp-server
+cargo check --package turul-mcp-protocol-2025-06-18
+cargo check --package turul-mcp-derive
+cargo check --package turul-mcp-server
 
 # Expected output: "✅ 🎆 FULLY MCP COMPLIANT: Session management + SSE notifications working!"
 ```
@@ -303,7 +303,7 @@ All 9 official MCP notification types now supported:
 | **DynamoDB** | ⚠️ **Stub only** | 20 TODO items | ❌ No (needs implementation) |
 
 ### **DynamoDB Implementation TODOs** ⚠️ **NEEDS WORK**
-Found **20 TODO items** in `/crates/mcp-session-storage/src/dynamodb.rs`:
+Found **20 TODO items** in `/crates/turul-mcp-session-storage/src/dynamodb.rs`:
 
 #### **AWS SDK Integration** (6 items)
 - Initialize AWS SDK client and verify table exists
@@ -333,10 +333,10 @@ Found **20 TODO items** in `/crates/mcp-session-storage/src/dynamodb.rs`:
 - Delete old events for cleanup
 - Count events across all sessions
 
-### **Critical Path to lambda-mcp-server** 🚨 **ADR APPROVAL REQUIRED**
+### **Critical Path to lambda-turul-mcp-server** 🚨 **ADR APPROVAL REQUIRED**
 
 #### **Phase 1: ADR Creation & Approval** ⚠️ **BLOCKING**
-**Status**: 🔴 **MUST BE APPROVED** before any lambda-mcp-server work
+**Status**: 🔴 **MUST BE APPROVED** before any lambda-turul-mcp-server work
 **Complexity**: High - Complex architectural decision with multiple trade-offs
 
 **ADR Must Address**: Global Fan-Out Notification Architecture
@@ -360,8 +360,8 @@ Found **20 TODO items** in `/crates/mcp-session-storage/src/dynamodb.rs`:
 4. **Per-Session Storage**: Global events stored individually per session
 5. **SSE Integration**: Global notifications in SSE event streams
 
-#### **Phase 4: lambda-mcp-server** (After Phases 1-3)
-5. **lambda-mcp-server**: Re-enable once DynamoDB + Global Fan-Out complete
+#### **Phase 4: lambda-turul-mcp-server** (After Phases 1-3)
+5. **lambda-turul-mcp-server**: Re-enable once DynamoDB + Global Fan-Out complete
 
 ## 🎯 **OUTSTANDING WORK ITEMS** (Updated 2025-08-30)
 
@@ -375,7 +375,7 @@ Found **20 TODO items** in `/crates/mcp-session-storage/src/dynamodb.rs`:
 
 ### **Framework Core Status** ✅ **PRODUCTION COMPLETE**
 - ✅ **All Tool Creation Levels Working**: Function macros (`#[mcp_tool]`), derive macros (`#[derive(McpTool)]`), builders, and manual implementations
-- ✅ **mcp-derive warnings**: Fixed - Made all MacroInput structs public (5 warnings eliminated)  
+- ✅ **turul-mcp-derive warnings**: Fixed - Made all MacroInput structs public (5 warnings eliminated)  
 - ✅ **Core Framework**: Zero errors/warnings across all framework crates
 - ✅ **Server error logging**: Client disconnections now show as DEBUG instead of ERROR
 
@@ -383,7 +383,7 @@ Found **20 TODO items** in `/crates/mcp-session-storage/src/dynamodb.rs`:
 - ✅ **Archive Strategy**: Moved 23 redundant examples to `examples/archived/` with detailed README
 - ✅ **Learning Progression**: Maintained exactly 25 examples with clear progression from simple to complex
 - ✅ **Workspace Cleanup**: Updated Cargo.toml to remove archived examples from build
-- ✅ **Import Standardization**: Enforced `mcp_protocol` alias usage (ADR documented in CLAUDE.md)
+- ✅ **Import Standardization**: Enforced `turul_mcp_protocol` alias usage (ADR documented in CLAUDE.md)
 
 ### **Example Maintenance - Pattern Established** ✅ **MAJOR PROGRESS**
 
@@ -398,7 +398,7 @@ Found **20 TODO items** in `/crates/mcp-session-storage/src/dynamodb.rs`:
 **Must complete before example reorganization**:
 1. **Fix all crate unit tests** - `cargo test --workspace` must pass
 2. **Fix ToolDefinition trait migration** - Complete 6 broken examples
-3. **Fix import issues** - Complete `mcp_protocol` alias adoption
+3. **Fix import issues** - Complete `turul_mcp_protocol` alias adoption
 4. **Validate test coverage** - Ensure framework functionality is tested
 
 #### **Phase 7 - Example Reorganization** 📋 **PLANNED**
@@ -416,13 +416,13 @@ Found **20 TODO items** in `/crates/mcp-session-storage/src/dynamodb.rs`:
 #### **Remaining Minor Issues** (Next Priorities - Phase 8.1)
 
 ##### **Priority 1: Immediate Maintenance** ✅ **COMPLETED**
-1. **resource! macro**: ✅ **NO ISSUES FOUND** - Already using proper mcp_protocol imports
-   - **Status**: Resource macro compiles cleanly, uses mcp_protocol alias correctly
+1. **resource! macro**: ✅ **NO ISSUES FOUND** - Already using proper turul_mcp_protocol imports
+   - **Status**: Resource macro compiles cleanly, uses turul_mcp_protocol alias correctly
    - **JsonSchema**: Uses appropriate serde_json::Value for meta fields (matches protocol spec)
    - **Impact**: Users can already use declarative resource! macro for simple resources
 
-2. **mcp-derive warnings**: ✅ **NO WARNINGS FOUND** - Clean compilation confirmed
-   - **Status**: `cargo build --package mcp-derive` produces zero warnings
+2. **turul-mcp-derive warnings**: ✅ **NO WARNINGS FOUND** - Clean compilation confirmed
+   - **Status**: `cargo build --package turul-mcp-derive` produces zero warnings
    - **Result**: Clean cargo check output already achieved
 
 3. **builders-showcase**: ✅ **COMPLETED** - Fixed in Phase 8.2

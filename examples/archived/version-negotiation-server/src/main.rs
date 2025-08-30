@@ -6,10 +6,10 @@
 
 use std::collections::HashMap;
 use async_trait::async_trait;
-use mcp_server::{McpServer, McpTool};
-use mcp_protocol::{ToolSchema, ToolResult, version::McpVersion, schema::JsonSchema, McpError, McpResult};
-use mcp_protocol::tools::CallToolResult;
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
+use turul_mcp_server::{McpServer, McpTool};
+use turul_mcp_protocol::{ToolSchema, ToolResult, version::McpVersion, schema::JsonSchema, McpError, McpResult};
+use turul_mcp_protocol::tools::CallToolResult;
+use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
 use serde_json::Value;
 use tracing::info;
 
@@ -52,7 +52,7 @@ impl HasOutputSchema for VersionInfoTool {
 }
 
 impl HasAnnotations for VersionInfoTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None // Use default
     }
 }
@@ -71,7 +71,7 @@ impl McpTool for VersionInfoTool {
     async fn call(
         &self,
         _args: Value,
-        session: Option<mcp_server::SessionContext>,
+        session: Option<turul_mcp_server::SessionContext>,
     ) -> McpResult<CallToolResult> {
         let mut results = vec![];
 
@@ -163,7 +163,7 @@ impl HasOutputSchema for VersionTestTool {
 }
 
 impl HasAnnotations for VersionTestTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None // Use default
     }
 }
@@ -182,7 +182,7 @@ impl McpTool for VersionTestTool {
     async fn call(
         &self,
         args: Value,
-        _session: Option<mcp_server::SessionContext>,
+        _session: Option<turul_mcp_server::SessionContext>,
     ) -> McpResult<CallToolResult> {
         let client_version = args.get("client_version")
             .and_then(|v| v.as_str())

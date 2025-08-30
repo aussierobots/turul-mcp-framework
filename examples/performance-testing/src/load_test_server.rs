@@ -6,9 +6,9 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use mcp_derive::McpTool;
-use mcp_server::{McpServer, McpResult};
-use mcp_protocol::McpError;
+use turul_mcp_derive::McpTool;
+use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_protocol::McpError;
 use serde_json::json;
 use tokio::time::sleep;
 use tracing::info;
@@ -27,7 +27,7 @@ struct FastComputeTool {
 }
 
 impl FastComputeTool {
-    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
+    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
         let start = Instant::now();
         REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         
@@ -50,7 +50,7 @@ struct CpuIntensiveTool {
 }
 
 impl CpuIntensiveTool {
-    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
+    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
         let start = Instant::now();
         REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         
@@ -78,7 +78,7 @@ struct MemoryAllocateTool {
 }
 
 impl MemoryAllocateTool {
-    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
+    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
         let start = Instant::now();
         REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         
@@ -110,7 +110,7 @@ struct AsyncIoTool {
 }
 
 impl AsyncIoTool {
-    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
+    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
         let start = Instant::now();
         REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         
@@ -126,7 +126,7 @@ impl AsyncIoTool {
 
 /// Session-aware counter tool
 #[derive(Clone)]
-#[derive(mcp_derive::McpTool)]
+#[derive(turul_mcp_derive::McpTool)]
 #[tool(name = "session_counter", description = "Session-aware counter for session testing")]
 struct SessionCounterTool {
     #[param(description = "Increment amount")]
@@ -134,7 +134,7 @@ struct SessionCounterTool {
 }
     
 impl SessionCounterTool {
-    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<mcp_protocol::tools::CallToolResult> {
+    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<turul_mcp_protocol::tools::CallToolResult> {
         let start = Instant::now();
         REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         
@@ -144,8 +144,8 @@ impl SessionCounterTool {
         let elapsed = start.elapsed().as_micros() as u64;
         TOTAL_PROCESSING_TIME.fetch_add(elapsed, Ordering::Relaxed);
         
-        Ok(mcp_protocol::tools::CallToolResult::success(vec![
-            mcp_protocol::ToolResult::text(result)
+        Ok(turul_mcp_protocol::tools::CallToolResult::success(vec![
+            turul_mcp_protocol::ToolResult::text(result)
         ]))
     }
 }
@@ -159,7 +159,7 @@ struct PerfStatsTool {
 }
 
 impl PerfStatsTool {
-    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
+    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
         let total_requests = REQUEST_COUNTER.load(Ordering::Relaxed);
         let total_time_micros = TOTAL_PROCESSING_TIME.load(Ordering::Relaxed);
         
@@ -189,7 +189,7 @@ struct ErrorSimulationTool {
 }
 
 impl ErrorSimulationTool {
-    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
+    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
         REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
         
         match self.error_type.as_str() {

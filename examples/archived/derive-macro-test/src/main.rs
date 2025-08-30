@@ -5,9 +5,9 @@
 //!
 //! Lines of code: ~50 (vs 400+ with manual trait implementations)
 
-use mcp_derive::{McpTool, McpResource, McpNotification};
-use mcp_server::{McpServer, McpResult};
-use mcp_protocol::resources::HasResourceUri; // Import trait for .uri() method
+use turul_mcp_derive::{McpTool, McpResource, McpNotification};
+use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_protocol::resources::HasResourceUri; // Import trait for .uri() method
 use tracing::info;
 
 // =============================================================================
@@ -32,8 +32,8 @@ impl Calculator {
             "subtract" => self.a - self.b,
             "multiply" => self.a * self.b,
             "divide" if self.b != 0.0 => self.a / self.b,
-            "divide" => return Err(mcp_protocol::McpError::tool_execution("Division by zero")),
-            _ => return Err(mcp_protocol::McpError::invalid_param_type(
+            "divide" => return Err(turul_mcp_protocol::McpError::tool_execution("Division by zero")),
+            _ => return Err(turul_mcp_protocol::McpError::invalid_param_type(
                 "operation",
                 "add|subtract|multiply|divide", 
                 &self.operation

@@ -17,10 +17,10 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use async_trait::async_trait;
-use mcp_server::{McpServer, McpTool, SessionContext};
-use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
-use mcp_protocol::tools::CallToolResult;
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations};
+use turul_mcp_server::{McpServer, McpTool, SessionContext};
+use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
+use turul_mcp_protocol::tools::CallToolResult;
+use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations};
 // ElicitationBuilder import removed - using simplified demonstrations
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -444,7 +444,7 @@ impl HasOutputSchema for StartOnboardingWorkflowTool {
 }
 
 impl HasAnnotations for StartOnboardingWorkflowTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -614,7 +614,7 @@ impl HasOutputSchema for ComplianceFormTool {
 }
 
 impl HasAnnotations for ComplianceFormTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }

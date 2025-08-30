@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Sending request: {}", request);
     
     let response = client
-        .post("http://127.0.0.1:9000/lambda-url/lambda-mcp-server")
+        .post("http://127.0.0.1:9000/lambda-url/lambda-turul-mcp-server")
         .header("Content-Type", "application/json")
         .header("mcp-session-id", "test-session")
         .json(&request)

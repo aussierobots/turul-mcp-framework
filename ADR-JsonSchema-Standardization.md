@@ -95,19 +95,19 @@ pub fn with_properties(mut self, properties: HashMap<String, serde_json::Value>)
 
 ### Changes Made
 
-1. **Core Protocol Types** (`mcp-protocol-2025-06-18/src/tools.rs`):
+1. **Core Protocol Types** (`turul-mcp-protocol-2025-06-18/src/tools.rs`):
    - Updated `ToolSchema.properties` type
    - Updated `with_properties()` method signature
    - Added proper JsonSchema imports
 
-2. **Macro Simplification** (`mcp-derive/src/`):
+2. **Macro Simplification** (`turul-mcp-derive/src/`):
    - Removed `serde_json::to_value()` conversion calls
    - Cleaned up `tool_derive.rs` and `tool_attr.rs`
    - Deleted obsolete `type_to_json_value()` function
 
 3. **Builder Updates**:
-   - `mcp-protocol-2025-06-18/src/tools/builder.rs`
-   - `mcp-builders/src/tool.rs`
+   - `turul-mcp-protocol-2025-06-18/src/tools/builder.rs`
+   - `turul-mcp-builders/src/tool.rs`
    - Changed from `serde_json::json!()` to `JsonSchema::*()` constructors
 
 ### Testing Verification
@@ -119,9 +119,9 @@ cargo check --package derive-macro-server     # Derive macro
 cargo check --package function-macro-server   # Additional function examples
 
 # ✅ Framework compiles cleanly
-cargo check --package mcp-protocol-2025-06-18
-cargo check --package mcp-derive
-cargo check --package mcp-server
+cargo check --package turul-mcp-protocol-2025-06-18
+cargo check --package turul-mcp-derive
+cargo check --package turul-mcp-server
 ```
 
 ## Consequences

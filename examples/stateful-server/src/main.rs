@@ -7,9 +7,9 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use mcp_server::{McpServer, McpTool, SessionContext};
-use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
+use turul_mcp_server::{McpServer, McpTool, SessionContext};
+use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
+use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
 use serde_json::{Value, json};
 
 /// Shopping cart tool that maintains state across requests
@@ -61,7 +61,7 @@ impl HasOutputSchema for ShoppingCartTool {
 }
 
 impl HasAnnotations for ShoppingCartTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -254,7 +254,7 @@ impl HasOutputSchema for UserPreferencesTool {
 }
 
 impl HasAnnotations for UserPreferencesTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -385,7 +385,7 @@ impl HasOutputSchema for SessionInfoTool {
 }
 
 impl HasAnnotations for SessionInfoTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }

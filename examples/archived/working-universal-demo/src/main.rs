@@ -1,12 +1,12 @@
 //! # Working Universal Demo - TODO Pattern Actually Working!
 //!
-//! This demonstrates the EXACT pattern from universal-mcp-server TODO comment,
+//! This demonstrates the EXACT pattern from universal-turul-mcp-server TODO comment,
 //! using ZERO-CONFIGURATION approach that works RIGHT NOW.
 //!
 //! Lines: ~50 (implementing the TODO vision with zero-config framework)
 
-use mcp_derive::mcp_tool;
-use mcp_server::{McpServer, McpResult, ToolBuilder};
+use turul_mcp_derive::mcp_tool;
+use turul_mcp_server::{McpServer, McpResult, ToolBuilder};
 use serde_json::json;
 use tracing::info;
 

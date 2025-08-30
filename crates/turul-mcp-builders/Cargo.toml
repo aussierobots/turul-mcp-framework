@@ -1,0 +1,22 @@
+[package]
+name = "turul-mcp-builders"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Runtime builders for MCP (Model Context Protocol) components"
+keywords = ["mcp", "protocol", "builders", "runtime"]
+categories = ["development-tools", "api-bindings"]
+
+[dependencies]
+# Protocol alias for current version  
+turul-mcp-protocol = { package = "turul-mcp-protocol-2025-06-18", path = "../turul-mcp-protocol-2025-06-18" }
+turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server" }
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

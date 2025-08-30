@@ -94,7 +94,7 @@ The framework supports **4 tool creation approaches**:
 
 1. **Function Macros** - `#[mcp_tool]` attribute on functions
 2. **Derive Macros** - `#[derive(McpTool)]` on structs
-3. **Builder Pattern** - Runtime construction with `mcp-builders`
+3. **Builder Pattern** - Runtime construction with `turul-mcp-builders`
 4. **Manual Implementation** - Direct trait implementation
 
 Each approach offers different trade-offs between simplicity and control.

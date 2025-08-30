@@ -3,12 +3,14 @@
 //! This is the simplest possible MCP server - just one function with the #[mcp_tool] attribute.
 //! Perfect for getting started and understanding the basics.
 
-use mcp_derive::mcp_tool;
-use mcp_server::McpServer;
+use turul_mcp_derive::mcp_tool;
+use turul_mcp_server::{McpResult, McpServer};
 
 /// The simplest possible MCP tool - just echo back the input text
 #[mcp_tool(name = "echo", description = "Echo back the input text")]
-async fn echo(text: String) -> Result<String, String> {
+async fn echo(
+    #[param(description = "Text to echo back")] text: String
+) -> McpResult<String> {
     Ok(format!("Echo: {}", text))
 }
 

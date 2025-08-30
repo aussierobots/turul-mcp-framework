@@ -1,7 +1,7 @@
 use async_trait::async_trait;
-use mcp_derive::McpTool;
-use mcp_protocol::{CallToolResponse, ToolResult, ToolSchema};
-use mcp_server::{McpResult, McpServer, McpTool, SessionContext};
+use turul_mcp_derive::McpTool;
+use turul_mcp_protocol::{CallToolResponse, ToolResult, ToolSchema};
+use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::info;
@@ -51,7 +51,7 @@ impl McpTool for EchoManualTool {
     }
 
     fn input_schema(&self) -> ToolSchema {
-        use mcp_protocol::schema::JsonSchema;
+        use turul_mcp_protocol::schema::JsonSchema;
         use std::collections::HashMap;
         
         ToolSchema::object()
@@ -63,7 +63,7 @@ impl McpTool for EchoManualTool {
     }
     
     fn output_schema(&self) -> Option<ToolSchema> {
-        use mcp_protocol::schema::JsonSchema;
+        use turul_mcp_protocol::schema::JsonSchema;
         use std::collections::HashMap;
         
         Some(ToolSchema::object()
@@ -80,7 +80,7 @@ impl McpTool for EchoManualTool {
         
         let text = args.get("text")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| mcp_protocol::McpError::invalid_param_type("text", "string", "other"))?;
+            .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type("text", "string", "other"))?;
             
         let repeat = args.get("repeat")
             .and_then(|v| v.as_u64())
@@ -167,7 +167,7 @@ impl McpTool for PersonCreatorManualTool {
     }
 
     fn input_schema(&self) -> ToolSchema {
-        use mcp_protocol::schema::JsonSchema;
+        use turul_mcp_protocol::schema::JsonSchema;
         use std::collections::HashMap;
         
         ToolSchema::object()
@@ -181,7 +181,7 @@ impl McpTool for PersonCreatorManualTool {
     }
     
     fn output_schema(&self) -> Option<ToolSchema> {
-        use mcp_protocol::schema::JsonSchema;
+        use turul_mcp_protocol::schema::JsonSchema;
         use std::collections::HashMap;
         
         Some(ToolSchema::object()
@@ -197,15 +197,15 @@ impl McpTool for PersonCreatorManualTool {
     async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
         let name = args.get("name")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| mcp_protocol::McpError::invalid_param_type("name", "string", "other"))?;
+            .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type("name", "string", "other"))?;
             
         let age = args.get("age")
             .and_then(|v| v.as_u64())
-            .ok_or_else(|| mcp_protocol::McpError::invalid_param_type("age", "integer", "other"))? as u32;
+            .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type("age", "integer", "other"))? as u32;
             
         let email = args.get("email")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| mcp_protocol::McpError::invalid_param_type("email", "string", "other"))?;
+            .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type("email", "string", "other"))?;
             
         let is_active = args.get("is_active")
             .and_then(|v| v.as_bool())
@@ -219,7 +219,7 @@ impl McpTool for PersonCreatorManualTool {
         };
         
         let json_text = serde_json::to_string(&person).map_err(|e| 
-            mcp_protocol::McpError::tool_execution(&e.to_string()))?;
+            turul_mcp_protocol::McpError::tool_execution(&e.to_string()))?;
         
         Ok(vec![ToolResult::text(json_text)])
     }
@@ -236,7 +236,7 @@ impl McpTool for PersonCreatorManualTool {
             
             let person = PersonData { name, age, email, is_active };
             let structured_content = serde_json::to_value(&person)
-                .map_err(|e| mcp_protocol::McpError::tool_execution(&e.to_string()))?;
+                .map_err(|e| turul_mcp_protocol::McpError::tool_execution(&e.to_string()))?;
             
             Ok(response.with_structured_content(structured_content))
         } else {

@@ -6,8 +6,8 @@
 //! - Simple derive macros replace complex trait implementations
 //! - Pluggable session storage (InMemory → SQLite → PostgreSQL → AWS)
 
-use mcp_derive::McpTool;
-use mcp_server::McpServer;
+use turul_mcp_derive::McpTool;
+use turul_mcp_server::McpServer;
 
 /// ZERO CONFIGURATION - Framework auto-determines name: "calculator"
 #[derive(McpTool)]
@@ -21,8 +21,8 @@ struct Calculator {
 impl Calculator {
     async fn execute(
         &self,
-        _session: Option<mcp_server::SessionContext>,
-    ) -> mcp_server::McpResult<f64> {
+        _session: Option<turul_mcp_server::SessionContext>,
+    ) -> turul_mcp_server::McpResult<f64> {
         Ok(self.a + self.b)
     }
 }
@@ -41,8 +41,8 @@ struct LogProgress {
 impl LogProgress {
     async fn execute(
         &self,
-        session: Option<mcp_server::SessionContext>,
-    ) -> mcp_server::McpResult<String> {
+        session: Option<turul_mcp_server::SessionContext>,
+    ) -> turul_mcp_server::McpResult<String> {
         if let Some(session) = session {
             // Send built-in MCP progress notification to connected clients via SSE
             session.notify_progress(&self.message, self.percent as u64);
@@ -74,8 +74,8 @@ struct StructCalculator {
 impl StructCalculator {
     async fn execute(
         &self,
-        _session: Option<mcp_server::SessionContext>,
-    ) -> mcp_server::McpResult<CalculationResult> {
+        _session: Option<turul_mcp_server::SessionContext>,
+    ) -> turul_mcp_server::McpResult<CalculationResult> {
         Ok(CalculationResult {
             sum: self.a + self.b,
             operation: "addition".to_string(),
@@ -100,8 +100,8 @@ struct EnhancedCalculator {
 impl EnhancedCalculator {
     async fn execute(
         &self,
-        _session: Option<mcp_server::SessionContext>,
-    ) -> mcp_server::McpResult<f64> {
+        _session: Option<turul_mcp_server::SessionContext>,
+    ) -> turul_mcp_server::McpResult<f64> {
         Ok(self.x * self.y)  // Simple multiplication 
     }
 }

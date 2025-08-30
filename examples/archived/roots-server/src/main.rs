@@ -6,9 +6,9 @@
 
 use std::collections::HashMap;
 use async_trait::async_trait;
-use mcp_server::{McpServer, McpTool};
-use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, roots::Root, McpError, McpResult, CallToolResult};
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
+use turul_mcp_server::{McpServer, McpTool};
+use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, roots::Root, McpError, McpResult, CallToolResult};
+use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
 use serde_json::Value;
 use tracing::info;
 
@@ -51,7 +51,7 @@ impl HasOutputSchema for ListRootsTool {
 }
 
 impl HasAnnotations for ListRootsTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -67,7 +67,7 @@ impl McpTool for ListRootsTool {
     async fn call(
         &self,
         _args: Value,
-        _session: Option<mcp_server::SessionContext>,
+        _session: Option<turul_mcp_server::SessionContext>,
     ) -> McpResult<CallToolResult> {
         let results = vec![
             ToolResult::text("Available Root Directories:\n\
@@ -130,7 +130,7 @@ impl HasOutputSchema for InspectRootTool {
 }
 
 impl HasAnnotations for InspectRootTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -147,7 +147,7 @@ impl McpTool for InspectRootTool {
     async fn call(
         &self,
         args: Value,
-        _session: Option<mcp_server::SessionContext>,
+        _session: Option<turul_mcp_server::SessionContext>,
     ) -> McpResult<CallToolResult> {
         let root_uri = args.get("root_uri")
             .and_then(|v| v.as_str())
@@ -252,7 +252,7 @@ impl HasOutputSchema for FileOperationTool {
 }
 
 impl HasAnnotations for FileOperationTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -269,7 +269,7 @@ impl McpTool for FileOperationTool {
     async fn call(
         &self,
         args: Value,
-        _session: Option<mcp_server::SessionContext>,
+        _session: Option<turul_mcp_server::SessionContext>,
     ) -> McpResult<CallToolResult> {
         let operation = args.get("operation")
             .and_then(|v| v.as_str())
@@ -382,7 +382,7 @@ impl HasOutputSchema for RootSecurityTool {
 }
 
 impl HasAnnotations for RootSecurityTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -399,7 +399,7 @@ impl McpTool for RootSecurityTool {
     async fn call(
         &self,
         _args: Value,
-        _session: Option<mcp_server::SessionContext>,
+        _session: Option<turul_mcp_server::SessionContext>,
     ) -> McpResult<CallToolResult> {
         let results = vec![
             ToolResult::text("🔐 ROOT DIRECTORY SECURITY\n\

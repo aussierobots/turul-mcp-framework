@@ -1,5 +1,5 @@
-use mcp_derive::McpTool;
-use mcp_server::{McpResult, McpServer};
+use turul_mcp_derive::McpTool;
+use turul_mcp_server::{McpResult, McpServer};
 use serde::{Serialize, Deserialize};
 use tracing::info;
 use std::collections::HashMap;
@@ -9,10 +9,10 @@ struct AdditionResult {
     sum: f64,
 }
 
-impl mcp_protocol::schema::JsonSchemaGenerator for AdditionResult {
-    fn json_schema() -> mcp_protocol::tools::ToolSchema {
-        use mcp_protocol::schema::JsonSchema;
-        mcp_protocol::tools::ToolSchema::object()
+impl turul_mcp_protocol::schema::JsonSchemaGenerator for AdditionResult {
+    fn json_schema() -> turul_mcp_protocol::tools::ToolSchema {
+        use turul_mcp_protocol::schema::JsonSchema;
+        turul_mcp_protocol::tools::ToolSchema::object()
             .with_properties(HashMap::from([
                 ("sum".to_string(), JsonSchema::number())
             ]))
@@ -31,7 +31,7 @@ struct CalculatorAddDeriveTool {
 }
 
 impl CalculatorAddDeriveTool {
-    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<AdditionResult> {
+    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<AdditionResult> {
         Ok(AdditionResult { sum: self.a + self.b })
     }
 }

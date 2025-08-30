@@ -7,11 +7,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use async_trait::async_trait;
-use mcp_server::{McpServer, McpTool, SessionContext};
-use mcp_protocol::{ToolSchema, ToolResult, McpError, McpResult};
-use mcp_protocol::schema::JsonSchema;
-use mcp_protocol::meta::{Meta, Cursor};
-use mcp_protocol::tools::{
+use turul_mcp_server::{McpServer, McpTool, SessionContext};
+use turul_mcp_protocol::{ToolSchema, ToolResult, McpError, McpResult};
+use turul_mcp_protocol::schema::JsonSchema;
+use turul_mcp_protocol::meta::{Meta, Cursor};
+use turul_mcp_protocol::tools::{
     HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, 
     HasAnnotations, HasToolMeta, CallToolResult
 };
@@ -435,7 +435,7 @@ impl HasOutputSchema for ListUsersTool {
 }
 
 impl HasAnnotations for ListUsersTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
 }
 
 impl HasToolMeta for ListUsersTool {

@@ -3,9 +3,9 @@
 //! This example demonstrates the `resource!` declarative macro for creating simple MCP resources
 //! with inline content generation closures.
 
-use mcp_derive::resource;
-use mcp_server::{McpServer, McpResource};
-use mcp_protocol::resources::{ResourceContent, HasResourceMetadata, HasResourceDescription};
+use turul_mcp_derive::resource;
+use turul_mcp_server::{McpServer, McpResource};
+use turul_mcp_protocol::resources::{ResourceContent, HasResourceMetadata, HasResourceDescription};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

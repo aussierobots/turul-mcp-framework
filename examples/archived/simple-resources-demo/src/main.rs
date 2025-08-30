@@ -4,9 +4,9 @@
 //! Shows both derive macro and manual trait implementation approaches.
 
 use async_trait::async_trait;
-use mcp_derive::McpResource;
-use mcp_server::{McpServer, McpResult, McpResource};
-use mcp_protocol::resources::ResourceContent;
+use turul_mcp_derive::McpResource;
+use turul_mcp_server::{McpServer, McpResult, McpResource};
+use turul_mcp_protocol::resources::ResourceContent;
 use serde_json::json;
 use tracing::info;
 

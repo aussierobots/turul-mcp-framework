@@ -6,11 +6,11 @@
 //! frameworks, file extensions, and development commands.
 
 use async_trait::async_trait;
-use mcp_protocol::{McpError, tools::{
+use turul_mcp_protocol::{McpError, tools::{
     HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, 
     HasAnnotations, HasToolMeta, ToolSchema, ToolResult, CallToolResult
 }, schema::JsonSchema};
-use mcp_server::{McpResult, McpServer, McpTool, SessionContext};
+use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use tracing::info;
@@ -136,7 +136,7 @@ impl HasOutputSchema for IdeCompletionTool {
 }
 
 impl HasAnnotations for IdeCompletionTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
 }
 
 impl HasToolMeta for IdeCompletionTool {

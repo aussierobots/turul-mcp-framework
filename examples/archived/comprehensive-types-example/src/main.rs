@@ -1,5 +1,5 @@
-use mcp_derive::McpTool;
-use mcp_server::{McpResult, McpServer};
+use turul_mcp_derive::McpTool;
+use turul_mcp_server::{McpResult, McpServer};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -92,7 +92,7 @@ impl BooleanLogicTool {
             "and" => self.a && self.b,
             "or" => self.a || self.b,
             "xor" => self.a ^ self.b,
-            _ => return Err(mcp_protocol::McpError::invalid_param_type("operation", "and|or|xor", &self.operation)),
+            _ => return Err(turul_mcp_protocol::McpError::invalid_param_type("operation", "and|or|xor", &self.operation)),
         };
         Ok(result)
     }
@@ -130,7 +130,7 @@ impl DataAnalyzerTool {
         tracing::debug!("DataAnalyzerTool executing with {} data points, detailed: {:?}", self.data.len(), self.detailed);
         
         if self.data.is_empty() {
-            return Err(mcp_protocol::McpError::invalid_param_type("data", "non-empty array", "empty array"));
+            return Err(turul_mcp_protocol::McpError::invalid_param_type("data", "non-empty array", "empty array"));
         }
 
         let count = self.data.len();

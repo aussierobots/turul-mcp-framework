@@ -192,7 +192,7 @@ System status resource with real-time metadata.
 ### Progress Token Management
 
 ```rust
-use mcp_protocol_2025_06_18::{Meta, ProgressToken};
+use turul_mcp_protocol::{Meta, ProgressToken};
 
 // Create progress token for long-running operation
 let progress_token = ProgressToken::new("operation-12345");
@@ -221,7 +221,7 @@ let meta = Meta::new()
 ### JSON-RPC 2.0 Compliance
 
 ```rust
-use mcp_protocol_2025_06_18::{JsonRpcResponse, ResultWithMeta};
+use turul_mcp_protocol::{JsonRpcResponse, ResultWithMeta};
 
 // Create spec-compliant response
 let response = JsonRpcResponse::success(
@@ -276,7 +276,7 @@ let error_response = JsonRpcResponse::error(
 ## Server Configuration
 
 ```rust
-use mcp_protocol_2025_06_18::PROTOCOL_VERSION;
+use turul_mcp_protocol::PROTOCOL_VERSION;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

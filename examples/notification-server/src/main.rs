@@ -8,12 +8,12 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use mcp_server::{McpServer, McpResult};
-use mcp_protocol::{
+use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_protocol::{
     McpError,
     notifications::{HasNotificationMetadata, HasNotificationPayload, HasNotificationRules},
 };
-use mcp_server::notifications::{McpNotification, DeliveryResult, DeliveryStatus};
+use turul_mcp_server::notifications::{McpNotification, DeliveryResult, DeliveryStatus};
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
 use tracing::{info, debug, warn};

@@ -1,10 +1,10 @@
 use async_trait::async_trait;
-use mcp_protocol_2025_06_18::tools::{
+use turul_mcp_protocol::tools::{
     ToolResult, CallToolResult, ToolSchema, ToolAnnotations,
     HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, 
     HasAnnotations, HasToolMeta
 };
-use mcp_server::{McpResult, McpServer, McpTool, SessionContext};
+use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
 use serde_json::Value;
 use std::collections::HashMap;
 use tracing::info;
@@ -32,7 +32,7 @@ impl HasInputSchema for CalculatorAddTool {
         // Return a static schema - no dynamic construction
         static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
         INPUT_SCHEMA.get_or_init(|| {
-            use mcp_protocol_2025_06_18::schema::JsonSchema;
+            use turul_mcp_protocol::schema::JsonSchema;
             ToolSchema::object()
                 .with_properties(HashMap::from([
                     ("a".to_string(), JsonSchema::number()),
@@ -63,11 +63,11 @@ impl McpTool for CalculatorAddTool {
         // Manual parameter extraction - no helper methods
         let a = args.get("a")
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| mcp_protocol::McpError::missing_param("a"))?;
+            .ok_or_else(|| turul_mcp_protocol::McpError::missing_param("a"))?;
         
         let b = args.get("b")
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| mcp_protocol::McpError::missing_param("b"))?;
+            .ok_or_else(|| turul_mcp_protocol::McpError::missing_param("b"))?;
         
         // Direct calculation
         let sum = a + b;

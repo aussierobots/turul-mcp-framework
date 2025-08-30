@@ -13,9 +13,9 @@
 //! - Multi-region capabilities with Global Tables
 
 use std::sync::Arc;
-use mcp_server::{McpServer, McpResult, SessionContext};
-use mcp_session_storage::{DynamoDbSessionStorage, DynamoDbConfig};
-use mcp_derive::McpTool;
+use turul_mcp_server::{McpServer, McpResult, SessionContext};
+use turul_mcp_session_storage::{DynamoDbSessionStorage, DynamoDbConfig};
+use turul_mcp_derive::McpTool;
 use serde_json::{json, Value};
 use tracing::{info, error, debug, warn};
 
@@ -31,7 +31,7 @@ struct StoreAppStateTool {
 
 impl StoreAppStateTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         debug!("Storing app state in DynamoDB: {} = {}", self.key, self.data);
 
@@ -39,7 +39,7 @@ impl StoreAppStateTool {
         (session.set_state)(&format!("app_{}", self.key), self.data.clone());
 
         // Send CloudWatch-style notification
-        (session.send_notification)(mcp_server::SessionEvent::Notification(json!({
+        (session.send_notification)(turul_mcp_server::SessionEvent::Notification(json!({
             "jsonrpc": "2.0",
             "method": "notifications/progress",
             "params": {
@@ -72,7 +72,7 @@ struct GetAppStateTool {
 
 impl GetAppStateTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         debug!("Getting app state from DynamoDB: {}", self.key);
 
@@ -107,7 +107,7 @@ struct LambdaOperationTool {
 
 impl LambdaOperationTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         debug!("Performing Lambda-style operation: {}", self.operation);
 
@@ -160,7 +160,7 @@ struct DynamoDbInfoTool {}
 
 impl DynamoDbInfoTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         Ok(json!({
             "session_id": session.session_id,
@@ -213,7 +213,7 @@ struct GlobalStateTool {
 
 impl GlobalStateTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         debug!("Setting global state for region: {}", self.region);
 

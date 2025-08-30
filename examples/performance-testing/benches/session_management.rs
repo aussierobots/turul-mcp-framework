@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
-use mcp_server::SessionContext;
+use turul_mcp_server::SessionContext;
 
 /// Create a mock session context for benchmarking
 fn create_session_context() -> SessionContext {

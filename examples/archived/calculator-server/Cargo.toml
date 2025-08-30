@@ -6,11 +6,11 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Example MCP calculator server using the mcp-server"
+description = "Example MCP calculator server using the turul-mcp-server"
 
 [dependencies]
-mcp-server = { workspace = true }
-mcp-protocol = { workspace = true }
+turul-mcp-server = { workspace = true }
+turul-mcp-protocol = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }

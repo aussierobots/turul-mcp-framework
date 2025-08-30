@@ -1,6 +1,6 @@
 # Minimal MCP Server Example
 
-This example demonstrates the absolute minimum setup for an MCP server using the mcp-server.
+This example demonstrates the absolute minimum setup for an MCP server using the turul-mcp-server.
 
 ## What This Example Shows
 

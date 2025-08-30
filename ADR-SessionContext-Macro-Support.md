@@ -78,7 +78,7 @@ async fn call(&self, args: Value, _session: Option<SessionContext>) -> ... {
 
 ### Phase 1: Fix Derive Macro
 
-**File**: `crates/mcp-derive/src/tool_derive.rs`
+**File**: `crates/turul-mcp-derive/src/tool_derive.rs`
 
 **Changes**:
 1. Line 192: Change `_session` → `session`
@@ -98,7 +98,7 @@ async fn execute(&self) -> McpResult<T>  // Falls back to this
 
 ### Phase 2: Fix Function Macro
 
-**File**: `crates/mcp-derive/src/tool_attr.rs`
+**File**: `crates/turul-mcp-derive/src/tool_attr.rs`
 
 **Changes**:
 1. Line 207: Change `_session` → `session`

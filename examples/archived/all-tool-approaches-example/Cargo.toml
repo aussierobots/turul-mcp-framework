@@ -9,9 +9,9 @@ homepage.workspace = true
 description = "Example showcasing all three MCP tool creation approaches"
 
 [dependencies]
-mcp-server = { workspace = true }
-mcp-protocol = { workspace = true }
-mcp-derive = { workspace = true }
+turul-mcp-server = { workspace = true }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-derive = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }

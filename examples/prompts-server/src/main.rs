@@ -7,12 +7,12 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use mcp_server::{McpServer, McpResult};
-use mcp_protocol::{
+use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_protocol::{
     McpError,
     prompts::{HasPromptMetadata, HasPromptDescription, HasPromptArguments, HasPromptAnnotations, HasPromptMeta, PromptAnnotations, PromptArgument, PromptMessage},
 };
-use mcp_server::prompt::{McpPrompt};
+use turul_mcp_server::prompt::{McpPrompt};
 use serde_json::Value;
 use tracing::info;
 

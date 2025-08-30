@@ -1,7 +1,7 @@
 //! Test for custom output field name feature
 
-use mcp_derive::mcp_tool;
-use mcp_server::{McpTool, McpResult};
+use turul_mcp_derive::mcp_tool;
+use turul_mcp_server::{McpTool, McpResult};
 use serde_json::json;
 
 #[mcp_tool(name = "test_custom_field", description = "Test custom output field", output_field = "sum")]

@@ -6,9 +6,9 @@ edition = "2021"
 [workspace]
 
 [dependencies]
-mcp-server = { path = "../../crates/mcp-server" }
-mcp-protocol = { path = "../../crates/mcp-protocol" }
-mcp-derive = { path = "../../crates/mcp-derive" }
+turul-mcp-server = { path = "../../crates/turul-mcp-server" }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
 async-trait = "0.1"
 tokio = { version = "1.0", features = ["full"] }
 tracing = "0.1"

@@ -8,9 +8,9 @@ name = "comprehensive-resource-example"
 path = "src/main.rs"
 
 [dependencies]
-mcp-derive = { path = "../../crates/mcp-derive" }
-mcp-server = { path = "../../crates/mcp-server" }
-mcp-protocol = { path = "../../crates/mcp-protocol-2025-06-18", package = "mcp-protocol-2025-06-18" }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
+turul-mcp-server = { path = "../../crates/turul-mcp-server" }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol-2025-06-18", package = "turul-mcp-protocol-2025-06-18" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }

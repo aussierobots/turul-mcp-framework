@@ -6,11 +6,11 @@
 
 use std::collections::HashMap;
 
-use mcp_derive::{McpTool, resource};
-use mcp_server::{McpServer, McpTool, McpResource, SessionContext};
-use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema};
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
-use mcp_protocol_2025_06_18::{
+use turul_mcp_derive::{McpTool, resource};
+use turul_mcp_server::{McpServer, McpTool, McpResource, SessionContext};
+use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema};
+use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
+use turul_mcp_protocol::{
     Meta, ProgressToken, ResultWithMeta, HasData, HasMeta,
     JsonRpcRequest, JsonRpcResponse, RequestParams
 };
@@ -28,7 +28,7 @@ struct ProcessDataTool {
 }
 
 impl ProcessDataTool {
-    async fn execute(&self) -> mcp_server::McpResult<String> {
+    async fn execute(&self) -> turul_mcp_server::McpResult<String> {
         // Simulate processing with progress updates
         let total_steps = self.steps as u64;
         
@@ -94,7 +94,7 @@ impl HasOutputSchema for SessionAwareTool {
 }
 
 impl HasAnnotations for SessionAwareTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -108,7 +108,7 @@ impl HasToolMeta for SessionAwareTool {
 #[async_trait]
 impl McpTool for SessionAwareTool {
     
-    async fn call(&self, args: Value, session: Option<SessionContext>) -> mcp_server::McpResult<CallToolResult> {
+    async fn call(&self, args: Value, session: Option<SessionContext>) -> turul_mcp_server::McpResult<CallToolResult> {
         let message = args["message"].as_str().unwrap_or("default");
         let include_session = args["include_session_info"].as_bool().unwrap_or(false);
         
@@ -166,7 +166,7 @@ async fn create_status_resource() -> impl McpResource {
                 "_meta": meta_info
             });
             
-            Ok(vec![mcp_protocol::resources::ResourceContent::blob(
+            Ok(vec![turul_mcp_protocol::resources::ResourceContent::blob(
                 serde_json::to_string_pretty(&content_with_meta).unwrap(),
                 "application/json".to_string()
             )])

@@ -9,7 +9,7 @@
 use serde_json::Value;
 use std::collections::HashMap;
 use tracing::info;
-use mcp_server::{McpServer, McpResult};
+use turul_mcp_server::{McpServer, McpResult};
 
 // =============================================================================
 // TOOLS - Framework auto-uses "tools/call"  
@@ -39,8 +39,8 @@ impl Calculator {
             "subtract" => a - b,
             "multiply" => a * b,
             "divide" if b != 0.0 => a / b,
-            "divide" => return Err(mcp_protocol::McpError::tool_execution("Division by zero")),
-            _ => return Err(mcp_protocol::McpError::invalid_param_type("operation", "add|subtract|multiply|divide", operation)),
+            "divide" => return Err(turul_mcp_protocol::McpError::tool_execution("Division by zero")),
+            _ => return Err(turul_mcp_protocol::McpError::invalid_param_type("operation", "add|subtract|multiply|divide", operation)),
         };
         
         info!("🔢 Calculator: {} {} {} = {}", a, operation, b, result);

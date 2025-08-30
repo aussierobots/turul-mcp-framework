@@ -5,11 +5,11 @@
 use crate::global_events::{broadcast_session_event, SessionEventType, broadcast_global_event, GlobalEvent, ToolExecutionStatus};
 use crate::session_manager::SessionManager;
 
-// Import json-rpc-server framework types for proper error handling
+// Import turul-json-rpc-server framework types for proper error handling
 use async_trait::async_trait;
-use mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, McpError};
-use mcp_server::{McpTool, SessionContext, McpResult};
-use mcp_derive::McpTool;
+use turul_mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, McpError};
+use turul_mcp_server::{McpTool, SessionContext, McpResult};
+use turul_mcp_derive::McpTool;
 use serde_json::{Value, json};
 use serde::{Deserialize, Serialize};
 
@@ -499,22 +499,22 @@ impl Default for ServerNotificationTool {
 }
 
 impl ServerNotificationTool {
-    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
+    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
         // Validate component is not empty
         if self.component.trim().is_empty() {
-            return Err(mcp_protocol::McpError::missing_param("component"));
+            return Err(turul_mcp_protocol::McpError::missing_param("component"));
         }
 
         // Validate status is one of the allowed values
         match self.status.as_str() {
             "healthy" | "warning" | "error" | "info" => {},
-            "" => return Err(mcp_protocol::McpError::missing_param("status")),
-            _ => return Err(mcp_protocol::McpError::invalid_param_type("status", "one of: healthy, warning, error, info", &self.status)),
+            "" => return Err(turul_mcp_protocol::McpError::missing_param("status")),
+            _ => return Err(turul_mcp_protocol::McpError::invalid_param_type("status", "one of: healthy, warning, error, info", &self.status)),
         }
 
         // Validate message is not empty
         if self.message.trim().is_empty() {
-            return Err(mcp_protocol::McpError::missing_param("message"));
+            return Err(turul_mcp_protocol::McpError::missing_param("message"));
         }
 
         // Parse details JSON if provided
@@ -628,23 +628,23 @@ impl Default for ProgressUpdateTool {
 }
 
 impl ProgressUpdateTool {
-    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> McpResult<String> {
+    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
         // Validate tool_name is not empty
         if self.tool_name.trim().is_empty() {
-            return Err(mcp_protocol::McpError::missing_param("tool_name"));
+            return Err(turul_mcp_protocol::McpError::missing_param("tool_name"));
         }
 
         // Validate status is one of the allowed values
         match self.status.as_str() {
             "started" | "in_progress" | "completed" | "failed" => {},
-            "" => return Err(mcp_protocol::McpError::missing_param("status")),
-            _ => return Err(mcp_protocol::McpError::invalid_param_type("status", "one of: started, in_progress, completed, failed", &self.status)),
+            "" => return Err(turul_mcp_protocol::McpError::missing_param("status")),
+            _ => return Err(turul_mcp_protocol::McpError::invalid_param_type("status", "one of: started, in_progress, completed, failed", &self.status)),
         }
 
         // Validate progress_percent range if provided
         if let Some(percent) = self.progress_percent {
             if percent < 0.0 || percent > 100.0 {
-                return Err(mcp_protocol::McpError::param_out_of_range("progress_percent", &percent.to_string(), "0.0 to 100.0"));
+                return Err(turul_mcp_protocol::McpError::param_out_of_range("progress_percent", &percent.to_string(), "0.0 to 100.0"));
             }
         }
 
@@ -683,7 +683,7 @@ impl ProgressUpdateTool {
                     .unwrap_or("Unknown error");
                 ToolExecutionStatus::Failed { error: error_msg.to_string() }
             }
-            _ => return Err(mcp_protocol::McpError::invalid_param_type("status", "one of: started, in_progress, completed, failed", &self.status)),
+            _ => return Err(turul_mcp_protocol::McpError::invalid_param_type("status", "one of: started, in_progress, completed, failed", &self.status)),
         };
 
         info!("📊 Sending progress update for tool: {} (status: {}, progress: {:?}%)", 

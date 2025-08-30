@@ -14,14 +14,15 @@ Use at own risk. Suggest forking
 - **🌐 Transport Flexibility**: HTTP/1.1, HTTP/2, WebSocket, SSE, and stdio transport support
 - **☁️ Serverless Ready**: AWS Lambda integration with streaming responses and SQS event processing
 - **🔧 Production Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
+- **⚡ Performance Optimized**: Comprehensive benchmarking suite with >1000 RPS throughput, <100ms response times, and extensive stress testing
 
 ## 🚀 Quick Start
 
 ### 1. Simple Calculator (Derive Macros)
 
 ```rust
-use mcp_derive::McpTool;
-use mcp_server::{McpServer, McpResult};
+use turul_mcp_derive::McpTool;
+use turul_mcp_server::{McpServer, McpResult};
 
 #[derive(McpTool, Clone)]
 #[tool(name = "add", description = "Add two numbers")]
@@ -55,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
 
 ```rust
 // From examples/logging-server - Enterprise audit system
-use mcp_derive::McpTool;
+use turul_mcp_derive::McpTool;
 
 #[derive(McpTool, Clone)]
 #[tool(name = "audit_log", description = "Create compliance audit entry")]
@@ -93,12 +94,12 @@ impl AuditTool {
 ## 🏛️ Architecture Overview
 
 ### Core Framework (6 Crates)
-- **`mcp-server`** - High-level server builder with session management
-- **`mcp-client`** - Comprehensive client library with multi-transport support
-- **`http-mcp-server`** - HTTP/SSE transport with CORS and streaming
-- **`mcp-protocol-2025-06-18`** - Complete MCP specification implementation
-- **`mcp-derive`** - Procedural and declarative macros
-- **`json-rpc-server`** - Transport-agnostic JSON-RPC 2.0 foundation
+- **`turul-mcp-server`** - High-level server builder with session management
+- **`turul-mcp-client`** - Comprehensive client library with multi-transport support
+- **`turul-http-turul-mcp-server`** - HTTP/SSE transport with CORS and streaming
+- **`turul-mcp-protocol-2025-06-18`** - Complete MCP specification implementation
+- **`turul-mcp-derive`** - Procedural and declarative macros
+- **`turul-turul-mcp-json-rpc-server`** - Transport-agnostic JSON-RPC 2.0 foundation
 
 ### Fine-Grained Trait Architecture
 **Modern composable design pattern for all MCP areas:**
@@ -212,7 +213,7 @@ Educational examples showcasing framework patterns:
 - **Basic Patterns**: minimal-server, manual-tools-server, spec-compliant-server
 - **Advanced Features**: stateful-server, pagination-server, version-negotiation-server
 - **Macro System**: tool-macro-example, resource-macro-example, enhanced-tool-macro-test
-- **Serverless**: lambda-mcp-server (AWS Lambda with SQS integration)
+- **Serverless**: lambda-turul-mcp-server (AWS Lambda with SQS integration)
 - **Testing**: performance-testing (comprehensive benchmarking suite)
 
 ## ☁️ Serverless Support
@@ -221,7 +222,7 @@ Educational examples showcasing framework patterns:
 Full serverless implementation with advanced AWS integration:
 
 ```bash
-cd examples/lambda-mcp-server
+cd examples/lambda-turul-mcp-server
 
 # Local development
 cargo lambda watch
@@ -252,7 +253,7 @@ sam deploy --guided
 cargo test --workspace
 
 # Integration tests
-cargo test -p mcp-framework-integration-tests
+cargo test -p turul-mcp-framework-integration-tests
 
 # Performance benchmarks
 cd examples/performance-testing
@@ -351,7 +352,7 @@ tool! {
 ### 4. Manual Implementation (Fine-Grained Traits)
 **Best for:** Maximum control, complex business logic
 ```rust
-use mcp_protocol::tools::*;
+use turul_mcp_protocol::tools::*;
 
 struct CustomTool {
     input_schema: ToolSchema,
@@ -398,7 +399,7 @@ impl McpTool for CustomTool {
 Comprehensive MCP client with multi-transport support:
 
 ```rust
-use mcp_client::{McpClient, ClientConfig};
+use turul_mcp_client::{McpClient, ClientConfig};
 
 let client = McpClient::builder()
     .with_url("http://localhost:8080/mcp")?

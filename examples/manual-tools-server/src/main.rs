@@ -7,9 +7,9 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use chrono::Utc;
-use mcp_server::{McpServer, McpTool, SessionContext};
-use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
+use turul_mcp_server::{McpServer, McpTool, SessionContext};
+use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
+use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -62,7 +62,7 @@ impl HasOutputSchema for FileSystemTool {
 }
 
 impl HasAnnotations for FileSystemTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -244,7 +244,7 @@ impl HasOutputSchema for TaskManagerTool {
 }
 
 impl HasAnnotations for TaskManagerTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
@@ -450,7 +450,7 @@ impl HasOutputSchema for WeatherTool {
 }
 
 impl HasAnnotations for WeatherTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }

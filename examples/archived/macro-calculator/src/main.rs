@@ -5,8 +5,8 @@
 
 use std::net::SocketAddr;
 
-use mcp_derive::McpTool;
-use mcp_server::{McpResult, McpServer};
+use turul_mcp_derive::McpTool;
+use turul_mcp_server::{McpResult, McpServer};
 use tracing::info;
 
 /// Addition tool using derive macro

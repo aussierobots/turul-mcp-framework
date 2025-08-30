@@ -9,11 +9,11 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use mcp_derive::McpTool;
-use mcp_server::{McpTool, SessionContext, McpServer};
-use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, Meta, ProgressToken, ResultWithMeta, CallToolResult};
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations};
-use mcp_json_rpc_server::{JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcNotification, RequestParams};
+use turul_mcp_derive::McpTool;
+use turul_mcp_server::{McpTool, SessionContext, McpServer};
+use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, Meta, ProgressToken, ResultWithMeta, CallToolResult};
+use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations};
+use turul_mcp_json_rpc_server::{JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcNotification, RequestParams};
 use serde_json::{json, Value};
 use async_trait::async_trait;
 
@@ -28,7 +28,7 @@ struct AddTool {
 }
 
 impl AddTool {
-    async fn execute(&self, _session: Option<mcp_server::SessionContext>) -> mcp_server::McpResult<String> {
+    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<String> {
         tracing::debug!("AddTool executing with values a={}, b={}", self.a, self.b);
         Ok(format!("{} + {} = {}", self.a, self.b, self.a + self.b))
     }
@@ -111,7 +111,7 @@ impl HasToolMeta for SessionTool {}
 #[async_trait]
 impl McpTool for SessionTool {
     
-    async fn call(&self, args: Value, session: Option<SessionContext>) -> mcp_server::McpResult<CallToolResult> {
+    async fn call(&self, args: Value, session: Option<SessionContext>) -> turul_mcp_server::McpResult<CallToolResult> {
         let message = args["message"].as_str().unwrap_or("default");
         tracing::debug!("SessionTool called with message: {}", message);
         
@@ -744,13 +744,13 @@ mod calculator_levels_tests {
     // === Level 1: Function Macro ===
     // ===========================================
 
-    use mcp_derive::mcp_tool;
+    use turul_mcp_derive::mcp_tool;
 
     #[mcp_tool(name = "calculator_add_function_test", description = "Add two numbers using function macro")]
     async fn calculator_add_function_test(
         #[param(description = "First number")] a: f64,
         #[param(description = "Second number")] b: f64,
-    ) -> mcp_server::McpResult<f64> {
+    ) -> turul_mcp_server::McpResult<f64> {
         Ok(a + b)
     }
 
@@ -777,7 +777,7 @@ mod calculator_levels_tests {
     // === Level 3: Builder Pattern ===
     // ===========================================
 
-    use mcp_server::ToolBuilder;
+    use turul_mcp_server::ToolBuilder;
 
     #[tokio::test]
     async fn test_level3_builder_pattern() {
@@ -816,12 +816,12 @@ mod calculator_levels_tests {
     // === Level 4: Manual Implementation ===
     // ===========================================
 
-    use mcp_protocol_2025_06_18::tools::{
+    use turul_mcp_protocol::tools::{
         ToolResult, CallToolResult, ToolSchema,
         HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, 
         HasAnnotations, HasToolMeta
     };
-    use mcp_protocol_2025_06_18::schema::JsonSchema;
+    use turul_mcp_protocol::schema::JsonSchema;
 
     #[derive(Clone)]
     struct CalculatorAddManualTool;
@@ -865,7 +865,7 @@ mod calculator_levels_tests {
 
     #[async_trait]
     impl McpTool for CalculatorAddManualTool {
-        async fn call(&self, args: Value, _session: Option<SessionContext>) -> mcp_server::McpResult<CallToolResponse> {
+        async fn call(&self, args: Value, _session: Option<SessionContext>) -> turul_mcp_server::McpResult<CallToolResponse> {
             let a = args.get("a").and_then(|v| v.as_f64())
                 .ok_or_else(|| mcp_protocol::McpError::missing_param("a"))?;
             let b = args.get("b").and_then(|v| v.as_f64())
@@ -985,13 +985,13 @@ mod calculator_levels_tests {
 #[cfg(test)]
 mod custom_output_field_tests {
     use super::*;
-    use mcp_derive::mcp_tool;
+    use turul_mcp_derive::mcp_tool;
 
     #[mcp_tool(name = "test_custom_field", description = "Test custom output field", output_field = "sum")]
     async fn test_custom_field_tool(
         #[param(description = "First number")] a: f64,
         #[param(description = "Second number")] b: f64,
-    ) -> mcp_server::McpResult<f64> {
+    ) -> turul_mcp_server::McpResult<f64> {
         Ok(a + b)
     }
 
@@ -1022,7 +1022,7 @@ mod custom_output_field_tests {
     async fn test_default_field_tool(
         #[param(description = "First number")] a: f64,
         #[param(description = "Second number")] b: f64,
-    ) -> mcp_server::McpResult<f64> {
+    ) -> turul_mcp_server::McpResult<f64> {
         Ok(a + b)
     }
 

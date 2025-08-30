@@ -13,8 +13,8 @@ use serde_json::{Value, json};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-// Import json-rpc-server framework types for proper MCP spec compliance
-use mcp_json_rpc_server::{
+// Import turul-json-rpc-server framework types for proper MCP spec compliance
+use turul_mcp_json_rpc_server::{
     JsonRpcRequest, JsonRpcResponse, JsonRpcError
 };
 
@@ -143,7 +143,7 @@ impl EventRouter {
                     1 => {
                         // Single result - check if it's text and contains JSON
                         match &tool_results[0] {
-                            mcp_protocol::ToolResult::Text { text } => {
+                            turul_mcp_protocol::ToolResult::Text { text } => {
                                 // Try to parse as JSON for structured display
                                 match serde_json::from_str::<serde_json::Value>(text) {
                                     Ok(json_value) => json_value,
@@ -173,7 +173,7 @@ impl EventRouter {
                         // Multiple results, wrap in content array
                         let content: Vec<serde_json::Value> = tool_results.iter().map(|tr| {
                             match tr {
-                                mcp_protocol::ToolResult::Text { text } => serde_json::json!({
+                                turul_mcp_protocol::ToolResult::Text { text } => serde_json::json!({
                                     "type": "text",
                                     "text": text
                                 }),
@@ -462,7 +462,7 @@ impl EventRouter {
         &self,
         params: Value,
         lambda_context: LambdaEventContext,
-    ) -> Result<Vec<mcp_protocol::ToolResult>, LambdaError> {
+    ) -> Result<Vec<turul_mcp_protocol::ToolResult>, LambdaError> {
         let tool_name = params.get("name")
             .and_then(|n| n.as_str())
             .ok_or_else(|| LambdaError::from("Missing tool name"))?;
@@ -500,7 +500,7 @@ impl EventRouter {
             request_id: Uuid::now_v7().to_string(),
         };
 
-        // Execute tool through mcp-framework approach
+        // Execute tool through turul-mcp-framework approach
         match self.tool_registry.execute_tool(tool_name, arguments, tool_context).await {
             Ok(result) => {
                 info!("Tool {} executed successfully for session {}", tool_name, session_id);
@@ -508,7 +508,7 @@ impl EventRouter {
             }
             Err(e) => {
                 error!("Tool execution failed: {:?}", e);
-                Ok(vec![mcp_protocol::ToolResult::text(format!("Tool execution failed: {}", e))])
+                Ok(vec![turul_mcp_protocol::ToolResult::text(format!("Tool execution failed: {}", e))])
             }
         }
     }

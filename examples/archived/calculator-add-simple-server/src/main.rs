@@ -1,5 +1,5 @@
-use mcp_derive::mcp_tool;
-use mcp_server::{McpResult, McpServer};
+use turul_mcp_derive::mcp_tool;
+use turul_mcp_server::{McpResult, McpServer};
 use tracing::info;
 
 /// Level 1: Function Macros (Ultra-Simple)

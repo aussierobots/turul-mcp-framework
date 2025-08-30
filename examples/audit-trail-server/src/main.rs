@@ -6,10 +6,10 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use async_trait::async_trait;
-use mcp_server::{McpServer, McpTool, SessionContext};
-use mcp_session_storage::SqliteSessionStorage;
-use mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
+use turul_mcp_server::{McpServer, McpTool, SessionContext};
+use turul_mcp_session_storage::SqliteSessionStorage;
+use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
+use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use chrono::{DateTime, Utc};
@@ -107,7 +107,7 @@ impl HasOutputSchema for LogAuditEventTool {
 }
 
 impl HasAnnotations for LogAuditEventTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
 }
 
 impl HasToolMeta for LogAuditEventTool {
@@ -238,7 +238,7 @@ impl HasOutputSchema for SearchAuditTrailTool {
 }
 
 impl HasAnnotations for SearchAuditTrailTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
 }
 
 impl HasToolMeta for SearchAuditTrailTool {
@@ -375,7 +375,7 @@ impl HasOutputSchema for GenerateComplianceReportTool {
 }
 
 impl HasAnnotations for GenerateComplianceReportTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
 }
 
 impl HasToolMeta for GenerateComplianceReportTool {

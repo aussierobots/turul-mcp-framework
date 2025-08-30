@@ -12,7 +12,7 @@
 //! Lines of code: ~90 (vs 470+ with manual trait implementations)
 
 use tracing::info;
-use mcp_server::{McpServer, McpResult};
+use turul_mcp_server::{McpServer, McpResult};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

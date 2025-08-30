@@ -8,9 +8,9 @@ repository.workspace = true
 homepage.workspace = true
 
 [dependencies]
-mcp-server = { workspace = true, features = ["http"] }
-mcp-protocol = { workspace = true }
-mcp-derive = { workspace = true }
+turul-mcp-server = { workspace = true, features = ["http"] }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-derive = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

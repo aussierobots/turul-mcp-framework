@@ -1,6 +1,6 @@
 //! Builders Showcase - Comprehensive demonstration of all 9 MCP builders
 //!
-//! This example showcases the power of the mcp-builders crate by demonstrating
+//! This example showcases the power of the turul-mcp-builders crate by demonstrating
 //! how to use all 9 runtime builders to create sophisticated MCP components.
 //!
 //! Since this is a standalone demonstration, it focuses on showing the builder
@@ -13,19 +13,19 @@ use serde_json::json;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use mcp_builders::{
+use turul_mcp_builders::{
     // All 9 builders
     ToolBuilder, ResourceBuilder, PromptBuilder, MessageBuilder, 
     CompletionBuilder, RootBuilder, ElicitationBuilder,
     NotificationBuilder, LoggingBuilder,
 };
-use mcp_protocol::logging::LoggingLevel;
+use turul_mcp_protocol::logging::LoggingLevel;
 
 // Import traits needed for method calls
-use mcp_protocol::tools::{HasBaseMetadata, HasDescription};
-use mcp_protocol::prompts::{HasPromptMetadata, HasPromptDescription, HasPromptArguments};
-use mcp_protocol::resources::HasResourceUri;
-use mcp_protocol::roots::HasRootMetadata;
+use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription};
+use turul_mcp_protocol::prompts::{HasPromptMetadata, HasPromptDescription, HasPromptArguments};
+use turul_mcp_protocol::resources::HasResourceUri;
+use turul_mcp_protocol::roots::HasRootMetadata;
 // ResourceContent and ModelPreferences imports removed - unused
 
 #[tokio::main]
@@ -169,8 +169,8 @@ impl {{component_name}} {
     let template_content = template_resource.read().await?;
     println!("   ✅ Created template resource: {}", "file:///templates/component.rs");
     println!("   📝 Template content type: {}", match &template_content {
-        mcp_protocol::resources::ResourceContent::Text { .. } => "Text template",
-        mcp_protocol::resources::ResourceContent::Blob { .. } => "Binary template"
+        turul_mcp_protocol::resources::ResourceContent::Text { .. } => "Text template",
+        turul_mcp_protocol::resources::ResourceContent::Blob { .. } => "Binary template"
     });
     
     // ===========================================
@@ -493,12 +493,12 @@ impl {{component_name}} {
     println!("\n   📄 Resource Information:");
     println!("     Config URI: {}", project_config.uri());
     println!("     Config content type: {}", match &config_content {
-        mcp_protocol::resources::ResourceContent::Text { .. } => "Text",
-        mcp_protocol::resources::ResourceContent::Blob { .. } => "Binary"
+        turul_mcp_protocol::resources::ResourceContent::Text { .. } => "Text",
+        turul_mcp_protocol::resources::ResourceContent::Blob { .. } => "Binary"
     });
     println!("     Template content type: {}", match &template_content {
-        mcp_protocol::resources::ResourceContent::Text { .. } => "Text template",
-        mcp_protocol::resources::ResourceContent::Blob { .. } => "Binary template"
+        turul_mcp_protocol::resources::ResourceContent::Text { .. } => "Text template",
+        turul_mcp_protocol::resources::ResourceContent::Blob { .. } => "Binary template"
     });
     
     // Demonstrate prompt information

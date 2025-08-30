@@ -4,8 +4,8 @@
 //! with the updated macro implementations.
 
 use serde_json::json;
-use mcp_derive::{McpTool, mcp_tool};
-use mcp_server::{McpResult, SessionContext};
+use turul_mcp_derive::{McpTool, mcp_tool};
+use turul_mcp_server::{McpResult, SessionContext};
 
 /// Simple test to verify derive macro SessionContext passing
 #[derive(McpTool, Default)]
@@ -40,7 +40,7 @@ async fn session_function_test(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mcp_server::McpTool;
+    use turul_mcp_server::McpTool;
     use serde_json::Value;
 
     #[tokio::test]  

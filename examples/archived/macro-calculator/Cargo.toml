@@ -9,9 +9,9 @@ homepage.workspace = true
 description = "Calculator server example using MCP derive macros"
 
 [dependencies]
-mcp-server.workspace = true
-mcp-protocol.workspace = true
-mcp-derive.workspace = true
+turul-mcp-server.workspace = true
+turul-mcp-protocol.workspace = true
+turul-mcp-derive.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 serde.workspace = true

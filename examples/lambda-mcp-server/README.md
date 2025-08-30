@@ -150,7 +150,7 @@ cargo install cargo-lambda
 
 # 2. Clone and setup infrastructure
 git clone <repository>
-cd examples/lambda-mcp-server
+cd examples/lambda-turul-mcp-server
 
 # 3. 🎯 AUTOMATED INFRASTRUCTURE SETUP
 ./scripts/setup-infrastructure.sh

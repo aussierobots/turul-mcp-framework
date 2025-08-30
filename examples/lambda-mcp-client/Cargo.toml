@@ -1,12 +1,12 @@
 [package]
-name = "lambda-mcp-client"
+name = "lambda-turul-mcp-client"
 version = "0.1.0"
 edition.workspace = true
-description = "Comprehensive test client for lambda-mcp-server validation and end-to-end testing"
+description = "Comprehensive test client for lambda-turul-mcp-server validation and end-to-end testing"
 license = "MIT"
 
 [[bin]]
-name = "lambda-mcp-client"
+name = "lambda-turul-mcp-client"
 path = "src/main.rs"
 
 [dependencies]

@@ -9,9 +9,9 @@
 //! Use this to understand the trade-offs of each approach.
 
 use async_trait::async_trait;
-use mcp_derive::{mcp_tool, tool, McpTool};
-use mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, tools::*};
-use mcp_server::{McpResult, McpServer, McpTool, SessionContext};
+use turul_mcp_derive::{mcp_tool, tool, McpTool};
+use turul_mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, tools::*};
+use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -143,15 +143,15 @@ impl McpTool for DivideTool {
     async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let dividend = args.get("dividend")
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| mcp_protocol::McpError::missing_param("dividend"))?;
+            .ok_or_else(|| turul_mcp_protocol::McpError::missing_param("dividend"))?;
             
         let divisor = args.get("divisor")
             .and_then(|v| v.as_f64())
-            .ok_or_else(|| mcp_protocol::McpError::missing_param("divisor"))?;
+            .ok_or_else(|| turul_mcp_protocol::McpError::missing_param("divisor"))?;
         
         // Custom validation logic
         if divisor == 0.0 {
-            return Err(mcp_protocol::McpError::InvalidParameters("Division by zero".to_string()));
+            return Err(turul_mcp_protocol::McpError::InvalidParameters("Division by zero".to_string()));
         }
         
         let result = dividend / divisor;

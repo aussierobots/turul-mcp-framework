@@ -4,8 +4,12 @@
 
 use crate::global_events::{broadcast_monitoring_update, broadcast_tool_progress, ToolExecutionStatus};
 use async_trait::async_trait;
-use mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema};
-use mcp_server::{McpTool, SessionContext, McpResult};
+use turul_mcp_protocol::{CallToolResult, ToolResult, schema::JsonSchema};
+use turul_mcp_protocol::tools::{
+    ToolSchema, ToolAnnotations, HasBaseMetadata, HasDescription, 
+    HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta
+};
+use turul_mcp_server::{McpTool, SessionContext, McpResult};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
@@ -14,32 +18,61 @@ use uuid::Uuid;
 /// AWS Real-time Monitor Tool
 /// 
 /// Monitors AWS resources with live updates and streaming responses via global events
+#[derive(Clone)]
 pub struct AwsRealTimeMonitor;
 
-#[async_trait]
-impl McpTool for AwsRealTimeMonitor {
+// Implement all required trait components for ToolDefinition
+impl HasBaseMetadata for AwsRealTimeMonitor {
     fn name(&self) -> &str {
         "aws_real_time_monitor"
     }
+}
 
-    fn description(&self) -> &str {
-        "Monitor AWS resources with live updates and streaming responses via global event broadcasting"
+impl HasDescription for AwsRealTimeMonitor {
+    fn description(&self) -> Option<&str> {
+        Some("Monitor AWS resources with live updates and streaming responses via global event broadcasting")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("resource_type".to_string(), JsonSchema::string_with_description("Type of AWS resource to monitor")),
-                ("region".to_string(), JsonSchema::string_with_description("AWS region to monitor")),
-                ("update_frequency".to_string(), JsonSchema::number_with_description("Update frequency in milliseconds")
-                    .with_minimum(1000.0)
-                    .with_maximum(60000.0)),
-                ("filter_tags".to_string(), JsonSchema::object().with_description("Tag filters for resource selection")),
-            ]))
-            .with_required(vec!["resource_type".to_string()])
+impl HasInputSchema for AwsRealTimeMonitor {
+    fn input_schema(&self) -> &ToolSchema {
+        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+        INPUT_SCHEMA.get_or_init(|| {
+            ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("resource_type".to_string(), JsonSchema::string().with_description("Type of AWS resource to monitor")),
+                    ("region".to_string(), JsonSchema::string().with_description("AWS region to monitor")),
+                    ("update_frequency".to_string(), JsonSchema::number().with_description("Update frequency in milliseconds")
+                        .with_minimum(1000.0)
+                        .with_maximum(60000.0)),
+                    ("filter_tags".to_string(), JsonSchema::object().with_description("Tag filters for resource selection")),
+                ]))
+                .with_required(vec!["resource_type".to_string()])
+        })
     }
+}
 
-    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
+impl HasOutputSchema for AwsRealTimeMonitor {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for AwsRealTimeMonitor {
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for AwsRealTimeMonitor {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
+}
+
+#[async_trait]
+impl McpTool for AwsRealTimeMonitor {
+    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let resource_type = args.get("resource_type")
             .and_then(|v| v.as_str())
             .ok_or("Missing required parameter: resource_type")?;
@@ -68,7 +101,7 @@ impl McpTool for AwsRealTimeMonitor {
 
         // Broadcast tool execution start
         if let Err(e) = broadcast_tool_progress(
-            self.name(),
+            "aws_real_time_monitor",
             &session_id,
             ToolExecutionStatus::Started,
             None,
@@ -121,7 +154,7 @@ impl McpTool for AwsRealTimeMonitor {
         });
 
         if let Err(e) = broadcast_tool_progress(
-            self.name(),
+            "aws_real_time_monitor",
             &session_id,
             ToolExecutionStatus::Completed,
             Some(result_data.clone()),
@@ -130,9 +163,9 @@ impl McpTool for AwsRealTimeMonitor {
         }
 
         // Return the actual monitoring data, not a generic success message
-        let result = ToolResult::resource(result_data);
-
-        Ok(vec![result])
+        Ok(CallToolResult::success(vec![
+            ToolResult::text(result_data.to_string())
+        ]))
     }
 }
 

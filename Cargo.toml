@@ -2,15 +2,15 @@
 resolver = "3"
 members = [
     # Core crates
-    "crates/mcp-json-rpc-server",
-    "crates/mcp-protocol-2025-06-18",
-    "crates/mcp-protocol",
-    "crates/mcp-session-storage",
-    "crates/http-mcp-server",
-    "crates/mcp-server",
-    "crates/mcp-derive",
-    "crates/mcp-client",
-    "crates/mcp-builders",
+    "crates/turul-mcp-json-rpc-server",
+    "crates/turul-mcp-protocol-2025-06-18",
+    "crates/turul-mcp-protocol",
+    "crates/turul-mcp-session-storage",
+    "crates/turul-http-mcp-server",
+    "crates/turul-mcp-server",
+    "crates/turul-mcp-derive",
+    "crates/turul-mcp-client",
+    "crates/turul-mcp-builders",
 
     # Active examples (27 total)
     "examples/alert-system-server",
@@ -27,7 +27,7 @@ members = [
     "examples/elicitation-server",
     "examples/function-macro-server",
     "examples/lambda-mcp-client",
-    # "examples/lambda-mcp-server", # TODO: Needs trait migration for AWS tools
+    "examples/lambda-mcp-server", # Fixed: Ready for production use
     "examples/manual-tools-server",
     "examples/minimal-server",
     "examples/notification-server",
@@ -39,7 +39,7 @@ members = [
     "examples/sampling-server",
     # "examples/simple-dynamodb-session", # TODO: Fix compilation errors
     "examples/simple-logging-server",
-    # "examples/simple-postgres-session", # TODO: Fix compilation errors 
+    # "examples/simple-postgres-session", # TODO: Fix compilation errors
     # "examples/simple-sqlite-session", # TODO: Fix compilation errors
     "examples/stateful-server",
     "examples/zero-config-getting-started",
@@ -58,8 +58,8 @@ version = "0.1.0"
 edition = "2024"
 authors = ["Nick Hortovanyi <nick@aussierobots.com>"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/aussierobots/mcp-framework"
-homepage = "https://github.com/aussierobots/mcp-framework"
+repository = "https://github.com/aussierobots/turul-mcp-framework"
+homepage = "https://github.com/aussierobots/turul-mcp-framework"
 
 [workspace.dependencies]
 # Core dependencies shared across crates
@@ -87,14 +87,15 @@ http-body = "1"
 bytes = "1"
 
 # Internal crate dependencies
-mcp-json-rpc-server = { path = "crates/mcp-json-rpc-server" }
-mcp-protocol-2025-06-18 = { path = "crates/mcp-protocol-2025-06-18" }
-mcp-protocol = { path = "crates/mcp-protocol" }
-mcp-session-storage = { path = "crates/mcp-session-storage" }
-http-mcp-server = { path = "crates/http-mcp-server" }
-mcp-server = { path = "crates/mcp-server" }
-mcp-derive = { path = "crates/mcp-derive" }
-mcp-client = { path = "crates/mcp-client" }
+turul-mcp-json-rpc-server = { path = "crates/turul-mcp-json-rpc-server" }
+turul-mcp-protocol-2025-06-18 = { path = "crates/turul-mcp-protocol-2025-06-18" }
+turul-mcp-protocol = { path = "crates/turul-mcp-protocol" }
+turul-mcp-session-storage = { path = "crates/turul-mcp-session-storage" }
+turul-http-mcp-server = { path = "crates/turul-http-mcp-server" }
+turul-mcp-server = { path = "crates/turul-mcp-server" }
+turul-mcp-derive = { path = "crates/turul-mcp-derive" }
+turul-mcp-client = { path = "crates/turul-mcp-client" }
+turul-mcp-builders = { path = "crates/turul-mcp-builders" }
 
 # Additional dependencies for examples and tests
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -120,7 +121,7 @@ urlencoding = "2.1"
 
 # AWS SDK dependencies
 aws-config = "1.8"
-aws-sdk-dynamodb = "1.43"
+aws-sdk-dynamodb = "1"
 aws-sdk-sqs = "1"
 aws-sdk-sns = "1"
 

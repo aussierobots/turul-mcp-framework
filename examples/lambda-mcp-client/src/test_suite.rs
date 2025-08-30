@@ -1,6 +1,6 @@
 //! MCP 2025-06-18 Specification Compliance Test Suite
 //!
-//! This module defines comprehensive test suites that validate lambda-mcp-server
+//! This module defines comprehensive test suites that validate lambda-turul-mcp-server
 //! compliance with the official MCP 2025-06-18 specification. Tests focus on
 //! specification conformance rather than implementation-specific behavior.
 

@@ -3,9 +3,9 @@
 //! This example demonstrates the #[mcp_tool] function attribute macro for creating
 //! MCP tools from regular async functions with parameter attributes.
 
-use mcp_derive::mcp_tool;
-use mcp_server::{McpServer, McpResult};
-use mcp_protocol::McpError;
+use turul_mcp_derive::mcp_tool;
+use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_protocol::McpError;
 
 // Test basic function macro - addition tool
 #[mcp_tool(name = "add", description = "Add two numbers together")]

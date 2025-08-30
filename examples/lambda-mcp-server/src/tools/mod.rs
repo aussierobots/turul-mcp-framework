@@ -7,8 +7,8 @@ pub mod lambda_tools;
 pub mod session_tools;
 
 use lambda_runtime::Context as LambdaContext;
-use mcp_protocol::ToolResult;
-use mcp_server::McpTool;
+use turul_mcp_protocol::ToolResult;
+use turul_mcp_server::McpTool;
 use serde_json::Value;
 use std::collections::HashMap;
 use tracing::{debug, info};
@@ -162,7 +162,7 @@ impl ToolRegistry {
             .ok_or_else(|| lambda_runtime::Error::from(format!("Tool not found: {}", tool_name)))?;
 
         // Create session context (limited in Lambda environment)
-        let session_context = None; // SessionContext creation will be handled by mcp-server framework
+        let session_context = None; // SessionContext creation will be handled by turul-mcp-server framework
 
         // Execute the tool
         match tool.call(arguments, session_context).await {

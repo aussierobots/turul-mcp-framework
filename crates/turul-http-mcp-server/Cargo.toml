@@ -1,0 +1,42 @@
+[package]
+name = "turul-http-mcp-server"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "HTTP transport layer for Model Context Protocol (MCP) servers"
+
+[features]
+default = ["sse"]
+sse = []          # Server-Sent Events support
+
+[dependencies]
+turul-mcp-json-rpc-server.workspace = true
+turul-mcp-protocol.workspace = true
+turul-mcp-session-storage.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+futures.workspace = true
+tracing.workspace = true
+async-stream.workspace = true
+
+# HTTP server dependencies
+tokio.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+tower.workspace = true
+tokio-stream.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+http-body.workspace = true
+bytes.workspace = true
+uuid = { workspace = true, features = ["v7"] }
+lazy_static.workspace = true
+chrono = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

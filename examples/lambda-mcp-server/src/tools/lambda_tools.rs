@@ -3,8 +3,8 @@
 //! Tools for Lambda execution context, metrics, and system diagnostics
 
 use async_trait::async_trait;
-use mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema};
-use mcp_server::{McpTool, SessionContext, McpResult};
+use turul_mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema};
+use turul_mcp_server::{McpTool, SessionContext, McpResult};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use tracing::{debug, info};

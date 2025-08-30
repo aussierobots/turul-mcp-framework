@@ -1,5 +1,5 @@
-use mcp_derive::{McpTool, JsonSchema};
-use mcp_server::{McpResult, McpServer};
+use turul_mcp_derive::{McpTool, JsonSchema};
+use turul_mcp_server::{McpResult, McpServer};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -44,11 +44,11 @@ impl CalculatorStructTool {
             "multiply" => self.a * self.b,
             "divide" => {
                 if self.b == 0.0 {
-                    return Err(mcp_protocol::McpError::tool_execution("Division by zero"));
+                    return Err(turul_mcp_protocol::McpError::tool_execution("Division by zero"));
                 }
                 self.a / self.b
             }
-            _ => return Err(mcp_protocol::McpError::invalid_param_type("operation", "add|subtract|multiply|divide", &self.operation)),
+            _ => return Err(turul_mcp_protocol::McpError::invalid_param_type("operation", "add|subtract|multiply|divide", &self.operation)),
         };
         
         let calculation_time = start_time.elapsed().as_micros() as f64 / 1000.0;
@@ -100,7 +100,7 @@ struct StatisticsCalculatorTool {
 impl StatisticsCalculatorTool {
     async fn execute(&self) -> McpResult<StatisticsResult> {
         if self.numbers.is_empty() {
-            return Err(mcp_protocol::McpError::invalid_param_type("numbers", "non-empty array", "empty array"));
+            return Err(turul_mcp_protocol::McpError::invalid_param_type("numbers", "non-empty array", "empty array"));
         }
         
         let count = self.numbers.len();
@@ -177,7 +177,7 @@ struct QuadraticSolverTool {
 impl QuadraticSolverTool {
     async fn execute(&self) -> McpResult<QuadraticResult> {
         if self.a == 0.0 {
-            return Err(mcp_protocol::McpError::invalid_param_type("a", "non-zero", "zero"));
+            return Err(turul_mcp_protocol::McpError::invalid_param_type("a", "non-zero", "zero"));
         }
         
         let discriminant = self.b * self.b - 4.0 * self.a * self.c;

@@ -5,7 +5,7 @@
 //!
 //! Lines of code: ~40 for server setup (vs 2000+ with manual implementation)
 
-use mcp_server::McpServer;
+use turul_mcp_server::McpServer;
 use tracing::info;
 
 // These would be our tool, resource, sampler implementations
@@ -14,10 +14,10 @@ use tracing::info;
 use crate::types::{Calculator, ConfigResource, CreativeSampler, CodeCompleter};
 
 mod types {
-    use mcp_server::{McpTool, McpResource, McpSampling, McpCompletion, McpResult, SessionContext};
-    use mcp_protocol::tools::CallToolResult;
-    use mcp_protocol::sampling::CreateMessageResult;  
-    use mcp_protocol::completion::CompleteResult;
+    use turul_mcp_server::{McpTool, McpResource, McpSampling, McpCompletion, McpResult, SessionContext};
+    use turul_mcp_protocol::tools::CallToolResult;
+    use turul_mcp_protocol::sampling::CreateMessageResult;  
+    use turul_mcp_protocol::completion::CompleteResult;
     use async_trait::async_trait;
     use serde_json::Value;
 
@@ -67,11 +67,11 @@ mod types {
 
     #[async_trait]
     impl McpSampling for CreativeSampler {
-        async fn sample(&self, _request: mcp_protocol::sampling::CreateMessageRequest, _session: Option<SessionContext>) -> McpResult<CreateMessageResult> {
+        async fn sample(&self, _request: turul_mcp_protocol::sampling::CreateMessageRequest, _session: Option<SessionContext>) -> McpResult<CreateMessageResult> {
             Ok(CreateMessageResult {
-                content: mcp_protocol::sampling::MessageContent::Text { text: "Creative sample".to_string() },
+                content: turul_mcp_protocol::sampling::MessageContent::Text { text: "Creative sample".to_string() },
                 model: "creative-model".to_string(),
-                role: mcp_protocol::sampling::Role::Assistant,
+                role: turul_mcp_protocol::sampling::Role::Assistant,
                 stop_reason: Some("stop".to_string()),
             })
         }
@@ -90,9 +90,9 @@ mod types {
 
     #[async_trait]
     impl McpCompletion for CodeCompleter {
-        async fn complete(&self, _request: mcp_protocol::completion::CompleteRequest, _session: Option<SessionContext>) -> McpResult<CompleteResult> {
+        async fn complete(&self, _request: turul_mcp_protocol::completion::CompleteRequest, _session: Option<SessionContext>) -> McpResult<CompleteResult> {
             Ok(CompleteResult {
-                completion: mcp_protocol::completion::Completion::new("completion text".to_string()),
+                completion: turul_mcp_protocol::completion::Completion::new("completion text".to_string()),
             })
         }
     }

@@ -18,18 +18,18 @@ path = "src/performance_client.rs"
 # [[bin]]
 # name = "stress_test"
 # path = "src/stress_test.rs"
-# TODO: Needs mcp-client migration - complex reqwest patterns
+# TODO: Needs turul-mcp-client migration - complex reqwest patterns
 
 [[bin]]
 name = "memory_benchmark"
 path = "src/memory_benchmark.rs"
 
 [dependencies]
-mcp-server = { workspace = true }
-mcp-derive = { workspace = true }  
-http-mcp-server = { workspace = true }
-mcp-protocol = { workspace = true }
-mcp-client = { workspace = true }
+turul-mcp-server = { workspace = true }
+turul-mcp-derive = { workspace = true }  
+turul-http-mcp-server = { workspace = true }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-client = { workspace = true }
 
 tokio = { workspace = true }
 serde = { workspace = true }

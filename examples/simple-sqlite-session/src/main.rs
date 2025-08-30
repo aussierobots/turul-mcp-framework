@@ -12,9 +12,9 @@
 //! - Automatic database creation and schema migration
 
 use std::sync::Arc;
-use mcp_server::{McpServer, McpResult, SessionContext};
-use mcp_session_storage::{SqliteSessionStorage, SqliteConfig};
-use mcp_derive::McpTool;
+use turul_mcp_server::{McpServer, McpResult, SessionContext};
+use turul_mcp_session_storage::{SqliteSessionStorage, SqliteConfig};
+use turul_mcp_derive::McpTool;
 use serde_json::{json, Value};
 use tracing::{info, error, debug, warn};
 
@@ -30,7 +30,7 @@ struct SaveSettingTool {
 
 impl SaveSettingTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         debug!("Saving setting to SQLite: {} = {}", self.name, self.value);
 
@@ -58,7 +58,7 @@ struct LoadSettingTool {
 
 impl LoadSettingTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         debug!("Loading setting from SQLite: {}", self.name);
 
@@ -90,7 +90,7 @@ struct IncrementCounterTool {
 
 impl IncrementCounterTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         debug!("Incrementing counter in SQLite: {}", self.counter_name);
 
@@ -104,7 +104,7 @@ impl IncrementCounterTool {
         (session.set_state)(&key, json!(new_value));
 
         // Send notification about the increment
-        (session.send_notification)(mcp_server::SessionEvent::Notification(json!({
+        (session.send_notification)(turul_mcp_server::SessionEvent::Notification(json!({
             "jsonrpc": "2.0",
             "method": "notifications/progress", 
             "params": {
@@ -132,7 +132,7 @@ struct StorageStatsTool {}
 
 impl StorageStatsTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         Ok(json!({
             "session_id": session.session_id,
@@ -170,7 +170,7 @@ struct BackupDataTool {
 
 impl BackupDataTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
         debug!("Creating data backup: {}", self.description);
 

@@ -4,9 +4,9 @@
 //! MCP resources with minimal boilerplate code.
 
 use serde::{Serialize, Deserialize};
-use mcp_derive::McpResource;
-use mcp_server::{McpServer, McpResource};
-use mcp_protocol::resources::HasResourceUri;
+use turul_mcp_derive::McpResource;
+use turul_mcp_server::{McpServer, McpResource};
+use turul_mcp_protocol::resources::HasResourceUri;
 
 /// Simple configuration file resource
 #[derive(McpResource, Serialize, Deserialize, Clone)]

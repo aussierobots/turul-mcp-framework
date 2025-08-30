@@ -1,4 +1,4 @@
-use mcp_server::{McpServer, ToolBuilder};
+use turul_mcp_server::{McpServer, ToolBuilder};
 use serde_json::json;
 use tracing::info;
 

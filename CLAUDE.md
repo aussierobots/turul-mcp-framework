@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the **mcp-framework** - a standalone, production-ready Rust framework for building Model Context Protocol (MCP) servers. This framework is designed to eventually supersede previous MCP implementations with a clean, modular architecture.
+This is the **turul-mcp-framework** - a standalone, production-ready Rust framework for building Model Context Protocol (MCP) servers. This framework is designed to eventually supersede previous MCP implementations with a clean, modular architecture.
 
 ### Key Features
 - **Complete MCP 2025-06-18 Specification Support**: Full protocol compliance with latest features
 - **Zero-Configuration Framework**: Users NEVER specify method strings - framework auto-determines ALL methods from types
 - **Four-Level Creation Spectrum**: Function macros, derive macros, builders, and manual implementation
-- **Runtime Builder Library**: Complete `mcp-builders` crate with 9 builders covering all MCP areas
+- **Runtime Builder Library**: Complete `turul-mcp-builders` crate with 9 builders covering all MCP areas
 - **Streamable HTTP Transport**: Integrated SSE support for real-time notifications
 - **Session Management**: UUID v7-based sessions with automatic cleanup
 - **Rich Trait System**: Comprehensive trait coverage for all MCP operations
@@ -20,14 +20,14 @@ This is the **mcp-framework** - a standalone, production-ready Rust framework fo
 
 ### Core Crates Structure
 ```
-mcp-framework/
+turul-mcp-framework/
 ├── crates/
-│   ├── mcp-protocol-2025-06-18/  # Protocol types and traits
-│   ├── mcp-server/               # High-level server framework
-│   ├── mcp-builders/             # Runtime builder patterns (Level 3)
-│   ├── http-mcp-server/         # HTTP transport layer
-│   ├── json-rpc-server/         # JSON-RPC dispatch
-│   └── mcp-derive/              # Procedural macros
+│   ├── turul-mcp-protocol-2025-06-18/  # Protocol types and traits
+│   ├── turul-mcp-server/               # High-level server framework
+│   ├── turul-mcp-builders/             # Runtime builder patterns (Level 3)
+│   ├── turul-http-turul-mcp-server/         # HTTP transport layer
+│   ├── turul-turul-mcp-json-rpc-server/         # JSON-RPC dispatch
+│   └── turul-mcp-derive/              # Procedural macros
 └── examples/                    # Example servers
 ```
 
@@ -86,28 +86,28 @@ See `ADR-JsonSchema-Standardization.md` for the complete architectural decision 
 
 ## Import Conventions
 
-**CRITICAL**: Always use `mcp_protocol` alias for imports:
+**CRITICAL**: Always use `turul_mcp_protocol` alias for imports:
 ```rust
 // ✅ CORRECT
-use mcp_protocol::resources::{HasResourceMetadata, ResourceDefinition};
+use turul_mcp_protocol::resources::{HasResourceMetadata, ResourceDefinition};
 
 // ❌ WRONG  
-use mcp_protocol_2025_06_18::resources::{HasResourceMetadata, ResourceDefinition};
+use turul_mcp_protocol::resources::{HasResourceMetadata, ResourceDefinition};
 ```
 
-The `mcp_protocol` crate is an alias to `mcp_protocol_2025_06_18` but provides future-proofing and consistency across the framework.
+The `turul_mcp_protocol` crate is an alias to `turul_mcp_protocol_2025_06_18` but provides future-proofing and consistency across the framework.
 
-### Architecture Decision Record (ADR): mcp_protocol Alias Usage
+### Architecture Decision Record (ADR): turul_mcp_protocol Alias Usage
 
-**Decision**: ALL code in the mcp-framework MUST use the `mcp_protocol` alias, never direct `mcp_protocol_2025_06_18` paths.
+**Decision**: ALL code in the turul-mcp-framework MUST use the `turul_mcp_protocol` alias, never direct `turul_mcp_protocol_2025_06_18` paths.
 
 **Status**: **MANDATORY** - This is enforced across all code
 
 **Context**: The framework uses protocol versioning but needs future-proofing and consistency.
 
 **Decision**: 
-- ✅ **ALWAYS**: `use mcp_protocol::`
-- ❌ **NEVER**: `use mcp_protocol_2025_06_18::`
+- ✅ **ALWAYS**: `use turul_mcp_protocol::`
+- ❌ **NEVER**: `use turul_mcp_protocol::`
 
 **Consequences**:
 - **Positive**: Future protocol version changes only require updating the alias
@@ -351,7 +351,7 @@ When implementing any MCP specification area:
 - Tests MUST verify both concrete and dynamic implementations work identically
 
 ### MCP TypeScript Specification Compliance
-**CRITICAL**: All types in `mcp-protocol-2025-06-18` crate MUST exactly match the MCP TypeScript Schema specification. This includes:
+**CRITICAL**: All types in `turul-mcp-protocol-2025-06-18` crate MUST exactly match the MCP TypeScript Schema specification. This includes:
 - **Request Pattern**: Every MCP request type must follow `XxxRequest { method, params: XxxParams }` pattern
 - **Params Pattern**: Every params type includes method-specific fields PLUS optional `_meta` field  
 - **Response Pattern**: Every response type includes method-specific fields PLUS optional top-level `_meta` field
@@ -473,12 +473,12 @@ All types implement corresponding traits for compile-time specification complian
 ### Testing Compliance
 Run the MCP TypeScript specification compliance tests:
 ```bash
-cargo test --package mcp-protocol-2025-06-18 compliance_test::tests
+cargo test --package turul-mcp-protocol-2025-06-18 compliance_test::tests
 ```
 
 ## MCP Builders Crate - Runtime Construction Library
 
-The `mcp-builders` crate provides **Level 3** of the four-level creation spectrum - runtime flexibility for dynamic and configuration-driven MCP systems. This crate offers comprehensive builder patterns for ALL MCP protocol areas.
+The `turul-mcp-builders` crate provides **Level 3** of the four-level creation spectrum - runtime flexibility for dynamic and configuration-driven MCP systems. This crate offers comprehensive builder patterns for ALL MCP protocol areas.
 
 ### Status: Production Ready ✅
 - **9 Complete Builders**: All MCP areas covered with full specification compliance
@@ -488,7 +488,7 @@ The `mcp-builders` crate provides **Level 3** of the four-level creation spectru
 
 ### Complete Builder Coverage
 
-The mcp-builders crate provides builders for every MCP protocol area:
+The turul-mcp-builders crate provides builders for every MCP protocol area:
 
 1. **ToolBuilder** - Dynamic tool construction with parameter validation
 2. **ResourceBuilder** - Runtime resource creation with content handling  
@@ -511,7 +511,7 @@ The mcp-builders crate provides builders for every MCP protocol area:
 ### Usage Example - Multiple Builders
 
 ```rust
-use mcp_builders::*;
+use turul_mcp_builders::*;
 use serde_json::json;
 
 // Create a calculator tool at runtime
@@ -577,7 +577,7 @@ Each builder follows consistent patterns:
 
 ### MCP Specification Compliance
 
-The mcp-builders crate maintains strict MCP specification compliance:
+The turul-mcp-builders crate maintains strict MCP specification compliance:
 
 - **Exact Field Names**: All camelCase fields match TypeScript schema exactly
 - **Optional Fields**: Proper `skip_serializing_if` handling for optional parameters
@@ -614,8 +614,8 @@ This framework provides four distinct approaches for creating MCP tools, ordered
 **Boilerplate**: ~5 lines of code
 
 ```rust
-use mcp_server::{McpServer, McpResult};
-use mcp_derive::mcp_tool;
+use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_derive::mcp_tool;
 
 #[mcp_tool(name = "calculator_add", description = "Add two numbers")]
 async fn calculator_add(
@@ -653,8 +653,8 @@ let server = McpServer::builder()
 **Boilerplate**: ~15 lines of code
 
 ```rust
-use mcp_derive::McpTool;
-use mcp_server::{McpResult, McpTool};
+use turul_mcp_derive::McpTool;
+use turul_mcp_server::{McpResult, McpTool};
 
 #[derive(McpTool)]
 #[tool(name = "calculator_add_derive", description = "Add two numbers using derive")]
@@ -687,10 +687,10 @@ let server = McpServer::builder()
 **Best for**: Dynamic tools, configuration-driven systems, runtime tool creation
 **Boilerplate**: ~20 lines of code
 
-> **Note**: Level 3 provides the comprehensive `mcp-builders` crate with builders for ALL MCP areas (tools, resources, prompts, logging, notifications, etc.). See the [MCP Builders Crate](#mcp-builders-crate---runtime-construction-library) section above for complete documentation.
+> **Note**: Level 3 provides the comprehensive `turul-mcp-builders` crate with builders for ALL MCP areas (tools, resources, prompts, logging, notifications, etc.). See the [MCP Builders Crate](#turul-mcp-builders-crate---runtime-construction-library) section above for complete documentation.
 
 ```rust
-use mcp_server::{McpServer, ToolBuilder};
+use turul_mcp_server::{McpServer, ToolBuilder};
 use serde_json::json;
 
 let add_tool = ToolBuilder::new("calculator_add_builder")
@@ -726,8 +726,8 @@ let server = McpServer::builder()
 **Boilerplate**: ~25 lines of code
 
 ```rust
-use mcp_server::{McpServer, McpTool, McpResult, SessionContext};
-use mcp_protocol::tools::{
+use turul_mcp_server::{McpServer, McpTool, McpResult, SessionContext};
+use turul_mcp_protocol::tools::{
     ToolResult, CallToolResponse, ToolSchema,
     HasBaseMetadata, HasDescription, HasInputSchema, 
     HasOutputSchema, HasAnnotations, HasToolMeta

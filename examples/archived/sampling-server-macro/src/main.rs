@@ -6,7 +6,7 @@
 //! Lines of code: ~120 (vs 471+ with manual trait implementations)
 
 use tracing::info;
-use mcp_server::{McpServer, McpResult};
+use turul_mcp_server::{McpServer, McpResult};
 
 // =============================================================================
 // CREATIVE SAMPLER - Framework auto-uses "sampling/createMessage"

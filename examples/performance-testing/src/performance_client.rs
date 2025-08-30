@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use clap::{Parser, Subcommand};
-use mcp_client::{McpClient, McpClientBuilder};
+use turul_mcp_client::{McpClient, McpClientBuilder};
 use serde_json::{json, Value};
 use tokio::time::sleep;
 use tracing::{info, warn};

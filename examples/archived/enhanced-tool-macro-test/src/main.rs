@@ -1,6 +1,6 @@
-use mcp_derive::McpTool;
-use mcp_server::{McpServer, McpResult};
-use mcp_protocol::McpError;
+use turul_mcp_derive::McpTool;
+use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_protocol::McpError;
 
 // Enhanced calculator using derive macro - demonstrates advanced parameters
 #[derive(McpTool, Clone)]

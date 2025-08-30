@@ -13,10 +13,10 @@ The MCP framework requires session management for:
 - Different persistence backends (InMemory, PostgreSQL, SQLite)
 
 The framework consists of multiple crates that need to work together for session management:
-- `mcp-session-storage`: Storage abstraction and implementations
-- `mcp-server`: Core MCP server with tool execution
-- `mcp-json-rpc-server`: JSON-RPC handling and session contexts
-- `http-mcp-server`: HTTP transport with SSE streaming
+- `turul-mcp-session-storage`: Storage abstraction and implementations
+- `turul-mcp-server`: Core MCP server with tool execution
+- `turul-mcp-json-rpc-server`: JSON-RPC handling and session contexts
+- `turul-http-turul-mcp-server`: HTTP transport with SSE streaming
 
 ## Decision
 
@@ -24,7 +24,7 @@ The framework consists of multiple crates that need to work together for session
 
 ```
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────────┐
-│   mcp-server    │    │ mcp-json-rpc-    │    │  http-mcp-server    │
+│   turul-mcp-server    │    │ mcp-json-rpc-    │    │  http-turul-mcp-server    │
 │                 │    │     server       │    │                     │
 │  ┌─────────────┐│    │ ┌──────────────┐ │    │ ┌─────────────────┐ │
 │  │SessionManager││◄──►││SessionContext│ │    │ │SessionMcpHandler│ │
@@ -34,7 +34,7 @@ The framework consists of multiple crates that need to work together for session
 └─────────┼───────┘                            └──────────┼──────────┘
           │                                               │
           │              ┌─────────────────────────────────────┐
-          └──────────────►│       mcp-session-storage           │
+          └──────────────►│       turul-mcp-session-storage           │
                          │                                     │
                          │ ┌─────────────┐ ┌─────────────────┐ │
                          │ │SessionStorage│ │ Implementations │ │
@@ -48,7 +48,7 @@ The framework consists of multiple crates that need to work together for session
 
 ### Component Responsibilities
 
-#### 1. `mcp-session-storage` Crate
+#### 1. `turul-mcp-session-storage` Crate
 - **Purpose**: Provides SessionStorage trait abstraction and backend implementations
 - **Responsibilities**:
   - Define SessionStorage trait interface
@@ -57,7 +57,7 @@ The framework consists of multiple crates that need to work together for session
   - Manage SSE event storage and resumability
   - Provide session expiration and cleanup
 
-#### 2. `mcp-server` Crate  
+#### 2. `turul-mcp-server` Crate  
 - **Purpose**: Core MCP server with tool execution and session management
 - **Responsibilities**:
   - Own the SessionManager that orchestrates session lifecycle
@@ -65,38 +65,38 @@ The framework consists of multiple crates that need to work together for session
   - Create SessionContext for tool execution
   - Manage session creation, initialization, and cleanup
 
-#### 3. `mcp-json-rpc-server` Crate
+#### 3. `turul-mcp-json-rpc-server` Crate
 - **Purpose**: JSON-RPC protocol handling and session context provision
 - **Responsibilities**:
   - Provide SessionContext to tool handlers
   - Bridge between HTTP requests and session state
   - Handle session ID extraction and validation
 
-#### 4. `http-mcp-server` Crate
+#### 4. `turul-http-turul-mcp-server` Crate
 - **Purpose**: HTTP transport layer with SSE streaming
 - **Responsibilities**:
   - Handle HTTP requests and SSE connections
   - Manage session headers (Mcp-Session-Id)
   - Use SessionStorage for SSE event persistence
-  - Coordinate with mcp-server's SessionManager
+  - Coordinate with turul-mcp-server's SessionManager
 
 ### Data Flow
 
 1. **Session Creation**: 
    - Client sends `initialize` request
-   - `mcp-server` creates session via SessionStorage
+   - `turul-mcp-server` creates session via SessionStorage
    - Returns `Mcp-Session-Id` header
 
 2. **Tool Execution**:
    - Client sends tool request with session ID
-   - `mcp-json-rpc-server` creates SessionContext
+   - `turul-mcp-json-rpc-server` creates SessionContext
    - Tool uses `SessionContext.set_state()` to persist data
    - State is stored via SessionStorage backend
 
 3. **SSE Events**:
    - Tools send notifications via SessionContext
    - Events stored in SessionStorage for resumability
-   - `http-mcp-server` streams events to clients
+   - `turul-http-turul-mcp-server` streams events to clients
 
 ### SessionStorage Interface
 
@@ -213,6 +213,6 @@ let server = McpServer::builder()
 ## Migration Path
 
 - **Phase 1**: Implement SessionStorage trait in all backends ✅
-- **Phase 2**: Integrate with mcp-server SessionManager ✅  
+- **Phase 2**: Integrate with turul-mcp-server SessionManager ✅  
 - **Phase 3**: Update examples to demonstrate different backends 🔄
 - **Phase 4**: Add monitoring and metrics for session storage

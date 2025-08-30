@@ -6,8 +6,8 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-mcp-server.workspace = true
-mcp-protocol.workspace = true
+turul-mcp-server.workspace = true
+turul-mcp-protocol.workspace = true
 async-trait.workspace = true
 tokio.workspace = true
 tracing.workspace = true

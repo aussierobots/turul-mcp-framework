@@ -5,8 +5,8 @@
 //!
 //! Total lines: ~40 (following calculator-add-function-server pattern)
 
-use mcp_derive::mcp_tool;
-use mcp_server::{McpServer, McpResult, ToolBuilder};
+use turul_mcp_derive::mcp_tool;
+use turul_mcp_server::{McpServer, McpResult, ToolBuilder};
 use serde_json::json;
 use tracing::info;
 

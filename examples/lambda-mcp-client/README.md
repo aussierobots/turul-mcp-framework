@@ -1,6 +1,6 @@
 # Lambda MCP Test Client
 
-Comprehensive test client for validating `lambda-mcp-server` implementation, ensuring MCP 2025-06-18 Streamable HTTP protocol compliance, tool functionality, session management, and infrastructure integration.
+Comprehensive test client for validating `lambda-turul-mcp-server` implementation, ensuring MCP 2025-06-18 Streamable HTTP protocol compliance, tool functionality, session management, and infrastructure integration.
 
 ## Features
 
@@ -28,7 +28,7 @@ Comprehensive test client for validating `lambda-mcp-server` implementation, ens
 
 ### **Prerequisites**
 - **Rust 1.70+** with 2024 edition support
-- **Running lambda-mcp-server** (local or deployed)
+- **Running lambda-turul-mcp-server** (local or deployed)
 
 ### **Installation**
 ```bash
@@ -315,7 +315,7 @@ jobs:
           toolchain: stable
       - name: Setup Infrastructure
         run: |
-          cd examples/lambda-mcp-server
+          cd examples/lambda-turul-mcp-server
           ./scripts/setup-infrastructure.sh
       - name: Start MCP Server
         run: |
@@ -358,7 +358,7 @@ validator.validate_tool_response("my_tool", &response)?;
 ```bash
 Error: Connection refused
 ```
-- **Solution**: Ensure `lambda-mcp-server` is running on the specified URL
+- **Solution**: Ensure `lambda-turul-mcp-server` is running on the specified URL
 - **Check**: `cargo lambda watch` in the server directory
 
 #### **Schema Validation Failures**
@@ -393,7 +393,7 @@ Error: Session not found
 
 ## Summary
 
-This comprehensive test client ensures `lambda-mcp-server` meets all MCP specification requirements while validating tool functionality, session management, and infrastructure integration. Use it for:
+This comprehensive test client ensures `lambda-turul-mcp-server` meets all MCP specification requirements while validating tool functionality, session management, and infrastructure integration. Use it for:
 
 - ✅ **Development Testing**: Validate changes during development
 - ✅ **CI/CD Integration**: Automated testing in deployment pipelines  

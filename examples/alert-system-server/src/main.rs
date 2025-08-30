@@ -7,8 +7,8 @@
 
 use std::collections::HashMap;
 use async_trait::async_trait;
-use mcp_server::{McpServer, SessionContext, McpResult, McpTool as McpToolTrait};
-use mcp_protocol::{
+use turul_mcp_server::{McpServer, SessionContext, McpResult, McpTool as McpToolTrait};
+use turul_mcp_protocol::{
     JsonSchema, ToolSchema, CallToolResult, ToolResult, McpError,
     tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta}
 };
@@ -127,7 +127,7 @@ impl HasOutputSchema for ConfigureAlertRuleTool {
 }
 
 impl HasAnnotations for ConfigureAlertRuleTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
 }
 
 impl HasToolMeta for ConfigureAlertRuleTool {
@@ -346,7 +346,7 @@ impl HasOutputSchema for CheckAlertConditionsTool {
 }
 
 impl HasAnnotations for CheckAlertConditionsTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
 }
 
 impl HasToolMeta for CheckAlertConditionsTool {
@@ -521,7 +521,7 @@ impl HasOutputSchema for GetAlertHistoryTool {
 }
 
 impl HasAnnotations for GetAlertHistoryTool {
-    fn annotations(&self) -> Option<&mcp_protocol::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
 }
 
 impl HasToolMeta for GetAlertHistoryTool {

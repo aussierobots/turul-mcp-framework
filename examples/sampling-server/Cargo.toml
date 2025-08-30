@@ -4,8 +4,8 @@ version = "1.0.0"
 edition.workspace = true
 
 [dependencies]
-mcp-server = { workspace = true, features = ["http"] }
-mcp-protocol = { workspace = true }
+turul-mcp-server = { workspace = true, features = ["http"] }
+turul-mcp-protocol = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

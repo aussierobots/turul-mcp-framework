@@ -1,5 +1,5 @@
 [package]
-name = "mcp-framework-integration-tests"
+name = "turul-mcp-framework-integration-tests"
 version = "0.1.0"
 edition.workspace = true
 
@@ -8,11 +8,11 @@ name = "integration_tests"
 path = "integration_tests.rs"
 
 [dependencies]
-mcp-derive = { workspace = true }
-mcp-server = { workspace = true }
-mcp-protocol = { workspace = true }
-mcp-protocol-2025-06-18 = { workspace = true }
-mcp-json-rpc-server = { workspace = true }
+turul-mcp-derive = { workspace = true }
+turul-mcp-server = { workspace = true }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-protocol-2025-06-18 = { workspace = true }
+turul-mcp-json-rpc-server = { workspace = true }
 tokio = { workspace = true }
 tokio-test = { workspace = true }
 serde_json = { workspace = true }
@@ -23,3 +23,27 @@ futures = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 chrono = { workspace = true }
+
+[[test]]
+name = "basic_session_test"
+path = "basic_session_test.rs"
+
+[[test]]
+name = "calculator_levels_integration"
+path = "calculator_levels_integration.rs"
+
+[[test]]
+name = "custom_output_field_test"
+path = "custom_output_field_test.rs"
+
+[[test]]
+name = "mcp_compliance_tests"
+path = "mcp_compliance_tests.rs"
+
+[[test]]
+name = "session_context_macro_tests"
+path = "session_context_macro_tests.rs"
+
+[[test]]
+name = "working_examples_validation"
+path = "working_examples_validation.rs"

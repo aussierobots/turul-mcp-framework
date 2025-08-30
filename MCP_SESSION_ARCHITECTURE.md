@@ -16,24 +16,24 @@ The MCP Framework implements the **MCP 2025-06-18 Streamable HTTP Transport** sp
 │                          SESSION STORAGE LAYER                           │
 │                     (Pluggable Backend Abstraction)                      │
 ├─────────────────────────────────────────────────────────────────────────┤
-│ SessionStorage Trait (mcp-session-storage/src/traits.rs)                 │
+│ SessionStorage Trait (turul-mcp-session-storage/src/traits.rs)                      │
 │   • create_session() → UUID v7 (temporal ordering)                       │
 │   • store_event() → Monotonic event IDs                                  │
 │   • get_events_after() → SSE resumability support                        │
 │   • 30+ methods for complete session lifecycle                           │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ Implementations:                                                          │
-│   ✅ InMemorySessionStorage (complete, working)                          │
-│   🔜 SqliteSessionStorage (trait ready, impl pending)                    │
-│   🔜 PostgresSessionStorage (trait ready, impl pending)                  │
-│   🔜 DynamoDbSessionStorage (trait ready, impl pending)                  │
+│   ✅ InMemorySessionStorage (complete, production-ready)                 │
+│   ✅ SqliteSessionStorage (complete, production-ready)                   │
+│   ✅ PostgresSessionStorage (complete, production-ready)                 │
+│   ✅ DynamoDbSessionStorage (complete, auto-creates tables)              │
 └─────────────────────────────────────────────────────────────────────────┘
                                     ↓
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           STREAM MANAGER LAYER                           │
 │                        (SSE Streaming with Channels)                     │
 ├─────────────────────────────────────────────────────────────────────────┤
-│ StreamManager<S: SessionStorage> (http-mcp-server/src/stream_manager.rs) │
+│ StreamManager<S: SessionStorage> (turul-http-mcp-server/src/stream_manager.rs)      │
 │   • HashMap<SessionId, broadcast::Sender<SseEvent>>                      │
 │   • handle_sse_connection() with Last-Event-ID support                   │
 │   • broadcast_to_session() for targeted event delivery                   │
@@ -46,7 +46,7 @@ The MCP Framework implements the **MCP 2025-06-18 Streamable HTTP Transport** sp
 │                       NOTIFICATION BROADCASTER LAYER                     │
 │                    (MCP Protocol Notification Routing)                   │
 ├─────────────────────────────────────────────────────────────────────────┤
-│ NotificationBroadcaster Trait (http-mcp-server/src/notification_bridge)  │
+│ NotificationBroadcaster Trait (turul-http-mcp-server/src/notification_bridge)       │
 │   • send_progress_notification() - MCP compliant                         │
 │   • send_message_notification() - MCP compliant                          │
 │   • send_resource_updated_notification() - MCP compliant                 │
@@ -63,7 +63,7 @@ The MCP Framework implements the **MCP 2025-06-18 Streamable HTTP Transport** sp
 
 ### Component 1: JSON-RPC Handler (SessionMcpHandler)
 ```
-Location: crates/http-mcp-server/src/session_handler.rs
+Location: crates/turul-http-turul-mcp-server/src/session_handler.rs
 Purpose: Handles POST JSON-RPC requests and session state per MCP Streamable HTTP spec
 
 Flow:
@@ -80,7 +80,7 @@ StreamManager.broadcast_to_session()
 
 ### Component 2: SSE Stream Handler (StreamManager)
 ```
-Location: crates/http-mcp-server/src/stream_manager.rs
+Location: crates/turul-http-turul-mcp-server/src/stream_manager.rs
 Purpose: Handles SSE streams with resumability per MCP Streamable HTTP spec
 
 Flow:
@@ -111,7 +111,7 @@ Creates broadcast channel + event replay
 ## ✅ Fully Implemented Components
 
 ### SessionStorage Trait (Complete)
-- **Location**: `crates/mcp-session-storage/src/traits.rs`
+- **Location**: `crates/turul-mcp-session-storage/src/traits.rs`
 - **Status**: ✅ Fully implemented with 30+ methods
 - **Features**:
   - Session lifecycle (create, update, delete)
@@ -120,7 +120,7 @@ Creates broadcast channel + event replay
   - Cleanup and maintenance
 
 ### StreamManager (Complete & Connected)
-- **Location**: `crates/http-mcp-server/src/stream_manager.rs`
+- **Location**: `crates/turul-http-mcp-server/src/stream_manager.rs`
 - **Status**: ✅ Fully implemented with resumability
 - **Features**:
   - Per-session broadcast channels
@@ -130,7 +130,7 @@ Creates broadcast channel + event replay
   - POST SSE stream creation for tool notifications
 
 ### NotificationBroadcaster (Complete & Connected)
-- **Location**: `crates/http-mcp-server/src/notification_bridge.rs`
+- **Location**: `crates/turul-http-mcp-server/src/notification_bridge.rs`
 - **Status**: ✅ All MCP notification types supported and connected
 - **Features**:
   - 6 notification types (progress, message, cancelled, resources, tools)
@@ -141,7 +141,7 @@ Creates broadcast channel + event replay
 ## ✅ Connected Systems - Current Implementation
 
 ### Session Context Integration (Implemented)
-**File**: `crates/http-mcp-server/src/session_handler.rs`
+**File**: `crates/turul-http-mcp-server/src/session_handler.rs`
 
 ```rust
 // SessionMcpHandler creates SessionContext with NotificationBroadcaster
@@ -156,7 +156,7 @@ tool.call(session_context).await
 ```
 
 ### Notification Flow (Implemented)
-**File**: `crates/mcp-server/src/session.rs`
+**File**: `crates/turul-mcp-server/src/session.rs`
 
 ```rust
 // SessionContext provides notification methods
@@ -176,7 +176,7 @@ pub fn notify_log(&self, level: &str, message: impl Into<String>) {
 ```
 
 ### SSE Response Integration (Implemented)
-**File**: `crates/http-mcp-server/src/stream_manager.rs`
+**File**: `crates/turul-http-mcp-server/src/stream_manager.rs`
 
 ```rust
 // POST requests with Accept: text/event-stream return SSE streams
@@ -197,21 +197,33 @@ pub async fn create_post_sse_stream(&self,
 // Current: Single-instance (Working)
 StreamManager → tokio::broadcast → Local SSE clients
 
-// Future: Multi-instance
+// Future: Multi-instance (See GLOBAL_FANOUT_ARCHITECTURE.md)
 StreamManager → NotificationBroadcaster →
     ├── tokio::broadcast (local clients)
     ├── NATS JetStream (other instances)
     └── AWS SNS (Lambda functions)
 ```
 
+### Lambda Integration Status
+- **Lambda MCP Server**: ⚠️ **PARTIAL** - Workspace integrated, needs tool trait migration
+- **Lambda MCP Client**: ✅ **WORKING** - Full framework integration
+- **Next Steps**: Migrate remaining AWS tools to new ToolDefinition trait system
+
 ### Additional Storage Backends
 ```rust
-// All implement same SessionStorage trait
-PostgresSessionStorage → Production databases
-DynamoDbSessionStorage → Serverless/Lambda
-RedisSessionStorage → Cache layer
-S3SessionStorage → Long-term event archive
+// All implement same SessionStorage trait - ALL WORKING
+PostgresSessionStorage → Production databases ✅
+DynamoDbSessionStorage → Serverless/Lambda ✅ (auto-creates tables)
+RedisSessionStorage → Cache layer (planned)
+S3SessionStorage → Long-term event archive (planned)
 ```
+
+### DynamoDB Implementation Notes
+- **Auto-table Creation**: Creates `mcp-sessions` table automatically if it doesn't exist
+- **Pay-per-request Billing**: Uses on-demand billing for cost optimization
+- **Global Secondary Index**: Includes LastActivityIndex for efficient cleanup queries
+- **TTL Support**: Automatic session expiration via DynamoDB TTL attributes
+- **JSON State Storage**: Session state stored as JSON strings for flexibility
 
 ## 📊 Architecture Decision Records
 
@@ -268,9 +280,9 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:52935/mcp
 
 ## 📚 References
 
-- **SessionStorage Trait**: `crates/mcp-session-storage/src/traits.rs`
-- **StreamManager**: `crates/http-mcp-server/src/stream_manager.rs`
-- **NotificationBroadcaster**: `crates/http-mcp-server/src/notification_bridge.rs`
-- **SessionMcpHandler**: `crates/http-mcp-server/src/session_handler.rs`
-- **Working Test Example**: `crates/mcp-server/examples/client-initialise-report.rs`
+- **SessionStorage Trait**: `crates/turul-mcp-session-storage/src/traits.rs`
+- **StreamManager**: `crates/turul-http-mcp-server/src/stream_manager.rs`
+- **NotificationBroadcaster**: `crates/turul-http-mcp-server/src/notification_bridge.rs`
+- **SessionMcpHandler**: `crates/turul-http-mcp-server/src/session_handler.rs`
+- **Working Test Example**: `crates/turul-mcp-server/examples/client-initialise-report.rs`
 - **MCP Specification**: Complete MCP 2025-06-18 Streamable HTTP Transport implementation

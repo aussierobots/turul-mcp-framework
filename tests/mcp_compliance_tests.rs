@@ -17,7 +17,7 @@
 use std::collections::HashMap;
 use serde_json::{json, Value};
 
-use mcp_protocol_2025_06_18::{
+use turul_mcp_protocol::{
     JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcNotification, RequestParams, ResultWithMeta
 };
 

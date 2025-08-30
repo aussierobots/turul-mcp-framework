@@ -6,10 +6,10 @@
 //! that development teams use to access project artifacts and documentation.
 
 use async_trait::async_trait;
-use mcp_server::{McpServer, McpResult};
-use mcp_server::McpResource;
-use mcp_protocol::resources::ResourceContent;
-use mcp_protocol::resources::{
+use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_server::McpResource;
+use turul_mcp_protocol::resources::ResourceContent;
+use turul_mcp_protocol::resources::{
     HasResourceMetadata, HasResourceDescription, HasResourceUri, 
     HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta
 };
@@ -50,7 +50,7 @@ impl HasResourceMimeType for ProjectDocumentationResource {
 
 impl HasResourceSize for ProjectDocumentationResource {}
 impl HasResourceAnnotations for ProjectDocumentationResource {
-    fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
         None
     }
 }
@@ -158,7 +158,7 @@ impl HasResourceMimeType for ApiDocumentationResource {
 
 impl HasResourceSize for ApiDocumentationResource {}
 impl HasResourceAnnotations for ApiDocumentationResource {
-    fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
         None
     }
 }
@@ -229,7 +229,7 @@ impl HasResourceMimeType for ConfigurationResource {
 
 impl HasResourceSize for ConfigurationResource {}
 impl HasResourceAnnotations for ConfigurationResource {
-    fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
         None
     }
 }
@@ -339,7 +339,7 @@ impl HasResourceMimeType for DatabaseSchemaResource {
 
 impl HasResourceSize for DatabaseSchemaResource {}
 impl HasResourceAnnotations for DatabaseSchemaResource {
-    fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
         None
     }
 }
@@ -443,7 +443,7 @@ impl HasResourceMimeType for SystemStatusResource {
 
 impl HasResourceSize for SystemStatusResource {}
 impl HasResourceAnnotations for SystemStatusResource {
-    fn annotations(&self) -> Option<&mcp_protocol::meta::Annotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
         None
     }
 }

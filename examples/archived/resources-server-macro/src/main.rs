@@ -8,7 +8,7 @@
 use serde_json::Value;
 use std::path::PathBuf;
 use tracing::info;
-use mcp_server::{McpServer, McpResult};
+use turul_mcp_server::{McpServer, McpResult};
 
 // =============================================================================
 // FILE RESOURCE - Framework auto-uses "resources/read"

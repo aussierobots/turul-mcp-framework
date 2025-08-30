@@ -4,10 +4,10 @@ version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
-mcp-derive = { workspace = true }
-mcp-server = { workspace = true }
-mcp-protocol = { workspace = true }
-mcp-protocol-2025-06-18 = { workspace = true }
+turul-mcp-derive = { workspace = true }
+turul-mcp-server = { workspace = true }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-protocol-2025-06-18 = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

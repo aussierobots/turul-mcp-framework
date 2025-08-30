@@ -149,8 +149,8 @@ async fn test_basic_framework_functionality() {
     // This test validates core framework functionality without requiring examples
     
     // Test 1: Verify that derive macros work
-    use mcp_derive::McpTool;
-    use mcp_server::McpTool;
+    use turul_mcp_derive::McpTool;
+    use turul_mcp_server::McpTool;
     use serde_json::json;
     
     #[derive(McpTool, Clone)]
@@ -163,7 +163,7 @@ async fn test_basic_framework_functionality() {
     }
     
     impl TestAddTool {
-        async fn execute(&self) -> mcp_server::McpResult<String> {
+        async fn execute(&self) -> turul_mcp_server::McpResult<String> {
             Ok(format!("{}", self.a + self.b))
         }
     }

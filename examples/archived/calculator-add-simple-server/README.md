@@ -2,7 +2,7 @@
 
 ## Code Reduction Demonstration
 
-This example demonstrates the dramatic code reduction possible when using the mcp-framework's function macro approach compared to manual implementation.
+This example demonstrates the dramatic code reduction possible when using the turul-mcp-framework's function macro approach compared to manual implementation.
 
 ### Comparison
 

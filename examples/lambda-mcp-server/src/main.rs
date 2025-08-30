@@ -1,4 +1,4 @@
-//! AWS Lambda MCP Server using mcp-framework
+//! AWS Lambda MCP Server using turul-mcp-framework
 //!
 //! Complete Lambda MCP server with restored architecture including:
 //! - DynamoDB session management

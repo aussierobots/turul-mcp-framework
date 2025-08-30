@@ -16,10 +16,10 @@ name = "postgres-teardown"
 path = "src/bin/postgres-teardown.rs"
 
 [dependencies]
-mcp-server = { path = "../../crates/mcp-server", features = ["http", "sse"] }
-mcp-session-storage = { path = "../../crates/mcp-session-storage", features = ["postgres"] }
-mcp-derive = { path = "../../crates/mcp-derive" }
-mcp-protocol = { path = "../../crates/mcp-protocol" }
+turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http", "sse"] }
+turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage", features = ["postgres"] }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
 
 tokio = { version = "1.0", features = ["full"] }
 tracing = "0.1"

@@ -188,7 +188,7 @@ Global Tables: Enabled for multi-region
 # serverless.yml
 functions:
   mcpServer:
-    handler: target/lambda/mcp-server/bootstrap
+    handler: target/lambda/turul-mcp-server/bootstrap
     runtime: provided.al2
     environment:
       DYNAMODB_TABLE: ${self:service}-sessions-${sls:stage}
@@ -203,7 +203,7 @@ functions:
 # docker-compose.yml
 version: '3'
 services:
-  mcp-server:
+  turul-mcp-server:
     build: .
     environment:
       - DYNAMODB_TABLE=mcp-sessions

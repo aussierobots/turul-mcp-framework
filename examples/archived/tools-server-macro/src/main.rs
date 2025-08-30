@@ -8,7 +8,7 @@
 use serde_json::Value;
 use std::collections::HashMap;
 use tracing::info;
-use mcp_server::{McpServer, McpResult};
+use turul_mcp_server::{McpServer, McpResult};
 
 // =============================================================================
 // CALCULATOR TOOL - Framework auto-uses "tools/call"
@@ -40,11 +40,11 @@ impl Calculator {
             "subtract" => a - b,
             "multiply" => a * b,
             "divide" if b != 0.0 => a / b,
-            "divide" => return Err(mcp_protocol::McpError::tool_execution("Division by zero")),
+            "divide" => return Err(turul_mcp_protocol::McpError::tool_execution("Division by zero")),
             "power" => a.powf(b),
             "sqrt" if a >= 0.0 => a.sqrt(),
-            "sqrt" => return Err(mcp_protocol::McpError::tool_execution("Cannot take square root of negative number")),
-            _ => return Err(mcp_protocol::McpError::invalid_param_type(
+            "sqrt" => return Err(turul_mcp_protocol::McpError::tool_execution("Cannot take square root of negative number")),
+            _ => return Err(turul_mcp_protocol::McpError::invalid_param_type(
                 "operation", 
                 "add|subtract|multiply|divide|power|sqrt", 
                 operation
@@ -105,7 +105,7 @@ impl StringUtils {
                 "input": text,
                 "tool": "string_utils"
             })),
-            _ => return Err(mcp_protocol::McpError::invalid_param_type(
+            _ => return Err(turul_mcp_protocol::McpError::invalid_param_type(
                 "operation",
                 "uppercase|lowercase|reverse|length|words",
                 operation
