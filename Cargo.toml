@@ -27,7 +27,7 @@ members = [
     "examples/elicitation-server",
     "examples/function-macro-server",
     "examples/lambda-mcp-client",
-    "examples/lambda-mcp-server", # Fixed: Ready for production use
+    "examples/lambda-mcp-server",
     "examples/manual-tools-server",
     "examples/minimal-server",
     "examples/notification-server",
@@ -145,3 +145,14 @@ serde_yaml = "0.9"
 lto = true
 codegen-units = 1
 panic = "abort"
+
+[patch.crates-io]
+turul-mcp-json-rpc-server = { path = "crates/turul-mcp-json-rpc-server" }
+turul-mcp-protocol-2025-06-18 = { path = "crates/turul-mcp-protocol-2025-06-18" }
+turul-mcp-protocol = { path = "crates/turul-mcp-protocol" }
+turul-mcp-session-storage = { path = "crates/turul-mcp-session-storage" }
+turul-http-mcp-server = { path = "crates/turul-http-mcp-server" }
+turul-mcp-server = { path = "crates/turul-mcp-server" }
+turul-mcp-derive = { path = "crates/turul-mcp-derive" }
+turul-mcp-client = { path = "crates/turul-mcp-client" }
+turul-mcp-builders = { path = "crates/turul-mcp-builders" }
