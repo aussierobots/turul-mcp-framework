@@ -467,6 +467,84 @@ curl -N -H "Accept: text/event-stream" \\
   http://127.0.0.1:8080/mcp/events
 ```
 
+### MCP Session Management Compliance Testing
+
+The framework includes comprehensive compliance testing for MCP session management specification requirements.
+
+#### Running the Session Management Compliance Test
+
+```bash
+# 1. Start a server with session storage (choose backend: sqlite, postgres, dynamodb, or inmemory)
+cargo run --example client-initialise-server -- --port 52950 --storage-backend dynamodb --create-tables
+
+# 2. In another terminal, run the comprehensive compliance test (IMPORTANT: include RUST_LOG=info)
+RUST_LOG=info cargo run --example session-management-compliance-test -- http://127.0.0.1:52950/mcp
+
+# 3. Alternative: Use different storage backends
+cargo run --example client-initialise-server -- --port 52951 --storage-backend sqlite --create-tables
+RUST_LOG=info cargo run --example session-management-compliance-test -- http://127.0.0.1:52951/mcp
+```
+
+#### What the Compliance Test Verifies
+
+The comprehensive test validates all MCP session management requirements:
+
+- **✅ Session ID Generation**: UUID v7 with cryptographic security and ASCII compliance
+- **✅ Session Persistence**: Proper session validation and storage backend integration
+- **✅ Session Expiry**: TTL-based cleanup and 404 responses for expired sessions
+- **✅ Client Reinitialize**: Graceful session recovery on expiry
+- **✅ DELETE Termination**: Explicit session termination support
+- **✅ Session Isolation**: Multi-session security and data separation
+
+#### Expected Output
+
+```
+🧪 MCP Session Management Compliance Test
+═══════════════════════════════════════════
+✅ Session ID generation compliance verified
+✅ Session persistence compliance verified  
+✅ Session expiry compliance verified
+✅ Client reinitialize compliance verified
+✅ DELETE session termination compliance verified
+✅ Session isolation compliance verified
+
+🎉 MCP SESSION MANAGEMENT COMPLIANCE: COMPLETE
+═══════════════════════════════════════════════
+```
+
+#### Storage Backend Configuration
+
+**DynamoDB** (Production):
+- 5-minute TTL with automatic cleanup
+- GSI indexes for efficient queries
+- AWS credentials required
+
+**SQLite** (Development):  
+- File-based persistence
+- 5-minute TTL with background cleanup
+- No external dependencies
+
+**PostgreSQL** (Enterprise):
+- Full SQL features with indexing
+- 5-minute TTL with efficient cleanup
+- Connection string required
+
+**InMemory** (Testing):
+- Fast, no persistence
+- 5-minute TTL with memory cleanup
+- Zero configuration
+
+#### Customizing TTL Configuration
+
+```rust
+// Custom TTL configuration (default: 5 minutes)
+let config = DynamoDbConfig {
+    session_ttl_minutes: 30,  // 30-minute session TTL
+    event_ttl_minutes: 15,    // 15-minute event TTL
+    ..Default::default()
+};
+```
+
 ## 📊 Business Value Examples
 
 ### Enterprise Integration

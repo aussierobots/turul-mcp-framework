@@ -32,6 +32,49 @@ pub struct McpClient {
     request_counter: Arc<std::sync::atomic::AtomicU64>,
 }
 
+impl Drop for McpClient {
+    /// Automatic cleanup when client is dropped
+    /// 
+    /// This ensures that if the client is dropped without explicit disconnect,
+    /// we still attempt to send a DELETE request to clean up the session on the server.
+    fn drop(&mut self) {
+        let session_id = self.session.clone();
+        let transport = self.transport.clone();
+        
+        // Spawn a background task to handle cleanup
+        // We can't await in Drop, so we spawn a task that will complete cleanup
+        tokio::spawn(async move {
+            // Only send DELETE if we have a session ID
+            if let Some(session_id_str) = session_id.session_id_optional().await {
+                let mut transport_guard = transport.lock().await;
+                
+                info!(
+                    session_id = session_id_str,
+                    "McpClient dropped - attempting session cleanup via DELETE request"
+                );
+                
+                if let Err(e) = transport_guard.send_delete(&session_id_str).await {
+                    warn!(
+                        session_id = session_id_str,
+                        error = %e,
+                        "Failed to send DELETE request during Drop cleanup"
+                    );
+                } else {
+                    info!(
+                        session_id = session_id_str,
+                        "Successfully sent DELETE request during Drop cleanup"
+                    );
+                }
+            } else {
+                debug!("No session ID available, skipping DELETE request during Drop");
+            }
+            
+            // Also terminate the session locally
+            session_id.terminate(Some("Client dropped".to_string())).await;
+        });
+    }
+}
+
 impl McpClient {
     /// Create a new MCP client with the given transport
     pub fn new(transport: BoxedTransport, config: ClientConfig) -> Self {
@@ -75,7 +118,21 @@ impl McpClient {
     pub async fn disconnect(&self) -> McpClientResult<()> {
         info!("Disconnecting from MCP server");
 
-        // Terminate session
+        // Send DELETE request for session cleanup if we have a session ID
+        if let Some(session_id) = self.session.session_id_optional().await {
+            let mut transport = self.transport.lock().await;
+            if let Err(e) = transport.send_delete(&session_id).await {
+                warn!(
+                    session_id = session_id,
+                    error = %e,
+                    "Failed to send DELETE request during disconnect - continuing with cleanup"
+                );
+            }
+        } else {
+            debug!("No session ID available, skipping DELETE request during disconnect");
+        }
+
+        // Terminate session locally
         self.session
             .terminate(Some("Client disconnect".to_string()))
             .await;
@@ -137,19 +194,31 @@ impl McpClient {
             "params": request_json
         });
 
-        // Send initialize request with timeout
+        // Send initialize request with timeout (need headers for session ID)
         let response = timeout(
             self.config.timeouts.initialization,
-            self.send_request_internal(json_rpc_request),
+            self.send_request_with_headers_internal(json_rpc_request),
         )
         .await
         .map_err(|_| McpClientError::Timeout)?;
 
-        let response = response?;
+        let transport_response = response?;
+
+        // Extract session ID from headers (MCP protocol) - case insensitive lookup
+        let session_id = transport_response.headers.iter()
+            .find(|(key, _)| key.to_lowercase() == "mcp-session-id")
+            .map(|(_, value)| value.clone());
+            
+        if let Some(session_id) = session_id {
+            info!("Server provided session ID: {}", session_id);
+            self.session.set_session_id(session_id.clone()).await?;
+        } else {
+            return Err(McpClientError::generic("Server did not provide Mcp-Session-Id header during initialization"));
+        }
 
         // Parse initialize response
         let init_response: InitializeResult =
-            serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))
+            serde_json::from_value(transport_response.body.get("result").cloned().unwrap_or(Value::Null))
                 .map_err(|e| {
                     McpClientError::generic(format!("Failed to parse initialize response: {}", e))
                 })?;
@@ -223,6 +292,57 @@ impl McpClient {
         }
 
         Err(last_error.unwrap_or_else(|| McpClientError::generic("All retry attempts failed")))
+    }
+
+    /// Send request with headers and handle retries (used for initialization)
+    async fn send_request_with_headers_internal(&self, request: Value) -> McpClientResult<crate::transport::TransportResponse> {
+        let mut last_error = None;
+
+        for attempt in 0..self.config.retry.max_attempts {
+            if attempt > 0 {
+                let delay = self.config.retry.delay_for_attempt(attempt);
+                debug!(
+                    attempt = attempt,
+                    delay_ms = delay.as_millis(),
+                    "Retrying request with headers"
+                );
+                tokio::time::sleep(delay).await;
+            }
+
+            match self.send_request_with_headers_raw(request.clone()).await {
+                Ok(response) => return Ok(response),
+                Err(e) => {
+                    warn!(
+                        attempt = attempt,
+                        max_attempts = self.config.retry.max_attempts,
+                        error = %e,
+                        "Request with headers failed"
+                    );
+
+                    if !e.is_retryable() {
+                        return Err(e);
+                    }
+
+                    last_error = Some(e);
+                }
+            }
+        }
+
+        Err(last_error.unwrap_or_else(|| McpClientError::generic("All retry attempts failed")))
+    }
+
+    /// Send raw request with headers without retries
+    async fn send_request_with_headers_raw(&self, request: Value) -> McpClientResult<crate::transport::TransportResponse> {
+        let mut transport = self.transport.lock().await;
+        
+        let response = timeout(
+            self.config.timeouts.request,
+            transport.send_request_with_headers(request),
+        )
+        .await
+        .map_err(|_| McpClientError::Timeout)?;
+
+        response
     }
 
     /// Send raw request without retries
@@ -453,7 +573,7 @@ pub struct ConnectionStatus {
     pub session_state: SessionState,
     pub transport_type: crate::transport::TransportType,
     pub endpoint: String,
-    pub session_id: String,
+    pub session_id: Option<String>,
     pub protocol_version: Option<String>,
 }
 
@@ -465,11 +585,15 @@ impl ConnectionStatus {
 
     /// Get status summary
     pub fn summary(&self) -> String {
+        let session_display = match &self.session_id {
+            Some(id) => &id[..id.len().min(8)],
+            None => "None",
+        };
         format!(
             "{} transport to {} - Session {} ({})",
             self.transport_type,
             self.endpoint,
-            &self.session_id[..8],
+            session_display,
             self.session_state
         )
     }

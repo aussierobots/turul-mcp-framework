@@ -3,7 +3,6 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use uuid::Uuid;
 use serde_json::Value;
 use tracing::{debug, info, warn};
 
@@ -47,8 +46,8 @@ impl std::fmt::Display for SessionState {
 /// Session information and metadata
 #[derive(Debug, Clone)]
 pub struct SessionInfo {
-    /// Unique session identifier
-    pub session_id: String,
+    /// Session identifier from server (None until server provides it)
+    pub session_id: Option<String>,
     
     /// Session state
     pub state: SessionState,
@@ -80,7 +79,7 @@ impl SessionInfo {
     pub fn new() -> Self {
         let now = Instant::now();
         Self {
-            session_id: Uuid::now_v7().to_string(),
+            session_id: None,
             state: SessionState::Uninitialized,
             client_capabilities: None,
             server_capabilities: None,
@@ -153,9 +152,23 @@ impl SessionManager {
         self.session.read().await.clone()
     }
     
-    /// Get session ID
-    pub async fn session_id(&self) -> String {
+    /// Get session ID (returns error if not yet initialized by server)
+    pub async fn session_id(&self) -> McpClientResult<String> {
+        let session = self.session.read().await;
+        session.session_id.clone()
+            .ok_or_else(|| SessionError::NotInitialized.into())
+    }
+    
+    /// Get session ID if available (returns None if not initialized)
+    pub async fn session_id_optional(&self) -> Option<String> {
         self.session.read().await.session_id.clone()
+    }
+    
+    /// Set session ID (called when server provides it during initialization)
+    pub async fn set_session_id(&self, session_id: String) -> McpClientResult<()> {
+        let mut session = self.session.write().await;
+        session.session_id = Some(session_id);
+        Ok(())
     }
     
     /// Get current session state
@@ -196,7 +209,7 @@ impl SessionManager {
         session.update_activity();
         
         info!(
-            session_id = %session.session_id,
+            session_id = %session.session_id.as_deref().unwrap_or("None"),
             protocol_version = %protocol_version,
             "Session initialized successfully"
         );
@@ -217,7 +230,7 @@ impl SessionManager {
         session.update_activity();
         
         debug!(
-            session_id = %session.session_id,
+            session_id = %session.session_id.as_deref().unwrap_or("None"),
             attempt = session.connection_attempts,
             "Session initialization started"
         );
@@ -234,7 +247,7 @@ impl SessionManager {
         session.update_activity();
         
         info!(
-            session_id = %session.session_id,
+            session_id = %session.session_id.as_deref().unwrap_or("None"),
             previous_state = %previous_state,
             reason = reason.as_deref().unwrap_or("user requested"),
             "Session terminated"
@@ -250,7 +263,7 @@ impl SessionManager {
         session.update_activity();
         
         warn!(
-            session_id = %session.session_id,
+            session_id = %session.session_id.as_deref().unwrap_or("None"),
             previous_state = %previous_state,
             error = %error,
             "Session encountered error"
@@ -270,7 +283,7 @@ impl SessionManager {
         session.update_activity();
         
         info!(
-            session_id = %session.session_id,
+            session_id = %session.session_id.as_deref().unwrap_or("None"),
             attempt = session.connection_attempts,
             "Session reconnection started"
         );
@@ -282,7 +295,7 @@ impl SessionManager {
         *session = SessionInfo::new();
         
         debug!(
-            session_id = %session.session_id,
+            session_id = %session.session_id.as_deref().unwrap_or("None"),
             "Session reset for new connection"
         );
     }
@@ -353,7 +366,7 @@ impl SessionManager {
 /// Session statistics for monitoring and debugging
 #[derive(Debug, Clone)]
 pub struct SessionStatistics {
-    pub session_id: String,
+    pub session_id: Option<String>,
     pub state: SessionState,
     pub duration: Duration,
     pub idle_time: Duration,
@@ -369,9 +382,13 @@ impl SessionStatistics {
     
     /// Get human-readable session status
     pub fn status_summary(&self) -> String {
+        let session_display = match &self.session_id {
+            Some(id) => &id[..id.len().min(8)],
+            None => "None",
+        };
         format!(
             "Session {} ({}) - Duration: {:?}, Idle: {:?}, Attempts: {}",
-            &self.session_id[..8],
+            session_display,
             self.state,
             self.duration,
             self.idle_time,

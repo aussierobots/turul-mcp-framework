@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use serde_json::Value;
+use std::collections::HashMap;
 use url::Url;
 
 use crate::error::{McpClientResult, TransportError};
@@ -79,6 +80,30 @@ pub struct ConnectionInfo {
     pub metadata: Value,
 }
 
+/// Transport response containing both body and headers
+#[derive(Debug, Clone)]
+pub struct TransportResponse {
+    /// Response body (JSON)
+    pub body: Value,
+    /// Response headers
+    pub headers: HashMap<String, String>,
+}
+
+impl TransportResponse {
+    /// Create a new transport response
+    pub fn new(body: Value, headers: HashMap<String, String>) -> Self {
+        Self { body, headers }
+    }
+    
+    /// Create a simple response with just body (no headers)
+    pub fn body_only(body: Value) -> Self {
+        Self {
+            body,
+            headers: HashMap::new(),
+        }
+    }
+}
+
 /// Transport trait defining the interface for all transport implementations
 #[async_trait]
 pub trait Transport: Send + Sync {
@@ -100,8 +125,14 @@ pub trait Transport: Send + Sync {
     /// Send a request and wait for response
     async fn send_request(&mut self, request: Value) -> McpClientResult<Value>;
     
+    /// Send a request and return response with headers (for initialization)
+    async fn send_request_with_headers(&mut self, request: Value) -> McpClientResult<TransportResponse>;
+    
     /// Send a notification (no response expected)
     async fn send_notification(&mut self, notification: Value) -> McpClientResult<()>;
+    
+    /// Send a DELETE request for session termination (MCP session management)
+    async fn send_delete(&mut self, session_id: &str) -> McpClientResult<()>;
     
     /// Start listening for server events (if supported)
     async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver>;

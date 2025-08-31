@@ -407,6 +407,45 @@ impl Transport for SseTransport {
         Ok(result)
     }
     
+    async fn send_request_with_headers(&mut self, request: Value) -> McpClientResult<crate::transport::TransportResponse> {
+        // For SSE transport, we can delegate to the HTTP-style request but with header extraction
+        // This is used primarily for the initial initialize request
+        if !self.is_connected() {
+            return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
+        }
+        
+        debug!(
+            method = request.get("method").and_then(|v| v.as_str()),
+            "Sending SSE request with header extraction"
+        );
+        
+        let response = self.client
+            .post(self.endpoint.clone())
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .header("MCP-Protocol-Version", "2025-06-18")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
+
+        // Extract headers
+        let mut headers = std::collections::HashMap::new();
+        for (name, value) in response.headers() {
+            if let Ok(value_str) = value.to_str() {
+                headers.insert(name.to_string(), value_str.to_string());
+            }
+        }
+
+        let response_text = response.text().await
+            .map_err(|e| TransportError::Http(format!("Failed to read response: {}", e)))?;
+        
+        let result: Value = serde_json::from_str(&response_text)
+            .map_err(|e| TransportError::Http(format!("Invalid JSON response: {}", e)))?;
+
+        Ok(crate::transport::TransportResponse::new(result, headers))
+    }
+    
     async fn send_notification(&mut self, notification: Value) -> McpClientResult<()> {
         if !self.is_connected() {
             return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
@@ -438,6 +477,64 @@ impl Transport for SseTransport {
             Err(TransportError::Sse(
                 format!("Notification failed with status {}: {}", status, error_text)
             ).into())
+        }
+    }
+    
+    async fn send_delete(&mut self, session_id: &str) -> McpClientResult<()> {
+        if !self.is_connected() {
+            return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
+        }
+        
+        info!(
+            endpoint = %self.endpoint,
+            session_id = session_id,
+            "Sending DELETE request for session termination (SSE transport)"
+        );
+        
+        self.update_stats(|stats| stats.requests_sent += 1);
+        let start_time = Instant::now();
+        
+        let response = self.client
+            .delete(self.endpoint.clone())
+            .header("Content-Type", "application/json")
+            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("Mcp-Session-Id", session_id)
+            .send()
+            .await
+            .map_err(|e| TransportError::Sse(format!("Failed to send DELETE request: {}", e)))?;
+        
+        let elapsed = start_time.elapsed();
+        self.update_stats(|stats| {
+            stats.responses_received += 1;
+            // Update average response time
+            let elapsed_ms = elapsed.as_millis() as f64;
+            if stats.responses_received == 1 {
+                stats.avg_response_time_ms = elapsed_ms;
+            } else {
+                stats.avg_response_time_ms = 
+                    (stats.avg_response_time_ms * (stats.responses_received - 1) as f64 + elapsed_ms) 
+                    / stats.responses_received as f64;
+            }
+        });
+        
+        // DELETE should return 2xx success status  
+        if response.status().is_success() {
+            info!(
+                session_id = session_id, 
+                status = %response.status(),
+                elapsed_ms = elapsed.as_millis(),
+                "Session DELETE request completed successfully (SSE)"
+            );
+            Ok(())
+        } else {
+            warn!(
+                session_id = session_id,
+                status = %response.status(),
+                elapsed_ms = elapsed.as_millis(),
+                "DELETE request failed but continuing with cleanup (SSE)"
+            );
+            // Don't fail on DELETE errors - session cleanup should continue locally
+            Ok(())
         }
     }
     

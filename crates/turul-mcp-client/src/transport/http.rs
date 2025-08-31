@@ -132,6 +132,55 @@ impl HttpTransport {
         
         Ok(response_json)
     }
+    
+    /// Handle HTTP response with headers
+    async fn handle_response_with_headers(&self, response: Response) -> McpClientResult<crate::transport::TransportResponse> {
+        let status = response.status();
+        
+        if !status.is_success() {
+            let error_text = response.text().await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            
+            self.update_stats(|stats| {
+                stats.errors += 1;
+                stats.last_error = Some(format!("HTTP {}: {}", status, error_text));
+            });
+            
+            return Err(TransportError::Http(
+                format!("HTTP error {}: {}", status, error_text)
+            ).into());
+        }
+        
+        // Extract headers
+        let mut headers = std::collections::HashMap::new();
+        for (name, value) in response.headers() {
+            if let Ok(value_str) = value.to_str() {
+                headers.insert(name.to_string(), value_str.to_string());
+            }
+        }
+        
+        let content_type = response.headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        
+        if !content_type.contains("application/json") {
+            warn!(
+                content_type = content_type,
+                "Unexpected content type from server"
+            );
+        }
+        
+        let response_text = response.text().await
+            .map_err(|e| TransportError::Http(format!("Failed to read response: {}", e)))?;
+        
+        let response_json: Value = serde_json::from_str(&response_text)
+            .map_err(|e| TransportError::Http(format!("Invalid JSON response: {}", e)))?;
+        
+        self.update_stats(|stats| stats.responses_received += 1);
+        
+        Ok(crate::transport::TransportResponse::new(response_json, headers))
+    }
 }
 
 #[async_trait]
@@ -239,6 +288,57 @@ impl Transport for HttpTransport {
         Ok(result)
     }
     
+    async fn send_request_with_headers(&mut self, request: Value) -> McpClientResult<crate::transport::TransportResponse> {
+        if !self.is_connected() {
+            return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
+        }
+        
+        let start_time = Instant::now();
+        
+        // Ensure request has an ID
+        let mut request = request;
+        if request.get("id").is_none() {
+            request["id"] = Value::String(self.next_request_id());
+        }
+        
+        debug!(
+            method = request.get("method").and_then(|v| v.as_str()),
+            id = request.get("id").and_then(|v| v.as_str()),
+            "Sending HTTP request with header extraction"
+        );
+        
+        self.update_stats(|stats| stats.requests_sent += 1);
+        
+        let response = self.client
+            .post(self.endpoint.clone())
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .header("MCP-Protocol-Version", "2025-06-18")
+            .json(&request)
+            .send()
+            .await
+            .map_err(|e| TransportError::Http(format!("Failed to send request: {}", e)))?;
+        
+        let result = self.handle_response_with_headers(response).await?;
+        
+        let elapsed = start_time.elapsed();
+        self.update_stats(|stats| {
+            let new_avg = if stats.responses_received > 0 {
+                (stats.avg_response_time_ms * (stats.responses_received - 1) as f64 + elapsed.as_millis() as f64) / stats.responses_received as f64
+            } else {
+                elapsed.as_millis() as f64
+            };
+            stats.avg_response_time_ms = new_avg;
+        });
+        
+        debug!(
+            elapsed_ms = elapsed.as_millis(),
+            "HTTP request with headers completed"
+        );
+        
+        Ok(result)
+    }
+    
     async fn send_notification(&mut self, notification: Value) -> McpClientResult<()> {
         if !self.is_connected() {
             return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
@@ -271,6 +371,64 @@ impl Transport for HttpTransport {
             Err(TransportError::Http(
                 format!("Notification failed with status {}: {}", status, error_text)
             ).into())
+        }
+    }
+    
+    async fn send_delete(&mut self, session_id: &str) -> McpClientResult<()> {
+        if !self.is_connected() {
+            return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
+        }
+        
+        info!(
+            endpoint = %self.endpoint,
+            session_id = session_id,
+            "Sending DELETE request for session termination"
+        );
+        
+        self.update_stats(|stats| stats.requests_sent += 1);
+        let start_time = Instant::now();
+        
+        let response = self.client
+            .delete(self.endpoint.clone())
+            .header("Content-Type", "application/json")
+            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("Mcp-Session-Id", session_id)
+            .send()
+            .await
+            .map_err(|e| TransportError::Http(format!("Failed to send DELETE request: {}", e)))?;
+        
+        let elapsed = start_time.elapsed();
+        self.update_stats(|stats| {
+            stats.responses_received += 1;
+            // Update average response time
+            let elapsed_ms = elapsed.as_millis() as f64;
+            if stats.responses_received == 1 {
+                stats.avg_response_time_ms = elapsed_ms;
+            } else {
+                stats.avg_response_time_ms = 
+                    (stats.avg_response_time_ms * (stats.responses_received - 1) as f64 + elapsed_ms) 
+                    / stats.responses_received as f64;
+            }
+        });
+        
+        // DELETE should return 2xx success status  
+        if response.status().is_success() {
+            info!(
+                session_id = session_id, 
+                status = %response.status(),
+                elapsed_ms = elapsed.as_millis(),
+                "Session DELETE request completed successfully"
+            );
+            Ok(())
+        } else {
+            warn!(
+                session_id = session_id,
+                status = %response.status(),
+                elapsed_ms = elapsed.as_millis(),
+                "DELETE request failed but continuing with cleanup"
+            );
+            // Don't fail on DELETE errors - session cleanup should continue locally
+            Ok(())
         }
     }
     
