@@ -27,7 +27,7 @@ use turul_mcp_json_rpc_server::{
     dispatch::{parse_json_rpc_message, JsonRpcMessage, JsonRpcMessageResult},
     error::{JsonRpcError, JsonRpcErrorObject}
 };
-use turul_mcp_session_storage::{SessionStorage, InMemorySessionStorage};
+use turul_mcp_session_storage::InMemorySessionStorage;
 use turul_mcp_protocol::ServerCapabilities;
 use chrono;
 use uuid::Uuid;
@@ -106,16 +106,16 @@ fn jsonrpc_error_to_unified_body(error: JsonRpcError) -> Result<Response<Unified
 // ✅ CORRECTED ARCHITECTURE: Remove complex registry - use single shared StreamManager
 
 /// JSON-RPC 2.0 over HTTP handler with shared StreamManager
-pub struct SessionMcpHandler<S: SessionStorage = InMemorySessionStorage> {
+pub struct SessionMcpHandler {
     pub(crate) config: ServerConfig,
     pub(crate) dispatcher: Arc<JsonRpcDispatcher>,
-    pub(crate) session_storage: Arc<S>,
+    pub(crate) session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     pub(crate) stream_config: StreamConfig,
     // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance with internal session management
-    pub(crate) stream_manager: Arc<StreamManager<S>>,
+    pub(crate) stream_manager: Arc<StreamManager>,
 }
 
-impl<S: SessionStorage + 'static> Clone for SessionMcpHandler<S> {
+impl Clone for SessionMcpHandler {
     fn clone(&self) -> Self {
         Self {
             config: self.config.clone(),
@@ -127,26 +127,24 @@ impl<S: SessionStorage + 'static> Clone for SessionMcpHandler<S> {
     }
 }
 
-impl SessionMcpHandler<InMemorySessionStorage> {
+impl SessionMcpHandler {
     /// Create a new handler with default in-memory storage (zero-configuration)
     pub fn new(
         config: ServerConfig,
         dispatcher: Arc<JsonRpcDispatcher>,
         stream_config: StreamConfig,
     ) -> Self {
-        let storage = Arc::new(InMemorySessionStorage::new());
+        let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> = Arc::new(InMemorySessionStorage::new());
         Self::with_storage(config, dispatcher, storage, stream_config)
     }
-}
 
-impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
     /// Create handler with shared StreamManager instance (corrected architecture)
     pub fn with_shared_stream_manager(
         config: ServerConfig,
         dispatcher: Arc<JsonRpcDispatcher>,
-        session_storage: Arc<S>,
+        session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
         stream_config: StreamConfig,
-        stream_manager: Arc<StreamManager<S>>,
+        stream_manager: Arc<StreamManager>,
     ) -> Self {
         Self {
             config,
@@ -162,7 +160,7 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
     pub fn with_storage(
         config: ServerConfig,
         dispatcher: Arc<JsonRpcDispatcher>,
-        session_storage: Arc<S>,
+        session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
         stream_config: StreamConfig,
     ) -> Self {
         // Create own StreamManager instance (not recommended for production)
@@ -181,7 +179,7 @@ impl<S: SessionStorage + 'static> SessionMcpHandler<S> {
     }
 
     /// Get access to the StreamManager for notifications
-    pub fn get_stream_manager(&self) -> &Arc<StreamManager<S>> {
+    pub fn get_stream_manager(&self) -> &Arc<StreamManager> {
         &self.stream_manager
     }
 

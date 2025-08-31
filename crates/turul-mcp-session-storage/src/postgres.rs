@@ -54,6 +54,8 @@ pub struct PostgresConfig {
     pub cleanup_interval_minutes: u32,
     /// Maximum events to keep per session (for memory management)
     pub max_events_per_session: u32,
+    /// Allow table creation if tables don't exist
+    pub create_tables_if_missing: bool,
     /// Enable connection pooling optimizations
     pub enable_pooling_optimizations: bool,
     /// Statement timeout in seconds
@@ -70,6 +72,7 @@ impl Default for PostgresConfig {
             session_timeout_minutes: 30,
             cleanup_interval_minutes: 5,
             max_events_per_session: 1000,
+            create_tables_if_missing: true, // PostgreSQL defaults to creating tables
             enable_pooling_optimizations: true,
             statement_timeout_secs: 30,
         }

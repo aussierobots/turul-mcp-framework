@@ -15,7 +15,7 @@ use tokio::net::TcpListener;
 use tracing::{info, error, debug};
 
 use turul_mcp_json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
-use turul_mcp_session_storage::{SessionStorage, InMemorySessionStorage};
+use turul_mcp_session_storage::InMemorySessionStorage;
 
 use crate::{
     Result, SessionMcpHandler, StreamConfig, StreamManager,
@@ -50,28 +50,28 @@ impl Default for ServerConfig {
 }
 
 /// Builder for HTTP MCP server with pluggable storage
-pub struct HttpMcpServerBuilder<S: SessionStorage = InMemorySessionStorage> {
+pub struct HttpMcpServerBuilder {
     config: ServerConfig,
     dispatcher: JsonRpcDispatcher,
-    session_storage: Option<Arc<S>>,
+    session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
     stream_config: StreamConfig,
 }
 
-impl HttpMcpServerBuilder<InMemorySessionStorage> {
+impl HttpMcpServerBuilder {
     /// Create a new builder with in-memory storage (zero-configuration)
     pub fn new() -> Self {
         Self {
             config: ServerConfig::default(),
             dispatcher: JsonRpcDispatcher::new(),
-            session_storage: None,
+            session_storage: Some(Arc::new(InMemorySessionStorage::new())),
             stream_config: StreamConfig::default(),
         }
     }
 }
 
-impl<S: SessionStorage + 'static> HttpMcpServerBuilder<S> {
+impl HttpMcpServerBuilder {
     /// Create a new builder with specific session storage
-    pub fn with_storage(session_storage: Arc<S>) -> Self {
+    pub fn with_storage(session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>) -> Self {
         Self {
             config: ServerConfig::default(),
             dispatcher: JsonRpcDispatcher::new(),
@@ -135,7 +135,7 @@ impl<S: SessionStorage + 'static> HttpMcpServerBuilder<S> {
     }
 
     /// Build the HTTP MCP server
-    pub fn build(self) -> HttpMcpServer<S> {
+    pub fn build(self) -> HttpMcpServer {
         let session_storage = self.session_storage.expect("Session storage must be provided");
 
         // ✅ CORRECTED ARCHITECTURE: Create single shared StreamManager instance
@@ -154,42 +154,39 @@ impl<S: SessionStorage + 'static> HttpMcpServerBuilder<S> {
     }
 }
 
-impl<S: SessionStorage + 'static> Default for HttpMcpServerBuilder<S>
-where
-    S: Default + SessionStorage,
-{
+impl Default for HttpMcpServerBuilder {
     fn default() -> Self {
-        Self::with_storage(Arc::new(S::default()))
+        Self::new()
     }
 }
 
 /// HTTP MCP Server with SessionStorage integration
 #[derive(Clone)]
-pub struct HttpMcpServer<S: SessionStorage> {
+pub struct HttpMcpServer {
     config: ServerConfig,
     dispatcher: Arc<JsonRpcDispatcher>,
-    session_storage: Arc<S>,
+    session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     stream_config: StreamConfig,
     // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance
-    stream_manager: Arc<StreamManager<S>>,
+    stream_manager: Arc<StreamManager>,
 }
 
-impl HttpMcpServer<InMemorySessionStorage> {
+impl HttpMcpServer {
     /// Create a new builder with default in-memory storage
-    pub fn builder() -> HttpMcpServerBuilder<InMemorySessionStorage> {
+    pub fn builder() -> HttpMcpServerBuilder {
         HttpMcpServerBuilder::new()
     }
 }
 
-impl<S: SessionStorage + 'static> HttpMcpServer<S> {
+impl HttpMcpServer {
     /// Create a new builder with specific session storage
-    pub fn builder_with_storage(session_storage: Arc<S>) -> HttpMcpServerBuilder<S> {
+    pub fn builder_with_storage(session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>) -> HttpMcpServerBuilder {
         HttpMcpServerBuilder::with_storage(session_storage)
     }
 
     /// Get the shared StreamManager instance for event forwarding bridge
     /// Returns reference to the same StreamManager used by HTTP server
-    pub fn get_stream_manager(&self) -> Arc<crate::StreamManager<S>> {
+    pub fn get_stream_manager(&self) -> Arc<crate::StreamManager> {
         Arc::clone(&self.stream_manager)
     }
 
@@ -201,7 +198,7 @@ impl<S: SessionStorage + 'static> HttpMcpServer<S> {
         let listener = TcpListener::bind(&self.config.bind_address).await?;
         info!("HTTP MCP server listening on {}", self.config.bind_address);
         info!("MCP endpoint available at: {}", self.config.mcp_path);
-        info!("Session storage: {}", std::any::type_name::<S>());
+        info!("Session storage: turul_mcp_session_storage::BoxedSessionStorage");
 
         // ✅ CORRECTED ARCHITECTURE: Create single SessionMcpHandler instance outside the loop
         let handler = SessionMcpHandler::with_shared_stream_manager(
@@ -270,15 +267,15 @@ impl<S: SessionStorage + 'static> HttpMcpServer<S> {
         ServerStats {
             sessions: session_count,
             events: event_count,
-            storage_type: std::any::type_name::<S>().to_string(),
+            storage_type: "turul_mcp_session_storage::BoxedSessionStorage".to_string(),
         }
     }
 }
 
 /// Handle requests with MCP 2025-06-18 compliance
-async fn handle_request<S: SessionStorage + 'static>(
+async fn handle_request(
     req: Request<hyper::body::Incoming>,
-    handler: SessionMcpHandler<S>,
+    handler: SessionMcpHandler,
 ) -> std::result::Result<Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>, hyper::Error> {
     let method = req.method().clone();
     let uri = req.uri().clone();

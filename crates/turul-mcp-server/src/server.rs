@@ -64,20 +64,20 @@ impl McpServer {
         #[cfg(feature = "http")] enable_sse: bool,
     ) -> Self {
         // Create session manager with server capabilities, custom timeouts, and storage
-        let session_manager = match session_storage {
+        let session_manager = match &session_storage {
             Some(storage) => {
                 if let (Some(timeout_mins), Some(cleanup_secs)) =
                     (session_timeout_minutes, session_cleanup_interval_seconds)
                 {
                     Arc::new(SessionManager::with_storage_and_timeouts(
-                        storage,
+                        Arc::clone(storage),
                         capabilities.clone(),
                         std::time::Duration::from_secs(timeout_mins * 60),
                         std::time::Duration::from_secs(cleanup_secs),
                     ))
                 } else {
                     Arc::new(SessionManager::with_storage_and_timeouts(
-                        storage,
+                        Arc::clone(storage),
                         capabilities.clone(),
                         std::time::Duration::from_secs(30 * 60), // Default 30 minutes
                         std::time::Duration::from_secs(60),      // Default 1 minute
@@ -100,6 +100,13 @@ impl McpServer {
             }
         };
 
+        // Debug: Log session storage configuration
+        if let Some(storage) = &session_storage {
+            debug!("McpServer configured with session storage backend: {:p}", storage);
+        } else {
+            debug!("McpServer configured without session storage");
+        }
+        
         Self {
             implementation,
             capabilities,
@@ -172,6 +179,7 @@ impl McpServer {
 
         // Build HTTP server with shared session storage from SessionManager
         let session_storage = self.session_manager.get_storage();
+        debug!("Configuring HTTP MCP server with session storage backend");
         let mut builder = turul_http_mcp_server::HttpMcpServer::builder_with_storage(session_storage)
             .bind_address(self.bind_address)
             .mcp_path(&self.mcp_path)
@@ -217,7 +225,7 @@ impl McpServer {
     /// Set up event forwarding bridge between SessionManager and StreamManager
     async fn setup_sse_event_bridge(
         &self,
-        http_server: &turul_http_mcp_server::HttpMcpServer<turul_mcp_session_storage::InMemorySessionStorage>,
+        http_server: &turul_http_mcp_server::HttpMcpServer,
     ) {
         debug!("🌉 Setting up SSE event bridge between SessionManager and StreamManager");
         
@@ -262,7 +270,7 @@ impl McpServer {
     pub async fn run_with_sse_access(
         &self,
     ) -> Result<(
-        turul_http_mcp_server::HttpMcpServer<turul_mcp_session_storage::InMemorySessionStorage>,
+        turul_http_mcp_server::HttpMcpServer,
         tokio::task::JoinHandle<turul_http_mcp_server::Result<()>>,
     )> {
         info!(
@@ -293,6 +301,7 @@ impl McpServer {
 
         // Build HTTP server with shared session storage from SessionManager
         let session_storage = self.session_manager.get_storage();
+        debug!("Configuring HTTP MCP server with session storage backend");
         let mut builder = turul_http_mcp_server::HttpMcpServer::builder_with_storage(session_storage)
             .bind_address(self.bind_address)
             .mcp_path(&self.mcp_path)
@@ -330,6 +339,16 @@ impl McpServer {
         };
 
         Ok((http_server, server_task))
+    }
+
+    /// Get session storage configuration info
+    pub fn session_storage_info(&self) -> &str {
+        if let Some(storage) = &self.session_storage {
+            debug!("Accessing session storage for info - backend is configured: {:p}", storage);
+            "Backend configured"
+        } else {
+            "No backend configured"
+        }
     }
 }
 

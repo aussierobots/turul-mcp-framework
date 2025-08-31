@@ -13,7 +13,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tracing::{info, error};
 
-use turul_mcp_session_storage::SessionStorage;
 use turul_mcp_json_rpc_server::JsonRpcNotification;
 use turul_mcp_protocol::notifications::{
     ProgressNotification, LoggingMessageNotification, ResourceUpdatedNotification,
@@ -115,13 +114,13 @@ pub enum BroadcastError {
 ///
 /// This implementation converts ALL MCP notification types to proper JSON-RPC format
 /// and forwards them to StreamManager for SSE delivery
-pub struct StreamManagerNotificationBroadcaster<S: SessionStorage> {
-    stream_manager: Arc<StreamManager<S>>,
+pub struct StreamManagerNotificationBroadcaster {
+    stream_manager: Arc<StreamManager>,
 }
 
-impl<S: SessionStorage + 'static> StreamManagerNotificationBroadcaster<S> {
+impl StreamManagerNotificationBroadcaster {
     /// Create new broadcaster that forwards events to StreamManager
-    pub fn new(stream_manager: Arc<StreamManager<S>>) -> Self {
+    pub fn new(stream_manager: Arc<StreamManager>) -> Self {
         Self { stream_manager }
     }
 }
@@ -232,7 +231,7 @@ pub mod conversion {
 }
 
 #[async_trait]
-impl<S: SessionStorage + 'static> NotificationBroadcaster for StreamManagerNotificationBroadcaster<S> {
+impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
     // ================== SERVER-TO-CLIENT NOTIFICATIONS ==================
 
     async fn send_progress_notification(

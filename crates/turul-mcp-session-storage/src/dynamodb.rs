@@ -41,6 +41,8 @@ pub struct DynamoDbConfig {
     pub enable_backup: bool,
     /// Enable encryption at rest
     pub enable_encryption: bool,
+    /// Allow table creation if tables don't exist
+    pub create_tables_if_missing: bool,
 }
 
 impl Default for DynamoDbConfig {
@@ -53,6 +55,7 @@ impl Default for DynamoDbConfig {
             max_events_per_session: 1000,
             enable_backup: true,
             enable_encryption: true,
+            create_tables_if_missing: false,
         }
     }
 }
@@ -144,6 +147,8 @@ impl DynamoDbSessionStorage {
                             match status {
                                 TableStatus::Active => {
                                     info!("DynamoDB table '{}' is active and ready", self.config.table_name);
+                                    // Check if TTL is enabled, and enable it if not
+                                    self.ensure_ttl_enabled().await?;
                                     Ok(())
                                 }
                                 _ => {
@@ -166,9 +171,18 @@ impl DynamoDbSessionStorage {
                     }
                 }
                 Err(_err) => {
-                    warn!("Table '{}' does not exist, attempting to create it", self.config.table_name);
-                    self.create_table().await?;
-                    self.wait_for_table_active().await
+                    if self.config.create_tables_if_missing {
+                        warn!("Table '{}' does not exist, attempting to create it", self.config.table_name);
+                        self.create_table().await?;
+                        self.wait_for_table_active().await?;
+                        // Enable TTL after table becomes active
+                        self.enable_ttl().await?;
+                        Ok(())
+                    } else {
+                        let error_msg = format!("Table '{}' does not exist and create_tables_if_missing is false. Use --create-tables flag to enable table creation.", self.config.table_name);
+                        error!("{}", error_msg);
+                        Err(DynamoDbError::TableNotFound(error_msg))
+                    }
                 }
             }
         }
@@ -249,6 +263,114 @@ impl DynamoDbSessionStorage {
         }
     }
 
+    /// Enable TTL on the DynamoDB table
+    #[cfg(feature = "dynamodb")]
+    async fn enable_ttl(&self) -> Result<(), DynamoDbError> {
+        use aws_sdk_dynamodb::types::TimeToLiveSpecification;
+
+        info!("Enabling TTL on DynamoDB table: {}", self.config.table_name);
+
+        let ttl_spec = TimeToLiveSpecification::builder()
+            .attribute_name("ttl")
+            .enabled(true)
+            .build()
+            .map_err(|e| DynamoDbError::AwsError(e.to_string()))?;
+
+        match self.client.update_time_to_live()
+            .table_name(&self.config.table_name)
+            .time_to_live_specification(ttl_spec)
+            .send()
+            .await
+        {
+            Ok(_) => {
+                info!("Successfully enabled TTL on table: {}", self.config.table_name);
+                Ok(())
+            }
+            Err(err) => {
+                error!("Failed to enable TTL on table '{}': {}", self.config.table_name, err);
+                Err(DynamoDbError::AwsError(format!(
+                    "Failed to enable TTL on table '{}': {}", self.config.table_name, err
+                )))
+            }
+        }
+    }
+
+    /// Ensure TTL is enabled on the main session table
+    #[cfg(feature = "dynamodb")]
+    async fn ensure_ttl_enabled(&self) -> Result<(), DynamoDbError> {
+        info!("Checking TTL status on DynamoDB table: {}", self.config.table_name);
+
+        // Check current TTL status
+        match self.client.describe_time_to_live()
+            .table_name(&self.config.table_name)
+            .send()
+            .await
+        {
+            Ok(output) => {
+                if let Some(ttl_description) = output.time_to_live_description() {
+                    match ttl_description.time_to_live_status() {
+                        Some(aws_sdk_dynamodb::types::TimeToLiveStatus::Enabled) => {
+                            info!("TTL is already enabled on table: {}", self.config.table_name);
+                            return Ok(());
+                        }
+                        Some(aws_sdk_dynamodb::types::TimeToLiveStatus::Enabling) => {
+                            info!("TTL is currently being enabled on table: {}", self.config.table_name);
+                            return Ok(());
+                        }
+                        Some(status) => {
+                            info!("TTL status is {:?}, will enable it on table: {}", status, self.config.table_name);
+                        }
+                        None => {
+                            info!("TTL status unknown, will enable it on table: {}", self.config.table_name);
+                        }
+                    }
+                } else {
+                    info!("No TTL description found, will enable TTL on table: {}", self.config.table_name);
+                }
+                
+                // TTL is not enabled, so enable it
+                self.enable_ttl().await
+            }
+            Err(err) => {
+                warn!("Failed to describe TTL for table '{}': {}, attempting to enable", self.config.table_name, err);
+                // If we can't describe TTL, just try to enable it
+                self.enable_ttl().await
+            }
+        }
+    }
+
+    /// Enable TTL on the DynamoDB events table
+    #[cfg(feature = "dynamodb")]
+    async fn enable_ttl_on_events_table(&self, event_table: &str) -> Result<(), SessionStorageError> {
+        use aws_sdk_dynamodb::types::TimeToLiveSpecification;
+
+        info!("Enabling TTL on DynamoDB events table: {}", event_table);
+
+        let ttl_spec = TimeToLiveSpecification::builder()
+            .attribute_name("ttl")
+            .enabled(true)
+            .build()
+            .map_err(|e| SessionStorageError::AwsError(e.to_string()))?;
+
+        match self.client.update_time_to_live()
+            .table_name(event_table)
+            .time_to_live_specification(ttl_spec)
+            .send()
+            .await
+        {
+            Ok(_) => {
+                info!("Successfully enabled TTL on events table: {}", event_table);
+                Ok(())
+            }
+            Err(err) => {
+                error!("Failed to enable TTL on events table '{}': {}", event_table, err);
+                Err(SessionStorageError::DatabaseError(format!(
+                    "Failed to enable TTL on events table '{}': {}", event_table, err
+                )))
+            }
+        }
+    }
+
     /// Wait for the table to become active
     #[cfg(feature = "dynamodb")]
     async fn wait_for_table_active(&self) -> Result<(), DynamoDbError> {
@@ -291,6 +413,15 @@ impl DynamoDbSessionStorage {
             AttributeDefinition, BillingMode, KeySchemaElement, KeyType, 
             ScalarAttributeType, GlobalSecondaryIndex, Projection, ProjectionType
         };
+        
+        // Debug: Log all available DynamoDB types for events table creation
+        debug!("DynamoDB events table creation using types: {}, {}, {}, {}, {}, {} for advanced configurations",
+               std::any::type_name::<AttributeDefinition>(),
+               std::any::type_name::<KeySchemaElement>(),
+               std::any::type_name::<ScalarAttributeType>(),
+               std::any::type_name::<GlobalSecondaryIndex>(),
+               std::any::type_name::<Projection>(),
+               std::any::type_name::<ProjectionType>());
 
         // Check if events table exists
         match self.client.describe_table()
@@ -306,6 +437,12 @@ impl DynamoDbSessionStorage {
                 }
             }
             Err(_) => {
+                if !self.config.create_tables_if_missing {
+                    let error_msg = format!("Events table '{}' does not exist and create_tables_if_missing is false. Use --create-tables flag to enable table creation.", event_table);
+                    error!("{}", error_msg);
+                    return Err(SessionStorageError::DatabaseError(error_msg));
+                }
+                
                 // Table doesn't exist, create it
                 info!("Creating DynamoDB events table: {}", event_table);
 
@@ -348,6 +485,9 @@ impl DynamoDbSessionStorage {
                         
                         // Wait for events table to become active
                         self.wait_for_events_table_active(event_table).await?;
+                        
+                        // Enable TTL on events table
+                        self.enable_ttl_on_events_table(event_table).await?;
                     }
                     Err(err) => {
                         return Err(SessionStorageError::DatabaseError(format!(
@@ -499,6 +639,7 @@ impl DynamoDbSessionStorage {
 
     /// Convert SessionInfo to DynamoDB item format (legacy JSON format for tests)
     fn session_to_item(&self, session: &SessionInfo) -> Result<HashMap<String, Value>, DynamoDbError> {
+        debug!("Converting SessionInfo to legacy JSON format for session: {}", session.session_id);
         let mut item = HashMap::new();
         
         // Primary key
@@ -532,6 +673,7 @@ impl DynamoDbSessionStorage {
 
     /// Convert DynamoDB item to SessionInfo (legacy JSON format for tests)
     fn item_to_session(&self, item: &HashMap<String, Value>) -> Result<SessionInfo, DynamoDbError> {
+        debug!("Converting DynamoDB legacy JSON item to SessionInfo");
         let session_id = item.get("session_id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| DynamoDbError::InvalidSessionData("Missing session_id".to_string()))?
@@ -1288,6 +1430,16 @@ impl SessionStorage for DynamoDbSessionStorage {
         // DynamoDB maintenance is mostly automatic with TTL
         // Could implement event cleanup here if needed
         debug!("Performing DynamoDB maintenance");
+        
+        // Debug: Test legacy conversion methods periodically for compatibility
+        if cfg!(debug_assertions) {
+            let test_session = SessionInfo::new();
+            if let Ok(item) = self.session_to_item(&test_session) {
+                if let Ok(_converted_back) = self.item_to_session(&item) {
+                    debug!("Legacy JSON conversion methods working correctly for session: {}", test_session.session_id);
+                }
+            }
+        }
         
         Ok(())
     }

@@ -19,15 +19,15 @@ use serde_json::Value;
 use tokio::sync::{mpsc, RwLock};
 use tracing::{debug, info, error, warn};
 
-use turul_mcp_session_storage::{SessionStorage, SseEvent};
+use turul_mcp_session_storage::SseEvent;
 
 /// Connection ID for tracking individual SSE streams
 pub type ConnectionId = String;
 
 /// Enhanced stream manager with resumability support (MCP spec compliant)
-pub struct StreamManager<S: SessionStorage> {
+pub struct StreamManager {
     /// Session storage backend for persistence
-    storage: Arc<S>,
+    storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     /// Per-session connections for real-time events (MCP compliant - no broadcasting)
     connections: Arc<RwLock<HashMap<String, HashMap<ConnectionId, mpsc::Sender<SseEvent>>>>>,
     /// Configuration
@@ -112,14 +112,14 @@ pub enum StreamError {
     ConnectionError(String),
 }
 
-impl<S: SessionStorage + 'static> StreamManager<S> {
+impl StreamManager {
     /// Create new stream manager with session storage backend
-    pub fn new(storage: Arc<S>) -> Self {
+    pub fn new(storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>) -> Self {
         Self::with_config(storage, StreamConfig::default())
     }
 
     /// Create stream manager with custom configuration
-    pub fn with_config(storage: Arc<S>, config: StreamConfig) -> Self {
+    pub fn with_config(storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>, config: StreamConfig) -> Self {
         use uuid::Uuid;
         let instance_id = Uuid::now_v7().to_string();
         debug!("🔧 Creating StreamManager instance: {}", instance_id);
@@ -538,7 +538,7 @@ impl<S: SessionStorage + 'static> StreamManager<S> {
     }
 }
 
-impl<S: SessionStorage> Drop for StreamManager<S> {
+impl Drop for StreamManager {
     fn drop(&mut self) {
         debug!("🔥 DROP: StreamManager instance {} - this may cause connection loss!",
                self.instance_id);

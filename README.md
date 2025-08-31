@@ -188,7 +188,6 @@ let server = McpServer::builder()
 ### Transport Support
 - **HTTP/1.1 & HTTP/2** - Standard web transport
 - **Server-Sent Events (SSE)** - Real-time notifications
-- **WebSocket** - Bidirectional communication
 - **Stdio** - Command-line integration
 - **AWS Lambda Streaming** - Serverless deployment
 

@@ -50,6 +50,8 @@ pub struct SqliteConfig {
     pub cleanup_interval_minutes: u32,
     /// Maximum events to keep per session (for memory management)
     pub max_events_per_session: u32,
+    /// Allow table creation if tables don't exist
+    pub create_tables_if_missing: bool,
 }
 
 impl Default for SqliteConfig {
@@ -61,6 +63,7 @@ impl Default for SqliteConfig {
             session_timeout_minutes: 30,
             cleanup_interval_minutes: 5,
             max_events_per_session: 1000,
+            create_tables_if_missing: true, // SQLite defaults to creating tables
         }
     }
 }
