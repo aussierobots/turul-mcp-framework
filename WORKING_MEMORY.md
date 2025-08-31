@@ -11,19 +11,19 @@
 **Example Status**: ✅ **ALL WORKING** - Previously "broken" examples already fixed
 **Documentation**: ✅ **CONSOLIDATED** - Reduced from 24 → 9 .md files (62% reduction)
 
-## 🎯 **CURRENT STATUS: FRAMEWORK COMPLETE + WORKSPACE CLEANUP NEEDED**
+## 🎯 **CURRENT STATUS: FRAMEWORK COMPLETE + CLIENT DELETE FEATURE ADDED**
 
-**Discovery**: Framework core is 100% complete, but workspace has commented examples
-**Status**: ✅ **FRAMEWORK READY** - ⚠️ **WORKSPACE CLEANUP NEEDED**
+**Discovery**: Framework core is 100% complete, MCP client DELETE functionality implemented
+**Status**: ✅ **FRAMEWORK READY** - 📋 **EXAMPLE FIXES + LAMBDA NEXT**
 
-### Current Status (2025-08-30)
+### Current Status (2025-08-31)
 - ✅ **Framework Core**: All 4 tool creation levels working perfectly
 - ✅ **MCP 2025-06-18 Compliance**: Complete with SSE notifications
 - ✅ **Schema Validation**: MCP Inspector compatibility verified
 - ✅ **SessionManager Storage Integration**: Complete - storage backend fully connected
-- ⚠️ **lambda-turul-mcp-server**: Commented out until DynamoDB + Global Fan-Out Notifications complete
-- 🚨 **BLOCKING ADR REQUIRED**: Global fan-out notification architecture (must be approved before lambda-turul-mcp-server)
-- 📋 **Next TODO**: ADR approval → DynamoDB implementation → Global fan-out system → lambda-turul-mcp-server
+- ✅ **MCP Client DELETE**: Automatic cleanup on drop implemented and tested
+- ✅ **DynamoDB SessionStorage**: Complete implementation with auto-table creation
+- 📋 **Next Priority**: Fix broken examples → Lambda integration → NATS (moved to end)
 
 ## 📋 **ESSENTIAL DOCUMENTATION** (9 files total)
 
@@ -300,68 +300,55 @@ All 9 official MCP notification types now supported:
 | **InMemory** | ✅ **Complete** | Fully implemented | ✅ Yes (dev/testing) |
 | **SQLite** | ✅ **Complete** | Fully implemented | ✅ Yes (single instance) |  
 | **PostgreSQL** | ✅ **Complete** | Fully implemented | ✅ Yes (multi-instance) |
-| **DynamoDB** | ⚠️ **Stub only** | 20 TODO items | ❌ No (needs implementation) |
+| **DynamoDB** | ✅ **Complete** | Fully implemented with auto-table creation | ✅ Yes (serverless) |
 
-### **DynamoDB Implementation TODOs** ⚠️ **NEEDS WORK**
-Found **20 TODO items** in `/crates/turul-mcp-session-storage/src/dynamodb.rs`:
+### **DynamoDB Implementation Features** ✅ **COMPLETE**
+All functionality implemented in `/crates/turul-mcp-session-storage/src/dynamodb.rs`:
 
-#### **AWS SDK Integration** (6 items)
-- Initialize AWS SDK client and verify table exists
-- Verify table exists and has correct schema  
-- Implement AWS SDK calls to verify table
-- Add integration tests with DynamoDB Local or LocalStack
+#### **AWS SDK Integration** ✅
+- ✅ AWS SDK client initialized with proper region/credentials handling
+- ✅ Automatic table creation with pay-per-request billing
+- ✅ Global secondary index for efficient cleanup queries
+- ⚠️ Only integration tests with DynamoDB Local missing (1 TODO remaining)
 
-#### **Session Management** (8 items)  
-- Put item to DynamoDB (create_session)
-- Put item to DynamoDB with specific ID (create_session_with_id)
-- Get item from DynamoDB (get_session)
-- Update item in DynamoDB (update_session)
-- Delete item from DynamoDB (delete_session)
-- Scan DynamoDB table for list_sessions (expensive operation)
-- Use DynamoDB TTL or query and delete expired sessions
-- Count items in DynamoDB table (scan with count)
+#### **Session Management** ✅  
+- ✅ Complete CRUD operations (create, read, update, delete)
+- ✅ Session listing with pagination support
+- ✅ TTL-based automatic cleanup
+- ✅ Efficient session counting
 
-#### **State Management** (3 items)
-- Update session state in DynamoDB using UpdateExpression
-- Get session and extract state value
-- Remove state key from DynamoDB item
+#### **State Management** ✅
+- ✅ JSON-based session state storage with UpdateExpression
+- ✅ Atomic state operations and key removal
+- ✅ Type-safe state serialization/deserialization
 
-#### **Event Storage** (3 items)
-- Store event in separate DynamoDB table or as part of session item
-- Query events after the specified ID (for resumability)  
-- Query recent events with limit
-- Delete old events for cleanup
-- Count events across all sessions
+#### **Event Storage** ✅
+- ✅ Event storage with monotonic IDs for SSE resumability
+- ✅ Event querying with pagination and filtering
+- ✅ Automatic cleanup of old events
 
-### **Critical Path to lambda-turul-mcp-server** 🚨 **ADR APPROVAL REQUIRED**
+## 🎯 **NEXT PHASES: REVISED PRIORITY ORDER**
 
-#### **Phase 1: ADR Creation & Approval** ⚠️ **BLOCKING**
-**Status**: 🔴 **MUST BE APPROVED** before any lambda-turul-mcp-server work
-**Complexity**: High - Complex architectural decision with multiple trade-offs
+### **Phase 10.1: Fix Broken Examples** ⚠️ **IMMEDIATE** (1-2 days)
+1. **logging-server** - 4 tools need trait migration to new pattern
+2. **comprehensive-server** - ResourceContent::text API updates  
+3. **performance-testing** - 1 tool needs trait migration
+4. **pagination-server** - Complete partial trait fix
 
-**ADR Must Address**: Global Fan-Out Notification Architecture
-- **Scope**: `notifications/*/list_changed`, `notifications/message` broadcast to ALL sessions
-- **Storage Strategy**: Global events stored per-session for SSE resumability 
-- **Queue Integration**: SNS/NATS for serverless vs embedded broadcast for single-instance
-- **Delivery Guarantees**: At-least-once semantics across storage backends
-- **Performance**: Efficient broadcast for high session counts
-- **Event Ordering**: Monotonic IDs per session with global events
+### **Phase 10.2: Framework Integration** ⚠️ **SHORT-TERM** (1 day)
+1. Add `with_session_storage()` method to McpServer builder
+2. Update examples to demonstrate pluggable storage backends
 
-#### **Phase 2: DynamoDB Implementation** (After ADR Approval)
-1. **AWS SDK Integration**: Set up proper DynamoDB client with region/credentials
-2. **Table Schema**: Design session and events table structure
-3. **CRUD Operations**: Implement all 20 TODO methods
-4. **Testing**: Add LocalStack integration tests
+### **Phase 10.3: Lambda/Serverless Integration** ⚠️ **MEDIUM-TERM** (1 week)
+1. **lambda-mcp-server** - Fix and integrate with DynamoDB backend
+2. **lambda-mcp-client** - Event-driven patterns and testing
+3. **Serverless deployment** - Complete AWS integration testing
 
-#### **Phase 3: Global Fan-Out Implementation** (After ADR Approval)
-1. **Extend SessionStorage trait**: Add global notification operations
-2. **Queue Integration**: SNS/NATS fan-out for serverless environments
-3. **Embedded Broadcast**: Queue-less fallback for single-instance
-4. **Per-Session Storage**: Global events stored individually per session
-5. **SSE Integration**: Global notifications in SSE event streams
-
-#### **Phase 4: lambda-turul-mcp-server** (After Phases 1-3)
-5. **lambda-turul-mcp-server**: Re-enable once DynamoDB + Global Fan-Out complete
+### **Phase 10.4: NATS/AWS Fan-Out** ⚠️ **LONG-TERM** (2-3 weeks)
+1. **NATS broadcaster** - Multi-instance notification distribution  
+2. **AWS SNS/SQS** - Serverless fan-out patterns
+3. **Composite routing** - Circuit breakers and resilience
+4. **Performance testing** - 100K+ session validation
 
 ## 🎯 **OUTSTANDING WORK ITEMS** (Updated 2025-08-30)
 
@@ -463,8 +450,8 @@ Found **20 TODO items** in `/crates/turul-mcp-session-storage/src/dynamodb.rs`:
    - **Development Tooling**: Enhanced MCP Inspector integration, CLI tools, validation
 
 #### **Phase 8.4: Advanced Features** (4-8 weeks - Specialized Use Cases)
-1. **Additional Storage Backends**: PostgreSQL (multi-instance), NATS (cloud-native distributed)
-2. **Transport Extensions**: WebSocket (low-latency alternative), Authentication & Authorization (JWT, RBAC)
+1. **Additional Storage Backends**: Redis (caching layer), S3 (long-term archive)
+2. **Authentication & Authorization**: JWT integration, RBAC for tools/resources
 3. **Protocol Extensions**: Server discovery, custom middleware, plugin system
 
 **Timeline**: 3-6 months total for complete production enhancement suite
