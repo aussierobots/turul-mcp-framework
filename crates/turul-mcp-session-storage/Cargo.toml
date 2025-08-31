@@ -20,7 +20,7 @@ uuid = { workspace = true, features = ["v4", "v7"] }
 chrono = { workspace = true, features = ["serde"] }
 
 # Protocol types
-turul-mcp-protocol.workspace = true
+turul-mcp-protocol = { workspace = true, version = "0.1.0" }
 
 # Optional database support
 sqlx = { workspace = true, optional = true }

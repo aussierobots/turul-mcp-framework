@@ -14,7 +14,7 @@ server = []  # Server-side features
 client = []  # Client-side features
 
 [dependencies]
-turul-mcp-json-rpc-server.workspace = true
+turul-mcp-json-rpc-server = { workspace = true, version = "0.1.0" }
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true

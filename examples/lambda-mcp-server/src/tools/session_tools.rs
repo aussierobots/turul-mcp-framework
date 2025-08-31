@@ -7,7 +7,11 @@ use crate::session_manager::SessionManager;
 
 // Import turul-json-rpc-server framework types for proper error handling
 use async_trait::async_trait;
-use turul_mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, McpError};
+use turul_mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, McpError, CallToolResult};
+use turul_mcp_protocol::tools::{
+    ToolAnnotations, HasBaseMetadata, HasDescription, 
+    HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta
+};
 use turul_mcp_server::{McpTool, SessionContext, McpResult};
 use turul_mcp_derive::McpTool;
 use serde_json::{Value, json};
@@ -370,25 +374,54 @@ impl McpTool for ListActiveSessions {
 /// Manually trigger cleanup of expired sessions
 pub struct SessionCleanup;
 
-#[async_trait]
-impl McpTool for SessionCleanup {
+// Implement fine-grained traits for ToolDefinition
+impl HasBaseMetadata for SessionCleanup {
     fn name(&self) -> &str {
         "session_cleanup"
     }
+}
 
-    fn description(&self) -> &str {
-        "Manually trigger cleanup of expired sessions"
+impl HasDescription for SessionCleanup {
+    fn description(&self) -> Option<&str> {
+        Some("Manually trigger cleanup of expired sessions")
     }
+}
 
-    fn input_schema(&self) -> ToolSchema {
-        ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("dry_run".to_string(), JsonSchema::boolean()),
-                ("max_cleanup".to_string(), JsonSchema::number_with_description("Maximum number of sessions to clean up")
-                    .with_minimum(1.0)
-                    .with_maximum(100.0)),
-            ]))
+impl HasInputSchema for SessionCleanup {
+    fn input_schema(&self) -> &ToolSchema {
+        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+        INPUT_SCHEMA.get_or_init(|| {
+            ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("dry_run".to_string(), JsonSchema::boolean()),
+                    ("max_cleanup".to_string(), JsonSchema::number_with_description("Maximum number of sessions to clean up")
+                        .with_minimum(1.0)
+                        .with_maximum(100.0)),
+                ]))
+        })
     }
+}
+
+impl HasOutputSchema for SessionCleanup {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
+}
+
+impl HasAnnotations for SessionCleanup {
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
+}
+
+impl HasToolMeta for SessionCleanup {
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
+}
+
+#[async_trait]
+impl McpTool for SessionCleanup {
 
     async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<Vec<ToolResult>> {
         let dry_run = args.get("dry_run")

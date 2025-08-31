@@ -18,11 +18,11 @@ dynamodb = ["turul-mcp-session-storage/dynamodb"]
 
 [dependencies]
 # Framework dependencies
-turul-mcp-json-rpc-server.workspace = true
-turul-mcp-protocol.workspace = true
-turul-mcp-protocol-2025-06-18.workspace = true
-turul-mcp-session-storage.workspace = true
-turul-http-mcp-server = { workspace = true, optional = true }
+turul-mcp-json-rpc-server = { workspace = true, version = "0.1.0" }
+turul-mcp-protocol = { workspace = true, version = "0.1.0" }
+turul-mcp-protocol-2025-06-18 = { workspace = true, version = "0.1.0" }
+turul-mcp-session-storage = { workspace = true, version = "0.1.0" }
+turul-http-mcp-server = { workspace = true, optional = true, version = "0.1.0" }
 
 # Core dependencies
 serde.workspace = true

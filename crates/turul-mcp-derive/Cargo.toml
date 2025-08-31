@@ -20,8 +20,8 @@ serde_json = "1.0"
 async-trait.workspace = true
 
 # Internal dependencies
-turul-mcp-protocol.workspace = true
-turul-mcp-server.workspace = true
+turul-mcp-protocol = { workspace = true, version = "0.1.0" }
+turul-mcp-server = { workspace = true, version = "0.1.0" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

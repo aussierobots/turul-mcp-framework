@@ -12,8 +12,8 @@ categories = ["development-tools", "api-bindings"]
 
 [dependencies]
 # Protocol alias for current version  
-turul-mcp-protocol = { package = "turul-mcp-protocol-2025-06-18", path = "../turul-mcp-protocol-2025-06-18" }
-turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server" }
+turul-mcp-protocol-2025-06-18 = { path = "../turul-mcp-protocol-2025-06-18", version = "0.1.0" }
+turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.1.0" }
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
