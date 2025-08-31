@@ -8,9 +8,9 @@ repository = "https://github.com/aussierobots/turul-mcp-framework"
 
 [dependencies]
 # MCP framework dependencies
-turul-mcp-protocol = { workspace = true, version = "0.1.0" }
-turul-mcp-protocol-2025-06-18 = { workspace = true, version = "0.1.0" }
-turul-mcp-json-rpc-server = { workspace = true, version = "0.1.0" }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.1.0" }
+turul-mcp-protocol-2025-06-18 = { path = "../turul-mcp-protocol-2025-06-18", version = "0.1.0" }
+turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.1.0" }
 
 # Async runtime
 tokio = { workspace = true, features = ["full"] }
