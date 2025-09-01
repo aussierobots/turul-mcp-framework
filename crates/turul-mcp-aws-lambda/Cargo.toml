@@ -1,0 +1,70 @@
+[package]
+name = "turul-mcp-aws-lambda"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "AWS Lambda integration for turul-mcp-framework servers"
+
+[features]
+default = ["cors", "sse"]
+cors = []          # CORS header injection for Lambda responses
+sse = []           # Server-Sent Events stream adaptation
+dynamodb = ["turul-mcp-session-storage/dynamodb"]  # DynamoDB session storage
+
+[dependencies]
+# Core MCP framework
+turul-mcp-server = { path = "../turul-mcp-server", version = "0.1.0" }
+turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.1.0" }
+turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.1.0" }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.1.0" }
+turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.1.0" }
+turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.1.0" }
+
+# AWS Lambda runtime
+lambda_http = { workspace = true }
+lambda_runtime = { workspace = true }
+
+# HTTP and body handling
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+http = { workspace = true }
+http-body-util = { workspace = true }
+http-body = { workspace = true }
+bytes = { workspace = true }
+
+# Async and futures
+tokio = { workspace = true }
+futures = { workspace = true }
+async-stream = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Utilities
+uuid = { workspace = true, features = ["v7"] }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+tokio-test = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[[bin]]
+name = "lambda-echo-server"
+path = "examples/lambda-echo-server.rs"
+
+[[example]]
+name = "lambda-echo-server"
+path = "examples/lambda-echo-server.rs"
+
+[lib]
+name = "turul_mcp_aws_lambda"
+path = "src/lib.rs"

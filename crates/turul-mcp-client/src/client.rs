@@ -13,9 +13,8 @@ use crate::transport::{BoxedTransport, TransportFactory};
 
 // Re-export protocol types for convenience
 use turul_mcp_protocol::{
-    CallToolResult, GetPromptResult, InitializeResult, ListPromptsResult,
-    ListResourcesResult, ListToolsResult, Prompt, ReadResourceResult, Resource, Tool,
-    ToolResult,
+    CallToolResult, GetPromptResult, InitializeResult, ListPromptsResult, ListResourcesResult,
+    ListToolsResult, Prompt, ReadResourceResult, Resource, Tool, ToolResult,
 };
 
 /// Main MCP client
@@ -34,25 +33,25 @@ pub struct McpClient {
 
 impl Drop for McpClient {
     /// Automatic cleanup when client is dropped
-    /// 
+    ///
     /// This ensures that if the client is dropped without explicit disconnect,
     /// we still attempt to send a DELETE request to clean up the session on the server.
     fn drop(&mut self) {
         let session_id = self.session.clone();
         let transport = self.transport.clone();
-        
+
         // Spawn a background task to handle cleanup
         // We can't await in Drop, so we spawn a task that will complete cleanup
         tokio::spawn(async move {
             // Only send DELETE if we have a session ID
             if let Some(session_id_str) = session_id.session_id_optional().await {
                 let mut transport_guard = transport.lock().await;
-                
+
                 info!(
                     session_id = session_id_str,
                     "McpClient dropped - attempting session cleanup via DELETE request"
                 );
-                
+
                 if let Err(e) = transport_guard.send_delete(&session_id_str).await {
                     warn!(
                         session_id = session_id_str,
@@ -68,9 +67,11 @@ impl Drop for McpClient {
             } else {
                 debug!("No session ID available, skipping DELETE request during Drop");
             }
-            
+
             // Also terminate the session locally
-            session_id.terminate(Some("Client dropped".to_string())).await;
+            session_id
+                .terminate(Some("Client dropped".to_string()))
+                .await;
         });
     }
 }
@@ -205,23 +206,32 @@ impl McpClient {
         let transport_response = response?;
 
         // Extract session ID from headers (MCP protocol) - case insensitive lookup
-        let session_id = transport_response.headers.iter()
+        let session_id = transport_response
+            .headers
+            .iter()
             .find(|(key, _)| key.to_lowercase() == "mcp-session-id")
             .map(|(_, value)| value.clone());
-            
+
         if let Some(session_id) = session_id {
             info!("Server provided session ID: {}", session_id);
             self.session.set_session_id(session_id.clone()).await?;
         } else {
-            return Err(McpClientError::generic("Server did not provide Mcp-Session-Id header during initialization"));
+            return Err(McpClientError::generic(
+                "Server did not provide Mcp-Session-Id header during initialization",
+            ));
         }
 
         // Parse initialize response
-        let init_response: InitializeResult =
-            serde_json::from_value(transport_response.body.get("result").cloned().unwrap_or(Value::Null))
-                .map_err(|e| {
-                    McpClientError::generic(format!("Failed to parse initialize response: {}", e))
-                })?;
+        let init_response: InitializeResult = serde_json::from_value(
+            transport_response
+                .body
+                .get("result")
+                .cloned()
+                .unwrap_or(Value::Null),
+        )
+        .map_err(|e| {
+            McpClientError::generic(format!("Failed to parse initialize response: {}", e))
+        })?;
 
         // Validate server capabilities
         self.session
@@ -295,7 +305,10 @@ impl McpClient {
     }
 
     /// Send request with headers and handle retries (used for initialization)
-    async fn send_request_with_headers_internal(&self, request: Value) -> McpClientResult<crate::transport::TransportResponse> {
+    async fn send_request_with_headers_internal(
+        &self,
+        request: Value,
+    ) -> McpClientResult<crate::transport::TransportResponse> {
         let mut last_error = None;
 
         for attempt in 0..self.config.retry.max_attempts {
@@ -332,9 +345,12 @@ impl McpClient {
     }
 
     /// Send raw request with headers without retries
-    async fn send_request_with_headers_raw(&self, request: Value) -> McpClientResult<crate::transport::TransportResponse> {
+    async fn send_request_with_headers_raw(
+        &self,
+        request: Value,
+    ) -> McpClientResult<crate::transport::TransportResponse> {
         let mut transport = self.transport.lock().await;
-        
+
         let response = timeout(
             self.config.timeouts.request,
             transport.send_request_with_headers(request),
@@ -455,7 +471,10 @@ impl McpClient {
     }
 
     /// Read a resource
-    pub async fn read_resource(&self, uri: &str) -> McpClientResult<Vec<turul_mcp_protocol_2025_06_18::ResourceContent>> {
+    pub async fn read_resource(
+        &self,
+        uri: &str,
+    ) -> McpClientResult<Vec<turul_mcp_protocol_2025_06_18::ResourceContent>> {
         debug!(uri = uri, "Reading resource");
 
         let request = json!({
@@ -591,10 +610,7 @@ impl ConnectionStatus {
         };
         format!(
             "{} transport to {} - Session {} ({})",
-            self.transport_type,
-            self.endpoint,
-            session_display,
-            self.session_state
+            self.transport_type, self.endpoint, session_display, self.session_state
         )
     }
 }
@@ -673,7 +689,7 @@ mod tests {
             session_state: SessionState::Active,
             transport_type: crate::transport::TransportType::Http,
             endpoint: "http://localhost:8080/mcp".to_string(),
-            session_id: "session123".to_string(),
+            session_id: Some("session123".to_string()),
             protocol_version: Some("2025-06-18".to_string()),
         };
 

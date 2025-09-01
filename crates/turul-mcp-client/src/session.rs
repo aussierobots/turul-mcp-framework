@@ -1,16 +1,15 @@
 //! Session management for MCP client
 
+use serde_json::Value;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use serde_json::Value;
 use tracing::{debug, info, warn};
 
-use crate::error::{McpClientResult, SessionError};
 use crate::config::ClientConfig;
+use crate::error::{McpClientResult, SessionError};
 use turul_mcp_protocol::{
-    ClientCapabilities, ServerCapabilities, Implementation,
-    InitializeRequest
+    ClientCapabilities, Implementation, InitializeRequest, ServerCapabilities,
 };
 
 /// Session state enumeration
@@ -48,28 +47,28 @@ impl std::fmt::Display for SessionState {
 pub struct SessionInfo {
     /// Session identifier from server (None until server provides it)
     pub session_id: Option<String>,
-    
+
     /// Session state
     pub state: SessionState,
-    
+
     /// Client capabilities sent during initialization
     pub client_capabilities: Option<ClientCapabilities>,
-    
+
     /// Server capabilities received during initialization
     pub server_capabilities: Option<ServerCapabilities>,
-    
+
     /// Protocol version negotiated
     pub protocol_version: Option<String>,
-    
+
     /// Session creation timestamp
     pub created_at: Instant,
-    
+
     /// Last activity timestamp
     pub last_activity: Instant,
-    
+
     /// Connection attempt count
     pub connection_attempts: u32,
-    
+
     /// Session metadata
     pub metadata: Value,
 }
@@ -90,32 +89,32 @@ impl SessionInfo {
             metadata: Value::Null,
         }
     }
-    
+
     /// Update last activity timestamp
     pub fn update_activity(&mut self) {
         self.last_activity = Instant::now();
     }
-    
+
     /// Get session duration
     pub fn duration(&self) -> Duration {
         self.last_activity.duration_since(self.created_at)
     }
-    
+
     /// Get time since last activity
     pub fn idle_time(&self) -> Duration {
         Instant::now().duration_since(self.last_activity)
     }
-    
+
     /// Check if session is active
     pub fn is_active(&self) -> bool {
         self.state == SessionState::Active
     }
-    
+
     /// Check if session can be used for operations
     pub fn is_ready(&self) -> bool {
         matches!(self.state, SessionState::Active)
     }
-    
+
     /// Check if session needs initialization
     pub fn needs_initialization(&self) -> bool {
         matches!(self.state, SessionState::Uninitialized)
@@ -133,7 +132,7 @@ impl Default for SessionInfo {
 pub struct SessionManager {
     /// Current session information
     session: Arc<RwLock<SessionInfo>>,
-    
+
     /// Client configuration
     config: ClientConfig,
 }
@@ -146,36 +145,38 @@ impl SessionManager {
             config,
         }
     }
-    
+
     /// Get current session information
     pub async fn session_info(&self) -> SessionInfo {
         self.session.read().await.clone()
     }
-    
+
     /// Get session ID (returns error if not yet initialized by server)
     pub async fn session_id(&self) -> McpClientResult<String> {
         let session = self.session.read().await;
-        session.session_id.clone()
+        session
+            .session_id
+            .clone()
             .ok_or_else(|| SessionError::NotInitialized.into())
     }
-    
+
     /// Get session ID if available (returns None if not initialized)
     pub async fn session_id_optional(&self) -> Option<String> {
         self.session.read().await.session_id.clone()
     }
-    
+
     /// Set session ID (called when server provides it during initialization)
     pub async fn set_session_id(&self, session_id: String) -> McpClientResult<()> {
         let mut session = self.session.write().await;
         session.session_id = Some(session_id);
         Ok(())
     }
-    
+
     /// Get current session state
     pub async fn state(&self) -> SessionState {
         self.session.read().await.state.clone()
     }
-    
+
     /// Update session state
     pub async fn set_state(&self, state: SessionState) {
         let mut session = self.session.write().await;
@@ -183,12 +184,12 @@ impl SessionManager {
         session.state = state;
         session.update_activity();
     }
-    
+
     /// Check if session is ready for operations
     pub async fn is_ready(&self) -> bool {
         self.session.read().await.is_ready()
     }
-    
+
     /// Initialize session with server capabilities
     pub async fn initialize(
         &self,
@@ -197,55 +198,58 @@ impl SessionManager {
         protocol_version: String,
     ) -> McpClientResult<()> {
         let mut session = self.session.write().await;
-        
-        if !matches!(session.state, SessionState::Uninitialized | SessionState::Initializing) {
+
+        if !matches!(
+            session.state,
+            SessionState::Uninitialized | SessionState::Initializing
+        ) {
             return Err(SessionError::AlreadyInitialized.into());
         }
-        
+
         session.client_capabilities = Some(client_capabilities);
         session.server_capabilities = Some(server_capabilities);
         session.protocol_version = Some(protocol_version.clone());
         session.state = SessionState::Active;
         session.update_activity();
-        
+
         info!(
             session_id = %session.session_id.as_deref().unwrap_or("None"),
             protocol_version = %protocol_version,
             "Session initialized successfully"
         );
-        
+
         Ok(())
     }
-    
+
     /// Mark session as initializing
     pub async fn mark_initializing(&self) -> McpClientResult<()> {
         let mut session = self.session.write().await;
-        
+
         if !session.needs_initialization() {
             return Err(SessionError::AlreadyInitialized.into());
         }
-        
+
         session.state = SessionState::Initializing;
         session.connection_attempts += 1;
         session.update_activity();
-        
+
         debug!(
             session_id = %session.session_id.as_deref().unwrap_or("None"),
             attempt = session.connection_attempts,
             "Session initialization started"
         );
-        
+
         Ok(())
     }
-    
+
     /// Terminate session
     pub async fn terminate(&self, reason: Option<String>) {
         let mut session = self.session.write().await;
-        
+
         let previous_state = session.state.clone();
         session.state = SessionState::Terminated;
         session.update_activity();
-        
+
         info!(
             session_id = %session.session_id.as_deref().unwrap_or("None"),
             previous_state = %previous_state,
@@ -253,15 +257,15 @@ impl SessionManager {
             "Session terminated"
         );
     }
-    
+
     /// Handle session error
     pub async fn handle_error(&self, error: String) {
         let mut session = self.session.write().await;
-        
+
         let previous_state = session.state.clone();
         session.state = SessionState::Error(error.clone());
         session.update_activity();
-        
+
         warn!(
             session_id = %session.session_id.as_deref().unwrap_or("None"),
             previous_state = %previous_state,
@@ -269,42 +273,42 @@ impl SessionManager {
             "Session encountered error"
         );
     }
-    
+
     /// Start reconnection process
     pub async fn start_reconnection(&self) {
         let mut session = self.session.write().await;
-        
+
         if matches!(session.state, SessionState::Terminated) {
             return; // Cannot reconnect terminated sessions
         }
-        
+
         session.state = SessionState::Reconnecting;
         session.connection_attempts += 1;
         session.update_activity();
-        
+
         info!(
             session_id = %session.session_id.as_deref().unwrap_or("None"),
             attempt = session.connection_attempts,
             "Session reconnection started"
         );
     }
-    
+
     /// Reset session for new connection
     pub async fn reset(&self) {
         let mut session = self.session.write().await;
         *session = SessionInfo::new();
-        
+
         debug!(
             session_id = %session.session_id.as_deref().unwrap_or("None"),
             "Session reset for new connection"
         );
     }
-    
+
     /// Update activity timestamp
     pub async fn update_activity(&self) {
         self.session.write().await.update_activity();
     }
-    
+
     /// Get client capabilities for initialization
     pub fn create_client_capabilities(&self) -> ClientCapabilities {
         ClientCapabilities {
@@ -314,11 +318,11 @@ impl SessionManager {
             roots: None,
         }
     }
-    
+
     /// Create initialization request
     pub async fn create_initialize_request(&self) -> InitializeRequest {
         let client_info = &self.config.client_info;
-        
+
         InitializeRequest {
             protocol_version: "2025-06-18".to_string(),
             capabilities: self.create_client_capabilities(),
@@ -329,7 +333,7 @@ impl SessionManager {
             },
         }
     }
-    
+
     /// Validate server capabilities
     pub async fn validate_server_capabilities(
         &self,
@@ -342,16 +346,16 @@ impl SessionManager {
             prompts = ?server_capabilities.prompts,
             "Validating server capabilities"
         );
-        
+
         // For now, we accept any server capabilities
         // In the future, we might want to check for required features
         Ok(())
     }
-    
+
     /// Get session statistics
     pub async fn statistics(&self) -> SessionStatistics {
         let session = self.session.read().await;
-        
+
         SessionStatistics {
             session_id: session.session_id.clone(),
             state: session.state.clone(),
@@ -379,7 +383,7 @@ impl SessionStatistics {
     pub fn is_healthy(&self) -> bool {
         matches!(self.state, SessionState::Active) && self.idle_time < Duration::from_secs(300)
     }
-    
+
     /// Get human-readable session status
     pub fn status_summary(&self) -> String {
         let session_display = match &self.session_id {
@@ -388,11 +392,7 @@ impl SessionStatistics {
         };
         format!(
             "Session {} ({}) - Duration: {:?}, Idle: {:?}, Attempts: {}",
-            session_display,
-            self.state,
-            self.duration,
-            self.idle_time,
-            self.connection_attempts
+            session_display, self.state, self.duration, self.idle_time, self.connection_attempts
         )
     }
 }
@@ -401,20 +401,20 @@ impl SessionStatistics {
 mod tests {
     use super::*;
     use crate::config::ClientConfig;
-    
+
     #[tokio::test]
     async fn test_session_lifecycle() {
         let config = ClientConfig::default();
         let manager = SessionManager::new(config);
-        
+
         // Initial state should be uninitialized
         assert_eq!(manager.state().await, SessionState::Uninitialized);
         assert!(!manager.is_ready().await);
-        
+
         // Mark as initializing
         manager.mark_initializing().await.unwrap();
         assert_eq!(manager.state().await, SessionState::Initializing);
-        
+
         // Initialize session
         let client_caps = manager.create_client_capabilities();
         let server_caps = ServerCapabilities {
@@ -426,40 +426,43 @@ mod tests {
             completions: None,
             elicitation: None,
         };
-        
-        manager.initialize(client_caps, server_caps, "2025-06-18".to_string()).await.unwrap();
+
+        manager
+            .initialize(client_caps, server_caps, "2025-06-18".to_string())
+            .await
+            .unwrap();
         assert_eq!(manager.state().await, SessionState::Active);
         assert!(manager.is_ready().await);
-        
+
         // Terminate session
         manager.terminate(Some("test completed".to_string())).await;
         assert_eq!(manager.state().await, SessionState::Terminated);
         assert!(!manager.is_ready().await);
     }
-    
+
     #[tokio::test]
     async fn test_session_error_handling() {
         let config = ClientConfig::default();
         let manager = SessionManager::new(config);
-        
+
         manager.handle_error("test error".to_string()).await;
-        
+
         match manager.state().await {
             SessionState::Error(msg) => assert_eq!(msg, "test error"),
             _ => panic!("Expected error state"),
         }
     }
-    
+
     #[tokio::test]
     async fn test_session_reset() {
         let config = ClientConfig::default();
         let manager = SessionManager::new(config);
-        
-        let original_id = manager.session_id().await;
-        
+
+        let original_id = manager.session_id().await.unwrap();
+
         manager.reset().await;
-        
-        let new_id = manager.session_id().await;
+
+        let new_id = manager.session_id().await.unwrap();
         assert_ne!(original_id, new_id);
         assert_eq!(manager.state().await, SessionState::Uninitialized);
     }

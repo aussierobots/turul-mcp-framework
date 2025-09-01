@@ -24,8 +24,15 @@ aws-sdk-sqs.workspace = true
 turul-mcp-server = { path = "../../crates/turul-mcp-server" }
 turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
 turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
+turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage", features = ["dynamodb"] }
+turul-http-mcp-server = { path = "../../crates/turul-http-mcp-server" }
 turul-mcp-json-rpc-server = { workspace = true }
+turul-mcp-aws-lambda = { path = "../../crates/turul-mcp-aws-lambda" }
 async-trait = { workspace = true }
+
+# Tower middleware for Lambda
+tower = { workspace = true }
+tower-http = { workspace = true }
 
 # HTTP and JSON handling
 serde = { workspace = true }
@@ -34,6 +41,8 @@ uuid = { workspace = true }
 # HTTP and Hyper support for streaming
 http = { workspace = true }
 hyper = { workspace = true }
+http-body-util = { workspace = true }
+bytes = { workspace = true }
 
 # Date/time handling
 chrono = { workspace = true }
@@ -49,6 +58,9 @@ tracing-subscriber = { workspace = true }
 
 # URL encoding for SSE parameters
 urlencoding = { workspace = true }
+
+# Additional dependencies for tools
+md5 = "0.7"
 
 [dev-dependencies]
 tokio-test.workspace = true

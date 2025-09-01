@@ -465,6 +465,34 @@ All functionality implemented in `/crates/turul-mcp-session-storage/src/dynamodb
 - **MCP Compliance**: Maintains proper session boundaries per specification
 - **Verified**: End-to-end testing confirms Tool → NotificationBroadcaster → StreamManager → SSE → Client flow
 
+### **Lambda Integration Architecture** ✅ **DOCUMENTED** (2025-08-31)
+
+#### **Critical Discovery: Framework's 3-Layer Architecture**
+Through lambda-mcp-server development, we discovered the framework has a 3-layer structure:
+- **Layer 1**: `McpServer` - High-level builder and handler management
+- **Layer 2**: `HttpMcpServer` - TCP server with hyper (incompatible with Lambda)  
+- **Layer 3**: `SessionMcpHandler` - Request handler (what Lambda actually needs)
+
+#### **Integration Challenge**
+Lambda provides the HTTP runtime, making Layer 2 (TCP server) unusable. We need to:
+1. Skip the TCP server layer entirely
+2. Convert between lambda_http and hyper types
+3. Register handlers directly with JsonRpcDispatcher
+4. Handle CORS at the adapter level
+
+#### **Solution: turul-mcp-aws-lambda Crate**
+New crate providing Lambda-specific integration:
+- **Type Conversion**: Clean lambda_http ↔ hyper conversion with error handling
+- **Handler Registration**: Direct tool registration with JsonRpcDispatcher
+- **Lambda Optimizations**: CORS, SSE, and cold start optimizations
+- **Clean Separation**: Lambda concerns isolated from core framework
+
+#### **Key Architectural Insight**
+All framework components (McpServer, HttpMcpServer, SessionMcpHandler) use hyper internally. 
+The AWS SDK also uses hyper. This common foundation enables clean integration through type conversion.
+
+**ADR Reference**: See `docs/adr/001-lambda-mcp-integration-architecture.md` for complete analysis
+
 ## 📚 **ARCHITECTURE REFERENCES**
 
 - **Complete Documentation**: See `MCP_SESSION_ARCHITECTURE.md` for detailed system architecture

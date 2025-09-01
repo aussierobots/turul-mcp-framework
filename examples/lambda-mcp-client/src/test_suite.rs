@@ -261,6 +261,20 @@ impl TestSuite {
                 priority: 0,
             },
             TestCase {
+                name: "MCP Streamable HTTP DELETE Session Termination".to_string(),
+                description: "Validate DELETE requests for session termination per MCP 2025-06-18 spec".to_string(),
+                test_type: "mcp_streamable_http_delete_session".to_string(),
+                expected_duration_secs: 10,
+                parameters: Some(json!({
+                    "validate_delete_with_session": true,
+                    "validate_delete_without_session": true,
+                    "validate_cors_headers": true,
+                    "expected_success_codes": [204, 404],
+                    "expected_error_code": 400
+                })),
+                priority: 0,
+            },
+            TestCase {
                 name: "MCP Session Header Compliance".to_string(),
                 description: "Validate Mcp-Session-Id header handling per specification".to_string(),
                 test_type: "mcp_session_header_compliance".to_string(),

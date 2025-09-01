@@ -95,6 +95,27 @@ impl HasDescription for MyTool {
 // MyTool automatically implements ToolDefinition via blanket impl
 ```
 
+### **Phase 10.1.5: Lambda Integration Architecture** ✅ **DOCUMENTED**
+**Priority**: 🔴 **CRITICAL** - Unblock Lambda development
+
+**Completed**:
+- ✅ **ADR Created**: `docs/adr/001-lambda-mcp-integration-architecture.md`
+- ✅ **Architecture Discovery**: Documented 3-layer framework structure
+- ✅ **Solution Defined**: New turul-mcp-aws-lambda crate specification
+- ✅ **WORKING_MEMORY Updated**: Added Lambda integration section with ADR reference
+
+**Key Insights Documented**:
+- Framework has 3 layers: McpServer → HttpMcpServer → SessionMcpHandler
+- Lambda needs Layer 3 (SessionMcpHandler) but can't use Layer 2 (TCP server)
+- All components use hyper internally, enabling clean type conversion
+- JsonRpcDispatcher needs direct handler registration (McpServer handlers are internal)
+
+**Next Steps**:
+1. Create turul-mcp-aws-lambda crate structure
+2. Implement type conversion layer (lambda_http ↔ hyper)
+3. Build LambdaMcpHandler with handler registration bridge
+4. Update lambda-mcp-server to use new crate
+
 ### **Phase 10.2: Framework Integration** ⚠️ **SHORT-TERM** (1 day)
 **Priority**: 🟡 **HIGH** - Enable easy storage backend switching
 

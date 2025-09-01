@@ -1,215 +1,223 @@
-//! MCP Tools Module
+//! AWS Lambda MCP Tools
 //!
-//! Comprehensive tool suite for AWS Lambda MCP server with real-time notifications
+//! Derive-based tool implementations for AWS services integration
 
-pub mod aws_tools;
-pub mod lambda_tools;
-pub mod session_tools;
-
-use lambda_runtime::Context as LambdaContext;
-use turul_mcp_protocol::ToolResult;
-use turul_mcp_server::McpTool;
+use turul_mcp_derive::McpTool;
+use turul_mcp_server::McpResult;
 use serde_json::Value;
-use std::collections::HashMap;
-use tracing::{debug, info};
 
-/// Tool execution context with Lambda and session information
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct ToolExecutionContext {
-    /// MCP session ID
-    pub session_id: String,
-    /// Lambda execution context
-    pub lambda_context: LambdaEventContext,
-    /// Request correlation ID
-    pub request_id: String,
+/// DynamoDB query tool for serverless data operations
+#[derive(McpTool, Default, Clone)]
+#[tool(
+    name = "dynamodb_query", 
+    description = "Query DynamoDB tables with real-time results and monitoring"
+)]
+pub struct DynamoDbQueryTool {
+    #[param(description = "Table name to query")]
+    pub table_name: String,
+    
+    #[param(description = "Query key condition expression")]
+    pub key_condition: String,
+    
+    #[param(description = "Optional filter expression")]
+    pub filter_expression: Option<String>,
+    
+    #[param(description = "Maximum number of items to return (1-100)")]
+    pub limit: Option<i32>,
 }
 
-/// Lambda event context wrapper
-#[derive(Debug, Clone)]
-pub struct LambdaEventContext {
-    /// AWS Lambda context
-    pub lambda_context: LambdaContext,
-    /// Optional session ID from headers
-    pub session_id: Option<String>,
-}
-
-#[allow(dead_code)]
-impl LambdaEventContext {
-    /// Create new Lambda event context
-    pub fn new(lambda_context: LambdaContext) -> Self {
-        Self {
-            lambda_context,
-            session_id: None,
-        }
-    }
-
-    /// Create with session ID
-    pub fn with_session_id(lambda_context: LambdaContext, session_id: String) -> Self {
-        Self {
-            lambda_context,
-            session_id: Some(session_id),
-        }
-    }
-
-    /// Get session ID
-    pub fn session_id(&self) -> Option<&str> {
-        self.session_id.as_deref()
-    }
-
-    /// Get request ID
-    pub fn request_id(&self) -> &str {
-        &self.lambda_context.request_id
-    }
-
-    /// Get function name
-    pub fn function_name(&self) -> &str {
-        &self.lambda_context.env_config.function_name
-    }
-
-    /// Get remaining time in milliseconds
-    pub fn remaining_time_millis(&self) -> i64 {
-        // Note: lambda_http::Context doesn't have get_remaining_time_in_millis
-        // Return a default value for now
-        300000 // 5 minutes in milliseconds
-    }
-}
-
-impl From<LambdaContext> for LambdaEventContext {
-    fn from(context: LambdaContext) -> Self {
-        Self::new(context)
-    }
-}
-
-/// Tool registry for managing available MCP tools
-pub struct ToolRegistry {
-    /// Registered tools by name
-    tools: HashMap<String, Box<dyn McpTool + Send + Sync>>,
-}
-
-#[allow(dead_code)]
-impl ToolRegistry {
-    /// Create new tool registry with all available tools
-    pub async fn new() -> Result<Self, lambda_runtime::Error> {
-        let mut registry = Self {
-            tools: HashMap::new(),
-        };
-
-        // Register AWS tools
-        registry.register_tool(Box::new(aws_tools::AwsRealTimeMonitor)).await?;
-
-        // Register Lambda tools  
-        registry.register_tool(Box::new(lambda_tools::LambdaDiagnostics)).await?;
-
-        // Register session tools
-        registry.register_tool(Box::new(session_tools::SessionInfo)).await?;
-        registry.register_tool(Box::new(session_tools::ListActiveSessions)).await?;
-        registry.register_tool(Box::new(session_tools::SessionCleanup)).await?;
-        registry.register_tool(Box::new(session_tools::ServerNotificationTool::default())).await?;
-        registry.register_tool(Box::new(session_tools::ProgressUpdateTool::default())).await?;
-
-        info!("Registered {} tools", registry.tools.len());
-        Ok(registry)
-    }
-
-    /// Create tool registry for testing
-    #[cfg(test)]
-    pub async fn new_for_test() -> Result<Self, lambda_runtime::Error> {
-        // For tests, register minimal tools
-        let mut registry = Self {
-            tools: HashMap::new(),
-        };
-
-        registry.register_tool(Box::new(session_tools::SessionInfo)).await?;
-        Ok(registry)
-    }
-
-    /// Register a new tool
-    async fn register_tool(&mut self, tool: Box<dyn McpTool + Send + Sync>) -> Result<(), lambda_runtime::Error> {
-        let name = tool.name().to_string();
-        debug!("Registering tool: {}", name);
-        self.tools.insert(name, tool);
-        Ok(())
-    }
-
-    /// List all available tools
-    pub async fn list_tools(&self) -> Result<Vec<Value>, lambda_runtime::Error> {
-        let mut tools = Vec::new();
-
-        for tool in self.tools.values() {
-            let tool_def = serde_json::json!({
-                "name": tool.name(),
-                "description": tool.description(),
-                "inputSchema": tool.input_schema()
-            });
-            tools.push(tool_def);
-        }
-
-        debug!("Listed {} tools", tools.len());
-        Ok(tools)
-    }
-
-    /// Execute a tool by name
-    pub async fn execute_tool(
-        &self,
-        tool_name: &str,
-        arguments: Value,
-        context: ToolExecutionContext,
-    ) -> Result<ToolResult, lambda_runtime::Error> {
-        debug!("Executing tool: {} with context: {:?}", tool_name, context);
-
-        let tool = self.tools.get(tool_name)
-            .ok_or_else(|| lambda_runtime::Error::from(format!("Tool not found: {}", tool_name)))?;
-
-        // Create session context (limited in Lambda environment)
-        let session_context = None; // SessionContext creation will be handled by turul-mcp-server framework
-
-        // Execute the tool
-        match tool.call(arguments, session_context).await {
-            Ok(results) => {
-                if let Some(result) = results.into_iter().next() {
-                    debug!("Tool {} executed successfully", tool_name);
-                    Ok(result)
-                } else {
-                    Ok(ToolResult::text("Tool executed but returned no results"))
-                }
-            }
-            Err(e) => {
-                let error_msg = format!("Tool execution failed: {:?}", e);
-                debug!("{}", error_msg);
-                Err(lambda_runtime::Error::from(error_msg))
-            }
-        }
-    }
-
-    /// Get tool count
-    pub fn tool_count(&self) -> usize {
-        self.tools.len()
-    }
-
-    /// Check if tool exists
-    pub fn has_tool(&self, tool_name: &str) -> bool {
-        self.tools.contains_key(tool_name)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_lambda_event_context() {
-        let lambda_ctx = LambdaContext::default();
-        let event_ctx = LambdaEventContext::new(lambda_ctx);
+impl DynamoDbQueryTool {
+    pub async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<Value> {
+        use serde_json::json;
         
-        assert!(event_ctx.session_id().is_none());
-        assert!(!event_ctx.request_id().is_empty());
+        // Simulate DynamoDB query with validation
+        if self.table_name.is_empty() {
+            return Err("table_name is required".into());
+        }
+        
+        if self.key_condition.is_empty() {
+            return Err("key_condition is required".into());
+        }
+        
+        let limit = self.limit.unwrap_or(25).clamp(1, 100);
+        
+        // Mock query result with realistic DynamoDB response structure
+        Ok(json!({
+            "query_result": {
+                "table_name": self.table_name,
+                "items_found": limit,
+                "key_condition": self.key_condition,
+                "filter_expression": self.filter_expression,
+                "scan_count": limit + 2,
+                "consumed_capacity": {
+                    "table_name": self.table_name,
+                    "capacity_units": 1.5
+                },
+                "last_evaluated_key": null,
+                "items": (0..limit).map(|i| json!({
+                    "id": format!("item-{}", i + 1),
+                    "data": format!("Sample data for item {}", i + 1),
+                    "timestamp": chrono::Utc::now().timestamp()
+                })).collect::<Vec<_>>()
+            }
+        }))
     }
+}
 
-    #[tokio::test]
-    async fn test_tool_registry_creation() {
-        let registry = ToolRegistry::new_for_test().await.unwrap();
-        assert!(registry.tool_count() > 0);
-        assert!(registry.has_tool("session_info"));
+/// SNS message publishing tool for notifications and alerts
+#[derive(McpTool, Default, Clone)]
+#[tool(
+    name = "sns_publish",
+    description = "Publish messages to SNS topics with delivery confirmation"
+)]
+pub struct SnsPublishTool {
+    #[param(description = "SNS topic ARN")]
+    pub topic_arn: String,
+    
+    #[param(description = "Message content to publish")]
+    pub message: String,
+    
+    #[param(description = "Optional message subject (for email subscriptions)")]
+    pub subject: Option<String>,
+    
+    #[param(description = "Optional message attributes as JSON object")]
+    pub message_attributes: Option<Value>,
+}
+
+impl SnsPublishTool {
+    pub async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<Value> {
+        use serde_json::json;
+        
+        if self.topic_arn.is_empty() {
+            return Err("topic_arn is required".into());
+        }
+        
+        if self.message.is_empty() {
+            return Err("message is required".into());
+        }
+        
+        // Mock SNS publish result
+        Ok(json!({
+            "publish_result": {
+                "message_id": format!("msg-{}", uuid::Uuid::new_v4()),
+                "topic_arn": self.topic_arn,
+                "subject": self.subject,
+                "message_length": self.message.len(),
+                "message_attributes_count": self.message_attributes
+                    .as_ref()
+                    .and_then(|attrs| attrs.as_object())
+                    .map(|obj| obj.len())
+                    .unwrap_or(0),
+                "status": "published",
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            }
+        }))
+    }
+}
+
+/// SQS message sending tool for asynchronous processing
+#[derive(McpTool, Default, Clone)]
+#[tool(
+    name = "sqs_send_message",
+    description = "Send messages to SQS queues with delivery tracking"
+)]
+pub struct SqsSendMessageTool {
+    #[param(description = "SQS queue URL")]
+    pub queue_url: String,
+    
+    #[param(description = "Message body to send")]
+    pub message_body: String,
+    
+    #[param(description = "Optional message group ID (for FIFO queues)")]
+    pub message_group_id: Option<String>,
+    
+    #[param(description = "Optional deduplication ID (for FIFO queues)")]
+    pub message_deduplication_id: Option<String>,
+    
+    #[param(description = "Delay seconds before message becomes available (0-900)")]
+    pub delay_seconds: Option<i32>,
+}
+
+impl SqsSendMessageTool {
+    pub async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<Value> {
+        use serde_json::json;
+        
+        if self.queue_url.is_empty() {
+            return Err("queue_url is required".into());
+        }
+        
+        if self.message_body.is_empty() {
+            return Err("message_body is required".into());
+        }
+        
+        let delay_seconds = self.delay_seconds.unwrap_or(0).clamp(0, 900);
+        
+        // Mock SQS send result
+        Ok(json!({
+            "send_result": {
+                "message_id": format!("sqs-{}", uuid::Uuid::new_v4()),
+                "queue_url": self.queue_url,
+                "message_body_length": self.message_body.len(),
+                "message_group_id": self.message_group_id,
+                "message_deduplication_id": self.message_deduplication_id,
+                "delay_seconds": delay_seconds,
+                "md5_of_body": format!("{:x}", md5::compute(&self.message_body)),
+                "status": "sent",
+                "timestamp": chrono::Utc::now().to_rfc3339()
+            }
+        }))
+    }
+}
+
+/// CloudWatch metrics publishing tool for monitoring and alerting
+#[derive(McpTool, Default, Clone)]
+#[tool(
+    name = "cloudwatch_metrics",
+    description = "Publish custom metrics to CloudWatch with dimensions"
+)]
+pub struct CloudWatchMetricsTool {
+    #[param(description = "CloudWatch namespace")]
+    pub namespace: String,
+    
+    #[param(description = "Metric name")]
+    pub metric_name: String,
+    
+    #[param(description = "Metric value")]
+    pub value: f64,
+    
+    #[param(description = "Metric unit (Count, Percent, Seconds, etc.)")]
+    pub unit: Option<String>,
+    
+    #[param(description = "Optional dimensions as JSON object")]
+    pub dimensions: Option<Value>,
+}
+
+impl CloudWatchMetricsTool {
+    pub async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<Value> {
+        use serde_json::json;
+        
+        if self.namespace.is_empty() {
+            return Err("namespace is required".into());
+        }
+        
+        if self.metric_name.is_empty() {
+            return Err("metric_name is required".into());
+        }
+        
+        let unit = self.unit.clone().unwrap_or_else(|| "Count".to_string());
+        
+        // Mock CloudWatch put metric result
+        Ok(json!({
+            "metric_result": {
+                "namespace": self.namespace,
+                "metric_name": self.metric_name,
+                "value": self.value,
+                "unit": unit,
+                "dimensions": self.dimensions.clone().unwrap_or_else(|| json!({})),
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+                "status": "published",
+                "estimated_cost_usd": 0.01 // CloudWatch custom metrics cost
+            }
+        }))
     }
 }

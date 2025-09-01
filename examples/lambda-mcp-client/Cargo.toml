@@ -10,7 +10,10 @@ name = "lambda-turul-mcp-client"
 path = "src/main.rs"
 
 [dependencies]
-# HTTP client for MCP communication
+# MCP client framework
+turul-mcp-client = { path = "../../crates/turul-mcp-client" }
+
+# HTTP client for MCP communication (still needed for direct requests during testing)
 reqwest = { version = "0.12", features = ["json", "stream"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }

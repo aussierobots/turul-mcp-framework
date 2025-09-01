@@ -1,177 +1,115 @@
-//! AWS Lambda MCP Server using turul-mcp-framework
+//! AWS Lambda MCP Server using turul-mcp-aws-lambda
 //!
-//! Complete Lambda MCP server with restored architecture including:
-//! - DynamoDB session management
-//! - Global event broadcasting via tokio channels
-//! - SNS/SQS external event processing
-//! - SSE streaming for real-time notifications
-//! - Complete tool suite (AWS, Lambda, Session tools)
+//! A complete MCP server for AWS Lambda with:
+//! - turul-mcp-aws-lambda integration
+//! - MCP 2025-06-18 compliance  
+//! - DynamoDB session storage
+//! - CORS support
+//! - AWS tools integration
 
-mod event_router;
-mod global_events;
-mod session_manager;
-mod sns_processor;
-mod streaming_response;
 mod tools;
 
-use event_router::EventRouter;
-use global_events::initialize_global_events;
-use lambda_http::{
-    Body, Error, Request, RequestExt, Response, run_with_streaming_response, service_fn,
-};
-use sns_processor::initialize_sns_processor;
+use lambda_http::{run, service_fn, Error, Request, Body};
 use std::env;
-use std::sync::OnceLock;
-use tracing::{error, info, warn};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use tracing::{error, info};
+use tracing_subscriber;
 
-// Global EventRouter using OnceCell pattern - initialized once, reused for all requests
-static EVENT_ROUTER: OnceLock<EventRouter> = OnceLock::new();
+// Framework imports
+use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
+use turul_mcp_session_storage::DynamoDbSessionStorage;
 
-/// Initialize logging with comprehensive coverage
+// Local imports
+use tools::{DynamoDbQueryTool, SnsPublishTool, SqsSendMessageTool, CloudWatchMetricsTool};
+
+/// Initialize CloudWatch-optimized logging for Lambda environment
 fn init_logging() {
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "lambda_mcp_server=info,mcp_server=debug,http_mcp_server=debug,aws_sdk_dynamodb=warn,aws_sdk_sns=warn,aws_sdk_sqs=warn".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
+    let log_level = env::var("LOG_LEVEL")
+        .unwrap_or_else(|_| "INFO".to_string());
+        
+    tracing_subscriber::fmt()
+        .with_max_level(log_level.parse().unwrap_or(tracing::Level::INFO))
+        .with_target(false)      // No target for CloudWatch  
+        .without_time()          // CloudWatch adds timestamps
+        .json()                  // Structured logging for CloudWatch
         .init();
+        
+    info!("🚀 Logging initialized at level: {}", log_level);
 }
 
-/// Initialize global event system, EventRouter, and SNS processing
-async fn initialize_background_services() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    info!("🚀 Initializing Lambda MCP Server with complete restored architecture");
-
-    // Initialize global event broadcasting system
-    initialize_global_events();
-    info!("✅ Global event broadcasting system initialized");
-
-    // Initialize EventRouter once (OnceCell pattern) - will create SessionManager, ToolRegistry etc.
-    match EventRouter::new().await {
-        Ok(router) => {
-            EVENT_ROUTER
-                .set(router)
-                .map_err(|_| "Failed to set global EventRouter")?;
-            info!("✅ EventRouter initialized globally (includes SessionManager & ToolRegistry)");
-        }
-        Err(e) => {
-            error!("❌ Failed to initialize EventRouter: {:?}", e);
-            return Err(format!("EventRouter initialization failed: {}", e).into());
-        }
-    }
-
-    // Initialize global SNS processor if topic is configured
-    if let Ok(topic_arn) = env::var("SNS_TOPIC_ARN") {
-        info!(
-            "🔗 Initializing global SNS processor - Topic: {}",
-            topic_arn
-        );
-        initialize_sns_processor(topic_arn).await?;
-        info!("✅ Global SNS processor initialized and ready (OnceCell pattern)");
-    } else {
-        warn!("⚠️  SNS_TOPIC_ARN not configured - external event processing disabled");
-    }
-
-    info!("🎉 All background services initialized successfully");
-    Ok(())
-}
-
-/// Lambda handler function using the global event router
-async fn lambda_handler(request: Request) -> Result<Response<Body>, Error> {
-    let method = request.method();
-    let uri = request.uri();
-    let lambda_context = request.lambda_context();
-
-    info!(
-        "🌐 Lambda MCP request: {} {} (request_id: {})",
-        method,
-        uri.path(),
-        lambda_context.request_id
+/// Lambda handler function using turul-mcp-aws-lambda
+async fn lambda_handler(
+    request: Request
+) -> Result<lambda_http::Response<Body>, Error> {
+    info!("🌐 Lambda MCP request: {} {}", 
+        request.method(), 
+        request.uri().path()
     );
 
-    // Get the global EventRouter (initialized once at startup)
-    let event_router = EVENT_ROUTER.get().ok_or_else(|| {
-        error!("❌ Global EventRouter not initialized - this should never happen");
-        Error::from("EventRouter not initialized")
-    })?;
-
-    // Route request through the complete architecture
-    match event_router.route_request(request, lambda_context).await {
-        Ok(response) => {
-            info!("✅ Request processed successfully through global event router");
-            Ok(response)
-        }
-        Err(e) => {
-            error!("❌ Event router failed: {:?}", e);
-            Ok(create_error_response(
-                http::StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Request processing failed: {}", e),
-            ))
-        }
-    }
-}
-
-/// Create JSON-RPC 2.0 compliant error response
-fn create_error_response(status: http::StatusCode, message: &str) -> Response<Body> {
-    use serde_json::json;
-
-    // Create proper JSON-RPC 2.0 error response
-    let json_rpc_error = json!({
-        "jsonrpc": "2.0",
-        "id": null, // Use null when request ID is unknown/unparseable
-        "error": {
-            "code": match status {
-                http::StatusCode::BAD_REQUEST => -32600, // Invalid Request
-                http::StatusCode::NOT_FOUND => -32601,   // Method not found
-                http::StatusCode::UNPROCESSABLE_ENTITY => -32602, // Invalid params
-                _ => -32603, // Internal error
-            },
-            "message": message,
-            "data": {
-                "httpStatus": status.as_u16()
-            }
-        }
-    });
-
-    Response::builder()
-        .status(http::StatusCode::OK) // Always return 200 for JSON-RPC responses
-        .header("content-type", "application/json")
-        .header("access-control-allow-origin", "*")
-        .header(
-            "access-control-allow-headers",
-            "Content-Type, mcp-session-id",
-        )
-        .body(Body::from(json_rpc_error.to_string()))
-        .unwrap_or_else(|_| {
-            Response::builder()
-                .status(http::StatusCode::OK)
-                .body(Body::from(r#"{"jsonrpc":"2.0","id":null,"error":{"code":-32603,"message":"Internal server error"}}"#))
-                .unwrap()
+    // Create handler (could be cached globally for better performance)
+    let handler = create_lambda_mcp_handler().await?;
+    
+    // Process request through the Lambda MCP handler
+    handler.handle(request).await
+        .map_err(|e| {
+            error!("❌ Lambda MCP handler error: {}", e);
+            Error::from(e.to_string())
         })
 }
 
-/// Main Lambda entry point with complete restored architecture
+/// Create the Lambda MCP handler with AWS tools
+async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHandler, Error> {
+    info!("🔧 Creating Lambda MCP handler with AWS tools");
+    
+    // Create DynamoDB session storage
+    let storage = std::sync::Arc::new(
+        DynamoDbSessionStorage::new().await
+            .map_err(|e| Error::from(format!("Failed to create DynamoDB storage: {}", e)))?
+    );
+    
+    info!("💾 DynamoDB session storage initialized");
+    
+    // Build Lambda MCP handler with all AWS tools
+    let handler = LambdaMcpServerBuilder::new()
+        .name("aws-lambda-mcp-server")
+        .version("1.0.0")
+        // AWS Lambda tools
+        .tool(DynamoDbQueryTool::default())
+        .tool(SnsPublishTool::default())
+        .tool(SqsSendMessageTool::default())
+        .tool(CloudWatchMetricsTool::default())
+        // Session storage
+        .storage(storage)
+        // CORS configuration
+        .cors_allow_all_origins()
+        .build()
+        .await
+        .map_err(|e| Error::from(format!("Failed to build Lambda MCP handler: {}", e)))?;
+    
+    info!("✅ Lambda MCP handler created successfully");
+    Ok(handler)
+}
+
+/// Main Lambda entry point
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     init_logging();
 
-    info!("🚀 Starting Lambda MCP Server with complete restored architecture");
-    info!("Architecture components:");
-    info!("  - DynamoDB session management");
-    info!("  - Global event broadcasting (tokio channels)");
-    info!("  - SNS external event processing");
-    info!("  - SSE streaming for real-time notifications");
-    info!("  - Complete tool suite (AWS, Lambda, Session tools)");
-    info!("  - Event router with full request handling");
-    info!("Protocol version: 2025-06-18");
+    info!("🚀 Starting AWS Lambda MCP Server with turul-mcp-aws-lambda");
+    info!("Architecture: MCP 2025-06-18 Streamable HTTP compliance");
+    info!("  - turul-mcp-aws-lambda integration");
+    info!("  - DynamoDB session storage");
+    info!("  - CORS support");
+    info!("  - POST /mcp - JSON-RPC requests");
+    info!("  - GET /mcp - SSE streaming");
+    info!("  - OPTIONS * - CORS preflight");
 
-    // Initialize background services
-    if let Err(e) = initialize_background_services().await {
-        warn!("Failed to initialize background services: {:?}", e);
-        info!("Server will continue with limited functionality");
-    }
+    info!("📋 Environment variables:");
+    info!("  - LOG_LEVEL: {}", env::var("LOG_LEVEL").unwrap_or("INFO".to_string()));
+    info!("  - AWS_REGION: {}", env::var("AWS_REGION").unwrap_or("us-east-1".to_string()));
+    info!("  - MCP_SESSION_TABLE: {}", env::var("MCP_SESSION_TABLE").unwrap_or("mcp-sessions".to_string()));
+    
+    info!("🎯 Lambda handler ready");
 
-    // Run Lambda HTTP runtime with streaming response support
-    run_with_streaming_response(service_fn(lambda_handler)).await
+    // Run Lambda HTTP runtime
+    run(service_fn(lambda_handler)).await
 }

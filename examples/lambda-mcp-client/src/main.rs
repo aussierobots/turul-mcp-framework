@@ -21,8 +21,6 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 mod client;
-mod mcp_spec_validator;
-mod schema_validator;
 mod test_runner;
 mod test_suite;
 
@@ -56,7 +54,7 @@ enum Commands {
 #[derive(Args)]
 struct TestArgs {
     /// Server URL to test
-    #[arg(long, default_value = "http://127.0.0.1:9000")]
+    #[arg(long, default_value = "http://127.0.0.1:9000/lambda-url/lambda-turul-mcp-server")]
     url: String,
     
     /// Test suite to run (all, protocol, tools, session, infrastructure)
@@ -87,7 +85,7 @@ struct TestArgs {
 #[derive(Args)]
 struct ConnectArgs {
     /// Server URL to connect to
-    #[arg(long, default_value = "http://127.0.0.1:9000")]
+    #[arg(long, default_value = "http://127.0.0.1:9000/lambda-url/lambda-turul-mcp-server")]
     url: String,
     
     /// Session ID to use
@@ -102,7 +100,7 @@ struct ConnectArgs {
 #[derive(Args)]
 struct ValidateArgs {
     /// Server URL to test
-    #[arg(long, default_value = "http://127.0.0.1:9000")]
+    #[arg(long, default_value = "http://127.0.0.1:9000/lambda-url/lambda-turul-mcp-server")]
     url: String,
     
     /// Tool to validate (or 'all')
@@ -113,7 +111,7 @@ struct ValidateArgs {
 #[derive(Args)]
 struct BenchmarkArgs {
     /// Server URL to benchmark
-    #[arg(long, default_value = "http://127.0.0.1:9000")]
+    #[arg(long, default_value = "http://127.0.0.1:9000/lambda-url/lambda-turul-mcp-server")]
     url: String,
     
     /// Number of requests to send
@@ -132,7 +130,7 @@ struct BenchmarkArgs {
 #[derive(Args)]
 struct MonitorArgs {
     /// Server URL to monitor
-    #[arg(long, default_value = "http://127.0.0.1:9000")]
+    #[arg(long, default_value = "http://127.0.0.1:9000/lambda-url/lambda-turul-mcp-server")]
     url: String,
     
     /// Monitoring interval in seconds
@@ -179,7 +177,7 @@ async fn run_tests(args: TestArgs) -> Result<()> {
         user_agent: "lambda-mcp-client/0.1.0".to_string(),
     };
 
-    let mut test_runner = TestRunner::new(client_config, args.concurrency);
+    let test_runner = TestRunner::new(client_config, args.concurrency);
     
     // Create test suite based on arguments
     let test_suite = if args.test_sse_streaming {
@@ -234,7 +232,7 @@ async fn run_interactive_session(args: ConnectArgs) -> Result<()> {
         format!("interactive-{}", Uuid::new_v4())
     });
     
-    let mut client = McpClient::new(client_config, session_id.clone())?;
+    let mut client = McpClient::new(client_config).await?;
     
     println!("Session ID: {}", session_id.bright_green());
     println!();
@@ -254,15 +252,9 @@ async fn run_interactive_session(args: ConnectArgs) -> Result<()> {
     println!("{}", "✅ Success".green());
     
     println!("\n{}", "Available Tools:".bright_yellow().bold());
-    if let Some(tools_array) = tools.get("tools").and_then(|t| t.as_array()) {
-        for tool in tools_array {
-            if let Some(name) = tool.get("name").and_then(|n| n.as_str()) {
-                let desc = tool.get("description")
-                    .and_then(|d| d.as_str())
-                    .unwrap_or("No description");
-                println!("  {} - {}", name.bright_cyan(), desc);
-            }
-        }
+    for tool in &tools.tools {
+        let desc = tool.description.as_deref().unwrap_or("No description");
+        println!("  {} - {}", tool.name.bright_cyan(), desc);
     }
     
     println!("\n{}", "Type 'help' for commands, 'quit' to exit".bright_yellow());
@@ -296,7 +288,7 @@ async fn run_interactive_session(args: ConnectArgs) -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&tools)?);
             }
             "session" => {
-                match client.call_tool("session_info", json!({})).await {
+                match client.call_tool("session_info", Some(json!({}))).await {
                     Ok(result) => println!("{}", serde_json::to_string_pretty(&result)?),
                     Err(e) => println!("Error: {}", e.to_string().red()),
                 }
@@ -314,7 +306,7 @@ async fn run_interactive_session(args: ConnectArgs) -> Result<()> {
                         json!({})
                     };
                     
-                    match client.call_tool(tool_name, args).await {
+                    match client.call_tool(tool_name, Some(args)).await {
                         Ok(result) => println!("{}", serde_json::to_string_pretty(&result)?),
                         Err(e) => println!("Error: {}", e.to_string().red()),
                     }

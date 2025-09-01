@@ -11,6 +11,7 @@ members = [
     "crates/turul-mcp-derive",
     "crates/turul-mcp-client",
     "crates/turul-mcp-builders",
+    "crates/turul-mcp-aws-lambda",
 
     # Active examples (27 total)
     "examples/alert-system-server",

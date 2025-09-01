@@ -113,7 +113,7 @@ pub use completion::McpCompletion;
 pub use logging::McpLogger;
 pub use roots::McpRoot;
 pub use notifications::McpNotification;
-pub use server::McpServer;
+pub use server::{McpServer, SessionAwareInitializeHandler, SessionAwareToolHandler, ListToolsHandler, SessionAwareMcpHandlerBridge};
 pub use handlers::*;
 pub use session::{SessionContext, SessionManager, SessionEvent};
 pub use dispatch::{McpDispatcher, DispatchMiddleware, DispatchContext};
