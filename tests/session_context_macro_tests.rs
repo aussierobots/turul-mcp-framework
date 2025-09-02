@@ -6,13 +6,17 @@
 //! - Session state management through macros
 //! - Progress notifications from macro-generated tools
 //! - Error handling when SessionContext is missing
+//!
+//! NOTE: These tests now use proper SessionContext creation via test helpers.
 
-use std::collections::HashMap;
 use serde_json::{json, Value};
 use tokio;
 
 use turul_mcp_derive::{McpTool, mcp_tool};
 use turul_mcp_server::{McpResult, SessionContext, McpTool};
+
+mod test_helpers;
+use test_helpers::{TestSessionBuilder, create_test_session, create_test_session_pair, assert_session_state, assert_notification_sent};
 use turul_mcp_protocol::McpError;
 
 /// Test derive macro with SessionContext support
@@ -33,7 +37,7 @@ impl TestDeriveWithSession {
         session.set_typed_state("call_count", &new_count).unwrap();
         
         // Test progress notifications
-        session.notify_progress("processing", new_count);
+        session.notify_progress("processing", new_count as u64);
         
         Ok(json!({
             "input": self.input,
@@ -91,27 +95,10 @@ async fn test_function_no_session(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-    use turul_mcp_server::session::{SessionManager, SessionEvent};
-    use turul_mcp_protocol::{ServerCapabilities, ClientCapabilities, Implementation};
     
-    /// Create a test SessionContext
+    /// Create a test SessionContext using the test helpers
     async fn create_test_session() -> SessionContext {
-        let capabilities = ServerCapabilities::default();
-        let manager = SessionManager::new(capabilities);
-        let session_id = manager.create_session().await;
-        
-        // Initialize the session
-        let client_capabilities = ClientCapabilities::default();
-        let implementation = Implementation {
-            name: "test".to_string(),
-            version: "1.0.0".to_string(),
-        };
-        
-        manager.initialize_session(&session_id, client_capabilities, implementation).await.unwrap();
-        
-        // Get the SessionContext
-        manager.get_session_context(&session_id).await.unwrap()
+        test_helpers::create_test_session().await
     }
     
     #[tokio::test]
@@ -124,21 +111,27 @@ mod tests {
         let result = tool.call(args.clone(), Some(session.clone())).await.unwrap();
         
         // Verify the result structure
-        let content = &result.content[0].text;
+        let content = match &result.content[0] {
+            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            _ => panic!("Expected text content")
+        };
         let response: Value = serde_json::from_str(content).unwrap();
         
-        assert_eq!(response["input"], "hello");
-        assert_eq!(response["call_count"], 1);
-        assert!(!response["session_id"].as_str().unwrap().is_empty());
+        assert_eq!(response["value"]["input"], "hello");
+        assert_eq!(response["value"]["call_count"], 1);
+        assert!(!response["value"]["session_id"].as_str().unwrap().is_empty());
         
         // Second call should increment counter
         let args2 = json!({"input": "world"});
         let result2 = tool.call(args2, Some(session.clone())).await.unwrap();
-        let content2 = &result2.content[0].text;
+        let content2 = match &result2.content[0] {
+            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            _ => panic!("Expected text content")
+        };
         let response2: Value = serde_json::from_str(content2).unwrap();
         
-        assert_eq!(response2["call_count"], 2);
-        assert_eq!(response2["input"], "world");
+        assert_eq!(response2["value"]["call_count"], 2);
+        assert_eq!(response2["value"]["input"], "world");
     }
     
     #[tokio::test]
@@ -149,11 +142,14 @@ mod tests {
         let args = json!({"input": "test"});
         let result = tool.call(args, None).await.unwrap();
         
-        let content = &result.content[0].text;
+        let content = match &result.content[0] {
+            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            _ => panic!("Expected text content")
+        };
         let response: Value = serde_json::from_str(content).unwrap();
         
-        assert_eq!(response["input"], "test");
-        assert_eq!(response["message"], "No session needed");
+        assert_eq!(response["value"]["input"], "test");
+        assert_eq!(response["value"]["message"], "No session needed");
     }
     
     #[tokio::test]
@@ -184,7 +180,10 @@ mod tests {
         let args = json!({"input": "function"});
         let result = tool.call(args, Some(session.clone())).await.unwrap();
         
-        let content = &result.content[0].text;
+        let content = match &result.content[0] {
+            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            _ => panic!("Expected text content")
+        };
         let response: Value = serde_json::from_str(content).unwrap();
         
         // Function macro wraps result in output field (default "result")
@@ -203,7 +202,10 @@ mod tests {
         let args = json!({"input": "simple"});
         let result = tool.call(args, None).await.unwrap();
         
-        let content = &result.content[0].text;
+        let content = match &result.content[0] {
+            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            _ => panic!("Expected text content")
+        };
         let response: Value = serde_json::from_str(content).unwrap();
         
         assert_eq!(response["result"], "Simple: simple");
@@ -219,10 +221,13 @@ mod tests {
         
         assert!(result.is_err());
         match result.unwrap_err() {
-            McpError::SessionError(msg) => {
+            McpError::ToolExecutionError(msg) => {
                 assert!(msg.contains("Session required"));
             }
-            _ => panic!("Expected SessionError")
+            other => {
+                println!("Got error: {:?}", other);
+                panic!("Expected ToolExecutionError containing session error, got: {:?}", other)
+            }
         }
     }
     
@@ -240,6 +245,7 @@ mod tests {
         let function_tool = test_function_with_session();
         let args2 = json!({"input": "second"});
         let result = function_tool.call(args2, Some(session.clone())).await.unwrap();
+        println!("Function call result: {:?}", result); // Debug statement for result usage
         
         // Both tools should share session state
         let last_input: String = session.get_typed_state("last_input").unwrap();

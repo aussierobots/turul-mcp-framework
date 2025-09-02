@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 use serde_json::{json, Value};
 use turul_mcp_server::{McpTool, McpResult, SessionContext};
-use turul_mcp_protocol::tools::CallToolResponse;
+use turul_mcp_protocol::{tools::{CallToolResult, ToolResult}, McpError};
 
 // ===========================================
 // === Level 1: Function Macro ===
@@ -50,7 +50,7 @@ async fn test_level1_function_macro() {
 
 use turul_mcp_derive::McpTool;
 
-#[derive(McpTool)]
+#[derive(McpTool, Default)]
 #[tool(name = "calculator_add_derive_test", description = "Add two numbers using derive")]
 struct CalculatorAddDeriveTool {
     #[param(description = "First number")]
@@ -60,7 +60,7 @@ struct CalculatorAddDeriveTool {
 }
 
 impl CalculatorAddDeriveTool {
-    async fn execute(&self) -> McpResult<f64> {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<f64> {
         Ok(self.a + self.b)
     }
 }
@@ -125,7 +125,7 @@ async fn test_level3_builder_pattern() {
 
 use async_trait::async_trait;
 use turul_mcp_protocol::tools::{
-    ToolResult, ToolSchema,
+    ToolSchema,
     HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, 
     HasAnnotations, HasToolMeta
 };
@@ -164,7 +164,7 @@ impl HasOutputSchema for CalculatorAddManualTool {
 }
 
 impl HasAnnotations for CalculatorAddManualTool {
-    fn annotations(&self) -> Option<&mcp_protocol_2025_06_18::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
 }
 
 impl HasToolMeta for CalculatorAddManualTool {
@@ -173,15 +173,15 @@ impl HasToolMeta for CalculatorAddManualTool {
 
 #[async_trait]
 impl McpTool for CalculatorAddManualTool {
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResponse> {
+    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let a = args.get("a").and_then(|v| v.as_f64())
-            .ok_or_else(|| mcp_protocol::McpError::missing_param("a"))?;
+            .ok_or_else(|| McpError::missing_param("a"))?;
         let b = args.get("b").and_then(|v| v.as_f64())
-            .ok_or_else(|| mcp_protocol::McpError::missing_param("b"))?;
+            .ok_or_else(|| McpError::missing_param("b"))?;
         
         let sum = a + b;
         
-        Ok(CallToolResponse::success(vec![
+        Ok(CallToolResult::success(vec![
             ToolResult::text(format!("Sum: {}", sum))
         ]))
     }

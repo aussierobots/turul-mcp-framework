@@ -15,10 +15,10 @@
 //! - Session and context management
 
 use std::collections::HashMap;
-use serde_json::{json, Value};
+use serde_json::json;
 
 use turul_mcp_protocol::{
-    JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcNotification, RequestParams, ResultWithMeta
+    JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcNotification, ResultWithMeta, RequestParams
 };
 
 /// Test JSON-RPC 2.0 compliance
@@ -148,9 +148,9 @@ mod initialization_compliance {
         assert_eq!(request.method, "initialize");
         
         let params = request.params.unwrap();
-        assert_eq!(params["protocolVersion"], "2025-06-18");
-        assert!(params["capabilities"].is_object());
-        assert!(params["clientInfo"].is_object());
+        assert_eq!(params.other.get("protocolVersion"), Some(&json!("2025-06-18")));
+        assert!(params.other.get("capabilities").unwrap().is_object());
+        assert!(params.other.get("clientInfo").unwrap().is_object());
 
         // Step 2: Server responds with capabilities
         let initialize_response = json!({
@@ -182,9 +182,9 @@ mod initialization_compliance {
         assert!(response.result.is_some());
         
         let result = response.result.unwrap();
-        assert_eq!(result["protocolVersion"], "2025-06-18");
-        assert!(result["capabilities"].is_object());
-        assert!(result["serverInfo"].is_object());
+        assert_eq!(result.data.get("protocolVersion"), Some(&json!("2025-06-18")));
+        assert!(result.data.get("capabilities").unwrap().is_object());
+        assert!(result.data.get("serverInfo").unwrap().is_object());
 
         // Step 3: Client sends initialized notification
         let initialized_notification = json!({
@@ -292,10 +292,11 @@ mod message_structure_compliance {
         assert_eq!(request.method, "tools/call");
         
         let params = request.params.unwrap();
-        assert_eq!(params["name"], "calculator");
-        assert!(params["arguments"].is_object());
-        assert!(params["_meta"].is_object());
-        assert_eq!(params["_meta"]["progressToken"], "calc-123");
+        assert_eq!(params.other.get("name"), Some(&json!("calculator")));
+        assert!(params.other.get("arguments").unwrap().is_object());
+        assert!(params.other.get("_meta").unwrap().is_object());
+        let meta = params.other.get("_meta").unwrap();
+        assert_eq!(meta.get("progressToken"), Some(&json!("calc-123")));
     }
 
     #[tokio::test]
@@ -325,10 +326,9 @@ mod message_structure_compliance {
         assert!(response.result.is_some());
         
         let result = response.result.unwrap();
-        assert!(result["content"].is_array());
-        assert_eq!(result["isError"], false);
-        assert!(result["_meta"].is_object());
-        assert!(result["_meta"]["usage"].is_object());
+        assert!(result.data.get("content").unwrap().is_array());
+        assert_eq!(result.data.get("isError"), Some(&json!(false)));
+        assert!(result.meta.as_ref().unwrap().get("usage").unwrap().is_object());
     }
 
     #[tokio::test]
@@ -350,8 +350,8 @@ mod message_structure_compliance {
         assert_eq!(request.method, "resources/list");
         
         let params = request.params.unwrap();
-        assert_eq!(params["cursor"], "page-2");
-        assert!(params["_meta"].is_object());
+        assert_eq!(params.other.get("cursor"), Some(&json!("page-2")));
+        assert!(params.other.get("_meta").unwrap().is_object());
 
         // Resource read request
         let resource_read = json!({
@@ -370,8 +370,8 @@ mod message_structure_compliance {
         assert_eq!(request.method, "resources/read");
         
         let params = request.params.unwrap();
-        assert_eq!(params["uri"], "file:///example.txt");
-        assert!(params["_meta"].is_object());
+        assert_eq!(params.other.get("uri"), Some(&json!("file:///example.txt")));
+        assert!(params.other.get("_meta").unwrap().is_object());
     }
 
     #[tokio::test]
@@ -413,9 +413,9 @@ mod message_structure_compliance {
         assert_eq!(request.method, "prompts/get");
         
         let params = request.params.unwrap();
-        assert_eq!(params["name"], "code_review");
-        assert!(params["arguments"].is_object());
-        assert!(params["_meta"].is_object());
+        assert_eq!(params.other.get("name"), Some(&json!("code_review")));
+        assert!(params.other.get("arguments").unwrap().is_object());
+        assert!(params.other.get("_meta").unwrap().is_object());
     }
 }
 
@@ -441,9 +441,9 @@ mod notification_compliance {
         assert_eq!(notification.method, "notifications/progress");
         
         let params = notification.params.unwrap();
-        assert_eq!(params["progressToken"], "operation-123");
-        assert_eq!(params["progress"], 75);
-        assert_eq!(params["total"], 100);
+        assert_eq!(params.other.get("progressToken"), Some(&json!("operation-123")));
+        assert_eq!(params.other.get("progress"), Some(&json!(75)));
+        assert_eq!(params.other.get("total"), Some(&json!(100)));
     }
 
     #[tokio::test]
@@ -470,7 +470,7 @@ mod notification_compliance {
         assert_eq!(notification.method, "notifications/resources/updated");
         
         let params = notification.params.unwrap();
-        assert_eq!(params["uri"], "file:///updated.txt");
+        assert_eq!(params.other.get("uri"), Some(&json!("file:///updated.txt")));
     }
 
     #[tokio::test]
@@ -502,9 +502,9 @@ mod notification_compliance {
         assert_eq!(notification.method, "notifications/message");
         
         let params = notification.params.unwrap();
-        assert_eq!(params["level"], "info");
-        assert_eq!(params["logger"], "mcp.server");
-        assert!(params["data"].is_string());
+        assert_eq!(params.other.get("level"), Some(&json!("info")));
+        assert_eq!(params.other.get("logger"), Some(&json!("mcp.server")));
+        assert!(params.other.get("data").unwrap().is_string());
     }
 }
 
@@ -534,9 +534,10 @@ mod meta_field_compliance {
         let params = request.params.unwrap();
         
         // _meta should be preserved as an object
-        assert!(params["_meta"].is_object());
-        assert_eq!(params["_meta"]["progressToken"], "progress-abc-123");
-        assert_eq!(params["_meta"]["sessionId"], "session-xyz-789");
+        assert!(params.other.get("_meta").unwrap().is_object());
+        let meta = params.other.get("_meta").unwrap();
+        assert_eq!(meta.get("progressToken"), Some(&json!("progress-abc-123")));
+        assert_eq!(meta.get("sessionId"), Some(&json!("session-xyz-789")));
     }
 
     #[tokio::test]
@@ -568,11 +569,13 @@ mod meta_field_compliance {
         let result = response.result.unwrap();
         
         // _meta should be preserved with usage and timing info
-        assert!(result["_meta"].is_object());
-        assert!(result["_meta"]["usage"].is_object());
-        assert_eq!(result["_meta"]["usage"]["inputTokens"], 15);
-        assert_eq!(result["_meta"]["usage"]["outputTokens"], 8);
-        assert_eq!(result["_meta"]["processingTime"], 234);
+        assert!(result.meta.is_some());
+        let meta = result.meta.as_ref().unwrap();
+        let usage = meta.get("usage").unwrap();
+        assert!(usage.is_object());
+        assert_eq!(usage.get("inputTokens"), Some(&json!(15)));
+        assert_eq!(usage.get("outputTokens"), Some(&json!(8)));
+        assert_eq!(meta.get("processingTime"), Some(&json!(234)));
     }
 
     #[tokio::test]
@@ -589,7 +592,7 @@ mod meta_field_compliance {
         let params = request.params.unwrap();
         
         // Should work fine without _meta field
-        assert!(params.get("_meta").is_none());
+        assert!(params.other.get("_meta").is_none());
     }
 
     #[tokio::test]
@@ -615,10 +618,10 @@ mod meta_field_compliance {
 
         let request: JsonRpcRequest = serde_json::from_value(request_with_custom_meta).unwrap();
         let params = request.params.unwrap();
-        let meta = &params["_meta"];
+        let meta = params.other.get("_meta").unwrap();
         
         // Custom fields should be preserved
-        assert_eq!(meta["progressToken"], "token-123");
+        assert_eq!(meta.get("progressToken"), Some(&json!("token-123")));
         assert_eq!(meta["customField"], "custom_value");
         assert!(meta["experimentalData"].is_object());
         assert_eq!(meta["experimentalData"]["feature"], "beta");
@@ -823,8 +826,8 @@ mod pagination_compliance {
         let response: JsonRpcResponse = serde_json::from_value(paginated_response).unwrap();
         let result = response.result.unwrap();
         
-        assert!(result["resources"].is_array());
-        assert_eq!(result["nextCursor"], "page-2-token-abc123");
+        assert!(result.data.get("resources").unwrap().is_array());
+        assert_eq!(result.data.get("nextCursor"), Some(&json!("page-2-token-abc123")));
 
         // Follow-up request with cursor
         let next_request = json!({
@@ -838,7 +841,7 @@ mod pagination_compliance {
 
         let request: JsonRpcRequest = serde_json::from_value(next_request).unwrap();
         let params = request.params.unwrap();
-        assert_eq!(params["cursor"], "page-2-token-abc123");
+        assert_eq!(params.other.get("cursor"), Some(&json!("page-2-token-abc123")));
     }
 
     #[tokio::test]
@@ -861,8 +864,8 @@ mod pagination_compliance {
         let response: JsonRpcResponse = serde_json::from_value(final_page_response).unwrap();
         let result = response.result.unwrap();
         
-        assert!(result["resources"].is_array());
-        assert!(result.get("nextCursor").is_none());
+        assert!(result.data.get("resources").unwrap().is_array());
+        assert!(result.data.get("nextCursor").is_none());
     }
 }
 
@@ -874,18 +877,22 @@ mod framework_integration_compliance {
     #[tokio::test]
     async fn test_framework_json_rpc_compliance() {
         // Test that our framework produces compliant JSON-RPC
+        let mut params_map = HashMap::new();
+        params_map.insert("protocolVersion".to_string(), json!("2025-06-18"));
+        params_map.insert("capabilities".to_string(), json!({}));
+        params_map.insert("clientInfo".to_string(), json!({
+            "name": "compliance-test",
+            "version": "1.0.0"
+        }));
+        
         let request = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
             method: "initialize".to_string(),
-            params: Some(json!({
-                "protocolVersion": "2025-06-18",
-                "capabilities": {},
-                "clientInfo": {
-                    "name": "compliance-test",
-                    "version": "1.0.0"
-                }
-            })),
-            id: Some(json!(1)),
+            params: Some(RequestParams {
+                meta: None,
+                other: params_map,
+            }),
+            id: json!(1),
         };
 
         // Serialize and deserialize to ensure round-trip compatibility
@@ -894,15 +901,15 @@ mod framework_integration_compliance {
         
         assert_eq!(deserialized.jsonrpc, "2.0");
         assert_eq!(deserialized.method, "initialize");
-        assert_eq!(deserialized.id, Some(json!(1)));
+        assert_eq!(deserialized.id, json!(1));
     }
 
     #[tokio::test]
     async fn test_framework_response_compliance() {
         // Test framework response generation
         let response = JsonRpcResponse::success(
-            Some(json!("test-id")),
-            json!({
+            json!("test-id"),
+            ResultWithMeta::from_value(json!({
                 "protocolVersion": "2025-06-18",
                 "capabilities": {
                     "tools": { "listChanged": true },
@@ -912,7 +919,7 @@ mod framework_integration_compliance {
                     "name": "mcp-test-server",
                     "version": "1.0.0"
                 }
-            })
+            }))
         );
 
         // Serialize and validate structure
@@ -924,9 +931,9 @@ mod framework_integration_compliance {
         assert!(serialized.get("error").is_none());
         
         let result = &serialized["result"];
-        assert_eq!(result["protocolVersion"], "2025-06-18");
-        assert!(result["capabilities"].is_object());
-        assert!(result["serverInfo"].is_object());
+        assert_eq!(result.get("protocolVersion"), Some(&json!("2025-06-18")));
+        assert!(result.get("capabilities").unwrap().is_object());
+        assert!(result.get("serverInfo").unwrap().is_object());
     }
 
     #[tokio::test]
@@ -977,10 +984,10 @@ mod mcp_2025_06_18_features {
 
         let request: JsonRpcRequest = serde_json::from_value(request_with_structured_meta).unwrap();
         let params = request.params.unwrap();
-        let meta = &params["_meta"];
+        let meta = params.other.get("_meta").unwrap();
         
         // Verify structured _meta fields are preserved
-        assert_eq!(meta["progressToken"], "structured-progress-token");
+        assert_eq!(meta.get("progressToken"), Some(&json!("structured-progress-token")));
         assert!(meta["elicitation"].is_object());
         assert_eq!(meta["elicitation"]["type"], "confirmation");
         assert!(meta["cursor"].is_object());

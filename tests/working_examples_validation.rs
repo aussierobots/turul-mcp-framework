@@ -163,7 +163,7 @@ async fn test_basic_framework_functionality() {
     }
     
     impl TestAddTool {
-        async fn execute(&self) -> turul_mcp_server::McpResult<String> {
+        async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<String> {
             Ok(format!("{}", self.a + self.b))
         }
     }

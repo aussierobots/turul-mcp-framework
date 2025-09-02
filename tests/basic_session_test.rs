@@ -53,12 +53,15 @@ mod tests {
         assert!(!result.content.is_empty());
         
         // Parse the response to check session handling
-        let content = &result.content[0].text;
+        let content = match &result.content[0] {
+            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            _ => panic!("Expected text content")
+        };
         let response: Value = serde_json::from_str(content).unwrap();
         
-        assert_eq!(response["input"], "test");
-        assert_eq!(response["has_session"], false);
-        assert_eq!(response["session_id"], "no-session");
+        assert_eq!(response["value"]["input"], "test");
+        assert_eq!(response["value"]["has_session"], false);
+        assert_eq!(response["value"]["session_id"], "no-session");
     }
     
     #[tokio::test]
@@ -71,7 +74,10 @@ mod tests {
         assert!(!result.content.is_empty());
         
         // Parse the response (function macro wraps result in "result" field)
-        let content = &result.content[0].text;
+        let content = match &result.content[0] {
+            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            _ => panic!("Expected text content")
+        };
         let response: Value = serde_json::from_str(content).unwrap();
         
         assert!(response["result"].as_str().unwrap().contains("function_test"));
