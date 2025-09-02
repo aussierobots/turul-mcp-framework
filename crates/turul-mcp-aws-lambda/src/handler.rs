@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use lambda_http::{Body as LambdaBody, Request as LambdaRequest, Response as LambdaResponse};
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use turul_http_mcp_server::{
@@ -533,7 +533,7 @@ impl LambdaMcpHandler {
 mod tests {
     use super::*;
     use std::sync::Arc;
-    use turul_http_mcp_server::{ServerConfig, StreamConfig, StreamManager};
+    use turul_http_mcp_server::{JsonRpcHandler, ServerConfig, StreamConfig, StreamManager};
     use turul_mcp_json_rpc_server::JsonRpcDispatcher;
     use turul_mcp_protocol::{Implementation, ServerCapabilities};
     use turul_mcp_session_storage::InMemorySessionStorage;
@@ -551,11 +551,15 @@ mod tests {
         let implementation = Implementation {
             name: "test".to_string(),
             version: "1.0.0".to_string(),
+            title: Some("Test Server".to_string()),
         };
         let capabilities = ServerCapabilities::default();
 
         let handler = LambdaMcpHandler::new(
-            dispatcher,
+            Arc::try_unwrap(dispatcher).unwrap_or_else(|_arc| {
+                // Fallback if Arc has multiple references - create a new dispatcher
+                JsonRpcDispatcher::new()
+            }),
             session_storage,
             stream_manager,
             config,
@@ -566,7 +570,7 @@ mod tests {
         );
 
         // Test that handler was created successfully
-        assert!(!handler.stream_manager.as_ref() as *const _ == std::ptr::null());
+        assert!(handler.stream_manager().as_ref() as *const _ != std::ptr::null());
     }
 
     #[tokio::test]

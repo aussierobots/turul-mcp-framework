@@ -61,37 +61,24 @@ pub fn inject_mcp_headers(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use http::Method;
     
     #[tokio::test]
     async fn test_mcp_headers_extraction() {
-        use lambda_http::{RequestExt, request::RequestContext};
-        use aws_lambda_events::apigw::ApiGatewayProxyRequest;
-        use std::collections::HashMap;
+        use http::{Request, HeaderValue};
         
-        // Create a simple request context for testing
-        let mut headers = HashMap::new();
-        headers.insert("mcp-session-id".to_string(), "sess-123".to_string());
-        headers.insert("mcp-protocol-version".to_string(), "2025-06-18".to_string());
-        headers.insert("last-event-id".to_string(), "event-456".to_string());
+        // Create a test request with MCP headers
+        let mut request = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .body(LambdaBody::Empty)
+            .unwrap();
         
-        let apigw_request = ApiGatewayProxyRequest {
-            resource: Some("/mcp".to_string()),
-            path: Some("/mcp".to_string()),
-            http_method: Some("POST".to_string()),
-            headers: Some(headers),
-            query_string_parameters: None,
-            path_parameters: None,
-            stage_variables: None,
-            request_context: Default::default(),
-            body: None,
-            is_base64_encoded: Some(false),
-            multi_value_headers: None,
-            multi_value_query_string_parameters: None,
-        };
+        let headers = request.headers_mut();
+        headers.insert("mcp-session-id", HeaderValue::from_static("sess-123"));
+        headers.insert("mcp-protocol-version", HeaderValue::from_static("2025-06-18"));
+        headers.insert("last-event-id", HeaderValue::from_static("event-456"));
         
-        let lambda_req = LambdaRequest::from(apigw_request);
-        let mcp_headers = extract_mcp_headers(&lambda_req);
+        let mcp_headers = extract_mcp_headers(&request);
         
         assert_eq!(mcp_headers.get("mcp-session-id"), Some(&"sess-123".to_string()));
         assert_eq!(mcp_headers.get("mcp-protocol-version"), Some(&"2025-06-18".to_string()));

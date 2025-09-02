@@ -11,19 +11,21 @@
 **Example Status**: ✅ **ALL WORKING** - Previously "broken" examples already fixed
 **Documentation**: ✅ **CONSOLIDATED** - Reduced from 24 → 9 .md files (62% reduction)
 
-## 🎯 **CURRENT STATUS: FRAMEWORK COMPLETE + CLIENT DELETE FEATURE ADDED**
+## 🎯 **CURRENT STATUS: SESSION-AWARE LOGGING SYSTEM IMPLEMENTATION**
 
-**Discovery**: Framework core is 100% complete, MCP client DELETE functionality implemented
-**Status**: ✅ **FRAMEWORK READY** - 📋 **EXAMPLE FIXES + LAMBDA NEXT**
+**Discovery**: Implementing new phase for MCP LoggingLevel session awareness
+**Status**: 🚧 **IN PROGRESS** - Session-aware logging filtering per MCP specification
 
-### Current Status (2025-08-31)
+### Current Status (2025-09-01)
 - ✅ **Framework Core**: All 4 tool creation levels working perfectly
 - ✅ **MCP 2025-06-18 Compliance**: Complete with SSE notifications
-- ✅ **Schema Validation**: MCP Inspector compatibility verified
+- ✅ **turul-mcp-aws-lambda Tests**: All 17 unit tests + 2 doc tests passing
+- ✅ **Lambda Architecture**: Clean integration between framework and AWS Lambda
 - ✅ **SessionManager Storage Integration**: Complete - storage backend fully connected
 - ✅ **MCP Client DELETE**: Automatic cleanup on drop implemented and tested
 - ✅ **DynamoDB SessionStorage**: Complete implementation with auto-table creation
-- 📋 **Next Priority**: Fix broken examples → Lambda integration → NATS (moved to end)
+- ✅ **Documentation Complete**: README.md created for all 10 core crates + ADRs organized
+- 🚧 **Current Phase**: Session-aware logging system where each session can have different LoggingLevel filters
 
 ## 📋 **ESSENTIAL DOCUMENTATION** (9 files total)
 
@@ -33,9 +35,11 @@
 - **Current Status**: [WORKING_MEMORY.md](./WORKING_MEMORY.md) - This file
 - **System Architecture**: [MCP_SESSION_ARCHITECTURE.md](./MCP_SESSION_ARCHITECTURE.md) - Technical architecture details
 - **Architecture Decisions**: 
-  - [ADR-CompileTime-Schema-Generation.md](./ADR-CompileTime-Schema-Generation.md) - Schema generation rules
-  - [ADR-JsonSchema-Standardization.md](./ADR-JsonSchema-Standardization.md) - Type system standardization
-  - [ADR-SessionContext-Macro-Support.md](./ADR-SessionContext-Macro-Support.md) - Macro session support
+  - [docs/adr/](./docs/adr/) - Architecture Decision Records directory
+  - [ADR-001](./docs/adr/001-session-storage-architecture.md) - Pluggable session storage design
+  - [ADR-002](./docs/adr/002-compile-time-schema-generation.md) - Schema generation rules
+  - [ADR-003](./docs/adr/003-jsonschema-standardization.md) - Type system standardization
+  - [ADR-004](./docs/adr/004-sessioncontext-macro-support.md) - Macro session support
 - **AI Assistant**: [CLAUDE.md](./CLAUDE.md) - Development guidance for Claude Code
 
 ## 🚨 **CRITICAL ARCHITECTURAL RULE: turul_mcp_protocol Alias Usage**
@@ -79,6 +83,50 @@ This is documented as an ADR in CLAUDE.md and applies to:
 - **Result**: **90% code reduction** + automatic trait implementations + zero boilerplate
 
 **Pattern Validated**: `#[derive(McpTool)]` approach is production-ready and dramatically more efficient than manual implementations.
+
+## 🔄 **PHASE 9: SESSION-AWARE MCP LOGGING SYSTEM** 🚧 **IN PROGRESS**
+
+**Goal**: Implement session-aware MCP LoggingLevel filtering where each session can have its own logging verbosity level
+
+### **Architecture Overview**
+- **Current State**: LoggingHandler receives SetLevelRequest but doesn't store per-session
+- **Target State**: Each session stores its own LoggingLevel, notifications are filtered accordingly
+- **Storage Pattern**: Use session state with key "mcp:logging:level"
+- **Default Level**: LoggingLevel::Info for backward compatibility
+
+### **Implementation Progress** ✅ **COMPLETED**
+🎯 **SessionContext Enhanced**:
+- ✅ Added `get_logging_level()` method - retrieves current session's level from state
+- ✅ Added `set_logging_level(LoggingLevel)` method - stores level in session state
+- ✅ Added `should_log(LoggingLevel)` method - checks if message should be sent to session
+- ✅ Updated `notify_log()` to filter based on session level with automatic level parsing
+
+🎯 **LoggingHandler Enhanced**:
+- ✅ Updated to use `handle_with_session()` method instead of basic `handle()`
+- ✅ Stores SetLevelRequest per-session using `SessionContext.set_logging_level()`
+- ✅ Provides confirmation messages when logging level is changed
+
+🎯 **LoggingBuilder Integration**:
+- ✅ Added `SessionAwareLogger` with session-aware filtering capabilities
+- ✅ Implemented `LoggingTarget` trait for modular session integration
+- ✅ Created trait bridge: `SessionContext` implements `LoggingTarget`
+- ✅ Added convenience methods for sending to single/multiple sessions
+
+🎯 **Comprehensive Testing**:
+- ✅ 18 session-aware logging tests covering all functionality
+- ✅ 8 LoggingBuilder integration tests
+- ✅ Complete edge case testing (invalid levels, boundary conditions, etc.)
+
+🎯 **Example Integration**:
+- ✅ Created comprehensive demo tools for lambda-mcp-server example
+- ✅ 3 demo tools: `session_logging_demo`, `set_logging_level`, `check_logging_status`
+- ✅ Full documentation with usage examples and filtering demonstrations
+
+### **Design Decisions**
+- **Session State Key**: "mcp:logging:level" for consistent storage across all backends
+- **String Storage Format**: Store as lowercase strings ("debug", "info", "error", etc.)
+- **Default Behavior**: Existing sessions without level set default to LoggingLevel::Info
+- **Filtering Location**: At notification source to minimize network traffic and processing
 
 ### **Phase 8.3 Enhancement: Performance Testing Upgrade** ✅ **MAJOR SUCCESS**
 **Achievement**: Upgraded performance-testing to use proper MCP client instead of raw HTTP

@@ -14,6 +14,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use turul_mcp_protocol::{ClientCapabilities, Implementation, McpVersion, ServerCapabilities};
+use turul_mcp_session_storage::{SessionStorage, SessionStorageError};
 
 /// Session context provided automatically to tools and handlers
 #[derive(Clone)]
@@ -38,15 +39,76 @@ impl SessionContext {
     /// Create from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration
     pub fn from_json_rpc_with_broadcaster(
         json_rpc_ctx: turul_mcp_json_rpc_server::SessionContext,
+        storage: Arc<dyn SessionStorage<Error = SessionStorageError>>,
     ) -> Self {
         let session_id = json_rpc_ctx.session_id.clone();
         let broadcaster = json_rpc_ctx.broadcaster.clone();
         
-        // Simple state management - just use empty closures since we don't have session manager
-        let get_state = Arc::new(move |_key: &str| -> Option<Value> { None });
-        let set_state = Arc::new(move |_key: &str, _value: Value| {});
-        let remove_state = Arc::new(move |_key: &str| -> Option<Value> { None });
-        let is_initialized = Arc::new(move || -> bool { true });
+        // Use real storage for state management
+        let get_state = {
+            let storage = storage.clone();
+            let session_id = session_id.clone();
+            Arc::new(move |key: &str| -> Option<Value> {
+                futures::executor::block_on(async {
+                    match storage.get_session_state(&session_id, key).await {
+                        Ok(Some(value)) => Some(value),
+                        Ok(None) => None,
+                        Err(e) => {
+                            tracing::warn!("Failed to get session state for key '{}': {}", key, e);
+                            None
+                        }
+                    }
+                })
+            })
+        };
+        
+        let set_state = {
+            let storage = storage.clone();
+            let session_id = session_id.clone();
+            Arc::new(move |key: &str, value: Value| {
+                futures::executor::block_on(async {
+                    if let Err(e) = storage.set_session_state(&session_id, key, value.clone()).await {
+                        tracing::error!("Failed to set session state for key '{}': {}", key, e);
+                    }
+                });
+            })
+        };
+        
+        let remove_state = {
+            let storage = storage.clone();
+            let session_id = session_id.clone();
+            Arc::new(move |key: &str| -> Option<Value> {
+                futures::executor::block_on(async {
+                    match storage.remove_session_state(&session_id, key).await {
+                        Ok(value) => value,
+                        Err(e) => {
+                            tracing::warn!("Failed to remove session state for key '{}': {}", key, e);
+                            None
+                        }
+                    }
+                })
+            })
+        };
+        
+        let is_initialized = {
+            let storage = storage.clone();
+            let session_id = session_id.clone();
+            Arc::new(move || -> bool {
+                futures::executor::block_on(async {
+                    match storage.get_session(&session_id).await {
+                        Ok(Some(session_info)) => session_info.is_initialized,
+                        Ok(None) => {
+                            tracing::warn!("Session {} not found in storage", session_id);
+                            false
+                        },
+                        Err(e) => {
+                            tracing::error!("Failed to check session initialization: {}", e);
+                            false
+                        }
+                    }
+                })
+            })
+        };
         
         // Store the broadcaster in the send_notification closure for later use by notify methods
         let send_notification = {
@@ -258,24 +320,43 @@ impl SessionContext {
         self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
     }
 
-    /// Send a logging message notification
-    pub fn notify_log(&self, level: &str, message: impl Into<String>) {
+    /// Send a logging message notification (with session-aware level filtering)
+    pub fn notify_log(
+        &self, 
+        level: turul_mcp_protocol::logging::LoggingLevel, 
+        data: serde_json::Value,
+        logger: Option<String>,
+        meta: Option<std::collections::HashMap<String, serde_json::Value>>
+    ) {
+        // Use the provided LoggingLevel directly
+        let message_level = level;
+        
+        // Check if this message should be sent to this session based on its logging level
+        if !self.should_log(message_level) {
+            debug!("🔕 Filtering out {:?} level message for session {} (threshold: {:?})", 
+                message_level, self.session_id, self.get_logging_level());
+            return;
+        }
+        
+        debug!("📢 Sending {:?} level message to session {} (threshold: {:?})", 
+            message_level, self.session_id, self.get_logging_level());
+        
+        // Create proper LoggingMessageNotification struct once
+        use turul_mcp_protocol::notifications::LoggingMessageNotification;
+        let mut notification = LoggingMessageNotification::new(message_level, data);
+        
+        // Add optional logger if provided
+        if let Some(logger) = logger {
+            notification = notification.with_logger(logger);
+        }
+        
+        // Add optional meta if provided  
+        if let Some(meta) = meta {
+            notification = notification.with_meta(meta);
+        }
+        
         if self.has_broadcaster() {
             debug!("🔔 notify_log using NotificationBroadcaster for session: {}", self.session_id);
-            
-            // Create proper MCP notification using existing JSON-RPC format
-            let mut other = std::collections::HashMap::new();
-            other.insert("level".to_string(), serde_json::json!(level));
-            other.insert("message".to_string(), serde_json::json!(message.into()));
-            
-            let params = turul_mcp_protocol::RequestParams {
-                meta: None,
-                other,
-            };
-            let notification = turul_mcp_protocol::JsonRpcNotification::new(
-                "notifications/message".to_string()
-            ).with_params(params);
-            
             // Send via SessionEvent (which will be picked up by the broadcaster if connected properly)
             self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
             return;
@@ -283,18 +364,7 @@ impl SessionContext {
             debug!("🔔 notify_log using OLD SessionManager for session: {}", self.session_id);
         }
         
-        // Legacy implementation (fallback)
-        let mut other = std::collections::HashMap::new();
-        other.insert("level".to_string(), serde_json::json!(level));
-        other.insert("message".to_string(), serde_json::json!(message.into()));
-        
-        let params = turul_mcp_protocol::RequestParams {
-            meta: None,
-            other,
-        };
-        let notification = turul_mcp_protocol::JsonRpcNotification::new(
-            "notifications/message".to_string()
-        ).with_params(params);
+        // Legacy implementation (fallback) - use the same notification
         self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
     }
 
@@ -328,6 +398,76 @@ impl SessionContext {
         );
         self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
     }
+
+    // ============================================================================
+    // === Session-Aware Logging Level Methods ===
+    // ============================================================================
+
+    /// Get the current logging level for this session
+    pub fn get_logging_level(&self) -> turul_mcp_protocol::logging::LoggingLevel {
+        use turul_mcp_protocol::logging::LoggingLevel;
+        
+        // Check session state for stored logging level
+        if let Some(level_value) = (self.get_state)("mcp:logging:level") {
+            if let Some(level_str) = level_value.as_str() {
+                match level_str {
+                    "debug" => LoggingLevel::Debug,
+                    "info" => LoggingLevel::Info,
+                    "notice" => LoggingLevel::Notice,
+                    "warning" => LoggingLevel::Warning,
+                    "error" => LoggingLevel::Error,
+                    "critical" => LoggingLevel::Critical,
+                    "alert" => LoggingLevel::Alert,
+                    "emergency" => LoggingLevel::Emergency,
+                    _ => LoggingLevel::Info, // Default fallback
+                }
+            } else {
+                LoggingLevel::Info // Default if not a string
+            }
+        } else {
+            LoggingLevel::Info // Default if not set
+        }
+    }
+
+    /// Set the logging level for this session
+    pub fn set_logging_level(&self, level: turul_mcp_protocol::logging::LoggingLevel) {
+        use turul_mcp_protocol::logging::LoggingLevel;
+        
+        let level_str = match level {
+            LoggingLevel::Debug => "debug",
+            LoggingLevel::Info => "info",
+            LoggingLevel::Notice => "notice",
+            LoggingLevel::Warning => "warning",
+            LoggingLevel::Error => "error",
+            LoggingLevel::Critical => "critical",
+            LoggingLevel::Alert => "alert",
+            LoggingLevel::Emergency => "emergency",
+        };
+        
+        (self.set_state)("mcp:logging:level", serde_json::json!(level_str));
+        debug!("🎯 Set logging level for session {}: {:?}", self.session_id, level);
+    }
+
+    /// Check if a log message at the given level should be sent to this session
+    pub fn should_log(&self, message_level: turul_mcp_protocol::logging::LoggingLevel) -> bool {
+        let session_threshold = self.get_logging_level();
+        message_level.should_log(session_threshold)
+    }
+}
+
+// ============================================================================
+// === LoggingTarget Trait Implementation ===
+// ============================================================================
+
+/// Implement LoggingTarget trait from turul-mcp-builders to enable session-aware logging
+impl turul_mcp_builders::logging::LoggingTarget for SessionContext {
+    fn should_log(&self, level: turul_mcp_protocol::logging::LoggingLevel) -> bool {
+        self.should_log(level)
+    }
+    
+    fn notify_log(&self, level: turul_mcp_protocol::logging::LoggingLevel, data: serde_json::Value, logger: Option<String>, meta: Option<std::collections::HashMap<String, serde_json::Value>>) {
+        self.notify_log(level, data, logger, meta)
+    }
 }
 
 /// Parse notification JSON and send via actual NotificationBroadcaster to StreamManager using proper notification structs
@@ -341,8 +481,6 @@ async fn parse_and_send_notification_with_broadcaster(
     // Import the types we need for downcasting and notifications
     use turul_http_mcp_server::notification_bridge::SharedNotificationBroadcaster;
     use turul_mcp_protocol::notifications::{LoggingMessageNotification, ProgressNotification};
-    use turul_mcp_protocol::logging::LoggingLevel;
-    
     // Attempt to downcast Arc<dyn Any> back to SharedNotificationBroadcaster
     if let Some(broadcaster) = broadcaster_any.downcast_ref::<SharedNotificationBroadcaster>() {
         debug!("✅ Successfully downcast broadcaster for session {}", session_id);
@@ -351,28 +489,13 @@ async fn parse_and_send_notification_with_broadcaster(
         if let Some(method) = json_value.get("method").and_then(|v| v.as_str()) {
             match method {
                 "notifications/message" => {
-                    if let Some(params) = json_value.get("params") {
-                        if let Some(level_str) = params.get("level").and_then(|v| v.as_str()) {
-                            debug!("📝 Message notification detected: level={}", level_str);
-                            
-                            // Parse level string to LoggingLevel enum
-                            let level = match level_str {
-                                "debug" => LoggingLevel::Debug,
-                                "info" => LoggingLevel::Info,
-                                "warning" => LoggingLevel::Warning,
-                                "error" => LoggingLevel::Error,
-                                _ => {
-                                    error!("❌ Unknown logging level: {}", level_str);
-                                    return Err(format!("Unknown logging level: {}", level_str));
-                                }
-                            };
-                            
-                            // Get the message data
-                            let data = params.get("message").cloned()
-                                .unwrap_or_else(|| serde_json::json!("Missing message"));
-                            
-                            // Create proper LoggingMessageNotification using the struct from notifications.rs
-                            let notification = LoggingMessageNotification::new(level, data);
+                    debug!("📝 Message notification detected, deserializing directly to LoggingMessageNotification");
+                    
+                    // Deserialize directly into LoggingMessageNotification struct
+                    match serde_json::from_value::<LoggingMessageNotification>(json_value.clone()) {
+                        Ok(notification) => {
+                            debug!("✅ Successfully deserialized LoggingMessageNotification: level={:?}, logger={:?}", 
+                                notification.params.level, notification.params.logger);
                             
                             debug!("🔧 About to call broadcaster.send_message_notification() for session {}", session_id);
                             // ACTUALLY SEND the notification using the proper method
@@ -387,6 +510,10 @@ async fn parse_and_send_notification_with_broadcaster(
                                     return Err(format!("Failed to send LoggingMessageNotification: {}", e));
                                 }
                             }
+                        }
+                        Err(e) => {
+                            error!("❌ Failed to deserialize LoggingMessageNotification: {}", e);
+                            return Err(format!("Failed to deserialize LoggingMessageNotification: {}", e));
                         }
                     }
                 }

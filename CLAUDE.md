@@ -82,7 +82,7 @@ The framework uses `JsonSchema` consistently throughout for all schema definitio
 - **Performance**: No runtime conversion overhead
 - **Developer Experience**: Clear, strongly-typed schema construction
 
-See `ADR-JsonSchema-Standardization.md` for the complete architectural decision record.
+See `docs/adr/003-jsonschema-standardization.md` for the complete architectural decision record.
 
 ## Import Conventions
 

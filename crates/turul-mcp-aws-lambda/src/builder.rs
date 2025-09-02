@@ -29,15 +29,31 @@ use crate::cors::CorsConfig;
 /// ## Example
 ///
 /// ```rust,no_run
+/// use std::sync::Arc;
 /// use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
 /// use turul_mcp_session_storage::InMemorySessionStorage;
+/// use turul_mcp_derive::McpTool;
+/// use turul_mcp_server::{McpResult, SessionContext};
+///
+/// #[derive(McpTool, Clone, Default)]
+/// #[tool(name = "example", description = "Example tool")]
+/// struct ExampleTool {
+///     #[param(description = "Example parameter")]
+///     value: String,
+/// }
+///
+/// impl ExampleTool {
+///     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+///         Ok(format!("Got: {}", self.value))
+///     }
+/// }
 ///
 /// #[tokio::main]
 /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
-///     let handler = LambdaMcpServerBuilder::new()
+///     let server = LambdaMcpServerBuilder::new()
 ///         .name("my-lambda-server")
 ///         .version("1.0.0")
-///         .tool(MyTool::default())
+///         .tool(ExampleTool::default())
 ///         .storage(Arc::new(InMemorySessionStorage::new()))
 ///         .cors_allow_all_origins()
 ///         .build()
@@ -911,7 +927,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_builder_basic() {
-        let handler = LambdaMcpServerBuilder::new()
+        let server = LambdaMcpServerBuilder::new()
             .name("test-server")
             .version("1.0.0")
             .tool(TestTool::default())
@@ -920,16 +936,18 @@ mod tests {
             .await
             .unwrap();
 
-        // Verify handler was created
+        // Create handler from server and verify it has stream_manager
+        let handler = server.handler().await.unwrap();
         assert!(handler.stream_manager().as_ref() as *const _ != std::ptr::null());
     }
 
     #[tokio::test]
     async fn test_simple_lambda_server() {
         let tools = vec![TestTool::default()];
-        let handler = simple_lambda_server(tools).await.unwrap();
+        let server = simple_lambda_server(tools).await.unwrap();
 
-        // Verify handler was created with default configuration
+        // Create handler and verify it was created with default configuration
+        let handler = server.handler().await.unwrap();
         assert!(handler.stream_manager().as_ref() as *const _ != std::ptr::null());
     }
 
@@ -937,26 +955,28 @@ mod tests {
     async fn test_builder_extension_trait() {
         let tools = vec![TestTool::default(), TestTool::default()];
 
-        let handler = LambdaMcpServerBuilder::new()
+        let server = LambdaMcpServerBuilder::new()
             .tools(tools)
             .storage(Arc::new(InMemorySessionStorage::new()))
             .build()
             .await
             .unwrap();
 
+        let handler = server.handler().await.unwrap();
         assert!(handler.stream_manager().as_ref() as *const _ != std::ptr::null());
     }
 
     #[cfg(feature = "cors")]
     #[tokio::test]
     async fn test_cors_configuration() {
-        let handler = LambdaMcpServerBuilder::new()
+        let server = LambdaMcpServerBuilder::new()
             .cors_allow_all_origins()
             .storage(Arc::new(InMemorySessionStorage::new()))
             .build()
             .await
             .unwrap();
 
+        let handler = server.handler().await.unwrap();
         assert!(handler.stream_manager().as_ref() as *const _ != std::ptr::null());
     }
 }

@@ -22,6 +22,7 @@ turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "
 turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.1.0" }
 turul-mcp-protocol-2025-06-18 = { path = "../turul-mcp-protocol-2025-06-18", version = "0.1.0" }
 turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.1.0" }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.1.0" }
 turul-http-mcp-server = { path = "../turul-http-mcp-server", optional = true, version = "0.1.0" }
 
 # Core dependencies
@@ -38,6 +39,7 @@ chrono = { workspace = true, features = ["serde"] }
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 # Dependencies for examples
+turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.1.0" }
 anyhow.workspace = true
 clap.workspace = true
 reqwest.workspace = true

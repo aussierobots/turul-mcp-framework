@@ -2,14 +2,99 @@
 
 **Purpose**: Maintain working memory and progress tracking across multiple compact contexts for the MCP Framework documentation and code updates.
 
-## Current Status: PHASE 10 - EXAMPLE FIXES & LAMBDA INTEGRATION ⚠️ **IN PROGRESS**
+## Current Status: PHASE 12 - SESSION DROP FUNCTION TESTING ⚠️ **IN PROGRESS**
 
-**Last Updated**: 2025-08-31  
-**Current Phase**: Phase 10 - Fix broken examples and integrate Lambda components
-**Achievement**: ✅ **MCP client DELETE functionality implemented and tested**
-**Framework Status**: ✅ **PRODUCTION READY** - All core features working, DynamoDB complete
-**Current Status**: Moving to example maintenance and Lambda serverless integration
-**Next Action**: Fix logging-server trait migration (4 tools)
+**Last Updated**: 2025-09-01  
+**Previous Phase**: ✅ Phase 11 - Session-aware MCP LoggingLevel filtering COMPLETED  
+**Current Phase**: Phase 12 - Session drop function testing and DELETE method verification
+**Framework Status**: ✅ **PRODUCTION READY** - Core features working, investigating session cleanup
+**Current Focus**: 🔍 **Testing session drop functionality and DELETE method implementation**
+**Concern**: DELETE method implementation may not be working properly for session cleanup
+
+---
+
+## 📋 **PHASE 12: SESSION DROP FUNCTION TESTING** ⚠️ **IN PROGRESS** (2025-09-01)
+
+### **Overview** 
+Investigation and testing of session cleanup functionality, specifically the DELETE method implementation for proper session drop handling. User expressed concerns that the DELETE method may not be implemented correctly.
+
+### **TODO Items for Phase 12**
+
+#### **🔍 Session Drop Investigation**
+- [ ] **Test DELETE /mcp endpoint** - Verify DELETE method properly removes sessions
+- [ ] **Test session cleanup functionality** - Verify automatic cleanup works correctly  
+- [ ] **Create session drop test client** - Build test that creates sessions then tries to delete them
+- [ ] **Verify session isolation after delete** - Ensure deleted sessions can't be reused
+- [ ] **Test session storage cleanup** - Verify deleted sessions are removed from storage backends
+- [ ] **Test SSE connection cleanup** - Verify SSE streams are properly closed on session delete
+
+#### **🧪 Test Implementation**  
+- [ ] **Create session drop test example** - Build comprehensive test for session lifecycle
+- [ ] **Test all storage backends** - Verify DELETE works with InMemory, SQLite, PostgreSQL, DynamoDB
+- [ ] **Test concurrent session deletion** - Verify thread-safety of session cleanup
+- [ ] **Test graceful vs forced cleanup** - Both user-initiated DELETE and automatic expiry
+
+#### **📋 Verification Requirements**
+- [ ] **Session state completely removed** - No traces left in session storage
+- [ ] **SSE streams properly closed** - No hanging connections or memory leaks
+- [ ] **Session ID reuse prevention** - Deleted session IDs cannot be reused improperly  
+- [ ] **Error handling** - Proper error codes when attempting to use deleted sessions
+
+### **Implementation Priority**
+1. **HIGH**: Test basic DELETE method functionality 
+2. **HIGH**: Verify session storage cleanup across all backends
+3. **MEDIUM**: Test SSE connection cleanup and proper stream closure
+4. **MEDIUM**: Test concurrent deletion and thread safety
+5. **LOW**: Test edge cases and error conditions
+
+### **Expected Outcomes**
+- ✅ DELETE method working properly across all session storage backends
+- ✅ Comprehensive test coverage for session lifecycle management  
+- ✅ Verification that session cleanup doesn't cause memory leaks or hanging connections
+- ✅ Documentation of proper session deletion patterns and best practices
+
+---
+
+## 📋 **PHASE 11: SESSION-AWARE LOGGING SYSTEM** ✅ **COMPLETED** (2025-09-01)
+
+### **Overview**
+Successfully implemented session-aware MCP LoggingLevel filtering where each session can set its own logging verbosity level via SetLevelRequest, and notifications are filtered accordingly.
+
+### **Completed Implementation**
+✅ **SessionContext Enhancement**:
+- ✅ `get_logging_level()` - retrieves session's current level (default: Info)
+- ✅ `set_logging_level(LoggingLevel)` - stores level in session state  
+- ✅ `should_log(LoggingLevel)` - checks if message should be sent to session
+- ✅ Updated `notify_log()` to automatically filter based on session's logging level
+
+✅ **LoggingHandler Integration**:
+- ✅ Modified LoggingHandler to use `handle_with_session()` for per-session storage
+- ✅ SetLevelRequest now stores level in session state using session context
+- ✅ Provides confirmation messages when logging level changes
+
+✅ **LoggingBuilder Integration**:
+- ✅ Created `SessionAwareLogger` with automatic session-level filtering
+- ✅ Implemented `LoggingTarget` trait for modular integration
+- ✅ SessionContext implements LoggingTarget for seamless builder integration
+- ✅ Added convenience methods for single/multiple session messaging
+
+✅ **Comprehensive Testing**:
+- ✅ 26 total tests: 18 session-aware logging + 8 LoggingBuilder integration
+- ✅ Complete edge case coverage (invalid levels, boundary conditions, session isolation)
+- ✅ All tests passing with zero warnings
+
+✅ **Example Integration**:
+- ✅ 3 comprehensive demo tools in lambda-mcp-server example
+- ✅ `session_logging_demo` - demonstrates filtering with multiple operations
+- ✅ `set_logging_level` - easy level changing interface  
+- ✅ `check_logging_status` - session logging configuration inspector
+
+### **Architecture Implemented**
+- **Session State Key**: "mcp:logging:level" (consistent across all storage backends)
+- **Storage Format**: Lowercase strings ("debug", "info", "error", etc.)
+- **Default Level**: LoggingLevel::Info for backward compatibility
+- **Filtering Strategy**: At notification source to minimize traffic and processing
+- **Session Isolation**: Each session maintains independent logging configuration
 
 ---
 
@@ -68,14 +153,38 @@
 
 ## 📋 **PHASE 10: EXAMPLE FIXES & LAMBDA INTEGRATION** ⚠️ **CURRENT PHASE**
 
-### **Phase 10.1: Fix Broken Examples** ⚠️ **IMMEDIATE** (1-2 days)
-**Priority**: 🔴 **CRITICAL** - Framework examples should all work
+### **Phase 10.1: Documentation Enhancement** ✅ **COMPLETED**
+**Priority**: 🔴 **CRITICAL** - Lambda unit tests fixed, ready for development
 
-**Examples Needing Trait Migration:**
-1. **logging-server** - 4 tools need migration to HasBaseMetadata/HasDescription pattern  
-2. **comprehensive-server** - ResourceContent::text API parameter updates
-3. **performance-testing** - 1 tool needs trait migration  
-4. **pagination-server** - Complete partial trait migration started previously
+**Completed Tasks:**
+1. ✅ **turul-mcp-aws-lambda tests** - All 17 unit tests + 2 doc tests passing
+2. ✅ **Fixed compilation errors** - Handler creation, dispatcher types, adapter tests
+3. ✅ **Updated doctests** - Proper tool examples with working code patterns
+4. ✅ **Clean build warnings** - Removed unused imports and variables
+
+### **Phase 10.2: Crate Documentation** ✅ **COMPLETED** (2025-09-01)  
+**Priority**: ✅ **COMPLETED** - Professional crate documentation implemented
+
+**✅ Completed Documentation Tasks:**
+1. ✅ **Created README.md for each crate** - Standardized documentation across framework
+   - ✅ turul-mcp-protocol-2025-06-18/README.md - Protocol types and traits with comprehensive examples
+   - ✅ turul-mcp-server/README.md - Core server framework with 4-level tool creation spectrum
+   - ✅ turul-mcp-derive/README.md - Macro system documentation with function and derive patterns
+   - ✅ turul-mcp-builders/README.md - Runtime builder patterns covering all 9 MCP areas
+   - ✅ turul-mcp-aws-lambda/README.md - Lambda integration guide with deployment instructions
+   - ✅ turul-http-mcp-server/README.md - HTTP transport layer with SSE streaming
+   - ✅ turul-mcp-session-storage/README.md - Storage backends with production configurations
+   - ✅ turul-mcp-client/README.md - Multi-transport client with session management
+   - ✅ turul-mcp-json-rpc-server/README.md - Transport-agnostic JSON-RPC implementation
+   - ✅ turul-mcp-protocol/README.md - Version alias for future-proofing
+
+2. ✅ **Moved ADR-*.md to docs/adr/** - Architectural Decision Records organization
+   - ✅ Created docs/adr/ directory structure with README
+   - ✅ Moved ADR-SessionStorage-Architecture.md → docs/adr/001-session-storage-architecture.md
+   - ✅ Moved ADR-CompileTime-Schema-Generation.md → docs/adr/002-compile-time-schema-generation.md
+   - ✅ Moved ADR-JsonSchema-Standardization.md → docs/adr/003-jsonschema-standardization.md
+   - ✅ Moved ADR-SessionContext-Macro-Support.md → docs/adr/004-sessioncontext-macro-support.md
+   - ✅ Updated references in WORKING_MEMORY.md and CLAUDE.md
 
 **Pattern to Apply** (proven successful in elicitation-server):
 ```rust
@@ -95,26 +204,27 @@ impl HasDescription for MyTool {
 // MyTool automatically implements ToolDefinition via blanket impl
 ```
 
-### **Phase 10.1.5: Lambda Integration Architecture** ✅ **DOCUMENTED**
-**Priority**: 🔴 **CRITICAL** - Unblock Lambda development
+### **Phase 10.3: Lambda Server Example Update** ✅ **COMPLETED** (2025-09-01)
+**Priority**: ✅ **COMPLETED** - lambda-mcp-server verified and validated
 
-**Completed**:
-- ✅ **ADR Created**: `docs/adr/001-lambda-mcp-integration-architecture.md`
-- ✅ **Architecture Discovery**: Documented 3-layer framework structure
-- ✅ **Solution Defined**: New turul-mcp-aws-lambda crate specification
-- ✅ **WORKING_MEMORY Updated**: Added Lambda integration section with ADR reference
+**✅ Completed Lambda Integration Tasks:**
+1. ✅ **Updated lambda-mcp-server example** - Already uses modern framework architecture
+   - ✅ Uses LambdaMcpServerBuilder with proper configuration
+   - ✅ All tool implementations use #[derive(McpTool)] macros
+   - ✅ Comprehensive error handling and CORS configuration implemented
+   - ✅ Tested compilation and cargo lambda build successfully
 
-**Key Insights Documented**:
-- Framework has 3 layers: McpServer → HttpMcpServer → SessionMcpHandler
-- Lambda needs Layer 3 (SessionMcpHandler) but can't use Layer 2 (TCP server)
-- All components use hyper internally, enabling clean type conversion
-- JsonRpcDispatcher needs direct handler registration (McpServer handlers are internal)
+2. ✅ **Lambda deployment ready** - Complete serverless integration
+   - ✅ cargo lambda build/deploy process verified working
+   - ✅ Environment variable configuration implemented (LOG_LEVEL, AWS_REGION, MCP_SESSION_TABLE)
+   - ✅ Ready for AWS Lambda runtime deployment
 
-**Next Steps**:
-1. Create turul-mcp-aws-lambda crate structure
-2. Implement type conversion layer (lambda_http ↔ hyper)
-3. Build LambdaMcpHandler with handler registration bridge
-4. Update lambda-mcp-server to use new crate
+**Architecture Validated:**
+- ✅ DynamoDB session storage integration
+- ✅ SSE streaming support enabled
+- ✅ AWS tools integration (DynamoDB, SNS, SQS, CloudWatch)
+- ✅ Modern derive macro patterns throughout
+- ✅ Comprehensive error handling and logging
 
 ### **Phase 10.2: Framework Integration** ⚠️ **SHORT-TERM** (1 day)
 **Priority**: 🟡 **HIGH** - Enable easy storage backend switching

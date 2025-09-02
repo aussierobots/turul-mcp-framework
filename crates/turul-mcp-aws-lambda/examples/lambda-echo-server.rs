@@ -35,9 +35,9 @@ impl EchoTool {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Initialize tracing
+    // Initialize tracing with RUST_LOG environment variable
     tracing_subscriber::fmt()
-        .with_max_level(tracing::Level::DEBUG)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_target(false)
         .without_time()
         .init();

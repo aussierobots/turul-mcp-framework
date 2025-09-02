@@ -1,15 +1,16 @@
 //! AWS Lambda MCP Server using turul-mcp-aws-lambda
 //!
 //! A complete MCP server for AWS Lambda with:
-//! - turul-mcp-aws-lambda integration
-//! - MCP 2025-06-18 compliance  
-//! - DynamoDB session storage
-//! - CORS support
-//! - AWS tools integration
+//! - turul-mcp-aws-lambda integration with streaming response support
+//! - MCP 2025-06-18 compliance with SSE notifications
+//! - DynamoDB session storage with automatic table creation
+//! - CORS support for browser clients
+//! - AWS tools integration (DynamoDB, SNS, SQS, CloudWatch)
 
 mod tools;
+mod session_aware_logging_demo;
 
-use lambda_http::{run, service_fn, Error, Request, Body};
+use lambda_http::{run_with_streaming_response, service_fn, Error, Request, Body};
 use std::env;
 use tracing::{error, info};
 use tracing_subscriber;
@@ -20,6 +21,7 @@ use turul_mcp_session_storage::DynamoDbSessionStorage;
 
 // Local imports
 use tools::{DynamoDbQueryTool, SnsPublishTool, SqsSendMessageTool, CloudWatchMetricsTool};
+use session_aware_logging_demo::{SessionLoggingDemoTool, SetLoggingLevelTool, CheckLoggingStatusTool};
 
 /// Initialize CloudWatch-optimized logging for Lambda environment
 fn init_logging() {
@@ -68,8 +70,8 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
     
     info!("💾 DynamoDB session storage initialized");
     
-    // Build Lambda MCP handler with all AWS tools
-    let handler = LambdaMcpServerBuilder::new()
+    // Build Lambda MCP server with all AWS tools
+    let server = LambdaMcpServerBuilder::new()
         .name("aws-lambda-mcp-server")
         .version("1.0.0")
         // AWS Lambda tools
@@ -77,13 +79,23 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
         .tool(SnsPublishTool::default())
         .tool(SqsSendMessageTool::default())
         .tool(CloudWatchMetricsTool::default())
+        // Session-aware logging demo tools
+        .tool(SessionLoggingDemoTool::default())
+        .tool(SetLoggingLevelTool::default())
+        .tool(CheckLoggingStatusTool::default())
         // Session storage
         .storage(storage)
+        // Enable SSE streaming
+        .sse(true)
         // CORS configuration
         .cors_allow_all_origins()
         .build()
         .await
-        .map_err(|e| Error::from(format!("Failed to build Lambda MCP handler: {}", e)))?;
+        .map_err(|e| Error::from(format!("Failed to build Lambda MCP server: {}", e)))?;
+    
+    // Create handler from server
+    let handler = server.handler().await
+        .map_err(|e| Error::from(format!("Failed to create Lambda MCP handler: {}", e)))?;
     
     info!("✅ Lambda MCP handler created successfully");
     Ok(handler)
@@ -110,6 +122,6 @@ async fn main() -> Result<(), Error> {
     
     info!("🎯 Lambda handler ready");
 
-    // Run Lambda HTTP runtime
-    run(service_fn(lambda_handler)).await
+    // Run Lambda HTTP runtime with streaming response support
+    run_with_streaming_response(service_fn(lambda_handler)).await
 }

@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 description = "AWS Lambda integration for turul-mcp-framework servers"
+autoexamples = false  # Disable auto-discovery to prevent duplicate target warnings
 
 [features]
 default = ["cors", "sse"]
@@ -56,14 +57,15 @@ chrono = { workspace = true, features = ["serde"] }
 tokio = { workspace = true, features = ["test-util"] }
 tokio-test = { workspace = true }
 tracing-subscriber = { workspace = true }
+aws_lambda_events = { workspace = true }
 
+# Binary target required for `cargo lambda watch` to work properly
+# Must be [[bin]] not [[example]] for lambda tooling compatibility
 [[bin]]
 name = "lambda-echo-server"
 path = "examples/lambda-echo-server.rs"
 
-[[example]]
-name = "lambda-echo-server"
-path = "examples/lambda-echo-server.rs"
+# Note: autoexamples = false in [package] prevents duplicate target warnings
 
 [lib]
 name = "turul_mcp_aws_lambda"

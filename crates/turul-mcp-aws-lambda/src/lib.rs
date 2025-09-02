@@ -19,19 +19,38 @@
 //!
 //! ```rust,no_run
 //! use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
-//! use turul_mcp_server::McpTool;
+//! use turul_mcp_derive::McpTool;
+//! use turul_mcp_server::{McpResult, SessionContext};
 //! use lambda_http::{run_with_streaming_response, service_fn, Error};
+//!
+//! #[derive(McpTool, Clone, Default)]
+//! #[tool(name = "example", description = "Example tool")]
+//! struct ExampleTool {
+//!     #[param(description = "Example parameter")]
+//!     value: String,
+//! }
+//!
+//! impl ExampleTool {
+//!     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+//!         Ok(format!("Got: {}", self.value))
+//!     }
+//! }
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Error> {
-//!     let handler = LambdaMcpServerBuilder::new()
-//!         .tool(MyTool::default())
+//!     let server = LambdaMcpServerBuilder::new()
+//!         .tool(ExampleTool::default())
 //!         .cors_allow_all_origins()
 //!         .build()
 //!         .await?;
 //!     
+//!     let handler = server.handler().await?;
+//!     
 //!     run_with_streaming_response(service_fn(move |req| {
-//!         handler.clone().handle(req)
+//!         let handler = handler.clone();
+//!         async move { 
+//!             handler.handle(req).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+//!         }
 //!     })).await
 //! }
 //! ```

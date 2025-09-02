@@ -12,6 +12,9 @@ use turul_mcp_protocol::logging::{
     LoggingMessageNotification, SetLevelRequest,
 };
 
+// Re-export the trait for convenience (defined below)
+// pub use LoggingTarget;
+
 /// Builder for creating logging messages at runtime
 pub struct LoggingBuilder {
     level: LoggingLevel,
@@ -33,6 +36,7 @@ impl LoggingBuilder {
             batch_size: None,
         }
     }
+    
 
     /// Set the logger name/identifier
     pub fn logger(mut self, logger: impl Into<String>) -> Self {
@@ -76,6 +80,17 @@ impl LoggingBuilder {
     /// Build a dynamic logger that implements the definition traits
     pub fn build_dynamic(self) -> DynamicLogger {
         DynamicLogger {
+            level: self.level,
+            data: self.data,
+            logger: self.logger,
+            meta: self.meta,
+            batch_size: self.batch_size,
+        }
+    }
+
+    /// Create session-aware logger that can send messages directly to a session
+    pub fn build_session_aware(self) -> SessionAwareLogger {
+        SessionAwareLogger {
             level: self.level,
             data: self.data,
             logger: self.logger,
@@ -130,6 +145,108 @@ impl HasLogTransport for DynamicLogger {
 }
 
 // LoggerDefinition is automatically implemented via blanket impl!
+
+/// Session-aware logger that can send messages to sessions with filtering
+/// 
+/// This logger is designed to work with session contexts that implement
+/// logging level checking and message sending capabilities.
+#[derive(Debug)]
+pub struct SessionAwareLogger {
+    level: LoggingLevel,
+    data: Value,
+    logger: Option<String>,
+    #[allow(dead_code)]
+    meta: Option<HashMap<String, Value>>,
+    batch_size: Option<usize>,
+}
+
+/// Trait for logging targets that can check levels and send messages
+pub trait LoggingTarget {
+    /// Check if this target should receive a message at the given level
+    fn should_log(&self, level: LoggingLevel) -> bool;
+    
+    /// Send a log message to this target
+    fn notify_log(&self, level: LoggingLevel, data: serde_json::Value, logger: Option<String>, meta: Option<std::collections::HashMap<String, serde_json::Value>>);
+}
+
+impl SessionAwareLogger {
+    /// Send this log message to the specified target if it passes the target's logging level filter
+    pub fn send_to_target<T: LoggingTarget>(&self, target: &T) {
+        if target.should_log(self.level) {
+            let message = self.format_message();
+            target.notify_log(self.level, serde_json::json!(message), self.logger.clone(), self.meta.clone());
+        }
+    }
+    
+    /// Send this log message to multiple targets with per-target filtering
+    pub fn send_to_targets<T: LoggingTarget>(&self, targets: &[&T]) {
+        for &target in targets {
+            self.send_to_target(target);
+        }
+    }
+    
+    /// Check if this message would be sent to the given target
+    pub fn would_send_to_target<T: LoggingTarget>(&self, target: &T) -> bool {
+        target.should_log(self.level)
+    }
+    
+    /// Get the formatted message that would be sent
+    pub fn format_message(&self) -> String {
+        match &self.data {
+            Value::String(s) => s.clone(),
+            other => serde_json::to_string(other).unwrap_or_else(|_| "<invalid log data>".to_string()),
+        }
+    }
+    
+    /// Convert logging level to string representation
+    pub fn level_to_string(&self) -> &'static str {
+        match self.level {
+            LoggingLevel::Debug => "debug",
+            LoggingLevel::Info => "info",
+            LoggingLevel::Notice => "notice",
+            LoggingLevel::Warning => "warning",
+            LoggingLevel::Error => "error",
+            LoggingLevel::Critical => "critical",
+            LoggingLevel::Alert => "alert",
+            LoggingLevel::Emergency => "emergency",
+        }
+    }
+}
+
+// Implement all fine-grained traits for SessionAwareLogger (same as DynamicLogger)
+impl HasLoggingMetadata for SessionAwareLogger {
+    fn method(&self) -> &str {
+        "notifications/message"
+    }
+
+    fn logger_name(&self) -> Option<&str> {
+        self.logger.as_deref()
+    }
+}
+
+impl HasLogLevel for SessionAwareLogger {
+    fn level(&self) -> LoggingLevel {
+        self.level
+    }
+}
+
+impl HasLogFormat for SessionAwareLogger {
+    fn data(&self) -> &Value {
+        &self.data
+    }
+}
+
+impl HasLogTransport for SessionAwareLogger {
+    fn batch_size(&self) -> Option<usize> {
+        self.batch_size
+    }
+
+    fn should_deliver(&self, threshold_level: LoggingLevel) -> bool {
+        self.level.should_log(threshold_level)
+    }
+}
+
+// LoggerDefinition is automatically implemented via blanket impl for SessionAwareLogger too!
 
 /// Builder for set level requests
 pub struct SetLevelBuilder {

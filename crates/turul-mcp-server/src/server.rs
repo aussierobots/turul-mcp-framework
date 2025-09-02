@@ -412,7 +412,10 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
                 "Converting JSON-RPC session context: session_id={}",
                 json_rpc_ctx.session_id
             );
-            Some(SessionContext::from_json_rpc_with_broadcaster(json_rpc_ctx))
+            Some(SessionContext::from_json_rpc_with_broadcaster(
+                json_rpc_ctx, 
+                self.session_manager.get_storage()
+            ))
         } else {
             // Fallback: extract session ID from params (legacy behavior)
             let session_id = extract_session_id_from_params(&params);
@@ -935,7 +938,10 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                 "Converting JSON-RPC session context for tool call: session_id={}",
                 json_rpc_ctx.session_id
             );
-            Some(SessionContext::from_json_rpc_with_broadcaster(json_rpc_ctx))
+            Some(SessionContext::from_json_rpc_with_broadcaster(
+                json_rpc_ctx, 
+                self.session_manager.get_storage()
+            ))
         } else {
             debug!("No session context provided for tool call");
             None

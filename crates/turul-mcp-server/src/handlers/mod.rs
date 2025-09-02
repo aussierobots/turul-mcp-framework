@@ -226,19 +226,71 @@ pub struct LoggingHandler;
 #[async_trait]
 impl McpHandler for LoggingHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+        // Fallback for when no session is provided
         use turul_mcp_protocol::logging::SetLevelParams;
 
         if let Some(params) = params {
             let set_level_params: SetLevelParams = serde_json::from_value(params)?;
 
-            // In a real implementation, you'd set the actual log level
-            tracing::info!("Setting log level to: {:?}", set_level_params.level);
+            // Without session context, just log the request but can't store per-session
+            tracing::warn!("LoggingHandler.handle() called without session context - cannot store level per-session");
+            tracing::info!("Would set log level to: {:?}", set_level_params.level);
 
             // MCP logging/setLevel doesn't return data, just success
             serde_json::to_value(json!({})).map_err(McpError::from)
         } else {
             Err(McpError::missing_param("SetLevelParams"))
         }
+    }
+
+    async fn handle_with_session(
+        &self,
+        params: Option<Value>,
+        session: Option<SessionContext>,
+    ) -> McpResult<Value> {
+        use turul_mcp_protocol::logging::SetLevelParams;
+
+        // Parse params - returns InvalidParams (-32602) if fails  
+        let params = params.ok_or_else(|| 
+            McpError::missing_param("params"))?;
+        
+        let set_level_params: SetLevelParams = serde_json::from_value(params)?;
+
+        // Require session - returns configuration error if missing
+        let session_ctx = session.ok_or_else(|| 
+            McpError::configuration("Session required for logging/setLevel"))?;
+        
+        // Check initialization - returns configuration error if not initialized  
+        if !(session_ctx.is_initialized)() {
+            return Err(McpError::configuration(
+                "Session must be initialized before setting logging level"
+            ));
+        }
+        
+        // Set the level
+        session_ctx.set_logging_level(set_level_params.level);
+        
+        tracing::info!("🎯 Set logging level for session {}: {:?}", 
+            session_ctx.session_id, set_level_params.level);
+        
+        // Verify persistence - returns configuration error if fails
+        let stored_level = session_ctx.get_logging_level();
+        if stored_level != set_level_params.level {
+            return Err(McpError::configuration(
+                "Failed to persist logging level in session storage"
+            ));
+        }
+        
+        // Send confirmation notification
+        session_ctx.notify_log(
+            turul_mcp_protocol::logging::LoggingLevel::Info,
+            serde_json::json!(format!("Logging level changed to: {:?}", set_level_params.level)),
+            None,
+            None
+        );
+        
+        // Success returns empty object per MCP spec
+        Ok(json!({}))
     }
 
     fn supported_methods(&self) -> Vec<String> {

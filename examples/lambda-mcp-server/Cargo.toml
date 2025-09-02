@@ -25,6 +25,7 @@ turul-mcp-server = { path = "../../crates/turul-mcp-server" }
 turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
 turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
 turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage", features = ["dynamodb"] }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
 turul-http-mcp-server = { path = "../../crates/turul-http-mcp-server" }
 turul-mcp-json-rpc-server = { workspace = true }
 turul-mcp-aws-lambda = { path = "../../crates/turul-mcp-aws-lambda" }
