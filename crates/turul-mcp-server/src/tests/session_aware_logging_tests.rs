@@ -13,6 +13,21 @@ use crate::session::SessionManager;
 use crate::handlers::{LoggingHandler, McpHandler};
 use turul_mcp_protocol::{ServerCapabilities, logging::LoggingLevel};
 
+/// Helper function to convert string level to LoggingLevel enum for tests
+fn str_to_logging_level(level: &str) -> LoggingLevel {
+    match level.to_lowercase().as_str() {
+        "debug" => LoggingLevel::Debug,
+        "info" => LoggingLevel::Info,
+        "notice" => LoggingLevel::Notice,
+        "warning" => LoggingLevel::Warning,
+        "error" => LoggingLevel::Error,
+        "critical" => LoggingLevel::Critical,
+        "alert" => LoggingLevel::Alert,
+        "emergency" => LoggingLevel::Emergency,
+        _ => LoggingLevel::Info, // Default fallback
+    }
+}
+
 /// Test session-aware logging level methods
 #[cfg(test)]
 mod logging_level_tests {
@@ -236,6 +251,16 @@ mod logging_handler_tests {
         let manager = Arc::new(SessionManager::new(capabilities));
         
         let session_id = manager.create_session().await;
+        
+        // Initialize the session (required before setting logging level)
+        let client_info = turul_mcp_protocol::Implementation {
+            name: "test-client".to_string(),
+            version: "1.0.0".to_string(),
+            title: Some("Test Client".to_string()),
+        };
+        let client_capabilities = turul_mcp_protocol::ClientCapabilities::default();
+        manager.initialize_session(&session_id, client_info, client_capabilities).await.unwrap();
+        
         let context = manager.create_session_context(&session_id);
         
         let handler = LoggingHandler;
@@ -247,8 +272,10 @@ mod logging_handler_tests {
         
         // Call handler with session context
         let result = handler.handle_with_session(Some(params), context).await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), json!({}));
+        match result {
+            Ok(value) => assert_eq!(value, json!({})),
+            Err(e) => panic!("Expected Ok but got error: {:?}", e),
+        }
         
         // Verify level was set in session
         let context2 = manager.create_session_context(&session_id).unwrap();
@@ -263,10 +290,11 @@ mod logging_handler_tests {
             "level": "warning"
         });
         
-        // Call handler without session context (should still work but not store level)
+        // Call handler without session context (should fail with session required error)
         let result = handler.handle_with_session(Some(params), None).await;
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap(), json!({}));
+        assert!(result.is_err());
+        // Verify it's the expected "Session required" error
+        assert!(result.unwrap_err().to_string().contains("Session required"));
     }
 
     #[tokio::test]
@@ -290,6 +318,15 @@ mod logging_handler_tests {
         let manager = Arc::new(SessionManager::new(capabilities));
         
         let session_id = manager.create_session().await;
+        
+        // Initialize the session (required before setting logging level)
+        let client_info = turul_mcp_protocol::Implementation {
+            name: "test-client".to_string(),
+            version: "1.0.0".to_string(),
+            title: Some("Test Client".to_string()),
+        };
+        let client_capabilities = turul_mcp_protocol::ClientCapabilities::default();
+        manager.initialize_session(&session_id, client_info, client_capabilities).await.unwrap();
         
         let handler = LoggingHandler;
         
@@ -337,14 +374,14 @@ mod notify_log_filtering_tests {
         context.set_logging_level(LoggingLevel::Warning);
         
         // These calls should not panic, but filtering happens internally
-        context.notify_log("debug", "This should be filtered out");
-        context.notify_log("info", "This should be filtered out");
-        context.notify_log("notice", "This should be filtered out");
-        context.notify_log("warning", "This should pass through");
-        context.notify_log("error", "This should pass through");
-        context.notify_log("critical", "This should pass through");
-        context.notify_log("alert", "This should pass through");
-        context.notify_log("emergency", "This should pass through");
+        context.notify_log(str_to_logging_level("debug"), serde_json::json!("This should be filtered out"), Some("test".to_string()), None);
+        context.notify_log(str_to_logging_level("info"), serde_json::json!("This should be filtered out"), Some("test".to_string()), None);
+        context.notify_log(str_to_logging_level("notice"), serde_json::json!("This should be filtered out"), Some("test".to_string()), None);
+        context.notify_log(str_to_logging_level("warning"), serde_json::json!("This should pass through"), Some("test".to_string()), None);
+        context.notify_log(str_to_logging_level("error"), serde_json::json!("This should pass through"), Some("test".to_string()), None);
+        context.notify_log(str_to_logging_level("critical"), serde_json::json!("This should pass through"), Some("test".to_string()), None);
+        context.notify_log(str_to_logging_level("alert"), serde_json::json!("This should pass through"), Some("test".to_string()), None);
+        context.notify_log(str_to_logging_level("emergency"), serde_json::json!("This should pass through"), Some("test".to_string()), None);
     }
 
     #[tokio::test]
@@ -356,7 +393,7 @@ mod notify_log_filtering_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Unknown level should default to Info and be handled gracefully
-        context.notify_log("unknown_level", "This should not panic");
+        context.notify_log(str_to_logging_level("unknown_level"), serde_json::json!("This should not panic"), Some("test".to_string()), None);
     }
 
     #[tokio::test]
@@ -375,11 +412,31 @@ mod notify_log_filtering_tests {
         error_context.set_logging_level(LoggingLevel::Error);
         
         // Same message to both sessions - should be filtered differently
-        debug_context.notify_log("info", "Info message to debug session"); // Should pass
-        error_context.notify_log("info", "Info message to error session"); // Should be filtered
+        debug_context.notify_log(
+            str_to_logging_level("info"), 
+            serde_json::json!("Info message to debug session"),
+            Some("test".to_string()),
+            None
+        ); // Should pass
+        error_context.notify_log(
+            str_to_logging_level("info"), 
+            serde_json::json!("Info message to error session"),
+            Some("test".to_string()),
+            None
+        ); // Should be filtered
         
-        debug_context.notify_log("error", "Error message to debug session"); // Should pass
-        error_context.notify_log("error", "Error message to error session"); // Should pass
+        debug_context.notify_log(
+            str_to_logging_level("error"), 
+            serde_json::json!("Error message to debug session"),
+            Some("test".to_string()),
+            None
+        ); // Should pass
+        error_context.notify_log(
+            str_to_logging_level("error"), 
+            serde_json::json!("Error message to error session"),
+            Some("test".to_string()),
+            None
+        ); // Should pass
     }
 }
 

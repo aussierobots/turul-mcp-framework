@@ -191,7 +191,8 @@ impl McpServer {
                 .bind_address(self.bind_address)
                 .mcp_path(&self.mcp_path)
                 .cors(self.enable_cors)
-                .sse(self.enable_sse)
+                .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
+                // POST SSE remains at default (false) for compatibility
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(
                     vec!["tools/list".to_string()],
@@ -328,7 +329,8 @@ impl McpServer {
                 .bind_address(self.bind_address)
                 .mcp_path(&self.mcp_path)
                 .cors(self.enable_cors)
-                .sse(self.enable_sse)
+                .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
+                // POST SSE remains at default (false) for compatibility
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(
                     vec!["tools/list".to_string()],

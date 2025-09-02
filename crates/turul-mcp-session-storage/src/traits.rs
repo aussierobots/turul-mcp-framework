@@ -150,10 +150,39 @@ pub trait SessionStorage: Send + Sync {
     // Session Management
     // ============================================================================
 
-    /// Create a new session with generated UUID v7
+    /// Create a new session with automatically generated UUID v7
+    /// 
+    /// **USE THIS METHOD** for:
+    /// - Production code
+    /// - Normal server operations  
+    /// - Tests that don't need specific session IDs
+    /// 
+    /// The session ID is generated using `Uuid::now_v7()` which provides:
+    /// - Temporal ordering (sessions created later have higher IDs)
+    /// - Better database performance vs UUID v4
+    /// - Collision resistance
     async fn create_session(&self, capabilities: ServerCapabilities) -> Result<SessionInfo, Self::Error>;
 
-    /// Create session with specific ID (for testing)
+    /// Create session with a specific session ID
+    /// 
+    /// **ONLY USE THIS METHOD** for:
+    /// - Unit tests that need predictable session IDs
+    /// - Integration tests that need to correlate sessions
+    /// - Migration scenarios from other session systems
+    /// 
+    /// **DO NOT USE** for:
+    /// - Production code (use `create_session()` instead)
+    /// - Normal server operations
+    /// - Tests that don't specifically need custom session IDs
+    /// 
+    /// # Example
+    /// ```rust
+    /// // ✅ CORRECT - Testing specific session behavior
+    /// let session = storage.create_session_with_id("test-session-123".to_string(), caps).await?;
+    /// 
+    /// // ❌ WRONG - Should use create_session() instead  
+    /// let session = storage.create_session_with_id(Uuid::now_v7().to_string(), caps).await?;
+    /// ```
     async fn create_session_with_id(&self, session_id: String, capabilities: ServerCapabilities) -> Result<SessionInfo, Self::Error>;
 
     /// Get session by ID

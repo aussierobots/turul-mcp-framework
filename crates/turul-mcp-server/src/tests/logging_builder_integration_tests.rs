@@ -32,7 +32,12 @@ mod logging_target_tests {
         assert!(!context.should_log(LoggingLevel::Debug));
         
         // Test notify_log method (should not panic)
-        context.notify_log("error", "Test message".to_string());
+        context.notify_log(
+            turul_mcp_protocol::logging::LoggingLevel::Error, 
+            serde_json::json!("Test message"),
+            Some("test".to_string()),
+            None
+        );
     }
 }
 

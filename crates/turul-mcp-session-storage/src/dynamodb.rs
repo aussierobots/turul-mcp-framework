@@ -1832,14 +1832,13 @@ impl SessionStorage for DynamoDbSessionStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use turul_mcp_protocol::ServerCapabilities;
 
     #[tokio::test]
     async fn test_dynamodb_config() {
         let config = DynamoDbConfig::default();
         assert_eq!(config.table_name, "mcp-sessions");
         assert_eq!(config.region, "us-east-1");
-        assert_eq!(config.session_ttl_min, 5);
+        assert_eq!(config.session_ttl_minutes, 5);
     }
 
     #[tokio::test]

@@ -10,11 +10,24 @@
 //! # First, start the server in another terminal:
 //! cargo run --package turul-mcp-server --example logging-test-server
 //!
-//! # Then run this client:
+//! # Default: Test GET SSE mode (comprehensive test)
 //! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client
+//!
+//! # Test POST SSE streaming mode only
+//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client -- --test-post-sse
+//!
+//! # Test both POST and GET SSE streaming modes
+//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client -- --test-both-modes
+//!
+//! # Quick verification test (faster)
+//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client -- --quick-test
+//!
+//! # Test against server on different port
+//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client -- --port 8080
 //! ```
 
 use anyhow::Result;
+use clap::Parser;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -30,6 +43,32 @@ use turul_mcp_protocol::{
     tools::CallToolParams,
     version::McpVersion,
 };
+
+/// Command-line arguments for the logging test client
+#[derive(Parser, Debug)]
+#[command(name = "logging-test-client")]
+#[command(about = "Session-aware logging test client for MCP framework")]
+struct Args {
+    /// Server port to connect to
+    #[arg(short, long, default_value = "8003")]
+    port: u16,
+    
+    /// Test POST SSE streaming mode (tool calls with Accept: text/event-stream)
+    #[arg(long)]
+    test_post_sse: bool,
+    
+    /// Test GET SSE streaming mode (persistent SSE connection)
+    #[arg(long, default_value = "true")]
+    test_get_sse: bool,
+    
+    /// Test both POST and GET SSE streaming modes
+    #[arg(long)]
+    test_both_modes: bool,
+    
+    /// Only run a quick verification test (faster execution)
+    #[arg(long)]
+    quick_test: bool,
+}
 
 /// Test client that verifies session-aware logging filtering
 #[derive(Clone)]
@@ -164,6 +203,7 @@ impl LoggingTestClient {
         Ok(response)
     }
 
+    #[allow(dead_code)]
     async fn send_log_message(
         &self,
         message: &str,
@@ -373,6 +413,7 @@ impl LoggingTestClient {
         Ok(response)
     }
 
+    #[allow(dead_code)]
     async fn monitor_sse_notifications(
         &self,
         duration_secs: u64,
@@ -538,6 +579,9 @@ impl LoggingTestClient {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Parse command-line arguments
+    let args = Args::parse();
+    
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -547,10 +591,19 @@ async fn main() -> Result<()> {
 
     println!("🧪 LOGGING TEST CLIENT");
     println!("======================");
+    
+    // Determine test modes
+    let test_get_sse = args.test_get_sse || args.test_both_modes || (!args.test_post_sse && !args.test_both_modes);
+    let test_post_sse = args.test_post_sse || args.test_both_modes;
+    
+    println!("🔧 Configuration:");
+    println!("   • Server: http://127.0.0.1:{}/mcp", args.port);
+    println!("   • GET SSE Testing: {}", if test_get_sse { "✅ ENABLED" } else { "❌ DISABLED" });
+    println!("   • POST SSE Testing: {}", if test_post_sse { "✅ ENABLED" } else { "❌ DISABLED" });
+    println!("   • Test Mode: {}", if args.quick_test { "🚀 QUICK" } else { "🔍 COMPREHENSIVE" });
     println!("");
 
-    let port = 8003;
-    let mut client = LoggingTestClient::new(port);
+    let mut client = LoggingTestClient::new(args.port);
 
     // Initialize session
     client.initialize().await?;
@@ -569,6 +622,7 @@ async fn main() -> Result<()> {
     sleep(Duration::from_millis(1000)).await;
 
     // Helper function to collect notifications for a specific correlation ID
+    #[allow(dead_code)]
     async fn collect_notifications_for_test(
         receiver: &mut mpsc::UnboundedReceiver<(String, u64, String)>,
         correlation_id: &str,

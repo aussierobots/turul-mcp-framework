@@ -67,7 +67,7 @@ impl McpTool for LoggingTestTool {
         tracing::info!("   Will be filtered: {}", will_be_filtered);
         
         // Send the log message via session notification (will be filtered automatically)
-        session.notify_log(level_str, message.to_string());
+        session.notify_log(logging_level, serde_json::json!(message.to_string()), Some("demo".to_string()), None);
         
         // Return test result information
         Ok(CallToolResult::success(vec![
@@ -366,6 +366,7 @@ async fn main() -> Result<()> {
     ];
     
     for (message, level, should_receive) in &test_cases {
+        tracing::debug!("Testing message '{}' at level '{}', should_receive: {}", message, level, should_receive);
         let response = client.test_log_message(message, level).await?;
         tracing::info!("📋 Response: {}", serde_json::to_string_pretty(&response)?);
         sleep(Duration::from_millis(100)).await;
@@ -383,6 +384,7 @@ async fn main() -> Result<()> {
     ];
     
     for (message, level, should_receive) in &filtered_test_cases {
+        tracing::debug!("Testing filtered message '{}' at level '{}', should_receive: {}", message, level, should_receive);
         let response = client.test_log_message(message, level).await?;
         tracing::info!("📋 Response: {}", serde_json::to_string_pretty(&response)?);
         sleep(Duration::from_millis(100)).await;

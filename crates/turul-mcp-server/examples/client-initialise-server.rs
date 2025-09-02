@@ -26,6 +26,7 @@ use chrono;
 
 use turul_mcp_server::{McpServer, McpTool, SessionContext, McpResult};
 use turul_mcp_protocol::tools::CallToolResult;
+use turul_mcp_protocol::logging::LoggingLevel;
 use turul_mcp_session_storage::InMemorySessionStorage;
 #[cfg(feature = "sqlite")]
 use turul_mcp_session_storage::{SqliteSessionStorage, SqliteConfig};
@@ -56,7 +57,12 @@ impl McpTool for EchoSseTool {
             session_context.notify_progress("echo_processing", 50);
             
             // Also send a log message notification
-            session_context.notify_log("info", format!("Processing echo for text: '{}'", text));
+            session_context.notify_log(
+                LoggingLevel::Info, 
+                serde_json::json!(format!("Processing echo for text: '{}'", text)),
+                Some("echo-tool".to_string()),
+                None
+            );
         } else {
             info!("⚠️  No session context available for notifications");
         }
@@ -68,7 +74,12 @@ impl McpTool for EchoSseTool {
         // Send completion notification
         if let Some(session_context) = &session {
             session_context.notify_progress("echo_processing", 100);
-            session_context.notify_log("info", format!("Echo completed successfully: '{}'", response_text));
+            session_context.notify_log(
+                LoggingLevel::Info, 
+                serde_json::json!(format!("Echo completed successfully: '{}'", response_text)),
+                Some("echo-tool".to_string()),
+                None
+            );
         }
 
         Ok(CallToolResult::success(vec![

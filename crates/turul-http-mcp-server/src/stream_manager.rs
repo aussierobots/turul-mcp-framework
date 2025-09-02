@@ -110,6 +110,8 @@ pub enum StreamError {
     StorageError(String),
     #[error("Connection error: {0}")]
     ConnectionError(String),
+    #[error("No connections available for session: {0}")]
+    NoConnections(String),
 }
 
 impl StreamManager {
@@ -328,6 +330,14 @@ impl StreamManager {
             .unwrap()
     }
 
+    /// Check if a session has any active SSE connections
+    pub async fn has_connections(&self, session_id: &str) -> bool {
+        let connections = self.connections.read().await;
+        connections.get(session_id)
+            .map(|session_connections| !session_connections.is_empty())
+            .unwrap_or(false)
+    }
+
     /// Send event to specific session (MCP compliant - ONE connection only)
     pub async fn broadcast_to_session(
         &self,
@@ -335,10 +345,27 @@ impl StreamManager {
         event_type: String,
         data: Value,
     ) -> Result<u64, StreamError> {
-        // Create the event
-        let event = SseEvent::new(event_type, data);
+        self.broadcast_to_session_with_options(session_id, event_type, data, true).await
+    }
 
-        // Store event for resumability
+    /// Send event to specific session with option to suppress when no connections exist
+    pub async fn broadcast_to_session_with_options(
+        &self,
+        session_id: &str,
+        event_type: String,
+        data: Value,
+        store_when_no_connections: bool,
+    ) -> Result<u64, StreamError> {
+        // Check if we should suppress notifications when no connections exist
+        if !store_when_no_connections && !self.has_connections(session_id).await {
+            debug!("🚫 Suppressing notification for session {} (no connections, store_when_no_connections=false)", session_id);
+            return Err(StreamError::NoConnections(session_id.to_string()));
+        }
+
+        // Create the event
+        let event = SseEvent::new(event_type.clone(), data);
+
+        // Store event for resumability (always store for compliant clients)
         let stored_event = self.storage.store_event(session_id, event).await
             .map_err(|e| StreamError::StorageError(e.to_string()))?;
 
@@ -456,7 +483,7 @@ impl StreamManager {
         &self,
         session_id: String,
         response: turul_mcp_json_rpc_server::JsonRpcResponse,
-    ) -> Result<hyper::Response<http_body_util::Full<bytes::Bytes>>, StreamError> {
+    ) -> Result<hyper::Response<http_body_util::combinators::BoxBody<bytes::Bytes, std::convert::Infallible>>, StreamError> {
         // Verify session exists
         if self.storage.get_session(&session_id).await
             .map_err(|e| StreamError::StorageError(e.to_string()))?
@@ -471,40 +498,48 @@ impl StreamManager {
         let response_json = serde_json::to_string(&response)
             .map_err(|e| StreamError::StorageError(format!("Failed to serialize response: {}", e)))?;
 
-        // For MCP Streamable HTTP, we create an SSE stream that:
-        // 1. Sends any pending notifications for this session
-        // 2. Sends the JSON-RPC response as an SSE event
-        // 3. Closes the stream
-
-        let mut sse_content = String::new();
-
         // 1. Include recent notifications that may have been generated during tool execution
         // Note: Since tool notifications are processed asynchronously, we need to wait a moment
         // and then check for recent events to include in the POST SSE response
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
+        let mut sse_frames = Vec::new();
+        let mut event_id_counter = 1;
+        
         if let Ok(events) = self.storage.get_recent_events(&session_id, 10).await {
             for event in events {
                 // Convert stored SSE event to notification JSON-RPC format
                 if event.event_type != "ping" { // Skip keepalive events
                     let notification_sse = format!(
-                        "event: data\ndata: {}\n\n",
+                        "id: {}\nevent: {}\ndata: {}\n\n",
+                        event_id_counter,
+                        event.event_type, // Use actual event type (e.g., "notifications/message")
                         event.data
                     );
-                    sse_content.push_str(&notification_sse);
-                    debug!("📤 Including notification in POST SSE stream: event_type={}", event.event_type);
+                    debug!("📤 Including notification in POST SSE stream: id={}, event_type={}", event_id_counter, event.event_type);
+                    sse_frames.push(http_body::Frame::data(Bytes::from(notification_sse)));
+                    event_id_counter += 1;
                 }
             }
         }
 
         // 2. Add the JSON-RPC tool response
         let response_sse = format!(
-            "event: data\ndata: {}\n\n",
+            "id: {}\nevent: result\ndata: {}\n\n", // Tool responses use "result" event type
+            event_id_counter,
             response_json
         );
-        sse_content.push_str(&response_sse);
+        debug!("📤 Sending JSON-RPC response as SSE event: id={}, event=result", event_id_counter);
+        sse_frames.push(http_body::Frame::data(Bytes::from(response_sse)));
 
-        debug!("📡 POST SSE response created: session={}, content_length={}", session_id, sse_content.len());
+        // Create a simple stream from the collected frames
+        let stream = futures::stream::iter(sse_frames.into_iter().map(Ok::<_, std::convert::Infallible>));
+
+        // Create StreamBody from the stream and box it for type erasure
+        let body = StreamBody::new(stream);
+        let boxed_body = http_body_util::combinators::BoxBody::new(body);
+
+        debug!("📡 POST SSE streaming response created: session={}", session_id);
 
         // Build response with proper SSE headers including MCP session ID
         Ok(hyper::Response::builder()
@@ -513,8 +548,9 @@ impl StreamManager {
             .header(hyper::header::CACHE_CONTROL, "no-cache")
             .header(hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN, &self.config.cors_origin)
             .header("Connection", "keep-alive")
+            .header("X-Accel-Buffering", "no") // Prevent proxy buffering
             .header("Mcp-Session-Id", &session_id)
-            .body(http_body_util::Full::new(bytes::Bytes::from(sse_content)))
+            .body(boxed_body)
             .unwrap())
     }
 
@@ -562,7 +598,7 @@ use async_stream;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use turul_mcp_session_storage::InMemorySessionStorage;
+    use turul_mcp_session_storage::{InMemorySessionStorage, SessionStorage};
     use turul_mcp_protocol::ServerCapabilities;
 
     #[tokio::test]

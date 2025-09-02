@@ -680,7 +680,7 @@ mod tests {
     #[test]
     fn test_builder_defaults() {
         let builder = McpServerBuilder::new();
-        assert_eq!(builder.name, "mcp-server");
+        assert_eq!(builder.name, "turul-mcp-server");
         assert_eq!(builder.version, "1.0.0");
         assert!(builder.title.is_none());
         assert!(builder.instructions.is_none());

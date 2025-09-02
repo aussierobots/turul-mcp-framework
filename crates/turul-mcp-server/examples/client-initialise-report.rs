@@ -39,7 +39,6 @@
 
 use anyhow::{Result, anyhow, Context};
 use clap::Parser;
-use futures::StreamExt;
 use reqwest::Client;
 use serde_json::{json, Value};
 use std::time::Duration;
@@ -822,6 +821,8 @@ async fn test_sse_resumability(
             }
         }).await;
         
+        tracing::debug!("Timeout result for resumption test: {:?}", timeout_result.is_ok());
+        
         // Verify resumption behavior
         match last_event_id {
             0 => {
@@ -911,6 +912,7 @@ async fn test_sse_resumability(
 }
 
 /// Collect initial events from SSE stream for resumability testing
+#[allow(dead_code)]
 async fn collect_initial_events(
     client: &Client,
     url: &str,

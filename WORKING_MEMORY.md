@@ -1,20 +1,20 @@
 # MCP Framework - Working Memory
 
-## 🏆 **FRAMEWORK STATUS: 100% PRODUCTION COMPLETE**
+## 🚨 **FRAMEWORK STATUS: MCP INSPECTOR POST SSE COMPATIBILITY ISSUE**
 
 **Core Framework**: ✅ **COMPLETE** - All crates compile with zero errors/warnings
-**Workspace Compilation**: ✅ **PERFECT** - `cargo check --workspace` passes with zero errors
-**MCP Compliance**: ✅ **2025-06-18 SPEC** - Full protocol compliance with SSE notifications  
-**Schema Generation**: ✅ **COMPLETE** - Compile-time schemas match MCP Inspector exactly
+**Workspace Compilation**: ✅ **PERFECT** - `cargo check --workspace` passes cleanly
+**MCP Compliance**: ⚠️ **PARTIAL ISSUE** - Spec-compliant but MCP Inspector times out on POST SSE
+**Schema Generation**: ✅ **COMPLETE** - Compile-time schemas match MCP specification exactly
 **Tool Creation**: ✅ **4 LEVELS** - Function/derive/builder/manual approaches all working
 **SessionContext**: ✅ **INTEGRATED** - Full session support in all macro types
-**Example Status**: ✅ **ALL WORKING** - Previously "broken" examples already fixed
+**Example Status**: ✅ **ALL WORKING** - All examples compile without warnings
 **Documentation**: ✅ **CONSOLIDATED** - Reduced from 24 → 9 .md files (62% reduction)
 
-## 🎯 **CURRENT STATUS: SESSION-AWARE LOGGING SYSTEM IMPLEMENTATION**
+## 🚨 **CURRENT STATUS: MCP INSPECTOR POST SSE ISSUE - NEEDS FIX**
 
-**Discovery**: Implementing new phase for MCP LoggingLevel session awareness
-**Status**: 🚧 **IN PROGRESS** - Session-aware logging filtering per MCP specification
+**Critical Issue**: "MCP error -32001: Request timed out" - MCP Inspector cannot handle POST SSE responses
+**Status**: 🚨 **OPEN** - Need to fix POST SSE compatibility with MCP Inspector (official tooling)
 
 ### Current Status (2025-09-01)
 - ✅ **Framework Core**: All 4 tool creation levels working perfectly
@@ -40,6 +40,7 @@
   - [ADR-002](./docs/adr/002-compile-time-schema-generation.md) - Schema generation rules
   - [ADR-003](./docs/adr/003-jsonschema-standardization.md) - Type system standardization
   - [ADR-004](./docs/adr/004-sessioncontext-macro-support.md) - Macro session support
+  - [ADR-005](./docs/adr/005-mcp-message-notifications-architecture.md) - MCP message notifications and SSE streaming
 - **AI Assistant**: [CLAUDE.md](./CLAUDE.md) - Development guidance for Claude Code
 
 ## 🚨 **CRITICAL ARCHITECTURAL RULE: turul_mcp_protocol Alias Usage**
@@ -397,6 +398,27 @@ All functionality implemented in `/crates/turul-mcp-session-storage/src/dynamodb
 2. **AWS SNS/SQS** - Serverless fan-out patterns
 3. **Composite routing** - Circuit breakers and resilience
 4. **Performance testing** - 100K+ session validation
+
+### **Phase 10.5: POST SSE Streaming Restoration** ⚠️ **IMMEDIATE** (1-2 days) 
+**Priority**: 🔴 **CRITICAL** - MCP Inspector compatibility
+
+**Core Issue**: MCP Inspector not receiving notifications via POST SSE responses
+- **Problem**: POST SSE responses use hardcoded `event: data` instead of proper event types
+- **Expected**: Event types like `event: notifications/message` for proper client handling
+- **Impact**: Notifications don't appear in MCP Inspector interface, breaks user experience
+
+**Implementation Tasks**:
+1. **Fix StreamManager event formatting** - Replace hardcoded `event: data` with actual event types
+2. **Re-enable conditional SSE responses** - Remove "TEMPORARY FIX" blocking SSE for tool calls  
+3. **Update test server/client** - Add command-line switches to test both streaming modes
+4. **Comprehensive testing** - Verify notifications work via both POST SSE and GET SSE
+
+**Technical Details**:
+- **Stream Manager**: `crates/turul-http-mcp-server/src/stream_manager.rs` lines 490-492, 501-503
+- **Session Handler**: `crates/turul-http-mcp-server/src/session_handler.rs` lines 395-398  
+- **Test Examples**: Update logging-test-server and logging-test-client with dual-mode support
+
+**Expected Outcome**: Complete MCP Streamable HTTP compliance with both POST and GET SSE working
 
 ## 🎯 **OUTSTANDING WORK ITEMS** (Updated 2025-08-30)
 

@@ -14,6 +14,21 @@ use turul_mcp_protocol::logging::LoggingLevel;
 use turul_mcp_server::{McpResult, SessionContext};
 use turul_mcp_builders::logging::LoggingBuilder;
 
+/// Helper function to convert string level to LoggingLevel enum
+fn str_to_logging_level(level: &str) -> LoggingLevel {
+    match level.to_lowercase().as_str() {
+        "debug" => LoggingLevel::Debug,
+        "info" => LoggingLevel::Info,
+        "notice" => LoggingLevel::Notice,
+        "warning" => LoggingLevel::Warning,
+        "error" => LoggingLevel::Error,
+        "critical" => LoggingLevel::Critical,
+        "alert" => LoggingLevel::Alert,
+        "emergency" => LoggingLevel::Emergency,
+        _ => LoggingLevel::Info, // Default fallback
+    }
+}
+
 /// A tool that demonstrates session-aware logging by generating log messages
 /// at different levels and showing how they're filtered per session.
 #[derive(McpTool, Default, Clone)]
@@ -35,7 +50,7 @@ impl SessionLoggingDemoTool {
         
         // Show current session's logging level
         let current_level = session.get_logging_level();
-        session.notify_log("info", format!("Current session logging level: {:?}", current_level));
+        session.notify_log(str_to_logging_level("info"), serde_json::json!(format!("Current session logging level: {:?}", current_level)), Some("demo".to_string()), None);
         
         let operation = if self.operation.is_empty() { "all" } else { &self.operation };
         let count = if self.count <= 0 { 5 } else { self.count };
@@ -45,7 +60,7 @@ impl SessionLoggingDemoTool {
             "cascade" => self.demonstrate_level_cascade(&session).await,
             "builders" => self.demonstrate_logging_builders(&session).await,
             _ => {
-                session.notify_log("warning", format!("Unknown operation: {}", operation));
+                session.notify_log(str_to_logging_level("warning"), serde_json::json!(format!("Unknown operation: {}", operation)), Some("demo".to_string()), None);
                 Ok(json!({"error": "Unknown operation", "available": ["all", "cascade", "builders"]}))
             }
         }
@@ -53,7 +68,7 @@ impl SessionLoggingDemoTool {
     
     /// Demonstrate logging at all different levels
     async fn demonstrate_all_levels(&self, session: &SessionContext, count: i32) -> McpResult<serde_json::Value> {
-        session.notify_log("info", "🚀 Starting all levels demonstration");
+        session.notify_log(str_to_logging_level("info"), serde_json::json!("🚀 Starting all levels demonstration"), Some("demo".to_string()), None);
         
         let levels = [
             ("debug", "🐛 Debug message - lowest priority"),
@@ -69,11 +84,11 @@ impl SessionLoggingDemoTool {
         for i in 0..count {
             for (level, message) in &levels {
                 let full_message = format!("{} (iteration {})", message, i + 1);
-                session.notify_log(level, full_message);
+                session.notify_log(str_to_logging_level(level), serde_json::json!(full_message), Some("demo".to_string()), None);
             }
         }
         
-        session.notify_log("info", "✅ All levels demonstration complete");
+        session.notify_log(str_to_logging_level("info"), serde_json::json!("✅ All levels demonstration complete"), Some("demo".to_string()), None);
         
         Ok(json!({
             "demonstration": "all_levels",
@@ -85,7 +100,7 @@ impl SessionLoggingDemoTool {
     
     /// Demonstrate how changing logging level affects message delivery
     async fn demonstrate_level_cascade(&self, session: &SessionContext) -> McpResult<serde_json::Value> {
-        session.notify_log("info", "🔄 Starting level cascade demonstration");
+        session.notify_log(str_to_logging_level("info"), serde_json::json!("🔄 Starting level cascade demonstration"), Some("demo".to_string()), None);
         
         let test_levels = [
             LoggingLevel::Debug,
@@ -100,20 +115,20 @@ impl SessionLoggingDemoTool {
             // Temporarily set the session's logging level
             session.set_logging_level(*test_level);
             
-            session.notify_log("info", format!("📊 Setting logging level to: {:?}", test_level));
+            session.notify_log(str_to_logging_level("info"), serde_json::json!(format!("📊 Setting logging level to: {:?}", test_level)), Some("demo".to_string()), None);
             
             // Send messages at different levels to show filtering
-            session.notify_log("debug", "  → Debug message (priority 0)");
-            session.notify_log("info", "  → Info message (priority 1)");
-            session.notify_log("warning", "  → Warning message (priority 3)");
-            session.notify_log("error", "  → Error message (priority 4)");
+            session.notify_log(str_to_logging_level("debug"), serde_json::json!("  → Debug message (priority 0)"), Some("demo".to_string()), None);
+            session.notify_log(str_to_logging_level("info"), serde_json::json!("  → Info message (priority 1)"), Some("demo".to_string()), None);
+            session.notify_log(str_to_logging_level("warning"), serde_json::json!("  → Warning message (priority 3)"), Some("demo".to_string()), None);
+            session.notify_log(str_to_logging_level("error"), serde_json::json!("  → Error message (priority 4)"), Some("demo".to_string()), None);
             
-            session.notify_log("info", format!("  Only messages >= {:?} should appear above", test_level));
+            session.notify_log(str_to_logging_level("info"), serde_json::json!(format!("  Only messages >= {:?} should appear above", test_level)), Some("demo".to_string()), None);
         }
         
         // Restore original level
         session.set_logging_level(original_level);
-        session.notify_log("info", format!("🔙 Restored original logging level: {:?}", original_level));
+        session.notify_log(str_to_logging_level("info"), serde_json::json!(format!("🔙 Restored original logging level: {:?}", original_level)), Some("demo".to_string()), None);
         
         Ok(json!({
             "demonstration": "level_cascade",
@@ -125,7 +140,7 @@ impl SessionLoggingDemoTool {
     
     /// Demonstrate using LoggingBuilder with session-aware functionality
     async fn demonstrate_logging_builders(&self, session: &SessionContext) -> McpResult<serde_json::Value> {
-        session.notify_log("info", "🔧 Starting LoggingBuilder demonstration");
+        session.notify_log(str_to_logging_level("info"), serde_json::json!("🔧 Starting LoggingBuilder demonstration"), Some("demo".to_string()), None);
         
         // Create various loggers using the builder pattern
         let loggers = vec![
@@ -151,23 +166,23 @@ impl SessionLoggingDemoTool {
             .build_session_aware(),
         ];
         
-        session.notify_log("info", "📤 Sending messages via LoggingBuilder (filtered by session level):");
+        session.notify_log(str_to_logging_level("info"), serde_json::json!("📤 Sending messages via LoggingBuilder (filtered by session level):"), Some("demo".to_string()), None);
         
         for (i, logger) in loggers.iter().enumerate() {
             // Check if this message would be sent to the session
             let would_send = logger.would_send_to_target(session);
             let level_str = logger.level_to_string();
             
-            session.notify_log("info", format!("  📋 Logger {} ({}): {}", 
+            session.notify_log(str_to_logging_level("info"), serde_json::json!(format!("  📋 Logger {} ({}): {}", 
                 i + 1, level_str, 
                 if would_send { "✅ Will send" } else { "❌ Filtered out" }
-            ));
+            )), Some("demo".to_string()), None);
             
             // Send the message (will be filtered automatically)
             logger.send_to_target(session);
         }
         
-        session.notify_log("info", "✅ LoggingBuilder demonstration complete");
+        session.notify_log(str_to_logging_level("info"), serde_json::json!("✅ LoggingBuilder demonstration complete"), Some("demo".to_string()), None);
         
         Ok(json!({
             "demonstration": "logging_builders",
@@ -212,12 +227,22 @@ impl SetLoggingLevelTool {
         let old_level = session.get_logging_level();
         session.set_logging_level(new_level);
         
-        session.notify_log("info", format!(
-            "🎯 Logging level changed from {:?} to {:?}", 
-            old_level, new_level
-        ));
+        session.notify_log(
+            turul_mcp_protocol::logging::LoggingLevel::Info, 
+            serde_json::json!(format!(
+                "🎯 Logging level changed from {:?} to {:?}", 
+                old_level, new_level
+            )),
+            Some("system".to_string()),
+            None
+        );
         
-        session.notify_log("info", "Test the change by running the session_logging_demo tool!");
+        session.notify_log(
+            turul_mcp_protocol::logging::LoggingLevel::Info, 
+            serde_json::json!("Test the change by running the session_logging_demo tool!"),
+            Some("system".to_string()),
+            None
+        );
         
         Ok(json!({
             "success": true,
@@ -271,7 +296,7 @@ impl CheckLoggingStatusTool {
             .map(|level| format!("{:?}", level).to_lowercase())
             .collect();
         
-        session.notify_log("info", format!("📊 Session {} logging status checked", session_id));
+        session.notify_log(str_to_logging_level("info"), serde_json::json!(format!("📊 Session {} logging status checked", session_id)), Some("demo".to_string()), None);
         
         Ok(json!({
             "session_id": session_id,

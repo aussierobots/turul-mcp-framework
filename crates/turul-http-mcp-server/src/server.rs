@@ -33,8 +33,10 @@ pub struct ServerConfig {
     pub enable_cors: bool,
     /// Maximum request body size
     pub max_body_size: usize,
-    /// Enable SSE support
-    pub enable_sse: bool,
+    /// Enable GET SSE support (persistent event streams)
+    pub enable_get_sse: bool,
+    /// Enable POST SSE support (streaming tool call responses) - disabled by default for compatibility
+    pub enable_post_sse: bool,
 }
 
 impl Default for ServerConfig {
@@ -44,7 +46,8 @@ impl Default for ServerConfig {
             mcp_path: "/mcp".to_string(),
             enable_cors: true,
             max_body_size: 1024 * 1024, // 1MB
-            enable_sse: cfg!(feature = "sse"),
+            enable_get_sse: cfg!(feature = "sse"), // GET SSE enabled if "sse" feature is compiled
+            enable_post_sse: false, // Disabled by default for better client compatibility (e.g., MCP Inspector)
         }
     }
 }
@@ -104,9 +107,22 @@ impl HttpMcpServerBuilder {
         self
     }
 
-    /// Enable or disable SSE
+    /// Enable or disable GET SSE for persistent event streams
+    pub fn get_sse(mut self, enable: bool) -> Self {
+        self.config.enable_get_sse = enable;
+        self
+    }
+
+    /// Enable or disable POST SSE for streaming tool call responses (disabled by default for compatibility)
+    pub fn post_sse(mut self, enable: bool) -> Self {
+        self.config.enable_post_sse = enable;
+        self
+    }
+
+    /// Enable or disable both GET and POST SSE (convenience method)
     pub fn sse(mut self, enable: bool) -> Self {
-        self.config.enable_sse = enable;
+        self.config.enable_get_sse = enable;
+        self.config.enable_post_sse = enable;
         self
     }
 

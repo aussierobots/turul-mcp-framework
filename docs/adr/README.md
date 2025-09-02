@@ -18,6 +18,7 @@ Each ADR follows the standard format:
 | [002](./002-compile-time-schema-generation.md) | Compile-time Schema Generation | Accepted | 2025-08-28 | Automatic JSON schema generation from Rust types |
 | [003](./003-jsonschema-standardization.md) | JsonSchema Standardization | Accepted | 2025-08-28 | Framework-wide JsonSchema type usage |
 | [004](./004-sessioncontext-macro-support.md) | SessionContext Macro Support | Accepted | 2025-08-28 | Automatic SessionContext injection in macros |
+| [005](./005-mcp-message-notifications-architecture.md) | MCP Message Notifications Architecture | Active | 2025-09-02 | Dual-stream SSE notification delivery and event type formatting |
 
 ## Adding New ADRs
 

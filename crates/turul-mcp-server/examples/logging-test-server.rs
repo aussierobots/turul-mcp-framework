@@ -4,15 +4,44 @@
 //!
 //! Usage:
 //! ```bash
+//! # Default (port 8003, POST SSE enabled)
 //! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-server
+//!
+//! # Custom port with POST SSE enabled
+//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-server -- --port 8080
+//!
+//! # Disable POST SSE streaming (JSON-only responses)  
+//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-server -- --disable-post-sse
+//!
+//! # Enable POST SSE explicitly
+//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-server -- --enable-post-sse
 //! ```
 
 use anyhow::Result;
+use clap::Parser;
 use std::sync::Arc;
 use turul_mcp_protocol::logging::LoggingLevel;
 use turul_mcp_server::{McpResult, McpServer, SessionContext};
 use turul_mcp_session_storage::InMemorySessionStorage;
 use turul_mcp_derive::McpTool;
+
+/// Command-line arguments for the logging test server
+#[derive(Parser, Debug)]
+#[command(name = "logging-test-server")]
+#[command(about = "Session-aware logging test server for MCP framework")]
+struct Args {
+    /// Port to bind the server to
+    #[arg(short, long, default_value = "8003")]
+    port: u16,
+    
+    /// Enable POST SSE streaming for tool calls (requires Accept: text/event-stream)
+    #[arg(long, default_value = "true")]
+    enable_post_sse: bool,
+    
+    /// Disable POST SSE streaming (force JSON-only responses)
+    #[arg(long, conflicts_with = "enable_post_sse")]
+    disable_post_sse: bool,
+}
 
 /// Tool that sends a log message at the specified level using derive macro
 #[derive(McpTool, Clone, serde::Serialize, serde::Deserialize)]
@@ -162,6 +191,9 @@ impl SetLogLevelTool {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Parse command-line arguments
+    let args = Args::parse();
+    
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -171,8 +203,8 @@ async fn main() -> Result<()> {
 
     println!("🚀 Starting Logging Test Server");
     
-    let port = 8003;
-    let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", port).parse()?;
+    let post_sse_enabled = args.enable_post_sse && !args.disable_post_sse;
+    let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", args.port).parse()?;
 
     // Create server with logging test tools
     let storage = Arc::new(InMemorySessionStorage::new());
@@ -183,6 +215,7 @@ async fn main() -> Result<()> {
         .bind_address(bind_address)
         .with_session_storage(storage)
         .with_logging() // Enable logging capability
+        .sse(post_sse_enabled) // Configure SSE based on command-line flags
         .tool(SendLogTool {
             message: String::new(),
             level: String::new(), 
@@ -192,11 +225,19 @@ async fn main() -> Result<()> {
         .build()?;
 
     println!("📡 Server listening at http://{}/mcp", bind_address);
+    println!("🔧 Configuration:");
+    println!("   • Port: {}", args.port);
+    println!("   • POST SSE Streaming: {}", if post_sse_enabled { "✅ ENABLED" } else { "❌ DISABLED" });
     println!("🔧 Available tools:");
-    println!("   • send_log(message, level) - Sends log message at specified level");
+    println!("   • send_log(message, level, correlation_id?) - Sends log message at specified level");
     println!("   • set_log_level(level) - Changes session logging level");
     println!("");
     println!("💡 Use the client to test session-aware logging filtering!");
+    if post_sse_enabled {
+        println!("📡 POST requests with 'Accept: text/event-stream' will return SSE streams");
+    } else {
+        println!("📄 All POST requests will return JSON responses (SSE disabled)");
+    }
     
     // Start server
     server.run().await?;

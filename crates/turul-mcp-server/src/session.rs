@@ -1294,7 +1294,7 @@ mod tests {
         assert_eq!(removed, Some(json!("value")));
 
         // Test notification sending
-        ctx.notify_log("info", "Test notification");
+        ctx.notify_log(turul_mcp_protocol::logging::LoggingLevel::Info, serde_json::json!("Test notification"), Some("test".to_string()), None);
         ctx.notify_progress("test-token", 50);
     }
 

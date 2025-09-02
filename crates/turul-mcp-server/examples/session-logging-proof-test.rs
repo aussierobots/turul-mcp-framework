@@ -25,6 +25,21 @@ use turul_mcp_protocol::{
 use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
 use turul_mcp_session_storage::InMemorySessionStorage;
 
+/// Helper function to convert string level to LoggingLevel enum
+fn str_to_logging_level(level: &str) -> LoggingLevel {
+    match level.to_lowercase().as_str() {
+        "debug" => LoggingLevel::Debug,
+        "info" => LoggingLevel::Info,
+        "notice" => LoggingLevel::Notice,
+        "warning" => LoggingLevel::Warning,
+        "error" => LoggingLevel::Error,
+        "critical" => LoggingLevel::Critical,
+        "alert" => LoggingLevel::Alert,
+        "emergency" => LoggingLevel::Emergency,
+        _ => LoggingLevel::Info, // Default fallback
+    }
+}
+
 /// Test tool that sends log messages at different levels to verify filtering
 #[derive(Clone)]
 struct LogProofTool;
@@ -45,7 +60,12 @@ impl McpTool for LogProofTool {
             "debug_flood" => {
                 // Send multiple debug messages - should be filtered if session level > debug
                 for i in 1..=5 {
-                    session.notify_log("debug", format!("DEBUG MESSAGE {}: This should only appear if session level is DEBUG", i));
+                    session.notify_log(
+                        LoggingLevel::Debug, 
+                        serde_json::json!(format!("DEBUG MESSAGE {}: This should only appear if session level is DEBUG", i)),
+                        Some("proof-test".to_string()),
+                        None
+                    );
                 }
                 
                 Ok(CallToolResult::success(vec![
@@ -60,12 +80,12 @@ impl McpTool for LogProofTool {
             },
             "level_cascade" => {
                 // Send one message at each level
-                session.notify_log("debug", "🐛 DEBUG: Should only appear if session=DEBUG");
-                session.notify_log("info", "ℹ️ INFO: Should appear if session≤INFO");  
-                session.notify_log("notice", "📢 NOTICE: Should appear if session≤NOTICE");
-                session.notify_log("warning", "⚠️ WARNING: Should appear if session≤WARNING");
-                session.notify_log("error", "❌ ERROR: Should appear if session≤ERROR");
-                session.notify_log("critical", "🔥 CRITICAL: Should appear if session≤CRITICAL");
+                session.notify_log(str_to_logging_level("debug"), serde_json::json!("🐛 DEBUG: Should only appear if session=DEBUG"), Some("test".to_string()), None);
+                session.notify_log(str_to_logging_level("info"), serde_json::json!("ℹ️ INFO: Should appear if session≤INFO"), Some("test".to_string()), None);  
+                session.notify_log(str_to_logging_level("notice"), serde_json::json!("📢 NOTICE: Should appear if session≤NOTICE"), Some("test".to_string()), None);
+                session.notify_log(str_to_logging_level("warning"), serde_json::json!("⚠️ WARNING: Should appear if session≤WARNING"), Some("test".to_string()), None);
+                session.notify_log(str_to_logging_level("error"), serde_json::json!("❌ ERROR: Should appear if session≤ERROR"), Some("test".to_string()), None);
+                session.notify_log(str_to_logging_level("critical"), serde_json::json!("🔥 CRITICAL: Should appear if session≤CRITICAL"), Some("test".to_string()), None);
                 
                 let current_level = session.get_logging_level();
                 let levels_that_should_appear: Vec<String> = [
@@ -96,9 +116,24 @@ impl McpTool for LogProofTool {
                 let session_id = session.session_id.clone();
                 let current_level = session.get_logging_level();
                 
-                session.notify_log("info", format!("🏷️ SESSION ISOLATION TEST: Session {} at level {:?}", session_id, current_level));
-                session.notify_log("debug", format!("🔍 DEBUG from session {}: Should only appear if this session allows debug", session_id));
-                session.notify_log("error", format!("❌ ERROR from session {}: Should always appear regardless of other sessions", session_id));
+                session.notify_log(
+                    LoggingLevel::Info, 
+                    serde_json::json!(format!("🏷️ SESSION ISOLATION TEST: Session {} at level {:?}", session_id, current_level)),
+                    Some("proof-test".to_string()),
+                    None
+                );
+                session.notify_log(
+                    LoggingLevel::Debug, 
+                    serde_json::json!(format!("🔍 DEBUG from session {}: Should only appear if this session allows debug", session_id)),
+                    Some("proof-test".to_string()),
+                    None
+                );
+                session.notify_log(
+                    LoggingLevel::Error, 
+                    serde_json::json!(format!("❌ ERROR from session {}: Should always appear regardless of other sessions", session_id)),
+                    Some("proof-test".to_string()),
+                    None
+                );
                 
                 Ok(CallToolResult::success(vec![
                     ToolResult::text(json!({
@@ -112,10 +147,10 @@ impl McpTool for LogProofTool {
             },
             _ => {
                 // Basic test - send one message at each common level
-                session.notify_log("debug", "🧪 BASIC TEST: Debug message");
-                session.notify_log("info", "🧪 BASIC TEST: Info message");
-                session.notify_log("warning", "🧪 BASIC TEST: Warning message");
-                session.notify_log("error", "🧪 BASIC TEST: Error message");
+                session.notify_log(str_to_logging_level("debug"), serde_json::json!("🧪 BASIC TEST: Debug message"), Some("test".to_string()), None);
+                session.notify_log(str_to_logging_level("info"), serde_json::json!("🧪 BASIC TEST: Info message"), Some("test".to_string()), None);
+                session.notify_log(str_to_logging_level("warning"), serde_json::json!("🧪 BASIC TEST: Warning message"), Some("test".to_string()), None);
+                session.notify_log(str_to_logging_level("error"), serde_json::json!("🧪 BASIC TEST: Error message"), Some("test".to_string()), None);
                 
                 Ok(CallToolResult::success(vec![
                     ToolResult::text(json!({
@@ -199,7 +234,12 @@ impl McpTool for SetLevelTool {
             session.session_id, old_level, new_level);
             
         // Send a confirmation message at the new level
-        session.notify_log("info", format!("✅ Logging level changed to {:?}", new_level));
+        session.notify_log(
+            LoggingLevel::Info, 
+            serde_json::json!(format!("✅ Logging level changed to {:?}", new_level)),
+            Some("proof-test".to_string()),
+            None
+        );
         
         Ok(CallToolResult::success(vec![
             ToolResult::text(json!({

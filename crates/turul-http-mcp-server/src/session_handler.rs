@@ -88,6 +88,43 @@ type JsonRpcBody = Full<Bytes>;
 /// HTTP body type for unified MCP responses (can handle both JSON-RPC and streaming)
 type UnifiedMcpBody = http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>;
 
+/// Accept header compliance mode for MCP Streamable HTTP
+#[derive(Debug, Clone, PartialEq)]
+enum AcceptMode {
+    /// Client sends both application/json and text/event-stream (MCP spec compliant)
+    Compliant,
+    /// Client sends only application/json (compatibility mode for non-compliant clients)
+    JsonOnly,
+    /// Client sends only text/event-stream (SSE only)
+    SseOnly,
+    /// Client sends neither or something else entirely
+    Invalid,
+}
+
+/// Parse MCP Accept header and determine compliance mode
+fn parse_mcp_accept_header(accept_header: &str) -> (AcceptMode, bool) {
+    let accepts_json = accept_header.contains("application/json") || accept_header.contains("*/*");
+    let accepts_sse = accept_header.contains("text/event-stream");
+    
+    let mode = match (accepts_json, accepts_sse) {
+        (true, true) => AcceptMode::Compliant,
+        (true, false) => AcceptMode::JsonOnly, // MCP Inspector case
+        (false, true) => AcceptMode::SseOnly,
+        (false, false) => AcceptMode::Invalid,
+    };
+    
+    // For SSE decision, we need both compliance and actual SSE support
+    // In JsonOnly mode, we never use SSE even if server would prefer it
+    let should_use_sse = match mode {
+        AcceptMode::Compliant => true, // Server can choose
+        AcceptMode::JsonOnly => false, // Force JSON for compatibility
+        AcceptMode::SseOnly => true,   // Force SSE
+        AcceptMode::Invalid => false,  // Fallback to JSON
+    };
+    
+    (mode, should_use_sse)
+}
+
 /// Helper function to convert Full<Bytes> to UnsyncBoxBody<Bytes, hyper::Error>
 fn convert_to_unified_body(full_body: Full<Bytes>) -> UnifiedMcpBody {
     full_body.map_err(|never| match never {}).boxed_unsync()
@@ -192,7 +229,7 @@ impl SessionMcpHandler {
         match req.method() {
             &Method::POST => {
                 let response = self.handle_json_rpc_request(req).await?;
-                Ok(response.map(convert_to_unified_body))
+                Ok(response)
             },
             &Method::GET => self.handle_sse_request(req).await,
             &Method::DELETE => {
@@ -214,7 +251,7 @@ impl SessionMcpHandler {
     async fn handle_json_rpc_request(
         &self,
         req: Request<hyper::body::Incoming>,
-    ) -> Result<Response<Full<Bytes>>> {
+    ) -> Result<Response<UnifiedMcpBody>> {
         // Extract protocol version and session ID from headers
         let protocol_version = extract_protocol_version(req.headers());
         let session_id = extract_session_id(req.headers());
@@ -229,17 +266,18 @@ impl SessionMcpHandler {
 
         if !content_type.starts_with("application/json") {
             warn!("Invalid content type: {}", content_type);
-            return Ok(bad_request_response("Content-Type must be application/json"));
+            return Ok(bad_request_response("Content-Type must be application/json").map(convert_to_unified_body));
         }
 
-        // Check if client accepts SSE for streaming responses (MCP Streamable HTTP)
+        // Parse Accept header for MCP Streamable HTTP compliance
         let accept_header = req.headers()
             .get(ACCEPT)
             .and_then(|accept| accept.to_str().ok())
             .unwrap_or("application/json");
 
-        let accepts_sse = accept_header.contains("text/event-stream");
-        debug!("POST request Accept header: '{}', will use SSE for tool calls: {}", accept_header, accepts_sse);
+        let (accept_mode, accepts_sse) = parse_mcp_accept_header(accept_header);
+        debug!("POST request Accept header: '{}', mode: {:?}, will use SSE for tool calls: {}", 
+               accept_header, accept_mode, accepts_sse);
 
         // Read request body
         let body = req.into_body();
@@ -247,7 +285,7 @@ impl SessionMcpHandler {
             Ok(collected) => collected.to_bytes(),
             Err(err) => {
                 error!("Failed to read request body: {}", err);
-                return Ok(bad_request_response("Failed to read request body"));
+                return Ok(bad_request_response("Failed to read request body").map(convert_to_unified_body));
             }
         };
 
@@ -257,7 +295,7 @@ impl SessionMcpHandler {
             return Ok(Response::builder()
                 .status(StatusCode::PAYLOAD_TOO_LARGE)
                 .header(CONTENT_TYPE, "application/json")
-                .body(Full::new(Bytes::from("Request body too large")))
+                .body(convert_to_unified_body(Full::new(Bytes::from("Request body too large"))))
                 .unwrap());
         }
 
@@ -266,7 +304,7 @@ impl SessionMcpHandler {
             Ok(s) => s,
             Err(err) => {
                 error!("Invalid UTF-8 in request body: {}", err);
-                return Ok(bad_request_response("Request body must be valid UTF-8"));
+                return Ok(bad_request_response("Request body must be valid UTF-8").map(convert_to_unified_body));
             }
         };
 
@@ -283,7 +321,7 @@ impl SessionMcpHandler {
                 return Ok(Response::builder()
                     .status(StatusCode::OK) // JSON-RPC parse errors still use 200 OK
                     .header(CONTENT_TYPE, "application/json")
-                    .body(Full::new(Bytes::from(error_response)))
+                    .body(convert_to_unified_body(Full::new(Bytes::from(error_response))))
                     .unwrap());
             }
         };
@@ -389,13 +427,36 @@ impl SessionMcpHandler {
                 // Only use SSE if explicitly requested via Accept: text/event-stream header
                 let is_tool_call = method_name.as_ref().map_or(false, |m| m == "tools/call");
 
-                debug!("Decision point: method={:?}, accepts_sse={}, session_id={:?}, is_tool_call={}",
-                       method_name, accepts_sse, response_session_id, is_tool_call);
+                debug!("Decision point: method={:?}, accept_mode={:?}, accepts_sse={}, server_post_sse_enabled={}, session_id={:?}, is_tool_call={}",
+                       method_name, accept_mode, accepts_sse, self.config.enable_post_sse, response_session_id, is_tool_call);
 
-                // TEMPORARY FIX: Disable MCP Streamable HTTP for tool calls to ensure MCP Inspector compatibility
-                // Always return JSON responses for all operations until SSE implementation is fixed
-                debug!("🔧 COMPATIBILITY MODE: Always returning JSON response for method: {:?} (SSE disabled for tool calls)", method_name);
-                Ok(jsonrpc_response_with_session(response, response_session_id)?)
+                // MCP Streamable HTTP decision logic based on Accept header compliance AND server configuration
+                let should_use_sse = match accept_mode {
+                    AcceptMode::JsonOnly => false,    // Force JSON for compatibility (MCP Inspector)
+                    AcceptMode::Invalid => false,     // Fallback to JSON for invalid headers
+                    AcceptMode::Compliant => self.config.enable_post_sse && accepts_sse && is_tool_call, // Server chooses for compliant clients
+                    AcceptMode::SseOnly => self.config.enable_post_sse && accepts_sse,  // Force SSE if server allows and client accepts
+                };
+
+                if should_use_sse && response_session_id.is_some() {
+                    debug!("📡 Creating POST SSE stream (mode: {:?}) for tool call with notifications", accept_mode);
+                    match self.stream_manager.create_post_sse_stream(
+                        response_session_id.clone().unwrap(),
+                        response.clone(), // Clone the response for SSE stream creation
+                    ).await {
+                        Ok(sse_response) => {
+                            debug!("✅ POST SSE stream created successfully");
+                            Ok(sse_response.map(|body| body.map_err(|never| match never {}).boxed_unsync()))
+                        },
+                        Err(e) => {
+                            warn!("Failed to create POST SSE stream, falling back to JSON: {}", e);
+                            Ok(jsonrpc_response_with_session(response, response_session_id)?.map(convert_to_unified_body))
+                        }
+                    }
+                } else {
+                    debug!("📄 Returning standard JSON response (mode: {:?}) for method: {:?}", accept_mode, method_name);
+                    Ok(jsonrpc_response_with_session(response, response_session_id)?.map(convert_to_unified_body))
+                }
             }
             JsonRpcMessageResult::Error(error) => {
                 warn!("Sending JSON-RPC error response");
@@ -404,12 +465,12 @@ impl SessionMcpHandler {
                 Ok(Response::builder()
                     .status(StatusCode::OK) // JSON-RPC errors still return 200 OK
                     .header(CONTENT_TYPE, "application/json")
-                    .body(Full::new(Bytes::from(error_json)))
+                    .body(convert_to_unified_body(Full::new(Bytes::from(error_json))))
                     .unwrap())
             }
             JsonRpcMessageResult::NoResponse => {
                 // Notifications don't return responses (204 No Content)
-                Ok(jsonrpc_notification_response()?)
+                Ok(jsonrpc_notification_response()?.map(convert_to_unified_body))
             }
         }
     }
@@ -436,6 +497,20 @@ impl SessionMcpHandler {
                 JsonRpcErrorObject::server_error(
                     -32001,
                     "SSE not accepted - missing 'text/event-stream' in Accept header",
+                    None
+                )
+            );
+            return jsonrpc_error_to_unified_body(error);
+        }
+
+        // Check if GET SSE is enabled on the server
+        if !self.config.enable_get_sse {
+            warn!("GET SSE request received but GET SSE is disabled on server");
+            let error = JsonRpcError::new(
+                None,
+                JsonRpcErrorObject::server_error(
+                    -32003,
+                    "GET SSE is disabled on this server",
                     None
                 )
             );

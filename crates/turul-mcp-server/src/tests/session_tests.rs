@@ -15,7 +15,22 @@ use tokio::time::sleep;
 use serde_json::json;
 
 use crate::session::{SessionManager, SessionEvent, SessionError};
-use turul_mcp_protocol::{ServerCapabilities, ClientCapabilities, Implementation};
+use turul_mcp_protocol::{ServerCapabilities, ClientCapabilities, Implementation, logging::LoggingLevel};
+
+/// Helper function to convert string level to LoggingLevel enum for tests
+fn str_to_logging_level(level: &str) -> LoggingLevel {
+    match level.to_lowercase().as_str() {
+        "debug" => LoggingLevel::Debug,
+        "info" => LoggingLevel::Info,
+        "notice" => LoggingLevel::Notice,
+        "warning" => LoggingLevel::Warning,
+        "error" => LoggingLevel::Error,
+        "critical" => LoggingLevel::Critical,
+        "alert" => LoggingLevel::Alert,
+        "emergency" => LoggingLevel::Emergency,
+        _ => LoggingLevel::Info, // Default fallback
+    }
+}
 
 /// Test session creation and basic operations
 #[cfg(test)]
@@ -320,7 +335,7 @@ mod session_context_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Test different notification types
-        context.notify_log("info", "Test log message");
+        context.notify_log(turul_mcp_protocol::logging::LoggingLevel::Info, serde_json::json!("Test log message"), Some("test".to_string()), None);
         context.notify_progress("test-token", 25);
         context.notify_progress_with_total("test-token", 50, 100);
         context.notify_resources_changed();
@@ -690,7 +705,7 @@ mod concurrency_tests {
                 assert_eq!(retrieved, Some(value));
                 
                 // Send notification
-                context_clone.notify_log("info", format!("Concurrent operation {}", i));
+                context_clone.notify_log(str_to_logging_level("info"), serde_json::json!(format!("Concurrent operation {}", i)), Some("test".to_string()), None);
             });
             
             handles.push(handle);
@@ -758,7 +773,7 @@ mod error_handling_tests {
         
         // Set state and notifications should not panic
         (context.set_state)("key", json!("value"));
-        context.notify_log("info", "This should not panic");
+        context.notify_log(str_to_logging_level("info"), serde_json::json!("This should not panic"), Some("test".to_string()), None);
         
         assert!(!(context.is_initialized)());
     }

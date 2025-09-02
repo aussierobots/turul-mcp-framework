@@ -12,7 +12,22 @@ use std::sync::Arc;
 use serde_json::json;
 
 use crate::session::{SessionManager, SessionEvent};
-use turul_mcp_protocol::ServerCapabilities;
+use turul_mcp_protocol::{ServerCapabilities, logging::LoggingLevel};
+
+/// Helper function to convert string level to LoggingLevel enum for tests
+fn str_to_logging_level(level: &str) -> LoggingLevel {
+    match level.to_lowercase().as_str() {
+        "debug" => LoggingLevel::Debug,
+        "info" => LoggingLevel::Info,
+        "notice" => LoggingLevel::Notice,
+        "warning" => LoggingLevel::Warning,
+        "error" => LoggingLevel::Error,
+        "critical" => LoggingLevel::Critical,
+        "alert" => LoggingLevel::Alert,
+        "emergency" => LoggingLevel::Emergency,
+        _ => LoggingLevel::Info, // Default fallback
+    }
+}
 
 /// Test basic notification sending to specific sessions
 #[cfg(test)]
@@ -75,7 +90,7 @@ mod session_notification_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Test different context notification methods
-        context.notify_log("info", "Test log message");
+        context.notify_log(turul_mcp_protocol::logging::LoggingLevel::Info, serde_json::json!("Test log message"), Some("test".to_string()), None);
         context.notify_progress("test-token", 25);
         context.notify_progress_with_total("test-token", 50, 100);
         context.notify_resources_changed();
@@ -213,12 +228,12 @@ mod mcp_notification_tests {
         let log_levels = vec!["debug", "info", "warn", "error"];
         
         for level in log_levels {
-            context.notify_log(level, format!("Test {} message", level));
+            context.notify_log(str_to_logging_level(level), serde_json::json!(format!("Test {} message", level)), Some("test".to_string()), None);
         }
         
         // Test with complex messages
-        context.notify_log("info", "Multi-line\nmessage\nwith special chars: 🚀");
-        context.notify_log("error", json!({"structured": "log", "error_code": 500}).to_string());
+        context.notify_log(str_to_logging_level("info"), serde_json::json!("Multi-line\nmessage\nwith special chars: 🚀"), Some("test".to_string()), None);
+        context.notify_log(str_to_logging_level("error"), json!({"structured": "log", "error_code": 500}), Some("test".to_string()), None);
     }
 
     #[tokio::test]
@@ -404,14 +419,14 @@ mod notification_error_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // These should not panic even with unusual inputs
-        context.notify_log("", ""); // Empty strings
-        context.notify_log("invalid_level", "Test message");
+        context.notify_log(str_to_logging_level("info"), serde_json::json!(""), Some("test".to_string()), None); // Empty strings
+        context.notify_log(str_to_logging_level("invalid_level"), serde_json::json!("Test message"), Some("test".to_string()), None);
         context.notify_progress("", 0);
         context.notify_resource_updated("");
         
         // Test with very long strings
         let long_string = "x".repeat(10000);
-        context.notify_log("info", &long_string);
+        context.notify_log(str_to_logging_level("info"), serde_json::json!(long_string.clone()), Some("test".to_string()), None);
         context.notify_progress(&long_string, 50);
     }
 
@@ -427,7 +442,7 @@ mod notification_error_tests {
         manager.remove_session(&session_id).await;
         
         // Attempt to send notifications to expired session
-        context.notify_log("info", "Message to expired session");
+        context.notify_log(str_to_logging_level("info"), serde_json::json!("Message to expired session"), Some("test".to_string()), None);
         context.notify_progress("test", 50);
         
         // These should not panic, even though session may be expired
@@ -448,7 +463,7 @@ mod notification_error_tests {
         for i in 0..num_concurrent {
             let context_clone = context.clone();
             let handle = tokio::spawn(async move {
-                context_clone.notify_log("info", format!("Concurrent message {}", i));
+                context_clone.notify_log(str_to_logging_level("info"), serde_json::json!(format!("Concurrent message {}", i)), Some("test".to_string()), None);
                 context_clone.notify_progress("concurrent", i as u64);
                 
                 let custom_event = SessionEvent::Custom {
@@ -517,7 +532,7 @@ mod notification_performance_tests {
         
         // Send notifications as fast as possible
         for i in 0..num_notifications {
-            context.notify_log("performance", format!("Message {}", i));
+            context.notify_log(str_to_logging_level("performance"), serde_json::json!(format!("Message {}", i)), Some("test".to_string()), None);
             counter.fetch_add(1, Ordering::SeqCst);
         }
         
