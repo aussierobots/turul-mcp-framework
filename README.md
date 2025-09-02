@@ -7,13 +7,13 @@ A comprehensive, battle-tested Rust framework for building Model Context Protoco
 
 ## ✨ Key Highlights
 
-- **🏗️ 37 Workspace Crates**: Complete MCP ecosystem with core framework, client library, and serverless support
-- **📚 26 Comprehensive Examples**: 10 real-world business applications + 16 framework demonstration examples
+- **🏗️ 67+ Workspace Crates**: Complete MCP ecosystem with core framework, client library, and serverless support
+- **📚 31+ Comprehensive Examples**: Real-world business applications and framework demonstration examples
 - **🧪 100+ Comprehensive Tests**: Beta-grade test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
-- **🌐 Transport Flexibility**: HTTP/1.1, HTTP/2, WebSocket, SSE, and stdio transport support
+- **🌐 Transport Flexibility**: HTTP/1.1, HTTP/2, SSE, and stdio transport support
 - **☁️ Serverless Ready**: AWS Lambda integration with streaming responses and SQS event processing
-- **🔧 Production Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
+- **🔧 Beta Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
 - **⚡ Performance Optimized**: Comprehensive benchmarking suite with >1000 RPS throughput, <100ms response times, and extensive stress testing
 
 ## 🚀 Quick Start
@@ -93,10 +93,10 @@ impl AuditTool {
 
 ## 🏛️ Architecture Overview
 
-### Core Framework (6 Crates)
+### Core Framework (10+ Crates)
 - **`turul-mcp-server`** - High-level server builder with session management
-- **`turul-mcp-client`** - Comprehensive client library with multi-transport support
-- **`turul-http-turul-mcp-server`** - HTTP/SSE transport with CORS and streaming
+- **`turul-mcp-client`** - Comprehensive client library with HTTP transport support
+- **`turul-http-mcp-server`** - HTTP/SSE transport with CORS and streaming
 - **`turul-mcp-protocol-2025-06-18`** - Complete MCP specification implementation
 - **`turul-mcp-derive`** - Procedural and declarative macros
 - **`turul-mcp-json-rpc-server`** - Transport-agnostic JSON-RPC 2.0 foundation
@@ -186,15 +186,15 @@ let server = McpServer::builder()
 - ✅ **Session Management** - Stateful operations with UUID v7 correlation IDs
 
 ### Transport Support
-- **HTTP/1.1 & HTTP/2** - Standard web transport
-- **Server-Sent Events (SSE)** - Real-time notifications
+- **HTTP/1.1 & HTTP/2** - Standard web transport with JSON-RPC
+- **Server-Sent Events (SSE)** - Real-time notifications and streaming
 - **Stdio** - Command-line integration
-- **AWS Lambda Streaming** - Serverless deployment
+- **AWS Lambda** - Serverless deployment with streaming responses
 
 ## 📚 Examples Overview
 
-### 🏢 Real-World Business Applications (10 Examples)
-Production-ready servers solving actual business problems:
+### 🏢 Real-World Business Applications
+Beta-grade servers solving actual business problems:
 
 1. **comprehensive-server** → Development Team Integration Platform
 2. **dynamic-resource-server** → Enterprise API Data Gateway
@@ -207,7 +207,7 @@ Production-ready servers solving actual business problems:
 9. **calculator-server** → Business Financial Calculator
 10. **resources-server** → Development Team Resource Hub
 
-### 🔧 Framework Demonstrations (16 Examples)
+### 🔧 Framework Demonstrations
 Educational examples showcasing framework patterns:
 - **Basic Patterns**: minimal-server, manual-tools-server, spec-compliant-server
 - **Advanced Features**: stateful-server, pagination-server, version-negotiation-server
@@ -240,7 +240,7 @@ sam deploy --guided
 
 ## 🧪 Testing & Quality
 
-### 🧪 **Comprehensive Test Coverage - Production Quality**
+### 🧪 **Comprehensive Test Coverage - Beta Quality**
 
 **Framework Excellence**: 100+ tests across all components with full SessionContext integration:
 
@@ -497,7 +497,7 @@ impl McpTool for CustomTool {
 
 ## 🔧 Client Library
 
-Comprehensive MCP client with multi-transport support:
+Comprehensive MCP client for HTTP transport:
 
 ```rust
 use turul_mcp_client::{McpClient, ClientConfig};
@@ -530,7 +530,7 @@ let content = client.read_resource("config://app.json").await?;
 - **Rust 2024 Edition** - Latest language features and performance improvements
 - **Tokio/Hyper** - High-performance async runtime with HTTP/2 support
 
-### Production Ready
+### Beta Quality
 - **Session Management** - Automatic cleanup and state persistence
 - **Real-time Notifications** - SSE-based event streaming
 - **CORS Support** - Browser client compatibility
@@ -697,6 +697,6 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 ---
 
-**🚀 Ready to build production MCP servers?** Start with our [comprehensive examples](examples/) or check the [getting started guide](EXAMPLES.md).
+**🚀 Ready to build beta-grade MCP servers?** Start with our [comprehensive examples](examples/) or check the [getting started guide](EXAMPLES.md).
 
-**💡 Need help?** Open an issue or check our [26 working examples](examples/) covering everything from simple calculators to enterprise systems.
+**💡 Need help?** Open an issue or check our [31+ working examples](examples/) covering everything from simple calculators to enterprise systems.
