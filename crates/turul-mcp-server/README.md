@@ -26,27 +26,30 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 turul-mcp-server = "0.1"
-turul-mcp-derive = "0.1"  # For derive macros
+# Add turul-mcp-derive = "0.1" if using derive macros
 ```
 
-### Level 1: Function Macros (Ultra-Simple)
+### Level 3: Builder Pattern (No Dependencies)
 
 ```rust
-use turul_mcp_server::{McpServer, McpResult};
-use turul_mcp_derive::mcp_tool;
-
-#[mcp_tool(name = "calculator", description = "Add two numbers")]
-async fn calculator(
-    #[param(description = "First number")] a: f64,
-    #[param(description = "Second number")] b: f64,
-) -> McpResult<f64> {
-    Ok(a + b)
-}
+use turul_mcp_server::{McpServer, ToolBuilder};
+use serde_json::json;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let calculator = ToolBuilder::new("calculator")
+        .description("Add two numbers")
+        .number_param("a", "First number")
+        .number_param("b", "Second number")
+        .execute(|args| async move {
+            let a = args.get("a").and_then(|v| v.as_f64()).unwrap();
+            let b = args.get("b").and_then(|v| v.as_f64()).unwrap();
+            Ok(json!({"result": a + b}))
+        })
+        .build()?;
+
     let server = McpServer::builder()
-        .tool_fn(calculator)  // Just pass the function name!
+        .tool(calculator)
         .build()?
         .start()
         .await?;
@@ -55,6 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ### Level 2: Derive Macros (Struct-Based)
+*Requires: `turul-mcp-derive = "0.1"` dependency*
 
 ```rust
 use turul_mcp_server::{McpServer, McpResult, SessionContext};

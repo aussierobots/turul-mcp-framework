@@ -13,7 +13,7 @@ members = [
     "crates/turul-mcp-builders",
     "crates/turul-mcp-aws-lambda",
 
-    # Active examples (27 total)
+    # Active examples (34 total)
     "examples/alert-system-server",
     "examples/audit-trail-server",
     "examples/builders-showcase",
@@ -44,6 +44,15 @@ members = [
     # "examples/simple-sqlite-session", # TODO: Fix compilation errors
     "examples/stateful-server",
     "examples/zero-config-getting-started",
+    
+    # Moved from turul-mcp-server/examples
+    "examples/client-initialise-server",
+    "examples/client-initialise-report", 
+    "examples/logging-test-client",
+    "examples/logging-test-server",
+    "examples/session-aware-logging-demo",
+    "examples/session-logging-proof-test",
+    "examples/session-management-compliance-test",
 
     # Tests
     "tests",

@@ -38,19 +38,3 @@ chrono = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
-# Dependencies for examples
-turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.1.0" }
-anyhow.workspace = true
-clap.workspace = true
-reqwest.workspace = true
-tracing-subscriber.workspace = true
-chrono.workspace = true
-futures.workspace = true
-
-[[example]]
-name = "client-initialise-server"
-path = "examples/client-initialise-server.rs"
-
-[[example]]
-name = "client-initialise-report"
-path = "examples/client-initialise-report.rs"
