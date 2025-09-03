@@ -25,8 +25,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-server = "0.1"
-# Add turul-mcp-derive = "0.1" if using derive macros
+turul-mcp-server = "0.1.1"
+# Add turul-mcp-derive = "0.1.1" if using derive macros
 ```
 
 ### Level 3: Builder Pattern (No Dependencies)
@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ### Level 2: Derive Macros (Struct-Based)
-*Requires: `turul-mcp-derive = "0.1"` dependency*
+*Requires: `turul-mcp-derive = "0.1.1"` dependency*
 
 ```rust
 use turul_mcp_server::{McpServer, McpResult, SessionContext};
@@ -293,7 +293,7 @@ All MCP components use consistent trait patterns:
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.1", features = ["sqlite", "postgres"] }
+turul-mcp-server = { version = "0.1.1", features = ["sqlite", "postgres"] }
 ```
 
 - `default` - All features enabled

@@ -25,7 +25,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-json-rpc-server = "0.1"
+turul-mcp-json-rpc-server = "0.1.1"
 tokio = { version = "1.0", features = ["macros"] }
 serde_json = "1.0"
 ```
@@ -578,7 +578,7 @@ async fn test_full_json_rpc_flow() {
 
 ```toml
 [dependencies]
-turul-mcp-json-rpc-server = { version = "0.1", features = ["async"] }
+turul-mcp-json-rpc-server = { version = "0.1.1", features = ["async"] }
 ```
 
 Available features:

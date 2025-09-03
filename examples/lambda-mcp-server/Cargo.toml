@@ -1,6 +1,6 @@
 [package]
 name = "lambda-turul-mcp-server"
-version = "0.1.0"
+version = "0.1.1"
 edition.workspace = true
 description = "AWS Lambda serverless MCP server using mcp-framework components"
 license = "MIT"

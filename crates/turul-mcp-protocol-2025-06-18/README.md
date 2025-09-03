@@ -25,7 +25,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-protocol-2025-06-18 = "0.1"
+turul-mcp-protocol-2025-06-18 = "0.1.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ```
@@ -793,7 +793,7 @@ fn handle_protocol_errors() {
 
 ```toml
 [dependencies]
-turul-mcp-protocol-2025-06-18 = { version = "0.1", features = ["server"] }
+turul-mcp-protocol-2025-06-18 = { version = "0.1.1", features = ["server"] }
 ```
 
 Available features:

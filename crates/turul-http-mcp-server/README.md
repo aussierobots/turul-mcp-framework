@@ -25,9 +25,9 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-http-mcp-server = "0.1"
-turul-mcp-server = "0.1"
-turul-mcp-derive = "0.1"
+turul-http-mcp-server = "0.1.1"
+turul-mcp-server = "0.1.1"
+turul-mcp-derive = "0.1.1"
 ```
 
 ### Basic HTTP MCP Server
@@ -467,7 +467,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-turul-http-mcp-server = { version = "0.1", features = ["sse"] }
+turul-http-mcp-server = { version = "0.1.1", features = ["sse"] }
 ```
 
 - `default` = `["sse"]` - Includes SSE support by default
