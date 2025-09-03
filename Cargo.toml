@@ -64,9 +64,9 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
-authors = ["Nick Hortovanyi <nick@aussierobots.com>"]
+authors = ["Nick Hortovanyi <nick@aussierobots.com.au>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/aussierobots/turul-mcp-framework"
 homepage = "https://github.com/aussierobots/turul-mcp-framework"

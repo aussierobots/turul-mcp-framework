@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-aws-lambda"
-version = "0.1.1"
+version = "0.2.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -17,12 +17,12 @@ dynamodb = ["turul-mcp-session-storage/dynamodb"]  # DynamoDB session storage
 
 [dependencies]
 # Core MCP framework
-turul-mcp-server = { path = "../turul-mcp-server", version = "0.1.1" }
-turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.1.1" }
-turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.1.1" }
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.1.1" }
-turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.1.1" }
-turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.1.1" }
+turul-mcp-server = { path = "../turul-mcp-server", version = "0.2.0" }
+turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.2.0" }
+turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.2.0" }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.2.0" }
+turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.2.0" }
+turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.2.0" }
 
 # AWS Lambda runtime
 lambda_http = { workspace = true }

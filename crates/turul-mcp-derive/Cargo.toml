@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-derive"
-version = "0.1.1"
+version = "0.2.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -20,10 +20,10 @@ serde_json = "1.0"
 async-trait.workspace = true
 
 # Internal dependencies
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.1.1" }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.2.0" }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 async-trait.workspace = true
 tracing-test = "0.2"
-turul-mcp-server = { path = "../turul-mcp-server", version = "0.1.1" }
+turul-mcp-server = { path = "../turul-mcp-server", version = "0.2.0" }
