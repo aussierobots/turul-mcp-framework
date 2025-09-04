@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use crate::handlers::McpHandler;
 use crate::session::{SessionContext, SessionManager};
@@ -625,13 +625,46 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             }
         };
 
-        // Use session ID provided by HTTP layer, or create new one if not provided (GPS pattern)
+        // Use session ID provided by HTTP layer, or create new one if not provided
         let session_id = if let Some(ctx) = &session_context {
-            debug!("Using session ID from HTTP layer: {}", ctx.session_id);
-            // Create session with the provided session ID
-            self.session_manager
-                .create_session_with_id(ctx.session_id.clone())
-                .await
+            debug!("Using session from context: {}", ctx.session_id);
+            
+            // Add session to cache if it doesn't exist there
+            // This handles sessions created directly in storage by session_handler
+            let cache_exists = self.session_manager.session_exists_in_cache(&ctx.session_id).await;
+            debug!("Session {} exists in cache: {}", ctx.session_id, cache_exists);
+            
+            if !cache_exists {
+                debug!("Session {} not in cache, checking storage", ctx.session_id);
+                
+                // Try to load session from storage with its actual capabilities
+                match self.session_manager.load_session_from_storage(&ctx.session_id).await {
+                    Ok(true) => {
+                        debug!("Session {} loaded from storage with preserved capabilities", ctx.session_id);
+                    }
+                    Ok(false) => {
+                        // Session doesn't exist in storage either - this shouldn't happen
+                        // in normal flow but handle gracefully
+                        warn!("Session {} not found in storage, creating with defaults", ctx.session_id);
+                        self.session_manager.add_session_to_cache(
+                            ctx.session_id.clone(),
+                            self.session_manager.get_default_capabilities()
+                        ).await;
+                    }
+                    Err(e) => {
+                        error!("Failed to load session {} from storage: {}", ctx.session_id, e);
+                        // Fallback to defaults only on error
+                        self.session_manager.add_session_to_cache(
+                            ctx.session_id.clone(),
+                            self.session_manager.get_default_capabilities()
+                        ).await;
+                    }
+                }
+            } else {
+                debug!("Session {} already exists in cache", ctx.session_id);
+            }
+            
+            ctx.session_id.clone()
         } else {
             debug!("No session context provided, creating new session");
             self.session_manager.create_session().await

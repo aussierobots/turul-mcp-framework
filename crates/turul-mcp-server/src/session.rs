@@ -732,6 +732,8 @@ pub enum SessionError {
     NotInitialized(String),
     #[error("Invalid session data: {0}")]
     InvalidData(String),
+    #[error("Storage error: {0}")]
+    StorageError(String),
 }
 
 /// Global session manager for MCP servers
@@ -830,7 +832,7 @@ impl SessionManager {
         session_id
     }
 
-    /// Create a new session with a specific ID (for GPS pattern compliance)
+    /// Create a new session with a specific ID (for testing only - see trait documentation)
     pub async fn create_session_with_id(&self, session_id: String) -> String {
         let mut session = McpSession::new(self.default_capabilities.clone());
         session.id = session_id.clone();
@@ -849,6 +851,82 @@ impl SessionManager {
         // Also store in memory cache for performance
         self.sessions.write().await.insert(session_id.clone(), session);
         session_id
+    }
+
+    /// Add an externally created session to the cache
+    /// Used when session_handler creates a session directly in storage
+    pub async fn add_session_to_cache(&self, session_id: String, server_capabilities: ServerCapabilities) {
+        let mut session = McpSession::new(server_capabilities);
+        session.id = session_id.clone(); // Use the provided ID
+        
+        debug!("Adding externally created session {} to cache", session_id);
+        self.sessions.write().await.insert(session_id, session);
+    }
+
+    /// Load session from storage into cache with its actual capabilities
+    /// This preserves the negotiated capabilities and session state from persistent storage
+    pub async fn load_session_from_storage(&self, session_id: &str) -> Result<bool, SessionError> {
+        match self.storage.get_session(session_id).await {
+            Ok(Some(session_info)) => {
+                debug!("Loading session {} from storage", session_id);
+                
+                // Create McpSession from stored SessionInfo with preserved capabilities
+                let server_capabilities = session_info.server_capabilities.clone()
+                    .unwrap_or_else(|| {
+                        warn!("Session {} in storage has no server capabilities, using defaults", session_id);
+                        self.default_capabilities.clone()
+                    });
+                
+                let mut session = McpSession::new(server_capabilities);
+                session.id = session_id.to_string();
+                session.initialized = session_info.is_initialized;
+                session.client_capabilities = session_info.client_capabilities.clone();
+                session.state = session_info.state.clone();
+                
+                // Convert Unix timestamps to Instant
+                // Calculate elapsed time from stored timestamps to current time
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64;
+                
+                let created_elapsed = if now > session_info.created_at {
+                    Duration::from_millis(now - session_info.created_at)
+                } else {
+                    Duration::from_secs(0)
+                };
+                
+                let last_activity_elapsed = if now > session_info.last_activity {
+                    Duration::from_millis(now - session_info.last_activity)
+                } else {
+                    Duration::from_secs(0)
+                };
+                
+                // Set timestamps relative to current time
+                session.created = Instant::now() - created_elapsed;
+                session.last_accessed = Instant::now() - last_activity_elapsed;
+                
+                // Add to cache with preserved state and capabilities
+                self.sessions.write().await.insert(session_id.to_string(), session);
+                
+                debug!(
+                    "Session {} loaded from storage: initialized={}, has_capabilities={}", 
+                    session_id, 
+                    session_info.is_initialized,
+                    session_info.server_capabilities.is_some()
+                );
+                
+                Ok(true)
+            }
+            Ok(None) => {
+                debug!("Session {} not found in storage", session_id);
+                Ok(false)
+            }
+            Err(e) => {
+                error!("Failed to get session {} from storage: {}", session_id, e);
+                Err(SessionError::StorageError(e.to_string()))
+            }
+        }
     }
 
     /// Get session and update last accessed time
@@ -1223,6 +1301,16 @@ impl SessionManager {
     /// This ensures all components use the same storage backend
     pub fn get_storage(&self) -> Arc<turul_mcp_session_storage::BoxedSessionStorage> {
         Arc::clone(&self.storage)
+    }
+
+    /// Get the default capabilities for use by other components
+    pub fn get_default_capabilities(&self) -> ServerCapabilities {
+        self.default_capabilities.clone()
+    }
+
+    /// Check if session exists in the in-memory cache only (not storage)
+    pub async fn session_exists_in_cache(&self, session_id: &str) -> bool {
+        self.sessions.read().await.contains_key(session_id)
     }
 }
 
