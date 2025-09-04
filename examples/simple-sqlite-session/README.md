@@ -1,231 +1,141 @@
 # Simple SQLite Session Storage Example
 
-This example demonstrates SQLite-backed session storage for MCP servers, providing file-based persistence perfect for single-instance deployments and development environments.
+This example demonstrates SQLite-backed session storage for MCP servers. Perfect for single-instance deployments that need persistent session state without the complexity of a database server.
 
 ## Features
 
-- **File-Based Persistence**: Session data stored in local SQLite database
-- **Zero Configuration**: No database server setup required
-- **ACID Transactions**: Reliable data consistency
-- **Automatic Schema Creation**: Database and tables created automatically
-- **Lightweight**: Minimal resource usage and dependencies
+- **Session-scoped storage**: Each MCP session gets isolated key-value storage in SQLite
+- **File-based persistence**: Session data stored in local SQLite database file
+- **Zero configuration**: No database server setup required
+- **Automatic creation**: Database and tables created automatically
+- **Lightweight**: Minimal resource usage, perfect for development and desktop apps
 
-## Quick Start
+## Setup
 
-### Automated Setup (Recommended)
+### 1. Create SQLite Database
 
-Use the built-in database management utilities:
-
+**Option A: Using Setup Utility (Recommended)**
 ```bash
-# Set up SQLite database and schema
-cargo run --bin sqlite-setup
+# Create SQLite database and tables
+SQLITE_PATH="./my-sessions.db" cargo run --bin sqlite-setup
 
-# Run the MCP server
-cargo run --bin server
-
-# When done, clean up (optional)
-cargo run --bin sqlite-teardown
+# Then run the server
+SQLITE_PATH="./my-sessions.db" cargo run --bin simple-sqlite-session
 ```
 
-### Manual Setup
-
-#### 1. Run the Server
-
+**Option B: Automatic Creation**
 ```bash
-cargo run --bin server
+# Server will create database automatically if it doesn't exist
+cargo run --bin simple-sqlite-session
 ```
 
-With custom database location:
-```bash
-SQLITE_PATH="./my-sessions.db" cargo run --bin server
-```
-
-The server will automatically:
-- Create the SQLite database file if it doesn't exist
-- Set up the required table schema
-- Start accepting requests on http://127.0.0.1:8061/mcp
+The setup utility creates the SQLite database file with all required tables and schema.
 
 ## Usage
 
-### Save a Setting
+The server runs at `http://127.0.0.1:8061/mcp` and provides these tools:
+
+### Store Value in Session
 ```json
 {
   "jsonrpc": "2.0",
   "id": 1,
   "method": "tools/call",
   "params": {
-    "name": "save_setting",
+    "name": "store_value",
     "arguments": {
-      "name": "ui_mode",
+      "key": "theme",
       "value": "dark"
     }
   }
 }
 ```
 
-### Load a Setting
+### Get Value from Session
 ```json
 {
   "jsonrpc": "2.0",
   "id": 2,
   "method": "tools/call",
   "params": {
-    "name": "load_setting",
+    "name": "get_value",
     "arguments": {
-      "name": "ui_mode"
+      "key": "theme"
     }
   }
 }
 ```
 
-### Test Persistence
-
-1. **Save data**: `save_setting(name="auto_save", value=true)`
-2. **Increment counter**: `increment_counter(counter_name="app_launches")`
-3. **Stop the server** (Ctrl+C)
-4. **Restart the server**: `cargo run --bin server`
-5. **Load data**: `load_setting(name="auto_save")` ✅ Returns `true`
-6. **Increment again**: `increment_counter(counter_name="app_launches")` ✅ Continues from previous count!
-
-## Tools
-
-- **`save_setting`** - Save user setting to SQLite database
-- **`load_setting`** - Load user setting from SQLite database
-- **`increment_counter`** - Increment persistent counter (demonstrates stateful operations)
-- **`storage_stats`** - View SQLite storage backend information
-- **`backup_data`** - Create backup metadata (copy sessions.db file for full backup)
-
-## Architecture
-
+### Session Information
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "session_info",
+    "arguments": {}
+  }
+}
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   MCP Server    │    │  SessionStorage │    │  SQLite Database│
-│                 │    │      Trait      │    │  (sessions.db)  │
-│ ┌─────────────┐ │    │                 │    │                 │
-│ │SessionManager│◄────┤ SqliteStorage   │────┤   sessions      │
-│ │             │ │    │                 │    │   events        │
-│ └─────────────┘ │    │                 │    │   state         │
-│                 │    └─────────────────┘    └─────────────────┘
-└─────────────────┘
-```
+
+## Available Tools
+
+- **`store_value`** - Store a value in this session's SQLite storage (session-scoped)
+- **`get_value`** - Retrieve a value from this session's SQLite storage (session-scoped)
+- **`session_info`** - Get information about the SQLite session
+
+## Session Storage Behavior
+
+- **Session-scoped**: Data is isolated per session ID
+- **Persistent**: Data survives server restarts
+- **File-based**: Data stored in local SQLite database file
+- **Single-process**: SQLite is designed for single-process access
 
 ## Configuration
 
-Default SQLite settings:
-- **Database File**: `./sessions.db`
-- **Connection Pool**: 5 connections
-- **Session Timeout**: 30 minutes
-- **Cleanup Interval**: 5 minutes
-- **WAL Mode**: Enabled (better concurrency)
-- **Foreign Keys**: Enabled
-
-## Database Management
-
-### Setup Binary
-
-The `sqlite-setup` binary automates SQLite database creation:
+The server uses this environment variable:
 
 ```bash
-# Uses default settings (./mcp_sessions.db)
-cargo run --bin sqlite-setup
-
-# With custom environment variables
-SQLITE_DB_PATH="./custom.db" SQLITE_DATA_DIR="./backups" cargo run --bin sqlite-setup
+SQLITE_PATH=./sessions.db    # SQLite database file path
 ```
-
-**What it does:**
-- Creates SQLite database file with proper schema
-- Sets up tables and indexes for session storage
-- Configures SQLite optimizations (WAL mode, caching)
-- Runs database verification tests
-- Provides interactive options for existing databases
-
-### Teardown Binary
-
-The `sqlite-teardown` binary provides flexible database cleanup:
-
-```bash
-# Interactive mode - choose what to clean up
-cargo run --bin sqlite-teardown
-
-# Command line options
-cargo run --bin sqlite-teardown -- --clear-data     # Clear data, keep schema
-cargo run --bin sqlite-teardown -- --drop-tables    # Remove all tables
-cargo run --bin sqlite-teardown -- --backup         # Create timestamped backup
-cargo run --bin sqlite-teardown -- --vacuum         # Optimize database file
-cargo run --bin sqlite-teardown -- --delete         # Delete database file
-cargo run --bin sqlite-teardown -- --all            # Backup + full cleanup
-```
-
-**Cleanup Options:**
-1. **Clear session data** - Remove all sessions/events but keep schema (safe for development)
-2. **Drop tables** - Remove all MCP session tables and data
-3. **Backup database** - Create timestamped backup in data directory
-4. **Vacuum database** - Reclaim space and optimize file size
-5. **Delete database** - Completely remove database file and temporary files
-6. **Full cleanup** - Create backup then delete everything
-
-### Environment Variables
-
-Both binaries support these environment variables:
-
-```bash
-export SQLITE_DB_PATH="./mcp_sessions.db"  # Database file path
-export SQLITE_DATA_DIR="./data"            # Directory for backups
-```
-
-### Advanced Backup and Restore
-
-#### Automated Backup
-```bash
-# Create backup with the management utility
-cargo run --bin sqlite-teardown -- --backup
-```
-
-#### Manual Backup
-```bash
-# Stop the server first
-cp mcp_sessions.db backup-$(date +%Y%m%d).db
-```
-
-#### Restore from Backup
-```bash
-# Stop the server first  
-cp backup-20240830.db mcp_sessions.db
-# Restart the server
-```
-
-## File Locations
-
-- **Database File**: `./sessions.db` (configurable with `SQLITE_PATH`)
-- **WAL File**: `./sessions.db-wal` (Write-Ahead Log)
-- **Shared Memory**: `./sessions.db-shm`
 
 ## Use Cases
 
-**Perfect for**:
-- Single-instance MCP server deployments
-- Development and testing environments
-- Desktop applications requiring persistence
-- Local data storage without database server overhead
+Perfect for:
+- **Development environments**: Local development with persistent state
+- **Desktop applications**: Client-side applications needing local storage
+- **Single-instance deployments**: Simple deployments without database servers
+- **Local persistence**: Any scenario requiring lightweight, local data storage
 
-**Not recommended for**:
-- Multi-instance deployments (no shared access)
-- High-concurrency scenarios (SQLite limitations)
-- Distributed systems (use PostgreSQL instead)
+## Example Session
 
-## Troubleshooting
+1. **Create database**: `SQLITE_PATH="./my-sessions.db" cargo run --bin sqlite-setup`
+2. **Start server**: `SQLITE_PATH="./my-sessions.db" cargo run --bin simple-sqlite-session`
+3. **Store data**: `store_value(key='user_id', value=123)`
+4. **Restart server**: Server restarts, session persists in SQLite file
+5. **Retrieve data**: `get_value(key='user_id')` returns `123`
 
-**Database Locked**: Ensure only one server instance is running
-**Permission Denied**: Check write permissions for database directory
-**Corruption Issues**: SQLite auto-recovery usually handles this
-**Performance**: Consider WAL mode (enabled by default) for better write performance
+Each session maintains its own isolated storage space in the SQLite database file.
 
-## Development
+## Cleanup
 
-The example includes comprehensive logging:
+To delete the SQLite database file (permanent deletion):
+
 ```bash
-RUST_LOG=debug cargo run --bin server
+# WARNING: This will permanently delete ALL session data!
+CONFIRM_DELETE=yes SQLITE_PATH="./my-sessions.db" cargo run --bin sqlite-teardown
 ```
 
-This shows all SQLite operations and session management activities.
+## Database File
+
+- **Location**: `./sessions.db` (or custom via `SQLITE_PATH`)
+- **Format**: Standard SQLite database file
+- **Backup**: Simply copy the `.db` file
+- **Portability**: Database file is cross-platform
+
+## Available Commands
+
+- **`cargo run --bin sqlite-setup`** - Create SQLite database and tables
+- **`cargo run --bin simple-sqlite-session`** - Run the MCP server
+- **`cargo run --bin sqlite-teardown`** - Delete SQLite database file (requires `CONFIRM_DELETE=yes`)

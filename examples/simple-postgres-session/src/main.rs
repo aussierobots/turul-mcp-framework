@@ -29,112 +29,73 @@ use turul_mcp_derive::McpTool;
 use serde_json::{json, Value};
 use tracing::{info, error, debug};
 
-/// Tool that stores user preferences in session state
+/// Tool that stores a key-value pair in this session's PostgreSQL storage
 #[derive(McpTool, Default)]
-#[tool(name = "store_preference", description = "Store a user preference that persists across server restarts")]
-struct StorePreferenceTool {
-    #[param(description = "Preference key (e.g., 'theme', 'language')")]
+#[tool(name = "store_value", description = "Store a value in this session's PostgreSQL storage (session-scoped)")]
+struct StoreValueTool {
+    #[param(description = "Key to store in session")]
     key: String,
-    #[param(description = "Preference value")]
+    #[param(description = "Value to store in session")]
     value: Value,
 }
 
-impl StorePreferenceTool {
+impl StoreValueTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
         let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
-        debug!("Storing preference: {} = {}", self.key, self.value);
+        debug!("Storing value in PostgreSQL: {} = {}", self.key, self.value);
 
-        // Store preference in PostgreSQL-backed session
-        (session.set_state)(&format!("pref_{}", self.key), self.value.clone());
-
-        // Send progress notification
-        (session.send_notification)(turul_mcp_server::SessionEvent::Notification(json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/progress",
-            "params": {
-                "progressToken": format!("pref_{}", self.key),
-                "progress": 1,
-                "total": 1
-            }
-        })));
+        // Store value in this session's PostgreSQL storage
+        (session.set_state)(&self.key, self.value.clone());
 
         Ok(json!({
             "stored": true,
+            "session_id": session.session_id,
             "key": self.key,
             "value": self.value,
-            "message": format!("Stored preference '{}' in PostgreSQL session storage", self.key),
+            "storage": "PostgreSQL (session-scoped)",
+            "message": format!("Stored '{}' in session {} (PostgreSQL)", self.key, session.session_id),
             "timestamp": chrono::Utc::now()
         }))
     }
 }
 
-/// Tool that retrieves user preferences from session state
+/// Tool that retrieves a value from this session's PostgreSQL storage
 #[derive(McpTool, Default)]
-#[tool(name = "get_preference", description = "Retrieve a user preference from persistent session storage")]
-struct GetPreferenceTool {
-    #[param(description = "Preference key to retrieve")]
+#[tool(name = "get_value", description = "Retrieve a value from this session's PostgreSQL storage (session-scoped)")]
+struct GetValueTool {
+    #[param(description = "Key to retrieve from session")]
     key: String,
 }
 
-impl GetPreferenceTool {
+impl GetValueTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
         let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
 
-        debug!("Getting preference: {}", self.key);
+        debug!("Getting value from PostgreSQL: {}", self.key);
 
-        // Retrieve preference from PostgreSQL-backed session
-        let value = (session.get_state)(&format!("pref_{}", self.key));
+        // Retrieve value from this session's PostgreSQL storage
+        let value = (session.get_state)(&self.key);
 
         Ok(json!({
             "found": value.is_some(),
+            "session_id": session.session_id,
             "key": self.key,
             "value": value,
+            "storage": "PostgreSQL (session-scoped)",
             "message": if value.is_some() {
-                format!("Retrieved preference '{}' from PostgreSQL", self.key)
+                format!("Retrieved '{}' from session {} (PostgreSQL)", self.key, session.session_id)
             } else {
-                format!("Preference '{}' not found in session", self.key)
+                format!("Key '{}' not found in session {} (PostgreSQL)", self.key, session.session_id)
             },
             "timestamp": chrono::Utc::now()
         }))
     }
 }
 
-/// Tool that lists all stored preferences
+/// Tool that shows session information
 #[derive(McpTool, Default)]
-#[tool(name = "list_preferences", description = "List all stored user preferences")]
-struct ListPreferencesTool {}
-
-impl ListPreferencesTool {
-    async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
-
-        debug!("Listing all preferences");
-
-        // This is a simplified example - in practice you'd need a way to enumerate keys
-        // For now, just show that session is available
-        let demo_keys = vec!["theme", "language", "timezone"];
-        let mut preferences = serde_json::Map::new();
-
-        for key in demo_keys {
-            if let Some(value) = (session.get_state)(&format!("pref_{}", key)) {
-                preferences.insert(key.to_string(), value);
-            }
-        }
-
-        Ok(json!({
-            "preferences": preferences,
-            "session_id": session.session_id,
-            "storage_backend": "PostgreSQL",
-            "message": "Retrieved preferences from PostgreSQL session storage",
-            "timestamp": chrono::Utc::now()
-        }))
-    }
-}
-
-/// Tool that demonstrates session info
-#[derive(McpTool, Default)]
-#[tool(name = "session_info", description = "Get information about the current session")]
+#[tool(name = "session_info", description = "Get information about the PostgreSQL session")]
 struct SessionInfoTool {}
 
 impl SessionInfoTool {
@@ -144,15 +105,13 @@ impl SessionInfoTool {
         Ok(json!({
             "session_id": session.session_id,
             "storage_backend": "PostgreSQL",
-            "persistent": true,
-            "shared_across_instances": true,
             "features": [
                 "Session state persistence",
                 "Multi-instance sharing",
                 "Automatic cleanup",
                 "Transaction support"
             ],
-            "message": "Session backed by PostgreSQL - state persists across server restarts",
+            "message": "Session data isolated per session, backed by PostgreSQL - persists across server restarts",
             "timestamp": chrono::Utc::now()
         }))
     }
@@ -179,6 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_events_per_session: 1000,
         enable_pooling_optimizations: true,
         statement_timeout_secs: 30,
+        create_tables_if_missing: true,
     };
 
     info!("Connecting to PostgreSQL at {}", mask_db_url(&postgres_config.database_url));
@@ -207,11 +167,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("simple-postgres-session")
         .version("1.0.0")
         .title("PostgreSQL Session Storage Example")
-        .instructions("Demonstrates PostgreSQL-backed session storage for MCP servers. Use the tools to store and retrieve preferences that persist across server restarts.")
+        .instructions("Demonstrates PostgreSQL-backed session storage for MCP servers. Use the tools to store and retrieve values that persist across server restarts.")
         .with_session_storage(postgres_storage)
-        .tool(StorePreferenceTool::default())
-        .tool(GetPreferenceTool::default())
-        .tool(ListPreferencesTool::default())
+        .tool(StoreValueTool::default())
+        .tool(GetValueTool::default())
         .tool(SessionInfoTool::default())
         .bind_address("127.0.0.1:8060".parse()?)
         .sse(true)
@@ -223,15 +182,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("🔄 SSE Notifications: Enabled");
     info!("");
     info!("Available tools:");
-    info!("  • store_preference  - Store user preference in PostgreSQL");
-    info!("  • get_preference    - Retrieve user preference from PostgreSQL");  
-    info!("  • list_preferences  - List all stored preferences");
-    info!("  • session_info      - View session storage information");
+    info!("  • store_value    - Store value in PostgreSQL");
+    info!("  • get_value      - Retrieve value from PostgreSQL");  
+    info!("  • session_info   - View session storage information");
     info!("");
     info!("Example usage:");
-    info!("  1. store_preference(key='theme', value='dark')");
+    info!("  1. store_value(key='theme', value='dark')");
     info!("  2. Restart the server");
-    info!("  3. get_preference(key='theme')  // Returns 'dark' - persisted!");
+    info!("  3. get_value(key='theme')  // Returns 'dark' - persisted!");
     info!("  4. session_info()  // View PostgreSQL backend info");
     info!("");
     info!("🔧 Multi-instance: Start multiple servers with same DATABASE_URL to share sessions");
