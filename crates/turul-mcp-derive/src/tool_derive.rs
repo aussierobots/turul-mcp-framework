@@ -221,7 +221,14 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 } else if struct_name.contains("Calculator") || struct_name.contains("Counter") || struct_name.contains("Math") {
                     JsonSchema::number()
                 } else {
-                    JsonSchema::string()
+                    // Default to flexible object schema since we can't reliably determine the type
+                    // from struct names alone. This is safer than defaulting to string.
+                    JsonSchema::Object {
+                        description: Some("JSON object or value (zero-config fallback)".to_string()),
+                        properties: None,
+                        required: None,
+                        additional_properties: Some(true),
+                    }
                 };
                 
                 turul_mcp_protocol::tools::ToolSchema::object()
