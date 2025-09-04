@@ -38,12 +38,13 @@ members = [
     "examples/resource-server",
     "examples/resources-server",
     "examples/sampling-server",
-    # "examples/simple-dynamodb-session", # TODO: Fix compilation errors
-    "examples/simple-logging-server",
-    # "examples/simple-postgres-session", # TODO: Fix compilation errors
-    # "examples/simple-sqlite-session", # TODO: Fix compilation errors
+    "examples/simple-dynamodb-session", # Simplified and ready - utility binaries commented out
+    "examples/simple-logging-server", 
+    "examples/simple-postgres-session", # Fixed API mismatches - ready to use
+    "examples/simple-sqlite-session", # Fixed API mismatches - ready to use
     "examples/stateful-server",
     "examples/zero-config-getting-started",
+    "examples/lambda-mcp-server",
     
     # Moved from turul-mcp-server/examples
     "examples/client-initialise-server",
@@ -59,8 +60,7 @@ members = [
 ]
 
 exclude = [
-    # AWS examples for future phase
-    # "examples/lambda-mcp-server", # TODO: Needs trait migration for AWS tools
+    # AWS examples for future phase - re-enabled for 0.2.0
 ]
 
 [workspace.package]
