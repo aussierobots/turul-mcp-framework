@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::time::SystemTime;
 use async_trait::async_trait;
 use serde_json::Value;
-use sqlx::{SqlitePool, Row};
+use sqlx::{SqlitePool, Row, sqlite::SqliteConnectOptions};
 use thiserror::Error;
 use tracing::{info, warn, debug};
 
@@ -52,6 +52,8 @@ pub struct SqliteConfig {
     pub max_events_per_session: u32,
     /// Allow table creation if tables don't exist
     pub create_tables_if_missing: bool,
+    /// Create database file if it doesn't exist
+    pub create_database_if_missing: bool,
 }
 
 impl Default for SqliteConfig {
@@ -64,6 +66,7 @@ impl Default for SqliteConfig {
             cleanup_interval_minutes: 5,
             max_events_per_session: 1000,
             create_tables_if_missing: true, // SQLite defaults to creating tables
+            create_database_if_missing: true, // SQLite defaults to creating database
         }
     }
 }
@@ -90,11 +93,13 @@ impl SqliteSessionStorage {
                 .map_err(|e| crate::sqlite::SqliteError::Connection(format!("Failed to create database directory: {}", e)))?;
         }
         
-        // Build connection string
-        let database_url = format!("sqlite://{}", config.database_path.display());
+        // Build connection options with configurable create_if_missing
+        let connect_options = SqliteConnectOptions::new()
+            .filename(&config.database_path)
+            .create_if_missing(config.create_database_if_missing);
         
         // Create connection pool
-        let pool = SqlitePool::connect(&database_url).await?;
+        let pool = SqlitePool::connect_with(connect_options).await?;
         
         let storage = Self { pool, config };
         
@@ -221,6 +226,10 @@ async fn cleanup_expired_data(pool: &SqlitePool, config: &SqliteConfig) -> Resul
 #[async_trait]
 impl SessionStorage for SqliteSessionStorage {
     type Error = SessionStorageError;
+
+    fn backend_name(&self) -> &'static str {
+        "SQLite"
+    }
     
     async fn create_session(&self, capabilities: ServerCapabilities) -> Result<SessionInfo, Self::Error> {
         let mut session = SessionInfo::new();

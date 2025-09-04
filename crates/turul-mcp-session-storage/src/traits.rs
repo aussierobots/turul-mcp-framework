@@ -146,6 +146,9 @@ pub trait SessionStorage: Send + Sync {
     /// Error type for storage operations
     type Error: std::error::Error + Send + Sync + 'static;
 
+    /// Get the backend name for logging and debugging
+    fn backend_name(&self) -> &'static str;
+
     // ============================================================================
     // Session Management
     // ============================================================================

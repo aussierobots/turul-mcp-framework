@@ -336,6 +336,10 @@ fn mask_db_url(url: &str) -> String {
 #[async_trait]
 impl SessionStorage for PostgresSessionStorage {
     type Error = SessionStorageError;
+
+    fn backend_name(&self) -> &'static str {
+        "PostgreSQL"
+    }
     
     async fn create_session(&self, capabilities: ServerCapabilities) -> Result<SessionInfo, Self::Error> {
         let mut session = SessionInfo::new();

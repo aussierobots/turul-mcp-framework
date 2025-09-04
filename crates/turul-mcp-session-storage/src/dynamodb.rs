@@ -191,6 +191,16 @@ impl DynamoDbSessionStorage {
                         self.wait_for_table_active().await?;
                         // Enable TTL after table becomes active
                         self.enable_ttl().await?;
+                        
+                        // Also create the events table upfront
+                        let event_table = format!("{}-events", self.config.table_name);
+                        warn!(
+                            "Creating events table '{}' upfront to ensure both tables exist",
+                            event_table
+                        );
+                        self.ensure_events_table_exists(&event_table).await
+                            .map_err(|e| DynamoDbError::AwsError(format!("Failed to create events table: {}", e)))?;
+                        
                         Ok(())
                     } else {
                         let error_msg = format!(
@@ -892,11 +902,67 @@ impl DynamoDbSessionStorage {
             metadata,
         })
     }
+
+    /// Public method to create both DynamoDB tables (for setup utilities)
+    pub async fn create_tables(&self) -> Result<(), DynamoDbError> {
+        info!("Creating both DynamoDB tables: session and events");
+        
+        // Create main session table
+        self.create_table().await?;
+        self.wait_for_table_active().await?;
+        self.enable_ttl().await?;
+        
+        // Create events table
+        let event_table = format!("{}-events", self.config.table_name);
+        self.ensure_events_table_exists(&event_table).await
+            .map_err(|e| DynamoDbError::AwsError(format!("Failed to create events table: {}", e)))?;
+        
+        info!("Successfully created both DynamoDB tables");
+        Ok(())
+    }
+
+    /// Public method to delete both DynamoDB tables (for teardown utilities)
+    pub async fn delete_tables(&self) -> Result<(), DynamoDbError> {
+        #[cfg(feature = "dynamodb")]
+        {
+            let main_table = &self.config.table_name;
+            let event_table = format!("{}-events", self.config.table_name);
+            
+            info!("Deleting DynamoDB tables: {} and {}", main_table, event_table);
+            
+            // Delete main session table
+            match self.client.delete_table().table_name(main_table).send().await {
+                Ok(_) => info!("Successfully initiated deletion of table: {}", main_table),
+                Err(err) => warn!("Failed to delete table '{}': {}", main_table, err),
+            }
+            
+            // Delete events table
+            match self.client.delete_table().table_name(&event_table).send().await {
+                Ok(_) => info!("Successfully initiated deletion of table: {}", event_table),
+                Err(err) => warn!("Failed to delete table '{}': {}", event_table, err),
+            }
+            
+            info!("Table deletion initiated for both tables");
+            Ok(())
+        }
+        
+        #[cfg(not(feature = "dynamodb"))]
+        {
+            error!("DynamoDB feature is not enabled");
+            Err(DynamoDbError::ConfigError(
+                "DynamoDB feature is not enabled".to_string(),
+            ))
+        }
+    }
 }
 
 #[async_trait]
 impl SessionStorage for DynamoDbSessionStorage {
     type Error = SessionStorageError;
+
+    fn backend_name(&self) -> &'static str {
+        "DynamoDB"
+    }
 
     async fn create_session(
         &self,

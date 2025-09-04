@@ -214,7 +214,7 @@ impl HttpMcpServer {
         let listener = TcpListener::bind(&self.config.bind_address).await?;
         info!("HTTP MCP server listening on {}", self.config.bind_address);
         info!("MCP endpoint available at: {}", self.config.mcp_path);
-        info!("Session storage: turul_mcp_session_storage::BoxedSessionStorage");
+        info!("Session storage: {}", self.session_storage.backend_name());
 
         // ✅ CORRECTED ARCHITECTURE: Create single SessionMcpHandler instance outside the loop
         let handler = SessionMcpHandler::with_shared_stream_manager(
@@ -283,7 +283,7 @@ impl HttpMcpServer {
         ServerStats {
             sessions: session_count,
             events: event_count,
-            storage_type: "turul_mcp_session_storage::BoxedSessionStorage".to_string(),
+            storage_type: self.session_storage.backend_name().to_string(),
         }
     }
 }
@@ -376,6 +376,6 @@ mod tests {
         let stats = server.get_stats().await;
         assert_eq!(stats.sessions, 0);
         assert_eq!(stats.events, 0);
-        assert!(stats.storage_type.contains("InMemorySessionStorage"));
+        assert_eq!(stats.storage_type, "InMemory");
     }
 }

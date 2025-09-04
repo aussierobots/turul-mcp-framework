@@ -128,6 +128,10 @@ pub struct InMemoryStats {
 impl SessionStorage for InMemorySessionStorage {
     type Error = SessionStorageError;
 
+    fn backend_name(&self) -> &'static str {
+        "InMemory"
+    }
+
     // ============================================================================
     // Session Management
     // ============================================================================
