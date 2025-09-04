@@ -635,6 +635,36 @@ pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
 pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &str) -> TokenStream {
     match ty {
         syn::Type::Path(type_path) => {
+            // First check if it's a qualified path like serde_json::Value
+            let path_string = type_path.path.segments.iter()
+                .map(|seg| seg.ident.to_string())
+                .collect::<Vec<_>>()
+                .join("::");
+            
+            // Special case for serde_json::Value (qualified path)
+            if path_string.contains("serde_json") && path_string.ends_with("Value") {
+                return quote! {
+                    fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
+                        static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+                        Some(OUTPUT_SCHEMA.get_or_init(|| {
+                            use turul_mcp_protocol::schema::JsonSchema;
+                            use std::collections::HashMap;
+                            turul_mcp_protocol::tools::ToolSchema::object()
+                                .with_properties(HashMap::from([
+                                    (#field_name.to_string(), JsonSchema::Object {
+                                        description: Some("JSON object or value".to_string()),
+                                        properties: None,
+                                        required: None,
+                                        additional_properties: Some(true),
+                                    })
+                                ]))
+                                .with_required(vec![#field_name.to_string()])
+                        }))
+                    }
+                };
+            }
+            
+            // Then check for simple identifiers
             if let Some(ident) = type_path.path.get_ident() {
                 match ident.to_string().as_str() {
                     "f64" | "f32" => {
