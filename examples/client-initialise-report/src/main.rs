@@ -451,8 +451,10 @@ async fn send_initialized_notification(
     let status = response.status().as_u16();
     info!("📥 Initialized notification response status: {}", status);
 
-    if status == 204 {
-        info!("✅ notifications/initialized sent successfully (204 No Content - expected for notifications)");
+    if status == 202 {
+        info!("✅ notifications/initialized sent successfully (202 Accepted - standard for MCP notifications)");
+    } else if status == 204 {
+        info!("✅ notifications/initialized sent successfully (204 No Content - alternative for notifications)");
     } else {
         warn!("⚠️ Unexpected response status for notification: {}", status);
         let body = response.text().await?;
