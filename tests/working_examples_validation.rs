@@ -10,32 +10,72 @@ use tokio::time::timeout;
 /// Test that documented working examples compile successfully
 #[tokio::test]
 async fn test_working_examples_compilation() {
+    use tokio::time::{timeout, Duration};
+    use tokio::process::Command as AsyncCommand;
+    use futures::future::try_join_all;
+    
     let working_examples = vec![
         "minimal-server",
         "derive-macro-server", 
         "function-macro-server",
-        "macro-calculator",
+        "calculator-add-function-server",
         "notification-server",
         "stateful-server",
-        "client-initialise-report",
+        // Previously broken examples that now work (framework improvements!)
+        "completion-server",
+        "pagination-server", 
+        "elicitation-server",
+        "dynamic-resource-server",
+        "comprehensive-server",
     ];
     
-    for example in working_examples {
-        println!("Testing compilation of {}", example);
-        
-        let output = Command::new("cargo")
-            .args(&["check", "-p", example, "--quiet"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .expect(&format!("Failed to execute cargo check for {}", example));
-        
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            panic!("Example {} failed to compile:\n{}", example, stderr);
+    let example_count = working_examples.len();
+    println!("Testing compilation of {} examples in parallel...", example_count);
+    
+    // Create futures for parallel execution
+    let compile_futures = working_examples.into_iter().map(|example| {
+        async move {
+            println!("🔄 Starting compilation check for {}", example);
+            
+            // Add timeout to individual compilation check (60 seconds each for cold compilation)
+            let result = timeout(Duration::from_secs(60), async {
+                AsyncCommand::new("cargo")
+                    .args(&["check", "-p", example, "--quiet"])
+                    .output()
+                    .await
+            }).await;
+            
+            match result {
+                Ok(Ok(output)) => {
+                    if output.status.success() {
+                        println!("✅ {} compiles successfully", example);
+                        Ok(())
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        Err(format!("Example {} failed to compile:\n{}", example, stderr))
+                    }
+                }
+                Ok(Err(e)) => {
+                    Err(format!("Failed to execute cargo check for {}: {}", example, e))
+                }
+                Err(_) => {
+                    Err(format!("Compilation check for {} timed out after 60 seconds", example))
+                }
+            }
         }
-        
-        println!("✅ {} compiles successfully", example);
+    });
+    
+    // Execute all compilation checks in parallel with overall timeout (5 minutes for all examples)
+    match timeout(Duration::from_secs(300), try_join_all(compile_futures)).await {
+        Ok(Ok(_)) => {
+            println!("🎉 All {} examples compiled successfully!", example_count);
+        }
+        Ok(Err(e)) => {
+            panic!("Compilation failed: {}", e);
+        }
+        Err(_) => {
+            panic!("Overall compilation test timed out after 300 seconds");
+        }
     }
 }
 
@@ -44,7 +84,7 @@ async fn test_working_examples_compilation() {
 async fn test_mcp_streamable_http_compliance() {
     // Start server in background
     let mut server = Command::new("cargo")
-        .args(&["run", "--example", "client-initialise-server", "--", "--port", "52940"])
+        .args(&["run", "-p", "client-initialise-server", "--", "--port", "52940"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -56,7 +96,7 @@ async fn test_mcp_streamable_http_compliance() {
     // Run compliance test with timeout
     let test_result = timeout(Duration::from_secs(30), async {
         Command::new("cargo")
-            .args(&["run", "--example", "client-initialise-report", "--", "--url", "http://127.0.0.1:52940/mcp"])
+            .args(&["run", "-p", "client-initialise-report", "--", "--url", "http://127.0.0.1:52940/mcp"])
             .env("RUST_LOG", "info")
             .output()
             .expect("Failed to execute compliance test")
@@ -181,41 +221,3 @@ async fn test_basic_framework_functionality() {
     println!("✅ Basic framework functionality working");
 }
 
-/// Test known broken examples fail as expected
-#[tokio::test]
-async fn test_broken_examples_fail_compilation() {
-    let broken_examples = vec![
-        "completion-server",
-        "pagination-server", 
-        "elicitation-server",
-        "dynamic-resource-server",
-        "logging-server",
-        "comprehensive-server",
-    ];
-    
-    for example in broken_examples {
-        println!("Confirming {} fails compilation (expected)", example);
-        
-        let output = Command::new("cargo")
-            .args(&["check", "-p", example, "--quiet"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .output()
-            .expect(&format!("Failed to execute cargo check for {}", example));
-        
-        if output.status.success() {
-            panic!("Example {} should be broken but compiled successfully", example);
-        }
-        
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        
-        // Check for expected trait-related errors
-        if stderr.contains("method `name` is not a member of trait") || 
-           stderr.contains("trait bound") ||
-           stderr.contains("is not satisfied") {
-            println!("✅ {} fails as expected with trait errors", example);
-        } else {
-            panic!("Example {} failed with unexpected errors:\n{}", example, stderr);
-        }
-    }
-}
