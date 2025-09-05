@@ -20,8 +20,9 @@
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let transport = HttpTransport::new("http://localhost:8080/mcp")?;
 //!     let client = McpClientBuilder::new()
-//!         .with_transport(HttpTransport::new("http://localhost:8080/mcp")?)
+//!         .with_transport(Box::new(transport))
 //!         .build();
 //!
 //!     client.connect().await?;
@@ -38,22 +39,29 @@
 //! ### HTTP Transport (Streamable HTTP 2025-03-26+)
 //!
 //! ```rust,no_run
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use turul_mcp_client::transport::HttpTransport;
 //!
 //! let transport = HttpTransport::new("http://localhost:8080/mcp")?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ### SSE Transport (HTTP+SSE 2024-11-05)
 //!
 //! ```rust,no_run
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use turul_mcp_client::transport::SseTransport;
 //!
 //! let transport = SseTransport::new("http://localhost:8080/mcp")?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ### WebSocket Transport
 //!
-//! ```rust,no_run
+//! ```rust,ignore
+//! // WebSocket transport requires the "websocket" feature
 //! use turul_mcp_client::transport::WebSocketTransport;
 //!
 //! let transport = WebSocketTransport::new("ws://localhost:8080/mcp")?;
@@ -61,7 +69,8 @@
 //!
 //! ### Stdio Transport
 //!
-//! ```rust,no_run
+//! ```rust,ignore
+//! // Stdio transport requires the "stdio" feature
 //! use turul_mcp_client::transport::StdioTransport;
 //!
 //! let transport = StdioTransport::new("./turul-mcp-server-executable")?;
