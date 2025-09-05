@@ -18,33 +18,26 @@ A comprehensive, battle-tested Rust framework for building Model Context Protoco
 
 ## 🚀 Quick Start
 
-### 1. Simple Calculator (Derive Macros)
+### 1. Function Macros (Simplest - Recommended)
 
 ```rust
-use turul_mcp_derive::McpTool;
+use turul_mcp_derive::mcp_tool;
 use turul_mcp_server::{McpServer, McpResult};
 
-#[derive(McpTool, Clone)]
-#[tool(name = "add", description = "Add two numbers")]
-struct AddTool {
-    #[param(description = "First number")]
-    a: f64,
-    #[param(description = "Second number")]
-    b: f64,
-}
-
-impl AddTool {
-    async fn execute(&self) -> McpResult<String> {
-        Ok(format!("{} + {} = {}", self.a, self.b, self.a + self.b))
-    }
+#[mcp_tool(name = "add", description = "Add two numbers")]
+async fn add(
+    #[param(description = "First number")] a: f64,
+    #[param(description = "Second number")] b: f64,
+) -> McpResult<f64> {
+    Ok(a + b)
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = McpServer::builder()
         .name("calculator-server")
         .version("1.0.0")
-        .tool(AddTool { a: 0.0, b: 0.0 })
+        .tool_fn(add)  // Use function name directly
         .bind_address("127.0.0.1:8080".parse()?)
         .build()?;
 
@@ -52,59 +45,81 @@ async fn main() -> anyhow::Result<()> {
 }
 ```
 
-### 2. Business Application Example
+### 2. Derive Macros (Struct-Based)
 
 ```rust
-// From examples/logging-server - Enterprise audit system
 use turul_mcp_derive::McpTool;
+use turul_mcp_server::{McpServer, McpResult, SessionContext};
 
 #[derive(McpTool, Clone)]
-#[tool(name = "audit_log", description = "Create compliance audit entry")]
-struct AuditTool {
-    #[param(description = "Log level (Info, Warn, Error)")]
-    level: String,
-    #[param(description = "Audit message")]
-    message: String,
-    #[param(description = "Business category")]
-    category: String,
+#[tool(name = "calculator", description = "Mathematical operations")]
+struct Calculator {
+    #[param(description = "First number")]
+    a: f64,
+    #[param(description = "Second number")]
+    b: f64,
+    #[param(description = "Operation (+, -, *, /)")]
+    operation: String,
 }
 
-impl AuditTool {
-    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
-        let audit_entry = AuditEntry {
-            id: uuid::Uuid::now_v7().to_string(), // Modern UUID v7
-            timestamp: Utc::now(),
-            level: self.level.parse()?,
-            category: self.category.clone(),
-            message: self.message.clone(),
-            correlation_id: Some(format!("audit_{}", uuid::Uuid::now_v7())),
-            compliance_tags: vec!["sox".to_string(), "gdpr".to_string()],
-            retention_days: 2555, // 7 years for compliance
-        };
-
-        // Business logic with external data configuration
-        let audit_policies = load_audit_policies("data/audit_policies.yaml")?;
-        let formatted_entry = format_audit_entry(&audit_entry, &audit_policies)?;
-
-        Ok(formatted_entry)
+impl Calculator {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<f64> {
+        match self.operation.as_str() {
+            "+" => Ok(self.a + self.b),
+            "-" => Ok(self.a - self.b),
+            "*" => Ok(self.a * self.b),
+            "/" => {
+                if self.b == 0.0 {
+                    Err("Division by zero".into())
+                } else {
+                    Ok(self.a / self.b)
+                }
+            },
+            _ => Err("Invalid operation".into()),
+        }
     }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let server = McpServer::builder()
+        .name("calculator-server")
+        .version("1.0.0")
+        .tool(Calculator { a: 0.0, b: 0.0, operation: "+".to_string() })
+        .bind_address("127.0.0.1:8080".parse()?)
+        .build()?;
+
+    server.run().await
 }
 ```
 
 ## 🏛️ Architecture Overview
 
-### Core Framework (10+ Crates)
+### Core Framework (10 Crates)
 - **`turul-mcp-server`** - High-level server builder with session management
 - **`turul-mcp-client`** - Comprehensive client library with HTTP transport support
 - **`turul-http-mcp-server`** - HTTP/SSE transport with CORS and streaming
+- **`turul-mcp-protocol`** - Current MCP specification (alias to 2025-06-18)
 - **`turul-mcp-protocol-2025-06-18`** - Complete MCP specification implementation
-- **`turul-mcp-derive`** - Procedural and declarative macros
+- **`turul-mcp-derive`** - Procedural macros for all MCP areas
+- **`turul-mcp-builders`** - Runtime builder patterns for dynamic MCP components
 - **`turul-mcp-json-rpc-server`** - Transport-agnostic JSON-RPC 2.0 foundation
+- **`turul-mcp-session-storage`** - Session storage backends (SQLite, PostgreSQL, DynamoDB)
+- **`turul-mcp-aws-lambda`** - AWS Lambda integration for serverless deployment
 
 ### Fine-Grained Trait Architecture
 **Modern composable design pattern for all MCP areas:**
 
 ```rust
+use turul_mcp_protocol::tools::*;
+use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpResult};
+use turul_mcp_server::{McpTool, SessionContext};
+use async_trait::async_trait;
+use serde_json::Value;
+use std::collections::HashMap;
+
+struct MyTool;
+
 // Fine-grained trait composition for maximum flexibility
 impl HasBaseMetadata for MyTool {
     fn name(&self) -> &str { "my_tool" }
@@ -114,10 +129,30 @@ impl HasDescription for MyTool {
     fn description(&self) -> Option<&str> { Some("Tool description") }
 }
 
-// ... implement other trait aspects as needed
+impl HasInputSchema for MyTool {
+    fn input_schema(&self) -> &ToolSchema {
+        static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+        SCHEMA.get_or_init(|| {
+            ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("input".to_string(), JsonSchema::string())
+                ]))
+        })
+    }
+}
+
+// ... other trait implementations
 
 // ToolDefinition automatically implemented via blanket impl
-// McpTool trait provides execution interface
+#[async_trait]
+impl McpTool for MyTool {
+    async fn call(&self, _args: Value, _session: Option<SessionContext>) 
+        -> McpResult<CallToolResult> {
+        Ok(CallToolResult::success(vec![
+            ToolResult::text("Tool result")
+        ]))
+    }
+}
 ```
 
 **Supported Areas:**
@@ -363,136 +398,172 @@ async fn test_session_state_management() {
 
 ## 🎯 Development Patterns
 
-### 1. Derive Macros (Recommended)
-**Best for:** Type safety, IDE support, automatic schema generation
+### 1. Function Macros (Recommended for Simplicity)
+**Best for:** Quick development, natural syntax, minimal boilerplate
 
-**Available derive macros for all MCP areas:**
 ```rust
-// Tools
-#[derive(McpTool, Clone)]
-#[tool(name = "weather", description = "Get weather information")]
-struct WeatherTool {
-    #[param(description = "City name")]
-    city: String,
-    #[param(description = "Temperature unit", optional)]
-    unit: Option<String>,
-}
+use turul_mcp_derive::mcp_tool;
+use turul_mcp_server::{McpServer, McpResult};
 
-// Resources
-#[derive(McpResource, Clone)]
-#[resource(uri = "config://app.json", description = "Application configuration")]
-struct AppConfigResource;
-
-// Prompts
-#[derive(McpPrompt, Clone)]
-#[prompt(name = "code_review", description = "Generate code review prompts")]
-struct CodeReviewPrompt {
-    #[param(description = "Programming language")]
-    language: String,
-}
-
-// Sampling
-#[derive(McpSampling, Clone)]
-#[sampling(description = "Creative writing with style controls")]
-struct CreativeSampling;
-
-// Completion
-#[derive(McpCompletion, Clone)]
-#[completion(description = "Context-aware IDE completions")]
-struct IdeCompletion;
-
-// Logging
-#[derive(McpLogger, Clone)]
-#[logger(name = "audit", description = "Compliance audit logging")]
-struct AuditLogger;
-
-// Roots
-#[derive(McpRoot, Clone)]
-#[root(uri = "file:///workspace", description = "Project workspace")]
-struct WorkspaceRoot;
-
-// Elicitation
-#[derive(McpElicitation, Clone)]
-#[elicit(description = "Collect customer onboarding information")]
-struct OnboardingElicitation;
-
-// Notifications
-#[derive(McpNotification, Clone)]
-#[notification(method = "progress/update", description = "Progress updates")]
-struct ProgressNotification;
-```
-
-### 2. Function Attributes
-**Best for:** Natural function syntax, minimal boilerplate
-```rust
-#[mcp_tool(name = "multiply", description = "Multiply two numbers")]
-async fn multiply(
-    #[param(description = "First number")] a: f64,
-    #[param(description = "Second number")] b: f64,
+#[mcp_tool(name = "weather", description = "Get weather information")]
+async fn get_weather(
+    #[param(description = "City name")] city: String,
+    #[param(description = "Temperature unit")] unit: Option<String>,
 ) -> McpResult<String> {
-    Ok(format!("{} × {} = {}", a, b, a * b))
+    let unit = unit.unwrap_or_else(|| "celsius".to_string());
+    Ok(format!("Weather in {}: 22°{}", city, if unit == "fahrenheit" { "F" } else { "C" }))
 }
+
+// Usage in server
+let server = McpServer::builder()
+    .name("weather-server")
+    .version("1.0.0")
+    .tool_fn(get_weather)
+    .build()?;
 ```
 
-### 3. Declarative Macros
-**Best for:** Inline definitions, rapid prototyping
+### 2. Derive Macros (Struct-Based)
+**Best for:** Complex tools, organized codebases, multiple related functions
+
 ```rust
-tool! {
-    name: "fibonacci",
-    description: "Calculate fibonacci number",
-    params: {
-        n: u64 => "Position in sequence" { min: 0, max: 100 },
-        cache: Option<bool> => "Use caching" { default: true },
-    },
-    execute: |n, cache| async move {
-        // Implementation
+use turul_mcp_derive::McpTool;
+use turul_mcp_server::{McpServer, McpResult, SessionContext};
+
+#[derive(McpTool, Clone)]
+#[tool(name = "file_manager", description = "File management operations")]
+struct FileManager {
+    #[param(description = "Operation (create, read, delete)")]
+    operation: String,
+    #[param(description = "File path")]
+    path: String,
+    #[param(description = "File content (for create operation)")]
+    content: Option<String>,
+}
+
+impl FileManager {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        match self.operation.as_str() {
+            "create" => {
+                let content = self.content.as_ref().unwrap_or(&"Empty file".to_string());
+                Ok(format!("Created file '{}' with content: {}", self.path, content))
+            },
+            "read" => Ok(format!("Reading file: {}", self.path)),
+            "delete" => {
+                if let Some(session) = session {
+                    session.notify_progress(&format!("Deleting {}", self.path), 100);
+                }
+                Ok(format!("Deleted file: {}", self.path))
+            },
+            _ => Err("Invalid operation".into()),
+        }
     }
 }
+
+// Usage in server
+let server = McpServer::builder()
+    .name("file-server")
+    .version("1.0.0")
+    .tool(FileManager {
+        operation: "create".to_string(),
+        path: "/tmp/example".to_string(),
+        content: None,
+    })
+    .build()?;
 ```
 
-### 4. Manual Implementation (Fine-Grained Traits)
-**Best for:** Maximum control, complex business logic
+### 3. Builder Pattern (Runtime Flexibility)
+**Best for:** Dynamic tools, configuration-driven systems
+
+```rust
+use turul_mcp_server::{McpServer, ToolBuilder};
+use serde_json::json;
+
+let multiply_tool = ToolBuilder::new("multiply")
+    .description("Multiply two numbers")
+    .number_param("a", "First number")
+    .number_param("b", "Second number")
+    .number_output() // Generates {"result": number} schema
+    .execute(|args| async move {
+        let a = args.get("a").and_then(|v| v.as_f64())
+            .ok_or("Missing parameter 'a'")?;
+        let b = args.get("b").and_then(|v| v.as_f64())
+            .ok_or("Missing parameter 'b'")?;
+        
+        Ok(json!({"result": a * b}))
+    })
+    .build()
+    .map_err(|e| format!("Failed to build tool: {}", e))?;
+
+// Usage in server
+let server = McpServer::builder()
+    .name("calculator-server")
+    .version("1.0.0")
+    .tool(multiply_tool)
+    .build()?;
+```
+
+### 4. Manual Implementation (Maximum Control)
+**Best for:** Performance optimization, custom behavior
+
 ```rust
 use turul_mcp_protocol::tools::*;
+use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpResult};
+use turul_mcp_server::{McpTool, McpServer, SessionContext};
+use async_trait::async_trait;
+use serde_json::Value;
+use std::collections::HashMap;
 
-struct CustomTool {
-    input_schema: ToolSchema,
+struct ManualTool;
+
+impl HasBaseMetadata for ManualTool {
+    fn name(&self) -> &str { "manual_tool" }
 }
 
-// Implement fine-grained trait composition
-impl HasBaseMetadata for CustomTool {
-    fn name(&self) -> &str { "custom_business_logic" }
+impl HasDescription for ManualTool {
+    fn description(&self) -> Option<&str> { Some("Manual implementation with full control") }
 }
 
-impl HasDescription for CustomTool {
-    fn description(&self) -> Option<&str> { Some("Custom business logic tool") }
+impl HasInputSchema for ManualTool {
+    fn input_schema(&self) -> &ToolSchema {
+        static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+        SCHEMA.get_or_init(|| {
+            ToolSchema::object()
+                .with_properties(HashMap::from([
+                    ("input".to_string(), JsonSchema::string())
+                ]))
+        })
+    }
 }
 
-impl HasInputSchema for CustomTool {
-    fn input_schema(&self) -> &ToolSchema { &self.input_schema }
-}
-
-impl HasOutputSchema for CustomTool {
+impl HasOutputSchema for ManualTool {
     fn output_schema(&self) -> Option<&ToolSchema> { None }
 }
 
-impl HasAnnotations for CustomTool {
+impl HasAnnotations for ManualTool {
     fn annotations(&self) -> Option<&ToolAnnotations> { None }
 }
 
-impl HasToolMeta for CustomTool {
+impl HasToolMeta for ManualTool {
     fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
 }
 
-// ToolDefinition is automatically implemented via blanket impl!
-
 #[async_trait]
-impl McpTool for CustomTool {
-    async fn call(&self, args: Value, session: Option<SessionContext>)
+impl McpTool for ManualTool {
+    async fn call(&self, _args: Value, _session: Option<SessionContext>) 
         -> McpResult<CallToolResult> {
         // Full control over implementation
+        Ok(CallToolResult::success(vec![
+            ToolResult::text("Manual tool with complete control")
+        ]))
     }
 }
+
+// Usage in server
+let server = McpServer::builder()
+    .name("manual-server")
+    .version("1.0.0")
+    .tool(ManualTool)
+    .build()?;
 ```
 
 ## 🔧 Client Library
@@ -501,12 +572,26 @@ Comprehensive MCP client for HTTP transport:
 
 ```rust
 use turul_mcp_client::{McpClient, ClientConfig};
+use std::time::Duration;
 
-let client = McpClient::builder()
-    .with_url("http://localhost:8080/mcp")?
-    .build();
+// Configure the client
+let client_config = ClientConfig {
+    client_info: ClientInfo {
+        name: "my-mcp-client".to_string(),
+        version: "1.0.0".to_string(),
+    },
+    timeouts: TimeoutConfig {
+        request: Duration::from_secs(30),
+        connect: Duration::from_secs(10),
+    },
+    // ... other config fields
+};
 
-await client.connect()?;
+// Create client (actual connection requires transport setup)
+let mut client = McpClient::new(client_config).await?;
+
+// Initialize session
+let init_result = client.initialize().await?;
 
 // List available tools
 let tools = client.list_tools().await?;
@@ -517,7 +602,7 @@ let result = client.call_tool("add", json!({
     "b": 20.0
 })).await?;
 
-// Read resources
+// List and read resources
 let resources = client.list_resources().await?;
 let content = client.read_resource("config://app.json").await?;
 ```
@@ -551,9 +636,9 @@ let content = client.read_resource("config://app.json").await?;
 ### Testing Your Server
 ```bash
 # Test tool execution
-curl -X POST http://127.0.0.1:8080/mcp \\
-  -H "Content-Type: application/json" \\
-  -H "MCP-Protocol-Version: 2025-06-18" \\
+curl -X POST http://127.0.0.1:8080/mcp \
+  -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2025-06-18" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
@@ -564,9 +649,10 @@ curl -X POST http://127.0.0.1:8080/mcp \\
     }
   }'
 
-# Test SSE notifications
-curl -N -H "Accept: text/event-stream" \\
-  http://127.0.0.1:8080/mcp/events
+# Test SSE notifications (after getting session ID from above request)
+curl -N -H "Accept: text/event-stream" \
+  -H "Mcp-Session-Id: <session-id>" \
+  http://127.0.0.1:8080/mcp
 ```
 
 ### MCP Session Management Compliance Testing

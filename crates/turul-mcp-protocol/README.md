@@ -25,7 +25,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-protocol = "0.1.1"
+turul-mcp-protocol = "0.2.0"
 ```
 
 ### Import Pattern
@@ -307,7 +307,7 @@ mod tests {
 
 ```toml
 [dependencies]
-turul-mcp-protocol = { version = "0.1.1", features = ["server"] }
+turul-mcp-protocol = { version = "0.2.0", features = ["server"] }
 ```
 
 Available features:

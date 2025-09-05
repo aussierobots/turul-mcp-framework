@@ -25,46 +25,46 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-server = "0.1.1"
-# Add turul-mcp-derive = "0.1.1" if using derive macros
+turul-mcp-server = "0.2.0"
+turul-mcp-derive = "0.2.0"  # Required for function macros and derive macros
+tokio = { version = "1.0", features = ["full"] }
 ```
 
-### Level 3: Builder Pattern (No Dependencies)
+### Level 1: Function Macros (Simplest)
 
 ```rust
-use turul_mcp_server::{McpServer, ToolBuilder};
-use serde_json::json;
+use turul_mcp_derive::mcp_tool;
+use turul_mcp_server::{McpServer, McpResult};
+
+#[mcp_tool(name = "add", description = "Add two numbers")]
+async fn add(
+    #[param(description = "First number")] a: f64,
+    #[param(description = "Second number")] b: f64,
+) -> McpResult<f64> {
+    Ok(a + b)
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let calculator = ToolBuilder::new("calculator")
-        .description("Add two numbers")
-        .number_param("a", "First number")
-        .number_param("b", "Second number")
-        .execute(|args| async move {
-            let a = args.get("a").and_then(|v| v.as_f64()).unwrap();
-            let b = args.get("b").and_then(|v| v.as_f64()).unwrap();
-            Ok(json!({"result": a + b}))
-        })
+    let server = McpServer::builder()
+        .name("calculator-server")
+        .version("1.0.0")
+        .tool_fn(add) // Use original function name
+        .bind_address("127.0.0.1:8080".parse()?)
         .build()?;
 
-    let server = McpServer::builder()
-        .tool(calculator)
-        .build()?
-        .start()
-        .await?;
-    Ok(())
+    server.run().await
 }
 ```
 
 ### Level 2: Derive Macros (Struct-Based)
-*Requires: `turul-mcp-derive = "0.1.1"` dependency*
+*Requires: `turul-mcp-derive = "0.2.0"` dependency*
 
 ```rust
-use turul_mcp_server::{McpServer, McpResult, SessionContext};
 use turul_mcp_derive::McpTool;
+use turul_mcp_server::{McpServer, McpResult, SessionContext};
 
-#[derive(McpTool, Clone, Default)]
+#[derive(McpTool, Clone)]
 #[tool(name = "calculator", description = "Add two numbers")]
 struct Calculator {
     #[param(description = "First number")]
@@ -82,19 +82,20 @@ impl Calculator {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = McpServer::builder()
-        .tool(Calculator::default())
-        .build()?
-        .start()
-        .await?;
-    Ok(())
+        .name("calculator-server")
+        .version("1.0.0")
+        .tool(Calculator { a: 0.0, b: 0.0 })
+        .bind_address("127.0.0.1:8080".parse()?)
+        .build()?;
+
+    server.run().await
 }
 ```
 
-### Level 3: Runtime Builders
+### Level 3: Builder Pattern (Runtime Flexibility)
 
 ```rust
-use turul_mcp_server::McpServer;
-use turul_mcp_builders::ToolBuilder;
+use turul_mcp_server::{McpServer, ToolBuilder};
 use serde_json::json;
 
 #[tokio::main]
@@ -103,19 +104,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .description("Add two numbers")
         .number_param("a", "First number")
         .number_param("b", "Second number")
+        .number_output() // Generates {"result": number} schema
         .execute(|args| async move {
-            let a = args["a"].as_f64().unwrap();
-            let b = args["b"].as_f64().unwrap();
+            let a = args.get("a").and_then(|v| v.as_f64())
+                .ok_or("Missing parameter 'a'")?;
+            let b = args.get("b").and_then(|v| v.as_f64())
+                .ok_or("Missing parameter 'b'")?;
+            
             Ok(json!({"result": a + b}))
         })
-        .build()?;
+        .build()
+        .map_err(|e| format!("Failed to build tool: {}", e))?;
 
     let server = McpServer::builder()
+        .name("calculator-server")
+        .version("1.0.0")
         .tool(calculator)
-        .build()?
-        .start()
-        .await?;
-    Ok(())
+        .bind_address("127.0.0.1:8080".parse()?)
+        .build()?;
+
+    server.run().await
 }
 ```
 
@@ -148,21 +156,23 @@ use turul_mcp_derive::McpTool;
 
 #[derive(McpTool, Clone, Default)]
 #[tool(name = "stateful_counter", description = "Increment session counter")]
-struct StatefulCounter;
+struct StatefulCounter {
+    // Derive macros require named fields, so we add a dummy field
+    _marker: (),
+}
 
 impl StatefulCounter {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<i32> {
         if let Some(session) = session {
             // Get current counter or start at 0
-            let current: i32 = session.get_typed_state("counter").await?.unwrap_or(0);
+            let current: i32 = session.get_typed_state("counter").unwrap_or(0);
             let new_count = current + 1;
             
             // Save updated counter
-            session.set_typed_state("counter", &new_count).await?;
+            session.set_typed_state("counter", new_count)?;
             
             // Send progress notification
-            session.notify_progress("counting", new_count as f64, None, 
-                Some(format!("Count: {}", new_count))).await?;
+            session.notify_progress("counting", new_count as u64);
             
             Ok(new_count)
         } else {
@@ -184,10 +194,9 @@ The framework automatically provides SSE endpoints for real-time notifications:
 
 ```rust
 // Notifications are sent automatically from tools
-session.notify_progress("task-123", 75.0, Some(100.0), 
-    Some("Processing files...".to_string())).await?;
+session.notify_progress("task-123", 75);
 
-session.notify_log("info", "Operation completed successfully").await?;
+session.notify_log("info", "Operation completed successfully");
 ```
 
 ## Server Configuration
@@ -198,11 +207,13 @@ session.notify_log("info", "Operation completed successfully").await?;
 use turul_mcp_server::McpServer;
 
 let server = McpServer::builder()
-    .bind("127.0.0.1:8080")  // Custom bind address
+    .name("my-server")
+    .version("1.0.0")
+    .bind_address("127.0.0.1:8080".parse()?)  // Custom bind address
     .tool(/* your tools */)
-    .build()?
-    .start()
-    .await?;
+    .build()?;
+
+server.run().await?;
 ```
 
 ### Production Configuration
@@ -219,12 +230,12 @@ let storage = Arc::new(PostgreSqlSessionStorage::new(
 let server = McpServer::builder()
     .name("production-server")
     .version("1.0.0") 
-    .bind("0.0.0.0:3000")
+    .bind_address("0.0.0.0:3000".parse()?)
     .with_session_storage(storage)
     .tool(/* your tools */)
-    .build()?
-    .start()
-    .await?;
+    .build()?;
+
+server.run().await?;
 ```
 
 ## Protocol Compliance
@@ -293,7 +304,7 @@ All MCP components use consistent trait patterns:
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.1.1", features = ["sqlite", "postgres"] }
+turul-mcp-server = { version = "0.2.0", features = ["sqlite", "postgres"] }
 ```
 
 - `default` - All features enabled

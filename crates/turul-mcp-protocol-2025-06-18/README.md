@@ -25,7 +25,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-protocol-2025-06-18 = "0.1.1"
+turul-mcp-protocol-2025-06-18 = "0.2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ```

@@ -25,8 +25,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = "0.1.1"
-turul-mcp-derive = "0.1.1"
+turul-mcp-aws-lambda = "0.2.0"
+turul-mcp-derive = "0.2.0"
 lambda_http = "0.13"
 tokio = { version = "1.0", features = ["macros"] }
 ```
@@ -342,7 +342,7 @@ let server = LambdaMcpServerBuilder::new()
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.1.1", features = ["cors", "sse", "dynamodb"] }
+turul-mcp-aws-lambda = { version = "0.2.0", features = ["cors", "sse", "dynamodb"] }
 ```
 
 - `default` - Includes `cors` and `sse`

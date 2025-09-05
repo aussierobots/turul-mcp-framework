@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-mcp-builders.svg)](https://crates.io/crates/turul-mcp-builders)
 [![Documentation](https://docs.rs/turul-mcp-builders/badge.svg)](https://docs.rs/turul-mcp-builders)
 
-Runtime construction library for all MCP protocol areas - Level 3 of the four-level tool creation spectrum.
+Runtime construction library providing building blocks for MCP components. For server integration, use `turul_mcp_server::ToolBuilder` which wraps these builders.
 
 ## Overview
 
@@ -24,16 +24,18 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-builders = "0.1.1"
-turul-mcp-server = "0.1.1"
+turul-mcp-builders = "0.2.0"
+turul-mcp-server = "0.2.0"
 serde_json = "1.0"
 ```
 
 ### Basic Tool Builder
 
+**Note**: For direct server integration, use `turul_mcp_server::ToolBuilder` instead, which wraps this crate's functionality.
+
 ```rust
-use turul_mcp_builders::ToolBuilder;
-use turul_mcp_server::McpServer;
+// For server integration - use turul_mcp_server::ToolBuilder
+use turul_mcp_server::{McpServer, ToolBuilder};
 use serde_json::json;
 
 #[tokio::main]
@@ -43,6 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .description("Add two numbers")
         .number_param("a", "First number")
         .number_param("b", "Second number")
+        .number_output()
         .execute(|args| async move {
             let a = args.get("a").and_then(|v| v.as_f64()).unwrap_or(0.0);
             let b = args.get("b").and_then(|v| v.as_f64()).unwrap_or(0.0);

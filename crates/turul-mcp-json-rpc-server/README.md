@@ -25,7 +25,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-json-rpc-server = "0.1.1"
+turul-mcp-json-rpc-server = "0.2.0"
 tokio = { version = "1.0", features = ["macros"] }
 serde_json = "1.0"
 ```

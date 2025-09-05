@@ -53,12 +53,16 @@ use turul_mcp_server::{McpResult, SessionContext};
 
 #[mcp_tool(name = "counter", description = "Session-persistent counter")]
 async fn session_counter(
-    session: SessionContext  // Automatically detected by macro
+    session: Option<SessionContext>  // Automatically detected by macro
 ) -> McpResult<i32> {
-    let count: i32 = session.get_typed_state("count").await?.unwrap_or(0);
-    let new_count = count + 1;
-    session.set_typed_state("count", &new_count).await?;
-    Ok(new_count)
+    if let Some(session) = session {
+        let count: i32 = session.get_typed_state("count").unwrap_or(0);
+        let new_count = count + 1;
+        session.set_typed_state("count", new_count)?;
+        Ok(new_count)
+    } else {
+        Ok(0) // No session available
+    }
 }
 ```
 
@@ -84,15 +88,12 @@ async fn multiply(
 #[mcp_tool(name = "slow_task", description = "Task with progress updates")]
 async fn slow_task(
     #[param(description = "Number of steps")] steps: u32,
-    session: SessionContext,
+    session: Option<SessionContext>,
 ) -> McpResult<String> {
     for i in 1..=steps {
-        session.notify_progress(
-            "slow-task", 
-            i as f64, 
-            Some(steps as f64), 
-            Some(format!("Processing step {}", i))
-        ).await?;
+        if let Some(ref session) = session {
+            session.notify_progress("slow-task", i as u64);
+        }
         
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
@@ -157,16 +158,14 @@ impl UserLookupTool {
         let include_details = self.include_details.unwrap_or(false);
         
         if let Some(session) = session {
-            session.notify_progress("lookup", 25.0, Some(100.0), 
-                Some("Querying database...".to_string())).await?;
+            session.notify_progress("lookup", 25);
         }
         
         // Simulate database lookup
         let user = self.lookup_user_in_database(&self.user_id).await?;
         
         if let Some(session) = session {
-            session.notify_progress("lookup", 75.0, Some(100.0), 
-                Some("Processing user data...".to_string())).await?;
+            session.notify_progress("lookup", 75);
         }
         
         let result = if include_details {
@@ -176,8 +175,7 @@ impl UserLookupTool {
         };
         
         if let Some(session) = session {
-            session.notify_progress("lookup", 100.0, Some(100.0), 
-                Some("Lookup completed".to_string())).await?;
+            session.notify_progress("lookup", 100);
         }
         
         Ok(result)

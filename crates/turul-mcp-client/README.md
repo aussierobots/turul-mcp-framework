@@ -25,7 +25,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-client = "0.1.1"
+turul-mcp-client = "0.2.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -478,7 +478,7 @@ for (i, result) in results.into_iter().enumerate() {
 
 ```toml
 [dependencies]
-turul-mcp-client = { version = "0.1.1", features = ["all-transports"] }
+turul-mcp-client = { version = "0.2.0", features = ["all-transports"] }
 ```
 
 Available features:

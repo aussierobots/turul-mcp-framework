@@ -1,6 +1,4 @@
-#!/usr/bin/env -S cargo +stable script
-
-//! Test script to verify automatic DELETE request on MCP client drop
+//! Integration test to verify automatic DELETE request on MCP client drop
 //! 
 //! This script demonstrates that when an MCP client is dropped without
 //! explicit disconnect(), it automatically sends a DELETE request to
@@ -32,7 +30,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let client = McpClient::new(transport, config);
         
         client.connect().await?;
-        let session_id = client.session().session_id().await;
+        let session_info = client.session_info().await;
+        let session_id = session_info.session_id.unwrap_or_else(|| "no-session".to_string());
         println!("  Created session: {}", session_id);
         
         // Explicit disconnect - should send DELETE
@@ -50,7 +49,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let client = McpClient::new(transport, config);
         
         client.connect().await?;
-        let session_id = client.session().session_id().await;
+        let session_info = client.session_info().await;
+        let session_id = session_info.session_id.unwrap_or_else(|| "no-session".to_string());
         println!("  Created session: {}", session_id);
         
         // Client will be dropped here - should trigger automatic DELETE

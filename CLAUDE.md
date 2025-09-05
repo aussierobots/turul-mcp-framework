@@ -382,6 +382,24 @@ impl HasCallToolParams for CallToolParams { /* trait methods */ }
 impl CallToolRequest for CallToolRequest { /* trait methods */ }
 ```
 
+## Rust Edition Standard
+
+**CRITICAL**: Always use Rust edition 2024 in all Cargo.toml files:
+
+```toml
+[package]
+edition = "2024"
+```
+
+This applies to:
+- All new crate creation
+- All example projects  
+- All test projects
+- All documentation examples
+- All workspace configurations
+
+The framework targets the latest Rust features and edition 2024 provides the best developer experience with improved diagnostics, syntax, and async support.
+
 ## Build Commands
 
 ### Standard Development

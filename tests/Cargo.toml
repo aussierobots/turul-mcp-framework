@@ -12,6 +12,9 @@ turul-mcp-builders = { workspace = true }
 turul-mcp-json-rpc-server = { workspace = true }
 turul-mcp-session-storage = { workspace = true }
 turul-http-mcp-server = { workspace = true }
+turul-mcp-client = { workspace = true }
+turul-mcp-aws-lambda = { path = "../crates/turul-mcp-aws-lambda" }
+lambda_http = { workspace = true }
 tokio = { workspace = true }
 tokio-test = { workspace = true }
 serde_json = { workspace = true }
@@ -51,3 +54,32 @@ path = "working_examples_validation.rs"
 [[test]]
 name = "framework_integration_tests"
 path = "framework_integration_tests.rs"
+
+# README example tests
+[[test]]
+name = "server_examples"
+path = "server_examples.rs"
+
+[[test]]
+name = "derive_examples"
+path = "derive_examples.rs"
+
+[[test]]
+name = "builders_examples"
+path = "builders_examples.rs"
+
+[[test]]
+name = "client_examples"
+path = "client_examples.rs"
+
+[[test]]
+name = "http_server_examples"
+path = "http_server_examples.rs"
+
+[[test]]
+name = "lambda_examples"
+path = "lambda_examples.rs"
+
+[[test]]
+name = "client_drop_test"
+path = "client_drop_test.rs"

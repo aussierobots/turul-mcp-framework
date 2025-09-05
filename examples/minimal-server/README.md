@@ -6,7 +6,7 @@ This example demonstrates the absolute minimum setup for an MCP server using the
 
 - **Minimal Setup**: Just 50 lines of code for a working MCP server
 - **Basic Tool Implementation**: Simple echo tool using manual trait implementation
-- **Default Configuration**: Uses framework defaults (HTTP on 127.0.0.1:8000)
+- **Default Configuration**: HTTP on 127.0.0.1:8641
 - **Essential MCP Functionality**: Initialize, list tools, call tools
 
 ## Running the Example
@@ -15,7 +15,7 @@ This example demonstrates the absolute minimum setup for an MCP server using the
 cargo run --bin minimal-server
 ```
 
-The server will start on `http://127.0.0.1:8000/mcp` and provide:
+The server will start on `http://127.0.0.1:8641/mcp` and provide:
 - One tool: `echo` - echoes back text input
 - Standard MCP endpoints: initialize, tools/list, tools/call
 
@@ -23,7 +23,7 @@ The server will start on `http://127.0.0.1:8000/mcp` and provide:
 
 ### 1. Initialize the Connection
 ```bash
-curl -X POST http://127.0.0.1:8000/mcp \
+curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -39,7 +39,7 @@ curl -X POST http://127.0.0.1:8000/mcp \
 
 ### 2. List Available Tools
 ```bash
-curl -X POST http://127.0.0.1:8000/mcp \
+curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
@@ -51,7 +51,7 @@ curl -X POST http://127.0.0.1:8000/mcp \
 
 ### 3. Call the Echo Tool
 ```bash
-curl -X POST http://127.0.0.1:8000/mcp \
+curl -X POST http://127.0.0.1:8641/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",

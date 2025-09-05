@@ -18,7 +18,8 @@ use std::collections::HashMap;
 use serde_json::json;
 
 use turul_mcp_protocol::{
-    JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcNotification, ResultWithMeta, RequestParams
+    JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcNotification, ResultWithMeta, RequestParams,
+    meta::{ProgressToken, Cursor}
 };
 
 /// Test JSON-RPC 2.0 compliance
@@ -199,7 +200,7 @@ mod initialization_compliance {
     #[tokio::test]
     async fn test_protocol_version_validation() {
         let supported_versions = vec!["2025-06-18"];
-        let unsupported_versions = vec!["2024-11-05", "invalid", ""];
+        let _unsupported_versions = vec!["2024-11-05", "invalid", ""];
 
         for version in supported_versions {
             // Should accept supported version
@@ -294,9 +295,11 @@ mod message_structure_compliance {
         let params = request.params.unwrap();
         assert_eq!(params.other.get("name"), Some(&json!("calculator")));
         assert!(params.other.get("arguments").unwrap().is_object());
-        assert!(params.other.get("_meta").unwrap().is_object());
-        let meta = params.other.get("_meta").unwrap();
-        assert_eq!(meta.get("progressToken"), Some(&json!("calc-123")));
+        
+        // Check meta field (stored separately, not in other)
+        assert!(params.meta.is_some());
+        let meta = params.meta.unwrap();
+        assert_eq!(meta.progress_token, Some(ProgressToken::from("calc-123")));
     }
 
     #[tokio::test]
@@ -351,7 +354,9 @@ mod message_structure_compliance {
         
         let params = request.params.unwrap();
         assert_eq!(params.other.get("cursor"), Some(&json!("page-2")));
-        assert!(params.other.get("_meta").unwrap().is_object());
+        
+        // Check meta field (stored separately, not in other)
+        assert!(params.meta.is_some());
 
         // Resource read request
         let resource_read = json!({
@@ -371,7 +376,9 @@ mod message_structure_compliance {
         
         let params = request.params.unwrap();
         assert_eq!(params.other.get("uri"), Some(&json!("file:///example.txt")));
-        assert!(params.other.get("_meta").unwrap().is_object());
+        
+        // Check meta field (stored separately, not in other)
+        assert!(params.meta.is_some());
     }
 
     #[tokio::test]
@@ -415,7 +422,9 @@ mod message_structure_compliance {
         let params = request.params.unwrap();
         assert_eq!(params.other.get("name"), Some(&json!("code_review")));
         assert!(params.other.get("arguments").unwrap().is_object());
-        assert!(params.other.get("_meta").unwrap().is_object());
+        
+        // Check meta field (stored separately, not in other)
+        assert!(params.meta.is_some());
     }
 }
 
@@ -534,10 +543,10 @@ mod meta_field_compliance {
         let params = request.params.unwrap();
         
         // _meta should be preserved as an object
-        assert!(params.other.get("_meta").unwrap().is_object());
-        let meta = params.other.get("_meta").unwrap();
-        assert_eq!(meta.get("progressToken"), Some(&json!("progress-abc-123")));
-        assert_eq!(meta.get("sessionId"), Some(&json!("session-xyz-789")));
+        assert!(params.meta.is_some());
+        let meta = params.meta.unwrap();
+        assert_eq!(meta.progress_token, Some(ProgressToken::from("progress-abc-123")));
+        assert_eq!(meta.extra.get("sessionId"), Some(&json!("session-xyz-789")));
     }
 
     #[tokio::test]
@@ -592,7 +601,7 @@ mod meta_field_compliance {
         let params = request.params.unwrap();
         
         // Should work fine without _meta field
-        assert!(params.other.get("_meta").is_none());
+        assert!(params.meta.is_none());
     }
 
     #[tokio::test]
@@ -618,13 +627,14 @@ mod meta_field_compliance {
 
         let request: JsonRpcRequest = serde_json::from_value(request_with_custom_meta).unwrap();
         let params = request.params.unwrap();
-        let meta = params.other.get("_meta").unwrap();
         
         // Custom fields should be preserved
-        assert_eq!(meta.get("progressToken"), Some(&json!("token-123")));
-        assert_eq!(meta["customField"], "custom_value");
-        assert!(meta["experimentalData"].is_object());
-        assert_eq!(meta["experimentalData"]["feature"], "beta");
+        assert!(params.meta.is_some());
+        let meta = params.meta.unwrap();
+        assert_eq!(meta.progress_token, Some(ProgressToken::from("token-123")));
+        assert_eq!(meta.extra.get("customField"), Some(&json!("custom_value")));
+        assert!(meta.extra.get("experimentalData").unwrap().is_object());
+        assert_eq!(meta.extra["experimentalData"]["feature"], "beta");
     }
 }
 
@@ -969,14 +979,11 @@ mod mcp_2025_06_18_features {
                 },
                 "_meta": {
                     "progressToken": "structured-progress-token",
-                    "elicitation": {
-                        "type": "confirmation",
-                        "message": "Are you sure you want to proceed?"
-                    },
-                    "cursor": {
-                        "page": 2,
-                        "token": "page-token-xyz"
-                    }
+                    "cursor": "page-2",
+                    "total": 100,
+                    "hasMore": true,
+                    "progress": 0.75,
+                    "customField": "custom-value"
                 }
             },
             "id": "structured-test"
@@ -984,14 +991,18 @@ mod mcp_2025_06_18_features {
 
         let request: JsonRpcRequest = serde_json::from_value(request_with_structured_meta).unwrap();
         let params = request.params.unwrap();
-        let meta = params.other.get("_meta").unwrap();
+        
+        // Check meta field (stored separately, not in other)
+        assert!(params.meta.is_some());
+        let meta = params.meta.unwrap();
         
         // Verify structured _meta fields are preserved
-        assert_eq!(meta.get("progressToken"), Some(&json!("structured-progress-token")));
-        assert!(meta["elicitation"].is_object());
-        assert_eq!(meta["elicitation"]["type"], "confirmation");
-        assert!(meta["cursor"].is_object());
-        assert_eq!(meta["cursor"]["page"], 2);
+        assert_eq!(meta.progress_token, Some(ProgressToken::from("structured-progress-token")));
+        assert_eq!(meta.cursor, Some(Cursor::from("page-2")));
+        assert_eq!(meta.total, Some(100));
+        assert_eq!(meta.has_more, Some(true));
+        assert_eq!(meta.progress, Some(0.75));
+        assert_eq!(meta.extra.get("customField"), Some(&json!("custom-value")));
         
         println!("MCP 2025-06-18 structured _meta support verified");
     }

@@ -25,9 +25,10 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-http-mcp-server = "0.1.1"
-turul-mcp-server = "0.1.1"
-turul-mcp-derive = "0.1.1"
+turul-http-mcp-server = "0.2.0"
+turul-mcp-server = "0.2.0"
+turul-mcp-derive = "0.2.0"
+tokio = { version = "1.0", features = ["full"] }
 ```
 
 ### Basic HTTP MCP Server
@@ -126,16 +127,13 @@ use turul_mcp_server::{McpResult, SessionContext};
 #[mcp_tool(name = "long_task", description = "Long-running task with progress")]
 async fn long_task(
     #[param(description = "Task duration in seconds")] duration: u32,
-    session: SessionContext,  // Automatic session injection
+    session: Option<SessionContext>,  // Automatic session injection
 ) -> McpResult<String> {
     for i in 1..=duration {
-        // Send progress notification via SSE
-        session.notify_progress(
-            "long-task", 
-            i as f64, 
-            Some(duration as f64), 
-            Some(format!("Step {} of {}", i, duration))
-        ).await?;
+        if let Some(ref session) = session {
+            // Send progress notification via SSE
+            session.notify_progress("long-task", i as u64);
+        }
         
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
@@ -273,19 +271,10 @@ The server supports all MCP notification types via SSE:
 
 ```rust
 // Progress notifications
-session.notify_progress("task-id", 50.0, Some(100.0), Some("Processing...")).await?;
-
-// Resource update notifications  
-session.notify_resource_updated("file:///config.json").await?;
-
-// Prompt update notifications
-session.notify_prompt_updated("greeting").await?;
+session.notify_progress("task-id", 50);
 
 // Log notifications
-session.notify_log("info", serde_json::json!({
-    "message": "Operation completed",
-    "duration_ms": 1250
-}), Some("component")).await?;
+session.notify_log("info", "Operation completed");
 ```
 
 ### SSE Resumability
@@ -398,7 +387,7 @@ async fn validate_input(
 
 ```rust
 // Session operations fail gracefully
-if let Err(e) = session.set_typed_state("key", &value).await {
+if let Err(e) = session.set_typed_state("key", value) {
     tracing::warn!("Failed to persist session state: {}", e);
     // Operation continues without state persistence
 }
@@ -467,7 +456,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-turul-http-mcp-server = { version = "0.1.1", features = ["sse"] }
+turul-http-mcp-server = { version = "0.2.0", features = ["sse"] }
 ```
 
 - `default` = `["sse"]` - Includes SSE support by default
