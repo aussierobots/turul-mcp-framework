@@ -34,7 +34,7 @@ struct AddTool {
 }
 
 impl AddTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
         Ok(format!("{} + {} = {}", self.a, self.b, self.a + self.b))
     }
 }
