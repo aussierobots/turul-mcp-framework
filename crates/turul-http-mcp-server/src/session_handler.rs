@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::convert::Infallible;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tracing::{debug, warn, error};
+use tracing::{debug, warn, error, info};
 
 use hyper::{Request, Response, Method, StatusCode};
 use bytes::Bytes;
@@ -372,21 +372,30 @@ impl SessionMcpHandler {
                         }
                     }
                 } else {
-                    // ✅ CORRECTED ARCHITECTURE: Use shared StreamManager for notification broadcaster
-                    let session_id_str = session_id.clone().unwrap_or("unknown".to_string());
-                    let broadcaster: SharedNotificationBroadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(
-                        Arc::clone(&self.stream_manager)
-                    ));
-                    let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
-
-                    let session_context = SessionContext {
-                        session_id: session_id_str,
-                        metadata: std::collections::HashMap::new(),
-                        broadcaster: Some(broadcaster_any),
-                        timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                    // For non-initialize requests, create session context if session ID is provided
+                    // Let server-level handlers decide whether to enforce session requirements
+                    let session_context = if let Some(ref session_id_str) = session_id {
+                        debug!("Processing request with session: {}", session_id_str);
+                        let broadcaster: SharedNotificationBroadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(
+                            Arc::clone(&self.stream_manager)
+                        ));
+                        let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+                        Some(SessionContext {
+                            session_id: session_id_str.clone(),
+                            metadata: std::collections::HashMap::new(),
+                            broadcaster: Some(broadcaster_any),
+                            timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                        })
+                    } else {
+                        debug!("Processing request without session (lenient mode)");
+                        None
                     };
-
-                    let response = self.dispatcher.handle_request_with_context(request, session_context).await;
+                    
+                    let response = if let Some(ctx) = session_context {
+                        self.dispatcher.handle_request_with_context(request, ctx).await
+                    } else {
+                        self.dispatcher.handle_request(request).await
+                    };
                     (response, session_id)
                 };
 
@@ -396,24 +405,29 @@ impl SessionMcpHandler {
                 debug!("Processing JSON-RPC notification: method={}", notification.method);
                 let method_name = notification.method.clone();
 
-                // ✅ CORRECTED ARCHITECTURE: Create session context with shared StreamManager broadcaster
-                let session_context = if let Some(ref session_id) = session_id {
+                // For notifications, create session context if session ID is provided
+                // Let server-level handlers decide whether to enforce session requirements 
+                let session_context = if let Some(ref session_id_str) = session_id {
+                    debug!("Processing notification with session: {}", session_id_str);
                     let broadcaster: SharedNotificationBroadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(
                         Arc::clone(&self.stream_manager)
                     ));
                     let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
 
                     Some(SessionContext {
-                        session_id: session_id.clone(),
+                        session_id: session_id_str.clone(),
                         metadata: std::collections::HashMap::new(),
                         broadcaster: Some(broadcaster_any),
                         timestamp: chrono::Utc::now().timestamp_millis() as u64,
                     })
                 } else {
+                    debug!("Processing notification without session (lenient mode)");
                     None
                 };
 
-                if let Err(err) = self.dispatcher.handle_notification_with_context(notification, session_context).await {
+                let result = self.dispatcher.handle_notification_with_context(notification, session_context).await;
+                
+                if let Err(err) = result {
                     error!("Notification handling error: {}", err);
                 }
                 (JsonRpcMessageResult::NoResponse, session_id.clone(), Some(method_name))
@@ -593,25 +607,61 @@ impl SessionMcpHandler {
         debug!("DELETE request - Session: {:?}", session_id);
 
         if let Some(session_id) = session_id {
-            match self.session_storage.delete_session(&session_id).await {
-                Ok(true) => {
-                    debug!("Session {} removed via DELETE", session_id);
-                    Ok(Response::builder()
-                        .status(StatusCode::OK)
-                        .body(Full::new(Bytes::from("Session removed")))
-                        .unwrap())
+            // First, close any active SSE connections for this session
+            let closed_connections = self.stream_manager.close_session_connections(&session_id).await;
+            debug!("Closed {} SSE connections for session: {}", closed_connections, session_id);
+
+            // Mark session as terminated instead of immediate deletion (for proper lifecycle management)
+            match self.session_storage.get_session(&session_id).await {
+                Ok(Some(mut session_info)) => {
+                    // Mark session as terminated in state
+                    session_info.state.insert("terminated".to_string(), serde_json::Value::Bool(true));
+                    session_info.state.insert("terminated_at".to_string(), serde_json::Value::Number(
+                        serde_json::Number::from(chrono::Utc::now().timestamp_millis())
+                    ));
+                    session_info.touch();
+
+                    match self.session_storage.update_session(session_info).await {
+                        Ok(()) => {
+                            info!("Session {} marked as terminated (TTL will handle cleanup)", session_id);
+                            Ok(Response::builder()
+                                .status(StatusCode::OK)
+                                .body(Full::new(Bytes::from("Session terminated")))
+                                .unwrap())
+                        }
+                        Err(err) => {
+                            error!("Error marking session {} as terminated: {}", session_id, err);
+                            // Fallback to deletion if update fails
+                            match self.session_storage.delete_session(&session_id).await {
+                                Ok(_) => {
+                                    info!("Session {} deleted as fallback", session_id);
+                                    Ok(Response::builder()
+                                        .status(StatusCode::OK)
+                                        .body(Full::new(Bytes::from("Session removed")))
+                                        .unwrap())
+                                }
+                                Err(delete_err) => {
+                                    error!("Error deleting session {} as fallback: {}", session_id, delete_err);
+                                    Ok(Response::builder()
+                                        .status(StatusCode::INTERNAL_SERVER_ERROR)
+                                        .body(Full::new(Bytes::from("Session termination error")))
+                                        .unwrap())
+                                }
+                            }
+                        }
+                    }
                 }
-                Ok(false) => {
+                Ok(None) => {
                     Ok(Response::builder()
                         .status(StatusCode::NOT_FOUND)
                         .body(Full::new(Bytes::from("Session not found")))
                         .unwrap())
                 }
                 Err(err) => {
-                    error!("Error deleting session {}: {}", session_id, err);
+                    error!("Error retrieving session {} for termination: {}", session_id, err);
                     Ok(Response::builder()
                         .status(StatusCode::INTERNAL_SERVER_ERROR)
-                        .body(Full::new(Bytes::from("Session deletion error")))
+                        .body(Full::new(Bytes::from("Session lookup error")))
                         .unwrap())
                 }
             }

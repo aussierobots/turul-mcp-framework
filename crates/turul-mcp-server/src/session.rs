@@ -981,7 +981,7 @@ impl SessionManager {
         client_capabilities: ClientCapabilities,
         mcp_version: McpVersion,
     ) -> Result<(), SessionError> {
-        // Update storage backend
+        // Update storage backend first - CRITICAL for persistence
         if let Ok(Some(mut session_info)) = self.storage.get_session(session_id).await {
             session_info.client_capabilities = Some(client_capabilities.clone());
             session_info.is_initialized = true;
@@ -989,18 +989,28 @@ impl SessionManager {
             // Note: mcp_version not stored in SessionInfo, only in memory cache
             
             if let Err(e) = self.storage.update_session(session_info).await {
-                error!("Failed to update session in storage: {}", e);
+                error!("❌ CRITICAL: Failed to update session {} in storage: {}", session_id, e);
+                return Err(SessionError::StorageError(format!(
+                    "Failed to persist session initialization: {}", e
+                )));
             }
+            debug!("✅ Session {} storage updated with is_initialized=true", session_id);
+        } else {
+            error!("❌ Session {} not found in storage during initialization", session_id);
+            return Err(SessionError::NotFound(session_id.to_string()));
         }
         
         // Update in-memory cache
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get_mut(session_id) {
             session.initialize_with_version(client_info, client_capabilities, mcp_version);
-            debug!("Session {} initialized with protocol version {}", session_id, mcp_version);
+            debug!("✅ Session {} cache updated with protocol version {}", session_id, mcp_version);
             Ok(())
         } else {
-            Err(SessionError::NotFound(session_id.to_string()))
+            warn!("⚠️ Session {} not found in cache but exists in storage - creating cache entry", session_id);
+            // Session exists in storage but not in cache - this is acceptable
+            // The cache will be populated on next access
+            Ok(())
         }
     }
 

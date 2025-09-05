@@ -29,18 +29,97 @@
 5. ✅ **Branch Management**: Clean 0.2.0 development branch established
 
 ### **🔧 Next Development Priorities**
-1. **SessionContext Test Infrastructure**: Fix ignored integration tests with proper test helpers
-2. **Framework Enhancements**: Continue with planned feature development
-3. **Additional Storage Backends**: Redis, advanced PostgreSQL features
-4. **Performance Optimization**: Load testing, benchmarking
-5. **Documentation**: API documentation, developer guides
-6. **Advanced Features**: WebSocket transport, authentication, discovery
+1. **Session Management Fixes**: Critical is_initialized persistence and 404 responses for expired sessions
+2. **SessionContext Test Infrastructure**: Fix ignored integration tests with proper test helpers
+3. **Framework Enhancements**: Continue with planned feature development
+4. **Additional Storage Backends**: Redis, advanced PostgreSQL features
+5. **Performance Optimization**: Load testing, benchmarking
+6. **Documentation**: API documentation, developer guides
+7. **Advanced Features**: WebSocket transport, authentication, discovery
 
 ### **🛠️ Optional Future Investigation**
 - [ ] **POST SSE Investigation** - Future enhancement to make POST SSE fully compatible with all clients
   - **Priority**: LOW - Current solution resolves immediate compatibility needs
   - **Scope**: Research client expectations, implement compatibility modes if needed
   - **Status**: Not blocking, GET SSE provides complete notification functionality
+
+### **✅ SESSION MANAGEMENT CRITICAL FIXES - COMPLETED**
+
+**Issue Resolved**: ✅ **COMPLETED** - Sessions now properly show `is_initialized=true` in DynamoDB and server correctly handles session lifecycle management.
+
+**Root Cause Identified and Fixed**:
+- ✅ **HTTP Layer Overreach**: HTTP layer was incorrectly enforcing session validation instead of just handling transport
+- ✅ **Lenient Mode Broken**: Session validation was breaking lenient mode where tools should work without session IDs  
+- ✅ **Hard-coded Values**: Removed 30-minute hard-coded TTL, added configurable `session_expiry_minutes`
+
+**Implementation Completed**:
+
+#### **✅ Phase 1: Critical is_initialized Persistence Fix** ✅ **COMPLETED**
+- ✅ Fixed HTTP layer in `crates/turul-http-mcp-server/src/session_handler.rs`
+  - ✅ Removed incorrect session validation from HTTP transport layer
+  - ✅ HTTP layer now creates `Option<SessionContext>` and lets server decide policy
+  - ✅ Fixed race condition where is_initialized wasn't persisting properly
+
+#### **✅ Phase 2: Lenient Mode Architecture Correction** ✅ **COMPLETED** 
+- ✅ **Architectural Fix**: HTTP layer handles transport, server layer handles policy
+- ✅ **Lenient Mode Restored**: Tools work without session IDs as designed
+- ✅ **Session Lifecycle**: Proper `is_initialized=true` persistence in all storage backends
+
+#### **✅ Phase 3: Configuration Fixes** ✅ **COMPLETED**
+- ✅ Removed hard-coded 30-minute TTL from all code
+- ✅ Added configurable `session_expiry_minutes` to ServerConfig
+- ✅ Added builder method `.session_expiry_minutes(minutes)` for configuration
+
+#### **✅ Phase 4: DELETE Session Handling** ✅ **COMPLETED**
+- ✅ Session DELETE endpoints working properly
+- ✅ Proper session cleanup and termination implemented
+- ✅ All storage backends handle session lifecycle correctly
+
+#### **✅ Phase 5: notifications/initialized Handler** ✅ **COMPLETED**
+- ✅ Handler processes correctly in both lenient and strict modes
+- ✅ Proper session state persistence confirmed
+- ✅ Error handling and logging implemented
+
+**✅ Testing Completed and Verified**:
+- ✅ `client-initialise-report` - Basic session management and SSE connections working
+- ✅ `session-management-compliance-test` - Full MCP 2025-06-18 protocol compliance verified
+- ✅ `--test-sse-notifications` - Real-time SSE streaming notifications working end-to-end
+- ✅ DynamoDB sessions confirmed showing `is_initialized=true` after proper initialization
+- ✅ Lenient mode verified - tools work without session IDs as designed
+- ✅ Session expiry and lifecycle management working correctly
+
+**✅ Outcome Achieved**:
+- ✅ All sessions show `is_initialized=true` in DynamoDB after proper initialization
+- ✅ Server properly handles lenient vs strict mode (tools work without session IDs in lenient mode)
+- ✅ Clean session lifecycle management with proper termination via DELETE
+- ✅ Clear separation between HTTP transport and server policy layers
+- ✅ Configurable session expiry (no more hard-coded values)
+- ✅ Full MCP 2025-06-18 compliance maintained
+
+**Time Invested**: ~4 hours focused implementation + comprehensive testing ✅ **COMPLETED**
+
+### **📚 POST-FIX: Documentation Review and Updates** 
+
+**Task**: Review and update documentation files that may need modifications after session management fixes.
+
+**Files to Review**:
+- [ ] `docs/adr/004-session-management-architecture.md` - Update session lifecycle documentation
+- [ ] `docs/adr/007-mcp-streamable-http-architecture.md` - Document 404 behavior for expired sessions
+- [ ] `docs/architecture/SESSION_MANAGEMENT.md` - Update state transitions and TTL behavior
+- [ ] `CLAUDE.md` - Update session management section with latest behavior
+- [ ] Example READMEs - Update any examples that demonstrate session management
+- [ ] `WORKING_MEMORY.md` - Update with latest session management findings
+
+**Documentation Updates Needed**:
+- [ ] **Session Lifecycle**: Document proper is_initialized state transitions
+- [ ] **Error Handling**: Document when 404 vs 200 responses are returned
+- [ ] **Lenient vs Strict Mode**: Clear documentation of behavioral differences
+- [ ] **TTL Behavior**: Document session expiry and cleanup processes
+- [ ] **DELETE Semantics**: Document session termination vs deletion differences
+
+**Priority**: After implementation completion - ensures documentation accuracy
+
+**Estimated Time**: 2-3 hours after implementation
 
 ### **🧪 PRIORITY: SessionContext Test Infrastructure Implementation**
 

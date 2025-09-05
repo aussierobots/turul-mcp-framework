@@ -37,6 +37,8 @@ pub struct ServerConfig {
     pub enable_get_sse: bool,
     /// Enable POST SSE support (streaming tool call responses) - disabled by default for compatibility
     pub enable_post_sse: bool,
+    /// Session expiry time in minutes (default: 30 minutes)
+    pub session_expiry_minutes: u64,
 }
 
 impl Default for ServerConfig {
@@ -48,6 +50,7 @@ impl Default for ServerConfig {
             max_body_size: 1024 * 1024, // 1MB
             enable_get_sse: cfg!(feature = "sse"), // GET SSE enabled if "sse" feature is compiled
             enable_post_sse: false, // Disabled by default for better client compatibility (e.g., MCP Inspector)
+            session_expiry_minutes: 30, // 30 minutes default
         }
     }
 }
@@ -123,6 +126,12 @@ impl HttpMcpServerBuilder {
     pub fn sse(mut self, enable: bool) -> Self {
         self.config.enable_get_sse = enable;
         self.config.enable_post_sse = enable;
+        self
+    }
+
+    /// Set session expiry time in minutes
+    pub fn session_expiry_minutes(mut self, minutes: u64) -> Self {
+        self.config.session_expiry_minutes = minutes;
         self
     }
 
@@ -252,12 +261,13 @@ impl HttpMcpServer {
     /// Start background session cleanup task
     async fn start_session_cleanup(&self) {
         let storage = Arc::clone(&self.session_storage);
+        let session_expiry_minutes = self.config.session_expiry_minutes;
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
 
-                let expire_time = std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 60); // 30 minutes
+                let expire_time = std::time::SystemTime::now() - std::time::Duration::from_secs(session_expiry_minutes * 60);
                 match storage.expire_sessions(expire_time).await {
                     Ok(expired) => {
                         if !expired.is_empty() {

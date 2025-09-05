@@ -711,7 +711,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             )
             .await;
 
-        // Session is NOT marked as initialized yet - waiting for notifications/initialized
+        // Store negotiated version before initialization (differs by mode)
 
         // Store the negotiated version in session state for tools to access
         self.session_manager
@@ -752,7 +752,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             );
         } else {
             info!(
-                "Session {} created and ready for client with protocol version {} (waiting for notifications/initialized)",
+                "⏳ Session {} created and ready for client with protocol version {} (strict mode - waiting for notifications/initialized)",
                 session_id, negotiated_version
             );
         }
@@ -769,14 +769,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             response = response.with_instructions(instructions.clone());
         }
 
-        // TODO: The session ID needs to be communicated to the HTTP layer
-        // for proper MCP session management (GPS pattern)
-        // For now, the HTTP layer will need to extract it from the session manager
-
-        info!(
-            "Session {} created successfully (not yet initialized - waiting for notifications/initialized)",
-            session_id
-        );
+        // Session ID is communicated to HTTP layer via session manager
 
         serde_json::to_value(response).map_err(|e| {
             turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())

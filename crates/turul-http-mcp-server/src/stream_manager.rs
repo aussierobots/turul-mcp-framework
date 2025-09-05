@@ -296,6 +296,24 @@ impl StreamManager {
         debug!("🔍 AFTER unregister: HashMap has {} sessions", connections.len());
     }
 
+    /// Close all SSE connections for a session (useful for session termination)
+    pub async fn close_session_connections(&self, session_id: &str) -> usize {
+        debug!("🔴 Closing all connections for session: {}", session_id);
+        let mut connections = self.connections.write().await;
+        
+        let closed_count = if let Some(session_connections) = connections.remove(session_id) {
+            let count = session_connections.len();
+            debug!("🔌 Closed {} SSE connections for session: {}", count, session_id);
+            count
+        } else {
+            debug!("🔍 No SSE connections found for session: {}", session_id);
+            0
+        };
+        
+        debug!("🧹 Session {} removed from stream manager", session_id);
+        closed_count
+    }
+
     /// Convert SSE stream to HTTP response with proper headers
     async fn stream_to_response(&self, mut sse_stream: SseStream) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>> {
         // Extract session info before moving the stream
