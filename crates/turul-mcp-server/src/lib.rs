@@ -6,9 +6,12 @@
 //!
 //! ## Quick Start
 //!
-//! ```rust,no_run
-//! use turul_mcp_server::{McpServer, McpTool, SessionContext};
-//! use turul_mcp_protocol::{CallToolResult, tools::*};
+//! ```rust,ignore
+//! use turul_mcp_server::{McpServer, McpTool, SessionContext, McpResult};
+//! use turul_mcp_protocol::{
+//!     tools::{CallToolResponse, ToolResult, ToolSchema, ToolAnnotations},
+//!     resources::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta}
+//! };
 //! use serde_json::json;
 //! use async_trait::async_trait;
 //! use std::collections::HashMap;
@@ -57,12 +60,14 @@
 //!
 //! #[async_trait]
 //! impl McpTool for EchoTool {
-//!     async fn call(&self, args: serde_json::Value, _session: Option<SessionContext>) -> crate::McpResult<CallToolResult> {
+//!     async fn call(&self, args: serde_json::Value, _session: Option<SessionContext>) -> McpResult<CallToolResponse> {
 //!         let text = args.get("text")
 //!             .and_then(|v| v.as_str())
 //!             .unwrap_or("No text provided");
 //!         
-//!         Ok(CallToolResult::from_text(format!("Echo: {}", text)))
+//!         Ok(CallToolResponse::success(vec![
+//!             ToolResult::text(format!("Echo: {}", text))
+//!         ]))
 //!     }
 //! }
 //!

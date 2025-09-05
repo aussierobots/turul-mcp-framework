@@ -191,9 +191,9 @@ impl McpServerBuilder {
     /// as your async function, so you can use the function name directly.
     /// 
     /// # Example
-    /// ```rust,no_run
-    /// use mcp_derive::mcp_tool;
-    /// use mcp_server::McpServer;
+    /// ```rust,ignore
+    /// use turul_mcp_derive::mcp_tool;
+    /// use turul_mcp_server::McpServer;
     /// 
     /// #[mcp_tool(name = "add", description = "Add numbers")]
     /// async fn add_numbers(a: f64, b: f64) -> Result<f64, String> {
@@ -491,7 +491,7 @@ impl McpServerBuilder {
     /// 
     /// # Example
     /// ```rust,no_run
-    /// use mcp_server::McpServer;
+    /// use turul_mcp_server::McpServer;
     /// 
     /// let server = McpServer::builder()
     ///     .name("strict-server")

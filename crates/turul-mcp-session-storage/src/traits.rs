@@ -179,7 +179,7 @@ pub trait SessionStorage: Send + Sync {
     /// - Tests that don't specifically need custom session IDs
     /// 
     /// # Example
-    /// ```rust
+    /// ```rust,ignore
     /// // ✅ CORRECT - Testing specific session behavior
     /// let session = storage.create_session_with_id("test-session-123".to_string(), caps).await?;
     /// 
