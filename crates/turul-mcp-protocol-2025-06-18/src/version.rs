@@ -9,6 +9,7 @@
 
 use serde::{Deserialize, Serialize};
 
+
 /// Supported MCP protocol versions
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum McpVersion {
@@ -23,16 +24,8 @@ pub enum McpVersion {
     V2025_06_18,
 }
 
+
 impl McpVersion {
-    /// Parse a version string like "2024-11-05", "2025-03-26", or "2025-06-18"
-    pub fn from_str(s: &str) -> Option<Self> {
-        match s {
-            "2024-11-05" => Some(McpVersion::V2024_11_05),
-            "2025-03-26" => Some(McpVersion::V2025_03_26),
-            "2025-06-18" => Some(McpVersion::V2025_06_18),
-            _ => None,
-        }
-    }
 
     /// Convert this version to its string representation
     pub fn as_str(&self) -> &'static str {
@@ -99,10 +92,15 @@ impl std::str::FromStr for McpVersion {
     type Err = crate::McpError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::from_str(s).ok_or_else(|| crate::McpError::VersionMismatch {
-            expected: Self::CURRENT.as_str().to_string(),
-            actual: s.to_string(),
-        })
+        match s {
+            "2024-11-05" => Ok(McpVersion::V2024_11_05),
+            "2025-03-26" => Ok(McpVersion::V2025_03_26),
+            "2025-06-18" => Ok(McpVersion::V2025_06_18),
+            _ => Err(crate::McpError::VersionMismatch {
+                expected: Self::CURRENT.as_str().to_string(),
+                actual: s.to_string(),
+            }),
+        }
     }
 }
 
@@ -118,10 +116,10 @@ mod tests {
 
     #[test]
     fn test_version_parsing() {
-        assert_eq!(McpVersion::from_str("2024-11-05"), Some(McpVersion::V2024_11_05));
-        assert_eq!(McpVersion::from_str("2025-03-26"), Some(McpVersion::V2025_03_26));
-        assert_eq!(McpVersion::from_str("2025-06-18"), Some(McpVersion::V2025_06_18));
-        assert_eq!(McpVersion::from_str("invalid"), None);
+        assert_eq!("2024-11-05".parse::<McpVersion>().unwrap(), McpVersion::V2024_11_05);
+        assert_eq!("2025-03-26".parse::<McpVersion>().unwrap(), McpVersion::V2025_03_26);
+        assert_eq!("2025-06-18".parse::<McpVersion>().unwrap(), McpVersion::V2025_06_18);
+        assert!("invalid".parse::<McpVersion>().is_err());
     }
 
     #[test]

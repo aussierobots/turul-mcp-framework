@@ -488,6 +488,17 @@ pub struct PromptMeta {
     pub description: String,
 }
 
+/// Resource metadata extracted from attributes
+#[derive(Debug)]
+#[allow(dead_code)] // Some fields may be unused in current implementation
+pub struct ResourceMeta {
+    pub name: String,
+    pub uri: String,
+    pub description: String,
+    pub title: Option<String>,
+    pub mime_type: Option<String>,
+}
+
 /// Extract prompt metadata from #[prompt(...)] attributes
 pub fn extract_prompt_meta(attrs: &[Attribute]) -> Result<PromptMeta> {
     let mut name = None;
@@ -517,6 +528,56 @@ pub fn extract_prompt_meta(attrs: &[Attribute]) -> Result<PromptMeta> {
     let description = description.unwrap_or_else(|| "Generated prompt".to_string());
 
     Ok(PromptMeta { name, description })
+}
+
+/// Extract resource metadata from #[resource(...)] attributes
+pub fn extract_resource_meta(attrs: &[Attribute]) -> Result<ResourceMeta> {
+    let mut name = None;
+    let mut uri = None;
+    let mut description = None;
+    let mut title = None;
+    let mut mime_type = None;
+
+    for attr in attrs {
+        if attr.path().is_ident("resource") {
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("name") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    name = Some(s.value());
+                } else if meta.path.is_ident("uri") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    uri = Some(s.value());
+                } else if meta.path.is_ident("description") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    description = Some(s.value());
+                } else if meta.path.is_ident("title") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    title = Some(s.value());
+                } else if meta.path.is_ident("mime_type") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    mime_type = Some(s.value());
+                }
+                Ok(())
+            })?;
+        }
+    }
+
+    let name = name.ok_or_else(|| {
+        syn::Error::new(proc_macro2::Span::call_site(), "Missing 'name' in #[resource(name = \"...\")]")
+    })?;
+    
+    let uri = uri.ok_or_else(|| {
+        syn::Error::new(proc_macro2::Span::call_site(), "Missing 'uri' in #[resource(uri = \"...\")]")
+    })?;
+    
+    let description = description.unwrap_or_else(|| "Generated resource".to_string());
+
+    Ok(ResourceMeta { name, uri, description, title, mime_type })
 }
 
 /// Root metadata extracted from attributes

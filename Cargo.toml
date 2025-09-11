@@ -56,7 +56,8 @@ members = [
     "examples/session-management-compliance-test",
 
     # Tests
-    "tests",
+    "tests/resources",
+    "tests/prompts",
 ]
 
 exclude = [

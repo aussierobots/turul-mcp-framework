@@ -66,9 +66,8 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        // PromptDefinition is automatically implemented via trait composition
-        #[automatically_derived]
-        impl turul_mcp_protocol::prompts::PromptDefinition for #struct_name {}
+        // PromptDefinition automatically implemented via blanket impl in prompts.rs
+        // No need for explicit impl - blanket impl handles it
         
         #[automatically_derived]
         #[async_trait::async_trait]

@@ -154,8 +154,8 @@ impl LambdaMcpServerBuilder {
             "resources/list".to_string(),
             Arc::new(ResourcesHandler::new()),
         );
-        handlers.insert("prompts/list".to_string(), Arc::new(PromptsHandler::new()));
-        handlers.insert("prompts/get".to_string(), Arc::new(PromptsHandler::new()));
+        handlers.insert("prompts/list".to_string(), Arc::new(PromptsListHandler::new()));
+        handlers.insert("prompts/get".to_string(), Arc::new(PromptsGetHandler::new()));
         handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
         handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
         handlers.insert(
@@ -499,15 +499,9 @@ impl LambdaMcpServerBuilder {
             list_changed: Some(false),
         });
 
-        // Create PromptsHandler and add all registered prompts
-        let handler = PromptsHandler::new();
-        for (_, _prompt) in &self.prompts {
-            // Note: Different trait types between McpPrompt and handlers::McpPrompt
-            // For now, skip adding to handlers until we resolve trait alignment
-            // handler = handler.add_prompt_arc(prompt.clone());
-        }
-
-        self.handler(handler)
+        // Prompts handlers are automatically registered when prompts are added via .prompt()
+        // This method now just enables the capability
+        self
     }
 
     /// Add resources support

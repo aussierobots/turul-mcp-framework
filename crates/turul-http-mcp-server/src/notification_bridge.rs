@@ -52,7 +52,7 @@ pub trait NotificationBroadcaster: Send + Sync {
         notification: ResourceUpdatedNotification,
     ) -> Result<(), BroadcastError>;
 
-    /// Send resource list changed notification (notifications/resources/list_changed)
+    /// Send resource list changed notification (notifications/resources/listChanged)
     /// Notifies that the resource list has changed (added/removed resources)
     async fn send_resource_list_changed_notification(
         &self,
@@ -60,7 +60,7 @@ pub trait NotificationBroadcaster: Send + Sync {
         notification: ResourceListChangedNotification,
     ) -> Result<(), BroadcastError>;
 
-    /// Send tool list changed notification (notifications/tools/list_changed)
+    /// Send tool list changed notification (notifications/tools/listChanged)
     /// Notifies that the tool list has changed (added/removed tools)
     async fn send_tool_list_changed_notification(
         &self,
@@ -68,7 +68,7 @@ pub trait NotificationBroadcaster: Send + Sync {
         notification: ToolListChangedNotification,
     ) -> Result<(), BroadcastError>;
 
-    /// Send prompt list changed notification (notifications/prompts/list_changed)
+    /// Send prompt list changed notification (notifications/prompts/listChanged)
     /// Notifies that the prompt list has changed (added/removed prompts)
     async fn send_prompt_list_changed_notification(
         &self,

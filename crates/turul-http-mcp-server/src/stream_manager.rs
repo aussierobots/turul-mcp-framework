@@ -8,7 +8,7 @@
 //! - Proper HTTP status codes and headers
 
 use std::sync::Arc;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use futures::{Stream, StreamExt};
 use hyper::{Response, StatusCode};
@@ -30,6 +30,8 @@ pub struct StreamManager {
     storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     /// Per-session connections for real-time events (MCP compliant - no broadcasting)
     connections: Arc<RwLock<HashMap<String, HashMap<ConnectionId, mpsc::Sender<SseEvent>>>>>,
+    /// Per-session notification subscriptions (what notifications each session wants)
+    subscriptions: Arc<RwLock<HashMap<String, HashSet<String>>>>,
     /// Configuration
     config: StreamConfig,
     /// Unique instance ID for debugging
@@ -112,6 +114,8 @@ pub enum StreamError {
     ConnectionError(String),
     #[error("No connections available for session: {0}")]
     NoConnections(String),
+    #[error("Session {0} not subscribed to notification type: {1}")]
+    NotSubscribed(String, String),
 }
 
 impl StreamManager {
@@ -128,6 +132,7 @@ impl StreamManager {
         Self {
             storage,
             connections: Arc::new(RwLock::new(HashMap::new())),
+            subscriptions: Arc::new(RwLock::new(HashMap::new())),
             config,
             instance_id,
         }
@@ -310,6 +315,9 @@ impl StreamManager {
             0
         };
         
+        // Also clear subscriptions for this session
+        self.clear_subscriptions(session_id).await;
+        
         debug!("🧹 Session {} removed from stream manager", session_id);
         closed_count
     }
@@ -374,6 +382,12 @@ impl StreamManager {
         data: Value,
         store_when_no_connections: bool,
     ) -> Result<u64, StreamError> {
+        // Check subscription filtering first
+        if !self.is_subscribed(session_id, &event_type).await {
+            debug!("🚫 Session {} not subscribed to notification type: {}", session_id, event_type);
+            return Err(StreamError::NotSubscribed(session_id.to_string(), event_type));
+        }
+        
         // Check if we should suppress notifications when no connections exist
         if !store_when_no_connections && !self.has_connections(session_id).await {
             debug!("🚫 Suppressing notification for session {} (no connections, store_when_no_connections=false)", session_id);
@@ -570,6 +584,59 @@ impl StreamManager {
             .header("Mcp-Session-Id", &session_id)
             .body(boxed_body)
             .unwrap())
+    }
+
+    /// Subscribe a session to specific notification types
+    pub async fn subscribe_to_notifications(&self, session_id: &str, notification_types: Vec<String>) {
+        let mut subscriptions = self.subscriptions.write().await;
+        let session_subscriptions = subscriptions.entry(session_id.to_string()).or_insert_with(HashSet::new);
+        
+        for notification_type in notification_types {
+            session_subscriptions.insert(notification_type.clone());
+            debug!("📝 Session {} subscribed to notification: {}", session_id, notification_type);
+        }
+        
+        info!("🔔 Session {} now has {} subscriptions", session_id, session_subscriptions.len());
+    }
+    
+    /// Unsubscribe a session from specific notification types
+    pub async fn unsubscribe_from_notifications(&self, session_id: &str, notification_types: Vec<String>) {
+        let mut subscriptions = self.subscriptions.write().await;
+        if let Some(session_subscriptions) = subscriptions.get_mut(session_id) {
+            for notification_type in notification_types {
+                if session_subscriptions.remove(&notification_type) {
+                    debug!("📝 Session {} unsubscribed from notification: {}", session_id, notification_type);
+                }
+            }
+            
+            // Remove session entry if no subscriptions remain
+            if session_subscriptions.is_empty() {
+                subscriptions.remove(session_id);
+                debug!("🗑️ Removed subscription entry for session {} (no remaining subscriptions)", session_id);
+            }
+        }
+    }
+    
+    /// Check if a session is subscribed to a specific notification type
+    pub async fn is_subscribed(&self, session_id: &str, notification_type: &str) -> bool {
+        let subscriptions = self.subscriptions.read().await;
+        subscriptions.get(session_id)
+            .map(|session_subscriptions| session_subscriptions.contains(notification_type))
+            .unwrap_or(true) // Default: allow all notifications if no explicit subscriptions
+    }
+    
+    /// Get all subscriptions for a session
+    pub async fn get_subscriptions(&self, session_id: &str) -> HashSet<String> {
+        let subscriptions = self.subscriptions.read().await;
+        subscriptions.get(session_id).cloned().unwrap_or_default()
+    }
+    
+    /// Clear all subscriptions for a session (used during session cleanup)
+    pub async fn clear_subscriptions(&self, session_id: &str) {
+        let mut subscriptions = self.subscriptions.write().await;
+        if subscriptions.remove(session_id).is_some() {
+            debug!("🗑️ Cleared all subscriptions for session: {}", session_id);
+        }
     }
 
     /// Get statistics about active streams

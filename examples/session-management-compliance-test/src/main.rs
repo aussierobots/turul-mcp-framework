@@ -99,7 +99,7 @@ async fn test_session_id_generation(client: &Client, url: &str) -> Result<()> {
 
     // Validate session ID format and security
     let session_bytes = session_id.as_bytes();
-    let valid_ascii = session_bytes.iter().all(|&b| b >= 0x21 && b <= 0x7E);
+    let valid_ascii = session_bytes.iter().all(|&b| (0x21..=0x7E).contains(&b));
     
     if valid_ascii {
         info!("✅ Session ID contains only visible ASCII characters (0x21-0x7E)");

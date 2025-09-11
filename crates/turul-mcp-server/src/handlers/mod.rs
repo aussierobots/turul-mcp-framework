@@ -71,12 +71,12 @@ impl McpHandler for CompletionHandler {
     }
 }
 
-/// Prompts handler for prompts/list and prompts/get endpoints
-pub struct PromptsHandler {
+/// Prompts list handler for prompts/list endpoint only
+pub struct PromptsListHandler {
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
 }
 
-impl PromptsHandler {
+impl PromptsListHandler {
     pub fn new() -> Self {
         Self {
             prompts: HashMap::new(),
@@ -96,7 +96,7 @@ impl PromptsHandler {
 }
 
 #[async_trait]
-impl McpHandler for PromptsHandler {
+impl McpHandler for PromptsListHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         // Handle prompts/list with pagination support
         use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
@@ -111,21 +111,67 @@ impl McpHandler for PromptsHandler {
 
         debug!("Listing prompts with cursor: {:?}", cursor);
 
-        let prompts: Vec<Prompt> = self
+        // Convert all prompts and sort by name for stable ordering
+        let mut all_prompts: Vec<Prompt> = self
             .prompts
             .values()
-            .map(|p| Prompt::new(p.name()).with_description(p.description()))
+            .map(|p| {
+                let mut prompt = Prompt::new(p.name());
+                if let Some(desc) = p.description() {
+                    prompt = prompt.with_description(desc);
+                }
+                prompt
+            })
             .collect();
+        
+        // Sort by name to ensure stable pagination ordering (MCP 2025-06-18 requirement)
+        all_prompts.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let base_response = ListPromptsResult::new(prompts.clone());
+        // Implement cursor-based pagination
+        const DEFAULT_PAGE_SIZE: usize = 50; // MCP suggested default
+        let page_size = DEFAULT_PAGE_SIZE;
+        
+        // Find starting index based on cursor
+        let start_index = if let Some(cursor) = &cursor {
+            // Cursor contains the last name from previous page
+            let cursor_name = cursor.as_str();
+            
+            // Find the position after the cursor name
+            all_prompts.iter()
+                .position(|p| p.name.as_str() > cursor_name)
+                .unwrap_or(all_prompts.len())
+        } else {
+            0 // No cursor = start from beginning
+        };
+        
+        // Calculate end index for this page
+        let end_index = std::cmp::min(start_index + page_size, all_prompts.len());
+        
+        // Extract page of prompts
+        let page_prompts: Vec<Prompt> = all_prompts[start_index..end_index].to_vec();
+        
+        // Determine if there are more prompts after this page
+        let has_more = end_index < all_prompts.len();
+        
+        // Generate next cursor if there are more prompts
+        let next_cursor = if has_more {
+            // Cursor should be the name of the last item in current page
+            page_prompts.last().map(|p| Cursor::new(&p.name))
+        } else {
+            None
+        };
+        
+        debug!(
+            "Prompt pagination: start={}, end={}, page_size={}, has_more={}, next_cursor={:?}",
+            start_index, end_index, page_prompts.len(), has_more, next_cursor
+        );
 
-        // Add pagination metadata
-        let has_more = false; // In a real implementation, this would depend on the actual data
-        let total = Some(prompts.len() as u64);
+        let base_response = ListPromptsResult::new(page_prompts);
+        let total = Some(all_prompts.len() as u64);
 
         let paginated_response = PaginatedResponse::with_pagination(
             base_response,
-            None, // next_cursor - would be calculated based on current page
+            next_cursor,
             total,
             has_more,
         );
@@ -134,32 +180,118 @@ impl McpHandler for PromptsHandler {
     }
 
     fn supported_methods(&self) -> Vec<String> {
-        vec!["prompts/list".to_string(), "prompts/get".to_string()]
+        vec!["prompts/list".to_string()]
     }
 }
 
-/// Trait for MCP prompts
-#[async_trait]
-pub trait McpPrompt: Send + Sync {
-    /// The name of the prompt
-    fn name(&self) -> &str;
-
-    /// Description of the prompt
-    fn description(&self) -> &str;
-
-    /// Generate the prompt content
-    async fn generate(
-        &self,
-        args: HashMap<String, Value>,
-    ) -> McpResult<Vec<turul_mcp_protocol::prompts::PromptMessage>>;
+/// Prompts get handler for prompts/get endpoint only
+pub struct PromptsGetHandler {
+    prompts: HashMap<String, Arc<dyn McpPrompt>>,
 }
 
-/// Resources handler for resources/list and resources/read endpoints
-pub struct ResourcesHandler {
+impl PromptsGetHandler {
+    pub fn new() -> Self {
+        Self {
+            prompts: HashMap::new(),
+        }
+    }
+
+    pub fn add_prompt<P: McpPrompt + 'static>(mut self, prompt: P) -> Self {
+        self.prompts
+            .insert(prompt.name().to_string(), Arc::new(prompt));
+        self
+    }
+
+    pub fn add_prompt_arc(mut self, prompt: Arc<dyn McpPrompt>) -> Self {
+        self.prompts.insert(prompt.name().to_string(), prompt);
+        self
+    }
+}
+
+#[async_trait]
+impl McpHandler for PromptsGetHandler {
+    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+        use turul_mcp_protocol::prompts::{GetPromptParams, GetPromptResult};
+        use std::collections::HashMap as StdHashMap;
+
+        // Parse get prompt parameters
+        let params = params.ok_or_else(|| McpError::missing_param("GetPromptParams"))?;
+        let get_params: GetPromptParams = serde_json::from_value(params)?;
+
+        debug!("Getting prompt: {} with arguments: {:?}", get_params.name, get_params.arguments);
+
+        // Find the prompt by name
+        let prompt = self
+            .prompts
+            .get(&get_params.name)
+            .ok_or_else(|| {
+                McpError::invalid_param_type("name", "existing prompt name", &get_params.name)
+            })?;
+
+        // Validate required arguments against prompt definition (MCP 2025-06-18 compliance)
+        if let Some(prompt_arguments) = prompt.arguments() {
+            let empty_args = StdHashMap::new();
+            let provided_args = get_params.arguments.as_ref().unwrap_or(&empty_args);
+            
+            for arg_def in prompt_arguments {
+                let is_required = arg_def.required.unwrap_or(false);
+                if is_required && !provided_args.contains_key(&arg_def.name) {
+                    return Err(McpError::InvalidParameters(format!(
+                        "Missing required argument '{}' for prompt '{}'", 
+                        arg_def.name, 
+                        get_params.name
+                    )));
+                }
+            }
+        }
+
+        // Convert arguments from HashMap<String, String> to HashMap<String, Value> if needed
+        let arguments = match get_params.arguments {
+            Some(args) => {
+                let mut value_args = StdHashMap::new();
+                for (key, value) in args {
+                    value_args.insert(key, serde_json::Value::String(value));
+                }
+                value_args
+            }
+            None => StdHashMap::new(),
+        };
+
+        // Generate prompt messages using the prompt implementation
+        // Note: MCP 2025-06-18 spec enforces only 'user' and 'assistant' roles via Role enum - no 'system' role
+        let messages = prompt.render(Some(arguments)).await?;
+
+        // Create response with messages
+        let mut response = GetPromptResult::new(messages);
+        if let Some(desc) = prompt.description() {
+            response = response.with_description(desc);
+        }
+        
+        // Propagate optional _meta from request to response (MCP 2025-06-18 compliance)
+        if let Some(meta) = get_params.meta {
+            response = response.with_meta(meta);
+        }
+
+        serde_json::to_value(response).map_err(McpError::from)
+    }
+
+    fn supported_methods(&self) -> Vec<String> {
+        vec!["prompts/get".to_string()]
+    }
+}
+
+/// Legacy handler for backward compatibility - use PromptsListHandler instead
+pub type PromptsHandler = PromptsListHandler;
+
+/// Import the proper McpPrompt trait from the prompt module
+pub use crate::prompt::McpPrompt;
+
+/// Resources list handler for resources/list endpoint only
+pub struct ResourcesListHandler {
     resources: HashMap<String, Arc<dyn McpResource>>,
 }
 
-impl ResourcesHandler {
+impl ResourcesListHandler {
     pub fn new() -> Self {
         Self {
             resources: HashMap::new(),
@@ -179,7 +311,7 @@ impl ResourcesHandler {
 }
 
 #[async_trait]
-impl McpHandler for ResourcesHandler {
+impl McpHandler for ResourcesListHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
         use turul_mcp_protocol::resources::{ListResourcesResult, Resource};
@@ -193,21 +325,61 @@ impl McpHandler for ResourcesHandler {
 
         debug!("Listing resources with cursor: {:?}", cursor);
 
-        let resources: Vec<Resource> = self
+        // Convert all resources to descriptors and sort by URI for stable ordering
+        let mut all_resources: Vec<Resource> = self
             .resources
             .values()
             .map(|r| resource_to_descriptor(r.as_ref()))
             .collect();
+        
+        // Sort by URI to ensure stable pagination ordering (MCP 2025-06-18 requirement)
+        all_resources.sort_by(|a, b| a.uri.cmp(&b.uri));
 
-        let base_response = ListResourcesResult::new(resources.clone());
+        // Implement cursor-based pagination
+        const DEFAULT_PAGE_SIZE: usize = 50; // MCP suggested default
+        let page_size = DEFAULT_PAGE_SIZE;
+        
+        // Find starting index based on cursor
+        let start_index = if let Some(cursor) = &cursor {
+            // Cursor contains the last URI from previous page
+            let cursor_uri = cursor.as_str();
+            
+            // Find the position after the cursor URI
+            all_resources.iter()
+                .position(|r| r.uri.as_str() > cursor_uri)
+                .unwrap_or(all_resources.len())
+        } else {
+            0 // No cursor = start from beginning
+        };
+        
+        // Calculate end index for this page
+        let end_index = std::cmp::min(start_index + page_size, all_resources.len());
+        
+        // Extract page of resources
+        let page_resources: Vec<Resource> = all_resources[start_index..end_index].to_vec();
+        
+        // Determine if there are more resources after this page
+        let has_more = end_index < all_resources.len();
+        
+        // Generate next cursor if there are more resources
+        let next_cursor = if has_more {
+            // Cursor should be the URI of the last item in current page
+            page_resources.last().map(|r| Cursor::new(&r.uri))
+        } else {
+            None
+        };
+        
+        debug!(
+            "Resource pagination: start={}, end={}, page_size={}, has_more={}, next_cursor={:?}",
+            start_index, end_index, page_resources.len(), has_more, next_cursor
+        );
 
-        // Add pagination metadata if applicable
-        let has_more = false; // In a real implementation, this would depend on the actual data
-        let total = Some(resources.len() as u64);
+        let base_response = ListResourcesResult::new(page_resources);
+        let total = Some(all_resources.len() as u64);
 
         let paginated_response = PaginatedResponse::with_pagination(
             base_response,
-            None, // next_cursor - would be calculated based on current page
+            next_cursor,
             total,
             has_more,
         );
@@ -216,9 +388,211 @@ impl McpHandler for ResourcesHandler {
     }
 
     fn supported_methods(&self) -> Vec<String> {
-        vec!["resources/list".to_string(), "resources/read".to_string()]
+        vec!["resources/list".to_string()]
     }
 }
+
+/// Resources read handler for resources/read endpoint only
+pub struct ResourcesReadHandler {
+    resources: HashMap<String, Arc<dyn McpResource>>,
+    uri_registry: Arc<crate::uri_template::UriTemplateRegistry>,
+    security_middleware: Option<Arc<crate::security::SecurityMiddleware>>,
+}
+
+impl ResourcesReadHandler {
+    pub fn new() -> Self {
+        Self {
+            resources: HashMap::new(),
+            uri_registry: Arc::new(crate::uri_template::UriTemplateRegistry::new()),
+            security_middleware: Some(Arc::new(crate::security::SecurityMiddleware::default())),
+        }
+    }
+
+    /// Create handler with custom security middleware
+    pub fn with_security(mut self, middleware: Arc<crate::security::SecurityMiddleware>) -> Self {
+        self.security_middleware = Some(middleware);
+        self
+    }
+
+    /// Create handler without security middleware (for testing or trusted environments)
+    pub fn without_security(mut self) -> Self {
+        self.security_middleware = None;
+        self
+    }
+
+    pub fn add_resource<R: McpResource + 'static>(mut self, resource: R) -> Self {
+        self.resources
+            .insert(resource.uri().to_string(), Arc::new(resource));
+        self
+    }
+
+    pub fn add_resource_arc(mut self, resource: Arc<dyn McpResource>) -> Self {
+        self.resources.insert(resource.uri().to_string(), resource);
+        self
+    }
+
+    /// Add a dynamic resource with URI template support
+    pub fn add_template_resource<R: McpResource + 'static>(
+        mut self, 
+        template: crate::uri_template::UriTemplate,
+        resource: R
+    ) -> Self {
+        // Register the template in the registry
+        Arc::get_mut(&mut self.uri_registry)
+            .expect("URI registry should not be shared yet")
+            .register(template.clone());
+        
+        // Store the resource using the template pattern as key
+        let pattern = template.pattern().to_string();
+        self.resources.insert(pattern, Arc::new(resource));
+        self
+    }
+
+    /// Add a dynamic resource with URI template support (Arc version)
+    pub fn add_template_resource_arc(
+        mut self, 
+        template: crate::uri_template::UriTemplate,
+        resource: Arc<dyn McpResource>
+    ) -> Self {
+        // Register the template in the registry
+        Arc::get_mut(&mut self.uri_registry)
+            .expect("URI registry should not be shared yet")
+            .register(template.clone());
+        
+        // Store the resource using the template pattern as key
+        let pattern = template.pattern().to_string();
+        self.resources.insert(pattern, resource);
+        self
+    }
+}
+
+#[async_trait]
+impl McpHandler for ResourcesReadHandler {
+    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+        // Delegate to handle_with_session with no session
+        self.handle_with_session(params, None).await
+    }
+
+    async fn handle_with_session(
+        &self,
+        params: Option<Value>,
+        session: Option<SessionContext>,
+    ) -> McpResult<Value> {
+        use turul_mcp_protocol::resources::{ReadResourceParams, ReadResourceResult};
+
+        // Security validation
+        if let Some(security_middleware) = &self.security_middleware {
+            security_middleware.validate_request("resources/read", params.as_ref(), session.as_ref())?;
+        }
+
+        // Parse read resource parameters
+        let params = params.ok_or_else(|| McpError::missing_param("ReadResourceParams"))?;
+        let read_params: ReadResourceParams = serde_json::from_value(params)?;
+
+        debug!("Reading resource with URI: {}", read_params.uri);
+
+        // Additional security validation for the specific URI
+        if let Some(security_middleware) = &self.security_middleware {
+            // Re-validate the URI after parsing (defense in depth)
+            let uri_params = serde_json::json!({"uri": read_params.uri});
+            security_middleware.validate_request("resources/read", Some(&uri_params), session.as_ref())?;
+        }
+
+        // First try to match against URI templates
+        if let Some(template) = self.uri_registry.find_matching(&read_params.uri) {
+            debug!("Found matching URI template: {}", template.pattern());
+            
+            // Extract variables from the URI
+            let template_vars = template.extract(&read_params.uri)?;
+            debug!("Extracted template variables: {:?}", template_vars);
+            
+            // Find the resource by template pattern
+            let resource = self
+                .resources
+                .get(template.pattern())
+                .ok_or_else(|| {
+                    McpError::invalid_param_type("template", "registered template pattern", template.pattern())
+                })?;
+
+            // Create enhanced params with template variables
+            let mut enhanced_params = serde_json::to_value(&read_params)?;
+            if let Some(params_obj) = enhanced_params.as_object_mut() {
+                params_obj.insert("template_variables".to_string(), serde_json::to_value(template_vars)?);
+            }
+
+            let contents = resource.read(Some(enhanced_params)).await?;
+            
+            // Validate content before returning
+            if let Some(security_middleware) = &self.security_middleware {
+                for content in &contents {
+                    match content {
+                        turul_mcp_protocol::resources::ResourceContent::Text(text_content) => {
+                            if let Some(mime_type) = &text_content.mime_type {
+                                security_middleware.resource_access_control().validate_mime_type(mime_type)?;
+                            }
+                            let size = text_content.text.len() as u64;
+                            security_middleware.resource_access_control().validate_size(size)?;
+                        }
+                        turul_mcp_protocol::resources::ResourceContent::Blob(blob_content) => {
+                            if let Some(mime_type) = &blob_content.mime_type {
+                                security_middleware.resource_access_control().validate_mime_type(mime_type)?;
+                            }
+                            let size = blob_content.blob.len() as u64;
+                            security_middleware.resource_access_control().validate_size(size)?;
+                        }
+                    }
+                }
+            }
+
+            let response = ReadResourceResult::new(contents);
+            return serde_json::to_value(response).map_err(McpError::from);
+        }
+
+        // Fall back to exact URI matching
+        let resource = self
+            .resources
+            .get(&read_params.uri)
+            .ok_or_else(|| {
+                McpError::invalid_param_type("uri", "existing resource URI or template pattern", &read_params.uri)
+            })?;
+
+        // Call the resource's read method with original params
+        let params = Some(serde_json::to_value(&read_params)?);
+        let contents = resource.read(params).await?;
+
+        // Validate content before returning
+        if let Some(security_middleware) = &self.security_middleware {
+            for content in &contents {
+                match content {
+                    turul_mcp_protocol::resources::ResourceContent::Text(text_content) => {
+                        if let Some(mime_type) = &text_content.mime_type {
+                            security_middleware.resource_access_control().validate_mime_type(mime_type)?;
+                        }
+                        let size = text_content.text.len() as u64;
+                        security_middleware.resource_access_control().validate_size(size)?;
+                    }
+                    turul_mcp_protocol::resources::ResourceContent::Blob(blob_content) => {
+                        if let Some(mime_type) = &blob_content.mime_type {
+                            security_middleware.resource_access_control().validate_mime_type(mime_type)?;
+                        }
+                        let size = blob_content.blob.len() as u64;
+                        security_middleware.resource_access_control().validate_size(size)?;
+                    }
+                }
+            }
+        }
+
+        let response = ReadResourceResult::new(contents);
+        serde_json::to_value(response).map_err(McpError::from)
+    }
+
+    fn supported_methods(&self) -> Vec<String> {
+        vec!["resources/read".to_string()]
+    }
+}
+
+/// Legacy handler for backward compatibility - use ResourcesListHandler instead
+pub type ResourcesHandler = ResourcesListHandler;
 
 /// Logging handler for logging/setLevel endpoint
 pub struct LoggingHandler;
@@ -329,15 +703,55 @@ impl McpHandler for RootsHandler {
 
         debug!("Listing roots with cursor: {:?}", cursor);
 
-        let base_response = ListRootsResult::new(self.roots.clone());
+        // Sort roots by URI for stable ordering
+        let mut all_roots = self.roots.clone();
+        all_roots.sort_by(|a, b| a.uri.cmp(&b.uri));
 
-        // Add pagination metadata
-        let has_more = false; // In a real implementation, this would depend on the actual data
-        let total = Some(self.roots.len() as u64);
+        // Implement cursor-based pagination
+        const DEFAULT_PAGE_SIZE: usize = 50; // MCP suggested default
+        let page_size = DEFAULT_PAGE_SIZE;
+        
+        // Find starting index based on cursor
+        let start_index = if let Some(cursor) = &cursor {
+            // Cursor contains the last URI from previous page
+            let cursor_uri = cursor.as_str();
+            
+            // Find the position after the cursor URI
+            all_roots.iter()
+                .position(|r| r.uri.as_str() > cursor_uri)
+                .unwrap_or(all_roots.len())
+        } else {
+            0 // No cursor = start from beginning
+        };
+        
+        // Calculate end index for this page
+        let end_index = std::cmp::min(start_index + page_size, all_roots.len());
+        
+        // Extract page of roots
+        let page_roots = all_roots[start_index..end_index].to_vec();
+        
+        // Determine if there are more roots after this page
+        let has_more = end_index < all_roots.len();
+        
+        // Generate next cursor if there are more roots
+        let next_cursor = if has_more {
+            // Cursor should be the URI of the last item in current page
+            page_roots.last().map(|r| Cursor::new(&r.uri))
+        } else {
+            None
+        };
+        
+        debug!(
+            "Root pagination: start={}, end={}, page_size={}, has_more={}, next_cursor={:?}",
+            start_index, end_index, page_roots.len(), has_more, next_cursor
+        );
+
+        let base_response = ListRootsResult::new(page_roots);
+        let total = Some(all_roots.len() as u64);
 
         let paginated_response = PaginatedResponse::with_pagination(
             base_response,
-            None, // next_cursor - would be calculated based on current page
+            next_cursor,
             total,
             has_more,
         );
@@ -420,11 +834,20 @@ impl TemplatesHandler {
 
 #[async_trait]
 impl McpHandler for TemplatesHandler {
-    async fn handle(&self, _params: Option<Value>) -> McpResult<Value> {
+    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         // Templates functionality has been integrated into resources
         debug!(
             "Templates handler called - returning empty list as templates are now integrated into resources"
         );
+
+        // Parse cursor from params if provided (for consistency)
+        let cursor = params
+            .as_ref()
+            .and_then(|p| p.get("cursor"))
+            .and_then(|c| c.as_str())
+            .map(turul_mcp_protocol::meta::Cursor::from);
+
+        debug!("Listing templates with cursor: {:?}", cursor);
 
         // Return empty templates list since functionality moved to resources
         let templates: Vec<turul_mcp_protocol::resources::ResourceTemplate> = Vec::new();
@@ -432,12 +855,13 @@ impl McpHandler for TemplatesHandler {
         let base_response =
             turul_mcp_protocol::resources::ListResourceTemplatesResult::new(templates);
 
-        // Add pagination metadata if applicable
-        let has_more = false; // In a real implementation, this would depend on the actual data
+        // Proper pagination metadata (empty list = no next cursor, no more items)
+        let has_more = false;
+        let next_cursor = None; // Empty list has no next cursor
 
         let paginated_response = turul_mcp_protocol::meta::PaginatedResponse::with_pagination(
             base_response,
-            None, // next_cursor - would be calculated based on current page
+            next_cursor,
             total,
             has_more,
         );
@@ -484,17 +908,24 @@ impl McpHandler for ResourceTemplatesHandler {
         // For demonstration purposes, we return an empty list
         tracing::info!("Resource templates list requested");
 
-        let base_response = serde_json::json!({
-            "resourceTemplates": []
-        });
-
-        // Add pagination metadata for consistency
-        let has_more = false;
+        use turul_mcp_protocol::resources::ListResourceTemplatesResult;
+        let templates = Vec::new(); // Empty list for now
+        
+        // For empty list, pagination is simple
         let total = Some(0u64);
+        let has_more = false;
+        let next_cursor = None; // No items = no next cursor
+        
+        debug!(
+            "Resource template pagination: page_size=0, has_more={}, next_cursor={:?}",
+            has_more, next_cursor
+        );
+        
+        let base_response = ListResourceTemplatesResult::new(templates);
 
         let paginated_response = PaginatedResponse::with_pagination(
             base_response,
-            None, // next_cursor
+            next_cursor,
             total,
             has_more,
         );

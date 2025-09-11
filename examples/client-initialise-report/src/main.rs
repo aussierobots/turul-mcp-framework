@@ -131,17 +131,16 @@ async fn listen_sse_notifications(
 
                             // Try to parse as JSON-RPC notification
                             if let Ok(json_data) = serde_json::from_str::<Value>(data) {
-                                if let Some(method) = json_data.get("method").and_then(|m| m.as_str()) {
-                                    if method.starts_with("notifications/") {
-                                        let notification = SseNotification {
-                                            method: method.to_string(),
-                                            params: json_data.get("params").cloned().unwrap_or(json!({})),
-                                            _raw_event: event_block.clone(),
-                                        };
-                                        info!("📨 Received notification: {}", method);
-                                        debug!("📋 Notification details: {}", serde_json::to_string_pretty(&notification.params)?);
-                                        notifications.push(notification);
-                                    }
+                                if let Some(method) = json_data.get("method").and_then(|m| m.as_str())
+                                    && method.starts_with("notifications/") {
+                                    let notification = SseNotification {
+                                        method: method.to_string(),
+                                        params: json_data.get("params").cloned().unwrap_or(json!({})),
+                                        _raw_event: event_block.clone(),
+                                    };
+                                    info!("📨 Received notification: {}", method);
+                                    debug!("📋 Notification details: {}", serde_json::to_string_pretty(&notification.params)?);
+                                    notifications.push(notification);
                                 }
                             } else {
                                 debug!("🔍 Could not parse as JSON: {}", data);

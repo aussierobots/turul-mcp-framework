@@ -831,18 +831,11 @@ impl HasPromptMeta for WorkflowGeneratorPrompt {
 
 #[async_trait]
 impl McpPrompt for WorkflowGeneratorPrompt {
-    fn name(&self) -> &str {
-        "generate_workflow"
-    }
-    
-    fn description(&self) -> &str {
-        "Generate standardized development workflows based on team practices and project requirements"
-    }
-
-    async fn generate(
+    async fn render(
         &self,
-        args: HashMap<String, Value>,
+        args: Option<HashMap<String, Value>>,
     ) -> McpResult<Vec<PromptMessage>> {
+        let args = args.unwrap_or_default();
         let workflow_type = args
             .get("workflow_type")
             .and_then(|v| v.as_str())

@@ -1,7 +1,7 @@
 //! # MCP Derive Macros
 //!
 //! This crate provides procedural macros to simplify creating MCP tools and resources.
-//! 
+//!
 //! ## Features
 //!
 //! - `#[derive(McpTool)]` - Automatically derive McpTool implementations
@@ -11,31 +11,38 @@
 //! - `resource!` - Declarative macro for simple resource creation
 //! - `schema_for!` - Generate JSON schemas from Rust types
 //!
+//! ## Quick Start
+//!
+//! ```rust
+//! use turul_mcp_derive::prelude::*;
+//! 
+//! // All derive macros and common imports available
+//! ```
+//!
 //! ## Code Organization
 //!
-//! - **Derive Macros**: Implemented in individual modules (tool_derive, resource, json_schema_derive)
+//! - **Derive Macros**: Implemented in individual modules (tool_derive, resource_derive, json_schema_derive)
 //! - **Attribute Macros**: Function-style macros in tool_attr module
 //! - **Declarative Macros**: Concise syntax macros in the macros/ module
 //! - **Utilities**: Shared functionality in utils module
 
+
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, DeriveInput, ItemFn, punctuated::Punctuated, Meta, Token};
+use syn::{DeriveInput, ItemFn, Meta, Token, parse_macro_input, punctuated::Punctuated};
 
-mod tool_derive;
-mod tool_attr;
-mod resource;
-mod json_schema_derive;
-mod utils;
-mod macros;
-
-// New derive modules for all MCP areas
-mod elicitation_derive;
-mod prompt_derive;
-mod sampling_derive;
 mod completion_derive;
+mod elicitation_derive;
+mod json_schema_derive;
 mod logging_derive;
-mod roots_derive;
+mod macros;
 mod notification_derive;
+mod prompt_derive;
+mod resource_derive;
+mod roots_derive;
+mod sampling_derive;
+mod tool_attr;
+mod tool_derive;
+mod utils;
 
 #[cfg(test)]
 mod tests;
@@ -43,19 +50,19 @@ mod tests;
 /// Derive macro for automatically implementing McpTool
 ///
 /// This macro generates a complete McpTool implementation from a struct definition.
-/// 
+///
 /// # Attributes
-/// 
+///
 /// - `#[tool(name = "...", description = "...")]` - Tool metadata
 /// - `#[param(description = "...", ...)]` - Parameter descriptions and validation
 /// - `#[output_type(StructType)]` - Specify structured output type
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::McpTool;
 /// use turul_mcp_protocol::McpResult;
-/// 
+///
 /// #[derive(McpTool, Clone)]
 /// #[tool(name = "add", description = "Add two numbers")]
 /// struct AddTool {
@@ -64,7 +71,7 @@ mod tests;
 ///     #[param(description = "Second number")]
 ///     b: f64,
 /// }
-/// 
+///
 /// impl AddTool {
 ///     async fn execute(&self) -> McpResult<String> {
 ///         Ok(format!("{} + {} = {}", self.a, self.b, self.a + self.b))
@@ -80,16 +87,16 @@ pub fn derive_mcp_tool(input: TokenStream) -> TokenStream {
 }
 
 /// Function attribute macro for creating MCP tools
-/// 
+///
 /// This macro converts a regular async function into an MCP tool with automatic
 /// parameter extraction and schema generation.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::mcp_tool;
 /// use turul_mcp_protocol::McpResult;
-/// 
+///
 /// #[mcp_tool(name = "multiply", description = "Multiply two numbers")]
 /// async fn multiply(
 ///     #[param(description = "First number")] a: f64,
@@ -108,7 +115,7 @@ pub fn mcp_tool(args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// Helper attribute for parameter metadata in function macros
-/// 
+///
 /// This is used within #[mcp_tool] functions to provide parameter descriptions
 /// and constraints.
 #[proc_macro_attribute]
@@ -119,12 +126,12 @@ pub fn param(_args: TokenStream, input: TokenStream) -> TokenStream {
 }
 
 /// Derive macro for automatically implementing MCP resource handlers
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::McpResource;
-/// 
+///
 /// #[derive(McpResource)]
 /// #[uri = "file://config.json"]
 /// #[name = "Configuration File"]
@@ -135,33 +142,36 @@ pub fn param(_args: TokenStream, input: TokenStream) -> TokenStream {
 ///     data: String,
 /// }
 /// ```
-#[proc_macro_derive(McpResource, attributes(uri, name, description, content, content_type))]
+#[proc_macro_derive(
+    McpResource,
+    attributes(resource, uri, name, description, content, content_type)
+)]
 pub fn derive_mcp_resource(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
-    resource::mcp_resource_impl(input)
+    resource_derive::derive_mcp_resource_impl(input)
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }
 
 /// JsonSchema derive macro for generating JSON schema from struct definitions
-/// 
+///
 /// This macro generates a JSON schema implementation for structs that can be used
 /// as output types in MCP tools. It introspects the struct fields and generates
 /// the appropriate schema properties and requirements.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::JsonSchema;
 /// use serde::{Deserialize, Serialize};
-/// 
+///
 /// #[derive(JsonSchema, Serialize, Deserialize)]
 /// struct CalculationResult {
 ///     pub operation: String,
 ///     pub result: f64,
 ///     pub metadata: CalculationMetadata,
 /// }
-/// 
+///
 /// #[derive(JsonSchema, Serialize, Deserialize)]
 /// struct CalculationMetadata {
 ///     pub precision: String,
@@ -175,14 +185,14 @@ pub fn derive_json_schema(input: TokenStream) -> TokenStream {
 }
 
 /// Declarative macro for creating simple resources
-/// 
+///
 /// This provides a concise syntax for resource creation.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::resource;
-/// 
+///
 /// let config_resource = resource! {
 ///     uri: "file://config.json",
 ///     name: "Configuration",
@@ -208,22 +218,22 @@ pub fn resource(input: TokenStream) -> TokenStream {
 }
 
 /// Generate a JSON schema for a Rust type
-/// 
+///
 /// This macro generates a JSON schema definition for any Rust type that implements
 /// Serialize. It analyzes the type structure and creates appropriate schema constraints.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::schema_for;
 /// use serde::{Serialize, Deserialize};
-/// 
+///
 /// #[derive(Serialize, Deserialize)]
 /// struct Point {
 ///     x: f64,
 ///     y: f64,
 /// }
-/// 
+///
 /// let schema = schema_for!(Point);
 /// ```
 #[proc_macro]
@@ -235,12 +245,12 @@ pub fn schema_for(input: TokenStream) -> TokenStream {
 }
 
 /// Derive macro for automatically implementing McpElicitation
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::McpElicitation;
-/// 
+///
 /// #[derive(McpElicitation)]
 /// #[elicitation(message = "Please enter your details")]
 /// struct UserDetailsElicitation {
@@ -257,12 +267,12 @@ pub fn derive_mcp_elicitation(input: TokenStream) -> TokenStream {
 }
 
 /// Derive macro for automatically implementing McpPrompt
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::McpPrompt;
-/// 
+///
 /// #[derive(McpPrompt)]
 /// #[prompt(name = "code_review", description = "Review code")]
 /// struct CodeReviewPrompt {
@@ -279,12 +289,12 @@ pub fn derive_mcp_prompt(input: TokenStream) -> TokenStream {
 }
 
 /// Derive macro for automatically implementing McpSampling
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::McpSampling;
-/// 
+///
 /// #[derive(McpSampling)]
 /// #[sampling(model = "claude-3-haiku", temperature = 0.7)]
 /// struct TextGenerationSampling {
@@ -301,12 +311,12 @@ pub fn derive_mcp_sampling(input: TokenStream) -> TokenStream {
 }
 
 /// Derive macro for automatically implementing McpCompletion
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::McpCompletion;
-/// 
+///
 /// #[derive(McpCompletion)]
 /// #[completion(reference = "prompt://code_assist")]
 /// struct CodeCompletionProvider {
@@ -323,12 +333,12 @@ pub fn derive_mcp_completion(input: TokenStream) -> TokenStream {
 }
 
 /// Derive macro for automatically implementing McpLogger
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::McpLogger;
-/// 
+///
 /// #[derive(McpLogger)]
 /// #[logger(name = "app_logger", level = "info")]
 /// struct ApplicationLogger {
@@ -345,12 +355,12 @@ pub fn derive_mcp_logger(input: TokenStream) -> TokenStream {
 }
 
 /// Derive macro for automatically implementing McpRoot
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::McpRoot;
-/// 
+///
 /// #[derive(McpRoot)]
 /// #[root(uri = "file:///home/user/project", name = "Project Root")]
 /// struct ProjectRoot {
@@ -367,19 +377,19 @@ pub fn derive_mcp_root(input: TokenStream) -> TokenStream {
 }
 
 /// Derive macro for automatically implementing McpNotification
-/// 
+///
 /// ZERO CONFIGURATION - Framework auto-determines method from struct name for MCP spec notifications:
 /// - `ProgressNotification` → `"notifications/progress"`
 /// - `LoggingMessageNotification` → `"notifications/logging/message"`
 /// - `ResourceUpdatedNotification` → `"notifications/resources/updated"`
 /// - `ResourceListChangedNotification` → `"notifications/resources/list_changed"`
 /// - `ToolListChangedNotification` → `"notifications/tools/list_changed"`
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::McpNotification;
-/// 
+///
 /// #[derive(McpNotification, Default)]
 /// struct ProgressNotification {
 ///     progress_token: String,
@@ -397,14 +407,14 @@ pub fn derive_mcp_notification(input: TokenStream) -> TokenStream {
 }
 
 /// Declarative macro for creating simple tools
-/// 
+///
 /// This provides the most concise syntax for tool creation.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::tool;
-/// 
+///
 /// let divide_tool = tool! {
 ///     name: "divide",
 ///     description: "Divide two numbers",
@@ -430,14 +440,14 @@ pub fn tool(input: TokenStream) -> TokenStream {
 }
 
 /// Declarative macro for creating simple prompts
-/// 
+///
 /// This provides a concise syntax for prompt creation.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::prompt;
-/// 
+///
 /// let code_review_prompt = prompt! {
 ///     name: "code_review",
 ///     description: "Review code for quality and best practices",
@@ -448,7 +458,7 @@ pub fn tool(input: TokenStream) -> TokenStream {
 ///     template: |args| async move {
 ///         let code = args.get("code").and_then(|v| v.as_str()).unwrap_or("");
 ///         let lang = args.get("language").and_then(|v| v.as_str()).unwrap_or("text");
-///         
+///
 ///         Ok(vec![
 ///             turul_mcp_protocol::prompts::PromptMessage::user(format!(
 ///                 "Please review this {} code for quality, security, and best practices:\n\n```{}\n{}\n```",
@@ -467,14 +477,14 @@ pub fn prompt(input: TokenStream) -> TokenStream {
 }
 
 /// Declarative macro for creating sampling configurations
-/// 
+///
 /// This provides a concise syntax for sampling configuration.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::sampling;
-/// 
+///
 /// let text_generator = sampling! {
 ///     max_tokens: 1000,
 ///     temperature: 0.7,
@@ -503,14 +513,14 @@ pub fn sampling(input: TokenStream) -> TokenStream {
 }
 
 /// Declarative macro for creating MCP notifications with concise syntax.
-/// 
+///
 /// Supports zero-configuration method generation based on struct name.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::notification;
-/// 
+///
 /// notification! {
 ///     progress {
 ///         message: String = "Progress message",
@@ -527,12 +537,12 @@ pub fn notification(input: TokenStream) -> TokenStream {
 }
 
 /// Declarative macro for creating MCP completion handlers with concise syntax.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::completion;
-/// 
+///
 /// completion! {
 ///     text_editor {
 ///         context: String = "Editor context",
@@ -549,12 +559,12 @@ pub fn completion(input: TokenStream) -> TokenStream {
 }
 
 /// Declarative macro for creating MCP elicitation handlers with concise syntax.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::elicitation;
-/// 
+///
 /// elicitation! {
 ///     user_details, "Please provide your information" {
 ///         name: String = "Full name",
@@ -571,12 +581,12 @@ pub fn elicitation(input: TokenStream) -> TokenStream {
 }
 
 /// Declarative macro for creating MCP root handlers with concise syntax.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::roots;
-/// 
+///
 /// roots! {
 ///     project, "/path/to/project", name = "Project Files", read_only = false
 /// };
@@ -590,12 +600,12 @@ pub fn roots(input: TokenStream) -> TokenStream {
 }
 
 /// Declarative macro for creating MCP logging handlers with concise syntax.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```rust,ignore
 /// use turul_mcp_derive::logging;
-/// 
+///
 /// logging! {
 ///     file_logger {
 ///         log_level: String = "Logging level",

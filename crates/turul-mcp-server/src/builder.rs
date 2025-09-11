@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tracing::info;
 
 use crate::{McpTool, McpServer, Result, McpFrameworkError};
 use crate::resource::McpResource;
@@ -32,6 +33,9 @@ pub struct McpServerBuilder {
     
     /// Resources registered with the server
     resources: HashMap<String, Arc<dyn McpResource>>,
+    
+    /// Template resources (URI template -> resource)
+    template_resources: Vec<(crate::uri_template::UriTemplate, Arc<dyn McpResource>)>,
     
     /// Prompts registered with the server
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
@@ -93,9 +97,10 @@ impl McpServerBuilder {
         // Add all standard MCP 2025-06-18 handlers by default
         handlers.insert("ping".to_string(), Arc::new(PingHandler));
         handlers.insert("completion/complete".to_string(), Arc::new(CompletionHandler));
-        handlers.insert("resources/list".to_string(), Arc::new(ResourcesHandler::new()));
-        handlers.insert("prompts/list".to_string(), Arc::new(PromptsHandler::new()));
-        handlers.insert("prompts/get".to_string(), Arc::new(PromptsHandler::new()));
+        handlers.insert("resources/list".to_string(), Arc::new(ResourcesListHandler::new()));
+        handlers.insert("resources/read".to_string(), Arc::new(ResourcesReadHandler::new()));
+        handlers.insert("prompts/list".to_string(), Arc::new(PromptsListHandler::new()));
+        handlers.insert("prompts/get".to_string(), Arc::new(PromptsGetHandler::new()));
         handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
         handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
         handlers.insert("sampling/createMessage".to_string(), Arc::new(SamplingHandler));
@@ -128,6 +133,7 @@ impl McpServerBuilder {
             },
             tools,
             resources: HashMap::new(),
+            template_resources: Vec::new(),
             prompts: HashMap::new(),
             elicitations: HashMap::new(),
             sampling: HashMap::new(),
@@ -234,6 +240,16 @@ impl McpServerBuilder {
         for resource in resources {
             self = self.resource(resource);
         }
+        self
+    }
+
+    /// Register a resource with URI template support
+    pub fn template_resource<R: McpResource + 'static>(
+        mut self, 
+        template: crate::uri_template::UriTemplate,
+        resource: R
+    ) -> Self {
+        self.template_resources.push((template, Arc::new(resource)));
         self
     }
 
@@ -397,25 +413,48 @@ impl McpServerBuilder {
             list_changed: Some(false),
         });
         
-        // TODO: Update PromptsHandler to work with new fine-grained McpPrompt trait
-        // Currently there's a conflict between handlers::McpPrompt and prompt::McpPrompt
-        self.handler(PromptsHandler::new())
+        // Prompts handlers are automatically registered when prompts are added via .prompt()
+        // This method now just enables the capability
+        self
     }
 
     /// Add resources support
     pub fn with_resources(mut self) -> Self {
+        // Enable notifications if we have resources
+        let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
+        
         self.capabilities.resources = Some(ResourcesCapabilities {
-            subscribe: Some(false),
-            list_changed: Some(false),
+            subscribe: Some(false), // TODO: Implement resource subscriptions
+            list_changed: Some(has_resources),
         });
         
-        // Create ResourcesHandler and add all registered resources
-        let mut handler = ResourcesHandler::new();
+        // Create ResourcesListHandler and add all registered resources
+        let mut list_handler = ResourcesListHandler::new();
         for (_, resource) in &self.resources {
-            handler = handler.add_resource_arc(resource.clone());
+            list_handler = list_handler.add_resource_arc(resource.clone());
         }
         
-        self.handler(handler)
+        // Add template resources to list handler (using pattern as name)
+        for (_template, resource) in &self.template_resources {
+            list_handler = list_handler.add_resource_arc(resource.clone());
+        }
+        
+        // Create ResourcesReadHandler and add all registered resources
+        let mut read_handler = ResourcesReadHandler::new();
+        for (_, resource) in &self.resources {
+            read_handler = read_handler.add_resource_arc(resource.clone());
+        }
+        
+        // Add template resources to read handler with template support
+        for (template, resource) in &self.template_resources {
+            read_handler = read_handler.add_template_resource_arc(template.clone(), resource.clone());
+        }
+        
+        // Update notification manager
+        
+        // Register both handlers
+        self.handler(list_handler)
+            .handler(read_handler)
     }
 
     /// Add logging support
@@ -567,8 +606,9 @@ impl McpServerBuilder {
     }
 
 
+
     /// Build the MCP server
-    pub fn build(self) -> Result<McpServer> {
+    pub fn build(mut self) -> Result<McpServer> {
         // Validate configuration
         if self.name.is_empty() {
             return Err(McpFrameworkError::Config("Server name cannot be empty".to_string()));
@@ -576,6 +616,82 @@ impl McpServerBuilder {
         if self.version.is_empty() {
             return Err(McpFrameworkError::Config("Server version cannot be empty".to_string()));
         }
+
+        // Auto-detect and configure server capabilities based on registered components
+        let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
+        let has_tools = !self.tools.is_empty();
+        let has_prompts = !self.prompts.is_empty();
+        let has_roots = !self.roots.is_empty();
+        let has_elicitations = !self.elicitations.is_empty();
+        let has_completions = !self.completions.is_empty();
+        let _has_samplings = !self.sampling.is_empty();
+        let has_logging = !self.loggers.is_empty();
+
+        // Tools capabilities - support notifications if tools are registered
+        if has_tools {
+            self.capabilities.tools = Some(ToolsCapabilities {
+                list_changed: Some(true),
+            });
+        }
+
+        // Prompts capabilities - support notifications only if prompts are registered AND SSE is enabled
+        // Note: In current static framework, prompt set is fixed at build time and doesn't change
+        // notifications/prompts/listChanged would be emitted by future dynamic features like:
+        // - Hot-reload configuration systems
+        // - Admin APIs for runtime prompt registration
+        // - Plugin systems with dynamic prompt loading
+        if has_prompts {
+            self.capabilities.prompts = Some(PromptsCapabilities {
+                #[cfg(feature = "http")]
+                list_changed: Some(self.enable_sse),
+                #[cfg(not(feature = "http"))]  
+                list_changed: Some(false), // No HTTP transport = no SSE notifications
+            });
+        }
+
+        // Resources capabilities - support notifications and subscriptions
+        if has_resources {
+            self.capabilities.resources = Some(ResourcesCapabilities {
+                subscribe: Some(false), // TODO: Implement resource subscriptions in Phase 5
+                list_changed: Some(true),
+            });
+        }
+
+        // Elicitation capabilities - enable if elicitation handlers are registered
+        if has_elicitations {
+            self.capabilities.elicitation = Some(ElicitationCapabilities {
+                enabled: Some(true),
+            });
+        }
+
+        // Completion capabilities - enable if completion handlers are registered
+        if has_completions {
+            self.capabilities.completions = Some(CompletionsCapabilities {
+                enabled: Some(true),
+            });
+        }
+
+        // Logging capabilities - always enabled with comprehensive level support
+        if has_logging || true { // Always enable logging for debugging/monitoring
+            self.capabilities.logging = Some(LoggingCapabilities {
+                enabled: Some(true),
+                levels: Some(vec![
+                    "debug".to_string(),
+                    "info".to_string(), 
+                    "warning".to_string(),
+                    "error".to_string()
+                ]),
+            });
+        }
+
+        info!("🔧 Auto-configured server capabilities:");
+        info!("   - Tools: {}", has_tools);
+        info!("   - Resources: {}", has_resources);  
+        info!("   - Prompts: {}", has_prompts);
+        info!("   - Roots: {}", has_roots);
+        info!("   - Elicitation: {}", has_elicitations);
+        info!("   - Completions: {}", has_completions);
+        info!("   - Logging: enabled");
 
         // Create implementation info
         let mut implementation = Implementation::new(&self.name, &self.version);
@@ -591,6 +707,20 @@ impl McpServerBuilder {
                 roots_handler = roots_handler.add_root(root);
             }
             handlers.insert("roots/list".to_string(), Arc::new(roots_handler));
+        }
+
+        // Add PromptsHandlers if prompts were configured
+        if !self.prompts.is_empty() {
+            let mut prompts_list_handler = PromptsListHandler::new();
+            let mut prompts_get_handler = PromptsGetHandler::new();
+            
+            for prompt in self.prompts.values() {
+                prompts_list_handler = prompts_list_handler.add_prompt_arc(prompt.clone());
+                prompts_get_handler = prompts_get_handler.add_prompt_arc(prompt.clone());
+            }
+            
+            handlers.insert("prompts/list".to_string(), Arc::new(prompts_list_handler));
+            handlers.insert("prompts/get".to_string(), Arc::new(prompts_get_handler));
         }
 
         // Create server

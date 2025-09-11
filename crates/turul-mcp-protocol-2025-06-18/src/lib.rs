@@ -29,6 +29,7 @@ pub mod meta;
 pub mod traits;
 pub mod json_rpc;
 pub mod param_extraction;
+pub mod prelude;
 
 #[cfg(test)]
 mod compliance_test;
@@ -135,6 +136,12 @@ pub enum McpError {
     #[error("Tool execution failed: {0}")]
     ToolExecutionError(String),
     
+    #[error("Resource execution failed: {0}")]
+    ResourceExecutionError(String),
+    
+    #[error("Prompt execution failed: {0}")]
+    PromptExecutionError(String),
+    
     #[error("Resource access denied: {0}")]
     ResourceAccessDenied(String),
     
@@ -198,6 +205,16 @@ impl McpError {
         Self::ToolExecutionError(message.to_string())
     }
     
+    /// Create a resource execution error
+    pub fn resource_execution(message: &str) -> Self {
+        Self::ResourceExecutionError(message.to_string())
+    }
+    
+    /// Create a prompt execution error
+    pub fn prompt_execution(message: &str) -> Self {
+        Self::PromptExecutionError(message.to_string())
+    }
+    
     /// Create a validation error
     pub fn validation(message: &str) -> Self {
         Self::ValidationError(message.to_string())
@@ -236,6 +253,10 @@ impl McpError {
             // Access and execution errors
             McpError::ToolExecutionError(msg) => 
                 JsonRpcErrorObject::server_error(-32010, &format!("Tool execution failed: {}", msg), None),
+            McpError::ResourceExecutionError(msg) => 
+                JsonRpcErrorObject::server_error(-32012, &format!("Resource execution failed: {}", msg), None),
+            McpError::PromptExecutionError(msg) => 
+                JsonRpcErrorObject::server_error(-32013, &format!("Prompt execution failed: {}", msg), None),
             McpError::ResourceAccessDenied(uri) => 
                 JsonRpcErrorObject::server_error(-32011, &format!("Resource access denied: {}", uri), None),
                 
