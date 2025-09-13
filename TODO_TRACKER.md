@@ -4,17 +4,34 @@
 
 ## Current Status: BETA-GRADE - MCP INSPECTOR COMPATIBLE ✅
 
-**Last Updated**: 2025-09-03
-**Framework Status**: ✅ **BETA-GRADE** - All core functionality working, MCP Inspector compatible
+**Last Updated**: 2025-09-13
+**Framework Status**: 🟡 **CORE READY, E2E BROKEN** - Core MCP compliance working, E2E tests broken by remote merge
 **Current Branch**: 🚀 **0.2.0** - Latest development branch with synchronized versions  
-**Current Solution**: POST SSE disabled by default, GET SSE enabled for notifications
-**Next Focus**: SessionContext test infrastructure implementation
+**Current Issue**: Remote merge broke E2E integration tests due to URI validation conflicts
+**Next Focus**: Resolve URI validation conflicts to restore E2E test functionality
 
 ---
 
-## 📋 **CURRENT PRIORITIES - FRAMEWORK POLISH PHASE** (2025-09-12)
+## 📋 **CURRENT PRIORITIES - REMOTE MERGE CONFLICT RESOLUTION** (2025-09-13)
 
-**Status Update**: ✅ **COMPLETE MCP 2025-06-18 SPECIFICATION COMPLIANCE** - All critical compliance gaps identified by Codex review have been fixed. Framework now fully spec-compliant with truthful capability signaling.
+**Status Update**: 🔴 **E2E TESTS BROKEN BY REMOTE MERGE** - Core MCP compliance maintained (34/34 tests pass), but E2E integration tests broken by URI validation introduced in remote merge (99 objects).
+
+### **🔴 URGENT: REMOTE MERGE CONFLICT RESOLUTION** (2025-09-13)
+**Priority**: 🔴 **CRITICAL** - E2E test suite broken, impacting development workflow
+
+**Issue Analysis**:
+- ✅ **Core Framework**: All 34 MCP compliance tests pass, framework is solid
+- 🔴 **E2E Integration**: 15/15 resource E2E tests failing due to URI validation conflicts  
+- 🔴 **Root Cause**: Remote merge introduced security/validation rejecting test server custom URI schemes
+- 🔴 **Error Pattern**: "Invalid parameter type for 'uri': expected URI matching allowed patterns" for URIs like `binary://image`, `memory://data`
+
+**Next Actions**:
+1. 🔴 **Identify URI validation rules**: Find what patterns are now required
+2. 🔴 **Fix test compatibility**: Update test URIs or configure validation exceptions
+3. 🔴 **Restore E2E functionality**: Get integration tests working again
+4. 🔴 **Verify prompts E2E**: Check if prompts tests have similar issues
+
+**Time Estimate**: 2-4 hours to resolve URI validation conflicts
 
 ### **✅ PHASE 9: RESOURCES COMPLIANCE FIXES - COMPLETED**
 **Critical Review Implementation**: Successfully fixed all MCP 2025-06-18 specification compliance issues identified by resources_todo.md critical review.

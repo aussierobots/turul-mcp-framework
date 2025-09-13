@@ -3,7 +3,7 @@
 
 **Version**: 1.0  
 **Last Updated**: 2025-09-12  
-**Status**: 🟢 **PRODUCTION READY** - Complete MCP 2025-06-18 specification compliance achieved  
+**Status**: 🟡 **CORE READY, E2E TESTS BROKEN** - Complete MCP 2025-06-18 core compliance achieved, E2E integration tests broken by remote merge  
 **Framework**: turul-mcp-framework  
 **Specification**: [MCP 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18)
 
@@ -24,7 +24,7 @@
 | **Logging** | [Logging](https://modelcontextprotocol.io/specification/2025-06-18#logging) | ✅ Complete | ✅ Complete | 🟢 **COMPLIANT** |
 | **Capabilities** | [Capabilities](https://modelcontextprotocol.io/specification/2025-06-18#capabilities) | ✅ Complete | ✅ Complete | 🟢 **COMPLIANT** |
 
-**Overall Compliance**: 🟢 **98%+ COMPLIANT** - 8/8 core areas complete, comprehensive E2E coverage including Sampling/Roots/Elicitation, advanced concurrent session testing, minor notification gaps remaining
+**Overall Compliance**: 🟡 **CORE COMPLIANT, E2E TESTS BROKEN** - 34/34 MCP compliance tests pass, but E2E integration tests broken by remote merge introducing URI validation that conflicts with test server custom schemes
 
 ---
 
@@ -351,28 +351,29 @@ Verdict
 3. **Coverage Analysis**: Are we adequately testing all critical protocol features?
 4. **Risk Assessment**: What compliance risks exist with current test coverage?
 
-**Gemini Assessment Status**: 🟢 **REVISED - COVERAGE EXPANDED, GAPS REFINED**
+**Gemini Assessment Status**: 🟢 **REVISED - ADVANCED COMPLIANCE GAPS IDENTIFIED**
 
-**Key Achievement**: E2E test coverage has been significantly expanded to include Sampling, Roots, Elicitation, and advanced concurrent session testing, verifying a much broader range of the framework's capabilities.
-**Identified Gaps**: The primary focus shifts from protocol shape compliance to full feature completeness, as highlighted by the updated Codex review.
+**Key Achievement**: The framework is robust and compliant at a high level. The focus of analysis has now shifted to subtle, advanced protocol features and behaviors.
+**Identified Gaps**: Code review confirms several minor-but-important behavioral gaps, primarily in list-based endpoints, as noted in the latest Codex review.
 
-**Latest Update**: This review acknowledges the major expansion in testing and incorporates the latest, more nuanced findings from the Codex review.
-- ✅ **VERIFIED**: New E2E test suites for Sampling, Roots, Elicitation, and advanced concurrency are present in the codebase.
-- ⚠️  **DISCREPANCY IDENTIFIED**: The test plan claims the `Resources` protocol is fully complete, but the Codex review correctly notes that key features like `resources/subscribe` are not implemented and `resources/templates/list` lacks E2E test coverage. The definition of "complete" must be refined.
+**Latest Update**: This review verifies the newly identified gaps from the Codex review at the code level.
+- ✅ **VERIFIED**: The `tools/list` handler in `server.rs` does not implement pagination or stable sorting.
+- ✅ **VERIFIED**: The `tools/list` handler does not propagate the `_meta` field from the request to the response. This is likely true for other list handlers as well.
+- ✅ **CONCLUSION**: The framework is compliant in shape, but lacks full behavioral compliance for advanced use cases involving pagination and metadata round-tripping.
 
 **Gemini Findings**:
 ```
 Strategic Analysis:
-- Overall test strategy effectiveness: The test strategy continues to be highly effective, having successfully guided the expansion of E2E coverage into all major protocol areas, including Sampling, Roots, and Elicitation. The addition of advanced concurrent session testing is a significant step towards ensuring production-grade reliability.
-- Test implementation quality assessment: The quality of the test implementation is high, and the codebase now reflects a mature testing apparatus. The framework has demonstrably moved from closing fundamental compliance gaps to testing more advanced and concurrent features.
-- Critical feature coverage evaluation: While coverage has expanded significantly, the latest Codex review highlights a crucial nuance: some protocols marked as "COMPLETE" still have functional gaps. For example, the `Resources` protocol is missing a `subscribe` implementation and E2E tests for templates. The test plan should be updated to reflect this distinction between "protocol shape compliance" and "full feature implementation".
-- Production readiness evaluation: The framework is production-ready for its core implemented features (Tools, Prompts, basic Resources). However, it is NOT yet fully production-ready for features that are claimed but not fully implemented or tested, such as resource subscriptions. The "PRODUCTION READY" status in the header should be qualified.
+- Overall test strategy effectiveness: The test strategy is mature and has successfully driven the framework to a high level of compliance and robustness. The existing E2E tests provide excellent coverage for the main protocol features.
+- Test implementation quality assessment: The test quality for core features is high. However, as the framework matures, the definition of "quality" must expand to include testing for more subtle protocol requirements, such as `_meta` propagation and stable pagination on all list endpoints, which are currently missing.
+- Critical feature coverage evaluation: While all major protocol areas have E2E tests, the latest deep-dive review has uncovered minor-but-important gaps in the *implementation* of these features. The framework is compliant in shape, but not always in behavior (e.g., `tools/list` lacks pagination; `_meta` is not propagated). These are not show-stopping bugs, but they represent a deviation from the full spirit of the specification.
+- Production readiness evaluation: The framework is production-ready for many use cases. However, for sophisticated clients that rely on advanced features like stable pagination for `tools/list` or `_meta` round-tripping, the framework is not yet fully compliant. The "PRODUCTION READY" status should be interpreted with this caveat.
 
 Risk Analysis:
-- High-risk compliance gaps: The highest-risk gaps related to core protocol mechanics and state isolation have been closed. The primary remaining risks are now related to feature completeness and capability advertising.
-- Testing infrastructure risks: Low. The testing infrastructure is robust and has proven capable of supporting a wide range of E2E scenarios.
-- Feature completeness risks: Medium. The discrepancy between advertised capabilities and implemented features (e.g., `resources/subscribe`) is a medium risk. A client attempting to use an advertised but unimplemented feature will encounter errors. The test plan must more accurately track feature completeness, not just endpoint existence.
-- Client compatibility risks: Low. For the features that are fully implemented and tested, the risk of client incompatibility is low due to the verified schema compliance.
+- High-risk compliance gaps: None. The framework is stable and does not suffer from high-risk bugs or major protocol violations.
+- Feature completeness risks: Medium. The primary risk has shifted from core compliance to feature completeness. The lack of `_meta` propagation and pagination in some list endpoints could lead to unexpected behavior or integration challenges with strictly-compliant clients.
+- Client compatibility risks: Low-to-Medium. Basic clients will work perfectly. Advanced clients that use `_meta` for tracing or rely on pagination for large toolsets will encounter issues. This limits the framework's compatibility in advanced use cases.
+- Maintainability: High. The code is well-structured, making these identified gaps straightforward to fix. The issues are not architectural but are localized implementation details in the respective handlers.
 ```
 
 ---
@@ -432,7 +433,15 @@ Risk Analysis:
 
 ## 🚨 Known Issues and Gaps
 
-### HIGH PRIORITY GAPS ✅ MOSTLY RESOLVED
+### 🔴 CRITICAL ISSUE - REMOTE MERGE CONFLICTS
+**Post-Merge Status (2025-09-13)**:
+- ✅ **MCP Core Compliance**: All 34 MCP compliance tests pass 
+- 🔴 **E2E Integration Broken**: Resources/Prompts E2E tests failing due to URI validation conflicts
+- 🔴 **Root Cause**: Remote merge (99 objects) introduced security/validation features that reject test server custom URI schemes
+- 🔴 **Impact**: Test URIs like `binary://image`, `memory://data`, `error://not_found` now return "Invalid parameter type for 'uri': expected URI matching allowed patterns"
+- 🔴 **Next Action**: Need to either update test URIs to match new validation rules or configure validation to allow test schemes
+
+### HIGH PRIORITY GAPS ✅ MOSTLY RESOLVED  
 1. ~~**Tools E2E Testing**: Complete tools protocol E2E test suite needed~~ ✅ **COMPLETED**
 2. ~~**Tools Test Server**: Comprehensive tools test server implementation~~ ✅ **COMPLETED**
 3. **notifications/initialized**: Not consistently tested across servers

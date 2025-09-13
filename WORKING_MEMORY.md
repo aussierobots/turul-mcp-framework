@@ -1,17 +1,49 @@
 # MCP Framework - Working Memory
 
-## ✅ **FRAMEWORK STATUS: BETA-GRADE - MCP INSPECTOR COMPATIBLE**
+## 🟡 **FRAMEWORK STATUS: CORE READY - E2E TESTS BROKEN BY REMOTE MERGE**
 
 **Current Branch**: 🚀 **0.2.0** - Latest development branch with synchronized versions
 **Core Framework**: ✅ **COMPLETE** - All crates compile with zero errors/warnings
 **Workspace Compilation**: ✅ **PERFECT** - `cargo check --workspace` passes cleanly
-**MCP Compliance**: ✅ **FULL COMPLIANCE** - Complete MCP 2025-06-18 implementation
+**MCP Core Compliance**: ✅ **FULL COMPLIANCE** - All 34 MCP compliance tests pass
+**E2E Integration Tests**: 🔴 **BROKEN** - Remote merge introduced URI validation that conflicts with test server URIs
 **Schema Generation**: ✅ **COMPLETE** - Compile-time schemas match MCP specification exactly
 **Tool Creation**: ✅ **4 LEVELS** - Function/derive/builder/manual approaches all working
 **SessionContext**: ✅ **INTEGRATED** - Full session support in all macro types
 **Example Status**: ✅ **ALL WORKING** - All examples compile without warnings
 **Documentation**: ✅ **CONSOLIDATED** - Reduced from 24 → 9 .md files (62% reduction)
 **MCP Inspector**: ✅ **COMPATIBLE** - POST SSE disabled by default, standard JSON responses work perfectly
+
+## 🔴 **REMOTE MERGE CONFLICT ISSUES - IDENTIFIED** (2025-09-13)
+
+**Major Challenge**: 🔴 **E2E INTEGRATION TESTS BROKEN BY REMOTE MERGE** - Working E2E tests broken by security/validation changes introduced in remote branch.
+
+### **Issues Identified**
+- 🔴 **URI Validation Conflicts**: Remote merge (99 objects) introduced URI validation that rejects test server custom schemes
+- 🔴 **Test Server URIs Rejected**: URIs like `binary://image`, `memory://data`, `error://not_found` now fail with "Invalid parameter type for 'uri': expected URI matching allowed patterns"
+- 🔴 **Security Module Changes**: New security features in `crates/turul-mcp-server/src/security.rs` and URI template validation
+- 🔴 **Working Tests Before Merge**: All E2E tests were working before the remote merge
+
+### **Current Status**
+- ✅ **Core MCP Compliance**: All 34 MCP compliance tests pass - core framework is solid
+- ✅ **Compilation**: Workspace compiles cleanly with only minor warnings
+- ✅ **Test Servers Start**: resource-test-server, prompts-test-server start successfully
+- 🔴 **Resource Read Failures**: E2E integration tests fail when reading resources due to URI validation
+- 🔴 **15/15 Resources E2E Tests Failing**: All resource integration tests broken by validation
+
+### **Next Actions Required**
+1. **Identify validation rules**: Find what URI patterns are now required/allowed
+2. **Update test URIs**: Modify test server URIs to match new validation requirements, or
+3. **Configure validation**: Allow test URI schemes in validation configuration, or
+4. **Disable validation**: For test environments, disable strict URI validation
+
+### **Impact Assessment**
+- ✅ **Framework Core**: Production-ready, all core features working
+- 🔴 **Development**: E2E test suite broken, impacting development workflow
+- 🔴 **CI/CD**: Integration tests will fail in continuous integration
+- ✅ **End Users**: Framework API and functionality remains intact
+
+**Time Investment**: Estimated 2-4 hours to resolve URI validation conflicts and restore E2E test functionality
 
 ## ✅ **SESSION MANAGEMENT CRITICAL FIXES - COMPLETED** (2025-09-04)
 
