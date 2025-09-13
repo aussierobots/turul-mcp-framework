@@ -132,16 +132,9 @@ pub struct LambdaMcpServerBuilder {
 impl LambdaMcpServerBuilder {
     /// Create a new Lambda MCP server builder
     pub fn new() -> Self {
-        use turul_mcp_protocol::initialize::{LoggingCapabilities, ToolsCapabilities};
-
-        // Initialize with same default capabilities as McpServer
-        let capabilities = ServerCapabilities {
-            tools: Some(ToolsCapabilities {
-                list_changed: Some(false),
-            }),
-            logging: Some(LoggingCapabilities::default()),
-            ..Default::default()
-        };
+        // Initialize with default capabilities (same as McpServer)
+        // Capabilities will be set truthfully in build() based on registered components
+        let capabilities = ServerCapabilities::default();
 
         // Initialize handlers with defaults (same as McpServerBuilder)
         let mut handlers: HashMap<String, Arc<dyn McpHandler>> = HashMap::new();
@@ -164,7 +157,7 @@ impl LambdaMcpServerBuilder {
         );
         handlers.insert(
             "resources/templates/list".to_string(),
-            Arc::new(ResourceTemplatesHandler),
+            Arc::new(ResourceTemplatesHandler::new()),
         );
         handlers.insert(
             "elicitation/create".to_string(),
@@ -559,10 +552,6 @@ impl LambdaMcpServerBuilder {
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
 
-    /// Add templates support
-    pub fn with_templates(self) -> Self {
-        self.handler(TemplatesHandler::new())
-    }
 
     /// Add notifications support
     pub fn with_notifications(self) -> Self {
@@ -746,10 +735,62 @@ impl LambdaMcpServerBuilder {
             Implementation::new(&self.name, &self.version)
         };
 
-        // Create server capabilities with registered tools count
+        // Auto-detect and configure server capabilities based on registered components (same as McpServer)
         let mut capabilities = self.capabilities.clone();
-        if self.tools.is_empty() {
-            capabilities.tools = None;
+        let has_tools = !self.tools.is_empty();
+        let has_resources = !self.resources.is_empty();
+        let has_prompts = !self.prompts.is_empty();
+        let has_elicitations = !self.elicitations.is_empty();
+        let has_completions = !self.completions.is_empty();
+        let has_logging = !self.loggers.is_empty();
+
+        // Tools capabilities - truthful reporting (only set if tools are registered)
+        if has_tools {
+            capabilities.tools = Some(turul_mcp_protocol::initialize::ToolsCapabilities {
+                list_changed: Some(false), // Static framework: no dynamic change sources
+            });
+        }
+
+        // Resources capabilities - truthful reporting (only set if resources are registered)
+        if has_resources {
+            capabilities.resources = Some(turul_mcp_protocol::initialize::ResourcesCapabilities {
+                subscribe: Some(false), // TODO: Implement resource subscriptions
+                list_changed: Some(false), // Static framework: no dynamic change sources
+            });
+        }
+
+        // Prompts capabilities - truthful reporting (only set if prompts are registered)
+        if has_prompts {
+            capabilities.prompts = Some(turul_mcp_protocol::initialize::PromptsCapabilities {
+                list_changed: Some(false), // Static framework: no dynamic change sources
+            });
+        }
+
+        // Elicitation capabilities - truthful reporting (only set if elicitations are registered)
+        if has_elicitations {
+            capabilities.elicitation = Some(turul_mcp_protocol::initialize::ElicitationCapabilities {
+                enabled: Some(true),
+            });
+        }
+
+        // Completion capabilities - truthful reporting (only set if completions are registered)
+        if has_completions {
+            capabilities.completions = Some(turul_mcp_protocol::initialize::CompletionsCapabilities {
+                enabled: Some(true),
+            });
+        }
+
+        // Logging capabilities - always enabled for debugging/monitoring (same as McpServer)
+        if has_logging || true {
+            capabilities.logging = Some(turul_mcp_protocol::initialize::LoggingCapabilities {
+                enabled: Some(true),
+                levels: Some(vec![
+                    "debug".to_string(),
+                    "info".to_string(),
+                    "warning".to_string(),
+                    "error".to_string(),
+                ]),
+            });
         }
 
         // Add RootsHandler if roots were configured (same pattern as MCP server)
