@@ -1,0 +1,40 @@
+[package]
+name = "turul-mcp-framework-tools-integration-tests"
+version = "0.2.0"
+edition = "2021"
+authors = ["Nick <nick@aussierobots.com.au>"]
+description = "MCP Tools Protocol Integration Tests"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+# HTTP client for E2E testing
+reqwest = { version = "0.12", features = ["json"] }
+
+# JSON handling
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Process management for test servers
+tokio-process = "0.2"
+
+# Test utilities
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time utilities
+chrono = { version = "0.4", features = ["serde"] }
+
+# Collections
+indexmap = "2.0"
+
+# Async utilities
+futures = "0.3"
+
+# Shared E2E test utilities (will create this)
+mcp-e2e-shared = { path = "../shared" }

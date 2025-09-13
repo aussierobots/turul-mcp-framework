@@ -18,6 +18,16 @@ async-trait = "0.1"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 uuid = { version = "1.0", features = ["v7"] }
+reqwest = { version = "0.12", features = ["json", "stream"] }
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["client"] }
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
+futures = "0.3"
+tokio-stream = "0.1"
+portpicker = "0.1"
+tempfile = "3"
+mcp-e2e-shared = { path = "../shared" }
 
 [lib]
 name = "mcp_resources_tests"

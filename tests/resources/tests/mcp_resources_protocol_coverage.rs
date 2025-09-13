@@ -399,7 +399,7 @@ async fn test_edge_cases_and_robustness() {
     // Very long URIs
     let long_uri = "file:///".to_string() + &"a".repeat(1000) + ".txt";
     let long_resource = Resource::new(&long_uri, "long_resource");
-    assert_eq!(long_resource.uri.len(), 1003);
+    assert_eq!(long_resource.uri.len(), long_uri.len());
     
     // Special characters in URIs
     let special_resource = Resource::new("file:///test%20file%2Bspecial.txt", "special");
