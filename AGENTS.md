@@ -28,13 +28,22 @@
 - Requirements: correct JSON-RPC usage, `_meta` fields, version negotiation, pagination/cursors, progress, and session isolation/TTL.
 - Validate: run `cargo test --test mcp_compliance_tests`; for end‑to‑end session compliance, see README “MCP Session Management Compliance Testing”.
 
+### TypeScript Schema Alignment
+- Shapes must match the latest TS schema in `turul-mcp-protocol-2025-06-18` (camelCase, optional `_meta` on params/results where spec allows).
+- Prompts: `GetPromptParams.arguments` is `map<string,string>` at the boundary. Handlers may convert internally to `Value` for rendering.
+- Tools: `ToolSchema` type is `object`; `properties`/`required` present when needed; `annotations` are optional hints.
+- Resources: `Resource`, `ResourceTemplate`, and results (`List*Result`, `ReadResourceResult`) follow TS names, including `nextCursor` and `_meta`.
+- Extension: `CallToolResult.structuredContent` is an optional extension. Keep optional, document it, and ensure clients/tests do not depend on it for correctness.
+
 ## Resources Compliance
 - Capabilities: advertise `resources.subscribe` and `resources.listChanged` when supported (only set `listChanged` when wired).
-- Listing: implement `resources/list` and `resources/templates/list` with stable, absolute URIs; paginate via cursor (`nextCursor`).
+- Listing: implement `resources/list` and `resources/templates/list` with stable, absolute URIs; paginate via cursor (`nextCursor`). Do not enumerate dynamic template instances in `resources/list`; publish templates only via `resources/templates/list`.
 - Reading: `resources/read` returns `contents[]` with `uri`, `mimeType`, and Text/Blob/URI reference; avoid `unwrap()`.
 - Dynamic templates: publish via `ResourceTemplate` (e.g., `file:///user-{user_id}.json`, `file:///user-profile-{user_id}.{image_format}`); resolve at read-time with strict validation.
 - Security: enforce roots and access controls (allow/block patterns, MIME allowlist, size caps) for `file://` and user input.
 - Updates: send `notifications/resources/updated` and `notifications/resources/listChanged` appropriately.
+- `_meta`: round-trip optional `_meta` for list/template operations (params → result meta) to match MCP behavior.
+- Invalid URIs: do not publish invalid URIs in `resources/list`; test invalid cases via `resources/read` error scenarios. URIs must be absolute; encode spaces if demonstrated.
 - Example:
   - List: `curl -s http://127.0.0.1:52950/mcp -H 'Content-Type: application/json' -d '{"method":"resources/list"}'`
   - Read: `curl -s http://127.0.0.1:52950/mcp -H 'Content-Type: application/json' -d '{"method":"resources/read","params":{"uri":"config://app.json"}}'`
@@ -48,6 +57,11 @@
   - List: `curl -s http://127.0.0.1:52950/mcp -H 'Content-Type: application/json' -d '{"method":"prompts/list"}'`
   - Get: `curl -s http://127.0.0.1:52950/mcp -H 'Content-Type: application/json' -d '{"method":"prompts/get","params":{"name":"code_review","arguments":{"language":"rust"}}}'`
 
+## Tools Compliance
+- Listing: implement `tools/list` with stable ordering (sort by name) and support pagination (`nextCursor`) when applicable.
+- `_meta`: round-trip optional `_meta` for list operations.
+- Calling: `tools/call` returns `content[]` and may include `isError`; `_meta` optional. If `structuredContent` is included, treat as optional extension.
+
 ## Reviewer Checklist: Resources & Prompts
 - Capabilities: `resources.subscribe`, `resources.listChanged`, `prompts.listChanged` match actual support.
 - Endpoints: `resources/list`, `resources/read`, `resources/templates/list`, `prompts/list`, `prompts/get` implemented and registered (separate handlers).
@@ -58,6 +72,14 @@
 - Notifications: listChanged/updated methods use spec‑accurate names consistently; SSE bridge emits them.
 - Pagination: respects `cursor` and returns `nextCursor` when more items exist.
 - Tests: add/keep coverage for all of the above.
+
+## Notifications Compliance
+- `notifications/initialized`: in strict lifecycle mode, reject operations until client sends `notifications/initialized`; add E2E to verify gating and acceptance after.
+- `notifications/progress`: progress updates must include `progressToken`. Add at least one strict E2E that asserts ≥1 progress event and token match with tool response.
+- `listChanged` notifications for tools/prompts/resources must only be advertised/emitted when dynamic change sources exist; keep `listChanged=false` for static servers.
+
+## Capabilities Truthfulness
+- On every initialize E2E, assert capability truthfulness for the static framework: `resources.subscribe=false`, `tools.listChanged=false`, `prompts.listChanged=false` (and others only when actually wired).
 
 ## Server & Client Testing
 - Start a session‑enabled server (choose backend):
@@ -88,6 +110,13 @@
 - Use `#[tokio::test]` for async. Key suites: `session_context_macro_tests`, `framework_integration_tests`, `mcp_compliance_tests`.
 - Add unit tests under `#[cfg(test)]` per crate; keep deterministic and isolated.
 
+### E2E Test Authoring & Portability
+- Use `tests/shared` server manager; do not hardcode `current_dir` paths. Discover workspace root dynamically.
+- Add E2E for `resources/templates/list` (pagination, stable ordering, `_meta` round‑trip).
+- Add a strict SSE progress test validating at least one progress event and `progressToken` match.
+- Add strict lifecycle E2E gating with `notifications/initialized`.
+- Assert initialize capability snapshot in each E2E suite.
+
 ## Commit & Pull Request Guidelines
 - Commits: imperative subject (≤72 chars), meaningful body; reference issues (`Fixes #123`).
 - Pre‑PR: `cargo fmt`, `cargo clippy -D warnings`, `cargo test --workspace`; update README/examples/docs when APIs change.
@@ -102,3 +131,4 @@
 - Role: act as a strict critic for MCP 2025‑06‑18 compliance within the Turul MCP Framework; flag deviations and propose compliant fixes.
 - Do not relax security, logging, or API contracts to “make tests pass”; fix root causes while preserving spec compliance.
 - Boundaries: do not modify core framework areas unless explicitly requested. The ~9 areas are Tools, Resources, Prompts, Sampling, Completion, Logging, Roots, Elicitation, and Notifications.
+ - Extensions: if introducing non-standard fields (e.g., `structuredContent`), document them clearly, keep optional, and ensure baseline compliance without them.
