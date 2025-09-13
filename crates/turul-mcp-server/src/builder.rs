@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use tracing::info;
 
 use crate::{McpTool, McpServer, Result, McpFrameworkError};
 use crate::resource::McpResource;
@@ -32,6 +33,9 @@ pub struct McpServerBuilder {
     
     /// Resources registered with the server
     resources: HashMap<String, Arc<dyn McpResource>>,
+    
+    /// Template resources (URI template -> resource)
+    template_resources: Vec<(crate::uri_template::UriTemplate, Arc<dyn McpResource>)>,
     
     /// Prompts registered with the server
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
@@ -82,6 +86,9 @@ pub struct McpServerBuilder {
     enable_cors: bool,
     #[cfg(feature = "http")]
     enable_sse: bool,
+    
+    /// Validation errors collected during builder configuration
+    validation_errors: Vec<String>,
 }
 
 impl McpServerBuilder {
@@ -93,13 +100,14 @@ impl McpServerBuilder {
         // Add all standard MCP 2025-06-18 handlers by default
         handlers.insert("ping".to_string(), Arc::new(PingHandler));
         handlers.insert("completion/complete".to_string(), Arc::new(CompletionHandler));
-        handlers.insert("resources/list".to_string(), Arc::new(ResourcesHandler::new()));
-        handlers.insert("prompts/list".to_string(), Arc::new(PromptsHandler::new()));
-        handlers.insert("prompts/get".to_string(), Arc::new(PromptsHandler::new()));
+        handlers.insert("resources/list".to_string(), Arc::new(ResourcesListHandler::new()));
+        handlers.insert("resources/read".to_string(), Arc::new(ResourcesReadHandler::new()));
+        handlers.insert("prompts/list".to_string(), Arc::new(PromptsListHandler::new()));
+        handlers.insert("prompts/get".to_string(), Arc::new(PromptsGetHandler::new()));
         handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
         handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
         handlers.insert("sampling/createMessage".to_string(), Arc::new(SamplingHandler));
-        handlers.insert("resources/templates/list".to_string(), Arc::new(ResourceTemplatesHandler));
+        // Note: resources/templates/list is only registered if template resources are configured (see build method)
         handlers.insert("elicitation/create".to_string(), Arc::new(ElicitationHandler::with_mock_provider()));
         
         // Add all notification handlers (except notifications/initialized which is handled specially)
@@ -120,14 +128,10 @@ impl McpServerBuilder {
             name: "turul-mcp-server".to_string(),
             version: "1.0.0".to_string(),
             title: None,
-            capabilities: ServerCapabilities {
-                tools: Some(ToolsCapabilities {
-                    list_changed: Some(false),
-                }),
-                ..Default::default()
-            },
+            capabilities: ServerCapabilities::default(),
             tools,
             resources: HashMap::new(),
+            template_resources: Vec::new(),
             prompts: HashMap::new(),
             elicitations: HashMap::new(),
             sampling: HashMap::new(),
@@ -150,6 +154,7 @@ impl McpServerBuilder {
             enable_cors: true,
             #[cfg(feature = "http")]
             enable_sse: cfg!(feature = "sse"),
+            validation_errors: Vec::new(),
         }
     }
 
@@ -223,8 +228,15 @@ impl McpServerBuilder {
     }
 
     /// Register a resource with the server
+    /// Note: URI validation is performed during build() to maintain builder pattern
     pub fn resource<R: McpResource + 'static>(mut self, resource: R) -> Self {
         let uri = resource.uri().to_string();
+        
+        // Validate URI and collect errors for later reporting
+        if let Err(e) = self.validate_uri(&uri) {
+            self.validation_errors.push(format!("Invalid resource URI '{}': {}", uri, e));
+        }
+        
         self.resources.insert(uri, Arc::new(resource));
         self
     }
@@ -234,6 +246,21 @@ impl McpServerBuilder {
         for resource in resources {
             self = self.resource(resource);
         }
+        self
+    }
+
+    /// Register a resource with URI template support
+    pub fn template_resource<R: McpResource + 'static>(
+        mut self, 
+        template: crate::uri_template::UriTemplate,
+        resource: R
+    ) -> Self {
+        // Validate template pattern is well-formed (MCP 2025-06-18 compliance)
+        if let Err(e) = self.validate_uri_template(template.pattern()) {
+            self.validation_errors.push(format!("Invalid resource template URI '{}': {}", template.pattern(), e));
+        }
+        
+        self.template_resources.push((template, Arc::new(resource)));
         self
     }
 
@@ -342,6 +369,45 @@ impl McpServerBuilder {
         self
     }
 
+    /// Validate URI is absolute and well-formed (reusing SecurityMiddleware logic)
+    fn validate_uri(&self, uri: &str) -> std::result::Result<(), String> {
+        // Check basic URI format - must have scheme
+        if !uri.contains("://") {
+            return Err("URI must be absolute with scheme (e.g., file://, http://, memory://)".to_string());
+        }
+        
+        // Check for whitespace and control characters
+        if uri.chars().any(|c| c.is_whitespace() || c.is_control()) {
+            return Err("URI must not contain whitespace or control characters".to_string());
+        }
+        
+        // For file URIs, require absolute paths
+        if uri.starts_with("file://") {
+            let path_part = &uri[7..]; // Skip "file://"
+            if !path_part.starts_with('/') {
+                return Err("file:// URIs must use absolute paths".to_string());
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Validate URI template pattern (basic validation for template syntax)
+    fn validate_uri_template(&self, template: &str) -> std::result::Result<(), String> {
+        // First validate the base URI structure (ignoring template variables)
+        let base_uri = template.replace(|c| c == '{' || c == '}', "");
+        self.validate_uri(&base_uri)?;
+        
+        // Check template variable syntax is balanced
+        let open_braces = template.matches('{').count();
+        let close_braces = template.matches('}').count();
+        if open_braces != close_braces {
+            return Err("URI template has unbalanced braces".to_string());
+        }
+        
+        Ok(())
+    }
+
     // =============================================================================
     // ZERO-CONFIGURATION CONVENIENCE METHODS
     // These aliases make the API more intuitive and match the zero-config vision
@@ -397,25 +463,48 @@ impl McpServerBuilder {
             list_changed: Some(false),
         });
         
-        // TODO: Update PromptsHandler to work with new fine-grained McpPrompt trait
-        // Currently there's a conflict between handlers::McpPrompt and prompt::McpPrompt
-        self.handler(PromptsHandler::new())
+        // Prompts handlers are automatically registered when prompts are added via .prompt()
+        // This method now just enables the capability
+        self
     }
 
     /// Add resources support
     pub fn with_resources(mut self) -> Self {
+        // Enable notifications if we have resources
+        let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
+        
         self.capabilities.resources = Some(ResourcesCapabilities {
-            subscribe: Some(false),
-            list_changed: Some(false),
+            subscribe: Some(false), // TODO: Implement resource subscriptions
+            list_changed: Some(has_resources),
         });
         
-        // Create ResourcesHandler and add all registered resources
-        let mut handler = ResourcesHandler::new();
+        // Create ResourcesListHandler and add all registered resources
+        let mut list_handler = ResourcesListHandler::new();
         for (_, resource) in &self.resources {
-            handler = handler.add_resource_arc(resource.clone());
+            list_handler = list_handler.add_resource_arc(resource.clone());
         }
         
-        self.handler(handler)
+        // Add template resources to list handler (using pattern as name)
+        for (_template, resource) in &self.template_resources {
+            list_handler = list_handler.add_resource_arc(resource.clone());
+        }
+        
+        // Create ResourcesReadHandler and add all registered resources
+        let mut read_handler = ResourcesReadHandler::new();
+        for (_, resource) in &self.resources {
+            read_handler = read_handler.add_resource_arc(resource.clone());
+        }
+        
+        // Add template resources to read handler with template support
+        for (template, resource) in &self.template_resources {
+            read_handler = read_handler.add_template_resource_arc(template.clone(), resource.clone());
+        }
+        
+        // Update notification manager
+        
+        // Register both handlers
+        self.handler(list_handler)
+            .handler(read_handler)
     }
 
     /// Add logging support
@@ -458,10 +547,6 @@ impl McpServerBuilder {
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
 
-    /// Add templates support
-    pub fn with_templates(self) -> Self {
-        self.handler(TemplatesHandler::new())
-    }
 
     /// Add notifications support
     pub fn with_notifications(self) -> Self {
@@ -567,8 +652,9 @@ impl McpServerBuilder {
     }
 
 
+
     /// Build the MCP server
-    pub fn build(self) -> Result<McpServer> {
+    pub fn build(mut self) -> Result<McpServer> {
         // Validate configuration
         if self.name.is_empty() {
             return Err(McpFrameworkError::Config("Server name cannot be empty".to_string()));
@@ -576,6 +662,99 @@ impl McpServerBuilder {
         if self.version.is_empty() {
             return Err(McpFrameworkError::Config("Server version cannot be empty".to_string()));
         }
+        
+        // Check for validation errors collected during registration
+        if !self.validation_errors.is_empty() {
+            return Err(McpFrameworkError::Config(
+                format!("Resource validation errors:\n{}", self.validation_errors.join("\n"))
+            ));
+        }
+
+        // Auto-detect and configure server capabilities based on registered components
+        let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
+        let has_tools = !self.tools.is_empty();
+        let has_prompts = !self.prompts.is_empty();
+        let has_roots = !self.roots.is_empty();
+        let has_elicitations = !self.elicitations.is_empty();
+        let has_completions = !self.completions.is_empty();
+        let _has_samplings = !self.sampling.is_empty();
+        let has_logging = !self.loggers.is_empty();
+
+        // Tools capabilities - support notifications only if tools are registered AND we have dynamic change sources
+        // Note: In current static framework, tool set is fixed at build time and doesn't change
+        // list_changed should only be true when dynamic change sources are wired, such as:
+        // - Hot-reload configuration systems
+        // - Admin APIs for runtime tool registration
+        // - Plugin systems with dynamic tool loading
+        if has_tools {
+            self.capabilities.tools = Some(ToolsCapabilities {
+                // Static framework: no dynamic change sources = no list changes
+                list_changed: Some(false),
+            });
+        }
+
+        // Prompts capabilities - support notifications only when dynamic change sources are wired
+        // Note: In current static framework, prompt set is fixed at build time and doesn't change
+        // list_changed should only be true when dynamic change sources are wired, such as:
+        // - Hot-reload configuration systems
+        // - Admin APIs for runtime prompt registration
+        // - Plugin systems with dynamic prompt loading
+        if has_prompts {
+            self.capabilities.prompts = Some(PromptsCapabilities {
+                // Static framework: no dynamic change sources = no list changes
+                list_changed: Some(false),
+            });
+        }
+
+        // Resources capabilities - support notifications only when dynamic change sources are wired
+        // Note: In current static framework, resource set is fixed at build time and doesn't change
+        // list_changed should only be true when dynamic change sources are wired, such as:
+        // - Hot-reload configuration systems
+        // - Admin APIs for runtime resource registration
+        // - File system watchers that update resource availability
+        if has_resources {
+            self.capabilities.resources = Some(ResourcesCapabilities {
+                subscribe: Some(false), // TODO: Implement resource subscriptions in Phase 5
+                // Static framework: no dynamic change sources = no list changes
+                list_changed: Some(false),
+            });
+        }
+
+        // Elicitation capabilities - enable if elicitation handlers are registered
+        if has_elicitations {
+            self.capabilities.elicitation = Some(ElicitationCapabilities {
+                enabled: Some(true),
+            });
+        }
+
+        // Completion capabilities - enable if completion handlers are registered
+        if has_completions {
+            self.capabilities.completions = Some(CompletionsCapabilities {
+                enabled: Some(true),
+            });
+        }
+
+        // Logging capabilities - always enabled with comprehensive level support
+        if has_logging || true { // Always enable logging for debugging/monitoring
+            self.capabilities.logging = Some(LoggingCapabilities {
+                enabled: Some(true),
+                levels: Some(vec![
+                    "debug".to_string(),
+                    "info".to_string(), 
+                    "warning".to_string(),
+                    "error".to_string()
+                ]),
+            });
+        }
+
+        info!("🔧 Auto-configured server capabilities:");
+        info!("   - Tools: {}", has_tools);
+        info!("   - Resources: {}", has_resources);  
+        info!("   - Prompts: {}", has_prompts);
+        info!("   - Roots: {}", has_roots);
+        info!("   - Elicitation: {}", has_elicitations);
+        info!("   - Completions: {}", has_completions);
+        info!("   - Logging: enabled");
 
         // Create implementation info
         let mut implementation = Implementation::new(&self.name, &self.version);
@@ -591,6 +770,27 @@ impl McpServerBuilder {
                 roots_handler = roots_handler.add_root(root);
             }
             handlers.insert("roots/list".to_string(), Arc::new(roots_handler));
+        }
+
+        // Add PromptsHandlers if prompts were configured
+        if !self.prompts.is_empty() {
+            let mut prompts_list_handler = PromptsListHandler::new();
+            let mut prompts_get_handler = PromptsGetHandler::new();
+            
+            for prompt in self.prompts.values() {
+                prompts_list_handler = prompts_list_handler.add_prompt_arc(prompt.clone());
+                prompts_get_handler = prompts_get_handler.add_prompt_arc(prompt.clone());
+            }
+            
+            handlers.insert("prompts/list".to_string(), Arc::new(prompts_list_handler));
+            handlers.insert("prompts/get".to_string(), Arc::new(prompts_get_handler));
+        }
+
+        // Add ResourceTemplatesHandler if template resources were configured
+        if !self.template_resources.is_empty() {
+            let resource_templates_handler = ResourceTemplatesHandler::new()
+                .with_templates(self.template_resources.clone());
+            handlers.insert("resources/templates/list".to_string(), Arc::new(resource_templates_handler));
         }
 
         // Create server

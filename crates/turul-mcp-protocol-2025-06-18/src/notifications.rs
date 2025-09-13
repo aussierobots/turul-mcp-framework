@@ -22,6 +22,12 @@ pub struct NotificationParams {
     pub other: HashMap<String, Value>,
 }
 
+impl Default for NotificationParams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NotificationParams {
     pub fn new() -> Self {
         Self {
@@ -68,21 +74,27 @@ impl Notification {
 
 // ==== Specific Notification Types Following MCP Specification ====
 
-/// Method: "notifications/resources/list_changed" (per MCP spec)
+/// Method: "notifications/resources/listChanged" (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceListChangedNotification {
-    /// Method name (always "notifications/resources/list_changed")
+    /// Method name (always "notifications/resources/listChanged")
     pub method: String,
     /// Optional empty params with _meta support
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<NotificationParams>,
+}
+
+impl Default for ResourceListChangedNotification {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ResourceListChangedNotification {
     pub fn new() -> Self {
         Self {
-            method: "notifications/resources/list_changed".to_string(),
+            method: "notifications/resources/listChanged".to_string(),
             params: None,
         }
     }
@@ -93,21 +105,27 @@ impl ResourceListChangedNotification {
     }
 }
 
-/// Method: "notifications/tools/list_changed" (per MCP spec)
+/// Method: "notifications/tools/listChanged" (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolListChangedNotification {
-    /// Method name (always "notifications/tools/list_changed")
+    /// Method name (always "notifications/tools/listChanged")
     pub method: String,
     /// Optional empty params with _meta support
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<NotificationParams>,
+}
+
+impl Default for ToolListChangedNotification {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ToolListChangedNotification {
     pub fn new() -> Self {
         Self {
-            method: "notifications/tools/list_changed".to_string(),
+            method: "notifications/tools/listChanged".to_string(),
             params: None,
         }
     }
@@ -118,21 +136,27 @@ impl ToolListChangedNotification {
     }
 }
 
-/// Method: "notifications/prompts/list_changed" (per MCP spec)
+/// Method: "notifications/prompts/listChanged" (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptListChangedNotification {
-    /// Method name (always "notifications/prompts/list_changed")
+    /// Method name (always "notifications/prompts/listChanged")
     pub method: String,
     /// Optional empty params with _meta support
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<NotificationParams>,
+}
+
+impl Default for PromptListChangedNotification {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PromptListChangedNotification {
     pub fn new() -> Self {
         Self {
-            method: "notifications/prompts/list_changed".to_string(),
+            method: "notifications/prompts/listChanged".to_string(),
             params: None,
         }
     }
@@ -143,21 +167,27 @@ impl PromptListChangedNotification {
     }
 }
 
-/// Method: "notifications/roots/list_changed" (per MCP spec)
+/// Method: "notifications/roots/listChanged" (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RootsListChangedNotification {
-    /// Method name (always "notifications/roots/list_changed")
+    /// Method name (always "notifications/roots/listChanged")
     pub method: String,
     /// Optional empty params with _meta support
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<NotificationParams>,
 }
 
+impl Default for RootsListChangedNotification {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RootsListChangedNotification {
     pub fn new() -> Self {
         Self {
-            method: "notifications/roots/list_changed".to_string(),
+            method: "notifications/roots/listChanged".to_string(),
             params: None,
         }
     }
@@ -318,6 +348,12 @@ pub struct InitializedNotification {
     /// Optional empty params with _meta support
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<NotificationParams>,
+}
+
+impl Default for InitializedNotification {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InitializedNotification {
@@ -503,25 +539,25 @@ mod tests {
     #[test]
     fn test_resource_list_changed() {
         let notification = ResourceListChangedNotification::new();
-        assert_eq!(notification.method, "notifications/resources/list_changed");
+        assert_eq!(notification.method, "notifications/resources/listChanged");
     }
 
     #[test]
     fn test_tool_list_changed() {
         let notification = ToolListChangedNotification::new();
-        assert_eq!(notification.method, "notifications/tools/list_changed");
+        assert_eq!(notification.method, "notifications/tools/listChanged");
     }
 
     #[test]
     fn test_prompt_list_changed() {
         let notification = PromptListChangedNotification::new();
-        assert_eq!(notification.method, "notifications/prompts/list_changed");
+        assert_eq!(notification.method, "notifications/prompts/listChanged");
     }
 
     #[test]
     fn test_roots_list_changed() {
         let notification = RootsListChangedNotification::new();
-        assert_eq!(notification.method, "notifications/roots/list_changed");
+        assert_eq!(notification.method, "notifications/roots/listChanged");
     }
 
     #[test]

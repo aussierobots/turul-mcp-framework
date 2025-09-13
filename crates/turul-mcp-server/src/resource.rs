@@ -154,11 +154,10 @@ mod tests {
         let result = resource.read(None).await.unwrap();
         assert_eq!(result.len(), 1);
         
-        if let ResourceContent::Text(text_content) = &result[0] {
-            assert_eq!(text_content.text, "Hello, world!");
-        } else {
-            panic!("Expected text content");
-        }
+        let ResourceContent::Text(text_content) = &result[0] else {
+            panic!("Expected text content, got: {:?}", result[0]);
+        };
+        assert_eq!(text_content.text, "Hello, world!");
     }
 
     #[tokio::test]
@@ -172,10 +171,9 @@ mod tests {
         let result = resource.subscribe(None).await;
         assert!(result.is_err());
         
-        if let Err(turul_mcp_protocol::McpError::ToolExecutionError(message)) = result {
-            assert!(message.contains("subscriptions"));
-        } else {
-            panic!("Expected ToolExecutionError");
-        }
+        let Err(turul_mcp_protocol::McpError::ToolExecutionError(message)) = result else {
+            panic!("Expected ToolExecutionError, got: {:?}", result);
+        };
+        assert!(message.contains("subscriptions"));
     }
 }

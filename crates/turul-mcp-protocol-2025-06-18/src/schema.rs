@@ -247,18 +247,16 @@ impl JsonSchema {
 
     /// Add properties to object schema
     pub fn with_properties(mut self, properties: HashMap<String, JsonSchema>) -> Self {
-        match &mut self {
-            JsonSchema::Object { properties: p, .. } => *p = Some(properties),
-            _ => {}, // Ignore for non-object types
+        if let JsonSchema::Object { properties: p, .. } = &mut self {
+            *p = Some(properties);
         }
         self
     }
 
     /// Add required fields to object schema
     pub fn with_required(mut self, required: Vec<String>) -> Self {
-        match &mut self {
-            JsonSchema::Object { required: r, .. } => *r = Some(required),
-            _ => {}, // Ignore for non-object types
+        if let JsonSchema::Object { required: r, .. } = &mut self {
+            *r = Some(required);
         }
         self
     }

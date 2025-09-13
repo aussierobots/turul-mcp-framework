@@ -324,6 +324,6 @@ mod tests {
         };
 
         let notification = root.notify_roots_changed().await.unwrap();
-        assert_eq!(notification.method, "notifications/roots/list_changed");
+        assert_eq!(notification.method, "notifications/roots/listChanged");
     }
 }

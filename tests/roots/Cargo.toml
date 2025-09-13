@@ -1,0 +1,33 @@
+[package]
+name = "mcp-roots-tests"
+version = "0.2.0"
+edition = "2021"
+
+[dependencies]
+# Core framework
+turul-mcp-server = { path = "../../crates/turul-mcp-server" }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
+
+# Shared test utilities
+mcp-e2e-shared = { path = "../shared" }
+
+# HTTP client and JSON
+reqwest = { version = "0.12", features = ["json"] }
+serde_json = "1.0"
+
+# Testing
+tokio = { version = "1.0", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+[lib]
+name = "mcp_roots_tests"
+path = "src/lib.rs"
+
+[[test]]
+name = "roots_protocol_e2e"
+path = "tests/roots_protocol_e2e.rs"
+
+[[test]]
+name = "roots_security_e2e"
+path = "tests/roots_security_e2e.rs"

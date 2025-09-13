@@ -6,27 +6,12 @@
 //! Since this is a standalone demonstration, it focuses on showing the builder
 //! patterns and generated components rather than running a full server.
 
-use std::collections::HashMap;
 use std::time::Duration;
-
-use serde_json::json;
 use tokio::time::sleep;
 use uuid::Uuid;
 
-use turul_mcp_builders::{
-    // All 9 builders
-    ToolBuilder, ResourceBuilder, PromptBuilder, MessageBuilder, 
-    CompletionBuilder, RootBuilder, ElicitationBuilder,
-    NotificationBuilder, LoggingBuilder,
-};
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::logging::LoggingLevel;
-
-// Import traits needed for method calls
-use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription};
-use turul_mcp_protocol::prompts::{HasPromptMetadata, HasPromptDescription, HasPromptArguments};
-use turul_mcp_protocol::resources::HasResourceUri;
-use turul_mcp_protocol::roots::HasRootMetadata;
-// ResourceContent and ModelPreferences imports removed - unused
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

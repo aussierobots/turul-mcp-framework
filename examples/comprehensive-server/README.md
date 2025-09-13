@@ -40,15 +40,46 @@ This example demonstrates a complete MCP server with all supported handlers and 
 
 ## 🏃 Running the Example
 
+### Quick Start
 ```bash
+# Run with default settings (port 8002)
 cargo run -p comprehensive-server
+
+# Expected output:
+# INFO comprehensive_server: 🚀 Starting Comprehensive MCP Server on port 8002
+# INFO turul_mcp_server::builder: 🔧 Auto-configured server capabilities:
+# INFO turul_mcp_server::builder:    - Tools: true
+# INFO turul_mcp_server::builder:    - Resources: true
+# INFO turul_mcp_server::builder:    - Prompts: true
+# INFO turul_mcp_server::server: ✅ Server started successfully on http://127.0.0.1:8002/mcp
 ```
 
-The server starts on `http://127.0.0.1:8002/mcp` by default.
-
-You can specify a custom bind address:
+### Custom Configuration
 ```bash
+# Specify custom port
+cargo run -p comprehensive-server -- --port 9000
+
+# Specify full bind address  
 cargo run -p comprehensive-server -- 0.0.0.0:9000
+```
+
+### Quick Compliance Verification
+```bash
+# In another terminal, test the server
+curl -X POST http://127.0.0.1:8002/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2025-06-18",
+      "capabilities": {},
+      "clientInfo": {"name": "test", "version": "1.0"}
+    },
+    "id": 1
+  }' | jq
+
+# Should return MCP 2025-06-18 compliant response with all capabilities
 ```
 
 ## 🧪 Testing All Features
@@ -158,31 +189,13 @@ curl -X POST http://127.0.0.1:8002/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
-    "method": "templates/list",
+    "method": "resources/templates/list",
     "params": {},
     "id": "8"
   }'
 ```
 
-### 9. Get a Template
-```bash
-curl -X POST http://127.0.0.1:8002/mcp \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "templates/get",
-    "params": {
-      "name": "function",
-      "arguments": {
-        "name": "calculate_sum",
-        "return_type": "i32"
-      }
-    },
-    "id": "9"
-  }'
-```
-
-### 10. Set Log Level
+### 9. Set Log Level
 ```bash
 curl -X POST http://127.0.0.1:8002/mcp \
   -H "Content-Type: application/json" \
@@ -192,11 +205,11 @@ curl -X POST http://127.0.0.1:8002/mcp \
     "params": {
       "level": "debug"
     },
-    "id": "10"
+    "id": "9"
   }'
 ```
 
-### 11. List Workspace Roots
+### 10. List Workspace Roots
 ```bash
 curl -X POST http://127.0.0.1:8002/mcp \
   -H "Content-Type: application/json" \
@@ -204,11 +217,11 @@ curl -X POST http://127.0.0.1:8002/mcp \
     "jsonrpc": "2.0",
     "method": "roots/list",
     "params": {},
-    "id": "11"
+    "id": "10"
   }'
 ```
 
-### 12. Create Sample Message
+### 11. Create Sample Message
 ```bash
 curl -X POST http://127.0.0.1:8002/mcp \
   -H "Content-Type: application/json" \
@@ -221,11 +234,11 @@ curl -X POST http://127.0.0.1:8002/mcp \
       ],
       "maxTokens": 100
     },
-    "id": "12"
+    "id": "11"
   }'
 ```
 
-### 13. Request Text Completion
+### 12. Request Text Completion
 ```bash
 curl -X POST http://127.0.0.1:8002/mcp \
   -H "Content-Type: application/json" \
@@ -242,7 +255,7 @@ curl -X POST http://127.0.0.1:8002/mcp \
         "value": "function to calculate"
       }
     },
-    "id": "13"
+    "id": "12"
   }'
 ```
 
@@ -314,7 +327,7 @@ let server = McpServer::builder()
     .with_notifications()   // notifications/*
     .with_roots()           // roots/list
     .with_sampling()        // sampling/createMessage
-    .with_templates()       // templates/list, templates/get
+    .with_templates()       // resources/templates/list
     
     .build()?;
 ```
@@ -334,7 +347,7 @@ This example demonstrates full compliance with the MCP specification:
 | **Notifications** | notifications/* | ✅ Complete |
 | **Roots** | roots/list | ✅ Complete |
 | **Sampling** | sampling/createMessage | ✅ Complete |
-| **Templates** | templates/list, templates/get | ✅ Complete |
+| **Templates** | resources/templates/list | ✅ Complete |
 
 ## 🎯 Key Concepts Demonstrated
 

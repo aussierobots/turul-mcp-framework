@@ -186,7 +186,7 @@ impl HasParams for ElicitCreateRequest {
 impl HasData for ElicitResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("action".to_string(), serde_json::to_value(&self.action).unwrap_or(Value::String("cancel".to_string())));
+        data.insert("action".to_string(), serde_json::to_value(self.action).unwrap_or(Value::String("cancel".to_string())));
         if let Some(ref content) = self.content {
             data.insert("content".to_string(), serde_json::to_value(content).unwrap_or(Value::Null));
         }
@@ -201,6 +201,12 @@ impl HasMeta for ElicitResult {
 }
 
 impl RpcResult for ElicitResult {}
+
+impl Default for ElicitationSchema {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ElicitationSchema {
     pub fn new() -> Self {
@@ -281,6 +287,12 @@ impl ElicitResult {
 }
 
 // Convenience constructors for schema types
+impl Default for StringSchema {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StringSchema {
     pub fn new() -> Self {
         Self {
@@ -296,6 +308,12 @@ impl StringSchema {
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
+    }
+}
+
+impl Default for NumberSchema {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -323,6 +341,12 @@ impl NumberSchema {
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
+    }
+}
+
+impl Default for BooleanSchema {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

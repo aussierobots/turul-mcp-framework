@@ -1,0 +1,46 @@
+[package]
+name = "prompts-test-server"
+version = "0.2.0"
+edition = "2021"
+authors = ["Nick <nick@aussierobots.com.au>"]
+description = "MCP Prompts Test Server - Comprehensive test prompts for E2E validation"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "prompts-test-server"
+path = "src/main.rs"
+
+[dependencies]
+# Framework dependencies
+turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol-2025-06-18", package = "turul-mcp-protocol-2025-06-18" }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP server
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["server"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Random ports for testing
+portpicker = "0.1"
+
+# Async trait
+async-trait = "0.1"
+
+# Command line parsing
+clap = { version = "4", features = ["derive"] }

@@ -4,6 +4,14 @@
 //! of tools, resources, prompts, and other protocol components. This is "Level 3" of the
 //! MCP creation spectrum - runtime flexibility for dynamic/configuration-driven systems.
 //!
+//! # Quick Start
+//!
+//! ```rust
+//! use turul_mcp_builders::prelude::*;
+//! 
+//! // All builders and common types available
+//! ```
+//!
 //! # Features
 //! - Runtime tool construction with `ToolBuilder`
 //! - Dynamic resource creation with `ResourceBuilder`
@@ -119,6 +127,8 @@
 //! # Ok(())
 //! # }
 //! ```
+
+pub mod prelude;
 
 pub mod completion;
 pub mod elicitation;

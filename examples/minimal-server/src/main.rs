@@ -4,7 +4,7 @@
 //! Perfect for getting started and understanding the basics.
 
 use turul_mcp_derive::mcp_tool;
-use turul_mcp_server::{McpResult, McpServer};
+use turul_mcp_server::prelude::*;
 
 /// The simplest possible MCP tool - just echo back the input text
 #[mcp_tool(name = "echo", description = "Echo back the input text")]

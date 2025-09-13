@@ -1,0 +1,62 @@
+[package]
+name = "tools-test-server"
+version = "0.2.0"
+edition = "2021"
+authors = ["Nick <nick@aussierobots.com.au>"]
+description = "MCP Tools Test Server - Comprehensive test tools for E2E validation"
+license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "tools-test-server"
+path = "src/main.rs"
+
+[dependencies]
+# Framework dependencies
+turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol-2025-06-18", package = "turul-mcp-protocol-2025-06-18" }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP server
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["server"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# UUID
+uuid = { version = "1.0", features = ["v7", "serde"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Random ports for testing
+portpicker = "0.1"
+
+# File handling
+tempfile = "3.0"
+
+# Base64 encoding
+base64 = "0.21"
+
+# Async trait
+async-trait = "0.1"
+
+# Command line parsing
+clap = { version = "4", features = ["derive"] }
+
+# JSON Schema validation
+jsonschema = "0.17"
+
+# Math operations
+num-bigint = "0.4"

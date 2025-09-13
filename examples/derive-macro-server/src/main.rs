@@ -11,10 +11,7 @@ use std::net::SocketAddr;
 use std::path::Path;
 
 use turul_mcp_derive::McpTool;
-use turul_mcp_server::{McpResult, McpServer};
-use turul_mcp_protocol::McpError;
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use turul_mcp_server::prelude::*;
 
 #[derive(Debug, Deserialize, Serialize)]
 struct CodeTemplates {

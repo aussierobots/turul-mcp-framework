@@ -26,6 +26,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
+portpicker = "0.1"
 
 [[test]]
 name = "basic_session_test"
@@ -55,6 +56,7 @@ path = "working_examples_validation.rs"
 name = "framework_integration_tests"
 path = "framework_integration_tests.rs"
 
+<<<<<<< HEAD
 # README example tests
 [[test]]
 name = "server_examples"
@@ -83,3 +85,12 @@ path = "lambda_examples.rs"
 [[test]]
 name = "client_drop_test"
 path = "client_drop_test.rs"
+=======
+[[test]]
+name = "mcp_runtime_capability_validation"
+path = "mcp_runtime_capability_validation.rs"
+
+[[test]]
+name = "mcp_specification_compliance" 
+path = "mcp_specification_compliance.rs"
+>>>>>>> cebf93d8ec27b383dd751b6b1dde698217dca626

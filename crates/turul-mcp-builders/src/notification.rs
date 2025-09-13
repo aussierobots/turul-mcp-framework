@@ -384,10 +384,10 @@ impl NotificationBuilder {
 
 /// Collection of common notification methods as constants
 pub mod methods {
-    pub const RESOURCE_LIST_CHANGED: &str = "notifications/resources/list_changed";
-    pub const TOOL_LIST_CHANGED: &str = "notifications/tools/list_changed";
-    pub const PROMPT_LIST_CHANGED: &str = "notifications/prompts/list_changed";
-    pub const ROOTS_LIST_CHANGED: &str = "notifications/roots/list_changed";
+    pub const RESOURCE_LIST_CHANGED: &str = "notifications/resources/listChanged";
+    pub const TOOL_LIST_CHANGED: &str = "notifications/tools/listChanged";
+    pub const PROMPT_LIST_CHANGED: &str = "notifications/prompts/listChanged";
+    pub const ROOTS_LIST_CHANGED: &str = "notifications/roots/listChanged";
     pub const PROGRESS: &str = "notifications/progress";
     pub const RESOURCE_UPDATED: &str = "notifications/resources/updated";
     pub const CANCELLED: &str = "notifications/cancelled";
@@ -504,16 +504,16 @@ mod tests {
     fn test_convenience_methods() {
         // Test standard list changed notifications
         let resource_list = NotificationBuilder::resource_list_changed();
-        assert_eq!(resource_list.method, "notifications/resources/list_changed");
+        assert_eq!(resource_list.method, "notifications/resources/listChanged");
 
         let tool_list = NotificationBuilder::tool_list_changed();
-        assert_eq!(tool_list.method, "notifications/tools/list_changed");
+        assert_eq!(tool_list.method, "notifications/tools/listChanged");
 
         let prompt_list = NotificationBuilder::prompt_list_changed();
-        assert_eq!(prompt_list.method, "notifications/prompts/list_changed");
+        assert_eq!(prompt_list.method, "notifications/prompts/listChanged");
 
         let roots_list = NotificationBuilder::roots_list_changed();
-        assert_eq!(roots_list.method, "notifications/roots/list_changed");
+        assert_eq!(roots_list.method, "notifications/roots/listChanged");
 
         let initialized = NotificationBuilder::initialized();
         assert_eq!(initialized.method, "notifications/initialized");
@@ -587,11 +587,11 @@ mod tests {
 
         assert_eq!(
             RESOURCE_LIST_CHANGED,
-            "notifications/resources/list_changed"
+            "notifications/resources/listChanged"
         );
-        assert_eq!(TOOL_LIST_CHANGED, "notifications/tools/list_changed");
-        assert_eq!(PROMPT_LIST_CHANGED, "notifications/prompts/list_changed");
-        assert_eq!(ROOTS_LIST_CHANGED, "notifications/roots/list_changed");
+        assert_eq!(TOOL_LIST_CHANGED, "notifications/tools/listChanged");
+        assert_eq!(PROMPT_LIST_CHANGED, "notifications/prompts/listChanged");
+        assert_eq!(ROOTS_LIST_CHANGED, "notifications/roots/listChanged");
         assert_eq!(PROGRESS, "notifications/progress");
         assert_eq!(RESOURCE_UPDATED, "notifications/resources/updated");
         assert_eq!(CANCELLED, "notifications/cancelled");

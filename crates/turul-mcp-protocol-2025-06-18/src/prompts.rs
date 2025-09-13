@@ -76,6 +76,12 @@ pub struct PromptAnnotations {
     // Additional annotation fields can be added here as needed
 }
 
+impl Default for PromptAnnotations {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PromptAnnotations {
     pub fn new() -> Self {
         Self {
@@ -241,6 +247,12 @@ pub struct ListPromptsParams {
     pub meta: Option<HashMap<String, Value>>,
 }
 
+impl Default for ListPromptsParams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ListPromptsParams {
     pub fn new() -> Self {
         Self { 
@@ -260,12 +272,6 @@ impl ListPromptsParams {
     }
 }
 
-impl Default for ListPromptsParams {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Complete prompts/list request (matches TypeScript ListPromptsRequest interface)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -274,6 +280,12 @@ pub struct ListPromptsRequest {
     pub method: String,
     /// Request parameters
     pub params: ListPromptsParams,
+}
+
+impl Default for ListPromptsRequest {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ListPromptsRequest {

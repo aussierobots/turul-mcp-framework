@@ -120,11 +120,10 @@ mod tests {
         let result = tool.call(args, None).await.unwrap();
         assert!(!result.content.is_empty());
         
-        if let ToolResult::Text { text } = &result.content[0] {
-            assert_eq!(text, "Test: hello");
-        } else {
-            panic!("Expected text result");
-        }
+        let ToolResult::Text { text } = &result.content[0] else {
+            panic!("Expected text result, got: {:?}", result.content[0]);
+        };
+        assert_eq!(text, "Test: hello");
     }
 
     #[tokio::test]
@@ -136,10 +135,9 @@ mod tests {
         assert!(result.is_err());
         
         let error = result.unwrap_err();
-        if let turul_mcp_protocol::McpError::MissingParameter(param) = error {
-            assert_eq!(param, "message");
-        } else {
+        let turul_mcp_protocol::McpError::MissingParameter(param) = error else {
             panic!("Expected MissingParameter error, got: {:?}", error);
-        }
+        };
+        assert_eq!(param, "message");
     }
 }

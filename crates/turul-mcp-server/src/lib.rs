@@ -100,12 +100,21 @@ pub mod session;
 // Re-export session storage from separate crate (breaks circular dependency)
 pub use turul_mcp_session_storage as session_storage;
 pub mod dispatch;
+pub mod prelude;
+pub mod uri_template;
+pub mod security;
 
 #[cfg(feature = "http")]
 pub mod http;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod uri_template_tests;
+
+#[cfg(test)]
+mod security_integration_tests;
 
 // Re-export main types
 pub use builder::McpServerBuilder;
@@ -122,6 +131,7 @@ pub use server::{McpServer, SessionAwareInitializeHandler, SessionAwareToolHandl
 pub use handlers::*;
 pub use session::{SessionContext, SessionManager, SessionEvent};
 pub use dispatch::{McpDispatcher, DispatchMiddleware, DispatchContext};
+pub use security::{SecurityMiddleware, RateLimitConfig, ResourceAccessControl, AccessLevel, InputValidator};
 
 // Re-export foundational types
 pub use turul_mcp_json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};

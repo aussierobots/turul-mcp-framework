@@ -21,18 +21,46 @@ The prompts server provides five different prompt types for common development s
 
 ## Running the Server
 
+### Quick Start
 ```bash
 # Run the prompts server (default: 127.0.0.1:8040)
 cargo run -p prompts-server
 
-# Check available prompts
+# Expected output:
+# INFO prompts_server: 🚀 Starting MCP Prompts Server on port 8040
+# INFO turul_mcp_server::builder: 🔧 Auto-configured server capabilities:
+# INFO turul_mcp_server::builder:    - Prompts: true
+# INFO turul_mcp_server::server: ✅ Server started successfully on http://127.0.0.1:8040/mcp
+```
+
+### Verify Server is Working
+```bash
+# Initialize connection (in another terminal)
+curl -X POST http://127.0.0.1:8040/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2025-06-18",
+      "capabilities": {},
+      "clientInfo": {"name": "test", "version": "1.0"}
+    },
+    "id": 1
+  }' | jq
+
+# Check available prompts  
 curl -X POST http://127.0.0.1:8040/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "method": "prompts/list",
-    "id": 1
-  }'
+    "params": {},
+    "id": 2
+  }' | jq
+
+# Should show 5 available prompts:
+# - code-generation, documentation, code-review, debugging, architecture-design
 ```
 
 ## Available Prompts

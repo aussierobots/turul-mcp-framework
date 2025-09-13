@@ -599,12 +599,10 @@ mod tests {
         // Test notification event
         let event_text = "event: notification\ndata: {\"method\":\"test\",\"params\":{}}";
         let event = SseTransport::parse_sse_event(event_text).unwrap();
-        match event {
-            ServerEvent::Notification(json) => {
-                assert_eq!(json["method"], "test");
-            }
-            _ => panic!("Expected notification event"),
-        }
+        let ServerEvent::Notification(json) = event else {
+            panic!("Expected notification event, got: {:?}", event);
+        };
+        assert_eq!(json["method"], "test");
         
         // Test heartbeat event
         let heartbeat_text = "event: heartbeat\ndata: ping";
@@ -614,12 +612,10 @@ mod tests {
         // Test multiline data
         let multiline_text = "event: notification\ndata: {\ndata:   \"method\": \"test\"\ndata: }";
         let multiline_event = SseTransport::parse_sse_event(multiline_text).unwrap();
-        match multiline_event {
-            ServerEvent::Notification(json) => {
-                assert_eq!(json["method"], "test");
-            }
-            _ => panic!("Expected notification event"),
-        }
+        let ServerEvent::Notification(json) = multiline_event else {
+            panic!("Expected notification event, got: {:?}", multiline_event);
+        };
+        assert_eq!(json["method"], "test");
     }
     
     #[test]

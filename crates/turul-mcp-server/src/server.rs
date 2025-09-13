@@ -134,6 +134,12 @@ impl McpServer {
     pub fn builder() -> McpServerBuilder {
         McpServerBuilder::new()
     }
+    
+    /// Get the server's configured capabilities
+    pub fn capabilities(&self) -> &turul_mcp_protocol::ServerCapabilities {
+        &self.capabilities
+    }
+    
 
     /// Run the server with the default transport (HTTP if available)
     pub async fn run(&self) -> Result<()> {
@@ -501,8 +507,8 @@ impl SessionAwareInitializeHandler {
         use turul_mcp_protocol::version::McpVersion;
 
         // Parse client's requested version
-        let requested_version = McpVersion::from_str(client_version)
-            .ok_or_else(|| format!("Unsupported protocol version: {}", client_version))?;
+        let requested_version = client_version.parse::<McpVersion>()
+            .map_err(|_| format!("Unsupported protocol version: {}", client_version))?;
 
         // Define server's supported versions (all versions from 2024-11-05 to current)
         let supported_versions = vec![

@@ -24,12 +24,28 @@ A comprehensive, battle-tested Rust framework for building Model Context Protoco
 use turul_mcp_derive::mcp_tool;
 use turul_mcp_server::{McpServer, McpResult};
 
+<<<<<<< HEAD
 #[mcp_tool(name = "add", description = "Add two numbers")]
 async fn add(
     #[param(description = "First number")] a: f64,
     #[param(description = "Second number")] b: f64,
 ) -> McpResult<f64> {
     Ok(a + b)
+=======
+#[derive(McpTool, Clone)]
+#[tool(name = "add", description = "Add two numbers")]
+struct AddTool {
+    #[param(description = "First number")]
+    a: f64,
+    #[param(description = "Second number")]
+    b: f64,
+}
+
+impl AddTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+        Ok(format!("{} + {} = {}", self.a, self.b, self.a + self.b))
+    }
+>>>>>>> cebf93d8ec27b383dd751b6b1dde698217dca626
 }
 
 #[tokio::main]
@@ -91,6 +107,146 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     server.run().await
 }
+```
+
+## 🚀 Running & Testing the Framework
+
+### Quick Start - Verify Everything Works
+
+```bash
+# 1. Build the framework
+cargo build --workspace
+
+# 2. Run compliance tests
+cargo test -p turul-mcp-framework-integration-tests --test mcp_runtime_capability_validation
+
+# 3. Start a simple server
+cargo run -p minimal-server
+
+# 4. Test the server (in another terminal)
+curl -X POST http://127.0.0.1:8000/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
+```
+
+### Example Servers - Ready to Run
+
+**Core Test Servers:**
+```bash
+# Comprehensive server (all MCP features)
+cargo run --package comprehensive-server -- --port 8082
+
+# Resource server (17 test resources)  
+cargo run --package resource-test-server -- --port 8080
+
+# Prompts server (11 test prompts)
+cargo run --package prompts-test-server -- --port 8081
+```
+
+**Business Application Servers:**
+```bash  
+# Development team resources
+cargo run -p resources-server -- --port 8041
+
+# AI development prompts  
+cargo run -p prompts-server -- --port 8040
+
+# Real-time notifications
+cargo run -p notification-server
+
+# Session management demo
+cargo run -p stateful-server
+```
+
+### Manual MCP Compliance Verification
+
+**Step 1: Initialize Connection**
+```bash
+PORT=8080  # Replace with your server's port
+curl -X POST http://127.0.0.1:$PORT/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2025-06-18", 
+      "capabilities": {},
+      "clientInfo": {"name": "test", "version": "1.0"}
+    },
+    "id": 1
+  }' | jq
+```
+
+**Expected Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "protocolVersion": "2025-06-18",
+    "serverInfo": {"name": "server-name", "version": "0.2.0"},
+    "capabilities": {"tools": {"listChanged": false}}
+  }
+}
+```
+
+**Step 2: Test Available Operations**
+```bash
+# Get session ID from response and test capabilities
+SESSION_ID="your-session-id-here"
+
+# If server has tools capability:
+curl -X POST http://127.0.0.1:$PORT/mcp \
+  -H 'Content-Type: application/json' \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","params":{},"id":2}' | jq
+
+# If server has resources capability:
+curl -X POST http://127.0.0.1:$PORT/mcp \
+  -H 'Content-Type: application/json' \
+  -H "Mcp-Session-Id: $SESSION_ID" \
+  -d '{"jsonrpc":"2.0","method":"resources/list","params":{},"id":3}' | jq
+```
+
+### Comprehensive Testing Guide
+
+For detailed testing instructions, server running guides, and compliance verification:
+
+**📚 [Complete Testing Guide](TESTING_GUIDE.md)**
+
+This guide includes:
+- ✅ All server running instructions with expected outputs
+- ✅ Manual MCP 2025-06-18 compliance verification  
+- ✅ SSE event stream testing procedures
+- ✅ Performance testing and troubleshooting
+- ✅ CI/CD integration examples
+
+### Quick Compliance Check Script
+
+```bash
+# Create and run compliance check
+cat > quick_check.sh << 'EOF'
+#!/bin/bash
+PORT=${1:-8080}
+echo "🧪 Testing MCP server on port $PORT"
+
+INIT_RESPONSE=$(curl -s -X POST http://127.0.0.1:$PORT/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
+
+if [[ $(echo $INIT_RESPONSE | jq -r '.result.protocolVersion') == "2025-06-18" ]]; then
+    echo "✅ MCP 2025-06-18 compliant"
+else
+    echo "❌ Not compliant"
+    exit 1
+fi
+EOF
+
+chmod +x quick_check.sh
+
+# Test any server
+cargo run -p minimal-server &
+./quick_check.sh 8000
 ```
 
 ## 🏛️ Architecture Overview

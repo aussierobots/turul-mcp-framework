@@ -29,10 +29,10 @@ fn auto_determine_notification_method(struct_name: String) -> String {
         "cancelled" => "notifications/cancelled".to_string(),
         "initialized" => "notifications/initialized".to_string(),
         "resource_updated" | "resources_updated" => "notifications/resources/updated".to_string(),
-        "resources_list_changed" | "resources_changed" => "notifications/resources/list_changed".to_string(),
-        "roots_list_changed" | "roots_changed" => "notifications/roots/list_changed".to_string(),
-        "prompts_list_changed" | "prompts_changed" => "notifications/prompts/list_changed".to_string(),
-        "tools_list_changed" | "tools_changed" => "notifications/tools/list_changed".to_string(),
+        "resources_list_changed" | "resources_changed" => "notifications/resources/listChanged".to_string(),
+        "roots_list_changed" | "roots_changed" => "notifications/roots/listChanged".to_string(),
+        "prompts_list_changed" | "prompts_changed" => "notifications/prompts/listChanged".to_string(),
+        "tools_list_changed" | "tools_changed" => "notifications/tools/listChanged".to_string(),
         _ => {
             // For custom notifications, use notifications/{snake_case}
             format!("notifications/{}", snake_case)
@@ -313,10 +313,10 @@ mod tests {
     fn test_special_notification_types() {
         // Test standard MCP notification types get proper method names
         let test_cases = vec![
-            ("ResourcesListChangedNotification", "notifications/resources/list_changed"),
-            ("PromptsChangedNotification", "notifications/prompts/list_changed"),
-            ("ToolsChangedNotification", "notifications/tools/list_changed"),
-            ("RootsListChangedNotification", "notifications/roots/list_changed"),
+            ("ResourcesListChangedNotification", "notifications/resources/listChanged"),
+            ("PromptsChangedNotification", "notifications/prompts/listChanged"),
+            ("ToolsChangedNotification", "notifications/tools/listChanged"),
+            ("RootsListChangedNotification", "notifications/roots/listChanged"),
         ];
 
         for (struct_name, expected_method) in test_cases {

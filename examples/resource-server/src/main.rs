@@ -10,9 +10,7 @@ use turul_mcp_protocol::resources::HasResourceUri;
 
 /// Simple configuration file resource
 #[derive(McpResource, Serialize, Deserialize, Clone)]
-#[uri = "file://config.json"]
-#[name = "Application Configuration"]
-#[description = "Main application configuration file"]
+#[resource(name = "config", uri = "file://config.json", description = "Main application configuration file")]
 struct ConfigResource {
     #[content]
     #[content_type = "application/json"]
@@ -36,16 +34,12 @@ impl ConfigResource {
 
 /// System status resource (unit struct)
 #[derive(McpResource, Clone)]
-#[uri = "system://status"]
-#[name = "System Status"]
-#[description = "Current system status and health information"]
+#[resource(name = "system_status", uri = "system://status", description = "Current system status and health information")]
 struct SystemStatusResource;
 
 /// User data resource with multiple content fields
 #[derive(McpResource, Serialize, Deserialize, Clone)]
-#[uri = "data://user-profile"]
-#[name = "User Profile"]
-#[description = "User profile data with multiple content sections"]
+#[resource(name = "user_profile", uri = "data://user-profile", description = "User profile data with multiple content sections")]
 struct UserProfileResource {
     #[content]
     #[content_type = "application/json"]
@@ -80,9 +74,7 @@ impl UserProfileResource {
 
 /// Log file resource (tuple struct)
 #[derive(McpResource, Clone)]
-#[uri = "file://app.log"]
-#[name = "Application Log"]
-#[description = "Current application log entries"]
+#[resource(name = "app_log", uri = "file://app.log", description = "Current application log entries")]
 struct LogFileResource(String);
 
 impl LogFileResource {

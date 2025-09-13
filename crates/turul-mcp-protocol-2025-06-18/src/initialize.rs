@@ -185,7 +185,7 @@ impl InitializeRequest {
 
     /// Get the protocol version as a parsed enum
     pub fn protocol_version(&self) -> Result<McpVersion, crate::McpError> {
-        McpVersion::from_str(&self.protocol_version).ok_or_else(|| {
+        self.protocol_version.parse::<McpVersion>().map_err(|_| {
             crate::McpError::VersionMismatch {
                 expected: McpVersion::CURRENT.as_str().to_string(),
                 actual: self.protocol_version.clone(),
@@ -230,7 +230,7 @@ impl InitializeResult {
 
     /// Get the protocol version as a parsed enum
     pub fn protocol_version(&self) -> Result<McpVersion, crate::McpError> {
-        McpVersion::from_str(&self.protocol_version).ok_or_else(|| {
+        self.protocol_version.parse::<McpVersion>().map_err(|_| {
             crate::McpError::VersionMismatch {
                 expected: McpVersion::CURRENT.as_str().to_string(),
                 actual: self.protocol_version.clone(),

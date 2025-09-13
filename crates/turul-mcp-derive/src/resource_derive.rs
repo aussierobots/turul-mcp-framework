@@ -2,28 +2,29 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{DeriveInput, Data, Fields, Result};
+use syn::{Data, DeriveInput, Fields, Result};
 
-use crate::utils::{extract_string_attribute, extract_field_meta};
+use crate::utils::{extract_field_meta, extract_resource_meta};
 
-pub fn mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
+pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
     let struct_name = &input.ident;
     let _vis = &input.vis;
 
-    // Extract struct-level attributes
-    let uri = extract_string_attribute(&input.attrs, "uri")
-        .ok_or_else(|| syn::Error::new_spanned(&input, "McpResource derive requires #[uri = \"...\"] attribute"))?;
-    
-    let name = extract_string_attribute(&input.attrs, "name")
-        .ok_or_else(|| syn::Error::new_spanned(&input, "McpResource derive requires #[name = \"...\"] attribute"))?;
-    
-    let description = extract_string_attribute(&input.attrs, "description")
-        .ok_or_else(|| syn::Error::new_spanned(&input, "McpResource derive requires #[description = \"...\"] attribute"))?;
+    // Extract struct-level attributes from #[resource(...)]
+    let resource_meta = extract_resource_meta(&input.attrs)?;
+    let uri = &resource_meta.uri;
+    let name = &resource_meta.name;
+    let description = &resource_meta.description;
 
     // Check if it's a struct
     let data = match &input.data {
         Data::Struct(data) => data,
-        _ => return Err(syn::Error::new_spanned(&input, "McpResource can only be derived for structs")),
+        _ => {
+            return Err(syn::Error::new_spanned(
+                &input,
+                "McpResource can only be derived for structs",
+            ));
+        }
     };
 
     // Generate read method based on struct fields
@@ -34,6 +35,10 @@ pub fn mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
         impl turul_mcp_protocol::resources::HasResourceMetadata for #struct_name {
             fn name(&self) -> &str {
                 #name
+            }
+
+            fn title(&self) -> Option<&str> {
+                None  // TODO: Support title from attributes
             }
         }
 
@@ -54,7 +59,7 @@ pub fn mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
         #[automatically_derived]
         impl turul_mcp_protocol::resources::HasResourceMimeType for #struct_name {
             fn mime_type(&self) -> Option<&str> {
-                None
+                None  // TODO: Support mime_type from attributes
             }
         }
 
@@ -108,7 +113,7 @@ fn generate_read_method(data: &syn::DataStruct) -> Result<TokenStream> {
                         // Use blob() for content with specific MIME types
                         content_parts.push(quote! {
                             turul_mcp_protocol::resources::ResourceContent::blob(
-                                self.uri(),
+                                self.uri().to_string(),
                                 self.#field_name.to_string(),
                                 #content_type.to_string()
                             )
@@ -117,7 +122,7 @@ fn generate_read_method(data: &syn::DataStruct) -> Result<TokenStream> {
                         // Use text() for plain text content
                         content_parts.push(quote! {
                             turul_mcp_protocol::resources::ResourceContent::text(
-                                self.uri(),
+                                self.uri().to_string(),
                                 self.#field_name.to_string()
                             )
                         });
@@ -129,10 +134,10 @@ fn generate_read_method(data: &syn::DataStruct) -> Result<TokenStream> {
                 // Default implementation - serialize entire struct as JSON
                 Ok(quote! {
                     let json_content = serde_json::to_string_pretty(self)
-                        .map_err(|e| turul_mcp_protocol::McpError::execution(format!("Failed to serialize resource: {}", e)))?;
+                        .map_err(|e| turul_mcp_protocol::McpError::resource_execution(&format!("Failed to serialize resource: {}", e)))?;
                     Ok(vec![
                         turul_mcp_protocol::resources::ResourceContent::blob(
-                            self.uri(),
+                            self.uri().to_string(),
                             json_content,
                             "application/json".to_string()
                         )
@@ -189,7 +194,7 @@ mod tests {
             }
         };
 
-        let result = mcp_resource_impl(input);
+        let result = derive_mcp_resource_impl(input);
         assert!(result.is_ok());
     }
 
@@ -201,7 +206,7 @@ mod tests {
             }
         };
 
-        let result = mcp_resource_impl(input);
+        let result = derive_mcp_resource_impl(input);
         assert!(result.is_err());
     }
 
@@ -214,7 +219,7 @@ mod tests {
             struct SystemStatus;
         };
 
-        let result = mcp_resource_impl(input);
+        let result = derive_mcp_resource_impl(input);
         assert!(result.is_ok());
     }
 
@@ -227,7 +232,7 @@ mod tests {
             struct Message(String);
         };
 
-        let result = mcp_resource_impl(input);
+        let result = derive_mcp_resource_impl(input);
         assert!(result.is_ok());
     }
 }

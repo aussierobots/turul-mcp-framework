@@ -308,6 +308,12 @@ pub struct ListResourcesRequest {
     pub params: ListResourcesParams,
 }
 
+impl Default for ListResourcesRequest {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ListResourcesRequest {
     pub fn new() -> Self {
         Self {
@@ -501,6 +507,12 @@ pub struct ListResourceTemplatesParams {
     pub meta: Option<HashMap<String, Value>>,
 }
 
+impl Default for ListResourceTemplatesParams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ListResourceTemplatesParams {
     pub fn new() -> Self {
         Self { 
@@ -528,6 +540,12 @@ pub struct ListResourceTemplatesRequest {
     pub method: String,
     /// Request parameters
     pub params: ListResourceTemplatesParams,
+}
+
+impl Default for ListResourceTemplatesRequest {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ListResourceTemplatesRequest {
