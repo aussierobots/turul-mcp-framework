@@ -117,6 +117,12 @@ pub struct ToolAnnotations {
     pub open_world_hint: Option<bool>,
 }
 
+impl Default for ToolAnnotations {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ToolAnnotations {
     pub fn new() -> Self {
         Self { 
@@ -349,6 +355,12 @@ pub struct ListToolsRequest {
     pub method: String,
     /// Request parameters
     pub params: ListToolsParams,
+}
+
+impl Default for ListToolsRequest {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ListToolsRequest {
@@ -622,7 +634,7 @@ impl CallToolResult {
         let response = Self::success(vec![ToolResult::text(text_content)]);
         
         // Auto-add structured content if tool has output schema
-        if let Some(_) = tool.output_schema() {
+        if tool.output_schema().is_some() {
             let structured = serde_json::to_value(result)
                 .map_err(|e| crate::McpError::tool_execution(&format!("Structured content error: {}", e)))?;
             Ok(response.with_structured_content(structured))
@@ -817,7 +829,7 @@ impl HasCallToolParams for CallToolParams {
         // This is a temporary workaround for trait compatibility
         // The trait expects &Value but we store HashMap<String, Value>
         // TODO: Fix trait definition to use proper HashMap type
-        self.arguments.as_ref().and_then(|_| None) // Return None for now
+        self.arguments.as_ref().and(None) // Return None for now
     }
 
     fn meta(&self) -> Option<&HashMap<String, Value>> {

@@ -330,7 +330,7 @@ async fn test_progress_tracker_with_notifications() {
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     
     // Now call a long-running progress tracker tool
-    let progress_result = client.call_tool("progress_tracker", json!({
+    let _progress_result = client.call_tool("progress_tracker", json!({
         "duration": 1.5,
         "steps": 3  // Should generate progress at 33%, 66%, 100%
     })).await.expect("Failed to call progress tracker");
@@ -356,7 +356,7 @@ async fn test_progress_tracker_with_notifications() {
     
     // Additional validation: Ensure we got reasonable number of progress updates
     // For 3 steps (33%, 66%, 100%), we should get at least 1 notification
-    assert!(progress_events.len() >= 1, 
+    assert!(!progress_events.is_empty(), 
            "Expected at least 1 progress notification for 3-step operation, got {}", progress_events.len());
 
     info!("✅ Progress tracker validation complete");
@@ -483,7 +483,7 @@ async fn test_notifications_initialized_lifecycle() {
     let tools = TestFixtures::extract_tools_list(&tools_result)
         .expect("Failed to extract tools from response");
 
-    assert!(tools.len() > 0, "No tools found after initialized notification");
+    assert!(!tools.is_empty(), "No tools found after initialized notification");
     info!("✅ Tools list works after initialized notification: {} tools found", tools.len());
 
     // Step 6: Verify that tool execution works after initialized notification
@@ -516,7 +516,7 @@ async fn test_notifications_initialized_lifecycle() {
 }
 
 #[tokio::test]
-async fn test_notifications_tools_listChanged_compliance() {
+async fn test_notifications_tools_list_changed_compliance() {
     let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_tools_server().await.expect("Failed to start tools server");
@@ -542,7 +542,7 @@ async fn test_notifications_tools_listChanged_compliance() {
     let tools_caps = server_capabilities.get("tools").unwrap().as_object().unwrap();
     
     // MCP Compliance: Static framework should advertise listChanged=false
-    assert_eq!(tools_caps.get("listChanged").unwrap().as_bool().unwrap(), false,
+    assert!(!tools_caps.get("listChanged").unwrap().as_bool().unwrap(),
                "🔍 MCP COMPLIANCE: Static framework must advertise tools.listChanged=false");
     
     info!("✅ Server correctly advertises tools.listChanged=false for static framework");

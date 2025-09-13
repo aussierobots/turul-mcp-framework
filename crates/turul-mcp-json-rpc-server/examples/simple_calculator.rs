@@ -93,7 +93,7 @@ async fn main() {
     );
 
     // Test multiple requests
-    let test_requests = vec![
+    let test_requests = [
         r#"{"jsonrpc": "2.0", "method": "add", "params": {"a": 5, "b": 3}, "id": 1}"#,
         r#"{"jsonrpc": "2.0", "method": "subtract", "params": {"a": 10, "b": 4}, "id": 2}"#,
         r#"{"jsonrpc": "2.0", "method": "multiply", "params": {"a": 2, "b": 3}, "id": 3}"#, // Will fail

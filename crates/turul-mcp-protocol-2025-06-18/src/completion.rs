@@ -233,6 +233,12 @@ impl CompleteArgument {
     }
 }
 
+impl Default for CompletionContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CompletionContext {
     pub fn new() -> Self {
         Self {

@@ -22,6 +22,12 @@ pub struct NotificationParams {
     pub other: HashMap<String, Value>,
 }
 
+impl Default for NotificationParams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NotificationParams {
     pub fn new() -> Self {
         Self {
@@ -79,6 +85,12 @@ pub struct ResourceListChangedNotification {
     pub params: Option<NotificationParams>,
 }
 
+impl Default for ResourceListChangedNotification {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ResourceListChangedNotification {
     pub fn new() -> Self {
         Self {
@@ -102,6 +114,12 @@ pub struct ToolListChangedNotification {
     /// Optional empty params with _meta support
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<NotificationParams>,
+}
+
+impl Default for ToolListChangedNotification {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ToolListChangedNotification {
@@ -129,6 +147,12 @@ pub struct PromptListChangedNotification {
     pub params: Option<NotificationParams>,
 }
 
+impl Default for PromptListChangedNotification {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PromptListChangedNotification {
     pub fn new() -> Self {
         Self {
@@ -152,6 +176,12 @@ pub struct RootsListChangedNotification {
     /// Optional empty params with _meta support
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<NotificationParams>,
+}
+
+impl Default for RootsListChangedNotification {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RootsListChangedNotification {
@@ -318,6 +348,12 @@ pub struct InitializedNotification {
     /// Optional empty params with _meta support
     #[serde(skip_serializing_if = "Option::is_none")]
     pub params: Option<NotificationParams>,
+}
+
+impl Default for InitializedNotification {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InitializedNotification {

@@ -105,6 +105,12 @@ pub struct RootsListChangedNotification {
     pub params: Option<RootsListChangedParams>,
 }
 
+impl Default for ListRootsParams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ListRootsParams {
     pub fn new() -> Self {
         Self {
@@ -118,7 +124,7 @@ impl ListRootsParams {
     }
 }
 
-impl Default for ListRootsParams {
+impl Default for ListRootsRequest {
     fn default() -> Self {
         Self::new()
     }
@@ -167,6 +173,12 @@ impl RootsListChangedParams {
 }
 
 impl Default for RootsListChangedParams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for RootsListChangedNotification {
     fn default() -> Self {
         Self::new()
     }
@@ -306,7 +318,7 @@ pub trait HasRootFiltering {
         }
         
         if let Some(extensions) = self.allowed_extensions() {
-            if let Some(ext) = path.split('.').last() {
+            if let Some(ext) = path.split('.').next_back() {
                 return extensions.contains(&ext.to_string());
             }
             return false;

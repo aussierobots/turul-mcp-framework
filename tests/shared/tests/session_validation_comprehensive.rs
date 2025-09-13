@@ -141,7 +141,7 @@ async fn test_session_aware_resource_context() {
                 info!("Session-aware resource call {}: {}", i, text.lines().next().unwrap_or(""));
                 
                 // Should contain the actual session ID
-                if let Some(session_id) = client.session_id() {
+                if let Some(_session_id) = client.session_id() {
                     // The content might contain the session ID or at least reference sessions
                     assert!(text.contains("session") || text.len() > 10, "Should have meaningful session content");
                 }
@@ -191,7 +191,7 @@ async fn test_concurrent_session_operations() {
     let mut clients = Vec::new();
     for i in 0..5 {
         let mut client = McpTestClient::new(server.port());
-        client.initialize().await.expect(&format!("Failed to initialize client {}", i));
+        client.initialize().await.expect("Failed to initialize client");
         clients.push(client);
     }
 

@@ -809,11 +809,10 @@ async fn test_sse_resumability(
                     // Parse SSE events
                     for line in response_text.lines() {
                         let line = line.trim();
-                        if let Some(id_str) = line.strip_prefix("id: ") {
-                            if let Ok(event_id) = id_str.parse::<u64>() {
+                        if let Some(id_str) = line.strip_prefix("id: ")
+                            && let Ok(event_id) = id_str.parse::<u64>() {
                                 received_ids.push(event_id);
                             }
-                        }
                     }
                 }
                 Err(_) => {
@@ -1209,6 +1208,7 @@ async fn verify_session_data_consistency(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn print_final_report(
     session_id: &str,
     server_info: &Value,
@@ -1247,11 +1247,10 @@ async fn print_final_report(
     
     info!("");
     info!("🔧 SERVER CAPABILITIES:");
-    if let Some(capabilities) = server_info.get("capabilities") {
-        if let Some(_tools) = capabilities.get("tools") {
+    if let Some(capabilities) = server_info.get("capabilities")
+        && let Some(_tools) = capabilities.get("tools") {
             info!("   • ✅ Tools: Supported");
         }
-    }
     
     info!("");
     info!("🌊 MCP STREAMABLE HTTP TEST:");

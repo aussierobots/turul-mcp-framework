@@ -372,7 +372,7 @@ impl TestServerManager {
 impl Drop for TestServerManager {
     fn drop(&mut self) {
         if let Some(mut process) = self.server_process.take() {
-            let _ = process.kill();
+            std::mem::drop(process.kill());
         }
     }
 }
@@ -442,7 +442,7 @@ impl TestFixtures {
     pub fn create_number_args() -> HashMap<String, Value> {
         let mut args = HashMap::new();
         args.insert("required_number".to_string(), json!(42));
-        args.insert("optional_number".to_string(), json!(3.14));
+        args.insert("optional_number".to_string(), json!(std::f64::consts::PI));
         args
     }
 
@@ -545,8 +545,7 @@ impl TestFixtures {
         result.get("result")?
             .as_object()?
             .get("tools")?
-            .as_array()
-            .map(|arr| arr.clone())
+            .as_array().cloned()
     }
 }
 

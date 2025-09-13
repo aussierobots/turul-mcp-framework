@@ -52,7 +52,6 @@ mod tests {
         let _tool = Tool::new("test", ToolSchema::object());
 
         // If this compiles, the re-exports are working
-        assert!(true);
     }
 
     #[test]
@@ -66,6 +65,5 @@ mod tests {
         let _error = McpError::tool_execution("test error");
         
         // If this compiles, the prelude is working
-        assert!(true);
     }
 }

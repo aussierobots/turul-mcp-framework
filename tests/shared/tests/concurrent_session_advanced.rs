@@ -46,7 +46,7 @@ async fn test_high_concurrency_client_creation() {
             barrier_clone.wait().await;
             
             let init_start = Instant::now();
-            client.initialize().await.expect(&format!("Client {} failed to initialize", client_id));
+            client.initialize().await.expect("Failed to initialize client");
             let init_duration = init_start.elapsed();
             
             let session_id = client.session_id().unwrap().clone();
@@ -120,7 +120,7 @@ async fn test_resource_contention_isolation() {
     let mut clients = Vec::new();
     for i in 0..client_count {
         let mut client = McpTestClient::new(server.port());
-        client.initialize().await.expect(&format!("Failed to initialize client {}", i));
+        client.initialize().await.expect("Failed to initialize client");
         clients.push(client);
     }
     
@@ -144,7 +144,7 @@ async fn test_resource_contention_isolation() {
     
     for (client_id, client) in clients.into_iter().enumerate() {
         let resources = test_resources.clone();
-        let results_clone = results.clone();
+        let _results_clone = results.clone();
         
         let handle = tokio::spawn(async move {
             let session_id = client.session_id().unwrap().clone();
@@ -199,7 +199,7 @@ async fn test_resource_contention_isolation() {
     for result in client_results {
         let (client_id, session_id, operations) = result.expect("Client operations should complete");
         
-        for (resource, attempt, success, error) in operations {
+        for (resource, _attempt, success, error) in operations {
             total_operations += 1;
             
             if success {
@@ -247,7 +247,7 @@ async fn test_long_running_session_persistence() {
         
         let handle = tokio::spawn(async move {
             let mut client = McpTestClient::new(server_port);
-            client.initialize().await.expect(&format!("Client {} failed to initialize", client_id));
+            client.initialize().await.expect("Failed to initialize client");
             
             let initial_session = client.session_id().unwrap().clone();
             let start_time = Instant::now();
@@ -345,9 +345,9 @@ async fn test_cross_protocol_session_management() {
             
             // Initialize both clients
             resource_client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await
-                .expect(&format!("Failed to initialize resource client for pair {}", pair_id));
+                .expect("Failed to initialize resource client");
             prompts_client.initialize_with_capabilities(TestFixtures::prompts_capabilities()).await
-                .expect(&format!("Failed to initialize prompts client for pair {}", pair_id));
+                .expect("Failed to initialize prompts client");
             
             let resource_session = resource_client.session_id().unwrap().clone();
             let prompts_session = prompts_client.session_id().unwrap().clone();
@@ -452,7 +452,7 @@ async fn test_session_cleanup_under_load() {
             let handle = tokio::spawn(async move {
                 let mut client = McpTestClient::new(server_port);
                 client.initialize().await
-                    .expect(&format!("Wave {} client {} failed to initialize", wave, client_id));
+                    .expect("Failed to initialize client");
                 
                 let session_id = client.session_id().unwrap().clone();
                 

@@ -11,12 +11,12 @@ use tracing::{debug, info};
 fn extract_error_from_response(response: &std::collections::HashMap<String, Value>) -> Option<Map<String, Value>> {
     if let Some(error) = response.get("error") {
         // Top-level JSON-RPC error
-        error.as_object().map(|obj| obj.clone())
+        error.as_object().cloned()
     } else if let Some(result) = response.get("result") {
         // Tool result with error
         if let Some(result_obj) = result.as_object() {
             if let Some(error) = result_obj.get("error") {
-                error.as_object().map(|obj| obj.clone())
+                error.as_object().cloned()
             } else {
                 None
             }
