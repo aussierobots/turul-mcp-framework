@@ -231,7 +231,7 @@ impl Drop for TestServerManager {
 
 #[tokio::test]
 async fn test_mcp_initialize_session() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -255,7 +255,7 @@ async fn test_mcp_initialize_session() {
 
 #[tokio::test]
 async fn test_prompts_list() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -299,7 +299,7 @@ async fn test_prompts_list() {
 
 #[tokio::test]
 async fn test_simple_prompt_get() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -327,7 +327,7 @@ async fn test_simple_prompt_get() {
 
 #[tokio::test]
 async fn test_string_args_prompt() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -357,7 +357,7 @@ async fn test_string_args_prompt() {
 
 #[tokio::test]
 async fn test_number_args_prompt() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -387,7 +387,7 @@ async fn test_number_args_prompt() {
 
 #[tokio::test]
 async fn test_boolean_args_prompt() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -417,7 +417,7 @@ async fn test_boolean_args_prompt() {
 
 #[tokio::test]
 async fn test_template_prompt() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -448,7 +448,7 @@ async fn test_template_prompt() {
 
 #[tokio::test]
 async fn test_multi_message_prompt() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -479,7 +479,7 @@ async fn test_multi_message_prompt() {
 
 #[tokio::test]
 async fn test_session_aware_prompt() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -505,7 +505,7 @@ async fn test_session_aware_prompt() {
 
 #[tokio::test]
 async fn test_validation_failure_prompt() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -533,7 +533,7 @@ async fn test_validation_failure_prompt() {
 
 #[tokio::test]
 async fn test_dynamic_prompt() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -562,7 +562,7 @@ async fn test_dynamic_prompt() {
 
 #[tokio::test]
 async fn test_empty_messages_prompt() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -585,7 +585,7 @@ async fn test_empty_messages_prompt() {
 
 #[tokio::test]
 async fn test_sse_prompt_notifications() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());

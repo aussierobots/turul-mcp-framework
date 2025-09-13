@@ -231,7 +231,7 @@ async fn test_resource_templates_uri_variable_patterns() {
            "Should find at least one template with URI variables");
 
     // Common variable patterns validation
-    for (name, uri_template, variables) in variable_patterns_found {
+    for (name, _uri_template, variables) in variable_patterns_found {
         for var in variables {
             // Variables should be valid identifiers
             assert!(!var.is_empty(), "Variable name should not be empty in template '{}'", name);

@@ -252,7 +252,7 @@ impl Drop for TestServerManager {
 
 #[tokio::test]
 async fn test_mcp_initialize_session() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -276,7 +276,7 @@ async fn test_mcp_initialize_session() {
 
 #[tokio::test]
 async fn test_resources_list() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -332,7 +332,7 @@ async fn test_resources_list() {
 
 #[tokio::test]
 async fn test_file_resource_read() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -358,7 +358,7 @@ async fn test_file_resource_read() {
 
 #[tokio::test]
 async fn test_memory_resource_read() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -385,7 +385,7 @@ async fn test_memory_resource_read() {
 
 #[tokio::test]
 async fn test_error_resource_handling() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -405,7 +405,7 @@ async fn test_error_resource_handling() {
 
 #[tokio::test]
 async fn test_template_resource_with_variables() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -425,7 +425,7 @@ async fn test_template_resource_with_variables() {
 
 #[tokio::test]
 async fn test_binary_resource_read() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -451,7 +451,7 @@ async fn test_binary_resource_read() {
 
 #[tokio::test]
 async fn test_session_aware_resource() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -476,7 +476,7 @@ async fn test_session_aware_resource() {
 
 #[tokio::test]
 async fn test_resource_subscription() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -494,7 +494,7 @@ async fn test_resource_subscription() {
 
 #[tokio::test]
 async fn test_paginated_resource() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -519,7 +519,7 @@ async fn test_paginated_resource() {
 
 #[tokio::test]
 async fn test_large_resource_handling() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -544,7 +544,7 @@ async fn test_large_resource_handling() {
 
 #[tokio::test]
 async fn test_resource_with_metadata() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -568,7 +568,7 @@ async fn test_resource_with_metadata() {
 
 #[tokio::test] 
 async fn test_complete_resource_specification() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -600,7 +600,7 @@ async fn test_complete_resource_specification() {
 
 #[tokio::test]
 async fn test_sse_resource_notifications() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -629,7 +629,7 @@ async fn test_sse_resource_notifications() {
 
 #[tokio::test]
 async fn test_multi_resource_collection() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());

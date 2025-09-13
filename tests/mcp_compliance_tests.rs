@@ -19,7 +19,7 @@ use serde_json::json;
 
 use turul_mcp_protocol::{
     JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcNotification, ResultWithMeta, RequestParams,
-    meta::{ProgressToken, Cursor}
+    meta::Meta
 };
 
 /// Test JSON-RPC 2.0 compliance
