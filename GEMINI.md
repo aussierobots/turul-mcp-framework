@@ -51,6 +51,83 @@ The framework's testing strategy is comprehensive and multi-layered, ensuring a 
 
 While the testing strategy is strong, it could be further improved by expanding the end-to-end and negative test coverage for all MCP capabilities.
 
+## MCP Schema Compliance Analysis (2025-09-13)
+
+After a thorough, side-by-side review of the official `schema.ts` and the Rust protocol crate (`turul-mcp-protocol-2025-06-18`), I can confirm a very high degree of compliance. The implementation is robust and correctly mirrors the specification's data structures.
+
+Here is my detailed breakdown by protocol area:
+
+---
+
+#### 1. **JSON-RPC & Core Types**
+*   **File:** `json_rpc.rs`
+*   **Schema:** `JSONRPCRequest`, `JSONRPCResponse`, `JSONRPCNotification`, `JSONRPCError`
+*   **Analysis:** The Rust implementation correctly defines the fundamental JSON-RPC 2.0 message structures. The schema defines `RequestId` as `string | number`, and the Rust implementation's use of `serde_json::Value` for this field is a valid approach that correctly handles both types during serialization and deserialization. The use of `#[serde(untagged)]` for the top-level `JsonRpcMessage` enum is an effective and correct way to model the different message types.
+*   **Verdict:** 🟢 **Fully Compliant.**
+
+---
+
+#### 2. **Initialize**
+*   **File:** `initialize.rs`
+*   **Schema:** `InitializeRequest`, `InitializeResult`, `ClientCapabilities`, `ServerCapabilities`, `Implementation`
+*   **Analysis:** The Rust structs (`InitializeRequest`, `InitializeResult`, etc.) are a **perfect match** for the TypeScript schema.
+    *   All fields are present and correctly named using `#[serde(rename_all = "camelCase")]`.
+    *   Optional fields in the schema (like `instructions` or `experimental`) are correctly typed as `Option<T>` in Rust and use `#[serde(skip_serializing_if = "Option::is_none")]`.
+    *   The nested `ClientCapabilities` and `ServerCapabilities` objects are structured exactly as in the schema.
+*   **Verdict:** 🟢 **Fully Compliant.**
+
+---
+
+#### 3. **Tools**
+*   **File:** `tools.rs`
+*   **Schema:** `Tool`, `ListToolsResult`, `CallToolRequest`, `CallToolResult`, `ToolAnnotations`, `ToolSchema`
+*   **Analysis:** The implementation is excellent and fully compliant.
+    *   `Tool` struct: Perfectly mirrors the `Tool` interface, including `inputSchema`, optional `outputSchema`, and `annotations`. The `#[serde(rename_all = "camelCase")]` is correctly applied.
+    *   `CallToolResult`: Correctly implements `content`, optional `isError`, and optional `structuredContent`. This is a key part of the spec, and it's implemented perfectly.
+    *   `ToolSchema`: The Rust `ToolSchema` correctly enforces `type: "object"` and has the right structure for `properties` and `required`.
+    *   The use of a `ToolDefinition` trait hierarchy is a sophisticated and idiomatic Rust approach that promotes flexibility while ensuring the final serialized `Tool` struct is compliant.
+*   **Verdict:** 🟢 **Fully Compliant.**
+
+---
+
+#### 4. **Resources**
+*   **File:** `resources.rs`
+*   **Schema:** `Resource`, `ResourceTemplate`, `ReadResourceResult`, `ListResourcesResult`, `TextResourceContents`, `BlobResourceContents`
+*   **Analysis:** This is another area of strong compliance.
+    *   `Resource` and `ResourceTemplate`: These structs are a direct mapping of the schema interfaces, correctly using `#[serde(rename_all = "camelCase")]` for fields like `mimeType` and `uriTemplate`.
+    *   `ReadResourceResult`: The `contents` field is a `Vec<ResourceContent>`, where `ResourceContent` is a Rust enum that correctly uses `#[serde(untagged)]` to represent the `TextResourceContents | BlobResourceContents` union from the schema. This is the correct way to model this in Rust.
+    *   `ListResourcesResult` and `ListResourceTemplatesResult`: Both correctly implement the `PaginatedResult` pattern with an optional `nextCursor`.
+*   **Verdict:** 🟢 **Fully Compliant.**
+
+---
+
+#### 5. **Prompts**
+*   **File:** `prompts.rs`
+*   **Schema:** `Prompt`, `GetPromptResult`, `ListPromptsResult`, `PromptMessage`, `ContentBlock`, `Role`
+*   **Analysis:** The prompts implementation is also fully compliant.
+    *   `Prompt` and `PromptArgument`: The structures match the schema, including the `arguments` array.
+    *   `GetPromptResult`: Correctly contains `messages` and an optional `description`.
+    *   `PromptMessage`: The `role` field uses a Rust enum `Role` that serializes to the correct lowercase strings (`"user"`, `"assistant"`).
+    *   `ContentBlock`: This is a complex union type in the schema. The Rust implementation correctly models it as an enum with `#[serde(tag = "type", rename_all = "snake_case")]`. While the schema doesn't explicitly enforce the case of the `type` tag's *value*, using `snake_case` here is a minor stylistic deviation from the `camelCase` used for field names. However, it is internally consistent and does not violate the spec.
+*   **Verdict:** 🟢 **Fully Compliant.**
+
+---
+
+#### 6. **Notifications**
+*   **File:** `notifications.rs`
+*   **Schema:** `ProgressNotification`, `ResourceUpdatedNotification`, `CancelledNotification`, etc.
+*   **Analysis:** The notification structs are defined correctly.
+    *   Each notification struct (e.g., `ProgressNotification`, `ResourceUpdatedNotification`) has a hardcoded `method` field and a `params` struct that matches the schema.
+    *   `ProgressNotificationParams` correctly includes `progressToken`, `progress`, and optional `total` and `message`.
+    *   All field names are correctly serialized to `camelCase`.
+*   **Verdict:** 🟢 **Fully Compliant.**
+
+### Overall Conclusion
+
+The `turul-mcp-protocol-2025-06-18` crate demonstrates a **meticulous and robust implementation** of the MCP 2025-06-18 specification. The developers have shown a deep understanding of both the MCP standard and idiomatic Rust practices. The use of `serde` attributes is consistent and correct, ensuring that the JSON produced and consumed by the framework will be fully compatible with any other client or server that adheres to the official `schema.ts`.
+
+The compliance is not just superficial; it extends to the nuances of the spec, such as optional fields, union types (enums in Rust), and nested capability objects. I have found no significant discrepancies that would lead to compliance issues.
+
 ## Building and Running
 
 The project is built and tested using Cargo.
@@ -97,3 +174,4 @@ The framework offers four levels of abstraction for creating tools:
 4.  **Manual Implementation:** For maximum control, you can implement the `McpTool` trait manually.
 
 The project uses `tracing` for logging.
+

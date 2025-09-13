@@ -193,3 +193,30 @@ For detailed technical decisions, see:
 - Future-proof design supporting additional transports
 - Production-ready: performance, security, and reliability first
 - Complete MCP 2025-06-18 specification compliance
+
+## Core Crate Modification Rules
+
+### 🚨 Critical Guidelines
+- **NO PANICS in production code** - Core crates must never use `panic!` in user-facing APIs
+- **Builder pattern stability** - Changes to builder methods require breaking change analysis
+- **Error handling consistency** - Use `Result` types for fallible operations
+- **Zero-configuration principle** - Framework should gracefully handle invalid inputs when possible
+
+### Before Modifying Core Crates:
+1. **Ultra Think Analysis Required**
+   - Analyze full impact on all examples, tests, and user code
+   - Consider backwards compatibility implications
+   - Evaluate alternative approaches
+   - Document breaking changes clearly
+
+2. **Error Handling Patterns**
+   - Use `Result<T, McpError>` for fallible operations
+   - Log errors with appropriate levels (warn/error)
+   - Prefer graceful degradation over crashes
+   - Early validation when possible without breaking APIs
+
+3. **Production Safety**
+   - Never crash the process due to user input
+   - Validate inputs but handle failures gracefully
+   - Provide clear error messages for debugging
+   - Consider fail-fast vs. fail-safe trade-offs

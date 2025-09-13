@@ -35,7 +35,9 @@ members = [
     "examples/pagination-server",
     "examples/performance-testing",
     "examples/prompts-server",
+    "examples/prompts-test-server",
     "examples/resource-server",
+    "examples/resource-test-server",
     "examples/resources-server",
     "examples/sampling-server",
     "examples/simple-dynamodb-session", # Simplified and ready - utility binaries commented out
@@ -43,6 +45,7 @@ members = [
     "examples/simple-postgres-session", # Fixed API mismatches - ready to use
     "examples/simple-sqlite-session", # Fixed API mismatches - ready to use
     "examples/stateful-server",
+    "examples/tools-test-server",
     "examples/zero-config-getting-started",
     "examples/lambda-mcp-server",
     
@@ -56,8 +59,10 @@ members = [
     "examples/session-management-compliance-test",
 
     # Tests
-    "tests/resources",
+    "tests",
+    "tests/resources", 
     "tests/prompts",
+    "tests/tools",
 ]
 
 exclude = [
