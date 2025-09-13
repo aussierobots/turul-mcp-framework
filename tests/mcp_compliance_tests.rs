@@ -296,17 +296,10 @@ mod message_structure_compliance {
         assert_eq!(params.other.get("name"), Some(&json!("calculator")));
         assert!(params.other.get("arguments").unwrap().is_object());
         
-<<<<<<< HEAD
-        // Check meta field (stored separately, not in other)
-        assert!(params.meta.is_some());
-        let meta = params.meta.unwrap();
-        assert_eq!(meta.progress_token, Some(ProgressToken::from("calc-123")));
-=======
         // _meta should be parsed into the meta field, not other
         assert!(params.meta.is_some());
         let meta = params.meta.unwrap();
         assert_eq!(meta.progress_token, Some("calc-123".into()));
->>>>>>> cebf93d8ec27b383dd751b6b1dde698217dca626
     }
 
     #[tokio::test]
@@ -362,11 +355,7 @@ mod message_structure_compliance {
         let params = request.params.unwrap();
         assert_eq!(params.other.get("cursor"), Some(&json!("page-2")));
         
-<<<<<<< HEAD
-        // Check meta field (stored separately, not in other)
-=======
         // _meta should be parsed into the meta field, not other
->>>>>>> cebf93d8ec27b383dd751b6b1dde698217dca626
         assert!(params.meta.is_some());
 
         // Resource read request
@@ -388,11 +377,7 @@ mod message_structure_compliance {
         let params = request.params.unwrap();
         assert_eq!(params.other.get("uri"), Some(&json!("file:///example.txt")));
         
-<<<<<<< HEAD
-        // Check meta field (stored separately, not in other)
-=======
         // _meta should be parsed into the meta field
->>>>>>> cebf93d8ec27b383dd751b6b1dde698217dca626
         assert!(params.meta.is_some());
     }
 
@@ -438,11 +423,7 @@ mod message_structure_compliance {
         assert_eq!(params.other.get("name"), Some(&json!("code_review")));
         assert!(params.other.get("arguments").unwrap().is_object());
         
-<<<<<<< HEAD
-        // Check meta field (stored separately, not in other)
-=======
         // _meta should be parsed into the meta field, not other
->>>>>>> cebf93d8ec27b383dd751b6b1dde698217dca626
         assert!(params.meta.is_some());
     }
 }
@@ -561,20 +542,12 @@ mod meta_field_compliance {
         let request: JsonRpcRequest = serde_json::from_value(request_with_meta).unwrap();
         let params = request.params.unwrap();
         
-<<<<<<< HEAD
-        // _meta should be preserved as an object
-        assert!(params.meta.is_some());
-        let meta = params.meta.unwrap();
-        assert_eq!(meta.progress_token, Some(ProgressToken::from("progress-abc-123")));
-        assert_eq!(meta.extra.get("sessionId"), Some(&json!("session-xyz-789")));
-=======
         // _meta should be parsed into the meta field
         assert!(params.meta.is_some());
         let meta = params.meta.unwrap();
         assert_eq!(meta.progress_token, Some("progress-abc-123".into()));
         // Note: sessionId would be in meta.extra if it's a custom field
         assert!(meta.extra.contains_key("sessionId"));
->>>>>>> cebf93d8ec27b383dd751b6b1dde698217dca626
     }
 
     #[tokio::test]
@@ -655,18 +628,10 @@ mod meta_field_compliance {
 
         let request: JsonRpcRequest = serde_json::from_value(request_with_custom_meta).unwrap();
         let params = request.params.unwrap();
-<<<<<<< HEAD
         
         // Custom fields should be preserved
         assert!(params.meta.is_some());
         let meta = params.meta.unwrap();
-        assert_eq!(meta.progress_token, Some(ProgressToken::from("token-123")));
-        assert_eq!(meta.extra.get("customField"), Some(&json!("custom_value")));
-        assert!(meta.extra.get("experimentalData").unwrap().is_object());
-        assert_eq!(meta.extra["experimentalData"]["feature"], "beta");
-=======
-        let meta = params.meta.unwrap();
-        
         // Standard field should be parsed correctly
         assert_eq!(meta.progress_token, Some("token-123".into()));
         
@@ -675,7 +640,6 @@ mod meta_field_compliance {
         assert!(meta.extra.get("experimentalData").unwrap().is_object());
         let experimental = meta.extra.get("experimentalData").unwrap();
         assert_eq!(experimental.get("feature"), Some(&json!("beta")));
->>>>>>> cebf93d8ec27b383dd751b6b1dde698217dca626
     }
 }
 
@@ -1020,13 +984,11 @@ mod mcp_2025_06_18_features {
                 },
                 "_meta": {
                     "progressToken": "structured-progress-token",
-<<<<<<< HEAD
                     "cursor": "page-2",
                     "total": 100,
                     "hasMore": true,
                     "progress": 0.75,
-                    "customField": "custom-value"
-=======
+                    "customField": "custom-value",
                     "elicitation": {
                         "type": "confirmation",
                         "message": "Are you sure you want to proceed?"
@@ -1035,7 +997,6 @@ mod mcp_2025_06_18_features {
                         "page": 2,
                         "token": "page-token-xyz"
                     }
->>>>>>> cebf93d8ec27b383dd751b6b1dde698217dca626
                 }
             },
             "id": "structured-test"
@@ -1043,20 +1004,8 @@ mod mcp_2025_06_18_features {
 
         let request: JsonRpcRequest = serde_json::from_value(request_with_structured_meta).unwrap();
         let params = request.params.unwrap();
-<<<<<<< HEAD
         
-        // Check meta field (stored separately, not in other)
         assert!(params.meta.is_some());
-        let meta = params.meta.unwrap();
-        
-        // Verify structured _meta fields are preserved
-        assert_eq!(meta.progress_token, Some(ProgressToken::from("structured-progress-token")));
-        assert_eq!(meta.cursor, Some(Cursor::from("page-2")));
-        assert_eq!(meta.total, Some(100));
-        assert_eq!(meta.has_more, Some(true));
-        assert_eq!(meta.progress, Some(0.75));
-        assert_eq!(meta.extra.get("customField"), Some(&json!("custom-value")));
-=======
         let meta = params.meta.unwrap();
         
         // Verify structured _meta fields are preserved
@@ -1071,7 +1020,6 @@ mod mcp_2025_06_18_features {
         assert!(meta.extra.get("customCursor").unwrap().is_object());
         let cursor = meta.extra.get("customCursor").unwrap();
         assert_eq!(cursor.get("page"), Some(&json!(2)));
->>>>>>> cebf93d8ec27b383dd751b6b1dde698217dca626
         
         println!("MCP 2025-06-18 structured _meta support verified");
     }
