@@ -24,28 +24,12 @@ A comprehensive, battle-tested Rust framework for building Model Context Protoco
 use turul_mcp_derive::mcp_tool;
 use turul_mcp_server::{McpServer, McpResult};
 
-<<<<<<< HEAD
 #[mcp_tool(name = "add", description = "Add two numbers")]
 async fn add(
     #[param(description = "First number")] a: f64,
     #[param(description = "Second number")] b: f64,
 ) -> McpResult<f64> {
     Ok(a + b)
-=======
-#[derive(McpTool, Clone)]
-#[tool(name = "add", description = "Add two numbers")]
-struct AddTool {
-    #[param(description = "First number")]
-    a: f64,
-    #[param(description = "Second number")]
-    b: f64,
-}
-
-impl AddTool {
-    async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
-        Ok(format!("{} + {} = {}", self.a, self.b, self.a + self.b))
-    }
->>>>>>> cebf93d8ec27b383dd751b6b1dde698217dca626
 }
 
 #[tokio::main]
