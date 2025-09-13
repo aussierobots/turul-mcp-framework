@@ -141,7 +141,7 @@ mod tests {
     #[tokio::test]
     async fn test_completion_validation() {
         let completion = TestCompletion {
-            reference: CompletionReference::resource("file://test.txt"),
+            reference: CompletionReference::resource("file:///tmp/test.txt"),
             argument: CompleteArgument::new("filename", ""),
         };
 

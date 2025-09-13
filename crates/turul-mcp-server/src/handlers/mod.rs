@@ -12,7 +12,7 @@ use tracing::debug;
 use crate::resource::{McpResource, resource_to_descriptor};
 
 use crate::{McpResult, SessionContext};
-use turul_mcp_protocol::McpError;
+use turul_mcp_protocol::{McpError, WithMeta};
 
 //pub mod response;
 //pub use response::*;
@@ -100,14 +100,16 @@ impl McpHandler for PromptsListHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         // Handle prompts/list with pagination support
         use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
-        use turul_mcp_protocol::prompts::{ListPromptsResult, Prompt};
+        use turul_mcp_protocol::prompts::{ListPromptsParams, ListPromptsResult, Prompt};
 
-        // Parse cursor from params if provided
-        let cursor = params
-            .as_ref()
-            .and_then(|p| p.get("cursor"))
-            .and_then(|c| c.as_str())
-            .map(Cursor::from);
+        // Parse typed parameters instead of manual cursor extraction
+        let list_params = if let Some(params_value) = params {
+            serde_json::from_value::<ListPromptsParams>(params_value).unwrap_or_default()
+        } else {
+            ListPromptsParams::new()
+        };
+        
+        let cursor = list_params.cursor;
 
         debug!("Listing prompts with cursor: {:?}", cursor);
 
@@ -169,12 +171,19 @@ impl McpHandler for PromptsListHandler {
         let base_response = ListPromptsResult::new(page_prompts);
         let total = Some(all_prompts.len() as u64);
 
-        let paginated_response = PaginatedResponse::with_pagination(
+        let mut paginated_response = PaginatedResponse::with_pagination(
             base_response,
             next_cursor,
             total,
             has_more,
         );
+
+        // Propagate optional _meta from request to response (MCP 2025-06-18 compliance)
+        if let Some(meta) = list_params.meta {
+            let mut meta_obj = turul_mcp_protocol::meta::Meta::new();
+            meta_obj.extra = meta;
+            paginated_response = paginated_response.with_meta(meta_obj);
+        }
 
         serde_json::to_value(paginated_response).map_err(McpError::from)
     }
@@ -314,14 +323,16 @@ impl ResourcesListHandler {
 impl McpHandler for ResourcesListHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
-        use turul_mcp_protocol::resources::{ListResourcesResult, Resource};
+        use turul_mcp_protocol::resources::{ListResourcesParams, ListResourcesResult, Resource};
 
-        // Parse cursor from params if provided
-        let cursor = params
-            .as_ref()
-            .and_then(|p| p.get("cursor"))
-            .and_then(|c| c.as_str())
-            .map(Cursor::from);
+        // Parse typed parameters instead of manual cursor extraction
+        let list_params = if let Some(params_value) = params {
+            serde_json::from_value::<ListResourcesParams>(params_value).unwrap_or_default()
+        } else {
+            ListResourcesParams::new()
+        };
+        
+        let cursor = list_params.cursor;
 
         debug!("Listing resources with cursor: {:?}", cursor);
 
@@ -377,12 +388,19 @@ impl McpHandler for ResourcesListHandler {
         let base_response = ListResourcesResult::new(page_resources);
         let total = Some(all_resources.len() as u64);
 
-        let paginated_response = PaginatedResponse::with_pagination(
+        let mut paginated_response = PaginatedResponse::with_pagination(
             base_response,
             next_cursor,
             total,
             has_more,
         );
+
+        // Propagate optional _meta from request to response (MCP 2025-06-18 compliance)
+        if let Some(meta) = list_params.meta {
+            let mut meta_obj = turul_mcp_protocol::meta::Meta::new();
+            meta_obj.extra = meta;
+            paginated_response = paginated_response.with_meta(meta_obj);
+        }
 
         serde_json::to_value(paginated_response).map_err(McpError::from)
     }
@@ -813,82 +831,24 @@ impl McpHandler for SamplingHandler {
     }
 }
 
-/// Templates handler for templates/list and templates/get endpoints
-pub struct TemplatesHandler {
-    templates: HashMap<String, Arc<dyn McpTemplate>>,
+
+/// Resource templates handler for resources/templates/list endpoint
+pub struct ResourceTemplatesHandler {
+    templates: Vec<(crate::uri_template::UriTemplate, Arc<dyn McpResource>)>,
 }
 
-impl TemplatesHandler {
+impl ResourceTemplatesHandler {
     pub fn new() -> Self {
         Self {
-            templates: HashMap::new(),
+            templates: Vec::new(),
         }
     }
 
-    pub fn add_template<T: McpTemplate + 'static>(mut self, template: T) -> Self {
-        self.templates
-            .insert(template.name().to_string(), Arc::new(template));
+    pub fn with_templates(mut self, templates: Vec<(crate::uri_template::UriTemplate, Arc<dyn McpResource>)>) -> Self {
+        self.templates = templates;
         self
     }
 }
-
-#[async_trait]
-impl McpHandler for TemplatesHandler {
-    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
-        // Templates functionality has been integrated into resources
-        debug!(
-            "Templates handler called - returning empty list as templates are now integrated into resources"
-        );
-
-        // Parse cursor from params if provided (for consistency)
-        let cursor = params
-            .as_ref()
-            .and_then(|p| p.get("cursor"))
-            .and_then(|c| c.as_str())
-            .map(turul_mcp_protocol::meta::Cursor::from);
-
-        debug!("Listing templates with cursor: {:?}", cursor);
-
-        // Return empty templates list since functionality moved to resources
-        let templates: Vec<turul_mcp_protocol::resources::ResourceTemplate> = Vec::new();
-        let total = Some(templates.len() as u64);
-        let base_response =
-            turul_mcp_protocol::resources::ListResourceTemplatesResult::new(templates);
-
-        // Proper pagination metadata (empty list = no next cursor, no more items)
-        let has_more = false;
-        let next_cursor = None; // Empty list has no next cursor
-
-        let paginated_response = turul_mcp_protocol::meta::PaginatedResponse::with_pagination(
-            base_response,
-            next_cursor,
-            total,
-            has_more,
-        );
-
-        serde_json::to_value(paginated_response).map_err(McpError::from)
-    }
-
-    fn supported_methods(&self) -> Vec<String> {
-        vec!["templates/list".to_string(), "templates/get".to_string()]
-    }
-}
-
-/// Trait for MCP templates
-#[async_trait]
-pub trait McpTemplate: Send + Sync {
-    /// The name of the template
-    fn name(&self) -> &str;
-
-    /// Description of the template
-    fn description(&self) -> &str;
-
-    /// Generate the template content
-    async fn generate(&self, args: HashMap<String, Value>) -> McpResult<String>;
-}
-
-/// Resource templates handler for resources/templates/list endpoint
-pub struct ResourceTemplatesHandler;
 
 #[async_trait]
 impl McpHandler for ResourceTemplatesHandler {
@@ -904,24 +864,70 @@ impl McpHandler for ResourceTemplatesHandler {
 
         debug!("Listing resource templates with cursor: {:?}", cursor);
 
-        // In a real implementation, this would return actual resource templates
-        // For demonstration purposes, we return an empty list
-        tracing::info!("Resource templates list requested");
+        tracing::info!("Resource templates list requested - {} templates registered", self.templates.len());
 
-        use turul_mcp_protocol::resources::ListResourceTemplatesResult;
-        let templates = Vec::new(); // Empty list for now
+        use turul_mcp_protocol::resources::{ListResourceTemplatesResult, ResourceTemplate};
         
-        // For empty list, pagination is simple
-        let total = Some(0u64);
-        let has_more = false;
-        let next_cursor = None; // No items = no next cursor
+        // Convert registered templates to ResourceTemplate objects and sort by template for stable ordering
+        let mut all_templates: Vec<ResourceTemplate> = self
+            .templates
+            .iter()
+            .map(|(uri_template, resource)| {
+                let template_name = resource.name();
+                let mut template = ResourceTemplate::new(template_name, uri_template.pattern());
+                if let Some(desc) = resource.description() {
+                    template = template.with_description(desc);
+                }
+                // Add MIME type if the resource provides it
+                if let Some(mime_type) = resource.mime_type() {
+                    template = template.with_mime_type(mime_type);
+                }
+                template
+            })
+            .collect();
+        
+        // Sort by uri_template to ensure stable pagination ordering (MCP 2025-06-18 requirement)
+        all_templates.sort_by(|a, b| a.uri_template.cmp(&b.uri_template));
+
+        // Implement cursor-based pagination
+        const DEFAULT_PAGE_SIZE: usize = 50; // MCP suggested default
+        let page_size = DEFAULT_PAGE_SIZE;
+        
+        // Find starting index based on cursor
+        let start_index = if let Some(cursor) = &cursor {
+            // Cursor contains the last uri_template from previous page
+            let cursor_template = cursor.as_str();
+            
+            // Find the position after the cursor template
+            all_templates.iter()
+                .position(|t| t.uri_template.as_str() > cursor_template)
+                .unwrap_or(all_templates.len())
+        } else {
+            0 // No cursor = start from beginning
+        };
+        
+        // Calculate end index for this page
+        let end_index = std::cmp::min(start_index + page_size, all_templates.len());
+        
+        // Extract the page
+        let page_templates = all_templates[start_index..end_index].to_vec();
+        
+        // Calculate pagination metadata
+        let total = Some(all_templates.len() as u64);
+        let has_more = end_index < all_templates.len();
+        let next_cursor = if has_more {
+            // Next cursor is the last template name in this page
+            page_templates.last().map(|t| Cursor::new(&t.uri_template))
+        } else {
+            None // No more pages
+        };
         
         debug!(
-            "Resource template pagination: page_size=0, has_more={}, next_cursor={:?}",
-            has_more, next_cursor
+            "Resource template pagination: page_size={}, has_more={}, next_cursor={:?}",
+            page_templates.len(), has_more, next_cursor
         );
         
-        let base_response = ListResourceTemplatesResult::new(templates);
+        let base_response = ListResourceTemplatesResult::new(page_templates);
 
         let paginated_response = PaginatedResponse::with_pagination(
             base_response,

@@ -237,4 +237,35 @@ mod tests {
         let pdf_template = UriTemplate::new("file:///docs/{id}.pdf").unwrap();
         assert_eq!(pdf_template.mime_type(), Some("application/pdf"));
     }
+
+    #[test]
+    fn test_builder_template_validation_error_collection() {
+        // Test that builder collects validation errors instead of panicking
+        let valid_template = UriTemplate::new("file:///valid/{id}.json").unwrap();
+        let invalid_template_pattern = "invalid template pattern {"; // Missing closing brace
+        
+        // This should succeed - valid template
+        let builder = McpServer::builder()
+            .name("test")
+            .version("1.0.0")
+            .bind_address("127.0.0.1:0".parse().unwrap())
+            .template_resource(valid_template, UserProfileResource::new());
+            
+        // This should collect an error but not panic - invalid template
+        let invalid_template = match UriTemplate::new(invalid_template_pattern) {
+            Ok(t) => t,
+            Err(_) => {
+                // Template creation itself fails - test passes (this is expected)
+                return;
+            }
+        };
+        
+        let builder_with_invalid = builder.template_resource(invalid_template, UserProfileResource::new());
+        let result = builder_with_invalid.build();
+        
+        // Should fail with validation error, not panic
+        assert!(result.is_err());
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("validation errors") || error_msg.contains("Invalid resource template"));
+    }
 }

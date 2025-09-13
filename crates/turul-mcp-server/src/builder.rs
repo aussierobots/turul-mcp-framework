@@ -86,6 +86,9 @@ pub struct McpServerBuilder {
     enable_cors: bool,
     #[cfg(feature = "http")]
     enable_sse: bool,
+    
+    /// Validation errors collected during builder configuration
+    validation_errors: Vec<String>,
 }
 
 impl McpServerBuilder {
@@ -104,7 +107,7 @@ impl McpServerBuilder {
         handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
         handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
         handlers.insert("sampling/createMessage".to_string(), Arc::new(SamplingHandler));
-        handlers.insert("resources/templates/list".to_string(), Arc::new(ResourceTemplatesHandler));
+        // Note: resources/templates/list is only registered if template resources are configured (see build method)
         handlers.insert("elicitation/create".to_string(), Arc::new(ElicitationHandler::with_mock_provider()));
         
         // Add all notification handlers (except notifications/initialized which is handled specially)
@@ -125,12 +128,7 @@ impl McpServerBuilder {
             name: "turul-mcp-server".to_string(),
             version: "1.0.0".to_string(),
             title: None,
-            capabilities: ServerCapabilities {
-                tools: Some(ToolsCapabilities {
-                    list_changed: Some(false),
-                }),
-                ..Default::default()
-            },
+            capabilities: ServerCapabilities::default(),
             tools,
             resources: HashMap::new(),
             template_resources: Vec::new(),
@@ -156,6 +154,7 @@ impl McpServerBuilder {
             enable_cors: true,
             #[cfg(feature = "http")]
             enable_sse: cfg!(feature = "sse"),
+            validation_errors: Vec::new(),
         }
     }
 
@@ -229,8 +228,15 @@ impl McpServerBuilder {
     }
 
     /// Register a resource with the server
+    /// Note: URI validation is performed during build() to maintain builder pattern
     pub fn resource<R: McpResource + 'static>(mut self, resource: R) -> Self {
         let uri = resource.uri().to_string();
+        
+        // Validate URI and collect errors for later reporting
+        if let Err(e) = self.validate_uri(&uri) {
+            self.validation_errors.push(format!("Invalid resource URI '{}': {}", uri, e));
+        }
+        
         self.resources.insert(uri, Arc::new(resource));
         self
     }
@@ -249,6 +255,11 @@ impl McpServerBuilder {
         template: crate::uri_template::UriTemplate,
         resource: R
     ) -> Self {
+        // Validate template pattern is well-formed (MCP 2025-06-18 compliance)
+        if let Err(e) = self.validate_uri_template(template.pattern()) {
+            self.validation_errors.push(format!("Invalid resource template URI '{}': {}", template.pattern(), e));
+        }
+        
         self.template_resources.push((template, Arc::new(resource)));
         self
     }
@@ -356,6 +367,45 @@ impl McpServerBuilder {
             self = self.notification_provider(notification);
         }
         self
+    }
+
+    /// Validate URI is absolute and well-formed (reusing SecurityMiddleware logic)
+    fn validate_uri(&self, uri: &str) -> std::result::Result<(), String> {
+        // Check basic URI format - must have scheme
+        if !uri.contains("://") {
+            return Err("URI must be absolute with scheme (e.g., file://, http://, memory://)".to_string());
+        }
+        
+        // Check for whitespace and control characters
+        if uri.chars().any(|c| c.is_whitespace() || c.is_control()) {
+            return Err("URI must not contain whitespace or control characters".to_string());
+        }
+        
+        // For file URIs, require absolute paths
+        if uri.starts_with("file://") {
+            let path_part = &uri[7..]; // Skip "file://"
+            if !path_part.starts_with('/') {
+                return Err("file:// URIs must use absolute paths".to_string());
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Validate URI template pattern (basic validation for template syntax)
+    fn validate_uri_template(&self, template: &str) -> std::result::Result<(), String> {
+        // First validate the base URI structure (ignoring template variables)
+        let base_uri = template.replace(|c| c == '{' || c == '}', "");
+        self.validate_uri(&base_uri)?;
+        
+        // Check template variable syntax is balanced
+        let open_braces = template.matches('{').count();
+        let close_braces = template.matches('}').count();
+        if open_braces != close_braces {
+            return Err("URI template has unbalanced braces".to_string());
+        }
+        
+        Ok(())
     }
 
     // =============================================================================
@@ -497,10 +547,6 @@ impl McpServerBuilder {
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
 
-    /// Add templates support
-    pub fn with_templates(self) -> Self {
-        self.handler(TemplatesHandler::new())
-    }
 
     /// Add notifications support
     pub fn with_notifications(self) -> Self {
@@ -616,6 +662,13 @@ impl McpServerBuilder {
         if self.version.is_empty() {
             return Err(McpFrameworkError::Config("Server version cannot be empty".to_string()));
         }
+        
+        // Check for validation errors collected during registration
+        if !self.validation_errors.is_empty() {
+            return Err(McpFrameworkError::Config(
+                format!("Resource validation errors:\n{}", self.validation_errors.join("\n"))
+            ));
+        }
 
         // Auto-detect and configure server capabilities based on registered components
         let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
@@ -627,33 +680,43 @@ impl McpServerBuilder {
         let _has_samplings = !self.sampling.is_empty();
         let has_logging = !self.loggers.is_empty();
 
-        // Tools capabilities - support notifications if tools are registered
+        // Tools capabilities - support notifications only if tools are registered AND we have dynamic change sources
+        // Note: In current static framework, tool set is fixed at build time and doesn't change
+        // list_changed should only be true when dynamic change sources are wired, such as:
+        // - Hot-reload configuration systems
+        // - Admin APIs for runtime tool registration
+        // - Plugin systems with dynamic tool loading
         if has_tools {
             self.capabilities.tools = Some(ToolsCapabilities {
-                list_changed: Some(true),
+                // Static framework: no dynamic change sources = no list changes
+                list_changed: Some(false),
             });
         }
 
-        // Prompts capabilities - support notifications only if prompts are registered AND SSE is enabled
+        // Prompts capabilities - support notifications only when dynamic change sources are wired
         // Note: In current static framework, prompt set is fixed at build time and doesn't change
-        // notifications/prompts/listChanged would be emitted by future dynamic features like:
+        // list_changed should only be true when dynamic change sources are wired, such as:
         // - Hot-reload configuration systems
         // - Admin APIs for runtime prompt registration
         // - Plugin systems with dynamic prompt loading
         if has_prompts {
             self.capabilities.prompts = Some(PromptsCapabilities {
-                #[cfg(feature = "http")]
-                list_changed: Some(self.enable_sse),
-                #[cfg(not(feature = "http"))]  
-                list_changed: Some(false), // No HTTP transport = no SSE notifications
+                // Static framework: no dynamic change sources = no list changes
+                list_changed: Some(false),
             });
         }
 
-        // Resources capabilities - support notifications and subscriptions
+        // Resources capabilities - support notifications only when dynamic change sources are wired
+        // Note: In current static framework, resource set is fixed at build time and doesn't change
+        // list_changed should only be true when dynamic change sources are wired, such as:
+        // - Hot-reload configuration systems
+        // - Admin APIs for runtime resource registration
+        // - File system watchers that update resource availability
         if has_resources {
             self.capabilities.resources = Some(ResourcesCapabilities {
                 subscribe: Some(false), // TODO: Implement resource subscriptions in Phase 5
-                list_changed: Some(true),
+                // Static framework: no dynamic change sources = no list changes
+                list_changed: Some(false),
             });
         }
 
@@ -721,6 +784,13 @@ impl McpServerBuilder {
             
             handlers.insert("prompts/list".to_string(), Arc::new(prompts_list_handler));
             handlers.insert("prompts/get".to_string(), Arc::new(prompts_get_handler));
+        }
+
+        // Add ResourceTemplatesHandler if template resources were configured
+        if !self.template_resources.is_empty() {
+            let resource_templates_handler = ResourceTemplatesHandler::new()
+                .with_templates(self.template_resources.clone());
+            handlers.insert("resources/templates/list".to_string(), Arc::new(resource_templates_handler));
         }
 
         // Create server
