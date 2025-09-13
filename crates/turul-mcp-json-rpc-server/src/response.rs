@@ -120,7 +120,7 @@ mod tests {
         match parsed.result {
             ResponseResult::Success(ref val) if val.is_null() => {}, // This is what actually happens
             ResponseResult::Null => {}, // This is what we expected
-            _ => panic!("Expected null result")
+            _ => panic!("Expected null result, got: {:?}", parsed.result)
         }
     }
 
