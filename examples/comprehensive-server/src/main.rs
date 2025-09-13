@@ -16,7 +16,7 @@ use turul_mcp_protocol::{schema::JsonSchema, ToolResult, ToolSchema, McpError, M
 use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations, CallToolResult};
 use turul_mcp_protocol::resources::{HasResourceMetadata, HasResourceDescription, HasResourceUri, HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta, ResourceContent};
 use turul_mcp_protocol::prompts::{PromptMessage, HasPromptMetadata, HasPromptDescription, HasPromptArguments, HasPromptAnnotations, HasPromptMeta, PromptAnnotations, PromptArgument};
-use turul_mcp_server::handlers::{McpPrompt, McpTemplate};
+use turul_mcp_server::handlers::McpPrompt;
 use turul_mcp_server::{McpServer, McpTool, McpResource, SessionContext};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value, from_str};
@@ -1008,8 +1008,10 @@ impl CodeTemplateGenerator {
     }
 }
 
-#[async_trait]
-impl McpTemplate for CodeTemplateGenerator {
+// NOTE: CodeTemplateGenerator McpTemplate implementation removed 
+// as McpTemplate trait was removed for MCP spec compliance
+/*
+impl CodeTemplateGenerator {
     fn name(&self) -> &str {
         "code_template"
     }
@@ -1475,6 +1477,7 @@ export {{ {}Attributes, {}CreationAttributes }};"#,
         }
     }
 }
+*/
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -1515,7 +1518,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_notifications()
         .with_roots()
         .with_sampling()
-        .with_templates()
 
         .build()?;
 

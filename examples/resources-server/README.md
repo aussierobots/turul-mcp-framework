@@ -53,6 +53,7 @@ resources-server/
 
 ## Running the Server
 
+### Quick Start
 ```bash
 # Ensure you're in the resources-server directory for data/ access
 cd examples/resources-server
@@ -60,14 +61,41 @@ cd examples/resources-server
 # Run the development resource server (default: 127.0.0.1:8041)
 cargo run -p resources-server
 
+# Expected output:
+# INFO resources_server: 🚀 Starting Development Resources Server on port 8041
+# INFO turul_mcp_server::builder: 🔧 Auto-configured server capabilities:
+# INFO turul_mcp_server::builder:    - Resources: true
+# INFO turul_mcp_server::server: ✅ Server started successfully on http://127.0.0.1:8041/mcp
+```
+
+### Verify Server is Working
+```bash
+# Initialize connection (in another terminal)
+curl -X POST http://127.0.0.1:8041/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "initialize",
+    "params": {
+      "protocolVersion": "2025-06-18",
+      "capabilities": {},
+      "clientInfo": {"name": "test", "version": "1.0"}
+    },
+    "id": 1
+  }' | jq
+
 # List available resources
 curl -X POST http://127.0.0.1:8041/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "jsonrpc": "2.0",
     "method": "resources/list",
-    "id": 1
-  }'
+    "params": {},
+    "id": 2
+  }' | jq
+
+# Should show 5 available resources:
+# - docs://project, docs://api, config://app, schema://database, status://system
 ```
 
 ## Available Resources

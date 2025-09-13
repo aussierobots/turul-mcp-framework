@@ -101,7 +101,7 @@ impl McpClient {
         // The framework doesn't expose the initialize method directly in the API I see
         let init_result = InitializeResult {
             capabilities: json!({
-                "tools": {"listChanged": true},
+                "tools": {"listChanged": false},  // MCP compliance: static framework
                 "resources": {"listChanged": false, "subscribe": false},
                 "prompts": {"listChanged": false},
                 "logging": {},
