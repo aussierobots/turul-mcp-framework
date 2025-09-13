@@ -447,10 +447,10 @@ mod tests {
 
         manager.handle_error("test error".to_string()).await;
 
-        match manager.state().await {
-            SessionState::Error(msg) => assert_eq!(msg, "test error"),
-            _ => panic!("Expected error state"),
-        }
+        let SessionState::Error(msg) = manager.state().await else {
+            panic!("Expected error state, got: {:?}", manager.state().await);
+        };
+        assert_eq!(msg, "test error");
     }
 
     #[tokio::test]
