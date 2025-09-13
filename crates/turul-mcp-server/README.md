@@ -34,7 +34,7 @@ tokio = { version = "1.0", features = ["full"] }
 
 ```rust
 use turul_mcp_derive::mcp_tool;
-use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_server::{McpServerBuilder, McpResult};
 
 #[mcp_tool(name = "add", description = "Add two numbers")]
 async fn add(
@@ -46,14 +46,15 @@ async fn add(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let server = McpServer::builder()
+    let server = McpServerBuilder::new()
         .name("calculator-server")
         .version("1.0.0")
         .tool_fn(add) // Use original function name
         .bind_address("127.0.0.1:8080".parse()?)
         .build()?;
 
-    server.run().await
+    // Note: Server configuration complete - refer to turul-http-mcp-server for HTTP transport
+    // or turul-mcp-aws-lambda for Lambda deployment
 }
 ```
 
@@ -62,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 use turul_mcp_derive::McpTool;
-use turul_mcp_server::{McpServer, McpResult, SessionContext};
+use turul_mcp_server::{McpServerBuilder, McpResult, SessionContext};
 
 #[derive(McpTool, Clone)]
 #[tool(name = "calculator", description = "Add two numbers")]
@@ -81,21 +82,27 @@ impl Calculator {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let server = McpServer::builder()
+    let server = McpServerBuilder::new()
         .name("calculator-server")
         .version("1.0.0")
         .tool(Calculator { a: 0.0, b: 0.0 })
         .bind_address("127.0.0.1:8080".parse()?)
         .build()?;
 
-    server.run().await
+    // Note: Server configuration complete - refer to turul-http-mcp-server for HTTP transport
+    // or turul-mcp-aws-lambda for Lambda deployment
 }
 ```
 
 ### Level 3: Builder Pattern (Runtime Flexibility)
 
+**Note**: `ToolBuilder` is re-exported from the server crate for convenience. You can use either:
+- `turul_mcp_server::ToolBuilder` (recommended for servers)  
+- `turul_mcp_builders::ToolBuilder` (direct import)
+
 ```rust
-use turul_mcp_server::{McpServer, ToolBuilder};
+use turul_mcp_server::McpServerBuilder;
+use turul_mcp_builders::ToolBuilder;
 use serde_json::json;
 
 #[tokio::main]
@@ -116,14 +123,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .map_err(|e| format!("Failed to build tool: {}", e))?;
 
-    let server = McpServer::builder()
+    let server = McpServerBuilder::new()
         .name("calculator-server")
         .version("1.0.0")
         .tool(calculator)
         .bind_address("127.0.0.1:8080".parse()?)
         .build()?;
 
-    server.run().await
+    // Note: Server configuration complete - refer to turul-http-mcp-server for HTTP transport
+    // or turul-mcp-aws-lambda for Lambda deployment
 }
 ```
 
@@ -132,7 +140,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Pluggable Storage Backends
 
 ```rust
-use turul_mcp_server::McpServer;
+use turul_mcp_server::McpServerBuilder;
 use turul_mcp_session_storage::{SqliteSessionStorage, PostgreSqlSessionStorage};
 use std::sync::Arc;
 
@@ -140,9 +148,9 @@ use std::sync::Arc;
 let storage = Arc::new(SqliteSessionStorage::new("sessions.db").await?);
 
 // PostgreSQL for multi-instance deployments  
-let storage = Arc::new(PostgreSqlSessionStorage::new("postgresql://...").await?);
+let storage = Arc::new(PostgresSessionStorage::new("postgresql://...").await?);
 
-let server = McpServer::builder()
+let server = McpServerBuilder::new()
     .with_session_storage(storage)
     .tool(/* your tools */)
     .build()?;
@@ -169,7 +177,8 @@ impl StatefulCounter {
             let new_count = current + 1;
             
             // Save updated counter
-            session.set_typed_state("counter", new_count)?;
+            session.set_typed_state("counter", new_count)
+                .map_err(|e| format!("Failed to save state: {}", e))?;
             
             // Send progress notification
             session.notify_progress("counting", new_count as u64);
@@ -204,30 +213,32 @@ session.notify_log("info", "Operation completed successfully");
 ### HTTP Server with Custom Port
 
 ```rust
-use turul_mcp_server::McpServer;
+use turul_mcp_server::McpServerBuilder;
 
-let server = McpServer::builder()
+let server = McpServerBuilder::new()
     .name("my-server")
     .version("1.0.0")
     .bind_address("127.0.0.1:8080".parse()?)  // Custom bind address
     .tool(/* your tools */)
     .build()?;
 
-server.run().await?;
+// Note: Server configuration complete - refer to turul-http-mcp-server for HTTP transport
+// or turul-mcp-aws-lambda for Lambda deployment
+Ok(())
 ```
 
 ### Production Configuration
 
 ```rust
-use turul_mcp_server::McpServer;
-use turul_mcp_session_storage::PostgreSqlSessionStorage;
+use turul_mcp_server::McpServerBuilder;
+use turul_mcp_session_storage::PostgresSessionStorage;
 use std::sync::Arc;
 
-let storage = Arc::new(PostgreSqlSessionStorage::new(
+let storage = Arc::new(PostgresSessionStorage::new(
     std::env::var("DATABASE_URL")?
 ).await?);
 
-let server = McpServer::builder()
+let server = McpServerBuilder::new()
     .name("production-server")
     .version("1.0.0") 
     .bind_address("0.0.0.0:3000".parse()?)
@@ -235,7 +246,9 @@ let server = McpServer::builder()
     .tool(/* your tools */)
     .build()?;
 
-server.run().await?;
+// Note: Server configuration complete - refer to turul-http-mcp-server for HTTP transport
+// or turul-mcp-aws-lambda for Lambda deployment
+Ok(())
 ```
 
 ## Protocol Compliance
@@ -253,16 +266,24 @@ server.run().await?;
 - ✅ **Cancellation** - Request cancellation with progress tokens
 - ✅ **Logging** - Structured logging with multiple levels
 
-### Zero-Configuration Promise
+### Server Capabilities
 
-Users never specify method strings - the framework automatically determines all MCP methods from types:
+Static servers should advertise truthful capabilities:
 
 ```rust
-let server = McpServer::builder()
-    .tool(calculator)                        // → tools/call
-    .notification_type::<ProgressNotification>() // → notifications/progress
-    .resource(file_resource)                 // → resources/read
+let server = McpServerBuilder::new()
+    .name("static-server")
+    .version("1.0.0")
+    .tool(calculator)
     .build()?;
+
+// Framework automatically sets:
+// - tools.listChanged = false (static tool list)
+// - prompts.listChanged = false (static prompt list)  
+// - resources.subscribe = false (no subscriptions)
+// - resources.listChanged = false (static resource list)
+
+// Optional strict lifecycle: notifications/initialized can be sent after successful setup
 ```
 
 ## Examples

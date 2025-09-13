@@ -32,7 +32,7 @@ impl HasResourceMetadata for ProjectDocumentationResource {
 
 impl HasResourceUri for ProjectDocumentationResource {
     fn uri(&self) -> &str {
-        "docs://project"
+        "file:///docs/project.md"
     }
 }
 
@@ -69,20 +69,20 @@ impl McpResource for ProjectDocumentationResource {
         if readme_path.exists() {
             match fs::read_to_string(readme_path) {
                 Ok(content) => {
-                    contents.push(ResourceContent::text("docs://project", format!(
+                    contents.push(ResourceContent::text("file:///docs/project.md", format!(
                         "# Main Project Documentation\n\n{}", content
                     )));
                 },
                 Err(_) => {
                     contents.push(ResourceContent::text(
-                        "docs://project", "# Project Documentation\n\nMain README file not accessible".to_string()
+                        "file:///docs/project.md", "# Project Documentation\n\nMain README file not accessible".to_string()
                     ));
                 }
             }
         }
         
         // Add project structure overview
-        contents.push(ResourceContent::text("docs://project",
+        contents.push(ResourceContent::text("file:///docs/project.md",
             "# MCP Framework Project Structure\n\n\
              ## Core Crates\n\
              - `mcp-server/` - Main MCP server framework\n\
@@ -103,7 +103,7 @@ impl McpResource for ProjectDocumentationResource {
         ));
         
         // Add architectural overview
-        contents.push(ResourceContent::text("docs://project",
+        contents.push(ResourceContent::text("file:///docs/project.md",
             "# Architecture Overview\n\n\
              ## MCP Protocol Implementation\n\
              The framework implements the Model Context Protocol (MCP) 2025-06-18 specification:\n\n\
@@ -140,7 +140,7 @@ impl HasResourceMetadata for ApiDocumentationResource {
 
 impl HasResourceUri for ApiDocumentationResource {
     fn uri(&self) -> &str {
-        "docs://api"
+        "file:///docs/api.md"
     }
 }
 
@@ -172,12 +172,12 @@ impl McpResource for ApiDocumentationResource {
         
         match fs::read_to_string(api_docs_path) {
             Ok(content) => {
-                Ok(vec![ResourceContent::text("docs://api", content)])
+                Ok(vec![ResourceContent::text("file:///docs/api.md", content)])
             },
             Err(_) => {
                 // Fallback content if file is not accessible
                 Ok(vec![
-                    ResourceContent::text("docs://api",
+                    ResourceContent::text("file:///docs/api.md",
                         "# API Documentation\n\n\
                          Documentation file not found at data/api_docs.md\n\n\
                          This resource loads API documentation from external markdown files,\n\
@@ -211,7 +211,7 @@ impl HasResourceMetadata for ConfigurationResource {
 
 impl HasResourceUri for ConfigurationResource {
     fn uri(&self) -> &str {
-        "config://app"
+        "file:///config/app.json"
     }
 }
 
@@ -248,17 +248,17 @@ impl McpResource for ConfigurationResource {
                 // Parse and pretty-print the JSON for better readability
                 match serde_json::from_str::<serde_json::Value>(&config_content) {
                     Ok(config_json) => {
-                        contents.push(ResourceContent::text("config://app",
+                        contents.push(ResourceContent::text("file:///config/app.json",
                             serde_json::to_string_pretty(&config_json).unwrap()
                         ));
                     },
                     Err(_) => {
-                        contents.push(ResourceContent::text("config://app", config_content));
+                        contents.push(ResourceContent::text("file:///config/app.json", config_content));
                     }
                 }
             },
             Err(_) => {
-                contents.push(ResourceContent::text("config://app",
+                contents.push(ResourceContent::text("file:///config/app.json",
                     "# Application Configuration\n\n\
                      Configuration file not found at data/app_config.json\n\n\
                      This resource demonstrates production configuration management\n\
@@ -280,7 +280,7 @@ impl McpResource for ConfigurationResource {
         }
         
         // Add environment variables documentation
-        contents.push(ResourceContent::text("config://app",
+        contents.push(ResourceContent::text("file:///config/app.json",
             "# Environment Variables Guide\n\n\
              ## Security Best Practices\n\
              Never commit sensitive values to configuration files. Use environment variables:\n\n\
@@ -321,7 +321,7 @@ impl HasResourceMetadata for DatabaseSchemaResource {
 
 impl HasResourceUri for DatabaseSchemaResource {
     fn uri(&self) -> &str {
-        "schema://database"
+        "file:///schema/database.json"
     }
 }
 
@@ -355,10 +355,10 @@ impl McpResource for DatabaseSchemaResource {
         
         match fs::read_to_string(schema_path) {
             Ok(schema_content) => {
-                contents.push(ResourceContent::text("schema://database", schema_content));
+                contents.push(ResourceContent::text("file:///schema/database.json", schema_content));
             },
             Err(_) => {
-                contents.push(ResourceContent::text("schema://database",
+                contents.push(ResourceContent::text("file:///schema/database.json",
                     "-- Database Schema\n\
                      -- Schema file not found at data/database_schema.sql\n\n\
                      /*\n\
@@ -384,7 +384,7 @@ impl McpResource for DatabaseSchemaResource {
         }
         
         // Add database documentation
-        contents.push(ResourceContent::text("schema://database",
+        contents.push(ResourceContent::text("file:///schema/database.json",
             "# Database Architecture Guide\n\n\
              ## Schema Management Best Practices\n\n\
              ### 1. Migration Strategy\n\
@@ -425,7 +425,7 @@ impl HasResourceMetadata for SystemStatusResource {
 
 impl HasResourceUri for SystemStatusResource {
     fn uri(&self) -> &str {
-        "status://system"
+        "file:///status/system.json"
     }
 }
 
@@ -498,8 +498,8 @@ impl McpResource for SystemStatusResource {
         });
 
         Ok(vec![
-            ResourceContent::text("status://system", serde_json::to_string_pretty(&status).unwrap()),
-            ResourceContent::text("status://system",
+            ResourceContent::text("file:///status/system.json", serde_json::to_string_pretty(&status).unwrap()),
+            ResourceContent::text("file:///status/system.json",
                 "# System Health Report\n\n\
                  ## Overall Status: ✅ HEALTHY\n\n\
                  ### Services\n\

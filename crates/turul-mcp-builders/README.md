@@ -47,14 +47,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .number_param("b", "Second number")
         .number_output()
         .execute(|args| async move {
-            let a = args.get("a").and_then(|v| v.as_f64()).unwrap_or(0.0);
-            let b = args.get("b").and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let a = args.get("a").and_then(|v| v.as_f64())
+                .ok_or("Missing parameter 'a'")?;
+            let b = args.get("b").and_then(|v| v.as_f64())
+                .ok_or("Missing parameter 'b'")?;
             Ok(json!({"result": a + b}))
         })
         .build()?;
 
     // Use in server
-    let server = McpServer::builder()
+    let server = McpServerBuilder::new()
         .tool(calculator)
         .build()?;
         
@@ -75,9 +77,12 @@ let tool = ToolBuilder::new("data_processor")
     .optional_string_param("format", "Output format (json, csv, xml)")
     .boolean_param("validate", "Validate input data")
     .execute(|args| async move {
-        let input = args.get("input").and_then(|v| v.as_str()).unwrap_or("");
-        let format = args.get("format").and_then(|v| v.as_str()).unwrap_or("json");
-        let validate = args.get("validate").and_then(|v| v.as_bool()).unwrap_or(false);
+        let input = args.get("input").and_then(|v| v.as_str())
+            .ok_or("Missing parameter 'input'")?;
+        let format = args.get("format").and_then(|v| v.as_str())
+            .unwrap_or("json");
+        let validate = args.get("validate").and_then(|v| v.as_bool())
+            .unwrap_or(false);
         
         // Custom processing logic
         let result = process_data(input, format, validate).await?;
@@ -119,13 +124,25 @@ let greeting_prompt = PromptBuilder::new("personalized_greeting")
 
 ```rust
 use turul_mcp_builders::MessageBuilder;
-use turul_mcp_protocol::sampling::Role;
+use serde_json::json;
 
-let message = MessageBuilder::new(Role::User)
-    .text_content("What is the capital of France?")
-    .add_annotation("topic", "geography")
-    .add_annotation("difficulty", "basic")
-    .build()?;
+let params = MessageBuilder::new()
+    .system("You are a helpful geography assistant.")
+    .user_text("What is the capital of France?")
+    .assistant_text("The capital of France is Paris.")
+    .temperature(0.7)
+    .max_tokens(1000)
+    .metadata(json!({
+        "topic": "geography",
+        "difficulty": "basic"
+    }))
+    .build_params();
+
+// Or build a complete sampling request
+let request = MessageBuilder::new()
+    .user_text("What is the capital of France?")
+    .temperature(0.7)
+    .build_request();
 ```
 
 ### 5. CompletionBuilder - Autocompletion Context
@@ -133,7 +150,7 @@ let message = MessageBuilder::new(Role::User)
 ```rust
 use turul_mcp_builders::CompletionBuilder;
 
-let completion = CompletionBuilder::new("code_completion")
+let completion = CompletionBuilder::for_prompt("code_completion")
     .argument("language", "rust")
     .argument("context", "struct definition")
     .build()?;
@@ -153,14 +170,16 @@ let project_root = RootBuilder::new("file:///workspace/my-project")
 
 ```rust
 use turul_mcp_builders::ElicitationBuilder;
+use turul_mcp_protocol::elicitation::StringFormat;
 
-let user_form = ElicitationBuilder::new("user_preferences")
+let user_form = ElicitationBuilder::new("Configure your application preferences")
     .title("User Preferences")
-    .description("Configure your application preferences")
-    .string_field("name", "Full Name", true)  // required
-    .email_field("email", "Email Address", true)
-    .select_field("theme", "UI Theme", vec!["light", "dark", "auto"], false)
-    .build()?;
+    .string_field("name", "Full Name")
+    .string_field_with_format("email", "Email Address", StringFormat::Email)
+    .enum_field("theme", "UI Theme", vec!["light".to_string(), "dark".to_string(), "auto".to_string()])
+    .require_field("name")  // Make name required
+    .require_field("email") // Make email required
+    .build();
 ```
 
 ### 8. NotificationBuilder - MCP Notifications
@@ -212,15 +231,23 @@ async fn load_tools_from_config(config_path: &str) -> Result<Vec<Box<dyn turul_m
     let config: Value = serde_json::from_str(&std::fs::read_to_string(config_path)?)?;
     let mut tools = Vec::new();
     
-    for tool_config in config["tools"].as_array().unwrap() {
-        let mut builder = ToolBuilder::new(tool_config["name"].as_str().unwrap())
-            .description(tool_config["description"].as_str().unwrap());
+    for tool_config in config["tools"].as_array()
+        .ok_or("Missing 'tools' array in config")? {
+        let name = tool_config["name"].as_str()
+            .ok_or("Missing tool 'name' field")?;
+        let description = tool_config["description"].as_str()
+            .ok_or("Missing tool 'description' field")?;
+        let mut builder = ToolBuilder::new(name).description(description);
             
         // Add parameters from config
-        for param in tool_config["parameters"].as_array().unwrap() {
-            let name = param["name"].as_str().unwrap();
-            let description = param["description"].as_str().unwrap();
-            let param_type = param["type"].as_str().unwrap();
+        for param in tool_config["parameters"].as_array()
+            .ok_or("Missing 'parameters' array")? {
+            let name = param["name"].as_str()
+                .ok_or("Missing parameter 'name' field")?;
+            let description = param["description"].as_str()
+                .ok_or("Missing parameter 'description' field")?;
+            let param_type = param["type"].as_str()
+                .ok_or("Missing parameter 'type' field")?;
             
             builder = match param_type {
                 "string" => builder.string_param(name, description),
@@ -231,7 +258,8 @@ async fn load_tools_from_config(config_path: &str) -> Result<Vec<Box<dyn turul_m
         }
         
         // Add execution logic based on tool type
-        let tool_type = tool_config["type"].as_str().unwrap();
+        let tool_type = tool_config["type"].as_str()
+            .ok_or("Missing tool 'type' field")?;
         builder = match tool_type {
             "calculator" => builder.execute(calculator_logic()),
             "file_reader" => builder.execute(file_reader_logic()),
@@ -273,32 +301,36 @@ trait Plugin {
 struct MathPlugin;
 
 impl Plugin for MathPlugin {
-    fn create_tools(&self) -> Vec<Box<dyn turul_mcp_server::McpTool>> {
-        vec![
+    fn create_tools(&self) -> Result<Vec<Box<dyn turul_mcp_server::McpTool>>, Box<dyn std::error::Error>> {
+        Ok(vec![
             Box::new(ToolBuilder::new("add")
                 .description("Add two numbers")
                 .number_param("a", "First number")
                 .number_param("b", "Second number") 
                 .execute(|args| async move {
-                    let a = args["a"].as_f64().unwrap();
-                    let b = args["b"].as_f64().unwrap();
+                    let a = args["a"].as_f64()
+                        .ok_or("Parameter 'a' must be a number")?;
+                    let b = args["b"].as_f64()
+                        .ok_or("Parameter 'b' must be a number")?;
                     Ok(json!({"result": a + b}))
                 })
                 .build()
-                .unwrap()),
+                .map_err(|e| format!("Failed to build add tool: {}", e))?),
                 
             Box::new(ToolBuilder::new("multiply")
                 .description("Multiply two numbers")
                 .number_param("x", "First number")
                 .number_param("y", "Second number")
                 .execute(|args| async move {
-                    let x = args["x"].as_f64().unwrap();
-                    let y = args["y"].as_f64().unwrap(); 
+                    let x = args["x"].as_f64()
+                        .ok_or("Parameter 'x' must be a number")?;
+                    let y = args["y"].as_f64()
+                        .ok_or("Parameter 'y' must be a number")?; 
                     Ok(json!({"result": x * y}))
                 })
                 .build()
-                .unwrap()),
-        ]
+                .map_err(|e| format!("Failed to build multiply tool: {}", e))?),
+        ])
     }
 }
 ```
@@ -317,8 +349,10 @@ let validated_tool = ToolBuilder::new("user_registration")
     .string_param("password", "User password") 
     .optional_number_param("age", "User age")
     .execute(|args| async move {
-        let email = args.get("email").and_then(|v| v.as_str()).unwrap_or("");
-        let password = args.get("password").and_then(|v| v.as_str()).unwrap_or("");
+        let email = args.get("email").and_then(|v| v.as_str())
+            .ok_or("Missing required parameter 'email'")?;
+        let password = args.get("password").and_then(|v| v.as_str())
+            .ok_or("Missing required parameter 'password'")?;
         let age = args.get("age").and_then(|v| v.as_f64());
         
         // Validation logic
@@ -409,7 +443,7 @@ let documented_tool = ToolBuilder::new("api_client")
 use turul_mcp_server::McpServer;
 use turul_mcp_builders::*;
 
-let server = McpServer::builder()
+let server = McpServerBuilder::new()
     .tool(ToolBuilder::new("calc").build()?)           // ToolDefinition
     .resource(ResourceBuilder::new("uri").build()?)    // ResourceDefinition
     .prompt(PromptBuilder::new("template").build()?)   // PromptDefinition
@@ -475,11 +509,12 @@ mod tests {
                 Ok(json!({"echo": args["input"]}))
             })
             .build()
-            .unwrap();
+            .expect("Tool should build successfully");
             
         // Test the built tool
         let args = json!({"input": "hello"});
-        let result = tool.call(args, None).await.unwrap();
+        let result = tool.call(args, None).await
+            .expect("Tool call should succeed");
         // Assert result format
     }
 }

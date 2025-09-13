@@ -94,7 +94,7 @@ All types and functionality from the current MCP specification are available:
 use turul_mcp_protocol::{
     // Version and capabilities
     McpVersion, ClientCapabilities, ServerCapabilities,
-    Implementation, ClientInfo, ServerInfo,
+    Implementation,
     
     // Initialization
     InitializeRequest, InitializeResult,
@@ -115,25 +115,23 @@ use turul_mcp_protocol::{
     CreateMessageRequest, CreateMessageResult,
     
     // Notifications
-    ProgressNotification, LoggingNotification,
-    ResourceUpdatedNotification, PromptUpdatedNotification,
+    ProgressNotification, LoggingMessageNotification,
+    ResourceUpdatedNotification, ResourceListChangedNotification,
 };
 ```
 
 ### Error Types
 
 ```rust
-use turul_mcp_protocol::{
-    McpError, JsonRpcError, ProtocolError,
-    ValidationError, SerializationError
-};
+use turul_mcp_protocol::McpError;
 
 fn handle_mcp_error(error: McpError) {
     match error {
-        McpError::Protocol(e) => println!("Protocol error: {}", e),
-        McpError::JsonRpc(e) => println!("JSON-RPC error: {}", e),
-        McpError::Validation(e) => println!("Validation error: {}", e),
-        McpError::Serialization(e) => println!("Serialization error: {}", e),
+        McpError::ToolNotFound(name) => println!("Tool not found: {}", name),
+        McpError::ResourceNotFound(uri) => println!("Resource not found: {}", uri),
+        McpError::InvalidParameters(msg) => println!("Invalid parameters: {}", msg),
+        McpError::ToolExecutionError(msg) => println!("Tool execution failed: {}", msg),
+        _ => println!("MCP error: {}", error),
     }
 }
 ```
@@ -144,14 +142,14 @@ fn handle_mcp_error(error: McpError) {
 use turul_mcp_protocol::{
     // Tool traits
     HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema,
-    ToolDefinition, McpTool,
+    ToolDefinition,
     
     // Resource traits
     HasResourceMetadata, ResourceDefinition, McpResource,
     
     // Request/Response traits
-    HasMethod, HasParams, JsonRpcRequestTrait,
-    HasData, HasMeta, JsonRpcResponseTrait,
+    HasMethod, HasParams,
+    HasData, HasMeta,
 };
 
 // Example implementation
@@ -175,10 +173,10 @@ impl HasDescription for MyTool {
 
 ```rust
 use turul_mcp_protocol::{Tool, CallToolRequest, CallToolResult};
-use turul_mcp_server::McpServer;
+use turul_mcp_server::McpServerBuilder;
 
 // Works seamlessly with the framework
-let server = McpServer::builder()
+let server = McpServerBuilder::new()
     .name("My MCP Server")
     .version("1.0.0")
     .tool(MyTool { /* ... */ })
@@ -276,8 +274,8 @@ mod tests {
     fn test_all_major_types_available() {
         // Ensure all major protocol types are accessible
         let _tool = Tool::new("test", ToolSchema::object());
-        let _resource = Resource::new("file:///test", Some("Test resource"));
-        let _prompt = Prompt::new("test", None);
+        let _resource = Resource::new("file:///test", "Test resource");
+        let _prompt = Prompt::new("test");
         
         // If this compiles, re-exports are working
         assert!(true);

@@ -108,7 +108,7 @@ cargo test -p turul-mcp-framework-integration-tests --test mcp_runtime_capabilit
 cargo run -p minimal-server
 
 # 4. Test the server (in another terminal)
-curl -X POST http://127.0.0.1:8000/mcp \
+curl -X POST http://127.0.0.1:8641/mcp \
   -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
 ```

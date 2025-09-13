@@ -53,9 +53,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = McpServer::builder()
         .with_session_storage(storage)
         .tool(/* your tools */)
-        .build()?
-        .start()
-        .await?;
+        .build()?;
+        
+    server.run().await?;
         
     Ok(())
 }
@@ -137,7 +137,7 @@ struct UserPreferences {
 // In your tool implementation
 async fn handle_user_preferences(session: SessionContext) -> Result<(), Box<dyn std::error::Error>> {
     // Get typed state
-    let prefs: Option<UserPreferences> = session.get_typed_state("user_prefs").await?;
+    let prefs: Option<UserPreferences> = session.get_typed_state("user_prefs");
     
     let mut preferences = prefs.unwrap_or(UserPreferences {
         theme: "light".to_string(),
@@ -149,10 +149,10 @@ async fn handle_user_preferences(session: SessionContext) -> Result<(), Box<dyn 
     preferences.theme = "dark".to_string();
     
     // Save typed state
-    session.set_typed_state("user_prefs", &preferences).await?;
+    session.set_typed_state("user_prefs", preferences)?;
     
     // Remove state when no longer needed
-    session.remove_state("user_prefs").await?;
+    session.remove_state("user_prefs");
     
     Ok(())
 }
@@ -192,12 +192,7 @@ use turul_mcp_server::SessionContext;
 
 async fn send_progress_with_persistence(session: SessionContext) -> Result<(), Box<dyn std::error::Error>> {
     // Progress notifications are automatically stored
-    session.notify_progress(
-        "long-task", 
-        50.0, 
-        Some(100.0), 
-        Some("Processing files...".to_string())
-    ).await?;
+    session.notify_progress("long-task", 50);
     
     // Client can reconnect and replay from last-event-id
     Ok(())
@@ -411,7 +406,7 @@ The framework provides graceful degradation when storage fails:
 
 ```rust
 // Session operations that fail gracefully
-if let Err(e) = session.set_typed_state("key", &value).await {
+if let Err(e) = session.set_typed_state("key", value) {
     tracing::warn!("Failed to persist session state: {}", e);
     // Operation continues without state persistence
 }

@@ -34,7 +34,8 @@ serde_json = "1.0"
 
 ```rust
 use turul_mcp_json_rpc_server::{
-    JsonRpcDispatcher, JsonRpcHandler, SessionContext, JsonRpcResult
+    JsonRpcDispatcher, JsonRpcHandler, SessionContext, RequestParams,
+    r#async::JsonRpcResult, dispatch::parse_json_rpc_message
 };
 use serde_json::{Value, json};
 use async_trait::async_trait;
@@ -46,23 +47,55 @@ impl JsonRpcHandler for CalculatorHandler {
     async fn handle(
         &self, 
         method: &str, 
-        params: Option<serde_json::Value>, 
+        params: Option<RequestParams>, 
         _session: Option<SessionContext>
     ) -> JsonRpcResult<Value> {
         match method {
             "add" => {
-                let params = params.ok_or("Missing parameters")?;
-                let a = params["a"].as_f64().ok_or("Missing 'a' parameter")?;
-                let b = params["b"].as_f64().ok_or("Missing 'b' parameter")?;
+                let params = params.ok_or_else(|| {
+                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                        "Missing parameters for add operation".to_string()
+                    )
+                })?;
+                
+                let map = params.to_map();
+                let a = map.get("a").and_then(|v| v.as_f64()).ok_or_else(|| {
+                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                        "Parameter 'a' is required and must be a number".to_string()
+                    )
+                })?;
+                let b = map.get("b").and_then(|v| v.as_f64()).ok_or_else(|| {
+                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                        "Parameter 'b' is required and must be a number".to_string()
+                    )
+                })?;
+                
                 Ok(json!({"result": a + b}))
             }
             "subtract" => {
-                let params = params.ok_or("Missing parameters")?;
-                let a = params["a"].as_f64().ok_or("Missing 'a' parameter")?;
-                let b = params["b"].as_f64().ok_or("Missing 'b' parameter")?;
+                let params = params.ok_or_else(|| {
+                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                        "Missing parameters for subtract operation".to_string()
+                    )
+                })?;
+                
+                let map = params.to_map();
+                let a = map.get("a").and_then(|v| v.as_f64()).ok_or_else(|| {
+                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                        "Parameter 'a' is required and must be a number".to_string()
+                    )
+                })?;
+                let b = map.get("b").and_then(|v| v.as_f64()).ok_or_else(|| {
+                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                        "Parameter 'b' is required and must be a number".to_string()
+                    )
+                })?;
+                
                 Ok(json!({"result": a - b}))
             }
-            _ => Err(format!("Unknown method: {}", method).into())
+            _ => Err(turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                format!("Unknown method: {}. Supported methods: add, subtract", method)
+            ))
         }
     }
 
@@ -75,19 +108,24 @@ impl JsonRpcHandler for CalculatorHandler {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create dispatcher and register handler
     let mut dispatcher = JsonRpcDispatcher::new();
-    dispatcher.register_handler("calculator", Box::new(CalculatorHandler));
+    dispatcher.register_methods(
+        vec!["add".to_string(), "subtract".to_string()],
+        CalculatorHandler,
+    );
 
-    // Handle a JSON-RPC request
-    let request_json = json!({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "calculator.add",
-        "params": {"a": 5, "b": 3}
-    });
-
-    let response = dispatcher.dispatch(request_json, None).await?;
-    println!("Response: {}", response);
-    // Output: {"jsonrpc":"2.0","id":1,"result":{"result":8}}
+    // Parse and handle a JSON-RPC request
+    let request_json = r#"{"jsonrpc": "2.0", "method": "add", "params": {"a": 5, "b": 3}, "id": 1}"#;
+    
+    match parse_json_rpc_message(request_json) {
+        Ok(turul_mcp_json_rpc_server::dispatch::JsonRpcMessage::Request(request)) => {
+            let response = dispatcher.handle_request(request).await;
+            let response_json = serde_json::to_string(&response)?;
+            println!("Response: {}", response_json);
+            // Output: {"jsonrpc":"2.0","id":1,"result":{"result":8}}
+        }
+        Err(e) => println!("Parse error: {}", e),
+        _ => println!("Received notification (no response needed)"),
+    }
 
     Ok(())
 }
@@ -119,6 +157,7 @@ Implement this trait to handle JSON-RPC method calls:
 
 ```rust
 use async_trait::async_trait;
+use std::sync::{Arc, Mutex};
 
 struct MyHandler {
     state: Arc<Mutex<MyState>>,
@@ -129,41 +168,55 @@ impl JsonRpcHandler for MyHandler {
     async fn handle(
         &self,
         method: &str,
-        params: Option<serde_json::Value>,
+        params: Option<RequestParams>,
         session: Option<SessionContext>
     ) -> JsonRpcResult<Value> {
         match method {
             "get_status" => {
                 Ok(json!({
                     "status": "active",
-                    "timestamp": chrono::Utc::now(),
+                    "timestamp": chrono::Utc::now().timestamp(),
                     "session_id": session.as_ref().map(|s| &s.session_id)
                 }))
             }
             "process_data" => {
-                let data = params.ok_or("Missing data parameter")?;
+                let params = params.ok_or_else(|| {
+                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                        "Missing data parameter".to_string()
+                    )
+                })?;
+                
+                let map = params.to_map();
+                let data = map.get("data").ok_or_else(|| {
+                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                        "Missing 'data' field in parameters".to_string()
+                    )
+                })?;
+                
                 let result = self.process(data).await?;
                 Ok(json!({"processed": result}))
             }
-            _ => Err(JsonRpcError::method_not_found(method).into())
+            _ => Err(turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                format!("Unknown method: {}", method)
+            ))
         }
     }
 
     async fn handle_notification(
         &self,
         method: &str,
-        params: Option<serde_json::Value>,
-        session: Option<SessionContext>
+        params: Option<RequestParams>,
+        _session: Option<SessionContext>
     ) -> JsonRpcResult<()> {
         match method {
             "log" => {
                 if let Some(params) = params {
-                    println!("Log: {:?}", params);
+                    println!("Log: {:?}", params.to_map());
                 }
                 Ok(())
             }
             "ping" => {
-                // Handle ping notification
+                println!("Received ping notification");
                 Ok(())
             }
             _ => Ok(()) // Ignore unknown notifications
@@ -207,21 +260,13 @@ impl JsonRpcHandler for SessionAwareHandler {
             "get_session_info" => {
                 Ok(json!({
                     "session_id": session.session_id,
-                    "timestamp": session.timestamp,
-                    "metadata": session.metadata
+                    "timestamp": session.timestamp
                 }))
             }
             "increment_counter" => {
-                // Access session metadata
-                let current = session.metadata
-                    .get("counter")
-                    .and_then(|v| v.as_u64())
-                    .unwrap_or(0);
-                
-                let new_count = current + 1;
-                
-                // In a real implementation, you'd update the session storage
-                Ok(json!({"counter": new_count}))
+                // Session state management would be handled by the transport layer
+                // This is just the JSON-RPC processing layer
+                Ok(json!({"message": "Counter increment processed"}))
             }
             _ => Err(JsonRpcError::method_not_found(method).into())
         }
@@ -234,31 +279,30 @@ impl JsonRpcHandler for SessionAwareHandler {
 ### Standard JSON-RPC Error Codes
 
 ```rust
-use turul_mcp_json_rpc_server::{JsonRpcError, JsonRpcErrorCode};
+use turul_mcp_json_rpc_server::error::{JsonRpcErrorObject, JsonRpcProcessingError};
 
-// Standard error codes
-let parse_error = JsonRpcError::new(
-    JsonRpcErrorCode::ParseError,
-    "Invalid JSON was received"
+// Standard error codes using JsonRpcErrorObject
+let parse_error = JsonRpcErrorObject::parse_error();
+
+let invalid_request = JsonRpcErrorObject::invalid_request();
+
+let method_not_found = JsonRpcErrorObject::method_not_found();
+
+let invalid_params = JsonRpcErrorObject::invalid_params("Required parameter missing");
+
+let internal_error = JsonRpcErrorObject::internal_error(Some("Database connection failed".to_string()));
+
+// For handler errors, use JsonRpcProcessingError
+let handler_error = JsonRpcProcessingError::HandlerError(
+    "Custom application error".to_string()
 );
-
-let invalid_request = JsonRpcError::new(
-    JsonRpcErrorCode::InvalidRequest,
-    "The JSON sent is not a valid Request object"
-);
-
-let method_not_found = JsonRpcError::method_not_found("unknown_method");
-
-let invalid_params = JsonRpcError::invalid_params("Required parameter missing");
-
-let internal_error = JsonRpcError::internal_error("Database connection failed");
 ```
 
 ### Custom Error Handling
 
 ```rust
 struct DatabaseHandler {
-    pool: sqlx::PgPool,
+    // In practice, you'd have a database connection here
 }
 
 #[async_trait]
@@ -266,34 +310,37 @@ impl JsonRpcHandler for DatabaseHandler {
     async fn handle(
         &self,
         method: &str,
-        params: Option<Value>,
+        params: Option<RequestParams>,
         _session: Option<SessionContext>
     ) -> JsonRpcResult<Value> {
         match method {
             "query_users" => {
-                match sqlx::query!("SELECT * FROM users")
-                    .fetch_all(&self.pool)
-                    .await
-                {
-                    Ok(rows) => {
-                        let users: Vec<Value> = rows.into_iter()
-                            .map(|row| json!({"id": row.id, "name": row.name}))
-                            .collect();
+                // Simulate database operation
+                match self.simulate_database_query().await {
+                    Ok(users) => {
                         Ok(json!({"users": users}))
                     }
-                    Err(sqlx::Error::Database(db_err)) => {
-                        Err(JsonRpcError::new(
-                            JsonRpcErrorCode::Custom(-32001),
-                            &format!("Database error: {}", db_err)
-                        ).into())
-                    }
                     Err(e) => {
-                        Err(JsonRpcError::internal_error(&format!("Query failed: {}", e)).into())
+                        Err(turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                            format!("Database query failed: {}", e)
+                        ))
                     }
                 }
             }
-            _ => Err(JsonRpcError::method_not_found(method).into())
+            _ => Err(turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                format!("Unknown method: {}", method)
+            ))
         }
+    }
+}
+
+impl DatabaseHandler {
+    async fn simulate_database_query(&self) -> Result<Vec<Value>, &'static str> {
+        // Simulate potential database errors
+        Ok(vec![
+            json!({"id": 1, "name": "Alice"}),
+            json!({"id": 2, "name": "Bob"})
+        ])
     }
 }
 ```
@@ -303,30 +350,40 @@ impl JsonRpcHandler for DatabaseHandler {
 Handle multiple requests in a single call:
 
 ```rust
+use turul_mcp_json_rpc_server::dispatch::parse_json_rpc_message;
 use serde_json::json;
 
-let batch_request = json!([
-    {
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "math.add",
-        "params": {"a": 1, "b": 2}
-    },
-    {
-        "jsonrpc": "2.0",
-        "id": 2,
-        "method": "math.multiply",
-        "params": {"a": 3, "b": 4}
-    },
-    {
-        "jsonrpc": "2.0",
-        "method": "log.info",  // notification (no id)
-        "params": {"message": "Batch processed"}
-    }
-]);
+// Note: This crate handles individual JSON-RPC messages
+// Batch processing would be handled by the transport layer
+let batch_request_json = r#"[
+    {"jsonrpc": "2.0", "id": 1, "method": "add", "params": {"a": 1, "b": 2}},
+    {"jsonrpc": "2.0", "id": 2, "method": "subtract", "params": {"a": 5, "b": 3}},
+    {"jsonrpc": "2.0", "method": "log", "params": {"message": "Batch processed"}}
+]"#;
 
-let response = dispatcher.dispatch(batch_request, session).await?;
-// Returns array of responses (notifications don't generate responses)
+// Parse each message in the batch
+let batch: Vec<serde_json::Value> = serde_json::from_str(batch_request_json)?;
+let mut responses = Vec::new();
+
+for message_json in batch {
+    let message_str = serde_json::to_string(&message_json)?;
+    match parse_json_rpc_message(&message_str) {
+        Ok(turul_mcp_json_rpc_server::dispatch::JsonRpcMessage::Request(request)) => {
+            let response = dispatcher.handle_request(request).await;
+            responses.push(serde_json::to_value(response)?);
+        }
+        Ok(turul_mcp_json_rpc_server::dispatch::JsonRpcMessage::Notification(notification)) => {
+            let _ = dispatcher.handle_notification(notification).await;
+            // Notifications don't generate responses
+        }
+        Err(_) => {
+            // Handle parse errors as needed
+        }
+    }
+}
+
+// Return array of responses (notifications don't generate responses)
+let batch_response = json!(responses);
 ```
 
 ## Notifications vs Requests
@@ -343,13 +400,14 @@ impl JsonRpcHandler for NotificationHandler {
     async fn handle_notification(
         &self,
         method: &str,
-        params: Option<Value>,
+        params: Option<RequestParams>,
         session: Option<SessionContext>
     ) -> JsonRpcResult<()> {
         match method {
             "user_activity" => {
                 if let Some(params) = params {
-                    println!("User activity: {:?}", params);
+                    let map = params.to_map();
+                    println!("User activity: {:?}", map);
                     // Log to database, send to analytics, etc.
                 }
                 Ok(())
@@ -366,10 +424,12 @@ impl JsonRpcHandler for NotificationHandler {
     async fn handle(
         &self,
         method: &str,
-        _params: Option<Value>,
+        _params: Option<RequestParams>,
         _session: Option<SessionContext>
     ) -> JsonRpcResult<Value> {
-        Err(JsonRpcError::method_not_found(method).into())
+        Err(turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+            format!("Method not supported for requests: {}", method)
+        ))
     }
 }
 ```
@@ -380,7 +440,12 @@ impl JsonRpcHandler for NotificationHandler {
 
 ```rust
 use hyper::{Body, Request, Response, StatusCode};
-use turul_mcp_json_rpc_server::JsonRpcDispatcher;
+use turul_mcp_json_rpc_server::{
+    JsonRpcDispatcher, dispatch::parse_json_rpc_message, 
+    types::JsonRpcResponse, error::JsonRpcErrorObject
+};
+use std::sync::Arc;
+use serde_json::Value;
 
 async fn handle_http_request(
     req: Request<Body>,
@@ -388,12 +453,12 @@ async fn handle_http_request(
 ) -> Result<Response<Body>, hyper::Error> {
     let body_bytes = hyper::body::to_bytes(req.into_body()).await?;
     
-    let request_json: Value = match serde_json::from_slice(&body_bytes) {
-        Ok(json) => json,
+    let request_str = match std::str::from_utf8(&body_bytes) {
+        Ok(s) => s,
         Err(_) => {
             let error_response = JsonRpcResponse::error(
                 None,
-                JsonRpcError::parse_error()
+                JsonRpcErrorObject::parse_error()
             );
             let response_json = serde_json::to_string(&error_response).unwrap();
             return Ok(Response::builder()
@@ -403,31 +468,33 @@ async fn handle_http_request(
         }
     };
 
-    // Create session context from HTTP headers
-    let session_id = extract_session_id(&req);
-    let session_context = session_id.map(|id| SessionContext {
-        session_id: id,
-        metadata: HashMap::new(),
-        broadcaster: None,
-        timestamp: chrono::Utc::now().timestamp_millis() as u64,
-    });
-
-    match dispatcher.dispatch(request_json, session_context).await {
-        Ok(response_json) => {
+    match parse_json_rpc_message(request_str) {
+        Ok(turul_mcp_json_rpc_server::dispatch::JsonRpcMessage::Request(request)) => {
+            let response = dispatcher.handle_request(request).await;
+            let response_json = serde_json::to_string(&response).unwrap();
+            
             Ok(Response::builder()
                 .status(StatusCode::OK)
                 .header("content-type", "application/json")
                 .body(Body::from(response_json))
                 .unwrap())
         }
-        Err(e) => {
+        Ok(turul_mcp_json_rpc_server::dispatch::JsonRpcMessage::Notification(notification)) => {
+            let _ = dispatcher.handle_notification(notification).await;
+            // Notifications don't generate responses
+            Ok(Response::builder()
+                .status(StatusCode::NO_CONTENT)
+                .body(Body::empty())
+                .unwrap())
+        }
+        Err(_) => {
             let error_response = JsonRpcResponse::error(
                 None,
-                JsonRpcError::internal_error(&e.to_string())
+                JsonRpcErrorObject::parse_error()
             );
             let response_json = serde_json::to_string(&error_response).unwrap();
             Ok(Response::builder()
-                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .status(StatusCode::BAD_REQUEST)
                 .body(Body::from(response_json))
                 .unwrap())
         }
@@ -440,6 +507,11 @@ async fn handle_http_request(
 ```rust
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 use futures_util::{SinkExt, StreamExt};
+use turul_mcp_json_rpc_server::{
+    JsonRpcDispatcher, dispatch::parse_json_rpc_message,
+    types::JsonRpcResponse, error::JsonRpcErrorObject
+};
+use std::sync::Arc;
 
 async fn handle_websocket_connection(
     ws_stream: WebSocketStream<tokio::net::TcpStream>,
@@ -450,29 +522,20 @@ async fn handle_websocket_connection(
     while let Some(msg) = ws_receiver.next().await {
         match msg {
             Ok(Message::Text(text)) => {
-                let request_json: Value = match serde_json::from_str(&text) {
-                    Ok(json) => json,
+                match parse_json_rpc_message(&text) {
+                    Ok(turul_mcp_json_rpc_server::dispatch::JsonRpcMessage::Request(request)) => {
+                        let response = dispatcher.handle_request(request).await;
+                        let response_json = serde_json::to_string(&response).unwrap();
+                        let _ = ws_sender.send(Message::Text(response_json)).await;
+                    }
+                    Ok(turul_mcp_json_rpc_server::dispatch::JsonRpcMessage::Notification(notification)) => {
+                        let _ = dispatcher.handle_notification(notification).await;
+                        // Notifications don't generate responses
+                    }
                     Err(_) => {
                         let error = JsonRpcResponse::error(
                             None,
-                            JsonRpcError::parse_error()
-                        );
-                        let _ = ws_sender.send(Message::Text(
-                            serde_json::to_string(&error).unwrap()
-                        )).await;
-                        continue;
-                    }
-                };
-
-                let response = dispatcher.dispatch(request_json, None).await;
-                match response {
-                    Ok(response_json) => {
-                        let _ = ws_sender.send(Message::Text(response_json)).await;
-                    }
-                    Err(e) => {
-                        let error = JsonRpcResponse::error(
-                            None,
-                            JsonRpcError::internal_error(&e.to_string())
+                            JsonRpcErrorObject::parse_error()
                         );
                         let _ = ws_sender.send(Message::Text(
                             serde_json::to_string(&error).unwrap()
@@ -501,10 +564,18 @@ mod tests {
     async fn test_calculator_handler() {
         let handler = CalculatorHandler;
         
+        // Create parameters using RequestParams
+        let params = turul_mcp_json_rpc_server::RequestParams::from_map(
+            vec![
+                ("a".to_string(), json!(5)),
+                ("b".to_string(), json!(3))
+            ].into_iter().collect()
+        );
+        
         // Test add method
         let result = handler.handle(
             "add",
-            Some(json!({"a": 5, "b": 3})),
+            Some(params),
             None
         ).await.unwrap();
         
@@ -518,21 +589,35 @@ mod tests {
     #[tokio::test]
     async fn test_dispatcher() {
         let mut dispatcher = JsonRpcDispatcher::new();
-        dispatcher.register_handler("calc", Box::new(CalculatorHandler));
+        dispatcher.register_methods(
+            vec!["add".to_string(), "subtract".to_string()],
+            CalculatorHandler,
+        );
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "calc.add",
-            "params": {"a": 10, "b": 20}
-        });
+        // Create a proper JsonRpcRequest
+        let request = turul_mcp_json_rpc_server::types::JsonRpcRequest {
+            jsonrpc: "2.0".to_string(),
+            method: "add".to_string(),
+            params: Some(turul_mcp_json_rpc_server::RequestParams::from_map(
+                vec![
+                    ("a".to_string(), json!(10)),
+                    ("b".to_string(), json!(20))
+                ].into_iter().collect()
+            )),
+            id: Some(turul_mcp_json_rpc_server::types::RequestId::Number(1)),
+        };
 
-        let response = dispatcher.dispatch(request, None).await.unwrap();
-        let response_json: Value = serde_json::from_str(&response).unwrap();
+        let response = dispatcher.handle_request(request).await;
         
-        assert_eq!(response_json["result"]["result"], json!(30));
-        assert_eq!(response_json["id"], json!(1));
-        assert_eq!(response_json["jsonrpc"], json!("2.0"));
+        // Check response structure
+        assert_eq!(response.jsonrpc, "2.0");
+        assert_eq!(response.id, Some(turul_mcp_json_rpc_server::types::RequestId::Number(1)));
+        
+        if let Some(result) = response.result {
+            assert_eq!(result["result"], json!(30));
+        } else {
+            panic!("Expected result, got error: {:?}", response.error);
+        }
     }
 }
 ```
@@ -545,32 +630,37 @@ use tokio_test;
 #[tokio::test]
 async fn test_full_json_rpc_flow() {
     let mut dispatcher = JsonRpcDispatcher::new();
-    dispatcher.register_handler("test", Box::new(TestHandler));
+    dispatcher.register_method("echo".to_string(), TestHandler);
 
     // Test request
-    let request = json!({
-        "jsonrpc": "2.0",
-        "id": "test-123",
-        "method": "test.echo",
-        "params": {"message": "Hello, JSON-RPC!"}
-    });
-
-    let response_str = dispatcher.dispatch(request, None).await.unwrap();
-    let response: Value = serde_json::from_str(&response_str).unwrap();
-
-    assert_eq!(response["jsonrpc"], "2.0");
-    assert_eq!(response["id"], "test-123");
-    assert_eq!(response["result"]["echo"], "Hello, JSON-RPC!");
+    let request_json = r#"{"jsonrpc": "2.0", "id": "test-123", "method": "echo", "params": {"message": "Hello, JSON-RPC!"}}"#;
+    
+    match turul_mcp_json_rpc_server::dispatch::parse_json_rpc_message(request_json) {
+        Ok(turul_mcp_json_rpc_server::dispatch::JsonRpcMessage::Request(request)) => {
+            let response = dispatcher.handle_request(request).await;
+            
+            assert_eq!(response.jsonrpc, "2.0");
+            assert_eq!(response.id, Some(turul_mcp_json_rpc_server::types::RequestId::String("test-123".to_string())));
+            
+            if let Some(result) = response.result {
+                assert_eq!(result["echo"], "Hello, JSON-RPC!");
+            } else {
+                panic!("Expected result, got error: {:?}", response.error);
+            }
+        }
+        _ => panic!("Failed to parse request"),
+    }
 
     // Test notification (no response expected)
-    let notification = json!({
-        "jsonrpc": "2.0",
-        "method": "test.log",
-        "params": {"level": "info", "message": "Test log"}
-    });
-
-    let response_str = dispatcher.dispatch(notification, None).await.unwrap();
-    assert_eq!(response_str, ""); // No response for notifications
+    let notification_json = r#"{"jsonrpc": "2.0", "method": "log", "params": {"level": "info", "message": "Test log"}}"#;
+    
+    match turul_mcp_json_rpc_server::dispatch::parse_json_rpc_message(notification_json) {
+        Ok(turul_mcp_json_rpc_server::dispatch::JsonRpcMessage::Notification(notification)) => {
+            let result = dispatcher.handle_notification(notification).await;
+            assert!(result.is_ok()); // Notifications should be handled without error
+        }
+        _ => panic!("Failed to parse notification"),
+    }
 }
 ```
 
@@ -578,7 +668,7 @@ async fn test_full_json_rpc_flow() {
 
 ```toml
 [dependencies]
-turul-mcp-json-rpc-server = { version = "0.1.1", features = ["async"] }
+turul-mcp-json-rpc-server = { version = "0.2.0", features = ["async"] }
 ```
 
 Available features:

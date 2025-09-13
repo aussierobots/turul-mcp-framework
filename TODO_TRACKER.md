@@ -12,12 +12,138 @@
 
 ---
 
-## 📋 **CURRENT PRIORITIES - REMOTE MERGE CONFLICT RESOLUTION** (2025-09-13)
+## 📋 **CURRENT PRIORITIES - README DOCUMENTATION FIXES** (2025-09-13)
 
-**Status Update**: 🔴 **E2E TESTS BROKEN BY REMOTE MERGE** - Core MCP compliance maintained (34/34 tests pass), but E2E integration tests broken by URI validation introduced in remote merge (99 objects).
+**Status Update**: 🔴 **CRITICAL README DOCUMENTATION ISSUES** - Comprehensive Codex and Gemini reviews revealed systematic documentation problems across all 10 crate README files with incorrect code samples, fabricated APIs, and broken examples.
 
-### **🔴 URGENT: REMOTE MERGE CONFLICT RESOLUTION** (2025-09-13)
-**Priority**: 🔴 **CRITICAL** - E2E test suite broken, impacting development workflow
+### **🔴 URGENT: README DOCUMENTATION CRITICAL FIXES** (2025-09-13)
+**Priority**: 🔴 **CRITICAL** - Documentation accuracy essential for framework credibility and user adoption
+
+**Issue Analysis**:
+- 🔴 **turul-mcp-protocol-2025-06-18**: Most broken README - "every single code example needs to be rewritten from scratch"
+- 🔴 **turul-http-mcp-server**: Fundamental architecture errors in documentation 
+- 🔴 **turul-mcp-client**: Contains fabricated APIs and incorrect usage patterns
+- 🔴 **Remaining 7 READMEs**: Systematic API mismatches and outdated code samples
+- 🔴 **Framework Impact**: Poor documentation undermines framework credibility and adoption
+
+**Critical Findings from Reviews**:
+- Documentation shows APIs that don't exist in current codebase
+- Code samples use incorrect import patterns and method signatures
+- Examples reference removed or renamed functionality
+- Architecture explanations don't match actual implementation
+- Missing critical configuration and setup information
+
+**Status**: 🔴 **INCOMPLETE** - Codex/Gemini re-review shows systematic issues remain unaddressed
+
+## 📋 **METHODICAL CODEX & GEMINI REVIEW CHECKLIST BY README**
+
+### **turul-mcp-protocol-2025-06-18/README.md**
+**CODEX Issues**:
+- [ ] **Initialize types**: Uses Implementation (not ClientInfo/ServerInfo); InitializeRequest/Result shown as params/results (not hand-built JSON-RPC objects)
+  - Fix: swap to Implementation; move JSON-RPC wrapping to transport/framework note
+- [ ] **Tools**: ToolResult constructors are text/image/audio/resource; no image_data/resource_reference; CallToolResult uses Option<bool> is_error and .success/.with_error_flag; structuredContent documented as optional
+  - Fix: correct constructors; show CallToolResult helpers; mark structuredContent optional
+- [ ] **Resources**: Resource::new(uri, name) + .with_title/.with_description/.with_mime_type; ResourceTemplate::new(name, uriTemplate) + builders; content via ResourceContent::text/blob
+  - Fix: remove .with_name and constructor-with-description patterns
+- [ ] **Prompts**: PromptMessage::user_text/assistant_text or ContentBlock::Text; GetPromptParams.arguments is HashMap<String, String>
+  - Fix: replace Value-based arguments
+- [ ] **Sampling**: names match crate (CreateMessageParams, Role::User/Assistant); remove invented ModelPreferences bits
+  - Fix: align APIs
+- [ ] **Naming**: nextCursor, "_meta", mimeType camelCase; method names exact ("resources/templates/list", notifications camelCase)
+  - Fix: correct casing/strings
+
+**GEMINI Issues**:
+- [ ] **SessionContext API**: Examples show incorrect usage of get_typed_state/set_typed_state with wrong async/Result patterns
+- [ ] **McpError variants**: Wrong error constructor patterns used throughout examples
+- [ ] **Type naming**: CallToolResponse vs CallToolResult inconsistencies
+
+### **turul-mcp-protocol/README.md (alias)**
+**CODEX Issues**:
+- [ ] **No McpTool references**: no fictitious traits (JsonRpcRequestTrait/JsonRpcResponseTrait); use HasMethod/HasParams/HasData/HasMeta
+  - Fix: prune non-existent types/traits
+- [ ] **Notifications names**: are spec-accurate camelCase
+  - Fix: update names if needed
+
+### **turul-mcp-server/README.md**
+**CODEX Issues**:
+- [ ] **Notes**: ToolBuilder re-exported from server crate; static capability truthfulness (tools/prompts listChanged=false; resources.subscribe=false & listChanged=false); optional strict lifecycle (notifications/initialized)
+  - Fix: add these notes if missing
+
+**GEMINI Issues**:
+- [ ] **Builder pattern**: McpServer::builder() vs McpServerBuilder::new() confusion
+- [ ] **Missing run method**: server.run() doesn't exist, needs proper transport layer explanation
+
+### **turul-http-mcp-server/README.md**
+**CODEX Issues**:
+- [ ] **Headers**: client sends MCP-Protocol-Version; server returns mcp-session-id. Strict lifecycle callout optional
+  - Fix: add short section if missing
+
+**GEMINI Issues**:
+- [ ] **Server architecture**: Two-step process shown is wrong, HttpMcpServerBuilder is primary entry point
+- [ ] **SessionContext API**: notify_progress method signature and usage incorrect
+- [ ] **CORS configuration**: .cors(cors) vs .cors(bool) API mismatch
+
+### **turul-mcp-derive/README.md**
+**CODEX Issues**:
+- [ ] **output_field**: clarify only affects structured output (or macro behavior); SessionContext is Option<SessionContext>
+  - Fix: clarify scope; keep Option
+
+**GEMINI Issues**:
+- [ ] **SessionContext API**: Examples show session.get_typed_state("count").unwrap_or(0) and session.set_typed_state("count", new_count)? which is incorrect
+- [ ] **McpError usage**: Err(McpError::InvalidParams("...".to_string())) uses wrong variant constructor
+- [ ] **Type names**: CallToolResponse should be CallToolResult
+
+### **turul-mcp-builders/README.md**
+**CODEX Issues**:
+- [ ] **Keep guidance**: prefer turul_mcp_server::ToolBuilder for servers; optionally show direct import from this crate for non-server use
+  - Fix: ensure both paths are consistent
+
+**GEMINI Issues**:
+- [ ] **ToolBuilder examples**: Still use .unwrap() and .unwrap_or() which is not robust
+- [ ] **MessageBuilder API**: .add_annotation("topic", "geography") method doesn't exist
+- [ ] **CompletionBuilder API**: CompletionBuilder::new("code_completion") wrong constructor (should be for_prompt or for_resource)
+- [ ] **ElicitationBuilder API**: .email_field() and .select_field() helper methods don't exist
+
+### **turul-mcp-json-rpc-server/README.md**
+**CODEX Issues**:
+- [ ] **Method naming consistent**: if examples use "calculator.add", supported_methods and requests match; otherwise use simple names consistently
+  - Fix: align names across example
+
+### **turul-mcp-client/README.md**
+**CODEX Issues**:
+- [ ] **Only document transports actually implemented**: label WS/Stdio as planned if not present
+- [ ] **Add note**: sets MCP-Protocol-Version; reads mcp-session-id
+- [ ] **Ensure builder API usage matches code**
+  - Fix: trim transports; add headers note; correct builder calls
+
+### **turul-mcp-aws-lambda/README.md**
+**CODEX Issues**:
+- [ ] **Builder APIs match code**: add static capability truthfulness note
+  - Fix: sync code snippets; add note
+
+### **turul-mcp-session-storage/README.md**
+**CODEX Issues**:
+- [ ] **Examples use async constructors**: and Arc<...> passed to .with_session_storage(...)
+  - Fix: update constructors/usages
+
+### **Repository-wide Issues**
+**CODEX Issues**:
+- [ ] **Endpoint/notification casing**: "resources/templates/list" only; listChanged camelCase
+- [ ] **_meta round-trip**: mention optional params._meta and result._meta on list endpoints
+- [ ] **JSON-RPC examples**: jsonrpc "2.0", id present, correct method strings; nextCursor/_meta/mimeType camelCase
+- [ ] **Progress**: long-running examples mention notifications/progress with progressToken
+  - Fix: standardize all docs to these conventions
+
+**Success Criteria**:
+- All README code samples compile and run successfully
+- Documentation accurately reflects current codebase state
+- No fabricated or non-existent APIs documented
+- Clear, correct usage patterns for all framework components
+
+**Time Estimate**: 6-8 hours to fix all README documentation issues
+
+### **✅ RESOLVED: REMOTE MERGE CONFLICT RESOLUTION** (2025-09-13)
+**Previous Priority**: 🔴 **CRITICAL** - E2E test suite broken, impacting development workflow
 
 **Issue Analysis**:
 - ✅ **Core Framework**: All 34 MCP compliance tests pass, framework is solid

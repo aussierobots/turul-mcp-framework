@@ -77,6 +77,9 @@ pub struct McpServerBuilder {
     /// MCP Lifecycle enforcement configuration
     strict_lifecycle: bool,
     
+    /// Test mode - disables security middleware for test servers
+    test_mode: bool,
+    
     /// HTTP configuration (if enabled)
     #[cfg(feature = "http")]
     bind_address: SocketAddr,
@@ -146,6 +149,7 @@ impl McpServerBuilder {
             session_cleanup_interval_seconds: None,
             session_storage: None, // Default: InMemory storage
             strict_lifecycle: false, // Default: lenient mode for compatibility
+            test_mode: false, // Default: production mode with security
             #[cfg(feature = "http")]
             bind_address: "127.0.0.1:8000".parse().unwrap(),
             #[cfg(feature = "http")]
@@ -490,7 +494,12 @@ impl McpServerBuilder {
         }
         
         // Create ResourcesReadHandler and add all registered resources
-        let mut read_handler = ResourcesReadHandler::new();
+        // Use test mode to disable security middleware for test servers
+        let mut read_handler = if self.test_mode {
+            ResourcesReadHandler::new().without_security()
+        } else {
+            ResourcesReadHandler::new()
+        };
         for (_, resource) in &self.resources {
             read_handler = read_handler.add_resource_arc(resource.clone());
         }
@@ -596,6 +605,26 @@ impl McpServerBuilder {
     /// all operations are rejected until `notifications/initialized` is received.
     pub fn with_strict_lifecycle(self) -> Self {
         self.strict_lifecycle(true)
+    }
+
+    /// Enable test mode - disables security middleware for test servers
+    /// 
+    /// In test mode, ResourcesReadHandler is created without security middleware,
+    /// allowing custom URI schemes for testing (binary://, memory://, error://, etc.).
+    /// Production servers should NOT use test mode as it bypasses security controls.
+    /// 
+    /// # Example
+    /// ```rust,ignore
+    /// let server = McpServer::builder()
+    ///     .name("test-server")
+    ///     .version("1.0.0")
+    ///     .test_mode()  // Disable security for testing
+    ///     .with_resources()
+    ///     .build()?;
+    /// ```
+    pub fn test_mode(mut self) -> Self {
+        self.test_mode = true;
+        self
     }
     
     /// Configure sessions with recommended defaults for long-running sessions

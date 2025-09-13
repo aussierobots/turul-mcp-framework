@@ -18,6 +18,7 @@ AWS Lambda integration for the turul-mcp-framework, enabling serverless deployme
 - ✅ **Type Conversion Layer** - Clean `lambda_http` ↔ `hyper` conversion
 - ✅ **Streaming Responses** - SSE notifications through Lambda streaming
 - ✅ **Builder Pattern** - Familiar API matching `McpServer::builder()`
+- ✅ **Truthful Capabilities** - Framework advertises accurate server capabilities
 
 ## Quick Start
 
@@ -146,9 +147,9 @@ struct CounterTool;
 impl CounterTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<i32> {
         if let Some(session) = session {
-            let count: i32 = session.get_typed_state("count").await?.unwrap_or(0);
+            let count: i32 = session.get_typed_state("count").unwrap_or(0);
             let new_count = count + 1;
-            session.set_typed_state("count", &new_count).await?;
+            session.set_typed_state("count", new_count)?;
             Ok(new_count)
         } else {
             Ok(0)
@@ -199,12 +200,7 @@ impl LongTaskTool {
         if let Some(session) = session {
             for i in 1..=5 {
                 // Send progress notification via SSE
-                session.notify_progress(
-                    "long-task", 
-                    i as f64, 
-                    Some(5.0), 
-                    Some(format!("Step {} of 5", i))
-                ).await?;
+                session.notify_progress("long-task", i);
                 
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
@@ -318,7 +314,7 @@ curl -X POST http://localhost:9000/lambda-url/test \
 
 ```rust
 // Cache expensive operations at module level
-static SHARED_STORAGE: std::sync::OnceLock<Arc<DynamoDbSessionStorage>> = std::sync::OnceLock::new();
+static SHARED_STORAGE: tokio::sync::OnceCell<Arc<DynamoDbSessionStorage>> = tokio::sync::OnceCell::const_new();
 
 async fn get_cached_storage() -> Arc<DynamoDbSessionStorage> {
     SHARED_STORAGE.get_or_init(|| async {
@@ -377,6 +373,28 @@ handler.handle(req).await
         Box::new(e) as Box<dyn std::error::Error + Send + Sync>
     })
 ```
+
+## Server Capabilities
+
+### Truthful Capability Reporting
+
+The framework automatically sets server capabilities based on registered components:
+
+```rust
+let server = LambdaMcpServerBuilder::new()
+    .tool(calculator)
+    .resource(user_resource)
+    .build()
+    .await?;
+
+// Framework automatically advertises:
+// - tools.listChanged = false (static tool list)
+// - resources.subscribe = false (no subscriptions)
+// - resources.listChanged = false (static resource list)
+// - No prompts capability (none registered)
+```
+
+This ensures clients receive accurate information about server capabilities.
 
 ## License
 

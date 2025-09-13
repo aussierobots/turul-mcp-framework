@@ -40,7 +40,7 @@ async fn calculator(
 }
 
 // Usage: Just pass the function to the server
-let server = McpServer::builder()
+let server = McpServerBuilder::new()
     .tool_fn(calculator)  // Framework knows the function name!
     .build()?;
 ```
@@ -58,7 +58,8 @@ async fn session_counter(
     if let Some(session) = session {
         let count: i32 = session.get_typed_state("count").unwrap_or(0);
         let new_count = count + 1;
-        session.set_typed_state("count", new_count)?;
+        session.set_typed_state("count", new_count)
+            .map_err(|e| format!("Failed to save state: {}", e))?;
         Ok(new_count)
     } else {
         Ok(0) // No session available
@@ -68,17 +69,19 @@ async fn session_counter(
 
 ### Custom Output Fields
 
+**Note**: `output_field` only affects structured output generation - the field name used when the return value is wrapped in a JSON object for structured responses.
+
 ```rust
 #[mcp_tool(
     name = "multiply", 
     description = "Multiply two numbers",
-    output_field = "product"  // Custom output field name
+    output_field = "product"  // Custom output field name for structured output only
 )]
 async fn multiply(
     #[param(description = "First number")] x: f64,
     #[param(description = "Second number")] y: f64,
 ) -> McpResult<f64> {
-    Ok(x * y)  // Returns {"product": 15.0} instead of {"result": 15.0}
+    Ok(x * y)  // Returns {"product": 15.0} instead of {"result": 15.0} in structured output
 }
 ```
 
@@ -338,7 +341,7 @@ async fn error_example(
     #[param(description = "Value to validate")] value: i32
 ) -> McpResult<String> {
     if value < 0 {
-        return Err(McpError::InvalidParams("Value must be non-negative".to_string()));
+        return Err(McpError::InvalidParameters("Value must be non-negative".to_string()));
     }
     
     if value > 1000 {
@@ -382,10 +385,10 @@ impl HasDescription for ExampleTool {
 }
 
 impl McpTool for ExampleTool {
-    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResponse> {
+    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
         // Generated parameter extraction and function call
         let result = example(/* extracted params */).await?;
-        Ok(CallToolResponse::success(/* wrapped result */))
+        Ok(CallToolResult::success(/* wrapped result */))
     }
 }
 ```
@@ -408,7 +411,8 @@ mod tests {
             operation: "add".to_string(),
         };
         
-        let result = tool.execute(None).await.unwrap();
+        let result = tool.execute(None).await
+            .expect("Tool execution should succeed");
         assert_eq!(result, 8.0);
     }
 }
@@ -419,10 +423,10 @@ mod tests {
 ```rust
 #[tokio::test]
 async fn test_tool_in_server() {
-    let server = McpServer::builder()
+    let server = McpServerBuilder::new()
         .tool_fn(calculator)
         .build()
-        .unwrap();
+        .expect("Server should build successfully");
         
     // Test server integration
     // (requires test infrastructure)

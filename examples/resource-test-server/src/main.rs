@@ -517,9 +517,10 @@ impl McpResource for BinaryResource {
         // For MCP, we need to base64 encode binary data
         let encoded = general_purpose::STANDARD.encode(&fake_png);
         
-        Ok(vec![ResourceContent::text(
+        Ok(vec![ResourceContent::blob(
             "binary://image", 
-            format!("data:image/png;base64,{}", encoded)
+            encoded,
+            "image/png"
         )])
     }
 }
@@ -1304,6 +1305,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .resource(LongUriResource::default())
         .resource(MetaDynamicResource::default())
         .resource(CompleteResource::default())
+        .test_mode()  // Disable security for test URI schemes
         .with_resources()
         .bind_address(format!("127.0.0.1:{}", port).parse()?)
         .build()?;
