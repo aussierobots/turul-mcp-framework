@@ -232,17 +232,86 @@ impl McpServerBuilder {
     }
 
     /// Register a resource with the server
-    /// Note: URI validation is performed during build() to maintain builder pattern
+    ///
+    /// Automatically detects if the resource URI contains template variables (e.g., `{ticker}`, `{id}`)
+    /// and registers it as either a static resource or template resource accordingly.
+    /// This eliminates the need to manually call `.template_resource()` for templated URIs.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// // Static resource
+    /// .resource(ConfigResource::new())  // URI: "file://config.json"
+    ///
+    /// // Template resource (auto-detected)
+    /// .resource(UserProfileResource::new())  // URI: "user://profile/{user_id}"
+    /// ```
     pub fn resource<R: McpResource + 'static>(mut self, resource: R) -> Self {
         let uri = resource.uri().to_string();
-        
-        // Validate URI and collect errors for later reporting
-        if let Err(e) = self.validate_uri(&uri) {
-            self.validation_errors.push(format!("Invalid resource URI '{}': {}", uri, e));
+
+        // Auto-detect if URI contains template variables
+        if self.is_template_uri(&uri) {
+            // It's a template resource - parse as UriTemplate
+            tracing::debug!("Detected template resource: {}", uri);
+            match crate::uri_template::UriTemplate::new(&uri) {
+                Ok(template) => {
+                    // Validate template pattern
+                    if let Err(e) = self.validate_uri_template(template.pattern()) {
+                        self.validation_errors.push(format!("Invalid template resource URI '{}': {}", uri, e));
+                    }
+                    self.template_resources.push((template, Arc::new(resource)));
+                }
+                Err(e) => {
+                    self.validation_errors.push(format!("Failed to parse template resource URI '{}': {}", uri, e));
+                }
+            }
+        } else {
+            // It's a static resource
+            tracing::debug!("Detected static resource: {}", uri);
+            if let Err(e) = self.validate_uri(&uri) {
+                tracing::warn!("Static resource validation failed for '{}': {}", uri, e);
+                self.validation_errors.push(format!("Invalid resource URI '{}': {}", uri, e));
+            } else {
+                tracing::debug!("Successfully added static resource: {}", uri);
+                self.resources.insert(uri, Arc::new(resource));
+            }
         }
-        
-        self.resources.insert(uri, Arc::new(resource));
+
         self
+    }
+
+    /// Register a function resource created with #[mcp_resource] macro
+    ///
+    /// This method provides a more intuitive way to register function resources.
+    /// The #[mcp_resource] macro generates a constructor function with the same name
+    /// as your async function, so you can use the function name directly.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use turul_mcp_derive::mcp_resource;
+    /// use turul_mcp_server::McpServer;
+    ///
+    /// #[mcp_resource(uri = "file:///data/{id}.json", description = "Data for ID")]
+    /// async fn get_data(id: String) -> McpResult<Vec<ResourceContent>> {
+    ///     // Implementation
+    ///     Ok(vec![ResourceContent::text(
+    ///         format!("file:///data/{}.json", id),
+    ///         format!("Data for {}", id)
+    ///     )])
+    /// }
+    ///
+    /// let server = McpServer::builder()
+    ///     .name("data-server")
+    ///     .resource_fn(get_data) // Use the function name directly!
+    ///     .build()?;
+    /// ```
+    pub fn resource_fn<F, R>(self, func: F) -> Self
+    where
+        F: Fn() -> R,
+        R: McpResource + 'static,
+    {
+        // Call the helper function to get the resource instance
+        self.resource(func())
     }
 
     /// Register multiple resources
@@ -253,9 +322,23 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a resource with URI template support
+    /// Register a resource with explicit URI template support
+    ///
+    /// **Note**: This method is now optional. The `.resource()` method automatically detects
+    /// template URIs and handles them appropriately. Use this method only when you need
+    /// explicit control over template parsing or want to add custom validators.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let template = UriTemplate::new("file:///data/{id}.json")?
+    ///     .with_validator("id", VariableValidator::user_id());
+    ///
+    /// let server = McpServer::builder()
+    ///     .template_resource(template, DataResource::new())
+    ///     .build()?;
+    /// ```
     pub fn template_resource<R: McpResource + 'static>(
-        mut self, 
+        mut self,
         template: crate::uri_template::UriTemplate,
         resource: R
     ) -> Self {
@@ -373,6 +456,11 @@ impl McpServerBuilder {
         self
     }
 
+    /// Check if URI contains template variables (e.g., {ticker}, {id})
+    fn is_template_uri(&self, uri: &str) -> bool {
+        uri.contains('{') && uri.contains('}')
+    }
+
     /// Validate URI is absolute and well-formed (reusing SecurityMiddleware logic)
     fn validate_uri(&self, uri: &str) -> std::result::Result<(), String> {
         // Check basic URI format - must have scheme
@@ -473,6 +561,11 @@ impl McpServerBuilder {
     }
 
     /// Add resources support
+    ///
+    /// **Note**: This method is now optional. The framework automatically calls this
+    /// when resources are registered via `.resource()` or `.template_resource()`.
+    /// You only need to call this explicitly if you want to enable resource capabilities
+    /// without registering any resources.
     pub fn with_resources(mut self) -> Self {
         // Enable notifications if we have resources
         let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
@@ -484,14 +577,15 @@ impl McpServerBuilder {
         
         // Create ResourcesListHandler and add all registered resources
         let mut list_handler = ResourcesListHandler::new();
-        for (_, resource) in &self.resources {
+        tracing::debug!("with_resources() - adding {} static resources to list handler", self.resources.len());
+        for (uri, resource) in &self.resources {
+            tracing::debug!("Adding static resource to list handler: {}", uri);
             list_handler = list_handler.add_resource_arc(resource.clone());
         }
         
-        // Add template resources to list handler (using pattern as name)
-        for (_template, resource) in &self.template_resources {
-            list_handler = list_handler.add_resource_arc(resource.clone());
-        }
+        // Template resources should NOT be added to ResourcesListHandler
+        // They only appear in ResourceTemplatesHandler (resources/templates/list)
+        // NOT in resources/list
         
         // Create ResourcesReadHandler and add all registered resources
         // Use test mode to disable security middleware for test servers
@@ -699,8 +793,15 @@ impl McpServerBuilder {
             ));
         }
 
-        // Auto-detect and configure server capabilities based on registered components
+        // Auto-register resource handlers if resources were registered
+        // This eliminates the need for manual .with_resources() calls
         let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
+        if has_resources {
+            // Automatically configure resource handlers - this will replace the empty defaults
+            self = self.with_resources();
+        }
+
+        // Auto-detect and configure server capabilities based on registered components
         let has_tools = !self.tools.is_empty();
         let has_prompts = !self.prompts.is_empty();
         let has_roots = !self.roots.is_empty();
@@ -955,5 +1056,261 @@ mod tests {
 
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), McpFrameworkError::Config(_)));
+    }
+
+    // Test resources for auto-detection testing
+    use turul_mcp_protocol::resources::{
+        HasResourceMetadata, HasResourceDescription, HasResourceUri,
+        HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta,
+        ResourceContent
+    };
+
+    struct StaticTestResource;
+
+    impl HasResourceMetadata for StaticTestResource {
+        fn name(&self) -> &str { "static_test" }
+    }
+
+    impl HasResourceDescription for StaticTestResource {
+        fn description(&self) -> Option<&str> { Some("Static test resource") }
+    }
+
+    impl HasResourceUri for StaticTestResource {
+        fn uri(&self) -> &str { "file:///test.txt" }
+    }
+
+    impl HasResourceMimeType for StaticTestResource {
+        fn mime_type(&self) -> Option<&str> { Some("text/plain") }
+    }
+
+    impl HasResourceSize for StaticTestResource {
+        fn size(&self) -> Option<u64> { None }
+    }
+
+    impl HasResourceAnnotations for StaticTestResource {
+        fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+    }
+
+    impl HasResourceMeta for StaticTestResource {
+        fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    }
+
+    #[async_trait]
+    impl McpResource for StaticTestResource {
+        async fn read(&self, _params: Option<Value>) -> crate::McpResult<Vec<ResourceContent>> {
+            Ok(vec![ResourceContent::text("file:///test.txt", "test content")])
+        }
+    }
+
+    struct TemplateTestResource;
+
+    impl HasResourceMetadata for TemplateTestResource {
+        fn name(&self) -> &str { "template_test" }
+    }
+
+    impl HasResourceDescription for TemplateTestResource {
+        fn description(&self) -> Option<&str> { Some("Template test resource") }
+    }
+
+    impl HasResourceUri for TemplateTestResource {
+        fn uri(&self) -> &str { "template://data/{id}.json" }
+    }
+
+    impl HasResourceMimeType for TemplateTestResource {
+        fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    }
+
+    impl HasResourceSize for TemplateTestResource {
+        fn size(&self) -> Option<u64> { None }
+    }
+
+    impl HasResourceAnnotations for TemplateTestResource {
+        fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+    }
+
+    impl HasResourceMeta for TemplateTestResource {
+        fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    }
+
+    #[async_trait]
+    impl McpResource for TemplateTestResource {
+        async fn read(&self, _params: Option<Value>) -> crate::McpResult<Vec<ResourceContent>> {
+            Ok(vec![ResourceContent::text("template://data/123.json", "test content")])
+        }
+    }
+
+    #[test]
+    fn test_is_template_uri() {
+        let builder = McpServerBuilder::new();
+
+        // Test static URIs
+        assert!(!builder.is_template_uri("file:///test.txt"));
+        assert!(!builder.is_template_uri("http://example.com/api"));
+        assert!(!builder.is_template_uri("memory://cache"));
+
+        // Test template URIs
+        assert!(builder.is_template_uri("file:///data/{id}.json"));
+        assert!(builder.is_template_uri("template://users/{user_id}"));
+        assert!(builder.is_template_uri("api://v1/{resource}/{id}"));
+
+        // Test edge cases
+        assert!(!builder.is_template_uri("file:///no-braces.txt"));
+        assert!(!builder.is_template_uri("file:///missing-close.txt{"));
+        assert!(!builder.is_template_uri("file:///missing-open.txt}"));
+        assert!(builder.is_template_uri("file:///multiple/{id}/{type}.json"));
+    }
+
+    #[test]
+    fn test_auto_detection_static_resource() {
+        let builder = McpServerBuilder::new()
+            .name("test-server")
+            .resource(StaticTestResource);
+
+
+        // Verify static resource was added to resources collection
+        assert_eq!(builder.resources.len(), 1);
+        assert!(builder.resources.contains_key("file:///test.txt"));
+        assert_eq!(builder.template_resources.len(), 0);
+        assert_eq!(builder.validation_errors.len(), 0);
+    }
+
+    #[test]
+    fn test_auto_detection_template_resource() {
+        let builder = McpServerBuilder::new()
+            .name("test-server")
+            .resource(TemplateTestResource);
+
+        // Verify template resource was added to template_resources collection
+        assert_eq!(builder.resources.len(), 0);
+        assert_eq!(builder.template_resources.len(), 1);
+        assert_eq!(builder.validation_errors.len(), 0);
+
+        // Verify the template pattern is correct
+        let (template, _) = &builder.template_resources[0];
+        assert_eq!(template.pattern(), "template://data/{id}.json");
+    }
+
+    #[test]
+    fn test_auto_detection_mixed_resources() {
+        let builder = McpServerBuilder::new()
+            .name("test-server")
+            .resource(StaticTestResource)
+            .resource(TemplateTestResource);
+
+        // Verify both resources were categorized correctly
+        assert_eq!(builder.resources.len(), 1);
+        assert!(builder.resources.contains_key("file:///test.txt"));
+        assert_eq!(builder.template_resources.len(), 1);
+
+        let (template, _) = &builder.template_resources[0];
+        assert_eq!(template.pattern(), "template://data/{id}.json");
+    }
+
+    #[test]
+    fn test_template_resource_explicit_still_works() {
+        let template = crate::uri_template::UriTemplate::new("template://explicit/{id}")
+            .expect("Failed to create template");
+
+        let builder = McpServerBuilder::new()
+            .name("test-server")
+            .template_resource(template, TemplateTestResource);
+
+        // Verify explicit template_resource still works
+        assert_eq!(builder.resources.len(), 0);
+        assert_eq!(builder.template_resources.len(), 1);
+
+        let (template, _) = &builder.template_resources[0];
+        assert_eq!(template.pattern(), "template://explicit/{id}");
+    }
+
+    #[test]
+    fn test_invalid_template_uri_error_handling() {
+        struct InvalidTemplateResource;
+
+        impl HasResourceMetadata for InvalidTemplateResource {
+            fn name(&self) -> &str { "invalid_template" }
+        }
+
+        impl HasResourceDescription for InvalidTemplateResource {
+            fn description(&self) -> Option<&str> { Some("Invalid template resource") }
+        }
+
+        impl HasResourceUri for InvalidTemplateResource {
+            fn uri(&self) -> &str { "not-a-valid-uri-{id}" } // Invalid base URI without scheme
+        }
+
+        impl HasResourceMimeType for InvalidTemplateResource {
+            fn mime_type(&self) -> Option<&str> { None }
+        }
+
+        impl HasResourceSize for InvalidTemplateResource {
+            fn size(&self) -> Option<u64> { None }
+        }
+
+        impl HasResourceAnnotations for InvalidTemplateResource {
+            fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+        }
+
+        impl HasResourceMeta for InvalidTemplateResource {
+            fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+        }
+
+        #[async_trait]
+        impl McpResource for InvalidTemplateResource {
+            async fn read(&self, _params: Option<Value>) -> crate::McpResult<Vec<ResourceContent>> {
+                Ok(vec![])
+            }
+        }
+
+        let builder = McpServerBuilder::new()
+            .name("test-server")
+            .resource(InvalidTemplateResource);
+
+
+        // The URI "not-a-valid-uri-{id}" has braces but lacks a scheme
+        // So it will be detected as a template but fail validation during template creation
+        assert!(!builder.validation_errors.is_empty());
+        assert!(builder.validation_errors[0].contains("URI must be absolute with scheme"));
+
+        // Resource is still added to template collection but validation error is captured
+        // The error will be reported during build() to prevent invalid servers
+        assert_eq!(builder.resources.len(), 0);
+        assert_eq!(builder.template_resources.len(), 1);
+    }
+
+    #[test]
+    fn test_automatic_resource_handler_registration() {
+        // Test that resources automatically register handlers without needing .with_resources()
+        let server_result = McpServerBuilder::new()
+            .name("auto-resources-server")
+            .resource(StaticTestResource)
+            .resource(TemplateTestResource)
+            .build();
+
+        // Server should build successfully with automatic resource handler registration
+        assert!(server_result.is_ok());
+    }
+
+    #[test]
+    fn test_no_resources_builds_successfully() {
+        // Test that servers without resources build successfully
+        let server_result = McpServerBuilder::new()
+            .name("no-resources-server")
+            .build();
+
+        assert!(server_result.is_ok());
+    }
+
+    #[test]
+    fn test_explicit_with_resources_still_works() {
+        // Test that explicit .with_resources() still works (no double registration)
+        let server_result = McpServerBuilder::new()
+            .name("explicit-resources-server")
+            .resource(StaticTestResource)
+            .with_resources() // Explicit call should not cause issues
+            .build();
+
+        // Should build successfully even with explicit .with_resources() call
+        assert!(server_result.is_ok());
     }
 }

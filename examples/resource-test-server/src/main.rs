@@ -52,7 +52,6 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use turul_mcp_server::{McpServer, McpResult};
 use turul_mcp_server::McpResource;
-use turul_mcp_server::uri_template::{UriTemplate, VariableValidator};
 use turul_mcp_protocol::resources::{
     ResourceContent, HasResourceMetadata, HasResourceDescription, HasResourceUri,
     HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta
@@ -1256,18 +1255,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create file resource with temp file
     let file_resource = FileResource::new()?;
 
-    // Create URI templates for template resources
-    let template_items_uri = UriTemplate::new("template://items/{id}")
-        .map_err(|e| format!("Failed to create template URI: {}", e))?
-        .with_validator("id", VariableValidator::user_id());
-
-    let template_user_uri = UriTemplate::new("template://users/{user_id}")
-        .map_err(|e| format!("Failed to create user template URI: {}", e))?
-        .with_validator("user_id", VariableValidator::user_id());
-
-    let template_files_uri = UriTemplate::new("template://files/{path}")
-        .map_err(|e| format!("Failed to create files template URI: {}", e))?;
-
     let server = McpServer::builder()
         .name("resource-test-server")
         .version("0.2.0")
@@ -1280,7 +1267,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             • Basic: file://, memory://, error://, slow://, empty://, large://, binary://\n\
             • Templates: template://items/{id}, template://users/{user_id}, template://files/{path}\n\
             • Advanced: session://, subscribe://, notify://, multi://, paginated://\n\
-            • Edge cases: invalid://, long://, meta://, complete://"
+            • Edge cases: invalid://, long://, meta://, complete://\n\n\
+            Note: Template resources are now auto-detected based on URI patterns."
         )
         // Basic Resources (Coverage)
         .resource(file_resource)
@@ -1290,10 +1278,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .resource(EmptyResource::default())
         .resource(LargeResource::default())
         .resource(BinaryResource::default())
-        // Template Resources (registered as templates for proper resource templates endpoint support)
-        .template_resource(template_items_uri, TemplateResource::default())
-        .template_resource(template_user_uri, UserTemplateResource::default())
-        .template_resource(template_files_uri, FileTemplateResource::default())
+        // Template Resources (auto-detected based on URI patterns)
+        .resource(TemplateResource::default())
+        .resource(UserTemplateResource::default())
+        .resource(FileTemplateResource::default())
         // Advanced Resources (Features)
         .resource(SessionResource::default())
         .resource(SubscribableResource::default())
@@ -1306,7 +1294,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .resource(MetaDynamicResource::default())
         .resource(CompleteResource::default())
         .test_mode()  // Disable security for test URI schemes
-        .with_resources()
+        // Note: .with_resources() no longer needed - automatically registered when resources are added
         .bind_address(format!("127.0.0.1:{}", port).parse()?)
         .build()?;
 

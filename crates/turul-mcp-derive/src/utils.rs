@@ -2,8 +2,7 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{Attribute, Result, Fields, DeriveInput, Data};
-
+use syn::{Attribute, Data, DeriveInput, Fields, Result};
 
 /// Extract tool metadata from attributes
 #[derive(Debug)]
@@ -11,7 +10,7 @@ pub struct ToolMeta {
     pub name: String,
     pub description: String,
     pub output_type: Option<syn::Type>,
-    pub output_field: Option<String>,  // Custom field name for output
+    pub output_field: Option<String>, // Custom field name for output
 }
 
 pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
@@ -53,21 +52,32 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
 
     let name = name.ok_or_else(|| {
         if attrs.is_empty() {
-            syn::Error::new(proc_macro2::Span::call_site(), "Missing #[tool(name = \"...\", description = \"...\")] attribute")
+            syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "Missing #[tool(name = \"...\", description = \"...\")] attribute",
+            )
         } else {
             syn::Error::new_spanned(&attrs[0], "Missing 'name' attribute in #[tool(...)]")
         }
     })?;
-    
+
     let description = description.ok_or_else(|| {
         if attrs.is_empty() {
-            syn::Error::new(proc_macro2::Span::call_site(), "Missing #[tool(name = \"...\", description = \"...\")] attribute")
+            syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "Missing #[tool(name = \"...\", description = \"...\")] attribute",
+            )
         } else {
             syn::Error::new_spanned(&attrs[0], "Missing 'description' attribute in #[tool(...)]")
         }
     })?;
 
-    Ok(ToolMeta { name, description, output_type, output_field })
+    Ok(ToolMeta {
+        name,
+        description,
+        output_type,
+        output_field,
+    })
 }
 
 /// Extract parameter metadata from field attributes
@@ -121,8 +131,11 @@ pub fn extract_param_meta(attrs: &[Attribute]) -> Result<ParamMeta> {
 
 /// Generate JSON schema for a Rust type
 pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
-    let description = param_meta.description.as_ref().map(|d| quote! { .with_description(#d) });
-    
+    let description = param_meta
+        .description
+        .as_ref()
+        .map(|d| quote! { .with_description(#d) });
+
     // Basic type mapping
     match ty {
         syn::Type::Path(type_path) => {
@@ -140,7 +153,8 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                             turul_mcp_protocol::schema::JsonSchema::number() #description #min #max
                         }
                     }
-                    "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize" | "usize" => {
+                    "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize"
+                    | "usize" => {
                         quote! {
                             turul_mcp_protocol::schema::JsonSchema::integer() #description
                         }
@@ -152,7 +166,9 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                     }
                     _ => {
                         // Check if this is Vec<T>
-                        if type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Vec" {
+                        if type_path.path.segments.len() == 1
+                            && type_path.path.segments[0].ident == "Vec"
+                        {
                             quote! {
                                 turul_mcp_protocol::schema::JsonSchema::array() #description
                             }
@@ -177,23 +193,26 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
     }
 }
 
-
 /// Generate parameter extraction code
-pub fn generate_param_extraction(field_name: &syn::Ident, field_type: &syn::Type, optional: bool) -> TokenStream {
+pub fn generate_param_extraction(
+    field_name: &syn::Ident,
+    field_type: &syn::Type,
+    optional: bool,
+) -> TokenStream {
     let field_name_str = field_name.to_string();
-    
+
     // Check if field_type is already an Option<T>
     let is_option_type = if let syn::Type::Path(type_path) = field_type {
-        type_path.path.segments.len() == 1 && 
-        type_path.path.segments[0].ident == "Option"
+        type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Option"
     } else {
         false
     };
-    
+
     if is_option_type {
         // Field is already Option<T>, extract the inner type
         if let syn::Type::Path(type_path) = field_type {
-            if let syn::PathArguments::AngleBracketed(args) = &type_path.path.segments[0].arguments {
+            if let syn::PathArguments::AngleBracketed(args) = &type_path.path.segments[0].arguments
+            {
                 if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
                     // Handle Option<T> field
                     return generate_option_extraction(field_name, inner_type, field_name_str);
@@ -216,9 +235,15 @@ pub fn generate_param_extraction(field_name: &syn::Ident, field_type: &syn::Type
 }
 
 /// Generate extraction code for required fields that are marked as optional via #[param(optional)]
-fn generate_optional_required_extraction(field_name: &syn::Ident, field_type: &syn::Type, field_name_str: String) -> TokenStream {
+fn generate_optional_required_extraction(
+    field_name: &syn::Ident,
+    field_type: &syn::Type,
+    field_name_str: String,
+) -> TokenStream {
     match field_type {
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "String") => {
+        syn::Type::Path(type_path)
+            if type_path.path.get_ident().map_or(false, |i| i == "String") =>
+        {
             quote! {
                 let #field_name: Option<String> = args.get(#field_name_str)
                     .and_then(|v| v.as_str())
@@ -268,9 +293,15 @@ fn generate_optional_required_extraction(field_name: &syn::Ident, field_type: &s
 }
 
 /// Generate extraction code for Option<T> fields
-fn generate_option_extraction(field_name: &syn::Ident, inner_type: &syn::Type, field_name_str: String) -> TokenStream {
+fn generate_option_extraction(
+    field_name: &syn::Ident,
+    inner_type: &syn::Type,
+    field_name_str: String,
+) -> TokenStream {
     match inner_type {
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "String") => {
+        syn::Type::Path(type_path)
+            if type_path.path.get_ident().map_or(false, |i| i == "String") =>
+        {
             quote! {
                 let #field_name: Option<String> = args.get(#field_name_str)
                     .and_then(|v| v.as_str())
@@ -325,7 +356,8 @@ fn generate_option_extraction(field_name: &syn::Ident, inner_type: &syn::Type, f
         _ => {
             // Check if this is Option<Vec<T>>
             if let syn::Type::Path(inner_path) = inner_type {
-                if inner_path.path.segments.len() == 1 && inner_path.path.segments[0].ident == "Vec" {
+                if inner_path.path.segments.len() == 1 && inner_path.path.segments[0].ident == "Vec"
+                {
                     return quote! {
                         let #field_name: Option<#inner_type> = args.get(#field_name_str)
                             .and_then(|v| v.as_array())
@@ -337,7 +369,7 @@ fn generate_option_extraction(field_name: &syn::Ident, inner_type: &syn::Type, f
                     };
                 }
             }
-            
+
             // Generic serde deserialization for complex Option types
             quote! {
                 let #field_name: Option<#inner_type> = args.get(#field_name_str)
@@ -348,9 +380,15 @@ fn generate_option_extraction(field_name: &syn::Ident, inner_type: &syn::Type, f
 }
 
 /// Generate extraction code for required fields
-fn generate_required_extraction(field_name: &syn::Ident, field_type: &syn::Type, field_name_str: String) -> TokenStream {
+fn generate_required_extraction(
+    field_name: &syn::Ident,
+    field_type: &syn::Type,
+    field_name_str: String,
+) -> TokenStream {
     match field_type {
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "String") => {
+        syn::Type::Path(type_path)
+            if type_path.path.get_ident().map_or(false, |i| i == "String") =>
+        {
             quote! {
                 let #field_name = args.get(#field_name_str)
                     .and_then(|v| v.as_str())
@@ -410,7 +448,9 @@ fn generate_required_extraction(field_name: &syn::Ident, field_type: &syn::Type,
                     .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "boolean", "other"))?;
             }
         }
-        syn::Type::Path(type_path) if type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Vec" => {
+        syn::Type::Path(type_path)
+            if type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Vec" =>
+        {
             quote! {
                 let #field_name: #field_type = args.get(#field_name_str)
                     .ok_or_else(|| turul_mcp_protocol::McpError::missing_param(#field_name_str))
@@ -455,7 +495,11 @@ pub fn extract_string_attribute(attrs: &[Attribute], name: &str) -> Option<Strin
     for attr in attrs {
         if attr.path().is_ident(name) {
             if let Ok(value) = attr.meta.require_name_value() {
-                if let syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(lit_str), .. }) = &value.value {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(lit_str),
+                    ..
+                }) = &value.value
+                {
                     return Some(lit_str.value());
                 }
             }
@@ -522,9 +566,12 @@ pub fn extract_prompt_meta(attrs: &[Attribute]) -> Result<PromptMeta> {
     }
 
     let name = name.ok_or_else(|| {
-        syn::Error::new(proc_macro2::Span::call_site(), "Missing 'name' in #[prompt(name = \"...\")]")
+        syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "Missing 'name' in #[prompt(name = \"...\")]",
+        )
     })?;
-    
+
     let description = description.unwrap_or_else(|| "Generated prompt".to_string());
 
     Ok(PromptMeta { name, description })
@@ -568,16 +615,28 @@ pub fn extract_resource_meta(attrs: &[Attribute]) -> Result<ResourceMeta> {
     }
 
     let name = name.ok_or_else(|| {
-        syn::Error::new(proc_macro2::Span::call_site(), "Missing 'name' in #[resource(name = \"...\")]")
+        syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "Missing 'name' in #[resource(name = \"...\")]",
+        )
     })?;
-    
+
     let uri = uri.ok_or_else(|| {
-        syn::Error::new(proc_macro2::Span::call_site(), "Missing 'uri' in #[resource(uri = \"...\")]")
+        syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "Missing 'uri' in #[resource(uri = \"...\")]",
+        )
     })?;
-    
+
     let description = description.unwrap_or_else(|| "Generated resource".to_string());
 
-    Ok(ResourceMeta { name, uri, description, title, mime_type })
+    Ok(ResourceMeta {
+        name,
+        uri,
+        description,
+        title,
+        mime_type,
+    })
 }
 
 /// Root metadata extracted from attributes
@@ -626,14 +685,22 @@ pub fn extract_root_meta(attrs: &[Attribute]) -> Result<RootMeta> {
     }
 
     let uri = uri.ok_or_else(|| {
-        syn::Error::new(proc_macro2::Span::call_site(), "Missing 'uri' in #[root(uri = \"...\")]")
+        syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "Missing 'uri' in #[root(uri = \"...\")]",
+        )
     })?;
-    
+
     let name = name.unwrap_or_else(|| "Unnamed Root".to_string());
     let description = description.unwrap_or_else(|| "Root directory".to_string());
     let read_only = read_only.unwrap_or(false);
 
-    Ok(RootMeta { uri, name, description, read_only })
+    Ok(RootMeta {
+        uri,
+        name,
+        description,
+        read_only,
+    })
 }
 
 /// Elicitation metadata extracted from attributes
@@ -660,7 +727,10 @@ pub fn extract_elicitation_meta(attrs: &[Attribute]) -> Result<ElicitationMeta> 
     }
 
     let message = message.ok_or_else(|| {
-        syn::Error::new(proc_macro2::Span::call_site(), "Missing 'message' in #[elicitation(message = \"...\")]")
+        syn::Error::new(
+            proc_macro2::Span::call_site(),
+            "Missing 'message' in #[elicitation(message = \"...\")]",
+        )
     })?;
 
     Ok(ElicitationMeta { message })
@@ -675,13 +745,21 @@ pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
             meta.content = Some(true);
         } else if attr.path().is_ident("content_type") {
             if let Ok(value) = attr.meta.require_name_value() {
-                if let syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(lit_str), .. }) = &value.value {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(lit_str),
+                    ..
+                }) = &value.value
+                {
                     meta.content_type = Some(lit_str.value());
                 }
             }
         } else if attr.path().is_ident("description") {
             if let Ok(value) = attr.meta.require_name_value() {
-                if let syn::Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(lit_str), .. }) = &value.value {
+                if let syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(lit_str),
+                    ..
+                }) = &value.value
+                {
                     meta.description = Some(lit_str.value());
                 }
             }
@@ -691,17 +769,18 @@ pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
     Ok(meta)
 }
 
-
-
 pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &str) -> TokenStream {
     match ty {
         syn::Type::Path(type_path) => {
             // First check if it's a qualified path like serde_json::Value
-            let path_string = type_path.path.segments.iter()
+            let path_string = type_path
+                .path
+                .segments
+                .iter()
                 .map(|seg| seg.ident.to_string())
                 .collect::<Vec<_>>()
                 .join("::");
-            
+
             // Special case for serde_json::Value (qualified path)
             if path_string.contains("serde_json") && path_string.ends_with("Value") {
                 return quote! {
@@ -724,7 +803,7 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                     }
                 };
             }
-            
+
             // Then check for simple identifiers
             if let Some(ident) = type_path.path.get_ident() {
                 match ident.to_string().as_str() {
@@ -743,7 +822,8 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                             }
                         }
                     }
-                    "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize" | "usize" => {
+                    "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize"
+                    | "usize" => {
                         quote! {
                             fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
                                 static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
@@ -790,7 +870,7 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                     }
                     _ => {
                         // For custom struct types, generate a basic object schema
-                        // This will be enhanced by the generate_enhanced_output_schema function 
+                        // This will be enhanced by the generate_enhanced_output_schema function
                         // when struct introspection is available
                         quote! {
                             fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
@@ -836,7 +916,10 @@ pub fn generate_output_schema_for_return_type(return_type: &syn::Type) -> Option
     generate_output_schema_for_return_type_with_field(return_type, "result")
 }
 
-pub fn generate_output_schema_for_return_type_with_field(return_type: &syn::Type, field_name: &str) -> Option<TokenStream> {
+pub fn generate_output_schema_for_return_type_with_field(
+    return_type: &syn::Type,
+    field_name: &str,
+) -> Option<TokenStream> {
     // Handle McpResult<T> by extracting the T type
     if let syn::Type::Path(type_path) = return_type {
         if let Some(segment) = type_path.path.segments.last() {
@@ -844,12 +927,17 @@ pub fn generate_output_schema_for_return_type_with_field(return_type: &syn::Type
                 // Extract the T from Result<T, E>
                 if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
                     if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
-                        return Some(generate_output_schema_for_type_with_field(inner_type, field_name));
+                        return Some(generate_output_schema_for_type_with_field(
+                            inner_type, field_name,
+                        ));
                     }
                 }
             } else {
                 // Direct type, not wrapped in Result
-                return Some(generate_output_schema_for_type_with_field(return_type, field_name));
+                return Some(generate_output_schema_for_type_with_field(
+                    return_type,
+                    field_name,
+                ));
             }
         }
     }
@@ -862,23 +950,36 @@ pub fn determine_output_field_name(ty: &syn::Type, custom_field: Option<&String>
     if let Some(field_name) = custom_field {
         return field_name.clone();
     }
-    
+
     // For struct types, extract the struct name and convert to camelCase
     if let syn::Type::Path(type_path) = ty {
         if let Some(ident) = type_path.path.get_ident() {
             let struct_name = ident.to_string();
             // Check if this looks like a custom struct (not a primitive)
-            if !matches!(struct_name.as_str(), 
-                "f64" | "f32" | "i64" | "i32" | "i16" | "i8" | 
-                "u64" | "u32" | "u16" | "u8" | "isize" | "usize" |
-                "String" | "str" | "bool"
+            if !matches!(
+                struct_name.as_str(),
+                "f64"
+                    | "f32"
+                    | "i64"
+                    | "i32"
+                    | "i16"
+                    | "i8"
+                    | "u64"
+                    | "u32"
+                    | "u16"
+                    | "u8"
+                    | "isize"
+                    | "usize"
+                    | "String"
+                    | "str"
+                    | "bool"
             ) {
                 // Convert struct name to camelCase (e.g., CalculationResult -> calculationResult)
                 return struct_to_camel_case(&struct_name);
             }
         }
     }
-    
+
     // Default to "output" for primitives (as requested by user)
     "output".to_string()
 }
@@ -893,7 +994,11 @@ fn struct_to_camel_case(struct_name: &str) -> String {
 }
 
 /// Generate enhanced output schema with struct property introspection
-pub fn generate_enhanced_output_schema(ty: &syn::Type, field_name: &str, input: Option<&DeriveInput>) -> TokenStream {
+pub fn generate_enhanced_output_schema(
+    ty: &syn::Type,
+    field_name: &str,
+    input: Option<&DeriveInput>,
+) -> TokenStream {
     // Try to introspect struct properties if we have the DeriveInput
     if let (syn::Type::Path(type_path), Some(derive_input)) = (ty, input) {
         if let Some(ident) = type_path.path.get_ident() {
@@ -907,29 +1012,32 @@ pub fn generate_enhanced_output_schema(ty: &syn::Type, field_name: &str, input: 
             }
         }
     }
-    
+
     // Fallback to basic type schema generation
     generate_output_schema_for_type_with_field(ty, field_name)
 }
 
 /// Generate schema for struct with all properties introspected
-fn generate_struct_schema_with_properties(fields: &syn::FieldsNamed, field_name: &str) -> TokenStream {
+fn generate_struct_schema_with_properties(
+    fields: &syn::FieldsNamed,
+    field_name: &str,
+) -> TokenStream {
     let mut property_definitions = Vec::new();
     let mut required_fields = Vec::new();
-    
+
     for field in &fields.named {
         if let Some(field_name) = &field.ident {
             let field_name_str = field_name.to_string();
             let field_type = &field.ty;
-            
+
             // Extract parameter metadata for better schema generation
             let param_meta = extract_param_meta(&field.attrs).unwrap_or_default();
             let schema = type_to_schema(field_type, &param_meta);
-            
+
             property_definitions.push(quote! {
                 (#field_name_str.to_string(), #schema)
             });
-            
+
             // Check if field is required (not Option<T> and not marked as optional)
             let is_option = is_option_type(field_type);
             if !is_option && !param_meta.optional {
@@ -939,14 +1047,14 @@ fn generate_struct_schema_with_properties(fields: &syn::FieldsNamed, field_name:
             }
         }
     }
-    
+
     quote! {
         fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
             static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
             Some(OUTPUT_SCHEMA.get_or_init(|| {
                 use turul_mcp_protocol::schema::JsonSchema;
                 use std::collections::HashMap;
-                
+
                 // Create schema for the struct content
                 let struct_schema = turul_mcp_protocol::tools::ToolSchema::object()
                     .with_properties(HashMap::from([
@@ -955,7 +1063,7 @@ fn generate_struct_schema_with_properties(fields: &syn::FieldsNamed, field_name:
                     .with_required(vec![
                         #(#required_fields),*
                     ]);
-                
+
                 // Wrap in outer object with field name
                 turul_mcp_protocol::tools::ToolSchema::object()
                     .with_properties(HashMap::from([
@@ -977,10 +1085,8 @@ fn generate_struct_schema_with_properties(fields: &syn::FieldsNamed, field_name:
 /// Check if a type is Option<T>
 fn is_option_type(ty: &syn::Type) -> bool {
     if let syn::Type::Path(type_path) = ty {
-        type_path.path.segments.len() == 1 && 
-        type_path.path.segments[0].ident == "Option"
+        type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Option"
     } else {
         false
     }
 }
-

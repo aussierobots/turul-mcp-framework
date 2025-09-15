@@ -5,8 +5,10 @@
 
 use serde::{Serialize, Deserialize};
 use turul_mcp_derive::McpResource;
-use turul_mcp_server::{McpServer, McpResource};
-use turul_mcp_protocol::resources::HasResourceUri;
+use turul_mcp_server::{McpServer, McpResource, McpResult};
+use turul_mcp_protocol::resources::{HasResourceUri, ResourceContent};
+use async_trait::async_trait;
+use serde_json::Value;
 
 /// Simple configuration file resource
 #[derive(McpResource, Serialize, Deserialize, Clone)]
@@ -25,10 +27,21 @@ impl ConfigResource {
             "debug": true,
             "features": ["resources", "derive_macros", "json_config"]
         });
-        
+
         Self {
             config_data: serde_json::to_string_pretty(&config).unwrap(),
         }
+    }
+}
+
+#[async_trait]
+impl McpResource for ConfigResource {
+    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        Ok(vec![ResourceContent::blob(
+            self.uri().to_string(),
+            self.config_data.clone(),
+            "application/json".to_string()
+        )])
     }
 }
 
@@ -36,6 +49,27 @@ impl ConfigResource {
 #[derive(McpResource, Clone)]
 #[resource(name = "system_status", uri = "system://status", description = "Current system status and health information")]
 struct SystemStatusResource;
+
+#[async_trait]
+impl McpResource for SystemStatusResource {
+    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        let status = serde_json::json!({
+            "status": "healthy",
+            "uptime": "72h 15m",
+            "version": "1.0.0",
+            "memory_usage": "45%",
+            "cpu_usage": "12%",
+            "active_connections": 42,
+            "last_restart": "2023-12-01T10:30:00Z"
+        });
+
+        Ok(vec![ResourceContent::blob(
+            self.uri().to_string(),
+            serde_json::to_string_pretty(&status).unwrap(),
+            "application/json".to_string()
+        )])
+    }
+}
 
 /// User data resource with multiple content fields
 #[derive(McpResource, Serialize, Deserialize, Clone)]
@@ -63,12 +97,29 @@ impl UserProfileResource {
                 "notifications": true
             }
         });
-        
+
         Self {
             profile_data: serde_json::to_string_pretty(&profile).unwrap(),
             bio: "This is a demo user account created for testing the MCP resource server functionality.".to_string(),
             internal_id: 12345,
         }
+    }
+}
+
+#[async_trait]
+impl McpResource for UserProfileResource {
+    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        Ok(vec![
+            ResourceContent::blob(
+                format!("{}/profile", self.uri()),
+                self.profile_data.clone(),
+                "application/json".to_string()
+            ),
+            ResourceContent::text(
+                format!("{}/bio", self.uri()),
+                self.bio.clone()
+            )
+        ])
     }
 }
 
@@ -87,8 +138,18 @@ impl LogFileResource {
             "2024-01-01 10:00:10 DEBUG Resource accessed: config.json",
             "2024-01-01 10:00:15 DEBUG Resource accessed: user-profile",
         ].join("\n");
-        
+
         Self(log_content)
+    }
+}
+
+#[async_trait]
+impl McpResource for LogFileResource {
+    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        Ok(vec![ResourceContent::text(
+            self.uri().to_string(),
+            self.0.clone()
+        )])
     }
 }
 
@@ -115,7 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .resource(system_status)
         .resource(user_profile)
         .resource(log_file)
-        .with_resources()
+        // Note: .with_resources() no longer needed - automatically registered when resources are added
         .bind_address("127.0.0.1:8007".parse()?)
         .build()?;
 

@@ -38,6 +38,7 @@ mod macros;
 mod notification_derive;
 mod prompt_derive;
 mod resource_derive;
+mod resource_attr;
 mod roots_derive;
 mod sampling_derive;
 mod tool_attr;
@@ -123,6 +124,36 @@ pub fn param(_args: TokenStream, input: TokenStream) -> TokenStream {
     // This attribute is only processed by the #[mcp_tool] macro
     // When used alone, it just passes through the input unchanged
     input
+}
+
+/// Function attribute macro for creating MCP resources
+///
+/// This macro automatically generates an MCP resource implementation from an async function.
+/// It supports both static and template resources based on the URI pattern.
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use turul_mcp_derive::mcp_resource;
+/// use turul_mcp_protocol::resources::ResourceContent;
+/// use turul_mcp_server::McpResult;
+///
+/// #[mcp_resource(uri = "file:///asx/timeline/{ticker}.json", description = "Timeline for ticker")]
+/// async fn ticker_timeline(ticker: String) -> McpResult<Vec<ResourceContent>> {
+///     // Implementation
+///     Ok(vec![ResourceContent::text(
+///         format!("file:///asx/timeline/{}.json", ticker),
+///         format!("Timeline data for {}", ticker)
+///     )])
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn mcp_resource(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args with Punctuated::<Meta, Token![,]>::parse_terminated);
+    let input = parse_macro_input!(input as ItemFn);
+    resource_attr::mcp_resource_impl(args, input)
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
 }
 
 /// Derive macro for automatically implementing MCP resource handlers

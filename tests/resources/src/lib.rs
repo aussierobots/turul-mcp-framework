@@ -3,8 +3,8 @@
 //! This module shows how to properly implement MCP resources using the derive macro
 //! with correct imports and error handling.
 
-use turul_mcp_server::prelude::*;
 use turul_mcp_derive::McpResource;
+use turul_mcp_server::prelude::*;
 
 /// User profile resource
 #[derive(McpResource, Clone, Serialize, Deserialize, Debug)]
@@ -14,33 +14,42 @@ use turul_mcp_derive::McpResource;
     description = "User profile information and preferences"
 )]
 pub struct UserProfileResource {
-    pub user_id: String,
     pub include_preferences: bool,
+}
+#[async_trait]
+impl McpResource for UserProfileResource {
+    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        let user_id = params
+            .as_ref()
+            .and_then(|vars| vars.get("user_id"))
+            .and_then(|id| id.as_str().map(String::from))
+            .ok_or_else(|| McpError::InvalidParameters("Missing user_id parameter".to_string()))?;
+        self.fetch_profile_data(user_id.as_str()).await
+    }
 }
 
 impl UserProfileResource {
-    pub fn new(user_id: impl Into<String>) -> Self {
+    pub fn new() -> Self {
         Self {
-            user_id: user_id.into(),
             include_preferences: false,
         }
     }
-    
+
     pub fn with_preferences(mut self) -> Self {
         self.include_preferences = true;
         self
     }
-    
+
     /// Business logic method to fetch user profile data
-    pub async fn fetch_profile_data(&self) -> McpResult<Vec<ResourceContent>> {
+    pub async fn fetch_profile_data(&self, user_id: &str) -> McpResult<Vec<ResourceContent>> {
         let mut profile_data = json!({
-            "user_id": self.user_id,
+            "user_id": user_id,
             "name": "John Doe",
             "email": "john.doe@example.com",
             "created_at": "2024-01-15T10:00:00Z",
             "status": "active"
         });
-        
+
         if self.include_preferences {
             profile_data["preferences"] = json!({
                 "theme": "dark",
@@ -56,14 +65,12 @@ impl UserProfileResource {
                 }
             });
         }
-        
-        Ok(vec![
-            ResourceContent::text(
-                &format!("app://users/{}", self.user_id),
-                serde_json::to_string_pretty(&profile_data)
-                    .map_err(|e| McpError::tool_execution(&format!("Serialization error: {}", e)))?
-            )
-        ])
+
+        Ok(vec![ResourceContent::text(
+            &format!("app://users/{}", user_id),
+            serde_json::to_string_pretty(&profile_data)
+                .map_err(|e| McpError::tool_execution(&format!("Serialization error: {}", e)))?,
+        )])
     }
 }
 
@@ -86,7 +93,7 @@ impl AppConfigResource {
             environment: environment.into(),
         }
     }
-    
+
     /// Fetch configuration based on type and environment
     pub async fn fetch_config_data(&self) -> McpResult<Vec<ResourceContent>> {
         let config_data = match self.config_type.as_str() {
@@ -130,17 +137,16 @@ impl AppConfigResource {
             _ => json!({
                 "type": "unknown",
                 "error": format!("Unknown config type: {}", self.config_type)
-            })
+            }),
         };
-        
-        Ok(vec![
-            ResourceContent::blob(
-                &format!("app://config/{}", self.config_type),
-                serde_json::to_string_pretty(&config_data)
-                    .map_err(|e| McpError::tool_execution(&format!("Config serialization error: {}", e)))?,
-                "application/json".to_string()
-            )
-        ])
+
+        Ok(vec![ResourceContent::blob(
+            &format!("app://config/{}", self.config_type),
+            serde_json::to_string_pretty(&config_data).map_err(|e| {
+                McpError::tool_execution(&format!("Config serialization error: {}", e))
+            })?,
+            "application/json".to_string(),
+        )])
     }
 }
 
@@ -163,15 +169,15 @@ impl LogFilesResource {
             lines: None,
         }
     }
-    
+
     pub fn with_lines(mut self, lines: u32) -> Self {
         self.lines = Some(lines);
         self
     }
-    
+
     pub async fn fetch_log_data(&self) -> McpResult<Vec<ResourceContent>> {
         let lines_to_fetch = self.lines.unwrap_or(100);
-        
+
         let sample_logs = match self.log_type.as_str() {
             "application" => vec![
                 "2024-01-15T14:30:01Z INFO Starting application server on port 8080",
@@ -194,29 +200,29 @@ impl LogFilesResource {
             ],
             _ => vec!["ERROR: Unknown log type requested"]
         };
-        
-        let log_content = sample_logs.into_iter()
+
+        let log_content = sample_logs
+            .into_iter()
             .take(lines_to_fetch as usize)
             .collect::<Vec<_>>()
             .join("\n");
-        
-        Ok(vec![
-            ResourceContent::text(
-                &format!("app://logs/{}", self.log_type),
-                format!("=== {} Logs (last {} lines) ===\n{}", 
-                    self.log_type.to_uppercase(), 
-                    lines_to_fetch, 
-                    log_content
-                )
-            )
-        ])
+
+        Ok(vec![ResourceContent::text(
+            &format!("app://logs/{}", self.log_type),
+            format!(
+                "=== {} Logs (last {} lines) ===\n{}",
+                self.log_type.to_uppercase(),
+                lines_to_fetch,
+                log_content
+            ),
+        )])
     }
 }
 
 /// File user resource demonstrating URI template "file:///user/{user_id}.json"
 #[derive(McpResource, Clone, Serialize, Deserialize, Debug)]
 #[resource(
-    name = "file_user", 
+    name = "file_user",
     uri = "file:///user/{user_id}.json",
     description = "User data stored as JSON files with URI template support"
 )]
@@ -230,7 +236,7 @@ impl FileUserResource {
             user_id: user_id.into(),
         }
     }
-    
+
     pub async fn fetch_user_data(&self) -> Result<Vec<ResourceContent>, McpError> {
         let user_data = json!({
             "id": self.user_id,
@@ -246,14 +252,13 @@ impl FileUserResource {
                 }
             }
         });
-        
-        Ok(vec![
-            ResourceContent::text(
-                &format!("file:///user/{}.json", self.user_id),
-                serde_json::to_string_pretty(&user_data)
-                    .map_err(|e| McpError::tool_execution(&format!("User data serialization error: {}", e)))?
-            )
-        ])
+
+        Ok(vec![ResourceContent::text(
+            &format!("file:///user/{}.json", self.user_id),
+            serde_json::to_string_pretty(&user_data).map_err(|e| {
+                McpError::tool_execution(&format!("User data serialization error: {}", e))
+            })?,
+        )])
     }
 }
 
@@ -263,7 +268,7 @@ impl FileUserResource {
 #[derive(McpResource, Clone, Serialize, Deserialize, Debug)]
 #[resource(
     name = "user_avatar",
-    uri = "file:///user/{user_id}/avatar.png", 
+    uri = "file:///user/{user_id}/avatar.png",
     description = "User avatar images as base64-encoded blob resources"
 )]
 pub struct UserAvatarResource {
@@ -276,28 +281,26 @@ impl UserAvatarResource {
             user_id: user_id.into(),
         }
     }
-    
+
     pub async fn fetch_avatar_data(&self) -> Result<Vec<ResourceContent>, McpError> {
         let base64_avatar = match self.user_id.as_str() {
             "123" => "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
             "456" => "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
             _ => "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChgGBfhzPMwAAAABJRU5ErkJggg=="
         };
-        
-        Ok(vec![
-            ResourceContent::blob(
-                &format!("file:///user/{}/avatar.png", self.user_id),
-                base64_avatar.to_string(),
-                "image/png"
-            )
-        ])
+
+        Ok(vec![ResourceContent::blob(
+            &format!("file:///user/{}/avatar.png", self.user_id),
+            base64_avatar.to_string(),
+            "image/png",
+        )])
     }
 }
 
 // Note: McpResource trait is automatically implemented by the derive macro
 
 /// Binary data resource demonstrating various blob types
-#[derive(McpResource, Clone, Serialize, Deserialize, Debug)]  
+#[derive(McpResource, Clone, Serialize, Deserialize, Debug)]
 #[resource(
     name = "binary_data",
     uri = "file:///data/{data_type}.{format}",
@@ -315,7 +318,7 @@ impl BinaryDataResource {
             format: format.into(),
         }
     }
-    
+
     pub async fn fetch_binary_data(&self) -> Result<Vec<ResourceContent>, McpError> {
         let (base64_data, mime_type) = match self.format.as_str() {
             "pdf" => ("JVBERi0xLjQKJcfs9z8KMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPD4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKeHJlZgowIDQKMDAwMDAwMDAwMCA2NTUzNSBmCjAwMDAwMDAwMDkgMDAwMDAgbgowMDAwMDAwMDc0IDAwMDAwIG4KMDAwMDAwMDEyMCAwMDAwMCBuCnRyYWlsZXIKPDwKL1NpemUgNAovUm9vdCAxIDAgUgo+PgpzdGFydHhyZWYKMTc5CiUlRU9G", "application/pdf"),
@@ -323,14 +326,12 @@ impl BinaryDataResource {
             "png" => ("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR42mNk+M9QwwAGIxFYAA6gAhHlqe7fAAAAAElFTkSuQmCC", "image/png"),
             _ => ("VGhpcyBpcyBhIHRlc3QgYmluYXJ5IGZpbGU=", "application/octet-stream")
         };
-        
-        Ok(vec![
-            ResourceContent::blob(
-                &format!("file:///data/{}.{}", self.data_type, self.format),
-                base64_data.to_string(),
-                mime_type
-            )
-        ])
+
+        Ok(vec![ResourceContent::blob(
+            &format!("file:///data/{}.{}", self.data_type, self.format),
+            base64_data.to_string(),
+            mime_type,
+        )])
     }
 }
 

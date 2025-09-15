@@ -853,7 +853,8 @@ impl ResourceTemplatesHandler {
 #[async_trait]
 impl McpHandler for ResourceTemplatesHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
-        use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
+        use turul_mcp_protocol::meta::Cursor;
+        use std::collections::HashMap;
 
         // Parse cursor from params if provided
         let cursor = params
@@ -927,16 +928,24 @@ impl McpHandler for ResourceTemplatesHandler {
             page_templates.len(), has_more, next_cursor
         );
         
-        let base_response = ListResourceTemplatesResult::new(page_templates);
+        let mut result = ListResourceTemplatesResult::new(page_templates);
 
-        let paginated_response = PaginatedResponse::with_pagination(
-            base_response,
-            next_cursor,
-            total,
-            has_more,
-        );
+        // Add pagination metadata directly to the result
+        if next_cursor.is_some() || total.is_some() {
+            let mut meta = HashMap::new();
+            if let Some(cursor) = next_cursor {
+                meta.insert("nextCursor".to_string(), serde_json::to_value(cursor)?);
+            }
+            if let Some(total_count) = total {
+                meta.insert("total".to_string(), serde_json::json!(total_count));
+            }
+            if has_more {
+                meta.insert("hasMore".to_string(), serde_json::json!(true));
+            }
+            result = result.with_meta(meta);
+        }
 
-        serde_json::to_value(paginated_response).map_err(McpError::from)
+        serde_json::to_value(result).map_err(McpError::from)
     }
 
     fn supported_methods(&self) -> Vec<String> {

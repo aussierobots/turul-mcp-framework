@@ -4,14 +4,14 @@
 
 ## Current Status: PRODUCTION READY ✅
 
-**Last Updated**: 2025-09-14
-**Framework Status**: ✅ **PRODUCTION READY** - All core functionality implemented and documented
+**Last Updated**: 2025-09-15
+**Framework Status**: ✅ **PRODUCTION READY** - All core functionality implemented and documented with enhanced developer experience
 **Current Branch**: 🚀 **0.2.0** - Synchronized versions, ready for publishing
 **Documentation**: ✅ **COMPREHENSIVE FIXES COMPLETED** - All README files corrected with working examples
 
 ---
 
-## ✅ Recently Completed (2025-09-13 to 2025-09-14)
+## ✅ Recently Completed (2025-09-13 to 2025-09-15)
 
 ### **Major Documentation Overhaul**
 - ✅ **turul-mcp-json-rpc-server/README.md**: Complete rewrite with correct APIs
@@ -21,14 +21,24 @@
 - ✅ **CLAUDE.md**: Reduced from 222 to 115 lines (48% reduction) while preserving essential guidance
 - ✅ **API Verification**: Confirmed SessionContext API is correct (external review was wrong)
 
+### **Auto-Detection Template Resources Implementation (2025-09-15)**
+- ✅ **Resource Function Macro**: New `#[mcp_resource]` procedural macro for async function resources
+- ✅ **Auto-Detection Logic**: Builder automatically detects template URIs based on `{variable}` patterns
+- ✅ **Unified API**: Single `.resource()` method handles both static and template resources
+- ✅ **Backward Compatibility**: `.template_resource()` method remains available for explicit control
+- ✅ **Resource Function Support**: New `.resource_fn()` method for function-style resources
+- ✅ **Comprehensive Testing**: 10 new unit tests covering all auto-detection scenarios
+- ✅ **Examples Updated**: All examples migrated to simplified API patterns
+
 ### **Framework Core Status**
 - ✅ **All 4 Tool Creation Levels**: Function/derive/builder/manual approaches working
+- ✅ **Resource Enhancement**: Auto-detection eliminates URI template redundancy
 - ✅ **MCP 2025-06-18 Compliance**: Complete specification support with SSE
 - ✅ **Session Management**: UUID v7 sessions with pluggable storage backends
 - ✅ **Storage Backends**: InMemory, SQLite, PostgreSQL, DynamoDB all implemented
-- ✅ **Testing**: All core tests passing, E2E tests working (14/15 pass)
+- ✅ **Testing**: All core tests passing, E2E tests working (14/15 pass), 10 new auto-detection tests
 - ✅ **MCP Inspector**: Compatible with standard configuration
-- ✅ **Examples**: All 25+ examples compile and run correctly
+- ✅ **Examples**: All 25+ examples compile and run correctly with simplified resource patterns
 
 ---
 
