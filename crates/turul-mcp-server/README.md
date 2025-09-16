@@ -135,6 +135,104 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+## Resources
+
+The framework provides powerful resource management with automatic URI template detection and parameter extraction.
+
+### Resource Function Registration
+
+Use `.resource_fn()` to register resources created with the `#[mcp_resource]` macro:
+
+```rust
+use turul_mcp_derive::mcp_resource;
+use turul_mcp_server::{McpServerBuilder, McpResult};
+use turul_mcp_protocol::resources::ResourceContent;
+
+// Static resource
+#[mcp_resource(
+    uri = "file:///config.json",
+    name = "config",
+    description = "Application configuration"
+)]
+async fn get_config() -> McpResult<Vec<ResourceContent>> {
+    let config = serde_json::json!({
+        "app_name": "My Server",
+        "version": "1.0.0",
+        "debug": true
+    });
+
+    Ok(vec![ResourceContent::blob(
+        "file:///config.json",
+        serde_json::to_string_pretty(&config).unwrap(),
+        "application/json".to_string()
+    )])
+}
+
+// Template resource - automatic parameter extraction
+#[mcp_resource(
+    uri = "file:///users/{user_id}.json",
+    name = "user_profile",
+    description = "User profile data"
+)]
+async fn get_user_profile(user_id: String) -> McpResult<Vec<ResourceContent>> {
+    let profile = serde_json::json!({
+        "user_id": user_id,
+        "username": format!("user_{}", user_id),
+        "email": format!("{}@example.com", user_id)
+    });
+
+    Ok(vec![ResourceContent::blob(
+        format!("file:///users/{}.json", user_id),
+        serde_json::to_string_pretty(&profile).unwrap(),
+        "application/json".to_string()
+    )])
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let server = McpServerBuilder::new()
+        .name("resource-server")
+        .version("1.0.0")
+        .resource_fn(get_config)       // Static resource
+        .resource_fn(get_user_profile) // Template: file:///users/{user_id}.json
+        .bind_address("127.0.0.1:8080".parse()?)
+        .build()?;
+
+    // Framework automatically:
+    // - Detects URI templates ({user_id} patterns)
+    // - Registers appropriate resource handlers
+    // - Extracts template variables from requests
+    // - Maps them to function parameters
+    Ok(())
+}
+```
+
+### Alternative: Direct Resource Registration
+
+You can also register resource instances directly:
+
+```rust
+use turul_mcp_server::{McpServerBuilder, McpResource};
+use turul_mcp_protocol::resources::*;
+use async_trait::async_trait;
+
+struct ConfigResource;
+
+#[async_trait]
+impl McpResource for ConfigResource {
+    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
+        // Custom implementation
+        Ok(vec![])
+    }
+}
+
+// Implement metadata traits...
+
+let server = McpServerBuilder::new()
+    .resource(ConfigResource)  // Direct instance
+    .build()?;
+```
+
 ## Session Management & Storage
 
 ### Pluggable Storage Backends

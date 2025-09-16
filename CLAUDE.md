@@ -31,6 +31,24 @@ struct Calculator;  // Framework → tools/call
 - **Error Handling**: Use `McpError` types, avoid `.unwrap()` in production
 - **Session IDs**: Always `Uuid::now_v7()` for temporal ordering
 
+### 🔒 URI Security Requirements
+**CRITICAL**: Custom URI schemes may be blocked by security middleware. Use standard file:// paths:
+
+```rust
+// ✅ SECURE - Use file:// scheme
+"file:///memory/data.json"     // Instead of memory://data
+"file:///empty/content.txt"    // Instead of cache://items
+"file:///session/info.json"    // Instead of session://info
+"file:///tmp/test.txt"         // Standard file paths
+
+// ❌ BLOCKED - Custom schemes
+"memory://data"                // May fail security checks
+"session://info"               // May fail security checks
+"custom://resource"            // May fail security checks
+```
+
+**Production Rule**: Always use `file://` URIs for maximum compatibility with security middleware.
+
 ## Quick Reference
 
 ### Tool Creation (4 Levels)

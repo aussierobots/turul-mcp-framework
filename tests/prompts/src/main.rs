@@ -41,16 +41,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test prompt message rendering
     info!("🎨 Testing Prompt Message Rendering:");
     
-    let review_messages = review_prompt.render(HashMap::new()).await?;
+    let review_messages = review_prompt.render(Some(HashMap::new())).await?;
     info!("✅ Review prompt rendered: {} messages", review_messages.len());
     
-    let docs_messages = docs_prompt.render(HashMap::new()).await?;
+    let docs_messages = docs_prompt.render(Some(HashMap::new())).await?;
     info!("✅ Docs prompt rendered: {} messages", docs_messages.len());
     
-    let error_messages = error_prompt.render(HashMap::new()).await?;
+    let error_messages = error_prompt.render(Some(HashMap::new())).await?;
     info!("✅ Error prompt rendered: {} messages", error_messages.len());
     
-    let plan_messages = plan_prompt.render(HashMap::new()).await?;
+    let plan_messages = plan_prompt.render(Some(HashMap::new())).await?;
     info!("✅ Plan prompt rendered: {} messages", plan_messages.len());
     
     // Test custom argument handling
@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     custom_args.insert("code".to_string(), json!("def hello(): print('Hello MCP!')"));
     custom_args.insert("focus_area".to_string(), json!("performance"));
     
-    let custom_messages = review_prompt.render(custom_args).await?;
+    let custom_messages = review_prompt.render(Some(custom_args)).await?;
     info!("✅ Review prompt with custom args: {} messages", custom_messages.len());
     
     info!("🚀 Testing New ContentBlock Prompts:");

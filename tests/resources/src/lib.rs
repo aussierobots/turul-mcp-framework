@@ -16,17 +16,6 @@ use turul_mcp_server::prelude::*;
 pub struct UserProfileResource {
     pub include_preferences: bool,
 }
-#[async_trait]
-impl McpResource for UserProfileResource {
-    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
-        let user_id = params
-            .as_ref()
-            .and_then(|vars| vars.get("user_id"))
-            .and_then(|id| id.as_str().map(String::from))
-            .ok_or_else(|| McpError::InvalidParameters("Missing user_id parameter".to_string()))?;
-        self.fetch_profile_data(user_id.as_str()).await
-    }
-}
 
 impl UserProfileResource {
     pub fn new() -> Self {
@@ -71,6 +60,26 @@ impl UserProfileResource {
             serde_json::to_string_pretty(&profile_data)
                 .map_err(|e| McpError::tool_execution(&format!("Serialization error: {}", e)))?,
         )])
+    }
+}
+
+#[async_trait]
+impl McpResource for UserProfileResource {
+    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        // Extract user_id from template variables
+        let user_id = if let Some(params) = &params {
+            if let Some(template_vars) = params.get("template_variables") {
+                if let Some(vars_obj) = template_vars.as_object() {
+                    if let Some(user_id_val) = vars_obj.get("user_id") {
+                        if let Some(user_id_str) = user_id_val.as_str() {
+                            user_id_str.to_string()
+                        } else { "unknown".to_string() }
+                    } else { "unknown".to_string() }
+                } else { "unknown".to_string() }
+            } else { "unknown".to_string() }
+        } else { "unknown".to_string() };
+
+        self.fetch_profile_data(&user_id).await
     }
 }
 
@@ -150,6 +159,13 @@ impl AppConfigResource {
     }
 }
 
+#[async_trait]
+impl McpResource for AppConfigResource {
+    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        self.fetch_config_data().await
+    }
+}
+
 /// Log files resource
 #[derive(McpResource, Clone, Serialize, Deserialize, Debug)]
 #[resource(
@@ -219,6 +235,13 @@ impl LogFilesResource {
     }
 }
 
+#[async_trait]
+impl McpResource for LogFilesResource {
+    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        self.fetch_log_data().await
+    }
+}
+
 /// File user resource demonstrating URI template "file:///user/{user_id}.json"
 #[derive(McpResource, Clone, Serialize, Deserialize, Debug)]
 #[resource(
@@ -262,7 +285,12 @@ impl FileUserResource {
     }
 }
 
-// Note: McpResource trait is automatically implemented by the derive macro
+#[async_trait]
+impl McpResource for FileUserResource {
+    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        self.fetch_user_data().await
+    }
+}
 
 /// User avatar resource demonstrating BlobResourceContent with base64 images
 #[derive(McpResource, Clone, Serialize, Deserialize, Debug)]
@@ -297,7 +325,12 @@ impl UserAvatarResource {
     }
 }
 
-// Note: McpResource trait is automatically implemented by the derive macro
+#[async_trait]
+impl McpResource for UserAvatarResource {
+    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        self.fetch_avatar_data().await
+    }
+}
 
 /// Binary data resource demonstrating various blob types
 #[derive(McpResource, Clone, Serialize, Deserialize, Debug)]
@@ -335,7 +368,12 @@ impl BinaryDataResource {
     }
 }
 
-// Note: McpResource trait is automatically implemented by the derive macro
+#[async_trait]
+impl McpResource for BinaryDataResource {
+    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        self.fetch_binary_data().await
+    }
+}
 
 // Test modules
 #[cfg(test)]

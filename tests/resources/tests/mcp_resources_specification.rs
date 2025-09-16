@@ -14,7 +14,7 @@ use mcp_resources_tests::{UserProfileResource, AppConfigResource, LogFilesResour
 
 #[tokio::test]
 async fn test_resource_definition_trait_complete_mcp_compliance() {
-    let user_resource = UserProfileResource::new("spec_test_user").with_preferences();
+    let user_resource = UserProfileResource::new().with_preferences();
     
     // === Test Required ResourceDefinition Trait Methods ===
     
@@ -63,7 +63,7 @@ async fn test_resource_definition_trait_complete_mcp_compliance() {
 async fn test_resource_uri_rfc_6570_template_compliance() {
     // === Test URI Template Format Compliance ===
     
-    let user_resource = UserProfileResource::new("uri_test");
+    let user_resource = UserProfileResource::new();
     let config_resource = AppConfigResource::new("api", "prod");
     let log_resource = LogFilesResource::new("error");
     
@@ -156,12 +156,12 @@ async fn test_resource_content_mcp_format_compliance() {
 async fn test_resource_business_logic_methods_coverage() {
     // === Test Business Logic Methods (Eliminates Dead Code Warnings) ===
     
-    let user_resource = UserProfileResource::new("business_test").with_preferences();
+    let user_resource = UserProfileResource::new().with_preferences();
     let config_resource = AppConfigResource::new("api", "development");  
     let log_resource = LogFilesResource::new("error").with_lines(25); // Use "error" type to get ERROR entries
     
     // Test UserProfileResource business methods
-    let user_profile_data = user_resource.fetch_profile_data().await.unwrap();
+    let user_profile_data = user_resource.fetch_profile_data("business_test").await.unwrap();
     assert!(!user_profile_data.is_empty());
     
     // Should include preferences when enabled
@@ -244,7 +244,7 @@ async fn test_resource_polymorphism_mcp_compliance() {
     
     // All resource types should work uniformly through ResourceDefinition trait
     let resources: Vec<Box<dyn ResourceDefinition>> = vec![
-        Box::new(UserProfileResource::new("poly1")),
+        Box::new(UserProfileResource::new()),
         Box::new(AppConfigResource::new("database", "prod")),
         Box::new(LogFilesResource::new("error").with_lines(50)),
     ];
@@ -288,7 +288,7 @@ async fn test_resource_mcp_error_handling_compliance() {
 async fn test_resource_serialization_round_trip_mcp_compliance() {
     // === Test Protocol Serialization Compliance ===
     
-    let user_resource = UserProfileResource::new("serialize_test");
+    let user_resource = UserProfileResource::new();
     let resource_struct = user_resource.to_resource();
     
     // Test JSON serialization preserves MCP structure
@@ -313,7 +313,7 @@ async fn test_resource_edge_cases_mcp_robustness() {
     // === Test Edge Cases and Robustness ===
     
     // Test with minimal/empty inputs
-    let minimal_resource = UserProfileResource::new("");
+    let minimal_resource = UserProfileResource::new();
     assert_eq!(minimal_resource.name(), "user_profile"); // Should still work
     assert!(!minimal_resource.uri().is_empty()); // Should have valid URI template
     
@@ -322,7 +322,7 @@ async fn test_resource_edge_cases_mcp_robustness() {
     assert!(!content.is_empty()); // Should produce content even with empty input
     
     // Test business logic robustness
-    let profile_data = minimal_resource.fetch_profile_data().await.unwrap();
+    let profile_data = minimal_resource.fetch_profile_data("test_user").await.unwrap();
     assert!(!profile_data.is_empty());
     
     // Test with boundary line counts

@@ -122,6 +122,10 @@ impl McpHandler for PromptsListHandler {
                 if let Some(desc) = p.description() {
                     prompt = prompt.with_description(desc);
                 }
+                // Include arguments from the prompt object
+                if let Some(args) = p.arguments() {
+                    prompt = prompt.with_arguments(args.clone());
+                }
                 prompt
             })
             .collect();

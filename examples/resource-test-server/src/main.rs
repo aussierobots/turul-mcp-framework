@@ -8,26 +8,26 @@
 //!
 //! ### Basic Resources (Coverage)
 //! - `file:///tmp/test.txt` - Reads files from disk with proper error handling
-//! - `memory://data` - Returns in-memory data for fast testing
-//! - `error://not_found` - Always returns NotFound errors for error path testing
-//! - `slow://delayed` - Simulates slow operations with configurable delays
-//! - `template://items/{id}` - Tests URI templates with variable substitution
-//! - `empty://content` - Returns empty content for edge case testing
-//! - `large://dataset` - Returns very large content for size testing
-//! - `binary://image` - Returns binary data with proper MIME types
+//! - `file:///memory/data.json` - Returns in-memory data for fast testing
+//! - `file:///error/not_found.txt` - Always returns NotFound errors for error path testing
+//! - `file:///slow/delayed.txt` - Simulates slow operations with configurable delays
+//! - `file:///template/items/{id}.json` - Tests URI templates with variable substitution
+//! - `file:///empty/content.txt` - Returns empty content for edge case testing
+//! - `file:///large/dataset.json` - Returns very large content for size testing
+//! - `file:///binary/image.png` - Returns binary data with proper MIME types
 //!
 //! ### Advanced Resources (Features)
-//! - `session://info` - Returns session ID and metadata (session-aware)
-//! - `subscribe://updates` - Supports resource subscriptions
-//! - `notify://trigger` - Triggers list change notifications via SSE
-//! - `multi://contents` - Returns multiple ResourceContent items
-//! - `paginated://items` - Supports cursor-based pagination
+//! - `file:///session/info.json` - Returns session ID and metadata (session-aware)
+//! - `file:///subscribe/updates.json` - Supports resource subscriptions
+//! - `file:///notify/trigger.json` - Triggers list change notifications via SSE
+//! - `file:///multi/contents.txt` - Returns multiple ResourceContent items
+//! - `file:///paginated/items.json` - Supports cursor-based pagination
 //!
 //! ### Edge Cases
-//! - `invalid://bad-chars-and-spaces` - Intentionally non-compliant URI for error testing
-//! - `long://very-long-uri...` - Resource with very long URIs
-//! - `meta://dynamic` - Changes behavior based on _meta fields
-//! - `complete://all-fields` - Resource with all optional fields populated
+//! - `file:///invalid/bad-chars-and-spaces.txt` - Intentionally non-compliant URI for error testing
+//! - `file:///long/very-long-uri...` - Resource with very long URIs
+//! - `file:///meta/dynamic.json` - Changes behavior based on _meta fields
+//! - `file:///complete/all-fields.json` - Resource with all optional fields populated
 //!
 //! ## Usage:
 //! ```bash
@@ -162,7 +162,7 @@ impl HasResourceMetadata for MemoryResource {
 }
 
 impl HasResourceUri for MemoryResource {
-    fn uri(&self) -> &str { "memory://data" }
+    fn uri(&self) -> &str { "file:///memory/data.json" }
 }
 
 impl HasResourceDescription for MemoryResource {
@@ -202,7 +202,7 @@ impl McpResource for MemoryResource {
         });
 
         Ok(vec![ResourceContent::text(
-            "memory://data",
+            "file:///memory/data.json",
             safe_json_serialize(&data)?
         )])
     }
@@ -217,7 +217,7 @@ impl HasResourceMetadata for ErrorResource {
 }
 
 impl HasResourceUri for ErrorResource {
-    fn uri(&self) -> &str { "error://not_found" }
+    fn uri(&self) -> &str { "file:///error/not_found.txt" }
 }
 
 impl HasResourceDescription for ErrorResource {
@@ -252,7 +252,7 @@ impl HasResourceMetadata for SlowResource {
 }
 
 impl HasResourceUri for SlowResource {
-    fn uri(&self) -> &str { "slow://delayed" }
+    fn uri(&self) -> &str { "file:///slow/delayed.txt" }
 }
 
 impl HasResourceDescription for SlowResource {
@@ -294,7 +294,7 @@ impl McpResource for SlowResource {
             Utc::now().to_rfc3339()
         );
 
-        Ok(vec![ResourceContent::text("slow://delayed", content)])
+        Ok(vec![ResourceContent::text("file:///slow/delayed.txt", content)])
     }
 }
 
@@ -307,7 +307,7 @@ impl HasResourceMetadata for TemplateResource {
 }
 
 impl HasResourceUri for TemplateResource {
-    fn uri(&self) -> &str { "template://items/{id}" }
+    fn uri(&self) -> &str { "file:///template/items/{id}.json" }
 }
 
 impl HasResourceDescription for TemplateResource {
@@ -342,7 +342,7 @@ impl McpResource for TemplateResource {
 
         let item_data = json!({
             "id": id,
-            "uri": format!("template://items/{}", id),
+            "uri": format!("file:///template/items/{}.json", id),
             "name": format!("Template Item {}", id),
             "description": format!("This is a dynamically generated item with ID: {}", id),
             "created_at": Utc::now().to_rfc3339(),
@@ -355,7 +355,7 @@ impl McpResource for TemplateResource {
         });
 
         Ok(vec![ResourceContent::text(
-            &format!("template://items/{}", id),
+            &format!("file:///template/items/{}.json", id),
             safe_json_serialize(&item_data)?
         )])
     }
@@ -370,7 +370,7 @@ impl HasResourceMetadata for EmptyResource {
 }
 
 impl HasResourceUri for EmptyResource {
-    fn uri(&self) -> &str { "empty://content" }
+    fn uri(&self) -> &str { "file:///empty/content.txt" }
 }
 
 impl HasResourceDescription for EmptyResource {
@@ -392,7 +392,7 @@ impl HasResourceMeta for EmptyResource {}
 #[async_trait]
 impl McpResource for EmptyResource {
     async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
-        Ok(vec![ResourceContent::text("empty://content", "")])
+        Ok(vec![ResourceContent::text("file:///empty/content.txt", "")])
     }
 }
 
@@ -405,7 +405,7 @@ impl HasResourceMetadata for LargeResource {
 }
 
 impl HasResourceUri for LargeResource {
-    fn uri(&self) -> &str { "large://dataset" }
+    fn uri(&self) -> &str { "file:///large/dataset.json" }
 }
 
 impl HasResourceDescription for LargeResource {
@@ -458,7 +458,7 @@ impl McpResource for LargeResource {
         });
 
         Ok(vec![ResourceContent::text(
-            "large://dataset",
+            "file:///large/dataset.json",
             &serde_json::to_string(&large_data)
                 .map_err(|e| McpError::resource_execution(&format!("Large data serialization failed: {}", e)))?
         )])
@@ -474,7 +474,7 @@ impl HasResourceMetadata for BinaryResource {
 }
 
 impl HasResourceUri for BinaryResource {
-    fn uri(&self) -> &str { "binary://image" }
+    fn uri(&self) -> &str { "file:///binary/image.png" }
 }
 
 impl HasResourceDescription for BinaryResource {
@@ -517,7 +517,7 @@ impl McpResource for BinaryResource {
         let encoded = general_purpose::STANDARD.encode(&fake_png);
         
         Ok(vec![ResourceContent::blob(
-            "binary://image", 
+            "file:///binary/image.png",
             encoded,
             "image/png"
         )])
@@ -537,7 +537,7 @@ impl HasResourceMetadata for SessionResource {
 }
 
 impl HasResourceUri for SessionResource {
-    fn uri(&self) -> &str { "session://info" }
+    fn uri(&self) -> &str { "file:///session/info.json" }
 }
 
 impl HasResourceDescription for SessionResource {
@@ -574,7 +574,7 @@ impl McpResource for SessionResource {
         });
 
         Ok(vec![ResourceContent::text(
-            "session://info",
+            "file:///session/info.json",
             safe_json_serialize(&session_data)?
         )])
     }
@@ -599,7 +599,7 @@ impl HasResourceMetadata for SubscribableResource {
 }
 
 impl HasResourceUri for SubscribableResource {
-    fn uri(&self) -> &str { "subscribe://updates" }
+    fn uri(&self) -> &str { "file:///subscribe/updates.json" }
 }
 
 impl HasResourceDescription for SubscribableResource {
@@ -636,7 +636,7 @@ impl McpResource for SubscribableResource {
         });
 
         Ok(vec![ResourceContent::text(
-            "subscribe://updates",
+            "file:///subscribe/updates.json",
             safe_json_serialize(&subscription_data)?
         )])
     }
@@ -651,7 +651,7 @@ impl HasResourceMetadata for NotifyingResource {
 }
 
 impl HasResourceUri for NotifyingResource {
-    fn uri(&self) -> &str { "notify://trigger" }
+    fn uri(&self) -> &str { "file:///notify/trigger.json" }
 }
 
 impl HasResourceDescription for NotifyingResource {
@@ -688,7 +688,7 @@ impl McpResource for NotifyingResource {
         });
 
         Ok(vec![ResourceContent::text(
-            "notify://trigger",
+            "file:///notify/trigger.json",
             safe_json_serialize(&notification_data)?
         )])
     }
@@ -703,7 +703,7 @@ impl HasResourceMetadata for MultiContentResource {
 }
 
 impl HasResourceUri for MultiContentResource {
-    fn uri(&self) -> &str { "multi://contents" }
+    fn uri(&self) -> &str { "file:///multi/contents.txt" }
 }
 
 impl HasResourceDescription for MultiContentResource {
@@ -727,7 +727,7 @@ impl McpResource for MultiContentResource {
     async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![
             ResourceContent::text(
-                "multi://contents/part1",
+                "file:///multi/contents/part1.json",
                 json!({
                     "part": 1,
                     "type": "metadata",
@@ -736,7 +736,7 @@ impl McpResource for MultiContentResource {
                 }).to_string()
             ),
             ResourceContent::text(
-                "multi://contents/part2", 
+                "file:///multi/contents/part2.json", 
                 json!({
                     "part": 2,
                     "type": "data",
@@ -748,7 +748,7 @@ impl McpResource for MultiContentResource {
                 }).to_string()
             ),
             ResourceContent::text(
-                "multi://contents/part3",
+                "file:///multi/contents/part3.txt",
                 "Part 3: Plain text content\nThis demonstrates that ResourceContent can contain different types of data\nincluding JSON, plain text, and other formats."
             )
         ])
@@ -764,7 +764,7 @@ impl HasResourceMetadata for PaginatedResource {
 }
 
 impl HasResourceUri for PaginatedResource {
-    fn uri(&self) -> &str { "paginated://items" }
+    fn uri(&self) -> &str { "file:///paginated/items.json" }
 }
 
 impl HasResourceDescription for PaginatedResource {
@@ -828,7 +828,7 @@ impl McpResource for PaginatedResource {
         });
 
         Ok(vec![ResourceContent::text(
-            "paginated://items",
+            "file:///paginated/items.json",
             safe_json_serialize(&paginated_data)?
         )])
     }
@@ -847,7 +847,7 @@ impl HasResourceMetadata for InvalidUriResource {
 }
 
 impl HasResourceUri for InvalidUriResource {
-    fn uri(&self) -> &str { "invalid://bad-chars-and-spaces" }
+    fn uri(&self) -> &str { "file:///invalid/bad-chars-and-spaces.txt" }
 }
 
 impl HasResourceDescription for InvalidUriResource {
@@ -870,7 +870,7 @@ impl HasResourceMeta for InvalidUriResource {}
 impl McpResource for InvalidUriResource {
     async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
-            "invalid://bad-chars-and-spaces",
+            "file:///invalid/bad-chars-and-spaces.txt",
             "This resource has an intentionally invalid URI with hyphens and special characters for testing"
         )])
     }
@@ -886,7 +886,7 @@ impl Default for LongUriResource {
     fn default() -> Self {
         let long_part = "very-long-path-component-".repeat(20); // ~500 chars
         Self {
-            long_uri: format!("long://{}/with/many/nested/path/segments/that/make/the/uri/extremely/long", long_part)
+            long_uri: format!("file:///long/{}/with/many/nested/path/segments/that/make/the/uri/extremely/long.txt", long_part)
         }
     }
 }
@@ -934,7 +934,7 @@ impl HasResourceMetadata for MetaDynamicResource {
 }
 
 impl HasResourceUri for MetaDynamicResource {
-    fn uri(&self) -> &str { "meta://dynamic" }
+    fn uri(&self) -> &str { "file:///meta/dynamic.json" }
 }
 
 impl HasResourceDescription for MetaDynamicResource {
@@ -994,7 +994,7 @@ impl McpResource for MetaDynamicResource {
         };
 
         Ok(vec![ResourceContent::text(
-            "meta://dynamic",
+            "file:///meta/dynamic.json",
             safe_json_serialize(&response)?
         )])
     }
@@ -1009,7 +1009,7 @@ impl HasResourceMetadata for UserTemplateResource {
 }
 
 impl HasResourceUri for UserTemplateResource {
-    fn uri(&self) -> &str { "template://users/{user_id}" }
+    fn uri(&self) -> &str { "file:///template/users/{user_id}.json" }
 }
 
 impl HasResourceDescription for UserTemplateResource {
@@ -1044,7 +1044,7 @@ impl McpResource for UserTemplateResource {
 
         let user_data = json!({
             "user_id": user_id,
-            "uri": format!("template://users/{}", user_id),
+            "uri": format!("file:///template/users/{}.json", user_id),
             "name": format!("User {}", user_id),
             "email": format!("{}@example.com", user_id),
             "profile": {
@@ -1064,7 +1064,7 @@ impl McpResource for UserTemplateResource {
         });
 
         Ok(vec![ResourceContent::text(
-            &format!("template://users/{}", user_id),
+            &format!("file:///template/users/{}.json", user_id),
             safe_json_serialize(&user_data)?
         )])
     }
@@ -1079,7 +1079,7 @@ impl HasResourceMetadata for FileTemplateResource {
 }
 
 impl HasResourceUri for FileTemplateResource {
-    fn uri(&self) -> &str { "template://files/{path}" }
+    fn uri(&self) -> &str { "file:///template/files/{path}" }
 }
 
 impl HasResourceDescription for FileTemplateResource {
@@ -1127,7 +1127,7 @@ impl McpResource for FileTemplateResource {
 
         let file_info = format!(
             "Template File: {}\n\
-            URI: template://files/{}\n\
+            URI: file:///template/files/{}\n\
             Generated: {}\n\
             Template Variables: {:?}\n\n\
             File Content:\n\
@@ -1140,7 +1140,7 @@ impl McpResource for FileTemplateResource {
         );
 
         Ok(vec![ResourceContent::text(
-            &format!("template://files/{}", path),
+            &format!("file:///template/files/{}", path),
             file_info
         )])
     }
@@ -1174,7 +1174,7 @@ impl HasResourceMetadata for CompleteResource {
 }
 
 impl HasResourceUri for CompleteResource {
-    fn uri(&self) -> &str { "complete://all-fields" }
+    fn uri(&self) -> &str { "file:///complete/all-fields.json" }
 }
 
 impl HasResourceDescription for CompleteResource {
@@ -1224,7 +1224,7 @@ impl McpResource for CompleteResource {
         });
 
         Ok(vec![ResourceContent::text(
-            "complete://all-fields",
+            "file:///complete/all-fields.json",
             safe_json_serialize(&complete_data)?
         )])
     }
@@ -1264,10 +1264,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             This server implements all MCP resource patterns and edge cases to validate\n\
             framework compliance with the MCP 2025-06-18 specification.\n\n\
             Available test resources:\n\
-            • Basic: file://, memory://, error://, slow://, empty://, large://, binary://\n\
-            • Templates: template://items/{id}, template://users/{user_id}, template://files/{path}\n\
-            • Advanced: session://, subscribe://, notify://, multi://, paginated://\n\
-            • Edge cases: invalid://, long://, meta://, complete://\n\n\
+            • Basic: file:///tmp/, file:///memory/, file:///error/, file:///slow/, file:///empty/, file:///large/, file:///binary/\n\
+            • Templates: file:///template/items/{id}.json, file:///template/users/{user_id}.json, file:///template/files/{path}\n\
+            • Advanced: file:///session/, file:///subscribe/, file:///notify/, file:///multi/, file:///paginated/\n\
+            • Edge cases: file:///invalid/, file:///long/, file:///meta/, file:///complete/\n\n\
             Note: Template resources are now auto-detected based on URI patterns."
         )
         // Basic Resources (Coverage)
@@ -1303,31 +1303,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("🧪 Test Resources Available:");
     info!("   📁 Basic Resources (Coverage):");
     info!("      • file:///tmp/test.txt - File reading with error handling");  
-    info!("      • memory://data - Fast in-memory JSON data");
-    info!("      • error://not_found - Always returns NotFound errors");
-    info!("      • slow://delayed - Configurable delay simulation");
-    info!("      • empty://content - Empty content edge case");
-    info!("      • large://dataset - Large content (configurable size)");
-    info!("      • binary://image - Binary data with MIME types");
+    info!("      • file:///memory/data.json - Fast in-memory JSON data");
+    info!("      • file:///error/not_found.txt - Always returns NotFound errors");
+    info!("      • file:///slow/delayed.txt - Configurable delay simulation");
+    info!("      • file:///empty/content.txt - Empty content edge case");
+    info!("      • file:///large/dataset.json - Large content (configurable size)");
+    info!("      • file:///binary/image.png - Binary data with MIME types");
     info!("");
     info!("   🎯 Template Resources (URI Templates with variables):");
-    info!("      • template://items/{{id}} - Item template with ID validation");
-    info!("      • template://users/{{user_id}} - User template with user_id validation");
-    info!("      • template://files/{{path}} - File path template with flexible paths");
+    info!("      • file:///template/items/{{id}}.json - Item template with ID validation");
+    info!("      • file:///template/users/{{user_id}}.json - User template with user_id validation");
+    info!("      • file:///template/files/{{path}} - File path template with flexible paths");
     info!("      📋 Available via: resources/templates/list endpoint");
     info!("");
     info!("   🚀 Advanced Resources (Features):");
-    info!("      • session://info - Session-aware resource");
-    info!("      • subscribe://updates - Subscription support");
-    info!("      • notify://trigger - SSE notification triggers");
-    info!("      • multi://contents - Multiple ResourceContent items");
-    info!("      • paginated://items - Cursor-based pagination");
+    info!("      • file:///session/info.json - Session-aware resource");
+    info!("      • file:///subscribe/updates.json - Subscription support");
+    info!("      • file:///notify/trigger.json - SSE notification triggers");
+    info!("      • file:///multi/contents.txt - Multiple ResourceContent items");
+    info!("      • file:///paginated/items.json - Cursor-based pagination");
     info!("");
     info!("   ⚠️  Edge Case Resources:");
-    info!("      • invalid://bad-chars-and-spaces - Intentionally non-compliant URI for error testing");
-    info!("      • long://very-long-path... - Very long URI testing");
-    info!("      • meta://dynamic - _meta field behavior changes");
-    info!("      • complete://all-fields - All optional fields populated");
+    info!("      • file:///invalid/bad-chars-and-spaces.txt - Intentionally non-compliant URI for error testing");
+    info!("      • file:///long/very-long-path... - Very long URI testing");
+    info!("      • file:///meta/dynamic.json - _meta field behavior changes");
+    info!("      • file:///complete/all-fields.json - All optional fields populated");
     info!("");
     info!("💡 Quick Test Commands:");
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);

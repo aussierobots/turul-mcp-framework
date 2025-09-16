@@ -11,7 +11,7 @@ use tracing::{debug, info};
 
 #[tokio::test]
 async fn test_sse_connection_establishment() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -36,7 +36,7 @@ async fn test_sse_connection_establishment() {
 
 #[tokio::test]
 async fn test_sse_resource_list_changed_notification() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -89,7 +89,7 @@ async fn test_sse_resource_list_changed_notification() {
 
 #[tokio::test]
 async fn test_sse_resource_subscription_notifications() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -128,7 +128,7 @@ async fn test_sse_resource_subscription_notifications() {
 
 #[tokio::test]
 async fn test_sse_session_isolation() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     
@@ -173,7 +173,7 @@ async fn test_sse_session_isolation() {
 
 #[tokio::test]
 async fn test_sse_notification_format_compliance() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -241,7 +241,7 @@ async fn test_sse_notification_format_compliance() {
 
 #[tokio::test]
 async fn test_sse_with_multiple_resource_operations() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -253,10 +253,10 @@ async fn test_sse_with_multiple_resource_operations() {
 
     // Perform multiple resource operations that might trigger notifications
     let operations = vec![
-        ("subscribe://updates", "subscribe"),
-        ("notify://trigger", "subscribe"),
-        ("memory://data", "read"),
-        ("template://items/test", "read"),
+        ("file:///subscribe/updates.json", "subscribe"),
+        ("file:///notify/trigger.json", "subscribe"),
+        ("file:///memory/data.json", "read"),
+        ("file:///template/items/test.json", "read"),
     ];
 
     for (uri, operation) in operations {
@@ -296,7 +296,7 @@ async fn test_sse_with_multiple_resource_operations() {
 
 #[tokio::test]
 async fn test_sse_error_resource_notifications() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());

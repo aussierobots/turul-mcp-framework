@@ -93,6 +93,74 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### 3. Resources with resource_fn()
+
+Create resources that provide data and files using the `.resource_fn()` method:
+
+```rust
+use turul_mcp_derive::mcp_resource;
+use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_protocol::resources::ResourceContent;
+
+// Static resource
+#[mcp_resource(
+    uri = "file:///config.json",
+    name = "config",
+    description = "Application configuration"
+)]
+async fn get_config() -> McpResult<Vec<ResourceContent>> {
+    let config = serde_json::json!({
+        "app_name": "My Server",
+        "version": "1.0.0"
+    });
+
+    Ok(vec![ResourceContent::blob(
+        "file:///config.json",
+        serde_json::to_string_pretty(&config).unwrap(),
+        "application/json".to_string()
+    )])
+}
+
+// Template resource with parameter extraction
+#[mcp_resource(
+    uri = "file:///users/{user_id}.json",
+    name = "user_profile",
+    description = "User profile data"
+)]
+async fn get_user_profile(user_id: String) -> McpResult<Vec<ResourceContent>> {
+    let profile = serde_json::json!({
+        "user_id": user_id,
+        "username": format!("user_{}", user_id),
+        "email": format!("{}@example.com", user_id)
+    });
+
+    Ok(vec![ResourceContent::blob(
+        format!("file:///users/{}.json", user_id),
+        serde_json::to_string_pretty(&profile).unwrap(),
+        "application/json".to_string()
+    )])
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let server = McpServer::builder()
+        .name("resource-server")
+        .version("1.0.0")
+        .resource_fn(get_config)       // Static resource
+        .resource_fn(get_user_profile) // Template: file:///users/{user_id}.json
+        .bind_address("127.0.0.1:8080".parse()?)
+        .build()?;
+
+    server.run().await
+}
+```
+
+The framework automatically:
+- Detects URI templates (`{user_id}` patterns)
+- Extracts template variables from requests
+- Maps them to function parameters
+- Registers appropriate resource handlers
+
 ## 🚀 Running & Testing the Framework
 
 ### Quick Start - Verify Everything Works

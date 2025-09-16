@@ -118,7 +118,7 @@ async fn test_resource_contention_isolation() {
     
     // Create clients
     let mut clients = Vec::new();
-    for i in 0..client_count {
+    for _i in 0..client_count {
         let mut client = McpTestClient::new(server.port());
         client.initialize().await.expect("Failed to initialize client");
         clients.push(client);
@@ -133,10 +133,10 @@ async fn test_resource_contention_isolation() {
     
     // Test concurrent access to the same resources
     let test_resources = vec![
-        "memory://data",
-        "session://info", 
+        "file:///memory/data.json",
+        "file:///session/info.json",
         "file:///tmp/test.txt",
-        "memory://cache",
+        "file:///empty/content.txt",
     ];
     
     let results = Arc::new(Mutex::new(Vec::<(usize, String, Vec<(String, usize, bool, Option<String>)>)>::new()));
@@ -160,7 +160,7 @@ async fn test_resource_contention_isolation() {
                             client_results.push((resource_uri.to_string(), attempt, true, None));
                             
                             // Verify session-aware resources include correct session
-                            if resource_uri == "session://info" {
+                            if resource_uri == "file:///session/info.json" {
                                 if let Some(result_data) = response.get("result").and_then(|r| r.as_object()) {
                                     if let Some(contents) = result_data.get("contents").and_then(|c| c.as_array()) {
                                         if let Some(content) = contents.first().and_then(|item| item.get("text")).and_then(|t| t.as_str()) {
@@ -261,8 +261,9 @@ async fn test_long_running_session_persistence() {
                     1 => client.get_prompt("session_aware_prompt", None).await,
                     _ => {
                         let mut args = HashMap::new();
-                        args.insert("code".to_string(), Value::String("test code".to_string()));
-                        client.get_prompt("code_review_prompt", Some(args)).await
+                        args.insert("required_text".to_string(), Value::String("test code".to_string()));
+                        args.insert("optional_text".to_string(), Value::String("test analysis".to_string()));
+                        client.get_prompt("string_args_prompt", Some(args)).await
                     },
                 };
                 

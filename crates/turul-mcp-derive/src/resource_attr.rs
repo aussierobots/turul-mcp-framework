@@ -67,6 +67,12 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
     // Default description if not provided
     let resource_description = resource_description.unwrap_or_else(|| format!("Resource: {}", resource_name));
 
+    // Handle mime_type properly for quote! generation
+    let mime_type_expr = match mime_type {
+        Some(mt) => quote! { Some(#mt).as_deref() },
+        None => quote! { None },
+    };
+
     // Extract template variables from URI for parameter extraction
     let mut template_vars = Vec::new();
     let mut fn_call_args = Vec::new();
@@ -106,9 +112,9 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
                         }
                     });
                 } else if param_name == "params" && matches!(**param_type, syn::Type::Path(ref p) if p.path.segments.last().unwrap().ident == "Value") {
-                    // This is the params argument
+                    // This is the params argument - unwrap the Option
                     has_params_arg = true;
-                    fn_call_args.push(quote! { params });
+                    fn_call_args.push(quote! { params.unwrap_or_default() });
                 } else {
                     // Regular parameter - extract from params
                     let param_name_str = param_name.to_string();
@@ -134,9 +140,17 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
 
     // Function will be called directly from the generated McpResource implementation
 
+    // Rename the function to avoid name collision with the resource constructor
+    let mut clean_input = input.clone();
+    clean_input.attrs.retain(|attr| !attr.path().is_ident("mcp_resource"));
+
+    // Rename the function with _impl suffix
+    let impl_fn_name = syn::Ident::new(&format!("{}_impl", fn_name), fn_name.span());
+    clean_input.sig.ident = impl_fn_name.clone();
+
     let expanded = quote! {
-        // Keep the original function
-        #input
+        // Keep the original function for direct use (with cleaned attributes)
+        #clean_input
 
         // Generate wrapper struct
         #[derive(Clone)]
@@ -169,7 +183,7 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
 
         impl turul_mcp_protocol::resources::HasResourceMimeType for #struct_name {
             fn mime_type(&self) -> Option<&str> {
-                #mime_type.as_deref()
+                #mime_type_expr
             }
         }
 
@@ -195,8 +209,8 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
         #[async_trait::async_trait]
         impl turul_mcp_server::McpResource for #struct_name {
             async fn read(&self, params: Option<serde_json::Value>) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
-                // Call the original function with extracted parameters
-                #fn_name(#(#fn_call_args),*).await
+                // Call the renamed implementation function with extracted parameters
+                #impl_fn_name(#(#fn_call_args),*).await
             }
         }
 
@@ -208,5 +222,136 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
     };
 
     Ok(expanded)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn test_basic_mcp_resource() {
+        let args = parse_quote! { uri = "file:///data/test.json", description = "Test resource" };
+        let input = parse_quote! {
+            async fn get_test_data() -> McpResult<Vec<ResourceContent>> {
+                Ok(vec![])
+            }
+        };
+
+        let result = mcp_resource_impl(args, input);
+        assert!(result.is_ok());
+
+        let code = result.unwrap().to_string();
+        assert!(code.contains("GetTestDataResourceImpl"));
+        assert!(code.contains("turul_mcp_server") && code.contains("McpResource"));
+        assert!(code.contains("fn get_test_data") && code.contains("GetTestDataResourceImpl"));
+    }
+
+    #[test]
+    fn test_mcp_resource_with_template_variables() {
+        let args = parse_quote! { uri = "file:///data/{id}.json", description = "Data for ID" };
+        let input = parse_quote! {
+            async fn get_data(id: String) -> McpResult<Vec<ResourceContent>> {
+                Ok(vec![])
+            }
+        };
+
+        let result = mcp_resource_impl(args, input);
+        assert!(result.is_ok());
+
+        let code = result.unwrap().to_string();
+        assert!(code.contains("GetDataResourceImpl"));
+        assert!(code.contains("template_variables"));
+        assert!(code.contains("fn get_data") && code.contains("GetDataResourceImpl"));
+    }
+
+    #[test]
+    fn test_mcp_resource_with_multiple_parameters() {
+        let args = parse_quote! { uri = "file:///timeline/{ticker}.json", description = "Timeline data" };
+        let input = parse_quote! {
+            async fn get_timeline(ticker: String, days: i32) -> McpResult<Vec<ResourceContent>> {
+                Ok(vec![])
+            }
+        };
+
+        let result = mcp_resource_impl(args, input);
+        assert!(result.is_ok());
+
+        let code = result.unwrap().to_string();
+        assert!(code.contains("GetTimelineResourceImpl"));
+        assert!(code.contains("template_variables"));
+        assert!(code.contains("missing_param") && code.contains("days"));
+    }
+
+    #[test]
+    fn test_mcp_resource_missing_uri() {
+        let args = parse_quote! { description = "Missing URI" };
+        let input = parse_quote! {
+            async fn test_fn() -> McpResult<Vec<ResourceContent>> {
+                Ok(vec![])
+            }
+        };
+
+        let result = mcp_resource_impl(args, input);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Missing 'uri' parameter"));
+    }
+
+    #[test]
+    fn test_mcp_resource_with_params_argument() {
+        let args = parse_quote! { uri = "file:///custom/{id}.json", description = "Custom resource" };
+        let input = parse_quote! {
+            async fn custom_resource(id: String, params: serde_json::Value) -> McpResult<Vec<ResourceContent>> {
+                Ok(vec![])
+            }
+        };
+
+        let result = mcp_resource_impl(args, input);
+        assert!(result.is_ok());
+
+        let code = result.unwrap().to_string();
+        assert!(code.contains("params"));
+        assert!(code.contains("template_variables"));
+    }
+
+    #[test]
+    fn test_generated_struct_name() {
+        let args = parse_quote! { uri = "file:///test.json" };
+        let input = parse_quote! {
+            async fn load_user_profile() -> McpResult<Vec<ResourceContent>> {
+                Ok(vec![])
+            }
+        };
+
+        let result = mcp_resource_impl(args, input);
+        assert!(result.is_ok());
+
+        let code = result.unwrap().to_string();
+        // Should capitalize properly: load_user_profile -> LoadUserProfileResourceImpl
+        assert!(code.contains("LoadUserProfileResourceImpl"));
+        assert!(code.contains("fn load_user_profile") && code.contains("LoadUserProfileResourceImpl"));
+    }
+
+    #[test]
+    fn test_resource_metadata_traits() {
+        let args = parse_quote! { uri = "file:///metadata.json", name = "test_meta", description = "Metadata test" };
+        let input = parse_quote! {
+            async fn test_metadata() -> McpResult<Vec<ResourceContent>> {
+                Ok(vec![])
+            }
+        };
+
+        let result = mcp_resource_impl(args, input);
+        assert!(result.is_ok());
+
+        let code = result.unwrap().to_string();
+        assert!(code.contains("HasResourceMetadata"));
+        assert!(code.contains("HasResourceDescription"));
+        assert!(code.contains("HasResourceUri"));
+        assert!(code.contains("HasResourceAnnotations"));
+        assert!(code.contains("HasResourceMeta"));
+        assert!(code.contains("\"test_meta\""));
+        assert!(code.contains("\"Metadata test\""));
+    }
 }
 

@@ -7,7 +7,7 @@ use tracing::info;
 
 #[tokio::test]
 async fn test_resource_initialization_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -23,7 +23,7 @@ async fn test_resource_initialization_with_shared_utils() {
 
 #[tokio::test]
 async fn test_resource_list_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -49,14 +49,14 @@ async fn test_resource_list_with_shared_utils() {
         .collect();
 
     assert!(resource_uris.iter().any(|uri| uri.starts_with("file://")));
-    assert!(resource_uris.iter().any(|uri| uri.starts_with("memory://")));
-    assert!(resource_uris.iter().any(|uri| uri.starts_with("error://")));
-    assert!(resource_uris.iter().any(|uri| uri.starts_with("template://")));
+    assert!(resource_uris.iter().any(|uri| uri.starts_with("file:///memory/")));
+    assert!(resource_uris.iter().any(|uri| uri.starts_with("file:///error/")));
+    assert!(resource_uris.iter().any(|uri| uri.starts_with("file:///template/")));
 }
 
 #[tokio::test]
 async fn test_resource_memory_read_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -64,7 +64,7 @@ async fn test_resource_memory_read_with_shared_utils() {
     client.initialize().await.expect("Failed to initialize");
 
     let result = client
-        .read_resource("memory://data")
+        .read_resource("file:///memory/data.json")
         .await
         .expect("Failed to read memory resource");
 
@@ -75,13 +75,13 @@ async fn test_resource_memory_read_with_shared_utils() {
         let contents = result_data["contents"].as_array().unwrap();
         let content = &contents[0];
         let content_obj = content.as_object().unwrap();
-        assert_eq!(content_obj["uri"], "memory://data");
+        assert_eq!(content_obj["uri"], "file:///memory/data.json");
     }
 }
 
 #[tokio::test]
 async fn test_resource_error_handling_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -89,19 +89,18 @@ async fn test_resource_error_handling_with_shared_utils() {
     client.initialize().await.expect("Failed to initialize");
 
     let result = client
-        .read_resource("error://not_found")
+        .read_resource("file:///error/not_found.txt")
         .await
         .expect("Request should succeed but resource should error");
 
-    // Should get a JSON-RPC error response
-    if result.contains_key("error") {
-        TestFixtures::verify_error_response(&result);
-    }
+    // Should get a JSON-RPC error response for not found resource
+    assert!(result.contains_key("error"), "Error resource should return JSON-RPC error response");
+    TestFixtures::verify_error_response(&result);
 }
 
 #[tokio::test]
 async fn test_session_consistency_resources() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -115,7 +114,7 @@ async fn test_session_consistency_resources() {
 
 #[tokio::test]
 async fn test_session_aware_resource_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -129,7 +128,7 @@ async fn test_session_aware_resource_with_shared_utils() {
 
 #[tokio::test]
 async fn test_resource_subscription_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -157,7 +156,7 @@ async fn test_resource_subscription_with_shared_utils() {
 
 #[tokio::test]
 async fn test_sse_notifications_resources_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -187,7 +186,7 @@ async fn test_sse_notifications_resources_with_shared_utils() {
 
 #[tokio::test]
 async fn test_multiple_resource_types_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -196,10 +195,10 @@ async fn test_multiple_resource_types_with_shared_utils() {
 
     let test_resources = vec![
         ("file:///tmp/test.txt", "file"),
-        ("memory://data", "memory"),
-        ("template://items/{id}", "template"),
-        ("empty://content", "empty"),
-        ("binary://image", "binary"),
+        ("file:///memory/data.json", "memory"),
+        ("file:///template/items/123.json", "template"),
+        ("file:///empty/content.txt", "empty"),
+        ("file:///binary/image.png", "binary"),
     ];
 
     for (uri, resource_type) in test_resources {

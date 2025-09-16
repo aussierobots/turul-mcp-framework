@@ -46,10 +46,14 @@ impl ReviewCodePrompt {
         self
     }
     
-    pub async fn render(&self, _args: HashMap<String, Value>) -> McpResult<Vec<PromptMessage>> {
+}
+
+#[async_trait]
+impl McpPrompt for ReviewCodePrompt {
+    async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let focus = self.focus.as_deref().unwrap_or("comprehensive");
         let level = self.target_level.as_deref().unwrap_or("intermediate");
-        
+
         let combined_prompt = format!(
             "You are an experienced {} developer and code reviewer. \
              Provide {} code review feedback tailored for {} developers. \
@@ -64,7 +68,7 @@ impl ReviewCodePrompt {
              6. Specific improvement suggestions",
             self.language, focus, level, self.language, self.language, self.code
         );
-        
+
         Ok(vec![
             PromptMessage::user_text(&combined_prompt),
         ])
@@ -105,9 +109,13 @@ impl GenerateDocsPrompt {
         }
     }
     
-    pub async fn render(&self, _args: HashMap<String, Value>) -> McpResult<Vec<PromptMessage>> {
+}
+
+#[async_trait]
+impl McpPrompt for GenerateDocsPrompt {
+    async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let audience = self.audience.as_deref().unwrap_or("developer");
-        
+
         let combined_prompt = format!(
             "You are a technical documentation expert specializing in {} documentation. \
              Create clear, comprehensive {} documentation targeted at {}s. \
@@ -123,7 +131,7 @@ impl GenerateDocsPrompt {
              Format as {} for {} audience.",
             self.format, self.doc_type, audience, self.doc_type, self.doc_type, self.content, self.format, audience
         );
-        
+
         Ok(vec![
             PromptMessage::user_text(&combined_prompt),
         ])
@@ -160,10 +168,14 @@ impl AnalyzeErrorPrompt {
         }
     }
     
-    pub async fn render(&self, _args: HashMap<String, Value>) -> McpResult<Vec<PromptMessage>> {
+}
+
+#[async_trait]
+impl McpPrompt for AnalyzeErrorPrompt {
+    async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let urgency = self.urgency.as_deref().unwrap_or("medium");
         let additional = self.additional_context.as_deref().unwrap_or("");
-        
+
         let mut combined_prompt = format!(
             "You are an expert debugging assistant with deep knowledge of {} systems. \
              Provide clear, actionable debugging guidance. Prioritize {} urgency issues \
@@ -171,11 +183,11 @@ impl AnalyzeErrorPrompt {
              Help me debug this {} error:\n\n{}\n\n",
             self.context, urgency, self.context, self.error_message
         );
-        
+
         if !additional.is_empty() {
             combined_prompt.push_str(&format!("Additional context:\n{}\n\n", additional));
         }
-        
+
         combined_prompt.push_str(
             "Please provide:\n\
              1. Error explanation and root cause analysis\n\
@@ -184,7 +196,7 @@ impl AnalyzeErrorPrompt {
              4. Prevention strategies\n\
              5. Related issues to check for"
         );
-        
+
         Ok(vec![
             PromptMessage::user_text(&combined_prompt),
         ])
@@ -229,10 +241,14 @@ impl PlanProjectPrompt {
         }
     }
     
-    pub async fn render(&self, _args: HashMap<String, Value>) -> McpResult<Vec<PromptMessage>> {
+}
+
+#[async_trait]
+impl McpPrompt for PlanProjectPrompt {
+    async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let team_size = self.team_size.as_deref().unwrap_or("small");
         let constraints = self.constraints.as_deref().unwrap_or("standard project constraints");
-        
+
         let combined_prompt = format!(
             "You are an experienced project manager and {} architect. \
              Create detailed, realistic project plans for {} teams with {} timeline. \
@@ -250,13 +266,13 @@ impl PlanProjectPrompt {
              5. Risk assessment and mitigation\n\
              6. Success metrics and deliverables",
             self.technology, team_size, self.timeline, constraints,
-            self.project_description, 
-            self.technology, 
-            self.timeline, 
-            team_size, 
+            self.project_description,
+            self.technology,
+            self.timeline,
+            team_size,
             constraints
         );
-        
+
         Ok(vec![
             PromptMessage::user_text(&combined_prompt),
         ])
@@ -356,7 +372,12 @@ impl MultiContentPrompt {
     }
 }
 
-// Note: McpPrompt trait is automatically implemented by the derive macro
+#[async_trait]
+impl McpPrompt for MultiContentPrompt {
+    async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
+        self.generate_multi_content_messages().await
+    }
+}
 
 /// Template prompt with variable substitution
 #[derive(McpPrompt, Clone, Serialize, Deserialize, Debug)]
@@ -399,4 +420,9 @@ impl TemplateVarPrompt {
     }
 }
 
-// Note: McpPrompt trait is automatically implemented by the derive macro
+#[async_trait]
+impl McpPrompt for TemplateVarPrompt {
+    async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
+        self.generate_template_messages().await
+    }
+}

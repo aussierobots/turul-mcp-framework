@@ -11,7 +11,7 @@ use tracing::{info, warn};
 
 #[tokio::test]
 async fn test_session_id_generation_and_persistence() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     // Test both server types
     let resource_server = TestServerManager::start_resource_server().await.expect("Failed to start resource server");
@@ -41,7 +41,7 @@ async fn test_session_id_generation_and_persistence() {
 
 #[tokio::test]
 async fn test_cross_request_session_consistency() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let resource_server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(resource_server.port());
@@ -52,7 +52,7 @@ async fn test_cross_request_session_consistency() {
     // Make multiple requests and verify session remains consistent
     let operations = vec![
         ("resources/list", json!({})),
-        ("resources/read", json!({"uri": "memory://data"})),
+        ("resources/read", json!({"uri": "file:///memory/data.json"})),
         ("resources/read", json!({"uri": "file:///tmp/test.txt"})),
     ];
 
@@ -76,7 +76,7 @@ async fn test_cross_request_session_consistency() {
 
 #[tokio::test] 
 async fn test_session_isolation_between_clients() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     
@@ -117,7 +117,7 @@ async fn test_session_isolation_between_clients() {
 
 #[tokio::test]
 async fn test_session_aware_resource_context() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -126,7 +126,7 @@ async fn test_session_aware_resource_context() {
 
     // Test session-aware resource multiple times
     for i in 1..=3 {
-        let result = client.read_resource("session://info").await.expect("Failed to read session resource");
+        let result = client.read_resource("file:///session/info.json").await.expect("Failed to read session resource");
         
         if result.contains_key("result") {
             let result_data = result["result"].as_object().unwrap();
@@ -152,7 +152,7 @@ async fn test_session_aware_resource_context() {
 
 #[tokio::test]
 async fn test_session_aware_prompt_context() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -183,13 +183,13 @@ async fn test_session_aware_prompt_context() {
 
 #[tokio::test]
 async fn test_concurrent_session_operations() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     
     // Create multiple clients for concurrent testing
     let mut clients = Vec::new();
-    for i in 0..5 {
+    for _i in 0..5 {
         let mut client = McpTestClient::new(server.port());
         client.initialize().await.expect("Failed to initialize client");
         clients.push(client);
@@ -216,10 +216,10 @@ async fn test_concurrent_session_operations() {
             let _list1 = client.list_resources().await;
             sleep(Duration::from_millis(10)).await;
             
-            let _read1 = client.read_resource("memory://data").await;
+            let _read1 = client.read_resource("file:///memory/data.json").await;
             sleep(Duration::from_millis(10)).await;
             
-            let _read2 = client.read_resource("session://info").await;
+            let _read2 = client.read_resource("file:///session/info.json").await;
             
             // Session should remain consistent throughout
             assert_eq!(client.session_id().unwrap(), &session_id, "Session should not change during operations");
@@ -241,7 +241,7 @@ async fn test_concurrent_session_operations() {
 
 #[tokio::test]
 async fn test_session_header_propagation() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
@@ -258,7 +258,7 @@ async fn test_session_header_propagation() {
     // Make requests and verify session is properly maintained
     let requests = vec![
         ("resources/list", json!({})),
-        ("resources/read", json!({"uri": "memory://data"})),
+        ("resources/read", json!({"uri": "file:///memory/data.json"})),
     ];
 
     for (method, params) in requests {
@@ -287,7 +287,7 @@ async fn test_session_header_propagation() {
 
 #[tokio::test]
 async fn test_session_management_comprehensive() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     // Test both resource and prompt servers
     let resource_server = TestServerManager::start_resource_server().await.expect("Failed to start resource server");

@@ -29,6 +29,7 @@ members = [
     "examples/dynamic-resource-server",
     "examples/elicitation-server",
     "examples/function-macro-server",
+    "examples/function-resource-server",
     "examples/lambda-mcp-client",
     "examples/lambda-mcp-server",
     "examples/manual-tools-server",

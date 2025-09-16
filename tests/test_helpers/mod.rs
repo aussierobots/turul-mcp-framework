@@ -31,6 +31,7 @@ pub struct TestNotificationBroadcaster {
     notifications: Arc<Mutex<Vec<(String, JsonRpcNotification)>>>,
 }
 
+#[allow(dead_code)]
 impl TestNotificationBroadcaster {
     pub fn new() -> Self {
         Self {
@@ -39,6 +40,7 @@ impl TestNotificationBroadcaster {
     }
 
     /// Get all notifications for a specific session
+    #[allow(dead_code)]
     pub fn get_notifications(&self, session_id: &str) -> Vec<JsonRpcNotification> {
         self.notifications
             .lock()
@@ -252,6 +254,7 @@ pub struct TestSessionBuilder {
     broadcaster: Arc<TestNotificationBroadcaster>,
 }
 
+#[allow(dead_code)]
 impl TestSessionBuilder {
     /// Create a new TestSessionBuilder with default components
     pub fn new() -> Self {
@@ -326,11 +329,13 @@ pub async fn create_test_session() -> SessionContext {
 }
 
 /// Convenience function to create two SessionContext instances
+#[allow(dead_code)]
 pub async fn create_test_session_pair() -> (SessionContext, SessionContext) {
     TestSessionBuilder::new().build_session_pair().await
 }
 
 /// Helper function to verify session state contains expected value
+#[allow(dead_code)]
 pub async fn assert_session_state<T>(session: &SessionContext, key: &str, expected: T) 
 where 
     T: serde::de::DeserializeOwned + PartialEq + std::fmt::Debug,
@@ -340,6 +345,7 @@ where
 }
 
 /// Helper function to verify a notification was sent to a session
+#[allow(dead_code)]
 pub fn assert_notification_sent(broadcaster: &TestNotificationBroadcaster, session_id: &str, method: &str) {
     assert!(
         broadcaster.has_notification(session_id, method),

@@ -16,11 +16,21 @@ use std::collections::HashMap;
 #[async_trait]
 pub trait McpPrompt: PromptDefinition + Send + Sync {
     /// Render the prompt with the given arguments
-    /// 
+    ///
     /// This method processes the arguments and returns the rendered prompt messages.
     /// The implementation should substitute arguments into templates and generate
     /// the final prompt content.
-    async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>>;
+    ///
+    /// Default implementation returns a simple template message. Override for custom logic.
+    async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
+        // Default implementation - simple template message
+        let message = format!(
+            "Prompt: {} - {}",
+            self.name(),
+            self.description().unwrap_or("Generated prompt")
+        );
+        Ok(vec![PromptMessage::text(message)])
+    }
 
     /// Optional: Check if this prompt handler can handle the given arguments
     /// 

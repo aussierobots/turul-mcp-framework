@@ -4,7 +4,6 @@
 //! to prevent compliance regressions like the ones identified by Codex review.
 
 use serde_json::{json, Value};
-use std::collections::HashMap;
 
 /// Test runtime capability truthfulness via actual initialize endpoint
 #[tokio::test]

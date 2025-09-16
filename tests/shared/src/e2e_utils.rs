@@ -581,7 +581,7 @@ impl SessionTestUtils {
 
     /// Test session-aware resource behavior
     pub async fn test_session_aware_resource(client: &McpTestClient) -> Result<(), Box<dyn std::error::Error>> {
-        let result = client.read_resource("session://info").await?;
+        let result = client.read_resource("file:///session/info.json").await?;
 
         if result.contains_key("result") {
             let result_data = result["result"].as_object().unwrap();

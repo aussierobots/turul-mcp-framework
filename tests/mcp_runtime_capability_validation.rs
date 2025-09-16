@@ -22,8 +22,9 @@ struct TestPrompt {
     input: String,
 }
 
-impl TestPrompt {
-    async fn generate(&self) -> McpResult<Vec<PromptMessage>> {
+#[async_trait]
+impl McpPrompt for TestPrompt {
+    async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         Ok(vec![PromptMessage::user_text(&format!("Test prompt with input: {}", self.input))])
     }
 }

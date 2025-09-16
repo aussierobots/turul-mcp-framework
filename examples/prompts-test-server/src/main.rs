@@ -184,18 +184,23 @@ impl HasPromptMeta for NumberArgsPrompt {}
 impl McpPrompt for NumberArgsPrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let args = args.unwrap_or_default();
-        
-        // Validate required number argument
+
+        // Debug: Log received arguments
+        tracing::info!("NumberArgsPrompt received arguments: {:?}", args);
+
+        // Validate required number argument - MCP spec requires string arguments
         let count = args.get("count")
-            .and_then(|v| v.as_f64())
-            .ok_or_else(|| McpError::missing_param("count"))?;
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::missing_param("count"))
+            .and_then(|s| s.parse::<f64>().map_err(|_| McpError::invalid_param_type("count", "number as string", s)))?;
             
         if count < 1.0 || count > 100.0 {
             return Err(McpError::param_out_of_range("count", &count.to_string(), "1-100"));
         }
             
         let multiplier = args.get("multiplier")
-            .and_then(|v| v.as_f64())
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<f64>().ok())
             .unwrap_or(1.0);
             
         let result = count * multiplier;
@@ -260,13 +265,15 @@ impl McpPrompt for BooleanArgsPrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let args = args.unwrap_or_default();
         
-        // Validate required boolean argument
+        // Validate required boolean argument - MCP spec requires string arguments
         let enable_feature = args.get("enable_feature")
-            .and_then(|v| v.as_bool())
-            .ok_or_else(|| McpError::missing_param("enable_feature"))?;
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::missing_param("enable_feature"))
+            .and_then(|s| s.parse::<bool>().map_err(|_| McpError::invalid_param_type("enable_feature", "boolean as string", s)))?;
             
         let debug_mode = args.get("debug_mode")
-            .and_then(|v| v.as_bool())
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<bool>().ok())
             .unwrap_or(false);
 
         let status = if enable_feature { "ENABLED" } else { "DISABLED" };
@@ -542,10 +549,11 @@ impl McpPrompt for ValidationPrompt {
             return Err(McpError::invalid_param_type("email", "valid email address", email));
         }
         
-        // Strict age validation
+        // Strict age validation - MCP spec requires string arguments
         let age = args.get("age")
-            .and_then(|v| v.as_f64())
-            .ok_or_else(|| McpError::missing_param("age"))?;
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| McpError::missing_param("age"))
+            .and_then(|s| s.parse::<f64>().map_err(|_| McpError::invalid_param_type("age", "number as string", s)))?;
             
         if age < 18.0 || age > 120.0 {
             return Err(McpError::param_out_of_range("age", &age.to_string(), "18-120"));

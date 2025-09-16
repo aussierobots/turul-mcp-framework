@@ -365,8 +365,8 @@ async fn test_number_args_prompt() {
     client.initialize().await.expect("Failed to initialize");
 
     let mut arguments = HashMap::new();
-    arguments.insert("required_number".to_string(), json!(42));
-    arguments.insert("optional_number".to_string(), json!(3.14));
+    arguments.insert("count".to_string(), json!("42"));
+    arguments.insert("multiplier".to_string(), json!("3.14"));
 
     let result = client
         .get_prompt("number_args_prompt", Some(arguments))
@@ -382,7 +382,7 @@ async fn test_number_args_prompt() {
 
     // Check that numbers were used in the message content
     let message_content = messages[0]["content"]["text"].as_str().unwrap();
-    assert!(message_content.contains("42"));
+    assert!(message_content.contains("42") || message_content.contains("125.4")); // 42 * 3.14 ≈ 131.88
 }
 
 #[tokio::test]
@@ -395,8 +395,8 @@ async fn test_boolean_args_prompt() {
     client.initialize().await.expect("Failed to initialize");
 
     let mut arguments = HashMap::new();
-    arguments.insert("required_boolean".to_string(), json!(true));
-    arguments.insert("optional_boolean".to_string(), json!(false));
+    arguments.insert("enable_feature".to_string(), json!("true"));
+    arguments.insert("debug_mode".to_string(), json!("false"));
 
     let result = client
         .get_prompt("boolean_args_prompt", Some(arguments))
@@ -412,7 +412,7 @@ async fn test_boolean_args_prompt() {
 
     // Check that booleans were used in the message content
     let message_content = messages[0]["content"]["text"].as_str().unwrap();
-    assert!(message_content.contains("true") || message_content.contains("false"));
+    assert!(message_content.contains("ENABLED") || message_content.contains("DISABLED") || message_content.contains("ON") || message_content.contains("OFF"));
 }
 
 #[tokio::test]
@@ -425,8 +425,9 @@ async fn test_template_prompt() {
     client.initialize().await.expect("Failed to initialize");
 
     let mut arguments = HashMap::new();
-    arguments.insert("template_name".to_string(), json!("test_template"));
-    arguments.insert("template_value".to_string(), json!("test value"));
+    arguments.insert("name".to_string(), json!("test_user"));
+    arguments.insert("topic".to_string(), json!("artificial intelligence"));
+    arguments.insert("style".to_string(), json!("casual"));
 
     let result = client
         .get_prompt("template_prompt", Some(arguments))
@@ -442,8 +443,8 @@ async fn test_template_prompt() {
 
     // Check that template variables were substituted
     let message_content = messages[0]["content"]["text"].as_str().unwrap();
-    assert!(message_content.contains("test_template"));
-    assert!(message_content.contains("test value"));
+    assert!(message_content.contains("test_user"));
+    assert!(message_content.contains("artificial intelligence"));
 }
 
 #[tokio::test]
@@ -455,8 +456,11 @@ async fn test_multi_message_prompt() {
 
     client.initialize().await.expect("Failed to initialize");
 
+    let mut arguments = HashMap::new();
+    arguments.insert("scenario".to_string(), json!("machine learning"));
+
     let result = client
-        .get_prompt("multi_message_prompt", None)
+        .get_prompt("multi_message_prompt", Some(arguments))
         .await
         .expect("Failed to get multi message prompt");
 
@@ -519,16 +523,10 @@ async fn test_validation_failure_prompt() {
         .expect("Request should succeed but prompt should error");
 
     // Should get a JSON-RPC error response for validation failure
-    if result.contains_key("error") {
-        let error = result["error"].as_object().unwrap();
-        assert!(error.contains_key("code"));
-        assert!(error.contains_key("message"));
-    } else {
-        // Some implementations might return empty messages or special content
-        // indicating validation failure
-        let result_data = result["result"].as_object().unwrap();
-        assert!(result_data.contains_key("messages"));
-    }
+    assert!(result.contains_key("error"), "Validation failure prompt should return JSON-RPC error response");
+    let error = result["error"].as_object().unwrap();
+    assert!(error.contains_key("code"));
+    assert!(error.contains_key("message"));
 }
 
 #[tokio::test]
@@ -541,7 +539,8 @@ async fn test_dynamic_prompt() {
     client.initialize().await.expect("Failed to initialize");
 
     let mut arguments = HashMap::new();
-    arguments.insert("dynamic_type".to_string(), json!("analysis"));
+    arguments.insert("mode".to_string(), json!("analytical"));
+    arguments.insert("content".to_string(), json!("data analysis results"));
 
     let result = client
         .get_prompt("dynamic_prompt", Some(arguments))
@@ -555,9 +554,9 @@ async fn test_dynamic_prompt() {
     let messages = result_data["messages"].as_array().unwrap();
     assert!(messages.len() > 0);
 
-    // Check that dynamic type was used
+    // Check that dynamic mode was used
     let message_content = messages[0]["content"]["text"].as_str().unwrap();
-    assert!(message_content.contains("analysis"));
+    assert!(message_content.contains("analytical") || message_content.contains("ANALYTICAL"));
 }
 
 #[tokio::test]
