@@ -265,7 +265,7 @@ impl LambdaMcpServerBuilder {
         self
     }
 
-    /// Register a function tool created with #[mcp_tool] macro
+    /// Register a function tool created with `#[mcp_tool]` macro
     pub fn tool_fn<F, T>(self, func: F) -> Self
     where
         F: Fn() -> T,
