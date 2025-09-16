@@ -23,7 +23,7 @@ use crate::{SessionStorage, SessionInfo, SseEvent, SessionStorageError};
 pub struct InMemorySessionStorage {
     /// All sessions by session ID
     sessions: Arc<RwLock<HashMap<String, SessionInfo>>>,
-    /// All events by session_id -> Vec<SseEvent>
+    /// All events by session_id -> Vec\<SseEvent\>
     events: Arc<RwLock<HashMap<String, Vec<SseEvent>>>>,
     /// Global event ID counter for ordering
     event_counter: Arc<AtomicU64>,
