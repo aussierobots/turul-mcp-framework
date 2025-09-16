@@ -56,7 +56,7 @@ where
     T::extract_serde(params)
 }
 
-/// Helper function to extract params from Option<RequestParams>
+/// Helper function to extract params from Option\<RequestParams\>
 pub fn extract_optional_params<T>(params: Option<turul_mcp_json_rpc_server::RequestParams>) -> Result<T, crate::McpError>
 where
     T: Params + SerdeParamExtractor<T, Error = crate::McpError> + Default,
