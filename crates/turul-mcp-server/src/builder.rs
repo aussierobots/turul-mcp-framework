@@ -2,10 +2,9 @@
 //!
 //! This module provides a builder pattern for creating MCP servers.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tracing::info;
 
 use crate::{McpTool, McpServer, Result, McpFrameworkError};
 use crate::resource::McpResource;
@@ -193,10 +192,10 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a function tool created with #[mcp_tool] macro
-    /// 
+    /// Register a function tool created with `#[mcp_tool]` macro
+    ///
     /// This method provides a more intuitive way to register function tools.
-    /// The #[mcp_tool] macro generates a constructor function with the same name
+    /// The `#[mcp_tool]` macro generates a constructor function with the same name
     /// as your async function, so you can use the function name directly.
     /// 
     /// # Example
@@ -280,10 +279,10 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a function resource created with #[mcp_resource] macro
+    /// Register a function resource created with `#[mcp_resource]` macro
     ///
     /// This method provides a more intuitive way to register function resources.
-    /// The #[mcp_resource] macro generates a constructor function with the same name
+    /// The `#[mcp_resource]` macro generates a constructor function with the same name
     /// as your async function, so you can use the function name directly.
     ///
     /// # Example
@@ -588,9 +587,13 @@ impl McpServerBuilder {
         // NOT in resources/list
         
         // Create ResourcesReadHandler and add all registered resources
-        // Use test mode to disable security middleware for test servers
+        // Auto-configure security based on registered resources
         let mut read_handler = if self.test_mode {
             ResourcesReadHandler::new().without_security()
+        } else if has_resources {
+            // Auto-generate security configuration from registered resources
+            let security_middleware = self.build_resource_security();
+            ResourcesReadHandler::new().with_security(Arc::new(security_middleware))
         } else {
             ResourcesReadHandler::new()
         };
@@ -776,6 +779,144 @@ impl McpServerBuilder {
 
 
 
+    /// Auto-generate security configuration based on registered resources
+    fn build_resource_security(&self) -> crate::security::SecurityMiddleware {
+        use crate::security::{SecurityMiddleware, ResourceAccessControl, AccessLevel};
+        use regex::Regex;
+        use std::collections::HashSet;
+
+        let mut allowed_patterns = Vec::new();
+        let mut allowed_extensions = HashSet::new();
+
+        // Extract patterns from static resources
+        for uri in self.resources.keys() {
+            // Extract file extension
+            if let Some(extension) = Self::extract_extension(uri) {
+                allowed_extensions.insert(extension);
+            }
+
+            // Generate regex pattern for this URI's base path
+            if let Some(base_pattern) = Self::uri_to_base_pattern(uri) {
+                allowed_patterns.push(base_pattern);
+            }
+        }
+
+        // Extract patterns from template resources
+        for (template, _) in &self.template_resources {
+            if let Some(pattern) = Self::template_to_regex_pattern(template.pattern()) {
+                allowed_patterns.push(pattern);
+            }
+
+            // Extract extension from template if present
+            if let Some(extension) = Self::extract_extension(template.pattern()) {
+                allowed_extensions.insert(extension);
+            }
+        }
+
+        // Build allowed MIME types from file extensions
+        let allowed_mime_types = Self::extensions_to_mime_types(&allowed_extensions);
+
+        // Convert pattern strings to Regex objects
+        let regex_patterns: Vec<Regex> = allowed_patterns
+            .into_iter()
+            .filter_map(|pattern| Regex::new(&pattern).ok())
+            .collect();
+
+        tracing::debug!(
+            "Auto-generated resource security: {} patterns, {} mime types",
+            regex_patterns.len(),
+            allowed_mime_types.len()
+        );
+
+        SecurityMiddleware::new()
+            .with_resource_access_control(ResourceAccessControl {
+                access_level: AccessLevel::Public, // Allow access without session for auto-detected resources
+                allowed_patterns: regex_patterns,
+                blocked_patterns: vec![
+                    Regex::new(r"\.\.").unwrap(), // Still prevent directory traversal
+                    Regex::new(r"/etc/").unwrap(), // Block system directories
+                    Regex::new(r"/proc/").unwrap(),
+                ],
+                max_size: Some(50 * 1024 * 1024), // 50MB limit for auto-detected resources
+                allowed_mime_types: Some(allowed_mime_types),
+            })
+    }
+
+    /// Extract file extension from URI
+    fn extract_extension(uri: &str) -> Option<String> {
+        uri.split('.')
+            .last()
+            .filter(|ext| !ext.is_empty() && ext.len() <= 10)
+            .map(|ext| ext.to_lowercase())
+    }
+
+    /// Convert URI to base regex pattern that allows files in the same directory
+    fn uri_to_base_pattern(uri: &str) -> Option<String> {
+        if let Some(last_slash) = uri.rfind('/') {
+            let base_path = &uri[..last_slash];
+            Some(format!("^{}/[^/]+$", regex::escape(base_path)))
+        } else {
+            None
+        }
+    }
+
+    /// Convert URI template to regex pattern
+    fn template_to_regex_pattern(template: &str) -> Option<String> {
+        use regex::Regex;
+
+        // Create a regex to find template variables in the original template
+        let template_var_regex = Regex::new(r"\{[^}]+\}").ok()?;
+
+        let mut result = String::new();
+        let mut last_end = 0;
+
+        // Process each template variable
+        for mat in template_var_regex.find_iter(template) {
+            // Add the escaped literal part before this match
+            result.push_str(&regex::escape(&template[last_end..mat.start()]));
+
+            // Add the regex pattern for the template variable
+            result.push_str("[a-zA-Z0-9_.-]+"); // Allow dots for IDs like announcement_id
+
+            last_end = mat.end();
+        }
+
+        // Add any remaining literal part
+        result.push_str(&regex::escape(&template[last_end..]));
+
+        Some(format!("^{}$", result))
+    }
+
+    /// Map file extensions to MIME types
+    fn extensions_to_mime_types(extensions: &HashSet<String>) -> Vec<String> {
+        let mut mime_types = Vec::new();
+
+        for ext in extensions {
+            match ext.as_str() {
+                "json" => mime_types.push("application/json".to_string()),
+                "csv" => mime_types.push("text/csv".to_string()),
+                "txt" => mime_types.push("text/plain".to_string()),
+                "html" => mime_types.push("text/html".to_string()),
+                "md" => mime_types.push("text/markdown".to_string()),
+                "xml" => mime_types.push("application/xml".to_string()),
+                "pdf" => mime_types.push("application/pdf".to_string()),
+                "png" => mime_types.push("image/png".to_string()),
+                "jpg" | "jpeg" => mime_types.push("image/jpeg".to_string()),
+                _ => {} // Unknown extensions not explicitly allowed
+            }
+        }
+
+        // Always allow basic text types
+        mime_types.extend_from_slice(&[
+            "text/plain".to_string(),
+            "application/json".to_string(),
+        ]);
+
+        mime_types.sort();
+        mime_types.dedup();
+        mime_types
+    }
+
     /// Build the MCP server
     pub fn build(mut self) -> Result<McpServer> {
         // Validate configuration
@@ -877,14 +1018,14 @@ impl McpServerBuilder {
             });
         }
 
-        info!("🔧 Auto-configured server capabilities:");
-        info!("   - Tools: {}", has_tools);
-        info!("   - Resources: {}", has_resources);  
-        info!("   - Prompts: {}", has_prompts);
-        info!("   - Roots: {}", has_roots);
-        info!("   - Elicitation: {}", has_elicitations);
-        info!("   - Completions: {}", has_completions);
-        info!("   - Logging: enabled");
+        tracing::debug!("🔧 Auto-configured server capabilities:");
+        tracing::debug!("   - Tools: {}", has_tools);
+        tracing::debug!("   - Resources: {}", has_resources);
+        tracing::debug!("   - Prompts: {}", has_prompts);
+        tracing::debug!("   - Roots: {}", has_roots);
+        tracing::debug!("   - Elicitation: {}", has_elicitations);
+        tracing::debug!("   - Completions: {}", has_completions);
+        tracing::debug!("   - Logging: enabled");
 
         // Create implementation info
         let mut implementation = Implementation::new(&self.name, &self.version);
@@ -1312,5 +1453,100 @@ mod tests {
 
         // Should build successfully even with explicit .with_resources() call
         assert!(server_result.is_ok());
+    }
+
+    // Function resource constructor for testing resource_fn method
+    fn create_static_test_resource() -> StaticTestResource {
+        StaticTestResource
+    }
+
+    fn create_template_test_resource() -> TemplateTestResource {
+        TemplateTestResource
+    }
+
+    #[test]
+    fn test_resource_fn_static_resource() {
+        // Test resource_fn with static resource (no template variables)
+        let builder = McpServerBuilder::new()
+            .name("resource-fn-static-server")
+            .resource_fn(create_static_test_resource);
+
+        // Verify static resource was registered correctly via resource_fn
+        assert_eq!(builder.resources.len(), 1);
+        assert!(builder.resources.contains_key("file:///test.txt"));
+        assert_eq!(builder.template_resources.len(), 0);
+        assert_eq!(builder.validation_errors.len(), 0);
+    }
+
+    #[test]
+    fn test_resource_fn_template_resource() {
+        // Test resource_fn with template resource (has template variables)
+        let builder = McpServerBuilder::new()
+            .name("resource-fn-template-server")
+            .resource_fn(create_template_test_resource);
+
+        // Verify template resource was auto-detected and registered correctly via resource_fn
+        assert_eq!(builder.resources.len(), 0);
+        assert_eq!(builder.template_resources.len(), 1);
+        assert_eq!(builder.validation_errors.len(), 0);
+
+        // Verify the template pattern is correct
+        let (template, _) = &builder.template_resources[0];
+        assert_eq!(template.pattern(), "template://data/{id}.json");
+    }
+
+    #[test]
+    fn test_resource_fn_mixed_with_direct_registration() {
+        // Test that resource_fn works alongside direct .resource() calls
+        let builder = McpServerBuilder::new()
+            .name("mixed-registration-server")
+            .resource(StaticTestResource) // Direct registration
+            .resource_fn(create_template_test_resource); // Function registration
+
+        // Verify both registration methods work together
+        assert_eq!(builder.resources.len(), 1);
+        assert!(builder.resources.contains_key("file:///test.txt"));
+        assert_eq!(builder.template_resources.len(), 1);
+
+        let (template, _) = &builder.template_resources[0];
+        assert_eq!(template.pattern(), "template://data/{id}.json");
+    }
+
+    #[test]
+    fn test_resource_fn_multiple_resources() {
+        // Test registering multiple resources via resource_fn
+        let builder = McpServerBuilder::new()
+            .name("multi-resource-fn-server")
+            .resource_fn(create_static_test_resource)
+            .resource_fn(create_template_test_resource);
+
+        // Verify both resources were registered correctly
+        assert_eq!(builder.resources.len(), 1);
+        assert!(builder.resources.contains_key("file:///test.txt"));
+        assert_eq!(builder.template_resources.len(), 1);
+
+        let (template, _) = &builder.template_resources[0];
+        assert_eq!(template.pattern(), "template://data/{id}.json");
+    }
+
+    #[test]
+    fn test_resource_fn_builds_successfully() {
+        // Test that server builds successfully with resource_fn registrations
+        let server_result = McpServerBuilder::new()
+            .name("resource-fn-build-server")
+            .resource_fn(create_static_test_resource)
+            .resource_fn(create_template_test_resource)
+            .build();
+
+        // Server should build successfully with automatic resource handler registration
+        assert!(server_result.is_ok());
+
+        let server = server_result.unwrap();
+        assert_eq!(server.implementation.name, "resource-fn-build-server");
+
+        // Verify capabilities were auto-configured for resources
+        assert!(server.capabilities.resources.is_some());
+        let resources_caps = server.capabilities.resources.as_ref().unwrap();
+        assert_eq!(resources_caps.list_changed, Some(false)); // Static framework
     }
 }
