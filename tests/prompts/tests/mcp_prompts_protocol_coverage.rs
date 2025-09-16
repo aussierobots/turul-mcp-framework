@@ -308,7 +308,7 @@ async fn test_list_prompts_result_pagination() {
 
     let next_cursor = Cursor::from("next_prompts_page");
     let mut meta = HashMap::new();
-    meta.insert("total_available".to_string(), json!(15));
+    meta.insert("total_available".to_string(), json!("15")); // MCP spec requires string values
 
     let result = ListPromptsResult::new(prompts)
         .with_next_cursor(next_cursor)

@@ -103,7 +103,7 @@ async fn test_prompt_arguments_mcp_schema_compliance() {
 #[tokio::test]
 async fn test_prompt_message_mcp_role_compliance() {
     let error_prompt = AnalyzeErrorPrompt::new("TypeError: test error", "javascript");
-    let messages = error_prompt.render(HashMap::new()).await.unwrap();
+    let messages = error_prompt.render(Some(HashMap::new())).await.unwrap();
     
     // === Test PromptMessage Role Compliance ===
     
@@ -133,7 +133,7 @@ async fn test_prompt_message_mcp_role_compliance() {
 #[tokio::test]
 async fn test_prompt_content_block_mcp_compliance() {
     let plan_prompt = PlanProjectPrompt::new("Build API", "rust", "detailed");
-    let messages = plan_prompt.render(HashMap::new()).await.unwrap();
+    let messages = plan_prompt.render(Some(HashMap::new())).await.unwrap();
     
     // === Test ContentBlock Type Compliance ===
     
@@ -167,7 +167,7 @@ async fn test_prompt_template_variable_substitution_mcp_compliance() {
     // === Test Template Variable Substitution ===
     
     // Test with default arguments (empty HashMap)
-    let default_messages = review_prompt.render(HashMap::new()).await.unwrap();
+    let default_messages = review_prompt.render(Some(HashMap::new())).await.unwrap();
     assert!(!default_messages.is_empty());
     
     // Validate default values are used
@@ -184,7 +184,7 @@ async fn test_prompt_template_variable_substitution_mcp_compliance() {
     custom_args.insert("code".to_string(), json!("fn main() {}"));
     custom_args.insert("focus_area".to_string(), json!("security"));
     
-    let custom_messages = review_prompt.render(custom_args).await.unwrap();
+    let custom_messages = review_prompt.render(Some(custom_args)).await.unwrap();
     assert!(!custom_messages.is_empty());
     
     // Note: Our current implementation uses constructor values, not runtime args
@@ -199,7 +199,7 @@ async fn test_prompt_business_logic_methods_coverage() {
     let review_prompt = ReviewCodePrompt::new("typescript", "const x = 1;").with_target_level("senior");
     
     // Test with_target_level method (eliminates warning)
-    let messages = review_prompt.render(HashMap::new()).await.unwrap();
+    let messages = review_prompt.render(Some(HashMap::new())).await.unwrap();
     assert!(!messages.is_empty());
     
     // Test that target level affects output (in real implementation)
@@ -212,15 +212,15 @@ async fn test_prompt_business_logic_methods_coverage() {
     
     // Test custom render methods (eliminates warnings)
     let docs_prompt = GenerateDocsPrompt::new("class", "class Example {}", "html");
-    let docs_messages = docs_prompt.render(HashMap::new()).await.unwrap();
+    let docs_messages = docs_prompt.render(Some(HashMap::new())).await.unwrap();
     assert!(!docs_messages.is_empty());
     
     let error_prompt = AnalyzeErrorPrompt::new("NullPointerException", "java");
-    let error_messages = error_prompt.render(HashMap::new()).await.unwrap(); 
+    let error_messages = error_prompt.render(Some(HashMap::new())).await.unwrap(); 
     assert!(!error_messages.is_empty());
     
     let plan_prompt = PlanProjectPrompt::new("Web App", "javascript", "brief");
-    let plan_messages = plan_prompt.render(HashMap::new()).await.unwrap();
+    let plan_messages = plan_prompt.render(Some(HashMap::new())).await.unwrap();
     assert!(!plan_messages.is_empty());
 }
 
@@ -236,24 +236,24 @@ async fn test_prompt_argument_type_validation_mcp_compliance() {
     valid_args.insert("content".to_string(), json!("sample code")); // String type
     valid_args.insert("format".to_string(), json!("html")); // String type
     
-    let valid_result = docs_prompt.render(valid_args).await;
+    let valid_result = docs_prompt.render(Some(valid_args)).await;
     assert!(valid_result.is_ok());
     
     let messages = valid_result.unwrap();
     assert!(!messages.is_empty());
     
-    // Test with different argument types (our implementation is currently lenient)
+    // Test with different argument types (MCP spec requires all arguments to be strings)
     let mut mixed_args = HashMap::new();
-    mixed_args.insert("doc_type".to_string(), json!(123)); // Number instead of string
-    mixed_args.insert("content".to_string(), json!(["array", "value"])); // Array instead of string
-    mixed_args.insert("format".to_string(), json!({"object": "value"})); // Object instead of string
+    mixed_args.insert("doc_type".to_string(), json!("123")); // Number as string per MCP spec
+    mixed_args.insert("content".to_string(), json!("[\"array\", \"value\"]")); // Array as string per MCP spec
+    mixed_args.insert("format".to_string(), json!("{\"object\": \"value\"}")); // Object as string per MCP spec
     
-    let mixed_result = docs_prompt.render(mixed_args).await;
+    let mixed_result = docs_prompt.render(Some(mixed_args)).await;
     // Current implementation is lenient, but in full MCP compliance this should validate
     assert!(mixed_result.is_ok()); // TODO: Should validate against JSON schema in production
     
     // Test with missing arguments (should handle gracefully)
-    let empty_result = docs_prompt.render(HashMap::new()).await;
+    let empty_result = docs_prompt.render(Some(HashMap::new())).await;
     assert!(empty_result.is_ok()); // Should not fail with missing optional args
 }
 
@@ -339,18 +339,18 @@ async fn test_prompt_edge_cases_mcp_robustness() {
     assert!(minimal_prompt.description().is_some()); // Should have description
     
     // Test prompt rendering with minimal data
-    let messages = minimal_prompt.render(HashMap::new()).await.unwrap();
+    let messages = minimal_prompt.render(Some(HashMap::new())).await.unwrap();
     assert!(!messages.is_empty()); // Should produce messages even with empty input
     
     // Test with very long inputs
     let long_code = "fn main() {\n".repeat(1000) + "}";
     let long_prompt = ReviewCodePrompt::new("rust", &long_code);
-    let long_messages = long_prompt.render(HashMap::new()).await.unwrap();
+    let long_messages = long_prompt.render(Some(HashMap::new())).await.unwrap();
     assert!(!long_messages.is_empty()); // Should handle long inputs
     
     // Test with special characters and unicode
     let unicode_prompt = AnalyzeErrorPrompt::new("错误: 无效的语法", "python");
-    let unicode_messages = unicode_prompt.render(HashMap::new()).await.unwrap();
+    let unicode_messages = unicode_prompt.render(Some(HashMap::new())).await.unwrap();
     assert!(!unicode_messages.is_empty()); // Should handle unicode
     
     // Test with malformed argument keys
@@ -360,6 +360,6 @@ async fn test_prompt_edge_cases_mcp_robustness() {
     malformed_args.insert("".to_string(), json!("empty key")); // Empty key
     malformed_args.insert("special!@#$%".to_string(), json!("special chars")); // Special chars
     
-    let malformed_result = error_prompt.render(malformed_args).await;
+    let malformed_result = error_prompt.render(Some(malformed_args)).await;
     assert!(malformed_result.is_ok()); // Should handle gracefully
 }
