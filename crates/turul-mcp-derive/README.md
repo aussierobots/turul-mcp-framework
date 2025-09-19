@@ -82,7 +82,7 @@ async fn session_counter(
 #[mcp_tool(
     name = "multiply", 
     description = "Multiply two numbers",
-    output_field = "product"  // Custom output field name for structured output only
+    output_field = "product"  // Custom output field name (also supports: field = "product")
 )]
 async fn multiply(
     #[param(description = "First number")] x: f64,
@@ -121,11 +121,11 @@ use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, SessionContext};
 
 #[derive(McpTool, Clone, Default)]
-#[tool(name = "calculator", description = "Advanced calculator")]
+#[tool(name = "calculator", description = "Advanced calculator", output_field = "result")]
 struct Calculator {
     #[param(description = "First number")]
     a: f64,
-    #[param(description = "Second number")]  
+    #[param(description = "Second number")]
     b: f64,
     #[param(description = "Operation type")]
     operation: String,

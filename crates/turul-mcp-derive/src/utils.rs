@@ -34,7 +34,7 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
                     let value = meta.value()?;
                     let ty: syn::Type = value.parse()?;
                     output_type = Some(ty);
-                } else if meta.path.is_ident("field") {
+                } else if meta.path.is_ident("field") || meta.path.is_ident("output_field") {
                     let value = meta.value()?;
                     let s: syn::LitStr = value.parse()?;
                     output_field = Some(s.value());

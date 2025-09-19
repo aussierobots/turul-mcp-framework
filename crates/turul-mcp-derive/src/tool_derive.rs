@@ -254,11 +254,51 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                         min_items: None,
                         max_items: None,
                     },
-                    serde_json::Value::Object(_) => JsonSchema::Object {
-                        description: Some("Object output".to_string()),
-                        properties: None,
-                        required: None,
-                        additional_properties: Some(true),
+                    serde_json::Value::Object(obj) => {
+                        // Generate detailed schema from object structure
+                        let mut properties = std::collections::HashMap::new();
+                        let mut required = Vec::new();
+
+                        for (key, value) in obj.iter() {
+                            let prop_schema = match value {
+                                serde_json::Value::String(_) => JsonSchema::string(),
+                                serde_json::Value::Number(n) if n.is_f64() => JsonSchema::number(),
+                                serde_json::Value::Number(_) => JsonSchema::integer(),
+                                serde_json::Value::Bool(_) => JsonSchema::boolean(),
+                                serde_json::Value::Array(arr) => {
+                                    // Try to determine array item type from first element
+                                    let item_type = arr.first().map(|first| match first {
+                                        serde_json::Value::String(_) => JsonSchema::string(),
+                                        serde_json::Value::Number(n) if n.is_f64() => JsonSchema::number(),
+                                        serde_json::Value::Number(_) => JsonSchema::integer(),
+                                        serde_json::Value::Bool(_) => JsonSchema::boolean(),
+                                        _ => JsonSchema::string(), // Fallback
+                                    });
+                                    JsonSchema::Array {
+                                        description: Some("Array of items".to_string()),
+                                        items: item_type.map(Box::new),
+                                        min_items: None,
+                                        max_items: None,
+                                    }
+                                },
+                                serde_json::Value::Object(_) => JsonSchema::Object {
+                                    description: Some("Nested object".to_string()),
+                                    properties: None,
+                                    required: None,
+                                    additional_properties: Some(true),
+                                },
+                                serde_json::Value::Null => continue, // Skip null values
+                            };
+                            properties.insert(key.clone(), prop_schema);
+                            required.push(key.clone());
+                        }
+
+                        JsonSchema::Object {
+                            description: Some("Generated from runtime object structure".to_string()),
+                            properties: Some(properties),
+                            required: Some(required),
+                            additional_properties: Some(false), // We know the exact structure
+                        }
                     },
                     serde_json::Value::Null => JsonSchema::string(), // Fallback
                 };
@@ -344,7 +384,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                         
                         // Wrap result to match MCP object schema format
                         let wrapped_result = serde_json::json!({field_name: result});
-                        
+
                         // Return structured result (schema already available from output_schema() method)
                         turul_mcp_protocol::tools::CallToolResult::from_result_auto(&wrapped_result, self.output_schema())
                     }
