@@ -67,10 +67,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 use turul_mcp_session_storage::SqliteSessionStorage;
 use std::sync::Arc;
 
-// SQLite with file persistence
-let storage = Arc::new(
-    SqliteSessionStorage::new("sessions.db").await?
-);
+// SQLite with file persistence (defaults to sessions.db in current directory)
+let storage = Arc::new(SqliteSessionStorage::new().await?);
 
 let server = McpServer::builder()
     .with_session_storage(storage)
@@ -80,13 +78,11 @@ let server = McpServer::builder()
 ### PostgreSQL (Multi-Instance)
 
 ```rust
-use turul_mcp_session_storage::PostgreSqlSessionStorage;
+use turul_mcp_session_storage::PostgresSessionStorage;
 use std::sync::Arc;
 
 // PostgreSQL for distributed deployments
-let storage = Arc::new(
-    PostgreSqlSessionStorage::new("postgresql://user:pass@localhost/mcpdb").await?
-);
+let storage = Arc::new(PostgresSessionStorage::new().await?);
 
 let server = McpServer::builder()
     .with_session_storage(storage)
@@ -265,35 +261,30 @@ let storage = DynamoDbSessionStorage::with_config(config).await?;
 
 ### Single-Instance with SQLite
 
-Perfect for single-server deployments:
-
 ```rust
-use turul_mcp_session_storage::SqliteSessionStorage;
+use turul_mcp_session_storage::{SqliteSessionStorage, SqliteConfig};
 
-// Production SQLite setup
-let storage = SqliteSessionStorage::new("/var/lib/mcp/sessions.db").await?;
-
-// Configure for production
 let storage = SqliteSessionStorage::with_config(SqliteConfig {
     database_path: "/var/lib/mcp/sessions.db".to_string(),
-    session_ttl_seconds: 7200,  // 2 hours
-    cleanup_interval_seconds: 600,  // 10 minutes cleanup
-    max_events_per_session: 5000,  // Large event buffer
+    session_ttl_seconds: 7200,
+    cleanup_interval_seconds: 600,
+    max_events_per_session: 5000,
 }).await?;
 ```
 
 ### Multi-Instance with PostgreSQL
 
-For load-balanced deployments:
-
 ```rust
-use turul_mcp_session_storage::PostgreSqlSessionStorage;
+use turul_mcp_session_storage::{PostgresSessionStorage, PostgresConfig};
+use std::sync::Arc;
 
-// Production PostgreSQL setup
 let database_url = std::env::var("DATABASE_URL")?;
-let storage = PostgreSqlSessionStorage::new(&database_url).await?;
+let config = PostgresConfig {
+    connection_string: database_url,
+    ..Default::default()
+};
+let storage = PostgresSessionStorage::with_config(config).await?;
 
-// All server instances share the same sessions
 let server = McpServer::builder()
     .bind("0.0.0.0:3000")
     .with_session_storage(Arc::new(storage))
