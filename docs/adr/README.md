@@ -19,6 +19,7 @@ Each ADR follows the standard format:
 | [003](./003-jsonschema-standardization.md) | JsonSchema Standardization | Accepted | 2025-08-28 | Framework-wide JsonSchema type usage |
 | [004](./004-sessioncontext-macro-support.md) | SessionContext Macro Support | Accepted | 2025-08-28 | Automatic SessionContext injection in macros |
 | [005](./005-mcp-message-notifications-architecture.md) | MCP Message Notifications Architecture | Active | 2025-09-02 | Dual-stream SSE notification delivery and event type formatting |
+| [008](./008-documentation-accuracy-verification.md) | Documentation Accuracy Verification Process | Accepted | 2025-09-20 | Critical verification methodology for documentation accuracy |
 
 ## Adding New ADRs
 
