@@ -283,40 +283,20 @@ use turul_mcp_protocol_2025_06_18::{
     ProgressToken, LogLevel
 };
 
-// Progress notification
-let progress = ProgressNotification {
-    method: "notifications/progress".to_string(),
-    params: Some(ProgressNotificationParams {
-        progress_token: ProgressToken("task-123".to_string()),
-        progress: 75.0,
-        total: Some(100.0),
-        meta: None,
-    }),
-};
+let mut progress = ProgressNotification::new("task-123".to_string(), 75);
+progress.total = Some(100);
+progress.message = Some("Processing...".to_string());
+progress._meta = Some(json!({ "source": "my-app" }));
 
-// Logging notification
-let log_notification = LoggingMessageNotification {
-    method: "notifications/message".to_string(),
-    params: Some(LoggingMessageNotificationParams {
-        level: LogLevel::Info,
-        data: serde_json::json!({
-            "message": "Task completed successfully",
-            "duration_ms": 1250,
-            "items_processed": 42
-        }),
-        logger: Some("task_processor".to_string()),
-        meta: None,
-    }),
-};
+let mut log = LoggingMessageNotification::new(
+    LoggingLevel::Error,
+    json!({ "error": "Connection failed", "retry_count": 3 })
+);
+log.logger = Some("database".to_string());
+log._meta = Some(json!({ "request_id": "xyz-123" }));
 
-// Resource update notification
-let resource_updated = ResourceUpdatedNotification {
-    method: "notifications/resources/updated".to_string(),
-    params: Some(ResourceUpdatedNotificationParams {
-        uri: "file:///data/config.json".to_string(),
-        meta: None,
-    }),
-};
+let mut resource_change = ResourceListChangedNotification::default();
+resource_change._meta = Some(json!({ "reason": "file-watcher" }));
 ```
 
 ## Schema Generation
@@ -587,7 +567,9 @@ impl HasBaseMetadata for MyTool {
 
 // Implement other required traits...
 
-let server = McpServerBuilder::new("My Server", "1.0.0")
+let server = McpServer::builder()
+    .name("My Server")
+    .version("1.0.0")
     .tool(MyTool)  // Protocol types work directly with framework
     .build()?;
 ```
