@@ -3,15 +3,69 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-http-mcp-server.svg)](https://crates.io/crates/turul-http-mcp-server)
 [![Documentation](https://docs.rs/turul-http-mcp-server/badge.svg)](https://docs.rs/turul-http-mcp-server)
 
-HTTP transport layer components for Model Context Protocol (MCP) servers with full MCP 2025-06-18 Streamable HTTP compliance and SSE support.
+HTTP and SSE transport layer for the `turul-mcp-server` framework.
 
 ## Overview
 
-`turul-http-mcp-server` provides the foundational HTTP transport components used by `turul-mcp-server`. It implements MCP Streamable HTTP with Server-Sent Events (SSE) for real-time notifications and session management.
+This crate provides the low-level HTTP and SSE transport implementation.
 
-**⚠️ Important**: Most users should use `turul-mcp-server` directly, which includes this transport layer automatically. This crate is primarily for internal framework use and advanced customization scenarios.
+**For most use cases, you should not use this crate directly.** The main `turul-mcp-server` crate provides a simpler, integrated experience with its `.run().await` method, which uses this transport layer internally.
 
-**Recommended approach**: Use `turul_mcp_server::McpServerBuilder` which handles HTTP transport configuration internally.
+Use this crate only when you need to:
+- Integrate the MCP server into an existing `hyper` or `axum` application.
+- Customize the HTTP transport layer beyond what `turul-mcp-server` offers.
+- Build a custom server with a different transport mechanism.
+
+## Advanced Usage: Pluggable Transport
+
+```rust
+use turul_mcp_server::prelude::*;
+use turul_mcp_server::McpServer;
+use turul_http_mcp_server::HttpMcpServerBuilder;
+use turul_mcp_derive::mcp_tool;
+use std::sync::Arc;
+
+#[mcp_tool(name = "add", description = "Add two numbers")]
+async fn add(a: f64, b: f64) -> McpResult<f64> { Ok(a + b) }
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mcp_server_config = McpServer::builder()
+        .name("pluggable-transport-server")
+        .version("1.0.0")
+        .tool_fn(add)
+        .build()?;
+
+    let http_server = HttpMcpServerBuilder::new()
+        .bind_address("127.0.0.1:8080".parse()?)
+        .with_mcp_server(Arc::new(mcp_server_config))
+        .build();
+
+    println!("Server listening on http://127.0.0.1:8080");
+    http_server.run().await?;
+    Ok(())
+}
+```
+
+## Correct Usage (Use This Instead)
+
+```rust
+use turul_mcp_server::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let server = McpServer::builder()
+        .name("my-server")
+        .version("1.0.0")
+        .bind_address("127.0.0.1:8080".parse()?)
+        .build()?;
+
+    // This automatically uses HTTP transport internally
+    server.run().await
+}
+```
+
+**That's it!** No need for manual HTTP transport setup.
 
 ## Features
 
@@ -226,7 +280,7 @@ let server = HttpMcpServerBuilder::with_storage(memory_storage).build();
 // SQLite storage (production)
 #[cfg(feature = "sqlite")]
 {
-    let sqlite_storage = Arc::new(SqliteSessionStorage::new("sessions.db").await?);
+    let sqlite_storage = Arc::new(SqliteSessionStorage::new().await?);
     let server = HttpMcpServerBuilder::with_storage(sqlite_storage).build();
 }
 ```
@@ -246,18 +300,17 @@ use std::sync::Arc;
 let stream_manager = Arc::new(StreamManager::new(session_storage));
 let broadcaster = StreamManagerNotificationBroadcaster::new(stream_manager);
 
-// Send notifications to specific sessions
-broadcaster.notify_session(
-    "session-123", 
-    serde_json::json!({
-        "method": "notifications/progress",
-        "params": {
-            "progressToken": "task-456",
-            "progress": 75,
-            "total": 100
-        }
-    })
-).await?;
+// Send notifications to specific sessions using typed APIs
+use turul_mcp_protocol::notifications::ProgressNotification;
+
+let progress_notification = ProgressNotification {
+    progress_token: "task-456".to_string(),
+    progress: 75,
+    total: Some(100),
+    message: Some("Processing...".to_string()),
+};
+
+broadcaster.send_progress_notification("session-123", progress_notification).await?;
 ```
 
 ### Event Replay and Resumability
@@ -298,10 +351,14 @@ use turul_http_mcp_server::{extract_protocol_version, extract_session_id};
 Optional strict lifecycle gating can be configured:
 
 ```rust
-// Require notifications/initialized before allowing operations
-let server = HttpMcpServerBuilder::new()
-    .strict_lifecycle(true)  // Reject operations before initialize
-    .build();
+// Note: Use McpServer::builder() for complete lifecycle management
+let server = McpServer::builder()
+    .name("my-server")
+    .version("1.0.0")
+    .bind_address("127.0.0.1:8080".parse()?)
+    .build()?;
+
+server.run().await
 ```
 
 ## Error Handling
@@ -390,9 +447,9 @@ async fn test_transport_layer() {
 
 ```rust
 // Recommended: Use the main server framework
-use turul_mcp_server::McpServerBuilder;
+use turul_mcp_server::McpServer;
 
-let server = McpServerBuilder::new()
+let server = McpServer::builder()
     .name("My Server")
     .version("1.0.0")
     .bind_address("127.0.0.1:3000".parse()?)
