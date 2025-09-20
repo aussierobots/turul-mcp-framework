@@ -28,7 +28,7 @@ Add this to your `Cargo.toml`:
 [dependencies]
 turul-mcp-aws-lambda = "0.2.0"
 turul-mcp-derive = "0.2.0"
-lambda_http = "0.13"
+lambda_http = "0.17"
 tokio = { version = "1.0", features = ["macros"] }
 ```
 
@@ -174,9 +174,8 @@ let server = LambdaMcpServerBuilder::new()
 ```rust
 use turul_mcp_aws_lambda::{LambdaMcpServerBuilder, CorsConfig};
 
-let cors = CorsConfig::new()
-    .allow_origins(vec!["https://myapp.com".to_string()])
-    .allow_credentials(true);
+let mut cors = CorsConfig::for_origins(vec!["https://myapp.com".to_string()]);
+cors.allow_credentials = true;
 
 let server = LambdaMcpServerBuilder::new()
     .cors(cors)

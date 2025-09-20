@@ -16,6 +16,9 @@ use turul_mcp_server::{
 use turul_mcp_session_storage::BoxedSessionStorage;
 
 use crate::error::Result;
+
+#[cfg(feature = "dynamodb")]
+use crate::error::LambdaError;
 use crate::server::LambdaMcpServer;
 
 #[cfg(feature = "cors")]
@@ -695,7 +698,7 @@ impl LambdaMcpServerBuilder {
     /// This is the recommended configuration for production Lambda deployments.
     #[cfg(all(feature = "dynamodb", feature = "cors"))]
     pub async fn production_config(self) -> Result<Self> {
-        self.dynamodb_storage().await?.cors_from_env().Ok()
+        Ok(self.dynamodb_storage().await?.cors_from_env())
     }
 
     /// Create with in-memory storage and permissive CORS
