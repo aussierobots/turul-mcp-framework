@@ -5,7 +5,7 @@ This example demonstrates the absolute minimum setup for an MCP server using the
 ## What This Example Shows
 
 - **Minimal Setup**: Just 50 lines of code for a working MCP server
-- **Basic Tool Implementation**: Simple echo tool using manual trait implementation
+- **Basic Tool Implementation**: Simple echo tool using function macro
 - **Default Configuration**: HTTP on 127.0.0.1:8641
 - **Essential MCP Functionality**: Initialize, list tools, call tools
 
@@ -66,7 +66,7 @@ curl -X POST http://127.0.0.1:8641/mcp \
 
 ## Key Concepts Demonstrated
 
-1. **McpTool Trait**: Manual implementation of the core trait
+1. **Function Macro**: Using #[mcp_tool] attribute for simplicity
 2. **Schema Definition**: JSON Schema for tool input parameters
 3. **Server Builder**: Fluent API for server configuration
 4. **Error Handling**: Basic error handling for tool execution
