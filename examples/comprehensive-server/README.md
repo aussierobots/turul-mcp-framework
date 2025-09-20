@@ -327,7 +327,6 @@ let server = McpServer::builder()
     .with_notifications()   // notifications/*
     .with_roots()           // roots/list
     .with_sampling()        // sampling/createMessage
-    .with_templates()       // resources/templates/list
     
     .build()?;
 ```
