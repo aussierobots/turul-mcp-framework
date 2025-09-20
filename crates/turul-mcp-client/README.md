@@ -11,7 +11,7 @@ MCP client library with multi-transport support and full MCP 2025-06-18 protocol
 
 ## Features
 
-- ✅ **Multi-Transport Support** - HTTP, SSE, WebSocket, and stdio transports
+- ✅ **Multi-Transport Support** - HTTP and SSE transports
 - ✅ **MCP 2025-06-18 Compliance** - Full protocol specification support
 - ✅ **Session Management** - Automatic session handling with recovery
 - ✅ **Streaming Support** - Real-time event streaming and progress tracking
@@ -93,39 +93,9 @@ let client = McpClientBuilder::new()
     .build();
 ```
 
-### WebSocket Transport (Feature Gated)
+### Future Transport Support
 
-For WebSocket-based MCP servers:
-
-```rust
-#[cfg(feature = "websocket")]
-use turul_mcp_client::transport::WebSocketTransport;
-
-#[cfg(feature = "websocket")]
-{
-    let transport = WebSocketTransport::new("ws://localhost:8080/mcp")?;
-    let client = McpClientBuilder::new()
-        .with_transport(Box::new(transport))
-        .build();
-}
-```
-
-### Stdio Transport (Feature Gated)
-
-For command-line MCP server executables:
-
-```rust
-#[cfg(feature = "stdio")]
-use turul_mcp_client::transport::StdioTransport;
-
-#[cfg(feature = "stdio")]
-{
-    let transport = StdioTransport::new("./my-mcp-server")?;
-    let client = McpClientBuilder::new()
-        .with_transport(Box::new(transport))
-        .build();
-}
-```
+Additional transport implementations (WebSocket, stdio) are planned for future releases.
 
 ## Client Configuration
 
@@ -136,16 +106,30 @@ use turul_mcp_client::{McpClientBuilder, ClientConfig, RetryConfig, TimeoutConfi
 use std::time::Duration;
 
 let config = ClientConfig {
-    connect_timeout: Duration::from_secs(10),
-    request_timeout: Duration::from_secs(30),
-    retry_config: RetryConfig {
-        max_retries: 3,
+    client_info: ClientInfo {
+        name: "My MCP Client".to_string(),
+        version: "1.0.0".to_string(),
+        description: Some("Custom MCP client".to_string()),
+        vendor: None,
+        metadata: None,
+    },
+    timeouts: TimeoutConfig {
+        connect: Duration::from_secs(10),
+        request: Duration::from_secs(30),
+        long_operation: Duration::from_secs(120),
+        initialization: Duration::from_secs(15),
+        heartbeat: Duration::from_secs(30),
+    },
+    retry: RetryConfig {
+        max_attempts: 3,
         initial_delay: Duration::from_millis(100),
         max_delay: Duration::from_secs(5),
-        exponential_base: 2.0,
+        backoff_multiplier: 2.0,
+        jitter: 0.1,
+        exponential_backoff: true,
     },
-    timeout_config: TimeoutConfig {
-        connect_timeout: Duration::from_secs(10),
+    connection: ConnectionConfig::default(),
+    logging: LoggingConfig::default(),
         request_timeout: Duration::from_secs(30),
     },
 };
@@ -383,11 +367,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
     
     // Create client with configuration
-    let config = ClientConfig {
-        connect_timeout: Duration::from_secs(10),
-        request_timeout: Duration::from_secs(30),
-        ..Default::default()
-    };
+    let mut config = ClientConfig::default();
+    config.timeouts.connect = Duration::from_secs(10);
+    config.timeouts.request = Duration::from_secs(30);
     
     let transport = HttpTransport::new("http://localhost:8080/mcp")?;
     let client = McpClientBuilder::new()
@@ -469,15 +451,15 @@ fn compare_transports() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-turul-mcp-client = { version = "0.2.0", features = ["websocket", "stdio"] }
+turul-mcp-client = { version = "0.2.0", features = ["sse"] }
 ```
 
 Available features:
 - `default` = `["http", "sse"]` - HTTP and SSE transport
 - `http` - HTTP transport support (included by default)
 - `sse` - Server-Sent Events transport (included by default)
-- `websocket` - WebSocket transport support
-- `stdio` - Standard I/O transport for executable servers
+- `websocket` - *(Planned)* WebSocket transport support
+- `stdio` - *(Planned)* Standard I/O transport for executable servers
 
 ## Error Reference
 
@@ -535,8 +517,8 @@ The client automatically adapts to server capabilities:
 
 - **HTTP**: Works with all MCP servers
 - **SSE**: Requires server-sent events support
-- **WebSocket**: Requires WebSocket endpoint
-- **Stdio**: Works with executable MCP servers
+- **WebSocket**: *(Planned)* WebSocket endpoint support
+- **Stdio**: *(Planned)* Executable MCP server support
 
 ## Related Crates
 

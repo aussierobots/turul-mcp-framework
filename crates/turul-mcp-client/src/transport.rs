@@ -10,21 +10,23 @@ use crate::error::{McpClientResult, TransportError};
 pub mod http;
 pub mod sse;
 
-#[cfg(feature = "websocket")]
-pub mod websocket;
+// WebSocket and Stdio transports are planned for future implementation
+// #[cfg(feature = "websocket")]
+// pub mod websocket;
 
-#[cfg(feature = "stdio")]
-pub mod stdio;
+// #[cfg(feature = "stdio")]
+// pub mod stdio;
 
 // Re-export transport implementations
 pub use http::HttpTransport;
 pub use sse::SseTransport;
 
-#[cfg(feature = "websocket")]
-pub use websocket::WebSocketTransport;
+// Re-exports for future transport implementations
+// #[cfg(feature = "websocket")]
+// pub use websocket::WebSocketTransport;
 
-#[cfg(feature = "stdio")]
-pub use stdio::StdioTransport;
+// #[cfg(feature = "stdio")]
+// pub use stdio::StdioTransport;
 
 /// Transport type enumeration
 #[derive(Debug, Clone, PartialEq)]
@@ -33,10 +35,9 @@ pub enum TransportType {
     Http,
     /// Server-Sent Events transport (HTTP+SSE 2024-11-05)
     Sse,
-    /// WebSocket transport
-    WebSocket,
-    /// Standard I/O transport (for local processes)
-    Stdio,
+    // Future transport types:
+    // WebSocket,
+    // Stdio,
 }
 
 impl std::fmt::Display for TransportType {
@@ -44,8 +45,6 @@ impl std::fmt::Display for TransportType {
         match self {
             TransportType::Http => write!(f, "HTTP"),
             TransportType::Sse => write!(f, "SSE"),
-            TransportType::WebSocket => write!(f, "WebSocket"),
-            TransportType::Stdio => write!(f, "Stdio"),
         }
     }
 }
@@ -216,8 +215,8 @@ pub fn detect_transport_type(url_str: &str) -> McpClientResult<TransportType> {
                 Ok(TransportType::Http)
             }
         }
-        "ws" | "wss" => Ok(TransportType::WebSocket),
-        "stdio" | "file" => Ok(TransportType::Stdio),
+        "ws" | "wss" => Err(TransportError::Unsupported("WebSocket transport not yet implemented".to_string()).into()),
+        "stdio" | "file" => Err(TransportError::Unsupported("Stdio transport not yet implemented".to_string()).into()),
         scheme => Err(TransportError::Unsupported(format!("Unknown scheme: {}", scheme)).into()),
     }
 }
@@ -233,18 +232,6 @@ impl TransportFactory {
         match transport_type {
             TransportType::Http => Ok(Box::new(HttpTransport::new(url)?)),
             TransportType::Sse => Ok(Box::new(SseTransport::new(url)?)),
-            #[cfg(feature = "websocket")]
-            TransportType::WebSocket => Ok(Box::new(WebSocketTransport::new(url)?)),
-            #[cfg(feature = "stdio")]
-            TransportType::Stdio => Ok(Box::new(StdioTransport::new(url)?)),
-            #[cfg(not(feature = "websocket"))]
-            TransportType::WebSocket => Err(TransportError::Unsupported(
-                "WebSocket support not enabled".to_string()
-            ).into()),
-            #[cfg(not(feature = "stdio"))]
-            TransportType::Stdio => Err(TransportError::Unsupported(
-                "Stdio support not enabled".to_string()
-            ).into()),
         }
     }
     
@@ -253,32 +240,12 @@ impl TransportFactory {
         match transport_type {
             TransportType::Http => Ok(Box::new(HttpTransport::new(endpoint)?)),
             TransportType::Sse => Ok(Box::new(SseTransport::new(endpoint)?)),
-            #[cfg(feature = "websocket")]
-            TransportType::WebSocket => Ok(Box::new(WebSocketTransport::new(endpoint)?)),
-            #[cfg(feature = "stdio")]
-            TransportType::Stdio => Ok(Box::new(StdioTransport::new(endpoint)?)),
-            #[cfg(not(feature = "websocket"))]
-            TransportType::WebSocket => Err(TransportError::Unsupported(
-                "WebSocket support not enabled".to_string()
-            ).into()),
-            #[cfg(not(feature = "stdio"))]
-            TransportType::Stdio => Err(TransportError::Unsupported(
-                "Stdio support not enabled".to_string()
-            ).into()),
         }
     }
     
     /// List available transport types
     pub fn available_transports() -> Vec<TransportType> {
-        let transports = vec![TransportType::Http, TransportType::Sse];
-        
-        #[cfg(feature = "websocket")]
-        transports.push(TransportType::WebSocket);
-        
-        #[cfg(feature = "stdio")]
-        transports.push(TransportType::Stdio);
-        
-        transports
+        vec![TransportType::Http, TransportType::Sse]
     }
 }
 
@@ -298,11 +265,9 @@ mod tests {
             TransportType::Sse
         );
         
-        assert_eq!(
-            detect_transport_type("ws://localhost:8080/mcp").unwrap(),
-            TransportType::WebSocket
-        );
-        
+        // WebSocket transport not yet implemented
+        assert!(detect_transport_type("ws://localhost:8080/mcp").is_err());
+
         assert!(detect_transport_type("invalid://localhost").is_err());
     }
     
