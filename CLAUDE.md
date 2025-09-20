@@ -75,6 +75,8 @@ let server = McpServer::builder()
     .name("my-server")
     .tool(Calculator::default())
     .build()?;
+
+server.run().await
 ```
 
 ### Development Commands
