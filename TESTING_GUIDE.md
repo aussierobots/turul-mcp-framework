@@ -18,9 +18,10 @@ echo "✅ Framework builds successfully"
 # Run full MCP compliance validation
 cargo test -p turul-mcp-framework-integration-tests --test mcp_runtime_capability_validation -- --nocapture
 
-# Expected output: all 4 tests pass
+# Expected output: all 5 tests pass
 # ✅ test_tools_capability_truthfulness ... ok
-# ✅ test_json_rpc_protocol_compliance ... ok  
+# ✅ test_prompts_capability_truthfulness ... ok
+# ✅ test_json_rpc_protocol_compliance ... ok
 # ✅ test_empty_server_capabilities ... ok
 # ✅ integration::test_full_mcp_compliance_integration ... ok
 ```
@@ -28,7 +29,7 @@ cargo test -p turul-mcp-framework-integration-tests --test mcp_runtime_capabilit
 ### 3. Manual Server Verification
 ```bash
 # Test a simple server (runs on random port)
-cargo run --example minimal-server
+cargo run --package minimal-server
 
 # In another terminal, verify it responds
 curl -X POST http://127.0.0.1:PORT/mcp \
@@ -108,17 +109,22 @@ cargo run --package comprehensive-server -- --port 8082
 
 ```bash
 # Simple servers (great for quick testing)
-cargo run --example minimal-server                    # Port 8000
-cargo run --example calculator-add-simple-server-derive  # Port 8001
+cargo run --package minimal-server                    # Random port
+cargo run --package calculator-add-simple-server-derive  # Random port
 
 # Feature-specific servers
-cargo run --example resources-server -- --port 8041   # Resources only
-cargo run --example prompts-server -- --port 8040     # Prompts only
-cargo run --example notification-server               # SSE notifications
+cargo run --package resources-server -- --port 8041   # Resources only
+cargo run --package prompts-server -- --port 8040     # Prompts only
+cargo run --package notification-server               # SSE notifications
 
-# Advanced servers  
-cargo run --example stateful-server                   # Session management
-cargo run --example performance-testing               # Load testing
+# Test servers (comprehensive)
+cargo run --package resource-test-server -- --port 52941    # Resources testing
+cargo run --package prompts-test-server -- --port 52942     # Prompts testing
+cargo run --package tools-test-server -- --port 52943      # Tools testing
+
+# Advanced servers
+cargo run --package stateful-server                   # Session management
+cargo run --package performance-testing               # Load testing
 ```
 
 ## Manual MCP Compliance Verification
@@ -446,6 +452,42 @@ done
 kill $SERVER_PID
 ```
 
+## Comprehensive Test Suite Execution
+
+### All E2E Protocol Tests
+```bash
+# Run all E2E tests across all protocol areas
+cargo test --package tests --test sampling_protocol_e2e    # Sampling protocol
+cargo test --package tests --test roots_protocol_e2e       # Roots protocol
+cargo test --package tests --test elicitation_protocol_e2e # Elicitation protocol
+
+# Resource and prompt E2E tests
+cargo test --package turul-mcp-framework-integration-tests --test resources_e2e_integration
+cargo test --package turul-mcp-framework-integration-tests --test prompts_e2e_integration
+
+# Tools E2E tests
+cargo test --package turul-mcp-framework-tools-integration-tests --test e2e_integration
+
+# Advanced concurrent session tests
+cargo test --package tests --test concurrent_session_advanced
+```
+
+### Individual Test Categories
+```bash
+# Core compliance tests
+cargo test --test mcp_compliance_tests
+cargo test --test mcp_specification_compliance
+
+# Framework integration tests
+cargo test --test framework_integration_tests
+cargo test --test working_examples_validation
+
+# Session and client tests
+cargo test --test basic_session_test
+cargo test --test client_drop_test
+cargo test --test session_context_macro_tests
+```
+
 ## Continuous Integration Testing
 
 ### GitHub Actions / CI Pipeline
@@ -455,10 +497,15 @@ cargo test --workspace --verbose
 cargo test -p turul-mcp-framework-integration-tests --test mcp_runtime_capability_validation
 cargo build --workspace --release
 
+# Run all E2E protocol tests
+cargo test --package tests
+cargo test --package turul-mcp-framework-integration-tests
+cargo test --package turul-mcp-framework-tools-integration-tests
+
 # Verify examples compile
 for example in examples/*/; do
   cargo check --manifest-path "$example/Cargo.toml"
 done
 ```
 
-This guide provides comprehensive instructions for running and manually verifying MCP 2025-06-18 compliance across the entire framework.
+This guide provides comprehensive instructions for running and manually verifying MCP 2025-06-18 compliance across the entire framework with complete protocol coverage including Tools, Resources, Prompts, Sampling, Roots, and Elicitation.

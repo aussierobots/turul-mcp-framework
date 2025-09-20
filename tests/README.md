@@ -16,17 +16,55 @@ The E2E testing suite consists of:
 
 ```
 tests/
-├── README.md                 # This file - main testing guide
-├── shared/                   # Shared E2E utilities and fixtures
-│   ├── src/e2e_utils.rs     # Common test client, server manager, fixtures
-│   ├── tests/               # Comprehensive session validation tests
-│   └── README.md            # Shared utilities documentation
-├── resources/               # Resource E2E tests
-│   ├── tests/               # All resource-related E2E tests
-│   └── README.md            # Resources testing guide
-└── prompts/                 # Prompts E2E tests
-    ├── tests/               # All prompts-related E2E tests
-    └── README.md            # Prompts testing guide
+├── README.md                              # This file - main testing guide
+├── Cargo.toml                            # Test workspace configuration
+├── E2E_TEST_IMPLEMENTATION_STATUS.md     # Implementation status tracking
+│
+├── Protocol Test Suites (E2E):
+├── shared/                               # Shared E2E utilities and fixtures
+│   ├── src/e2e_utils.rs                 # Common test client, server manager, fixtures
+│   ├── tests/                           # Comprehensive session validation tests
+│   └── README.md                        # Shared utilities documentation
+├── resources/                           # Resource E2E tests
+│   ├── tests/                           # All resource-related E2E tests
+│   └── README.md                        # Resources testing guide
+├── prompts/                             # Prompts E2E tests
+│   ├── tests/                           # All prompts-related E2E tests
+│   └── README.md                        # Prompts testing guide
+├── tools/                               # Tools E2E tests
+│   ├── tests/                           # All tools-related E2E tests
+│   └── README.md                        # Tools testing guide
+├── sampling/                            # Sampling protocol E2E tests
+│   ├── tests/                           # Sampling-related E2E tests
+│   └── README.md                        # Sampling testing guide
+├── roots/                               # Roots protocol E2E tests
+│   ├── tests/                           # Roots-related E2E tests
+│   └── README.md                        # Roots testing guide
+├── elicitation/                         # Elicitation protocol E2E tests
+│   ├── tests/                           # Elicitation-related E2E tests
+│   └── README.md                        # Elicitation testing guide
+│
+├── Framework Test Files (Integration):
+├── mcp_runtime_capability_validation.rs # Runtime capability validation
+├── mcp_compliance_tests.rs             # Core MCP protocol compliance
+├── mcp_specification_compliance.rs     # Full specification testing
+├── framework_integration_tests.rs      # Framework integration tests
+├── working_examples_validation.rs      # Example validation tests
+├── basic_session_test.rs               # Basic session functionality
+├── client_drop_test.rs                 # Client cleanup testing
+├── session_context_macro_tests.rs      # Session context macros
+├── builders_examples.rs                # Builder pattern examples
+├── derive_examples.rs                  # Derive macro examples
+├── server_examples.rs                  # Server configuration examples
+├── http_server_examples.rs             # HTTP server examples
+├── lambda_examples.rs                  # AWS Lambda examples
+├── client_examples.rs                  # Client usage examples
+├── calculator_levels_integration.rs    # Tool creation levels
+├── resources_integration_tests.rs      # Resource integration
+├── custom_output_field_test.rs         # Custom output testing
+│
+└── test_helpers/                        # Common test utilities
+    └── README.md                        # Test helpers documentation
 ```
 
 ## Quick Start
@@ -63,35 +101,40 @@ cd ../prompts && cargo build
 # From project root - runs all E2E tests
 cargo test --workspace --test "*e2e*" -- --nocapture
 
-# Or run each test suite individually
-cd tests/resources && cargo test -- --nocapture
-cd tests/prompts && cargo test -- --nocapture
-cd tests/shared && cargo test -- --nocapture
+# Or run each protocol test suite individually
+cargo test --package tests --test sampling_protocol_e2e -- --nocapture
+cargo test --package tests --test roots_protocol_e2e -- --nocapture
+cargo test --package tests --test elicitation_protocol_e2e -- --nocapture
+cargo test --package turul-mcp-framework-integration-tests --test resources_e2e_integration -- --nocapture
+cargo test --package turul-mcp-framework-integration-tests --test prompts_e2e_integration -- --nocapture
+cargo test --package turul-mcp-framework-tools-integration-tests --test e2e_integration -- --nocapture
 ```
 
 #### Run Specific Test Categories
 
-**Session Validation Tests**:
+**Protocol E2E Tests**:
 ```bash
-cd tests/shared && cargo test session -- --nocapture
+# All major protocol areas
+cargo test --package tests --test sampling_protocol_e2e
+cargo test --package tests --test roots_protocol_e2e
+cargo test --package tests --test elicitation_protocol_e2e
+cargo test --package turul-mcp-framework-integration-tests --test resources_e2e_integration
+cargo test --package turul-mcp-framework-integration-tests --test prompts_e2e_integration
+cargo test --package turul-mcp-framework-tools-integration-tests --test e2e_integration
 ```
 
-**SSE Notification Tests**:
+**Core Compliance Tests**:
 ```bash
-cd tests/resources && cargo test sse -- --nocapture
-cd tests/prompts && cargo test sse -- --nocapture
+cargo test --package tests --test mcp_runtime_capability_validation
+cargo test --package tests --test mcp_compliance_tests
+cargo test --package tests --test mcp_specification_compliance
 ```
 
-**Protocol Compliance Tests**:
+**Session and Framework Tests**:
 ```bash
-cd tests/resources && cargo test e2e_integration -- --nocapture
-cd tests/prompts && cargo test e2e_integration -- --nocapture
-```
-
-**Shared Utilities Tests**:
-```bash
-cd tests/resources && cargo test e2e_shared_integration -- --nocapture
-cd tests/prompts && cargo test e2e_shared_integration -- --nocapture
+cargo test --package tests --test basic_session_test
+cargo test --package tests --test concurrent_session_advanced
+cargo test --package tests --test framework_integration_tests
 ```
 
 #### Run Individual Tests
@@ -148,27 +191,23 @@ curl -X POST http://127.0.0.1:8080/mcp \
 - ✅ **Session Management**: UUID v7 session IDs with proper isolation
 - ✅ **Server-Sent Events**: SSE notifications with proper formatting
 
-### Resource Testing
-- ✅ **17 Test Resources**: Comprehensive coverage of all MCP resource patterns
-- ✅ **URI Templates**: Template variable substitution (e.g., `template://items/{id}`)
-- ✅ **Error Handling**: Proper error responses and edge cases
+### Complete Protocol Coverage
+- ✅ **Tools Testing**: 8+ test tools covering all execution patterns and progress tracking
+- ✅ **Resources Testing**: 17+ test resources covering all MCP resource patterns
+- ✅ **Prompts Testing**: 12+ test prompts covering all argument types and validation
+- ✅ **Sampling Testing**: Message generation with parameter validation and content formats
+- ✅ **Roots Testing**: Directory discovery, URI validation, and security boundaries
+- ✅ **Elicitation Testing**: Workflow management, form generation, and data validation
+
+### Advanced Testing Features
+- ✅ **URI Templates**: Template variable substitution (e.g., `file:///template/items/{id}`)
+- ✅ **Error Handling**: Comprehensive error responses and edge cases across all protocols
 - ✅ **Binary Content**: Base64-encoded binary data support
 - ✅ **Large Content**: Performance testing with large datasets
-- ✅ **Session-Aware Resources**: Context-dependent resource behavior
-
-### Prompts Testing  
-- ✅ **11 Test Prompts**: All MCP prompt patterns and argument types
-- ✅ **Argument Validation**: String, number, boolean, and template arguments
-- ✅ **Multi-Message Prompts**: User/assistant conversation patterns
-- ✅ **Dynamic Prompts**: Context-dependent prompt generation
-- ✅ **Validation Errors**: Proper error handling for invalid arguments
-
-### Session & SSE Testing
-- ✅ **Session Consistency**: Cross-request session maintenance
-- ✅ **Session Isolation**: Multi-client session separation
-- ✅ **SSE Event Bridge**: Real-time notification delivery
-- ✅ **Format Compliance**: Proper SSE event formatting
-- ✅ **Concurrent Operations**: Multi-client concurrent testing
+- ✅ **Session-Aware Operations**: Context-dependent behavior across all protocol areas
+- ✅ **Concurrent Sessions**: 50+ concurrent client testing with session isolation
+- ✅ **SSE Event Bridge**: Real-time notification delivery across all protocol areas
+- ✅ **Format Compliance**: Proper SSE event formatting and protocol adherence
 
 ## Troubleshooting
 
