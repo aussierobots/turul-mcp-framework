@@ -2,11 +2,12 @@
 //!
 //! Benchmarks for measuring tool execution performance across different scenarios.
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, BenchmarkId};
+use criterion::{criterion_group, criterion_main, Criterion, BenchmarkId};
+use std::hint::black_box;
 use tokio::runtime::Runtime;
 
 use turul_mcp_derive::McpTool;
-use turul_mcp_server::{McpTool, SessionContext, McpResult};
+use turul_mcp_server::prelude::*;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 
@@ -118,16 +119,22 @@ fn tool_execution_benchmarks(c: &mut Criterion) {
             
             let state = Arc::new(Mutex::new(HashMap::<String, Value>::new()));
             let state_clone = state.clone();
-            
+            let state_clone2 = state.clone();
+
             let session = SessionContext {
-                session_id: uuid::Uuid::new_v4(),
-                get_state: Box::new(move |key: &str| {
+                session_id: uuid::Uuid::new_v4().to_string(),
+                get_state: Arc::new(move |key: &str| {
                     state.lock().unwrap().get(key).cloned()
                 }),
-                set_state: Box::new(move |key: &str, value: Value| {
+                set_state: Arc::new(move |key: &str, value: Value| {
                     state_clone.lock().unwrap().insert(key.to_string(), value);
                 }),
-                broadcast_notification: Box::new(|_| {}),
+                remove_state: Arc::new(move |key: &str| {
+                    state_clone2.lock().unwrap().remove(key)
+                }),
+                is_initialized: Arc::new(|| true),
+                send_notification: Arc::new(|_| {}),
+                broadcaster: None,
             };
             
             let args = json!({"value": black_box(1)});
