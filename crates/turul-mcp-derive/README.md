@@ -47,9 +47,14 @@ async fn calculator(
 }
 
 // Usage: Just pass the function to the server
-let server = McpServerBuilder::new()
+let server = McpServer::builder()
+    .name("calculator-server")
+    .version("1.0.0")
     .tool_fn(calculator)  // Framework knows the function name!
+    .bind_address("127.0.0.1:8080".parse()?)
     .build()?;
+
+server.run().await
 ```
 
 ### SessionContext Integration
@@ -430,7 +435,7 @@ mod tests {
 ```rust
 #[tokio::test]
 async fn test_tool_in_server() {
-    let server = McpServerBuilder::new()
+    let server = McpServer::builder()
         .tool_fn(calculator)
         .build()
         .expect("Server should build successfully");
@@ -499,8 +504,13 @@ impl McpPrompt for CodeReviewPrompt {
 
 // Server usage
 let server = McpServer::builder()
+    .name("prompt-server")
+    .version("1.0.0")
     .prompt(CodeReviewPrompt::default())
+    .bind_address("127.0.0.1:8080".parse()?)
     .build()?;
+
+server.run().await
 ```
 
 ### Default vs Custom Render
@@ -650,10 +660,14 @@ The `#[mcp_resource]` macro generates both the resource implementation and a con
 ```rust
 let server = McpServer::builder()
     .name("resource-server")
+    .version("1.0.0")
     .resource_fn(get_config)       // Static resource
     .resource_fn(get_user_profile) // Template: file:///users/{user_id}.json
     .resource_fn(get_log_entries)  // Template with params
+    .bind_address("127.0.0.1:8080".parse()?)
     .build()?;
+
+server.run().await
 ```
 
 ### Template Variable Extraction
@@ -739,8 +753,13 @@ fn create_config_resource() -> ConfigResource {
 
 // Register with .resource_fn()
 let server = McpServer::builder()
+    .name("config-server")
+    .version("1.0.0")
     .resource_fn(create_config_resource)  // Uses constructor function
+    .bind_address("127.0.0.1:8080".parse()?)
     .build()?;
+
+server.run().await
 ```
 
 ### Comparison: Macro vs Manual Implementation
