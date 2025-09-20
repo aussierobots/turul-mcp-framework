@@ -56,11 +56,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     // Use in server
-    let server = McpServerBuilder::new()
+    let server = McpServer::builder()
+        .name("calculator-server")
+        .version("1.0.0")
         .tool(calculator)
+        .bind_address("127.0.0.1:8080".parse()?)
         .build()?;
-        
-    Ok(())
+
+    server.run().await
 }
 ```
 
@@ -74,7 +77,7 @@ use turul_mcp_builders::ToolBuilder;
 let tool = ToolBuilder::new("data_processor")
     .description("Process data with custom logic")
     .string_param("input", "Input data to process")
-    .optional_string_param("format", "Output format (json, csv, xml)")
+    .param("format", JsonSchema::string().with_description("Output format (json, csv, xml)")) // Optional - not added to required
     .boolean_param("validate", "Validate input data")
     .execute(|args| async move {
         let input = args.get("input").and_then(|v| v.as_str())
@@ -193,8 +196,8 @@ let progress = NotificationBuilder::progress("task-123", 75)
     .message("Processing files...")
     .build();
 
-// Log notification  
-let log = NotificationBuilder::log("info", json!({
+// Log notification
+let log = NotificationBuilder::logging_message(LoggingLevel::Info, json!({
     "message": "Operation completed",
     "duration_ms": 1250
 }))
@@ -295,7 +298,7 @@ async fn load_tools_from_config(config_path: &str) -> Result<Vec<Box<dyn turul_m
 use turul_mcp_builders::ToolBuilder;
 
 trait Plugin {
-    fn create_tools(&self) -> Vec<Box<dyn turul_mcp_server::McpTool>>;
+    fn create_tools(&self) -> Result<Vec<Box<dyn turul_mcp_server::McpTool>>, Box<dyn std::error::Error>>;
 }
 
 struct MathPlugin;
@@ -346,8 +349,8 @@ use serde_json::json;
 let validated_tool = ToolBuilder::new("user_registration")
     .description("Register a new user with validation")
     .string_param("email", "User email address")
-    .string_param("password", "User password") 
-    .optional_number_param("age", "User age")
+    .string_param("password", "User password")
+    .param("age", JsonSchema::number().with_description("User age")) // Optional - not added to required
     .execute(|args| async move {
         let email = args.get("email").and_then(|v| v.as_str())
             .ok_or("Missing required parameter 'email'")?;
@@ -424,7 +427,7 @@ use std::collections::HashMap;
 let documented_tool = ToolBuilder::new("api_client")
     .description("Call external API with full documentation") 
     .string_param("endpoint", "API endpoint URL")
-    .optional_string_param("method", "HTTP method (GET, POST, PUT, DELETE)")
+    .param("method", JsonSchema::string().with_description("HTTP method (GET, POST, PUT, DELETE)")) // Optional
     .meta_value("version", json!("1.2.0"))
     .meta_value("author", json!("api-team"))
     .meta_value("tags", json!(["external", "network", "api"]))
@@ -443,7 +446,7 @@ let documented_tool = ToolBuilder::new("api_client")
 use turul_mcp_server::McpServer;
 use turul_mcp_builders::*;
 
-let server = McpServerBuilder::new()
+let server = McpServer::builder()
     .tool(ToolBuilder::new("calc").build()?)           // ToolDefinition
     .resource(ResourceBuilder::new("uri").build()?)    // ResourceDefinition
     .prompt(PromptBuilder::new("template").build()?)   // PromptDefinition
