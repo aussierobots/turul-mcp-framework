@@ -2,16 +2,16 @@
 
 ## Project Overview
 
-This is a comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients. It is fully compliant with the MCP 2025-06-18 specification. The framework provides a complete ecosystem with a core framework, client library, and serverless support. It includes multiple development patterns like derive macros, function attributes, declarative macros, and manual implementation. It supports various transports like HTTP/1.1, HTTP/2, WebSocket, SSE, and stdio. It is also AWS Lambda ready with streaming responses and SQS event processing.
+This is a comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients. It is fully compliant with the MCP 2025-06-18 specification. The framework provides a complete ecosystem with a core framework, a client library, and serverless support. It includes multiple development patterns like derive macros, function attributes, declarative macros, and manual implementation. It supports various transports like HTTP/1.1, HTTP/2, WebSocket, SSE, and stdio. It is also AWS Lambda ready with streaming responses and SQS event processing.
 
-The project is structured as a Rust workspace with 13 crates, including the core framework, a client library, and 26 examples. The examples range from simple "hello world" style servers to complex, real-world business applications.
+The project is structured as a Rust workspace with 10 crates, including the core framework, a client library, and 42 examples. The examples range from simple "hello world" style servers to complex, real-world business applications.
 
 ## My Role: Critical Analyst and Planner
 
 My primary role in this project is to act as a critical analyst and planner. I will:
 
 *   **Review and Analyze:** I will review the codebase, documentation, and tests to identify areas for improvement, potential bugs, and compliance gaps.
-*   **Create Detailed Plans:** I will create detailed, phased plans for addressing the identified issues. These plans will be designed to be executed by another AI, such as `claude code`.
+*   **Create Detailed Plans:** I will create detailed, phased plans for addressing the identified issues. These plans will be designed to be executed by a code-generating AI assistant.
 *   **Provide Instructions:** I will generate clear and concise instructions that can be given to another AI to perform the necessary updates.
 *   **Maintain Documentation:** I will keep the `GEMINI.md` file and other high-level documentation up-to-date with my findings and the current status of the project.
 
@@ -21,7 +21,7 @@ I will **not** directly modify the code or create files myself. My role is to pr
 
 ### Executive Summary
 
-The Turul MCP Framework is a production-ready, comprehensively tested implementation of the Model Context Protocol (MCP) 2025-06-18 specification. It provides a robust and idiomatic Rust solution for building MCP servers and clients. A full schema-level compliance review confirms that the framework's data structures are a meticulous match for the official specification. The testing strategy is mature, with E2E tests covering all major protocol areas, including advanced concurrency and state-management scenarios. While the protocol implementation is fully compliant, it's important to distinguish this from full feature completeness, as some advertised capabilities in the examples (e.g., `resources/subscribe`) are not yet fully implemented, representing the next frontier for development.
+The Turul MCP Framework is a production-ready, comprehensively tested implementation of the Model Context Protocol (MCP) 2025-06-18 specification. It provides a robust and idiomatic Rust solution for building MCP servers and clients. A full schema-level compliance review confirms that the framework's data structures are a meticulous match for the official specification. The testing strategy is mature, with E2E tests covering all major protocol areas, including advanced concurrency and state-management scenarios. While the protocol implementation is fully compliant, it's important to distinguish this from full behavioral completeness, as several advanced features are not yet fully implemented, representing the next frontier for development.
 
 ### From TypeScript Inheritance to Rust Traits: A Best-Practice Approach
 
@@ -53,13 +53,17 @@ The framework's testing strategy is comprehensive and multi-layered, ensuring a 
     *   **Advanced Concurrent Sessions:** High-concurrency and resource contention scenarios are tested to ensure stability and session isolation under load.
 *   **Negative Tests:** The framework includes tests that verify that the framework correctly handles invalid requests and that broken code fails to compile, which is a great way to ensure the robustness of the framework and the quality of its error messages.
 
-### Compliance vs. Feature Completeness: The Next Step
+### Compliance vs. Behavioral Completeness: The Next Step for 0.2.0
 
-A key insight from the latest round of reviews is the distinction between protocol compliance and feature completeness. My analysis confirms that the framework is **fully compliant at the protocol level**—it correctly implements the shapes and rules defined in the MCP `schema.ts`.
+A key insight from the latest round of reviews is the distinction between protocol compliance and behavioral completeness. My analysis confirms that the framework is **fully compliant at the protocol level**—it correctly implements the data structures and rules defined in the MCP `schema.ts`.
 
-However, this is different from being **fully feature-complete**. As noted in the `MCP_E2E_COMPLIANCE_TEST_PLAN.md`, some capabilities advertised by the *example servers* are not fully implemented in the framework itself. For instance, the `resources/subscribe` endpoint is defined in the protocol, but the framework does not yet provide a first-class, built-in implementation for handling subscriptions, even though the E2E tests correctly verify that the server advertises this capability as `false`.
+However, for the `0.2.0` release, it is important to note this is different from being **fully behavior-complete**. As detailed in the `MCP_E2E_COMPLIANCE_TEST_PLAN.md`, several advanced capabilities, while defined, are not yet fully implemented. These represent the next frontier of development for the framework. Key examples include:
 
-This is not a compliance issue, but a matter of scope and maturity. The framework provides the necessary building blocks, but the implementation of certain business logic (like subscription management) is left to the developer. Future development should focus on closing these feature gaps by providing default, production-ready implementations for these remaining capabilities.
+*   **Resource Subscriptions:** The framework does not provide a first-class implementation for the `resources/subscribe` method. It correctly advertises this capability as `false` in the `initialize` handshake, adhering to the protocol's truthfulness requirement. The necessary hooks exist for developers to implement this logic themselves.
+*   **Advanced List Endpoint Features:** Some list-based endpoints, such as `tools/list`, do not yet support advanced features like stable sorting, pagination, or the propagation of the `_meta` field from request to response.
+*   **Session-Aware Resources:** The `McpResource::read` trait currently lacks access to the session context, meaning resources cannot dynamically change their content based on the session state. The `session://` resource in examples is therefore a simulation of this capability.
+
+These are not compliance bugs but rather represent the current scope of the framework's maturity. They are documented as the immediate focus for future releases.
 
 ## Building and Running
 
