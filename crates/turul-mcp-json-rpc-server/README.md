@@ -143,12 +143,12 @@ use turul_mcp_json_rpc_server::JsonRpcDispatcher;
 let mut dispatcher = JsonRpcDispatcher::new();
 
 // Register handlers
-dispatcher.register_handler("math", Box::new(MathHandler));
-dispatcher.register_handler("string", Box::new(StringHandler));
-dispatcher.register_handler("file", Box::new(FileHandler));
+dispatcher.register_method("math.add".to_string(), MathHandler);
+dispatcher.register_method("string.uppercase".to_string(), StringHandler);
+dispatcher.register_method("file.read".to_string(), FileHandler);
 
-// Handle requests with method routing: "math.add", "string.uppercase", etc.
-let response = dispatcher.dispatch(request_json, session_context).await?;
+// Handle requests with method routing
+let response = dispatcher.handle_request_with_context(request, session_context).await;
 ```
 
 ### JsonRpcHandler Trait
@@ -251,11 +251,11 @@ impl JsonRpcHandler for SessionAwareHandler {
     async fn handle(
         &self,
         method: &str,
-        params: Option<Value>,
+        params: Option<RequestParams>,
         session: Option<SessionContext>
     ) -> JsonRpcResult<Value> {
         let session = session.ok_or("Session required")?;
-        
+
         match method {
             "get_session_info" => {
                 Ok(json!({
@@ -264,8 +264,7 @@ impl JsonRpcHandler for SessionAwareHandler {
                 }))
             }
             "increment_counter" => {
-                // Session state management would be handled by the transport layer
-                // This is just the JSON-RPC processing layer
+                // if let Some(p) = params { /* use p.to_map() */ }
                 Ok(json!({"message": "Counter increment processed"}))
             }
             _ => Err(JsonRpcError::method_not_found(method).into())
