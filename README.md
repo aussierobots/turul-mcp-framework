@@ -7,11 +7,11 @@ A comprehensive, battle-tested Rust framework for building Model Context Protoco
 
 ## ✨ Key Highlights
 
-- **🏗️ 67+ Workspace Crates**: Complete MCP ecosystem with core framework, client library, and serverless support
-- **📚 38+ Comprehensive Examples**: Real-world business applications and framework demonstration examples
+- **🏗️ 10 Workspace Crates**: Complete MCP ecosystem with core framework, client library, and serverless support
+- **📚 65+ Comprehensive Examples**: Real-world business applications and framework demonstration examples (40+ active, 25+ archived)
 - **🧪 100+ Comprehensive Tests**: Beta-grade test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
-- **🌐 Transport Flexibility**: HTTP/1.1, HTTP/2, SSE, and stdio transport support
+- **🌐 Transport Flexibility**: HTTP/1.1 and SSE transport support (WebSocket and stdio planned)
 - **☁️ Serverless Ready**: AWS Lambda integration with streaming responses and SQS event processing
 - **🔧 Beta Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
 - **⚡ Performance Optimized**: Comprehensive benchmarking suite with >1000 RPS throughput, <100ms response times, and extensive stress testing
@@ -22,7 +22,7 @@ A comprehensive, battle-tested Rust framework for building Model Context Protoco
 
 ```rust
 use turul_mcp_derive::mcp_tool;
-use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_server::prelude::*;
 
 #[mcp_tool(name = "add", description = "Add two numbers")]
 async fn add(
@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 use turul_mcp_derive::McpTool;
-use turul_mcp_server::{McpServer, McpResult, SessionContext};
+use turul_mcp_server::prelude::*;
 
 #[derive(McpTool, Clone)]
 #[tool(name = "calculator", description = "Mathematical operations")]
@@ -99,7 +99,7 @@ Create resources that provide data and files using the `.resource_fn()` method:
 
 ```rust
 use turul_mcp_derive::mcp_resource;
-use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_server::prelude::*;
 use turul_mcp_protocol::resources::ResourceContent;
 
 // Static resource
@@ -514,7 +514,7 @@ cargo test --test mcp_compliance_tests
 
 ```rust
 // ✅ CORRECT: Framework integration test
-use turul_mcp_server::{McpServerBuilder, McpTool, SessionContext};
+use turul_mcp_server::prelude::*;
 use turul_mcp_derive::McpTool;
 
 #[derive(McpTool, Default)]
@@ -611,7 +611,7 @@ async fn test_session_state_management() {
 
 ```rust
 use turul_mcp_derive::mcp_tool;
-use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_server::prelude::*;
 
 #[mcp_tool(name = "weather", description = "Get weather information")]
 async fn get_weather(
@@ -635,7 +635,7 @@ let server = McpServer::builder()
 
 ```rust
 use turul_mcp_derive::McpTool;
-use turul_mcp_server::{McpServer, McpResult, SessionContext};
+use turul_mcp_server::prelude::*;
 
 #[derive(McpTool, Clone)]
 #[tool(name = "file_manager", description = "File management operations")]
@@ -683,7 +683,7 @@ let server = McpServer::builder()
 **Best for:** Dynamic tools, configuration-driven systems
 
 ```rust
-use turul_mcp_server::{McpServer, ToolBuilder};
+use turul_mcp_server::prelude::*;
 use serde_json::json;
 
 let multiply_tool = ToolBuilder::new("multiply")
@@ -716,7 +716,7 @@ let server = McpServer::builder()
 ```rust
 use turul_mcp_protocol::tools::*;
 use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpResult};
-use turul_mcp_server::{McpTool, McpServer, SessionContext};
+use turul_mcp_server::prelude::*;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -779,24 +779,16 @@ let server = McpServer::builder()
 Comprehensive MCP client for HTTP transport:
 
 ```rust
-use turul_mcp_client::{McpClient, ClientConfig};
+use turul_mcp_client::{McpClient, McpClientBuilder, transport::HttpTransport};
 use std::time::Duration;
 
-// Configure the client
-let client_config = ClientConfig {
-    client_info: ClientInfo {
-        name: "my-mcp-client".to_string(),
-        version: "1.0.0".to_string(),
-    },
-    timeouts: TimeoutConfig {
-        request: Duration::from_secs(30),
-        connect: Duration::from_secs(10),
-    },
-    // ... other config fields
-};
+// Create HTTP transport
+let transport = HttpTransport::new("http://localhost:8080/mcp")?;
 
-// Create client (actual connection requires transport setup)
-let mut client = McpClient::new(client_config).await?;
+// Create client using builder pattern
+let client = McpClientBuilder::new()
+    .with_transport(Box::new(transport))
+    .build();
 
 // Initialize session
 let init_result = client.initialize().await?;
@@ -993,4 +985,4 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 **🚀 Ready to build beta-grade MCP servers?** Start with our [comprehensive examples](examples/) or check the [getting started guide](EXAMPLES.md).
 
-**💡 Need help?** Open an issue or check our [38+ working examples](examples/) covering everything from simple calculators to enterprise systems.
+**💡 Need help?** Open an issue or check our [65+ working examples](examples/) covering everything from simple calculators to enterprise systems.
