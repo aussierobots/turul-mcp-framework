@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 - `Cargo.toml` (root): Workspace manifest; shared deps and profiles.
-- `crates/`: Core crates (server, client, protocol 2025-06-18, builders, derive, json-rpc, session-storage, http server).
+- `crates/`: Core crates (server, client, protocol alias + 2025-06-18 spec, builders, derive, json-rpc, session-storage, http server, AWS Lambda transport).
 - `examples/`: Runnable servers/clients showing patterns and real apps.
 - `tests/`: Integration tests (Tokio async): compliance, session, framework integration.
 - `docs/`: Architecture/spec notes (see README for overview).
@@ -10,9 +10,12 @@
 ## Architecture Overview (Key Crates)
 - `turul-mcp-server`: High-level server builder and areas (tools/resources/prompts/etc.).
 - `turul-mcp-client`: HTTP client library.
-- `turul-mcp-protocol-2025-06-18`: MCP spec types and contracts.
+- `turul-mcp-protocol`: Current-spec alias that re-exports the active protocol crate for downstreams.
+- `turul-mcp-protocol-2025-06-18`: MCP spec types and contracts for the 2025-06-18 schema.
+- `turul-mcp-session-storage`: Pluggable session backends (in-memory, SQLite, Postgres, DynamoDB).
 - `turul-mcp-json-rpc-server`: JSON-RPC 2.0 foundation.
 - `turul-http-mcp-server`: HTTP/SSE transport.
+- `turul-mcp-aws-lambda`: AWS Lambda entrypoint integration for serverless deployments.
 - `turul-mcp-derive` / `turul-mcp-builders`: Macros and builders for ergonomics.
 
 ## Build, Test, and Development Commands
