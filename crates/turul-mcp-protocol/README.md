@@ -171,26 +171,53 @@ impl HasDescription for MyTool {
 
 ### Server Integration
 
-```rust
-use turul_mcp_protocol::{Tool, CallToolRequest, CallToolResult};
-use turul_mcp_server::McpServerBuilder;
+The protocol types integrate seamlessly with `turul-mcp-server` to build a complete server. The following is a complete, runnable example.
 
-// Works seamlessly with the framework
-let server = McpServerBuilder::new()
-    .name("My MCP Server")
-    .version("1.0.0")
-    .tool(MyTool { /* ... */ })
-    .build()?;
+**Dependencies:**
+
+```toml
+[dependencies]
+turul-mcp-protocol = "0.2.0"
+turul-mcp-server = "0.2.0"
+turul-mcp-derive = "0.2.0"
+tokio = { version = "1.0", features = ["full"] }
+```
+
+**Example:**
+
+```rust
+use turul_mcp_server::prelude::*;
+use turul_mcp_derive::mcp_tool;
+
+#[mcp_tool(name = "my_tool", description = "An example tool")]
+async fn my_tool(#[param(description = "A message to echo")] message: String) -> McpResult<String> {
+    Ok(format!("You said: {}", message))
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let server = McpServer::builder()
+        .name("My MCP Server")
+        .version("1.0.0")
+        .tool_fn(my_tool)
+        .bind_address("127.0.0.1:8080".parse()?)
+        .build()?;
+
+    println!("Server listening on http://127.0.0.1:8080");
+    server.run().await?;
+    Ok(())
+}
 ```
 
 ### Client Integration
 
 ```rust
 use turul_mcp_protocol::{InitializeRequest, CallToolRequest};
-use turul_mcp_client::{McpClient, transport::HttpTransport};
+use turul_mcp_client::{McpClient, McpClientBuilder, transport::HttpTransport};
 
-let client = McpClient::builder()
-    .transport(HttpTransport::new("http://localhost:8080/mcp")?)
+let transport = HttpTransport::new("http://localhost:8080/mcp")?;
+let client = McpClientBuilder::new()
+    .with_transport(Box::new(transport))
     .build();
 
 // Protocol types work directly with client methods
