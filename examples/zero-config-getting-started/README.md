@@ -23,19 +23,17 @@ struct Calculator {
 }
 
 impl Calculator {
-    async fn execute(&self) -> McpResult<f64> {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<f64> {
         Ok(self.a + self.b)
     }
 }
 ```
 
-### Notification Definition (30 seconds)
+### Built-in Progress Notifications (30 seconds)
 ```rust
-// ✅ Framework auto-determines method: "notifications/progress"
-#[derive(McpNotification)]
-struct ProgressNotification {
-    message: String,
-    percent: u32,
+// ✅ Use session's built-in progress notification
+if let Some(session) = session {
+    session.notify_progress("Processing", 75);
 }
 ```
 
@@ -44,7 +42,6 @@ struct ProgressNotification {
 let server = McpServer::builder()
     .name("my-server")
     .tool(Calculator { a: 0.0, b: 0.0 })           // → tools/call
-    .notification_type::<ProgressNotification>()   // → notifications/progress
     .build()?;
 
 server.run().await
@@ -95,7 +92,7 @@ curl -X POST http://127.0.0.1:8000/mcp \
 
 ## Next Steps
 
-1. **Add More Tools**: Use `#[derive(McpTool)]` on any struct
-2. **Change Storage**: Replace with `PostgreSqlSessionStorage::new()`  
-3. **Add Resources**: Use `#[derive(McpResource)]` pattern
-4. **Scale Up**: Framework handles enterprise deployment automatically
+1. **Add More Tools**: Use `#[derive(McpTool)]` on any struct.
+2. **Change Storage**: Swap the default in-memory storage for a persistent backend, e.g., `PostgresSessionStorage::with_config(config).await?`.
+3. **Add Resources**: Use the `#[mcp_resource]` macro to serve data and files.
+4. **Scale Up**: The framework's architecture is ready for enterprise deployment.
