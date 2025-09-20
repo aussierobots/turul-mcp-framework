@@ -108,7 +108,7 @@ impl McpTool for ShoppingCartTool {
                 let (existing_qty, existing_price) = cart_items.get(item).cloned().unwrap_or((0, price));
                 cart_items.insert(item.to_string(), (existing_qty + quantity, existing_price));
 
-                session.set_typed_state("cart_items", &cart_items).unwrap();
+                session.set_typed_state("cart_items", &cart_items)?;
                 
                 // Send progress notification
                 session.notify_progress(format!("cart_item_{}", item), 1);
@@ -183,7 +183,7 @@ impl McpTool for ShoppingCartTool {
             "clear" => {
                 let cleared_items = cart_items.len();
                 cart_items.clear();
-                session.set_typed_state("cart_items", &cart_items).unwrap();
+                session.set_typed_state("cart_items", &cart_items)?;
                 session.notify_progress("cart_clear", 1);
 
                 json!({
@@ -196,7 +196,7 @@ impl McpTool for ShoppingCartTool {
         };
 
         // Update session state
-        session.set_typed_state("cart_items", &cart_items).unwrap();
+        session.set_typed_state("cart_items", &cart_items)?;
 
         Ok(CallToolResult {
             content: vec![ToolResult::text(result.to_string())],
@@ -287,7 +287,7 @@ impl McpTool for UserPreferencesTool {
                     .ok_or_else(|| McpError::missing_param("value"))?;
 
                 preferences.insert(key.to_string(), value.clone());
-                session.set_typed_state("user_preferences", &preferences).unwrap();
+                session.set_typed_state("user_preferences", &preferences)?;
 
                 json!({
                     "action": "set",
@@ -328,7 +328,7 @@ impl McpTool for UserPreferencesTool {
             "reset" => {
                 let cleared_count = preferences.len();
                 preferences.clear();
-                session.set_typed_state("user_preferences", &preferences).unwrap();
+                session.set_typed_state("user_preferences", &preferences)?;
 
                 json!({
                     "action": "reset",
