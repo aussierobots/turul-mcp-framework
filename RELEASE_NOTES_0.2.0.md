@@ -1,13 +1,13 @@
 # Release Notes - Version 0.2.0
 
 **Release Date**: September 20, 2025
-**Status**: ✅ **Production Ready** - Complete MCP 2025-06-18 specification implementation
+**Status**: ✅ **Production Ready** - Comprehensive MCP 2025-06-18 framework with critical production fixes
 
 ## 🎉 Major Achievements
 
 ### **Complete MCP Framework Implementation**
 - ✅ **4 Tool Creation Levels**: Function macros, derive macros, builders, and manual implementation
-- ✅ **Full MCP 2025-06-18 Compliance**: All protocol areas implemented (tools, resources, prompts, SSE)
+- ✅ **Comprehensive MCP 2025-06-18 Implementation**: Core protocol areas implemented (tools, resources, prompts, SSE) with production-grade stability
 - ✅ **Session Management**: UUID v7 sessions with pluggable storage backends (InMemory, SQLite, PostgreSQL, DynamoDB)
 - ✅ **Real-time Notifications**: Server-Sent Events (SSE) streaming with JSON-RPC format
 - ✅ **Zero-Configuration Design**: Framework auto-determines all methods from types
@@ -17,6 +17,24 @@
 - ✅ **Resource Function Macro**: New `#[mcp_resource]` procedural macro for async function resources
 - ✅ **Simplified Resource API**: Single `.resource()` method handles both static and template resources
 - ✅ **Comprehensive Documentation**: All README files verified for accuracy with working examples
+
+## 🔧 Critical Production Fixes
+
+### **Lifecycle & Security Enhancements**
+- ✅ **Extended Strict Lifecycle Gating**: All MCP endpoints now respect initialized state (not just tools/call)
+- ✅ **Async Runtime Safety**: Removed `futures::executor::block_on` usage preventing Tokio runtime panics
+- ✅ **Complete Session Context Migration**: All 410+ call sites converted to async with proper `.await` patterns
+
+### **MCP Spec Compliance Improvements**
+- ✅ **Pagination Response Structure**: Fixed `nextCursor` emission in all list handlers (prompts, resources, tools)
+- ✅ **Meta Propagation**: Proper `_meta` round-trip handling across all endpoints
+- ✅ **Tools List Stability**: Added sorting and typed parameter parsing for consistent pagination
+- ✅ **Resource Templates Response**: Corrected response shape to match MCP 2025-06-18 specification
+
+### **Framework Reliability**
+- ✅ **Deadlock Prevention**: Eliminated blocking calls in async contexts for production safety
+- ✅ **Consistent API Patterns**: Standardized pagination handling across all list endpoints
+- ✅ **Robust Error Handling**: Improved lifecycle violation error responses
 
 ## 📚 Documentation Quality Improvements
 
