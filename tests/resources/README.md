@@ -7,7 +7,7 @@ This directory contains comprehensive End-to-End testing for MCP Resources funct
 The resources E2E testing validates:
 - **Resource Discovery**: `resources/list` endpoint functionality
 - **Resource Reading**: `resources/read` with various content types
-- **Resource Subscriptions**: `resources/subscribe` and notifications
+- **Resource Subscriptions**: Tests verify `resources/subscribe` is correctly unimplemented
 - **URI Templates**: Variable substitution in resource URIs
 - **Session Context**: Session-aware resource behavior
 - **Error Handling**: Proper error responses and edge cases
@@ -152,7 +152,7 @@ cargo test test_sse_session_isolation -- --nocapture
 ### Resource Operations
 - ✅ **Resource Listing**: Proper `resources/list` response structure
 - ✅ **Resource Reading**: Valid `resources/read` with URI parameter
-- ✅ **Resource Subscription**: Working `resources/subscribe` functionality
+- ❌ **Resource Subscription**: `resources/subscribe` not yet implemented (advertises `subscribe: false`)
 - ✅ **Content Types**: Text, binary, JSON, and empty content handling
 - ✅ **URI Templates**: Variable substitution in resource URIs
 - ✅ **URI Validation**: Robust error collection for invalid resource URIs
