@@ -470,7 +470,7 @@ mod notification_error_tests {
                     event_type: "concurrent_test".to_string(),
                     data: json!({"id": i}),
                 };
-                context_clone.notify(custom_event);
+                context_clone.notify(custom_event).await;
             });
             handles.push(handle);
         }
