@@ -8,7 +8,7 @@ use crate::{
     error::{JsonRpcError, JsonRpcProcessingError},
     notification::JsonRpcNotification,
     request::{JsonRpcRequest, RequestParams},
-    response::{JsonRpcResponse, ResponseResult},
+    response::{ResponseResult, JsonRpcMessage},
 };
 
 /// Minimal session context for JSON-RPC handlers
@@ -147,77 +147,45 @@ impl JsonRpcDispatcher {
     }
 
     /// Process a JSON-RPC request with session context and return a response
-    pub async fn handle_request_with_context(&self, request: JsonRpcRequest, session_context: SessionContext) -> JsonRpcResponse {
+    pub async fn handle_request_with_context(&self, request: JsonRpcRequest, session_context: SessionContext) -> JsonRpcMessage {
         let handler = self.handlers.get(&request.method)
             .or(self.default_handler.as_ref());
 
         match handler {
             Some(handler) => {
                 match handler.handle(&request.method, request.params, Some(session_context)).await {
-                    Ok(result) => JsonRpcResponse::new(request.id, ResponseResult::Success(result)),
+                    Ok(result) => JsonRpcMessage::success(request.id, ResponseResult::Success(result)),
                     Err(err) => {
                         let rpc_error = err.to_rpc_error(Some(request.id.clone()));
-                        // Convert error to response - in practice you'd want to log and return error response
-                        JsonRpcResponse::new(request.id, ResponseResult::Success(
-                            serde_json::json!({
-                                "error": {
-                                    "code": rpc_error.error.code,
-                                    "message": rpc_error.error.message,
-                                    "data": rpc_error.error.data
-                                }
-                            })
-                        ))
+                        JsonRpcMessage::error(rpc_error)
                     }
                 }
             }
             None => {
                 let error = JsonRpcError::method_not_found(request.id.clone(), &request.method);
-                JsonRpcResponse::new(request.id, ResponseResult::Success(
-                    serde_json::json!({
-                        "error": {
-                            "code": error.error.code,
-                            "message": error.error.message
-                        }
-                    })
-                ))
+                JsonRpcMessage::error(error)
             }
         }
     }
 
     /// Process a JSON-RPC request and return a response (backward compatibility - no session context)
-    pub async fn handle_request(&self, request: JsonRpcRequest) -> JsonRpcResponse {
+    pub async fn handle_request(&self, request: JsonRpcRequest) -> JsonRpcMessage {
         let handler = self.handlers.get(&request.method)
             .or(self.default_handler.as_ref());
 
         match handler {
             Some(handler) => {
                 match handler.handle(&request.method, request.params, None).await {
-                    Ok(result) => JsonRpcResponse::new(request.id, ResponseResult::Success(result)),
+                    Ok(result) => JsonRpcMessage::success(request.id, ResponseResult::Success(result)),
                     Err(err) => {
                         let rpc_error = err.to_rpc_error(Some(request.id.clone()));
-                        // Convert error to response - in practice you'd want to log and return error response
-                        JsonRpcResponse::new(request.id, ResponseResult::Success(
-                            serde_json::json!({
-                                "error": {
-                                    "code": rpc_error.error.code,
-                                    "message": rpc_error.error.message,
-                                    "data": rpc_error.error.data
-                                }
-                            })
-                        ))
+                        JsonRpcMessage::error(rpc_error)
                     }
                 }
             }
             None => {
                 let error = JsonRpcError::method_not_found(request.id.clone(), &request.method);
-                JsonRpcResponse::new(request.id, ResponseResult::Success(
-                    serde_json::json!({
-                        "error": {
-                            "code": error.error.code,
-                            "message": error.error.message
-                        }
-                    })
-                ))
+                JsonRpcMessage::error(error)
             }
         }
     }
@@ -300,7 +268,8 @@ mod tests {
         );
 
         let response = dispatcher.handle_request(request).await;
-        assert_eq!(response.id, RequestId::Number(1));
+        assert_eq!(response.id(), Some(&RequestId::Number(1)));
+        assert!(!response.is_error());
     }
 
     #[tokio::test]
@@ -313,8 +282,8 @@ mod tests {
         );
 
         let response = dispatcher.handle_request(request).await;
-        assert_eq!(response.id, RequestId::Number(1));
-        // Response contains error information
+        assert_eq!(response.id(), Some(&RequestId::Number(1)));
+        assert!(response.is_error());
     }
 
     #[tokio::test] 

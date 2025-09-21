@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::types::{RequestId, JsonRpcVersion};
+use crate::error::JsonRpcError;
 
 /// Result data for a JSON-RPC response
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,6 +84,54 @@ where
 {
     fn from((id, result): (RequestId, T)) -> Self {
         Self::new(id, result.into())
+    }
+}
+
+/// Union type that represents either a successful response or an error response
+/// This ensures JSON-RPC 2.0 compliance by keeping success and error responses separate
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum JsonRpcMessage {
+    /// Successful response with result field
+    Response(JsonRpcResponse),
+    /// Error response with error field
+    Error(JsonRpcError),
+}
+
+impl JsonRpcMessage {
+    /// Create a success message
+    pub fn success(id: RequestId, result: ResponseResult) -> Self {
+        Self::Response(JsonRpcResponse::new(id, result))
+    }
+
+    /// Create an error message
+    pub fn error(error: JsonRpcError) -> Self {
+        Self::Error(error)
+    }
+
+    /// Check if this is an error response
+    pub fn is_error(&self) -> bool {
+        matches!(self, JsonRpcMessage::Error(_))
+    }
+
+    /// Get the request ID from either response or error
+    pub fn id(&self) -> Option<&RequestId> {
+        match self {
+            JsonRpcMessage::Response(resp) => Some(&resp.id),
+            JsonRpcMessage::Error(err) => err.id.as_ref(),
+        }
+    }
+}
+
+impl From<JsonRpcResponse> for JsonRpcMessage {
+    fn from(response: JsonRpcResponse) -> Self {
+        Self::Response(response)
+    }
+}
+
+impl From<JsonRpcError> for JsonRpcMessage {
+    fn from(error: JsonRpcError) -> Self {
+        Self::Error(error)
     }
 }
 

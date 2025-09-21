@@ -362,11 +362,13 @@ impl SessionMcpHandler {
                         }
                         Err(err) => {
                             error!("Failed to create session during initialize: {}", err);
-                            // Return error response - this will be converted to proper error response by dispatcher
+                            // Return error response using proper JSON-RPC error format
                             let error_msg = format!("Session creation failed: {}", err);
-                            let error_response = turul_mcp_json_rpc_server::JsonRpcResponse::success(
-                                request.id,
-                                serde_json::json!({"error": error_msg})
+                            let error_response = turul_mcp_json_rpc_server::JsonRpcMessage::error(
+                                turul_mcp_json_rpc_server::JsonRpcError::internal_error(
+                                    Some(request.id),
+                                    Some(error_msg)
+                                )
                             );
                             (error_response, None)
                         }
@@ -399,7 +401,16 @@ impl SessionMcpHandler {
                     (response, session_id)
                 };
 
-                (JsonRpcMessageResult::Response(response), response_session_id, Some(method_name))
+                // Convert JsonRpcMessage to JsonRpcMessageResult
+                let message_result = match response {
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
+                        JsonRpcMessageResult::Response(resp)
+                    }
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
+                        JsonRpcMessageResult::Error(err)
+                    }
+                };
+                (message_result, response_session_id, Some(method_name))
             }
             JsonRpcMessage::Notification(notification) => {
                 debug!("Processing JSON-RPC notification: method={}", notification.method);

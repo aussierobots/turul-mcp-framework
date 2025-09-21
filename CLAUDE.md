@@ -31,6 +31,41 @@ struct Calculator;  // Framework → tools/call
 - **Error Handling**: Use `McpError` types, avoid `.unwrap()` in production
 - **Session IDs**: Always `Uuid::now_v7()` for temporal ordering
 
+### JSON-RPC Response Format (JSON-RPC 2.0 Compliance)
+The framework uses **separate response types** for success and error cases:
+
+```rust
+// ✅ SUCCESS RESPONSE
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    // ... success data
+  }
+}
+
+// ✅ ERROR RESPONSE
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32603,
+    "message": "Error description"
+  }
+}
+
+// ❌ WRONG - Never wrap errors in result field
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "error": { ... }  // This violates JSON-RPC 2.0
+  }
+}
+```
+
+**Framework Implementation**: Uses `JsonRpcMessage` enum with `JsonRpcResponse` and `JsonRpcError` variants to ensure spec compliance.
+
 ### 🔒 URI Security Requirements
 **CRITICAL**: Custom URI schemes may be blocked by security middleware. Use standard file:// paths:
 

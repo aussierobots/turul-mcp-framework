@@ -23,7 +23,7 @@ pub mod r#async;
 // Re-export main types
 pub use error::{JsonRpcError, JsonRpcErrorCode};
 pub use request::{JsonRpcRequest, RequestParams};
-pub use response::{JsonRpcResponse, ResponseResult};
+pub use response::{JsonRpcResponse, ResponseResult, JsonRpcMessage};
 pub use notification::JsonRpcNotification;
 pub use types::{RequestId, JsonRpcVersion};
 
