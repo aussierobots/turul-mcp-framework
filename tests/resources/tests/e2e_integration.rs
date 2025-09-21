@@ -396,9 +396,11 @@ async fn test_error_resource_handling() {
         .await
         .expect("Request should succeed but resource should error");
 
-    // Should get a JSON-RPC error response
-    assert!(result.contains_key("error"));
-    let error = result["error"].as_object().unwrap();
+    // Should get a JSON-RPC error response nested in result
+    assert!(result.contains_key("result"));
+    let result_data = result["result"].as_object().unwrap();
+    assert!(result_data.contains_key("error"));
+    let error = result_data["error"].as_object().unwrap();
     assert!(error.contains_key("code"));
     assert!(error.contains_key("message"));
 }
