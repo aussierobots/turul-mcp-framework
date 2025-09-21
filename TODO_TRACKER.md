@@ -33,6 +33,11 @@
 
 **Status**: ✅ **NO CRITICAL ISSUES** - Framework is production-ready
 
+### Test Quality Improvements (Technical Debt)
+- [ ] **Pagination Test Enhancement**: Improve test to validate actual pagination logic (not just metadata presence)
+- [ ] **Concurrency Test Investigation**: Address 30% failure tolerance in concurrent resource tests
+- [ ] **Resource Subscription Implementation**: Add missing `resources/subscribe` MCP spec feature
+
 ### Optional Enhancements (Future)
 - [ ] **Redis Session Backend**: Additional storage option
 - [ ] **WebSocket Transport**: Alternative to HTTP/SSE
@@ -60,7 +65,7 @@
 
 ## 📊 Current Statistics
 
-- **Workspace**: 10 core crates + 65+ examples
+- **Workspace**: 10 core crates + 68 examples
 - **Test Coverage**: Comprehensive test suite across all components
 - **Documentation**: 100% verified accuracy between docs and implementation
 - **MCP Compliance**: Full 2025-06-18 specification support
