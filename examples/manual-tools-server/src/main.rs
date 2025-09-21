@@ -87,7 +87,7 @@ impl McpTool for FileSystemTool {
         let session = session.unwrap_or_else(|| panic!("Session required"));
         
         // Get or create file system state
-        let mut files: HashMap<String, String> = session.get_typed_state("virtual_files")
+        let mut files: HashMap<String, String> = session.get_typed_state("virtual_files").await
             .unwrap_or_default();
         
         let result = match operation {
@@ -101,8 +101,8 @@ impl McpTool for FileSystemTool {
                 }
                 
                 files.insert(path.to_string(), content.to_string());
-                session.set_typed_state("virtual_files", &files).unwrap();
-                session.notify_progress(format!("create_{}", path), 1);
+                session.set_typed_state("virtual_files", &files).await.unwrap();
+                session.notify_progress(format!("create_{}", path), 1).await;
                 
                 json!({
                     "operation": "create",
@@ -135,8 +135,8 @@ impl McpTool for FileSystemTool {
                 }
                 
                 files.insert(path.to_string(), content.to_string());
-                session.set_typed_state("virtual_files", &files).unwrap();
-                session.notify_progress(format!("update_{}", path), 1);
+                session.set_typed_state("virtual_files", &files).await.unwrap();
+                session.notify_progress(format!("update_{}", path), 1).await;
                 
                 json!({
                     "operation": "update",
@@ -148,8 +148,8 @@ impl McpTool for FileSystemTool {
             }
             "delete" => {
                 if files.remove(path).is_some() {
-                    session.set_typed_state("virtual_files", &files).unwrap();
-                    session.notify_progress(format!("delete_{}", path), 1);
+                    session.set_typed_state("virtual_files", &files).await.unwrap();
+                    session.notify_progress(format!("delete_{}", path), 1).await;
                     
                     json!({
                         "operation": "delete",
@@ -276,7 +276,7 @@ impl McpTool for TaskManagerTool {
         let session = session.unwrap_or_else(|| panic!("Session required"));
         
         // Get or create tasks state
-        let mut tasks: HashMap<String, Task> = session.get_typed_state("tasks")
+        let mut tasks: HashMap<String, Task> = session.get_typed_state("tasks").await
             .unwrap_or_default();
         
         let result = match action {
@@ -307,8 +307,8 @@ impl McpTool for TaskManagerTool {
                 };
                 
                 tasks.insert(task_id.clone(), task.clone());
-                session.set_typed_state("tasks", &tasks).unwrap();
-                session.notify_progress(format!("task_created_{}", task_id), 1);
+                session.set_typed_state("tasks", &tasks).await.unwrap();
+                session.notify_progress(format!("task_created_{}", task_id), 1).await;
                 
                 json!({
                     "action": "create",
@@ -335,8 +335,8 @@ impl McpTool for TaskManagerTool {
                     task.status = "completed".to_string();
                     task.updated = Utc::now().to_rfc3339();
                     let task_clone = task.clone();
-                    session.set_typed_state("tasks", &tasks).unwrap();
-                    session.notify_progress(format!("task_completed_{}", task_id), 1);
+                    session.set_typed_state("tasks", &tasks).await.unwrap();
+                    session.notify_progress(format!("task_completed_{}", task_id), 1).await;
                     
                     json!({
                         "action": "complete",
@@ -353,8 +353,8 @@ impl McpTool for TaskManagerTool {
                     .ok_or_else(|| McpError::missing_param("task_id"))?;
                 
                 if let Some(task) = tasks.remove(task_id) {
-                    session.set_typed_state("tasks", &tasks).unwrap();
-                    session.notify_progress(format!("task_deleted_{}", task_id), 1);
+                    session.set_typed_state("tasks", &tasks).await.unwrap();
+                    session.notify_progress(format!("task_deleted_{}", task_id), 1).await;
                     
                     json!({
                         "action": "delete",
@@ -381,8 +381,8 @@ impl McpTool for TaskManagerTool {
                     task.status = status.to_string();
                     task.updated = Utc::now().to_rfc3339();
                     let task_clone = task.clone();
-                    session.set_typed_state("tasks", &tasks).unwrap();
-                    session.notify_progress(format!("task_status_updated_{}", task_id), 1);
+                    session.set_typed_state("tasks", &tasks).await.unwrap();
+                    session.notify_progress(format!("task_status_updated_{}", task_id), 1).await;
                     
                     json!({
                         "action": "update_status",
@@ -501,8 +501,8 @@ impl McpTool for WeatherTool {
         // Cache in session if available
         if let Some(session) = session {
             let cache_key = format!("weather_{}", location.to_lowercase().replace(" ", "_"));
-            session.set_typed_state(&cache_key, &weather_data).unwrap();
-            session.notify_progress(format!("weather_fetched_{}", location), 1);
+            session.set_typed_state(&cache_key, &weather_data).await.unwrap();
+            session.notify_progress(format!("weather_fetched_{}", location), 1).await;
         }
 
         Ok(CallToolResult {

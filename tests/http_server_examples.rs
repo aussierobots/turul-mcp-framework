@@ -53,7 +53,7 @@ fn test_sse_progress_notifications() {
         for i in 1..=duration.min(3) { // Limit iterations for testing
             if let Some(ref session) = session {
                 // Send progress notification via SSE
-                session.notify_progress("long-task", i as u64);
+                session.notify_progress("long-task", i as u64).await;
             }
             
             // Don't actually sleep in tests
@@ -91,14 +91,14 @@ fn test_session_operations() {
         let value = "test_value";
         
         // Session operations should handle errors gracefully
-        if let Err(e) = session.set_typed_state("key", value) {
+        if let Err(e) = session.set_typed_state("key", value).await {
             // In real code: tracing::warn!("Failed to persist session state: {}", e);
             let _ = e; // Suppress unused variable warning in test
             // Operation continues without state persistence
         }
         
         // Test progress and log notifications
-        session.notify_progress("task-id", 50);
+        session.notify_progress("task-id", 50).await;
         // Note: notify_log API is more complex in practice, just test it compiles
         // session.notify_log(level, data, logger, meta)
     }

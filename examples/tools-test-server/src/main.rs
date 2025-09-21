@@ -322,24 +322,25 @@ impl SessionCounterTool {
         let counter_key = "counter_value";
         
         // Get current counter value from session storage
-        let current_value = (session_context.get_state)(counter_key)
+        let state_value = (session_context.get_state)(counter_key).await;
+        let current_value = state_value
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
         
         let new_value = match self.operation.as_str() {
             "increment" => {
                 let new_val = current_value + amount;
-                (session_context.set_state)(counter_key, json!(new_val));
+                (session_context.set_state)(counter_key, json!(new_val)).await;
                 new_val
             },
             "decrement" => {
                 let new_val = current_value - amount;
-                (session_context.set_state)(counter_key, json!(new_val));
+                (session_context.set_state)(counter_key, json!(new_val)).await;
                 new_val
             },
             "get" => current_value,
             "reset" => {
-                (session_context.set_state)(counter_key, json!(0));
+                (session_context.set_state)(counter_key, json!(0)).await;
                 0
             },
             _ => return Err(McpError::tool_execution(&format!("Invalid operation: {}", self.operation))),
@@ -410,7 +411,7 @@ impl ProgressTrackerTool {
         
         // Send initial progress notification
         if let Some(session_context) = &session {
-            session_context.notify_progress(&progress_token, 0);
+            session_context.notify_progress(&progress_token, 0).await;
             info!("Starting progress tracking operation: {} seconds, {} steps", self.duration, steps);
         }
         
@@ -420,7 +421,7 @@ impl ProgressTrackerTool {
             
             if let Some(session_context) = &session {
                 let progress = (step as f64 / steps as f64 * 100.0) as u64;
-                session_context.notify_progress(&progress_token, progress);
+                session_context.notify_progress(&progress_token, progress).await;
                 info!("Progress: {}/{} steps completed ({}%)", step, steps, progress);
             } else {
                 info!("Progress: {}/{} steps completed (no session)", step, steps);

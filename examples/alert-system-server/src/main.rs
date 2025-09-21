@@ -219,12 +219,12 @@ impl McpToolTrait for ConfigureAlertRuleTool {
         };
 
         // Store rule in session state
-        let mut rules: HashMap<String, AlertRule> = session.get_typed_state("alert_rules").unwrap_or_default();
+        let mut rules: HashMap<String, AlertRule> = session.get_typed_state("alert_rules").await.unwrap_or_default();
         rules.insert(rule.id.clone(), rule.clone());
-        session.set_typed_state("alert_rules", &rules).unwrap();
+        session.set_typed_state("alert_rules", &rules).await.unwrap();
 
         // Send configuration notification
-        session.notify_progress(format!("alert_rule_created_{}", severity.to_lowercase()), 1);
+        session.notify_progress(format!("alert_rule_created_{}", severity.to_lowercase()), 1).await;
 
         Ok(CallToolResult {
             content: vec![ToolResult::text(json!({
@@ -368,9 +368,9 @@ impl McpToolTrait for CheckAlertConditionsTool {
             .unwrap_or(false);
 
         // Get alert rules and cooldowns
-        let rules: HashMap<String, AlertRule> = session.get_typed_state("alert_rules").unwrap_or_default();
-        let mut cooldowns: HashMap<String, AlertCooldown> = session.get_typed_state("alert_cooldowns").unwrap_or_default();
-        let mut alert_events: Vec<AlertEvent> = session.get_typed_state("alert_events").unwrap_or_default();
+        let rules: HashMap<String, AlertRule> = session.get_typed_state("alert_rules").await.unwrap_or_default();
+        let mut cooldowns: HashMap<String, AlertCooldown> = session.get_typed_state("alert_cooldowns").await.unwrap_or_default();
+        let mut alert_events: Vec<AlertEvent> = session.get_typed_state("alert_events").await.unwrap_or_default();
 
         let now = Utc::now();
         let mut fired_alerts = Vec::new();
@@ -449,13 +449,13 @@ impl McpToolTrait for CheckAlertConditionsTool {
                 });
 
                 // Send alert notification
-                session.notify_progress(format!("alert_fired_{}", rule.severity.to_lowercase()), 1);
+                session.notify_progress(format!("alert_fired_{}", rule.severity.to_lowercase()), 1).await;
             }
         }
 
         // Update session state
-        session.set_typed_state("alert_cooldowns", &cooldowns).unwrap();
-        session.set_typed_state("alert_events", &alert_events).unwrap();
+        session.set_typed_state("alert_cooldowns", &cooldowns).await.unwrap();
+        session.set_typed_state("alert_events", &alert_events).await.unwrap();
 
         let result = json!({
             "checked_at": now,
@@ -544,8 +544,8 @@ impl McpToolTrait for GetAlertHistoryTool {
         let acknowledged_by = args.get("acknowledged_by").and_then(|v| v.as_str());
 
         // Get alert events and rules
-        let mut alert_events: Vec<AlertEvent> = session.get_typed_state("alert_events").unwrap_or_default();
-        let rules: HashMap<String, AlertRule> = session.get_typed_state("alert_rules").unwrap_or_default();
+        let mut alert_events: Vec<AlertEvent> = session.get_typed_state("alert_events").await.unwrap_or_default();
+        let rules: HashMap<String, AlertRule> = session.get_typed_state("alert_rules").await.unwrap_or_default();
 
         // Handle alert acknowledgment
         if let Some(alert_id) = acknowledge_alert_id {
@@ -558,7 +558,7 @@ impl McpToolTrait for GetAlertHistoryTool {
                         alert.acknowledged_at = ack_time;
                         
                         // Update session state
-                        session.set_typed_state("alert_events", &alert_events).unwrap();
+                        session.set_typed_state("alert_events", &alert_events).await.unwrap();
                         
                         return Ok(CallToolResult {
                             content: vec![ToolResult::text(json!({

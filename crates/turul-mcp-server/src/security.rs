@@ -540,11 +540,11 @@ mod tests {
         let session_id = "test-session".to_string();
         let session = SessionContext {
             session_id: session_id.clone(),
-            get_state: Arc::new(|_| None),
-            set_state: Arc::new(|_, _| {}),
-            remove_state: Arc::new(|_| None),
-            is_initialized: Arc::new(|| true),
-            send_notification: Arc::new(|_| {}),
+            get_state: Arc::new(|_| Box::pin(futures::future::ready(None))),
+            set_state: Arc::new(|_, _| Box::pin(futures::future::ready(()))),
+            remove_state: Arc::new(|_| Box::pin(futures::future::ready(None))),
+            is_initialized: Arc::new(|| Box::pin(futures::future::ready(true))),
+            send_notification: Arc::new(|_| Box::pin(futures::future::ready(()))),
             broadcaster: None,
         };
         

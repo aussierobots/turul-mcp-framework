@@ -68,9 +68,9 @@ async fn session_counter(
     session: Option<SessionContext>  // Automatically detected by macro
 ) -> McpResult<i32> {
     if let Some(session) = session {
-        let count: i32 = session.get_typed_state("count").unwrap_or(0);
+        let count: i32 = session.get_typed_state("count").await.unwrap_or(0);
         let new_count = count + 1;
-        session.set_typed_state("count", new_count)
+        session.set_typed_state("count", new_count).await
             .map_err(|e| format!("Failed to save state: {}", e))?;
         Ok(new_count)
     } else {
@@ -107,7 +107,7 @@ async fn slow_task(
 ) -> McpResult<String> {
     for i in 1..=steps {
         if let Some(ref session) = session {
-            session.notify_progress("slow-task", i as u64);
+            session.notify_progress("slow-task", i as u64).await;
         }
         
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
@@ -173,14 +173,14 @@ impl UserLookupTool {
         let include_details = self.include_details.unwrap_or(false);
         
         if let Some(session) = session {
-            session.notify_progress("lookup", 25);
+            session.notify_progress("lookup", 25).await;
         }
         
         // Simulate database lookup
         let user = self.lookup_user_in_database(&self.user_id).await?;
         
         if let Some(session) = session {
-            session.notify_progress("lookup", 75);
+            session.notify_progress("lookup", 75).await;
         }
         
         let result = if include_details {
@@ -190,7 +190,7 @@ impl UserLookupTool {
         };
         
         if let Some(session) = session {
-            session.notify_progress("lookup", 100);
+            session.notify_progress("lookup", 100).await;
         }
         
         Ok(result)

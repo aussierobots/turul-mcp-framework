@@ -82,7 +82,7 @@ impl McpTool for ShoppingCartTool {
         let session = session.ok_or_else(|| McpError::SessionError("This tool requires session context".to_string()))?;
 
         // Get or create cart state for this session
-        let mut cart_items: HashMap<String, (i64, f64)> = session.get_typed_state("cart_items")
+        let mut cart_items: HashMap<String, (i64, f64)> = session.get_typed_state("cart_items").await
             .unwrap_or_default();
         
         let result = match action {
@@ -108,10 +108,10 @@ impl McpTool for ShoppingCartTool {
                 let (existing_qty, existing_price) = cart_items.get(item).cloned().unwrap_or((0, price));
                 cart_items.insert(item.to_string(), (existing_qty + quantity, existing_price));
 
-                session.set_typed_state("cart_items", &cart_items)?;
+                session.set_typed_state("cart_items", &cart_items).await?;
                 
                 // Send progress notification
-                session.notify_progress(format!("cart_item_{}", item), 1);
+                session.notify_progress(format!("cart_item_{}", item), 1).await;
 
                 json!({
                     "action": "add",
@@ -134,7 +134,7 @@ impl McpTool for ShoppingCartTool {
                     let new_qty = existing_qty - quantity;
                     if new_qty <= 0 {
                         cart_items.remove(item);
-                        session.notify_progress(format!("cart_remove_{}", item), 1);
+                        session.notify_progress(format!("cart_remove_{}", item), 1).await;
                         json!({
                             "action": "remove",
                             "item": item,
@@ -144,7 +144,7 @@ impl McpTool for ShoppingCartTool {
                         })
                     } else {
                         cart_items.insert(item.to_string(), (new_qty, price));
-                        session.notify_progress(format!("cart_update_{}", item), 1);
+                        session.notify_progress(format!("cart_update_{}", item), 1).await;
                         json!({
                             "action": "remove",
                             "item": item,
@@ -183,8 +183,8 @@ impl McpTool for ShoppingCartTool {
             "clear" => {
                 let cleared_items = cart_items.len();
                 cart_items.clear();
-                session.set_typed_state("cart_items", &cart_items)?;
-                session.notify_progress("cart_clear", 1);
+                session.set_typed_state("cart_items", &cart_items).await?;
+                session.notify_progress("cart_clear", 1).await;
 
                 json!({
                     "action": "clear",
@@ -196,7 +196,7 @@ impl McpTool for ShoppingCartTool {
         };
 
         // Update session state
-        session.set_typed_state("cart_items", &cart_items)?;
+        session.set_typed_state("cart_items", &cart_items).await?;
 
         Ok(CallToolResult {
             content: vec![ToolResult::text(result.to_string())],
@@ -275,7 +275,7 @@ impl McpTool for UserPreferencesTool {
         let session = session.ok_or_else(|| McpError::SessionError("This tool requires session context".to_string()))?;
 
         // Get or create preferences state
-        let mut preferences: HashMap<String, Value> = session.get_typed_state("user_preferences")
+        let mut preferences: HashMap<String, Value> = session.get_typed_state("user_preferences").await
             .unwrap_or_default();
 
         let result = match action {
@@ -287,7 +287,7 @@ impl McpTool for UserPreferencesTool {
                     .ok_or_else(|| McpError::missing_param("value"))?;
 
                 preferences.insert(key.to_string(), value.clone());
-                session.set_typed_state("user_preferences", &preferences)?;
+                session.set_typed_state("user_preferences", &preferences).await?;
 
                 json!({
                     "action": "set",
@@ -328,7 +328,7 @@ impl McpTool for UserPreferencesTool {
             "reset" => {
                 let cleared_count = preferences.len();
                 preferences.clear();
-                session.set_typed_state("user_preferences", &preferences)?;
+                session.set_typed_state("user_preferences", &preferences).await?;
 
                 json!({
                     "action": "reset",
@@ -401,8 +401,8 @@ impl McpTool for SessionInfoTool {
     async fn call(&self, _args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
         if let Some(session) = session {
             let session_id = &session.session_id;
-            let is_initialized = (session.is_initialized)();
-            
+            let is_initialized = (session.is_initialized)().await;
+
             let info = json!({
                 "session_id": session_id,
                 "has_session": true,

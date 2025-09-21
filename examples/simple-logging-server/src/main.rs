@@ -58,7 +58,7 @@ impl LogMessageTool {
         let session = session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
 
         // Get current log level config to check if we should log
-        let log_config: LogLevelConfig = session.get_typed_state("log_config").unwrap_or_default();
+        let log_config: LogLevelConfig = session.get_typed_state("log_config").await.unwrap_or_default();
         
         // Simple level checking (DEBUG=0, INFO=1, WARN=2, ERROR=3)
         let level_priority = match self.level.as_str() {
@@ -94,12 +94,12 @@ impl LogMessageTool {
         };
 
         // Store in session logs
-        let mut logs: Vec<LogEntry> = session.get_typed_state("logs").unwrap_or_default();
+        let mut logs: Vec<LogEntry> = session.get_typed_state("logs").await.unwrap_or_default();
         logs.push(entry.clone());
-        session.set_typed_state("logs", &logs).unwrap();
+        session.set_typed_state("logs", &logs).await.unwrap();
 
         // Send progress notification
-        session.notify_progress(format!("log_{}", self.level.to_lowercase()), 1);
+        session.notify_progress(format!("log_{}", self.level.to_lowercase()), 1).await;
 
         Ok(json!({
             "logged": true,
@@ -132,7 +132,7 @@ impl SetLogLevelTool {
         }
 
         // Get or create log config
-        let mut log_config: LogLevelConfig = session.get_typed_state("log_config").unwrap_or_default();
+        let mut log_config: LogLevelConfig = session.get_typed_state("log_config").await.unwrap_or_default();
 
         let result = if let Some(cat) = &self.category {
             // Set category-specific level
@@ -154,7 +154,7 @@ impl SetLogLevelTool {
         };
 
         // Save config
-        session.set_typed_state("log_config", &log_config).unwrap();
+        session.set_typed_state("log_config", &log_config).await.unwrap();
 
         Ok(result)
     }
@@ -178,8 +178,8 @@ impl GetLogsStatusTool {
         let level_filter = self.level_filter.as_ref().map(|s| s.as_str());
 
         // Get current config and logs
-        let log_config: LogLevelConfig = session.get_typed_state("log_config").unwrap_or_default();
-        let logs: Vec<LogEntry> = session.get_typed_state("logs").unwrap_or_default();
+        let log_config: LogLevelConfig = session.get_typed_state("log_config").await.unwrap_or_default();
+        let logs: Vec<LogEntry> = session.get_typed_state("logs").await.unwrap_or_default();
 
         // Filter and limit logs
         let mut filtered_logs: Vec<&LogEntry> = logs.iter().collect();

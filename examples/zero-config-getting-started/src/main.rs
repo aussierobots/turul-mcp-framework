@@ -45,7 +45,7 @@ impl LogProgress {
     ) -> turul_mcp_server::McpResult<String> {
         if let Some(session) = session {
             // Send built-in MCP progress notification to connected clients via SSE
-            session.notify_progress(&self.message, self.percent as u64);
+            session.notify_progress(&self.message, self.percent as u64).await;
             tracing::info!("Sent MCP progress notification: {} ({}%)", self.message, self.percent);
         }
         

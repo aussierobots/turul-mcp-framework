@@ -94,7 +94,7 @@ impl SendLogTool {
         
         tracing::info!("📤 SendLogTool: Generating 1 MCP logging notification at {} level for session {}", 
                       level_str, session.session_id);
-        tracing::info!("   Session current level: {:?}", session.get_logging_level());
+        tracing::info!("   Session current level: {:?}", session.get_logging_level().await);
         
         // Create meta map with correlation_id for tracking (if provided)
         let meta_map = if let Some(ref correlation_id) = self.correlation_id {
@@ -118,7 +118,7 @@ impl SendLogTool {
             serde_json::json!(message),
             Some("test-server".to_string()),
             meta_map.clone()
-        );
+        ).await;
         
         let notifications_sent = 1;
         
@@ -136,9 +136,9 @@ impl SendLogTool {
             String::new()
         };
         
-        Ok(format!("Sent {} log notifications at {:?} level for session {}{}", 
-                  notifications_sent, 
-                  session.get_logging_level(), 
+        Ok(format!("Sent {} log notifications at {:?} level for session {}{}",
+                  notifications_sent,
+                  session.get_logging_level().await,
                   session.session_id,
                   correlation_info))
     }
@@ -171,8 +171,8 @@ impl SetLogLevelTool {
             _ => return Err(format!("Invalid level '{}'. Valid: debug, info, notice, warning, error, critical, alert, emergency", self.level).into()),
         };
         
-        let old_level = session.get_logging_level();
-        session.set_logging_level(new_level);
+        let old_level = session.get_logging_level().await;
+        session.set_logging_level(new_level).await;
         
         tracing::info!("🎯 Session {} logging level changed: {:?} -> {:?}", 
             session.session_id, old_level, new_level);
@@ -183,7 +183,7 @@ impl SetLogLevelTool {
             serde_json::json!(format!("Logging level changed to: {:?}", new_level)),
             Some("system".to_string()),
             None
-        );
+        ).await;
         
         Ok(format!("Successfully changed logging level from {:?} to {:?}", old_level, new_level))
     }

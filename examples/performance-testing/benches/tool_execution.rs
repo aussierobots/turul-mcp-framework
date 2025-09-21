@@ -57,12 +57,13 @@ struct BenchmarkSessionTool {
 impl BenchmarkSessionTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
         if let Some(session) = session {
-            let current: i64 = (session.get_state)("counter")
+            let current_value = (session.get_state)("counter").await;
+            let current: i64 = current_value
                 .and_then(|v| v.as_i64())
                 .unwrap_or(0);
             
             let new_value = current + self.value;
-            (session.set_state)("counter", json!(new_value));
+            (session.set_state)("counter", json!(new_value)).await;
             
             Ok(format!("Session value: {}", new_value))
         } else {
@@ -124,16 +125,24 @@ fn tool_execution_benchmarks(c: &mut Criterion) {
             let session = SessionContext {
                 session_id: uuid::Uuid::new_v4().to_string(),
                 get_state: Arc::new(move |key: &str| {
-                    state.lock().unwrap().get(key).cloned()
+                    let state = state.clone();
+                    let key = key.to_string();
+                    Box::pin(async move { state.lock().unwrap().get(&key).cloned() })
                 }),
                 set_state: Arc::new(move |key: &str, value: Value| {
-                    state_clone.lock().unwrap().insert(key.to_string(), value);
+                    let state = state_clone.clone();
+                    let key = key.to_string();
+                    Box::pin(async move {
+                        state.lock().unwrap().insert(key, value);
+                    })
                 }),
                 remove_state: Arc::new(move |key: &str| {
-                    state_clone2.lock().unwrap().remove(key)
+                    let state = state_clone2.clone();
+                    let key = key.to_string();
+                    Box::pin(async move { state.lock().unwrap().remove(&key) })
                 }),
-                is_initialized: Arc::new(|| true),
-                send_notification: Arc::new(|_| {}),
+                is_initialized: Arc::new(|| Box::pin(async { true })),
+                send_notification: Arc::new(|_| Box::pin(async {})),
                 broadcaster: None,
             };
             

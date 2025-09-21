@@ -36,7 +36,7 @@ impl StoreValueTool {
         debug!("Storing value in SQLite: {} = {}", self.key, self.value);
 
         // Store value in this session's SQLite storage
-        (session.set_state)(&self.key, self.value.clone());
+        (session.set_state)(&self.key, self.value.clone()).await;
 
         Ok(json!({
             "stored": true,
@@ -65,7 +65,7 @@ impl GetValueTool {
         debug!("Getting value from SQLite: {}", self.key);
 
         // Retrieve value from this session's SQLite storage
-        let value = (session.get_state)(&self.key);
+        let value = (session.get_state)(&self.key).await;
 
         Ok(json!({
             "found": value.is_some(),

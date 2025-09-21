@@ -272,10 +272,10 @@ mod session_context_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Set state through context
-        (context.set_state)("test_key", json!("context_value"));
+        (context.set_state)("test_key", json!("context_value")).await;
         
         // Get state through context
-        let value = (context.get_state)("test_key");
+        let value = (context.get_state)("test_key").await;
         assert_eq!(value, Some(json!("context_value")));
         
         // Verify state is also accessible through manager
@@ -283,11 +283,11 @@ mod session_context_tests {
         assert_eq!(manager_value, Some(json!("context_value")));
         
         // Remove state through context
-        let removed = (context.remove_state)("test_key");
+        let removed = (context.remove_state)("test_key").await;
         assert_eq!(removed, Some(json!("context_value")));
         
         // Verify removal
-        let value = (context.get_state)("test_key");
+        let value = (context.get_state)("test_key").await;
         assert_eq!(value, None);
     }
 
@@ -314,15 +314,15 @@ mod session_context_tests {
         };
         
         // Set typed state
-        let result = context.set_typed_state("typed_key", &test_data);
+        let result = context.set_typed_state("typed_key", &test_data).await;
         assert!(result.is_ok());
         
         // Get typed state
-        let retrieved: Option<TestData> = context.get_typed_state("typed_key");
+        let retrieved: Option<TestData> = context.get_typed_state("typed_key").await;
         assert_eq!(retrieved, Some(test_data));
         
         // Test type mismatch (should return None)
-        let wrong_type: Option<String> = context.get_typed_state("typed_key");
+        let wrong_type: Option<String> = context.get_typed_state("typed_key").await;
         assert_eq!(wrong_type, None);
     }
 
@@ -335,19 +335,30 @@ mod session_context_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Test different notification types
-        context.notify_log(turul_mcp_protocol::logging::LoggingLevel::Info, serde_json::json!("Test log message"), Some("test".to_string()), None);
-        context.notify_progress("test-token", 25);
-        context.notify_progress_with_total("test-token", 50, 100);
-        context.notify_resources_changed();
-        context.notify_resource_updated("test://resource");
-        context.notify_tools_changed();
+        context
+            .notify_log(
+                turul_mcp_protocol::logging::LoggingLevel::Info,
+                serde_json::json!("Test log message"),
+                Some("test".to_string()),
+                None,
+            )
+            .await;
+        context.notify_progress("test-token", 25).await;
+        context
+            .notify_progress_with_total("test-token", 50, 100)
+            .await;
+        context.notify_resources_changed().await;
+        context
+            .notify_resource_updated("test://resource")
+            .await;
+        context.notify_tools_changed().await;
         
         // Test custom notification
         let custom_event = SessionEvent::Custom {
             event_type: "test_event".to_string(),
             data: json!({"message": "custom test"}),
         };
-        context.notify(custom_event);
+        context.notify(custom_event).await;
         
         // These should not panic or error - notifications are fire-and-forget
     }
@@ -408,7 +419,7 @@ mod initialization_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Initially not initialized
-        assert!(!(context.is_initialized)());
+        assert!(!((context.is_initialized)().await));
         
         // Initialize session
         let client_info = Implementation {
@@ -421,7 +432,7 @@ mod initialization_tests {
         manager.initialize_session(&session_id, client_info, client_capabilities).await.unwrap();
         
         // Should now be initialized
-        assert!((context.is_initialized)());
+        assert!(((context.is_initialized)().await));
     }
 }
 
@@ -698,14 +709,21 @@ mod concurrency_tests {
                 let value = json!(i);
                 
                 // Set state through context
-                (context_clone.set_state)(&key, value.clone());
+                (context_clone.set_state)(&key, value.clone()).await;
                 
                 // Get state through context
-                let retrieved = (context_clone.get_state)(&key);
+                let retrieved = (context_clone.get_state)(&key).await;
                 assert_eq!(retrieved, Some(value));
                 
                 // Send notification
-                context_clone.notify_log(str_to_logging_level("info"), serde_json::json!(format!("Concurrent operation {}", i)), Some("test".to_string()), None);
+                context_clone
+                    .notify_log(
+                        str_to_logging_level("info"),
+                        serde_json::json!(format!("Concurrent operation {}", i)),
+                        Some("test".to_string()),
+                        None,
+                    )
+                    .await;
             });
             
             handles.push(handle);
@@ -717,7 +735,7 @@ mod concurrency_tests {
         // Verify all keys were set
         for i in 0..num_tasks {
             let key = format!("concurrent_key_{}", i);
-            let value = (context.get_state)(&key);
+            let value = (context.get_state)(&key).await;
             assert_eq!(value, Some(json!(i)));
         }
     }
@@ -765,17 +783,24 @@ mod error_handling_tests {
         let context = context.unwrap();
         
         // State operations should return None for invalid session
-        let value = (context.get_state)("any_key");
+        let value = (context.get_state)("any_key").await;
         assert_eq!(value, None);
         
-        let removed = (context.remove_state)("any_key");
+        let removed = (context.remove_state)("any_key").await;
         assert_eq!(removed, None);
         
         // Set state and notifications should not panic
-        (context.set_state)("key", json!("value"));
-        context.notify_log(str_to_logging_level("info"), serde_json::json!("This should not panic"), Some("test".to_string()), None);
+        (context.set_state)("key", json!("value")).await;
+        context
+            .notify_log(
+                str_to_logging_level("info"),
+                serde_json::json!("This should not panic"),
+                Some("test".to_string()),
+                None,
+            )
+            .await;
         
-        assert!(!(context.is_initialized)());
+        assert!(!((context.is_initialized)().await));
     }
 
     #[tokio::test]
@@ -795,7 +820,7 @@ mod error_handling_tests {
             number: u32,
         }
         
-        let wrong_type: Option<WrongType> = context.get_typed_state("valid_json");
+        let wrong_type: Option<WrongType> = context.get_typed_state("valid_json").await;
         assert_eq!(wrong_type, None);
         
         // Set non-serializable data should fail gracefully
@@ -810,7 +835,9 @@ mod error_handling_tests {
         };
         
         // This should not panic but should return an error
-        let _result = context.set_typed_state("non_serializable", non_serializable);
+        let _result = context
+            .set_typed_state("non_serializable", non_serializable)
+            .await;
         // The result depends on the actual serialization behavior
         // but should not panic
     }

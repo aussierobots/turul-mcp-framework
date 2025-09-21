@@ -107,11 +107,11 @@ mod tests {
     fn create_test_session() -> SessionContext {
         SessionContext {
             session_id: "test-session-123".to_string(),
-            get_state: Arc::new(|_| None),
-            set_state: Arc::new(|_, _| {}),
-            remove_state: Arc::new(|_| None),
-            is_initialized: Arc::new(|| true),
-            send_notification: Arc::new(|_| {}),
+            get_state: Arc::new(|_| Box::pin(futures::future::ready(None))),
+            set_state: Arc::new(|_, _| Box::pin(futures::future::ready(()))),
+            remove_state: Arc::new(|_| Box::pin(futures::future::ready(None))),
+            is_initialized: Arc::new(|| Box::pin(futures::future::ready(true))),
+            send_notification: Arc::new(|_| Box::pin(futures::future::ready(()))),
             broadcaster: None,
         }
     }

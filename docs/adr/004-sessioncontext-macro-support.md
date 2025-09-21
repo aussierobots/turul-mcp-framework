@@ -30,7 +30,7 @@ The MCP framework has a **fundamental architectural flaw** where SessionContext 
 
 ### Critical Features Broken by This Bug:
 
-1. **State Management**: `session.get_typed_state()` / `set_typed_state()` - UNAVAILABLE
+1. **State Management**: `session.get_typed_state().await` / `set_typed_state().await` - UNAVAILABLE
 2. **Real-time Notifications**: `session.notify_progress()` - UNAVAILABLE  
 3. **Session Tracking**: `session.session_id` - UNAVAILABLE
 4. **Future Session Features**: Any session-based capability - UNAVAILABLE
@@ -172,14 +172,19 @@ for input_arg in &input.sig.inputs {
    ```
 
 2. **SessionContext Structure Contains Non-Storable Elements**:
-   ```rust
-   pub struct SessionContext {
-       pub session_id: String,
-       pub get_state: Arc<dyn Fn(&str) -> Option<Value> + Send + Sync>,  // Closures!
-       pub set_state: Arc<dyn Fn(&str, Value) + Send + Sync>,           // Closures!
-       pub broadcaster: Option<Arc<dyn std::any::Any + Send + Sync>>,    // Session-specific
-   }
-   ```
+```rust
+use std::future::Future;
+use std::pin::Pin;
+
+type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
+
+pub struct SessionContext {
+    pub session_id: String,
+    pub get_state: Arc<dyn Fn(&str) -> BoxFuture<Option<Value>> + Send + Sync>, // Async closures!
+    pub set_state: Arc<dyn Fn(&str, Value) -> BoxFuture<()> + Send + Sync>,     // Async closures!
+    pub broadcaster: Option<Arc<dyn std::any::Any + Send + Sync>>,              // Session-specific
+}
+```
 
 3. **Function Macros Generate Zero-Sized Structs**:
    ```rust
@@ -241,7 +246,7 @@ impl MyTool {
 impl MyTool {
     async fn execute_with_session(&self, session: Option<SessionContext>) -> McpResult<String> {
         if let Some(session) = session {
-            session.notify_progress("working", 50);
+        session.notify_progress("working", 50).await;
         }
         // Full functionality now available
     }
@@ -262,7 +267,7 @@ async fn my_tool(
 ) -> McpResult<String> { 
     if let Some(session) = session {
         session.notify_progress("working", 50).await;
-        session.set_typed_state("last_input", &input).unwrap();
+    session.set_typed_state("last_input", &input).await.unwrap();
     }
     // Full functionality now available
     Ok(format!("Processed: {}", input))

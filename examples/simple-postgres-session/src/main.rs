@@ -46,7 +46,7 @@ impl StoreValueTool {
         debug!("Storing value in PostgreSQL: {} = {}", self.key, self.value);
 
         // Store value in this session's PostgreSQL storage
-        (session.set_state)(&self.key, self.value.clone());
+        (session.set_state)(&self.key, self.value.clone()).await;
 
         Ok(json!({
             "stored": true,
@@ -75,7 +75,7 @@ impl GetValueTool {
         debug!("Getting value from PostgreSQL: {}", self.key);
 
         // Retrieve value from this session's PostgreSQL storage
-        let value = (session.get_state)(&self.key);
+        let value = (session.get_state)(&self.key).await;
 
         Ok(json!({
             "found": value.is_some(),

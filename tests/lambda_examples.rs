@@ -78,9 +78,9 @@ fn test_session_persistence() {
     impl CounterTool {
         async fn execute(&self, session: Option<SessionContext>) -> McpResult<i32> {
             if let Some(session) = session {
-                let count: i32 = session.get_typed_state("count").unwrap_or(0);
+                let count: i32 = session.get_typed_state("count").await.unwrap_or(0);
                 let new_count = count + 1;
-                session.set_typed_state("count", new_count).unwrap();
+                session.set_typed_state("count", new_count).await.unwrap();
                 Ok(new_count)
             } else {
                 Ok(0)
@@ -144,7 +144,7 @@ fn test_lambda_sse_streaming() {
             if let Some(session) = session {
                 for i in 1..=3 { // Limit for testing
                     // Send progress notification via SSE
-                    session.notify_progress("long-task", i as u64);
+                session.notify_progress("long-task", i as u64).await;
                     
                     // Don't actually sleep in tests
                     // tokio::time::sleep(std::time::Duration::from_secs(1)).await;

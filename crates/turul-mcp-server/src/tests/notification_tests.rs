@@ -90,18 +90,18 @@ mod session_notification_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Test different context notification methods
-        context.notify_log(turul_mcp_protocol::logging::LoggingLevel::Info, serde_json::json!("Test log message"), Some("test".to_string()), None);
-        context.notify_progress("test-token", 25);
-        context.notify_progress_with_total("test-token", 50, 100);
-        context.notify_resources_changed();
-        context.notify_resource_updated("test://resource");
-        context.notify_tools_changed();
+        context.notify_log(turul_mcp_protocol::logging::LoggingLevel::Info, serde_json::json!("Test log message"), Some("test".to_string()), None).await;
+        context.notify_progress("test-token", 25).await;
+        context.notify_progress_with_total("test-token", 50, 100).await;
+        context.notify_resources_changed().await;
+        context.notify_resource_updated("test://resource").await;
+        context.notify_tools_changed().await;
         
         let custom_event = SessionEvent::Custom {
             event_type: "test_custom".to_string(),
             data: json!({"message": "custom notification"}),
         };
-        context.notify(custom_event);
+        context.notify(custom_event).await;
         
         // These should not panic - notifications are fire-and-forget
     }
@@ -204,16 +204,16 @@ mod mcp_notification_tests {
         
         for (i, token) in progress_tokens.iter().enumerate() {
             let progress = (i as u64 + 1) * 25;
-            context.notify_progress(*token, progress);
+            context.notify_progress(*token, progress).await;
             
             // Also test with total
-            context.notify_progress_with_total(*token, progress, 100);
+            context.notify_progress_with_total(*token, progress, 100).await;
         }
         
         // Test edge cases
-        context.notify_progress("zero-progress", 0);
-        context.notify_progress_with_total("complete", 100, 100);
-        context.notify_progress("over-100", 150); // Should still work
+        context.notify_progress("zero-progress", 0).await;
+        context.notify_progress_with_total("complete", 100, 100).await;
+        context.notify_progress("over-100", 150).await; // Should still work
     }
 
     #[tokio::test]
@@ -228,12 +228,12 @@ mod mcp_notification_tests {
         let log_levels = vec!["debug", "info", "warn", "error"];
         
         for level in log_levels {
-            context.notify_log(str_to_logging_level(level), serde_json::json!(format!("Test {} message", level)), Some("test".to_string()), None);
+            context.notify_log(str_to_logging_level(level), serde_json::json!(format!("Test {} message", level)), Some("test".to_string()), None).await;
         }
         
         // Test with complex messages
-        context.notify_log(str_to_logging_level("info"), serde_json::json!("Multi-line\nmessage\nwith special chars: 🚀"), Some("test".to_string()), None);
-        context.notify_log(str_to_logging_level("error"), json!({"structured": "log", "error_code": 500}), Some("test".to_string()), None);
+        context.notify_log(str_to_logging_level("info"), serde_json::json!("Multi-line\nmessage\nwith special chars: 🚀"), Some("test".to_string()), None).await;
+        context.notify_log(str_to_logging_level("error"), json!({"structured": "log", "error_code": 500}), Some("test".to_string()), None).await;
     }
 
     #[tokio::test]
@@ -245,7 +245,7 @@ mod mcp_notification_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Test resource list changed notification
-        context.notify_resources_changed();
+        context.notify_resources_changed().await;
         
         // Test specific resource updates
         let resource_uris = vec![
@@ -256,7 +256,7 @@ mod mcp_notification_tests {
         ];
         
         for uri in resource_uris {
-            context.notify_resource_updated(uri);
+            context.notify_resource_updated(uri).await;
         }
     }
 
@@ -269,12 +269,12 @@ mod mcp_notification_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Test tools list changed notification
-        context.notify_tools_changed();
+        context.notify_tools_changed().await;
         
         // Tool notifications should be fire-and-forget
         // Multiple calls should not cause issues
         for _ in 0..5 {
-            context.notify_tools_changed();
+            context.notify_tools_changed().await;
         }
     }
 
@@ -315,7 +315,7 @@ mod mcp_notification_tests {
         ];
         
         for notification in custom_notifications {
-            context.notify(notification);
+            context.notify(notification).await;
         }
     }
 }
@@ -419,15 +419,15 @@ mod notification_error_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // These should not panic even with unusual inputs
-        context.notify_log(str_to_logging_level("info"), serde_json::json!(""), Some("test".to_string()), None); // Empty strings
-        context.notify_log(str_to_logging_level("invalid_level"), serde_json::json!("Test message"), Some("test".to_string()), None);
-        context.notify_progress("", 0);
-        context.notify_resource_updated("");
+        context.notify_log(str_to_logging_level("info"), serde_json::json!(""), Some("test".to_string()), None).await; // Empty strings
+        context.notify_log(str_to_logging_level("invalid_level"), serde_json::json!("Test message"), Some("test".to_string()), None).await;
+        context.notify_progress("", 0).await;
+        context.notify_resource_updated("").await;
         
         // Test with very long strings
         let long_string = "x".repeat(10000);
-        context.notify_log(str_to_logging_level("info"), serde_json::json!(long_string.clone()), Some("test".to_string()), None);
-        context.notify_progress(&long_string, 50);
+        context.notify_log(str_to_logging_level("info"), serde_json::json!(long_string.clone()), Some("test".to_string()), None).await;
+        context.notify_progress(&long_string, 50).await;
     }
 
     #[tokio::test]
@@ -442,8 +442,8 @@ mod notification_error_tests {
         manager.remove_session(&session_id).await;
         
         // Attempt to send notifications to expired session
-        context.notify_log(str_to_logging_level("info"), serde_json::json!("Message to expired session"), Some("test".to_string()), None);
-        context.notify_progress("test", 50);
+        context.notify_log(str_to_logging_level("info"), serde_json::json!("Message to expired session"), Some("test".to_string()), None).await;
+        context.notify_progress("test", 50).await;
         
         // These should not panic, even though session may be expired
     }
@@ -463,8 +463,8 @@ mod notification_error_tests {
         for i in 0..num_concurrent {
             let context_clone = context.clone();
             let handle = tokio::spawn(async move {
-                context_clone.notify_log(str_to_logging_level("info"), serde_json::json!(format!("Concurrent message {}", i)), Some("test".to_string()), None);
-                context_clone.notify_progress("concurrent", i as u64);
+                context_clone.notify_log(str_to_logging_level("info"), serde_json::json!(format!("Concurrent message {}", i)), Some("test".to_string()), None).await;
+                context_clone.notify_progress("concurrent", i as u64).await;
                 
                 let custom_event = SessionEvent::Custom {
                     event_type: "concurrent_test".to_string(),

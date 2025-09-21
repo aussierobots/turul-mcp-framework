@@ -106,14 +106,14 @@ fn test_session_context() {
         async fn execute(&self, session: Option<SessionContext>) -> McpResult<i32> {
             if let Some(session) = session {
                 // Get current counter or start at 0
-                let current: i32 = session.get_typed_state("counter").unwrap_or(0);
+                let current: i32 = session.get_typed_state("counter").await.unwrap_or(0);
                 let new_count = current + 1;
                 
                 // Save updated counter
-                session.set_typed_state("counter", new_count).unwrap();
+                session.set_typed_state("counter", new_count).await.unwrap();
                 
                 // Send progress notification
-                session.notify_progress("counting", new_count as u64);
+                session.notify_progress("counting", new_count as u64).await;
                 
                 Ok(new_count)
             } else {

@@ -133,7 +133,7 @@ struct UserPreferences {
 // In your tool implementation
 async fn handle_user_preferences(session: SessionContext) -> Result<(), Box<dyn std::error::Error>> {
     // Get typed state
-    let prefs: Option<UserPreferences> = session.get_typed_state("user_prefs");
+    let prefs: Option<UserPreferences> = session.get_typed_state("user_prefs").await;
     
     let mut preferences = prefs.unwrap_or(UserPreferences {
         theme: "light".to_string(),
@@ -145,7 +145,7 @@ async fn handle_user_preferences(session: SessionContext) -> Result<(), Box<dyn 
     preferences.theme = "dark".to_string();
     
     // Save typed state
-    session.set_typed_state("user_prefs", preferences)?;
+session.set_typed_state("user_prefs", preferences).await?;
     
     // Remove state when no longer needed
     session.remove_state("user_prefs");
@@ -188,7 +188,7 @@ use turul_mcp_server::SessionContext;
 
 async fn send_progress_with_persistence(session: SessionContext) -> Result<(), Box<dyn std::error::Error>> {
     // Progress notifications are automatically stored
-    session.notify_progress("long-task", 50);
+session.notify_progress("long-task", 50).await;
     
     // Client can reconnect and replay from last-event-id
     Ok(())
@@ -397,7 +397,7 @@ The framework provides graceful degradation when storage fails:
 
 ```rust
 // Session operations that fail gracefully
-if let Err(e) = session.set_typed_state("key", value) {
+if let Err(e) = session.set_typed_state("key", value).await {
     tracing::warn!("Failed to persist session state: {}", e);
     // Operation continues without state persistence
 }

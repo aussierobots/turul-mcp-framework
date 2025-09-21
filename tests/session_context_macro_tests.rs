@@ -32,12 +32,12 @@ impl TestDeriveWithSession {
         let session = session.ok_or_else(|| McpError::SessionError("Session required for testing".to_string()))?;
         
         // Test state management
-        let count: i32 = session.get_typed_state("call_count").unwrap_or(0);
+        let count: i32 = session.get_typed_state("call_count").await.unwrap_or(0);
         let new_count = count + 1;
-        session.set_typed_state("call_count", &new_count).unwrap();
+        session.set_typed_state("call_count", &new_count).await.unwrap();
         
         // Test progress notifications
-        session.notify_progress("processing", new_count as u64);
+        session.notify_progress("processing", new_count as u64).await;
         
         Ok(json!({
             "input": self.input,
@@ -75,11 +75,11 @@ async fn test_function_with_session(
     let session = session.ok_or_else(|| McpError::SessionError("Session required for function test".to_string()))?;
     
     // Test state management in function macro
-    let prefix: String = session.get_typed_state("prefix").unwrap_or("default".to_string());
-    session.set_typed_state("last_input", &input).unwrap();
-    
+    let prefix: String = session.get_typed_state("prefix").await.unwrap_or("default".to_string());
+    session.set_typed_state("last_input", &input).await.unwrap();
+
     // Test progress notification
-    session.notify_progress("function_processing", 1);
+    session.notify_progress("function_processing", 1).await;
     
     Ok(format!("{}: {}", prefix, input))
 }

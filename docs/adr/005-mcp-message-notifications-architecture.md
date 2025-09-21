@@ -83,7 +83,7 @@ session.notify_log(
     serde_json::json!("Log message"),     // Message content
     Some("component".to_string()),        // Logger name (optional)
     Some(correlation_map)                 // Meta with correlation_id (optional)
-);
+).await;
 ```
 
 #### NotificationBroadcaster Processing

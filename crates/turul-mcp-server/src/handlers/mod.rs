@@ -656,21 +656,21 @@ impl McpHandler for LoggingHandler {
         let session_ctx = session.ok_or_else(|| 
             McpError::configuration("Session required for logging/setLevel"))?;
         
-        // Check initialization - returns configuration error if not initialized  
-        if !(session_ctx.is_initialized)() {
+        // Check initialization - returns configuration error if not initialized
+        if !(session_ctx.is_initialized)().await {
             return Err(McpError::configuration(
                 "Session must be initialized before setting logging level"
             ));
         }
         
         // Set the level
-        session_ctx.set_logging_level(set_level_params.level);
+        session_ctx.set_logging_level(set_level_params.level).await;
         
         tracing::info!("🎯 Set logging level for session {}: {:?}", 
             session_ctx.session_id, set_level_params.level);
         
         // Verify persistence - returns configuration error if fails
-        let stored_level = session_ctx.get_logging_level();
+        let stored_level = session_ctx.get_logging_level().await;
         if stored_level != set_level_params.level {
             return Err(McpError::configuration(
                 "Failed to persist logging level in session storage"
@@ -683,7 +683,7 @@ impl McpHandler for LoggingHandler {
             serde_json::json!(format!("Logging level changed to: {:?}", set_level_params.level)),
             None,
             None
-        );
+        ).await;
         
         // Success returns empty object per MCP spec
         Ok(json!({}))

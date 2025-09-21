@@ -26,7 +26,7 @@ struct Calculator;  // Framework → tools/call
 ```
 
 ### API Conventions
-- **SessionContext**: Use `get_typed_state(key)` and `set_typed_state(key, value)?`
+- **SessionContext**: Use `get_typed_state(key).await` and `set_typed_state(key, value).await?`
 - **Builder Pattern**: `McpServer::builder()` not `McpServerBuilder::new()`
 - **Error Handling**: Use `McpError` types, avoid `.unwrap()` in production
 - **Session IDs**: Always `Uuid::now_v7()` for temporal ordering

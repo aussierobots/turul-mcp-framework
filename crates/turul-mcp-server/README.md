@@ -283,15 +283,15 @@ impl StatefulCounter {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<i32> {
         if let Some(session) = session {
             // Get current counter or start at 0
-            let current: i32 = session.get_typed_state("counter").unwrap_or(0);
+        let current: i32 = session.get_typed_state("counter").await.unwrap_or(0);
             let new_count = current + 1;
             
             // Save updated counter
-            session.set_typed_state("counter", new_count)
+            session.set_typed_state("counter", new_count).await
                 .map_err(|e| format!("Failed to save state: {}", e))?;
             
             // Send progress notification
-            session.notify_progress("counting", new_count as u64);
+            session.notify_progress("counting", new_count as u64).await;
             
             Ok(new_count)
         } else {
@@ -313,9 +313,9 @@ The framework automatically provides SSE endpoints for real-time notifications:
 
 ```rust
 // Notifications are sent automatically from tools
-session.notify_progress("task-123", 75);
+session.notify_progress("task-123", 75).await;
 
-session.notify_log(LoggingLevel::Info, serde_json::json!({"message": "Operation completed successfully"}), None, None);
+session.notify_log(LoggingLevel::Info, serde_json::json!({"message": "Operation completed successfully"}), None, None).await;
 ```
 
 ## Server Configuration

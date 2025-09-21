@@ -2,8 +2,16 @@
 //!
 //! This module provides transparent session management for MCP tools and handlers.
 //! Sessions are automatically created and managed by the framework.
+//!
+//! ## Async Design
+//!
+//! All session state operations are fully async using futures. This prevents
+//! blocking the async runtime and enables true concurrent session operations.
+//! All session state calls must use `.await`.
 
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -16,21 +24,31 @@ use uuid::Uuid;
 use turul_mcp_protocol::{ClientCapabilities, Implementation, McpVersion, ServerCapabilities};
 use turul_mcp_session_storage::{SessionStorage, SessionStorageError};
 
+type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
+
 /// Session context provided automatically to tools and handlers
+///
+/// ## Async API
+///
+/// All session state operations return futures and must be awaited:
+/// ```rust
+/// let value = (ctx.get_state)("key").await;
+/// (ctx.set_state)("key", json!("value")).await;
+/// ```
 #[derive(Clone)]
 pub struct SessionContext {
     /// Unique session identifier
     pub session_id: String,
-    /// Get session state value by key
-    pub get_state: Arc<dyn Fn(&str) -> Option<Value> + Send + Sync>,
-    /// Set session state value by key
-    pub set_state: Arc<dyn Fn(&str, Value) + Send + Sync>,
-    /// Remove session state value by key
-    pub remove_state: Arc<dyn Fn(&str) -> Option<Value> + Send + Sync>,
-    /// Check if session is initialized
-    pub is_initialized: Arc<dyn Fn() -> bool + Send + Sync>,
-    /// Send notification to this session (legacy - use broadcaster instead)
-    pub send_notification: Arc<dyn Fn(SessionEvent) + Send + Sync>,
+    /// Get session state value by key (async)
+    pub get_state: Arc<dyn Fn(&str) -> BoxFuture<Option<Value>> + Send + Sync>,
+    /// Set session state value by key (async)
+    pub set_state: Arc<dyn Fn(&str, Value) -> BoxFuture<()> + Send + Sync>,
+    /// Remove session state value by key (async)
+    pub remove_state: Arc<dyn Fn(&str) -> BoxFuture<Option<Value>> + Send + Sync>,
+    /// Check if session is initialized (async)
+    pub is_initialized: Arc<dyn Fn() -> BoxFuture<bool> + Send + Sync>,
+    /// Send notification to this session (async)
+    pub send_notification: Arc<dyn Fn(SessionEvent) -> BoxFuture<()> + Send + Sync>,
     /// NotificationBroadcaster for sending MCP-compliant notifications
     pub broadcaster: Option<Arc<dyn std::any::Any + Send + Sync>>,
 }
@@ -48,9 +66,12 @@ impl SessionContext {
         let get_state = {
             let storage = storage.clone();
             let session_id = session_id.clone();
-            Arc::new(move |key: &str| -> Option<Value> {
-                futures::executor::block_on(async {
-                    match storage.get_session_state(&session_id, key).await {
+            Arc::new(move |key: &str| -> BoxFuture<Option<Value>> {
+                let storage = storage.clone();
+                let session_id = session_id.clone();
+                let key = key.to_string();
+                Box::pin(async move {
+                    match storage.get_session_state(&session_id, &key).await {
                         Ok(Some(value)) => Some(value),
                         Ok(None) => None,
                         Err(e) => {
@@ -65,21 +86,27 @@ impl SessionContext {
         let set_state = {
             let storage = storage.clone();
             let session_id = session_id.clone();
-            Arc::new(move |key: &str, value: Value| {
-                futures::executor::block_on(async {
-                    if let Err(e) = storage.set_session_state(&session_id, key, value.clone()).await {
+            Arc::new(move |key: &str, value: Value| -> BoxFuture<()> {
+                let storage = storage.clone();
+                let session_id = session_id.clone();
+                let key = key.to_string();
+                Box::pin(async move {
+                    if let Err(e) = storage.set_session_state(&session_id, &key, value).await {
                         tracing::error!("Failed to set session state for key '{}': {}", key, e);
                     }
-                });
+                })
             })
         };
         
         let remove_state = {
             let storage = storage.clone();
             let session_id = session_id.clone();
-            Arc::new(move |key: &str| -> Option<Value> {
-                futures::executor::block_on(async {
-                    match storage.remove_session_state(&session_id, key).await {
+            Arc::new(move |key: &str| -> BoxFuture<Option<Value>> {
+                let storage = storage.clone();
+                let session_id = session_id.clone();
+                let key = key.to_string();
+                Box::pin(async move {
+                    match storage.remove_session_state(&session_id, &key).await {
                         Ok(value) => value,
                         Err(e) => {
                             tracing::warn!("Failed to remove session state for key '{}': {}", key, e);
@@ -93,8 +120,10 @@ impl SessionContext {
         let is_initialized = {
             let storage = storage.clone();
             let session_id = session_id.clone();
-            Arc::new(move || -> bool {
-                futures::executor::block_on(async {
+            Arc::new(move || -> BoxFuture<bool> {
+                let storage = storage.clone();
+                let session_id = session_id.clone();
+                Box::pin(async move {
                     match storage.get_session(&session_id).await {
                         Ok(Some(session_info)) => session_info.is_initialized,
                         Ok(None) => {
@@ -114,43 +143,36 @@ impl SessionContext {
         let send_notification = {
             let session_id = session_id.clone();
             let broadcaster = broadcaster.clone();
-            Arc::new(move |event: SessionEvent| {
-                debug!("📨 SessionContext.send_notification() called for session {}: {:?}", session_id, event);
-                
-                // Try to use broadcaster if available
-                if let Some(broadcaster_any) = &broadcaster {
-                    debug!("✅ NotificationBroadcaster available for session: {}", session_id);
-                    
-                    // Attempt to extract and use the actual broadcaster
-                    match event {
-                        SessionEvent::Notification(json_value) => {
-                            debug!("🔧 Attempting to send notification via StreamManagerNotificationBroadcaster");
-                            debug!("📦 Notification JSON: {}", json_value);
-                            
-                            // Since we can't call async methods from sync closure, spawn a task
-                            let session_id_clone = session_id.clone();
-                            let json_value_clone = json_value.clone();
-                            let _broadcaster_clone = broadcaster_any.clone();
-                            
-                            tokio::spawn(async move {
-                                debug!("🚀 Async task: Processing notification for session {}", session_id_clone);
-                                
-                                // Parse the JSON notification and attempt to send it
-                                match parse_and_send_notification_with_broadcaster(&session_id_clone, &json_value_clone, &_broadcaster_clone).await {
-                                    Ok(_) => debug!("✅ Bridge working: Successfully processed notification for session {}", session_id_clone),
-                                    Err(e) => error!("❌ Bridge error: Failed to process notification for session {}: {}", session_id_clone, e),
+            Arc::new(move |event: SessionEvent| -> BoxFuture<()> {
+                let session_id = session_id.clone();
+                let broadcaster = broadcaster.clone();
+                Box::pin(async move {
+                    debug!("📨 SessionContext.send_notification() called for session {}: {:?}", session_id, event);
+
+                    // Try to use broadcaster if available
+                    if let Some(broadcaster_any) = &broadcaster {
+                        debug!("✅ NotificationBroadcaster available for session: {}", session_id);
+
+                        // Attempt to extract and use the actual broadcaster
+                        match event {
+                            SessionEvent::Notification(json_value) => {
+                                debug!("🔧 Attempting to send notification via StreamManagerNotificationBroadcaster");
+                                debug!("📦 Notification JSON: {}", json_value);
+
+                                // Now we can directly await the notification sending
+                                match parse_and_send_notification_with_broadcaster(&session_id, &json_value, &broadcaster_any).await {
+                                    Ok(_) => debug!("✅ Bridge working: Successfully processed notification for session {}", session_id),
+                                    Err(e) => error!("❌ Bridge error: Failed to process notification for session {}: {}", session_id, e),
                                 }
-                                
-                                debug!("🏁 Async task completed for session {}", session_id_clone);
-                            });
+                            }
+                            _ => {
+                                debug!("⚠️ Non-notification event, ignoring: {:?}", event);
+                            }
                         }
-                        _ => {
-                            debug!("⚠️ Non-notification event, ignoring: {:?}", event);
-                        }
+                    } else {
+                        debug!("⚠️ No broadcaster available for session {}", session_id);
                     }
-                } else {
-                    debug!("⚠️ No broadcaster available for session {}", session_id);
-                }
+                })
             })
         };
 
@@ -190,54 +212,64 @@ impl SessionContext {
 
         let get_state = {
             let session_id = session_id.clone();
-            Arc::new(move |key: &str| -> Option<Value> {
-                futures::executor::block_on(async {
-                    session_manager_for_get.get_session_state(&session_id, key).await
+            Arc::new(move |key: &str| -> BoxFuture<Option<Value>> {
+                let session_manager = session_manager_for_get.clone();
+                let session_id = session_id.clone();
+                let key = key.to_string();
+                Box::pin(async move {
+                    session_manager.get_session_state(&session_id, &key).await
                 })
             })
         };
 
         let set_state = {
             let session_id = session_id.clone();
-            Arc::new(move |key: &str, value: Value| {
-                futures::executor::block_on(async {
-                    session_manager_for_set.set_session_state(&session_id, key, value).await
-                });
+            Arc::new(move |key: &str, value: Value| -> BoxFuture<()> {
+                let session_manager = session_manager_for_set.clone();
+                let session_id = session_id.clone();
+                let key = key.to_string();
+                Box::pin(async move {
+                    let _ = session_manager.set_session_state(&session_id, &key, value).await;
+                })
             })
         };
 
         let remove_state = {
             let session_id = session_id.clone();
-            Arc::new(move |key: &str| -> Option<Value> {
-                futures::executor::block_on(async {
-                    session_manager_for_remove.remove_session_state(&session_id, key).await
+            Arc::new(move |key: &str| -> BoxFuture<Option<Value>> {
+                let session_manager = session_manager_for_remove.clone();
+                let session_id = session_id.clone();
+                let key = key.to_string();
+                Box::pin(async move {
+                    session_manager.remove_session_state(&session_id, &key).await
                 })
             })
         };
 
         let is_initialized = {
             let session_id = session_id.clone();
-            Arc::new(move || -> bool {
-                futures::executor::block_on(async {
-                    session_manager_for_init.is_session_initialized(&session_id).await
+            Arc::new(move || -> BoxFuture<bool> {
+                let session_manager = session_manager_for_init.clone();
+                let session_id = session_id.clone();
+                Box::pin(async move {
+                    session_manager.is_session_initialized(&session_id).await
                 })
             })
         };
 
         let send_notification = {
             let session_id = session_id.clone();
-            Arc::new(move |event: SessionEvent| {
-                debug!("📜 send_notification closure called for session {}: {:?}", session_id, event);
-                // Use tokio::spawn to run async operation without blocking the current thread
-                let session_id_clone = session_id.clone();
-                let session_manager_clone = session_manager_for_notify.clone();
-                tokio::spawn(async move {
-                    match session_manager_clone.send_event_to_session(&session_id_clone, event).await {
-                        Ok(_) => debug!("✅ send_event_to_session succeeded for session {}", session_id_clone),
-                        Err(e) => error!("❌ send_event_to_session failed for session {}: {}", session_id_clone, e),
+            Arc::new(move |event: SessionEvent| -> BoxFuture<()> {
+                let session_id = session_id.clone();
+                let session_manager = session_manager_for_notify.clone();
+                Box::pin(async move {
+                    debug!("📜 send_notification closure called for session {}: {:?}", session_id, event);
+                    match session_manager.send_event_to_session(&session_id, event).await {
+                        Ok(_) => debug!("✅ send_event_to_session succeeded for session {}", session_id),
+                        Err(e) => error!("❌ send_event_to_session failed for session {}: {}", session_id, e),
                     }
-                });
-                debug!("🚀 send_notification closure completed for session {}", session_id);
+                    debug!("🚀 send_notification closure completed for session {}", session_id);
+                })
             })
         };
 
@@ -251,38 +283,38 @@ impl SessionContext {
             broadcaster: None, // Old SessionManager doesn't have broadcaster
         }
     }
-    /// Convenience method to get typed session state
-    pub fn get_typed_state<T>(&self, key: &str) -> Option<T>
+    /// Convenience method to get typed session state (async)
+    pub async fn get_typed_state<T>(&self, key: &str) -> Option<T>
     where
         T: serde::de::DeserializeOwned,
     {
-        (self.get_state)(key)
+        (self.get_state)(key).await
             .and_then(|v| serde_json::from_value(v).ok())
     }
 
-    /// Convenience method to set typed session state
-    pub fn set_typed_state<T>(&self, key: &str, value: T) -> Result<(), String>
+    /// Convenience method to set typed session state (async)
+    pub async fn set_typed_state<T>(&self, key: &str, value: T) -> Result<(), String>
     where
         T: serde::Serialize,
     {
         match serde_json::to_value(value) {
             Ok(json_value) => {
-                (self.set_state)(key, json_value);
+                (self.set_state)(key, json_value).await;
                 Ok(())
             }
             Err(e) => Err(format!("Failed to serialize value: {}", e)),
         }
     }
 
-    /// Send a custom notification to this session
-    pub fn notify(&self, event: SessionEvent) {
+    /// Send a custom notification to this session (async)
+    pub async fn notify(&self, event: SessionEvent) {
         debug!("📨 SessionContext.notify() called for session {}: {:?}", self.session_id, event);
-        (self.send_notification)(event);
+        (self.send_notification)(event).await;
         debug!("🚀 SessionContext.notify() send_notification closure completed");
     }
 
     /// Send a progress notification
-    pub fn notify_progress(&self, progress_token: impl Into<String>, progress: u64) {
+    pub async fn notify_progress(&self, progress_token: impl Into<String>, progress: u64) {
         if self.has_broadcaster() {
             debug!("🔔 notify_progress using NotificationBroadcaster for session: {}", self.session_id);
             // TODO: Use broadcaster for MCP-compliant notifications
@@ -300,11 +332,11 @@ impl SessionContext {
         let notification = turul_mcp_protocol::JsonRpcNotification::new(
             "notifications/progress".to_string()
         ).with_params(params);
-        self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
+        self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap())).await;
     }
 
     /// Send a progress notification with total
-    pub fn notify_progress_with_total(&self, progress_token: impl Into<String>, progress: u64, total: u64) {
+    pub async fn notify_progress_with_total(&self, progress_token: impl Into<String>, progress: u64, total: u64) {
         let mut other = std::collections::HashMap::new();
         other.insert("progressToken".to_string(), serde_json::json!(progress_token.into()));
         other.insert("progress".to_string(), serde_json::json!(progress));
@@ -317,11 +349,11 @@ impl SessionContext {
         let notification = turul_mcp_protocol::JsonRpcNotification::new(
             "notifications/progress".to_string()
         ).with_params(params);
-        self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
+        self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap())).await;
     }
 
     /// Send a logging message notification (with session-aware level filtering)
-    pub fn notify_log(
+    pub async fn notify_log(
         &self, 
         level: turul_mcp_protocol::logging::LoggingLevel, 
         data: serde_json::Value,
@@ -332,14 +364,16 @@ impl SessionContext {
         let message_level = level;
         
         // Check if this message should be sent to this session based on its logging level
-        if !self.should_log(message_level) {
-            debug!("🔕 Filtering out {:?} level message for session {} (threshold: {:?})", 
-                message_level, self.session_id, self.get_logging_level());
+        if !self.should_log(message_level).await {
+            let threshold = self.get_logging_level().await;
+            debug!("🔕 Filtering out {:?} level message for session {} (threshold: {:?})",
+                message_level, self.session_id, threshold);
             return;
         }
         
-        debug!("📢 Sending {:?} level message to session {} (threshold: {:?})", 
-            message_level, self.session_id, self.get_logging_level());
+        let threshold = self.get_logging_level().await;
+        debug!("📢 Sending {:?} level message to session {} (threshold: {:?})",
+            message_level, self.session_id, threshold);
         
         // Create proper LoggingMessageNotification struct once
         use turul_mcp_protocol::notifications::LoggingMessageNotification;
@@ -358,26 +392,26 @@ impl SessionContext {
         if self.has_broadcaster() {
             debug!("🔔 notify_log using NotificationBroadcaster for session: {}", self.session_id);
             // Send via SessionEvent (which will be picked up by the broadcaster if connected properly)
-            self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
+            self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap())).await;
             return;
         } else {
             debug!("🔔 notify_log using OLD SessionManager for session: {}", self.session_id);
         }
         
         // Legacy implementation (fallback) - use the same notification
-        self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
+        self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap())).await;
     }
 
     /// Send a resource list changed notification
-    pub fn notify_resources_changed(&self) {
+    pub async fn notify_resources_changed(&self) {
         let notification = turul_mcp_protocol::JsonRpcNotification::new(
             "notifications/resources/listChanged".to_string()
         );
-        self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
+        self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap())).await;
     }
 
     /// Send a resource updated notification
-    pub fn notify_resource_updated(&self, uri: impl Into<String>) {
+    pub async fn notify_resource_updated(&self, uri: impl Into<String>) {
         let mut other = std::collections::HashMap::new();
         other.insert("uri".to_string(), serde_json::json!(uri.into()));
         
@@ -388,27 +422,27 @@ impl SessionContext {
         let notification = turul_mcp_protocol::JsonRpcNotification::new(
             "notifications/resources/updated".to_string()
         ).with_params(params);
-        self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
+        self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap())).await;
     }
 
     /// Send a tools list changed notification
-    pub fn notify_tools_changed(&self) {
+    pub async fn notify_tools_changed(&self) {
         let notification = turul_mcp_protocol::JsonRpcNotification::new(
             "notifications/tools/listChanged".to_string()
         );
-        self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap()));
+        self.notify(SessionEvent::Notification(serde_json::to_value(notification).unwrap())).await;
     }
 
     // ============================================================================
     // === Session-Aware Logging Level Methods ===
     // ============================================================================
 
-    /// Get the current logging level for this session
-    pub fn get_logging_level(&self) -> turul_mcp_protocol::logging::LoggingLevel {
+    /// Get the current logging level for this session (async)
+    pub async fn get_logging_level(&self) -> turul_mcp_protocol::logging::LoggingLevel {
         use turul_mcp_protocol::logging::LoggingLevel;
-        
+
         // Check session state for stored logging level
-        if let Some(level_value) = (self.get_state)("mcp:logging:level") {
+        if let Some(level_value) = (self.get_state)("mcp:logging:level").await {
             if let Some(level_str) = level_value.as_str() {
                 match level_str {
                     "debug" => LoggingLevel::Debug,
@@ -429,10 +463,10 @@ impl SessionContext {
         }
     }
 
-    /// Set the logging level for this session
-    pub fn set_logging_level(&self, level: turul_mcp_protocol::logging::LoggingLevel) {
+    /// Set the logging level for this session (async)
+    pub async fn set_logging_level(&self, level: turul_mcp_protocol::logging::LoggingLevel) {
         use turul_mcp_protocol::logging::LoggingLevel;
-        
+
         let level_str = match level {
             LoggingLevel::Debug => "debug",
             LoggingLevel::Info => "info",
@@ -443,15 +477,22 @@ impl SessionContext {
             LoggingLevel::Alert => "alert",
             LoggingLevel::Emergency => "emergency",
         };
-        
-        (self.set_state)("mcp:logging:level", serde_json::json!(level_str));
+
+        (self.set_state)("mcp:logging:level", serde_json::json!(level_str)).await;
         debug!("🎯 Set logging level for session {}: {:?}", self.session_id, level);
     }
 
-    /// Check if a log message at the given level should be sent to this session
-    pub fn should_log(&self, message_level: turul_mcp_protocol::logging::LoggingLevel) -> bool {
-        let session_threshold = self.get_logging_level();
+    /// Check if a log message at the given level should be sent to this session (async)
+    pub async fn should_log(&self, message_level: turul_mcp_protocol::logging::LoggingLevel) -> bool {
+        let session_threshold = self.get_logging_level().await;
         message_level.should_log(session_threshold)
+    }
+
+    /// Synchronous version of should_log for trait compatibility
+    pub fn should_log_sync(&self, message_level: turul_mcp_protocol::logging::LoggingLevel) -> bool {
+        // For sync compatibility, block on async get_logging_level
+        let session_level = futures::executor::block_on(self.get_logging_level());
+        message_level.should_log(session_level)
     }
 }
 
@@ -462,11 +503,15 @@ impl SessionContext {
 /// Implement LoggingTarget trait from turul-mcp-builders to enable session-aware logging
 impl turul_mcp_builders::logging::LoggingTarget for SessionContext {
     fn should_log(&self, level: turul_mcp_protocol::logging::LoggingLevel) -> bool {
-        self.should_log(level)
+        self.should_log_sync(level)
     }
     
     fn notify_log(&self, level: turul_mcp_protocol::logging::LoggingLevel, data: serde_json::Value, logger: Option<String>, meta: Option<std::collections::HashMap<String, serde_json::Value>>) {
-        self.notify_log(level, data, logger, meta)
+        // Since the trait expects sync but our method is async, we need to spawn a task
+        let session_ctx = self.clone();
+        tokio::spawn(async move {
+            session_ctx.notify_log(level, data, logger, meta).await;
+        });
     }
 }
 
@@ -1222,9 +1267,12 @@ impl SessionManager {
         let get_state = {
             let session_manager = session_manager.clone();
             let session_id = session_id.clone();
-            Arc::new(move |key: &str| -> Option<Value> {
-                futures::executor::block_on(async {
-                    session_manager.get_session_state(&session_id, key).await
+            Arc::new(move |key: &str| -> BoxFuture<Option<Value>> {
+                let session_manager = session_manager.clone();
+                let session_id = session_id.clone();
+                let key = key.to_string();
+                Box::pin(async move {
+                    session_manager.get_session_state(&session_id, &key).await
                 })
             })
         };
@@ -1232,19 +1280,25 @@ impl SessionManager {
         let set_state = {
             let session_manager = session_manager.clone();
             let session_id = session_id.clone();
-            Arc::new(move |key: &str, value: Value| {
-                futures::executor::block_on(async {
-                    session_manager.set_session_state(&session_id, key, value).await
-                });
+            Arc::new(move |key: &str, value: Value| -> BoxFuture<()> {
+                let session_manager = session_manager.clone();
+                let session_id = session_id.clone();
+                let key = key.to_string();
+                Box::pin(async move {
+                    let _ = session_manager.set_session_state(&session_id, &key, value).await;
+                })
             })
         };
 
         let remove_state = {
             let session_manager = session_manager.clone();
             let session_id = session_id.clone();
-            Arc::new(move |key: &str| -> Option<Value> {
-                futures::executor::block_on(async {
-                    session_manager.remove_session_state(&session_id, key).await
+            Arc::new(move |key: &str| -> BoxFuture<Option<Value>> {
+                let session_manager = session_manager.clone();
+                let session_id = session_id.clone();
+                let key = key.to_string();
+                Box::pin(async move {
+                    session_manager.remove_session_state(&session_id, &key).await
                 })
             })
         };
@@ -1252,8 +1306,10 @@ impl SessionManager {
         let is_initialized = {
             let session_manager = session_manager.clone();
             let session_id = session_id.clone();
-            Arc::new(move || -> bool {
-                futures::executor::block_on(async {
+            Arc::new(move || -> BoxFuture<bool> {
+                let session_manager = session_manager.clone();
+                let session_id = session_id.clone();
+                Box::pin(async move {
                     session_manager.is_session_initialized(&session_id).await
                 })
             })
@@ -1262,10 +1318,12 @@ impl SessionManager {
         let send_notification = {
             let session_manager = session_manager.clone();
             let session_id = session_id.clone();
-            Arc::new(move |event: SessionEvent| {
-                futures::executor::block_on(async {
+            Arc::new(move |event: SessionEvent| -> BoxFuture<()> {
+                let session_manager = session_manager.clone();
+                let session_id = session_id.clone();
+                Box::pin(async move {
                     let _ = session_manager.send_event_to_session(&session_id, event).await;
-                });
+                })
             })
         };
 
@@ -1384,16 +1442,23 @@ mod tests {
         let ctx = manager.create_session_context(&session_id).unwrap();
 
         // Test state operations through context
-        (ctx.set_state)("test", json!("value"));
-        let value = (ctx.get_state)("test");
+        (ctx.set_state)("test", json!("value")).await;
+        let value = (ctx.get_state)("test").await;
         assert_eq!(value, Some(json!("value")));
 
-        let removed = (ctx.remove_state)("test");
+        let removed = (ctx.remove_state)("test").await;
         assert_eq!(removed, Some(json!("value")));
 
         // Test notification sending
-        ctx.notify_log(turul_mcp_protocol::logging::LoggingLevel::Info, serde_json::json!("Test notification"), Some("test".to_string()), None);
-        ctx.notify_progress("test-token", 50);
+        ctx
+            .notify_log(
+                turul_mcp_protocol::logging::LoggingLevel::Info,
+                serde_json::json!("Test notification"),
+                Some("test".to_string()),
+                None,
+            )
+            .await;
+        ctx.notify_progress("test-token", 50).await;
     }
 
     #[tokio::test]

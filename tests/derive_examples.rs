@@ -35,9 +35,9 @@ fn test_session_context_function_macro() {
         session: Option<SessionContext>  // Automatically detected by macro
     ) -> McpResult<i32> {
         if let Some(session) = session {
-            let count: i32 = session.get_typed_state("count").unwrap_or(0);
+            let count: i32 = session.get_typed_state("count").await.unwrap_or(0);
             let new_count = count + 1;
-            session.set_typed_state("count", new_count).unwrap();
+            session.set_typed_state("count", new_count).await.unwrap();
             Ok(new_count)
         } else {
             Ok(0) // No session available
@@ -89,7 +89,7 @@ fn test_progress_notifications_function_macro() {
     ) -> McpResult<String> {
         for i in 1..=steps.min(3) { // Limit for testing
             if let Some(ref session) = session {
-                session.notify_progress("slow-task", i as u64);
+        session.notify_progress("slow-task", i as u64).await;
             }
             
             // Don't actually sleep in tests

@@ -57,8 +57,8 @@ impl McpTool for LoggingTestTool {
             ])),
         };
         
-        let current_session_level = session.get_logging_level();
-        let will_be_filtered = !session.should_log(logging_level);
+        let current_session_level = session.get_logging_level().await;
+        let will_be_filtered = !(session.should_log(logging_level).await);
         
         tracing::info!("🧪 LoggingTestTool called:");
         tracing::info!("   Message: '{}'", message);
@@ -67,7 +67,7 @@ impl McpTool for LoggingTestTool {
         tracing::info!("   Will be filtered: {}", will_be_filtered);
         
         // Send the log message via session notification (will be filtered automatically)
-        session.notify_log(logging_level, serde_json::json!(message.to_string()), Some("demo".to_string()), None);
+        session.notify_log(logging_level, serde_json::json!(message.to_string()), Some("demo".to_string()), None).await;
         
         // Return test result information
         Ok(CallToolResult::success(vec![
@@ -152,8 +152,8 @@ impl McpTool for SetLogLevelTool {
             ])),
         };
         
-        let old_level = session.get_logging_level();
-        session.set_logging_level(new_level);
+        let old_level = session.get_logging_level().await;
+        session.set_logging_level(new_level).await;
         
         tracing::info!("🎯 Session {} logging level changed: {:?} -> {:?}", 
             session.session_id, old_level, new_level);

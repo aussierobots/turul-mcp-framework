@@ -42,7 +42,7 @@ impl StoreValueTool {
         debug!("Storing value in DynamoDB: {} = {}", self.key, self.value);
 
         // Store value in this session's DynamoDB storage
-        (session.set_state)(&self.key, self.value.clone());
+        (session.set_state)(&self.key, self.value.clone()).await;
 
         Ok(json!({
             "stored": true,
@@ -71,7 +71,7 @@ impl GetValueTool {
         debug!("Getting value from DynamoDB: {}", self.key);
 
         // Retrieve value from this session's DynamoDB storage
-        let value = (session.get_state)(&self.key);
+        let value = (session.get_state)(&self.key).await;
 
         Ok(json!({
             "found": value.is_some(),

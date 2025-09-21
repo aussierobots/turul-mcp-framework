@@ -584,12 +584,12 @@ async fn test_session_state_management() {
     let session = create_test_session().await;
     
     // Session state works perfectly
-    session.set_typed_state("counter", &42i32).unwrap();
-    let value: i32 = session.get_typed_state("counter").unwrap();
+session.set_typed_state("counter", &42i32).await.unwrap();
+    let value: i32 = session.get_typed_state("counter").await.unwrap();
     assert_eq!(value, 42);
     
     // Progress notifications work
-    session.notify_progress("processing", 50);
+    session.notify_progress("processing", 50).await;
     
     // Tool execution with session context
     let tool = Calculator { a: 1.0, b: 2.0 };
@@ -658,7 +658,7 @@ impl FileManager {
             "read" => Ok(format!("Reading file: {}", self.path)),
             "delete" => {
                 if let Some(session) = session {
-                    session.notify_progress(&format!("Deleting {}", self.path), 100);
+                    session.notify_progress(&format!("Deleting {}", self.path), 100).await;
                 }
                 Ok(format!("Deleted file: {}", self.path))
             },

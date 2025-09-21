@@ -174,13 +174,14 @@ fn input_schema(&self) -> ToolSchema {
 async fn call(&self, args: Value, session: Option<SessionContext>) -> Result<Vec<ToolResult>, String> {
     if let Some(session) = session {
         // Get current counter value from session state
-        let current: i64 = (session.get_state)("counter")
+        let current_value = (session.get_state)("counter").await;
+        let current: i64 = current_value
             .and_then(|v| v.as_i64())
             .unwrap_or(0);
         
         // Update session state
         let new_value = current + increment;
-        (session.set_state)("counter", json!(new_value));
+        (session.set_state)("counter", json!(new_value)).await;
         
         Ok(vec![ToolResult::text(format!("Counter: {} → {}", current, new_value))])
     } else {

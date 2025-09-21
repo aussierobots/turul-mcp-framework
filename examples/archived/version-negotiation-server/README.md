@@ -189,7 +189,7 @@ The negotiated protocol version is automatically:
 async fn call(&self, _args: Value, session: Option<SessionContext>) -> Result<Vec<ToolResult>, String> {
     if let Some(ctx) = session {
         // Get negotiated version from session
-        if let Some(version_info) = (ctx.get_state)("mcp_version") {
+        if let Some(version_info) = (ctx.get_state)("mcp_version").await {
             let version_str = version_info.as_str().unwrap_or("unknown");
             // Use version information...
         }

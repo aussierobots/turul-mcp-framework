@@ -42,20 +42,20 @@ mod logging_level_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Default logging level should be Info
-        let level = context.get_logging_level();
+        let level = context.get_logging_level().await;
         assert_eq!(level, LoggingLevel::Info);
         
         // Should log messages at Info level or higher
-        assert!(context.should_log(LoggingLevel::Info));
-        assert!(context.should_log(LoggingLevel::Notice));
-        assert!(context.should_log(LoggingLevel::Warning));
-        assert!(context.should_log(LoggingLevel::Error));
-        assert!(context.should_log(LoggingLevel::Critical));
-        assert!(context.should_log(LoggingLevel::Alert));
-        assert!(context.should_log(LoggingLevel::Emergency));
+        assert!(context.should_log(LoggingLevel::Info).await);
+        assert!(context.should_log(LoggingLevel::Notice).await);
+        assert!(context.should_log(LoggingLevel::Warning).await);
+        assert!(context.should_log(LoggingLevel::Error).await);
+        assert!(context.should_log(LoggingLevel::Critical).await);
+        assert!(context.should_log(LoggingLevel::Alert).await);
+        assert!(context.should_log(LoggingLevel::Emergency).await);
         
         // Should NOT log messages below Info level
-        assert!(!context.should_log(LoggingLevel::Debug));
+        assert!(!context.should_log(LoggingLevel::Debug).await);
     }
 
     #[tokio::test]
@@ -79,8 +79,8 @@ mod logging_level_tests {
         ];
         
         for level in test_levels {
-            context.set_logging_level(level);
-            let retrieved_level = context.get_logging_level();
+            context.set_logging_level(level).await;
+            let retrieved_level = context.get_logging_level().await;
             assert_eq!(retrieved_level, level);
         }
     }
@@ -94,15 +94,15 @@ mod logging_level_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Set logging level
-        context.set_logging_level(LoggingLevel::Warning);
+        context.set_logging_level(LoggingLevel::Warning).await;
         
         // Check that it's stored in session state
-        let state_value = (context.get_state)("mcp:logging:level");
+        let state_value = (context.get_state)("mcp:logging:level").await;
         assert_eq!(state_value, Some(json!("warning")));
         
         // Create new context for same session - should retrieve the same level
         let context2 = manager.create_session_context(&session_id).unwrap();
-        let retrieved_level = context2.get_logging_level();
+        let retrieved_level = context2.get_logging_level().await;
         assert_eq!(retrieved_level, LoggingLevel::Warning);
     }
 
@@ -115,17 +115,17 @@ mod logging_level_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Set session to Error level
-        context.set_logging_level(LoggingLevel::Error);
+        context.set_logging_level(LoggingLevel::Error).await;
         
         // Only Error and higher should pass
-        assert!(!context.should_log(LoggingLevel::Debug));
-        assert!(!context.should_log(LoggingLevel::Info));
-        assert!(!context.should_log(LoggingLevel::Notice));
-        assert!(!context.should_log(LoggingLevel::Warning));
-        assert!(context.should_log(LoggingLevel::Error));
-        assert!(context.should_log(LoggingLevel::Critical));
-        assert!(context.should_log(LoggingLevel::Alert));
-        assert!(context.should_log(LoggingLevel::Emergency));
+        assert!(!context.should_log(LoggingLevel::Debug).await);
+        assert!(!context.should_log(LoggingLevel::Info).await);
+        assert!(!context.should_log(LoggingLevel::Notice).await);
+        assert!(!context.should_log(LoggingLevel::Warning).await);
+        assert!(context.should_log(LoggingLevel::Error).await);
+        assert!(context.should_log(LoggingLevel::Critical).await);
+        assert!(context.should_log(LoggingLevel::Alert).await);
+        assert!(context.should_log(LoggingLevel::Emergency).await);
     }
 
     #[tokio::test]
@@ -137,17 +137,17 @@ mod logging_level_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Set session to Debug level (lowest)
-        context.set_logging_level(LoggingLevel::Debug);
+        context.set_logging_level(LoggingLevel::Debug).await;
         
         // All levels should pass
-        assert!(context.should_log(LoggingLevel::Debug));
-        assert!(context.should_log(LoggingLevel::Info));
-        assert!(context.should_log(LoggingLevel::Notice));
-        assert!(context.should_log(LoggingLevel::Warning));
-        assert!(context.should_log(LoggingLevel::Error));
-        assert!(context.should_log(LoggingLevel::Critical));
-        assert!(context.should_log(LoggingLevel::Alert));
-        assert!(context.should_log(LoggingLevel::Emergency));
+        assert!(context.should_log(LoggingLevel::Debug).await);
+        assert!(context.should_log(LoggingLevel::Info).await);
+        assert!(context.should_log(LoggingLevel::Notice).await);
+        assert!(context.should_log(LoggingLevel::Warning).await);
+        assert!(context.should_log(LoggingLevel::Error).await);
+        assert!(context.should_log(LoggingLevel::Critical).await);
+        assert!(context.should_log(LoggingLevel::Alert).await);
+        assert!(context.should_log(LoggingLevel::Emergency).await);
     }
 
     #[tokio::test]
@@ -159,17 +159,17 @@ mod logging_level_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Set session to Emergency level (highest)
-        context.set_logging_level(LoggingLevel::Emergency);
+        context.set_logging_level(LoggingLevel::Emergency).await;
         
         // Only Emergency should pass
-        assert!(!context.should_log(LoggingLevel::Debug));
-        assert!(!context.should_log(LoggingLevel::Info));
-        assert!(!context.should_log(LoggingLevel::Notice));
-        assert!(!context.should_log(LoggingLevel::Warning));
-        assert!(!context.should_log(LoggingLevel::Error));
-        assert!(!context.should_log(LoggingLevel::Critical));
-        assert!(!context.should_log(LoggingLevel::Alert));
-        assert!(context.should_log(LoggingLevel::Emergency));
+        assert!(!context.should_log(LoggingLevel::Debug).await);
+        assert!(!context.should_log(LoggingLevel::Info).await);
+        assert!(!context.should_log(LoggingLevel::Notice).await);
+        assert!(!context.should_log(LoggingLevel::Warning).await);
+        assert!(!context.should_log(LoggingLevel::Error).await);
+        assert!(!context.should_log(LoggingLevel::Critical).await);
+        assert!(!context.should_log(LoggingLevel::Alert).await);
+        assert!(context.should_log(LoggingLevel::Emergency).await);
     }
 }
 
@@ -193,20 +193,20 @@ mod session_isolation_tests {
         let context3 = manager.create_session_context(&session3).unwrap();
         
         // Set different logging levels for each session
-        context1.set_logging_level(LoggingLevel::Debug);
-        context2.set_logging_level(LoggingLevel::Warning);
-        context3.set_logging_level(LoggingLevel::Error);
+        context1.set_logging_level(LoggingLevel::Debug).await;
+        context2.set_logging_level(LoggingLevel::Warning).await;
+        context3.set_logging_level(LoggingLevel::Error).await;
         
         // Verify each session has its own level
-        assert_eq!(context1.get_logging_level(), LoggingLevel::Debug);
-        assert_eq!(context2.get_logging_level(), LoggingLevel::Warning);
-        assert_eq!(context3.get_logging_level(), LoggingLevel::Error);
+        assert_eq!(context1.get_logging_level().await, LoggingLevel::Debug);
+        assert_eq!(context2.get_logging_level().await, LoggingLevel::Warning);
+        assert_eq!(context3.get_logging_level().await, LoggingLevel::Error);
         
         // Verify filtering behavior is independent
         let test_level = LoggingLevel::Info;
-        assert!(context1.should_log(test_level)); // Debug allows Info
-        assert!(!context2.should_log(test_level)); // Warning blocks Info
-        assert!(!context3.should_log(test_level)); // Error blocks Info
+        assert!(context1.should_log_sync(test_level)); // Debug allows Info
+        assert!(!context2.should_log_sync(test_level)); // Warning blocks Info
+        assert!(!context3.should_log_sync(test_level)); // Error blocks Info
     }
 
     #[tokio::test]
@@ -221,22 +221,22 @@ mod session_isolation_tests {
         let context2 = manager.create_session_context(&session2).unwrap();
         
         // Initially both should have default level
-        assert_eq!(context1.get_logging_level(), LoggingLevel::Info);
-        assert_eq!(context2.get_logging_level(), LoggingLevel::Info);
+        assert_eq!(context1.get_logging_level().await, LoggingLevel::Info);
+        assert_eq!(context2.get_logging_level().await, LoggingLevel::Info);
         
         // Change one session's level
-        context1.set_logging_level(LoggingLevel::Debug);
+        context1.set_logging_level(LoggingLevel::Debug).await;
         
         // Other session should be unchanged
-        assert_eq!(context1.get_logging_level(), LoggingLevel::Debug);
-        assert_eq!(context2.get_logging_level(), LoggingLevel::Info);
+        assert_eq!(context1.get_logging_level().await, LoggingLevel::Debug);
+        assert_eq!(context2.get_logging_level().await, LoggingLevel::Info);
         
         // Change second session's level
-        context2.set_logging_level(LoggingLevel::Error);
+        context2.set_logging_level(LoggingLevel::Error).await;
         
         // Both sessions should maintain their own levels
-        assert_eq!(context1.get_logging_level(), LoggingLevel::Debug);
-        assert_eq!(context2.get_logging_level(), LoggingLevel::Error);
+        assert_eq!(context1.get_logging_level().await, LoggingLevel::Debug);
+        assert_eq!(context2.get_logging_level().await, LoggingLevel::Error);
     }
 }
 
@@ -279,7 +279,7 @@ mod logging_handler_tests {
         
         // Verify level was set in session
         let context2 = manager.create_session_context(&session_id).unwrap();
-        assert_eq!(context2.get_logging_level(), LoggingLevel::Error);
+        assert_eq!(context2.get_logging_level().await, LoggingLevel::Error);
     }
 
     #[tokio::test]
@@ -352,7 +352,7 @@ mod logging_handler_tests {
             
             // Verify level was set correctly
             let context2 = manager.create_session_context(&session_id).unwrap();
-            assert_eq!(context2.get_logging_level(), expected_level, "Wrong level for: {}", level_str);
+            assert_eq!(context2.get_logging_level().await, expected_level, "Wrong level for: {}", level_str);
         }
     }
 }
@@ -371,17 +371,17 @@ mod notify_log_filtering_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Set session to Warning level
-        context.set_logging_level(LoggingLevel::Warning);
+        context.set_logging_level(LoggingLevel::Warning).await;
         
         // These calls should not panic, but filtering happens internally
-        context.notify_log(str_to_logging_level("debug"), serde_json::json!("This should be filtered out"), Some("test".to_string()), None);
-        context.notify_log(str_to_logging_level("info"), serde_json::json!("This should be filtered out"), Some("test".to_string()), None);
-        context.notify_log(str_to_logging_level("notice"), serde_json::json!("This should be filtered out"), Some("test".to_string()), None);
-        context.notify_log(str_to_logging_level("warning"), serde_json::json!("This should pass through"), Some("test".to_string()), None);
-        context.notify_log(str_to_logging_level("error"), serde_json::json!("This should pass through"), Some("test".to_string()), None);
-        context.notify_log(str_to_logging_level("critical"), serde_json::json!("This should pass through"), Some("test".to_string()), None);
-        context.notify_log(str_to_logging_level("alert"), serde_json::json!("This should pass through"), Some("test".to_string()), None);
-        context.notify_log(str_to_logging_level("emergency"), serde_json::json!("This should pass through"), Some("test".to_string()), None);
+        context.notify_log(str_to_logging_level("debug"), serde_json::json!("This should be filtered out"), Some("test".to_string()), None).await;
+        context.notify_log(str_to_logging_level("info"), serde_json::json!("This should be filtered out"), Some("test".to_string()), None).await;
+        context.notify_log(str_to_logging_level("notice"), serde_json::json!("This should be filtered out"), Some("test".to_string()), None).await;
+        context.notify_log(str_to_logging_level("warning"), serde_json::json!("This should pass through"), Some("test".to_string()), None).await;
+        context.notify_log(str_to_logging_level("error"), serde_json::json!("This should pass through"), Some("test".to_string()), None).await;
+        context.notify_log(str_to_logging_level("critical"), serde_json::json!("This should pass through"), Some("test".to_string()), None).await;
+        context.notify_log(str_to_logging_level("alert"), serde_json::json!("This should pass through"), Some("test".to_string()), None).await;
+        context.notify_log(str_to_logging_level("emergency"), serde_json::json!("This should pass through"), Some("test".to_string()), None).await;
     }
 
     #[tokio::test]
@@ -393,7 +393,7 @@ mod notify_log_filtering_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Unknown level should default to Info and be handled gracefully
-        context.notify_log(str_to_logging_level("unknown_level"), serde_json::json!("This should not panic"), Some("test".to_string()), None);
+        context.notify_log(str_to_logging_level("unknown_level"), serde_json::json!("This should not panic"), Some("test".to_string()), None).await;
     }
 
     #[tokio::test]
@@ -408,8 +408,8 @@ mod notify_log_filtering_tests {
         let debug_context = manager.create_session_context(&debug_session).unwrap();
         let error_context = manager.create_session_context(&error_session).unwrap();
         
-        debug_context.set_logging_level(LoggingLevel::Debug);
-        error_context.set_logging_level(LoggingLevel::Error);
+        debug_context.set_logging_level(LoggingLevel::Debug).await;
+        error_context.set_logging_level(LoggingLevel::Error).await;
         
         // Same message to both sessions - should be filtered differently
         debug_context.notify_log(
@@ -417,26 +417,26 @@ mod notify_log_filtering_tests {
             serde_json::json!("Info message to debug session"),
             Some("test".to_string()),
             None
-        ); // Should pass
+        ).await; // Should pass
         error_context.notify_log(
             str_to_logging_level("info"), 
             serde_json::json!("Info message to error session"),
             Some("test".to_string()),
             None
-        ); // Should be filtered
+        ).await; // Should be filtered
         
         debug_context.notify_log(
             str_to_logging_level("error"), 
             serde_json::json!("Error message to debug session"),
             Some("test".to_string()),
             None
-        ); // Should pass
+        ).await; // Should pass
         error_context.notify_log(
             str_to_logging_level("error"), 
             serde_json::json!("Error message to error session"),
             Some("test".to_string()),
             None
-        ); // Should pass
+        ).await; // Should pass
     }
 }
 
@@ -457,7 +457,7 @@ mod edge_case_tests {
         (context.set_state)("mcp:logging:level", json!("invalid_level"));
         
         // Should fall back to default Info level
-        let level = context.get_logging_level();
+        let level = context.get_logging_level().await;
         assert_eq!(level, LoggingLevel::Info);
     }
 
@@ -473,7 +473,7 @@ mod edge_case_tests {
         (context.set_state)("mcp:logging:level", json!(42));
         
         // Should fall back to default Info level
-        let level = context.get_logging_level();
+        let level = context.get_logging_level().await;
         assert_eq!(level, LoggingLevel::Info);
     }
 
@@ -498,11 +498,11 @@ mod edge_case_tests {
         ];
         
         for threshold in &all_levels {
-            context.set_logging_level(*threshold);
+            context.set_logging_level(*threshold).await;
             
             for message_level in &all_levels {
                 let should_pass = message_level.priority() >= threshold.priority();
-                let actual_pass = context.should_log(*message_level);
+                let actual_pass = context.should_log(*message_level).await;
                 assert_eq!(
                     actual_pass, should_pass,
                     "Level {:?} with threshold {:?}: expected {}, got {}",

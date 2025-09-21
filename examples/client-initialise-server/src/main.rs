@@ -54,15 +54,15 @@ impl McpTool for EchoSseTool {
         // Send a progress notification if we have a session
         if let Some(session_context) = &session {
             info!("📡 Sending progress notification via SessionContext");
-            session_context.notify_progress("echo_processing", 50);
-            
+            session_context.notify_progress("echo_processing", 50).await;
+
             // Also send a log message notification
             session_context.notify_log(
-                LoggingLevel::Info, 
+                LoggingLevel::Info,
                 serde_json::json!(format!("Processing echo for text: '{}'", text)),
                 Some("echo-tool".to_string()),
                 None
-            );
+            ).await;
         } else {
             info!("⚠️  No session context available for notifications");
         }
@@ -73,13 +73,13 @@ impl McpTool for EchoSseTool {
 
         // Send completion notification
         if let Some(session_context) = &session {
-            session_context.notify_progress("echo_processing", 100);
+            session_context.notify_progress("echo_processing", 100).await;
             session_context.notify_log(
-                LoggingLevel::Info, 
+                LoggingLevel::Info,
                 serde_json::json!(format!("Echo completed successfully: '{}'", response_text)),
                 Some("echo-tool".to_string()),
                 None
-            );
+            ).await;
         }
 
         Ok(CallToolResult::success(vec![

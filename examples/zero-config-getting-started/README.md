@@ -33,7 +33,7 @@ impl Calculator {
 ```rust
 // ✅ Use session's built-in progress notification
 if let Some(session) = session {
-    session.notify_progress("Processing", 75);
+session.notify_progress("Processing", 75).await;
 }
 ```
 

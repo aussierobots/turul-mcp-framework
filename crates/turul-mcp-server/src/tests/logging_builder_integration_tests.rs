@@ -23,21 +23,23 @@ mod logging_target_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Set session to Warning level
-        context.set_logging_level(LoggingLevel::Warning);
+        context.set_logging_level(LoggingLevel::Warning).await;
         
         // Test should_log method
-        assert!(context.should_log(LoggingLevel::Warning));
-        assert!(context.should_log(LoggingLevel::Error));
-        assert!(!context.should_log(LoggingLevel::Info));
-        assert!(!context.should_log(LoggingLevel::Debug));
+        assert!(context.should_log_sync(LoggingLevel::Warning));
+        assert!(context.should_log_sync(LoggingLevel::Error));
+        assert!(!context.should_log_sync(LoggingLevel::Info));
+        assert!(!context.should_log_sync(LoggingLevel::Debug));
         
         // Test notify_log method (should not panic)
-        context.notify_log(
-            turul_mcp_protocol::logging::LoggingLevel::Error, 
-            serde_json::json!("Test message"),
-            Some("test".to_string()),
-            None
-        );
+        context
+            .notify_log(
+                turul_mcp_protocol::logging::LoggingLevel::Error, 
+                serde_json::json!("Test message"),
+                Some("test".to_string()),
+                None
+            )
+            .await;
     }
 }
 
@@ -68,8 +70,8 @@ mod session_aware_logger_tests {
         let debug_context = manager.create_session_context(&debug_session).unwrap();
         let error_context = manager.create_session_context(&error_session).unwrap();
         
-        debug_context.set_logging_level(LoggingLevel::Debug);
-        error_context.set_logging_level(LoggingLevel::Error);
+        debug_context.set_logging_level(LoggingLevel::Debug).await;
+        error_context.set_logging_level(LoggingLevel::Error).await;
         
         // Create loggers at different levels
         let info_logger = LoggingBuilder::info(json!("Info message")).build_session_aware();
@@ -104,9 +106,9 @@ mod session_aware_logger_tests {
         let warning_context = manager.create_session_context(&warning_session).unwrap();
         let error_context = manager.create_session_context(&error_session).unwrap();
         
-        debug_context.set_logging_level(LoggingLevel::Debug);
-        warning_context.set_logging_level(LoggingLevel::Warning);
-        error_context.set_logging_level(LoggingLevel::Error);
+        debug_context.set_logging_level(LoggingLevel::Debug).await;
+        warning_context.set_logging_level(LoggingLevel::Warning).await;
+        error_context.set_logging_level(LoggingLevel::Error).await;
         
         // Create an info level logger
         let info_logger = LoggingBuilder::info(json!("Broadcast info message"))
@@ -132,7 +134,7 @@ mod session_aware_logger_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Set session to Debug level (allows all)
-        context.set_logging_level(LoggingLevel::Debug);
+        context.set_logging_level(LoggingLevel::Debug).await;
         
         // Test all logging levels
         let test_cases = vec![
@@ -222,7 +224,7 @@ mod builder_integration_tests {
         assert!(logger.format_message().contains("Critical system failure"));
         
         // Test session integration
-        context.set_logging_level(LoggingLevel::Warning);
+        context.set_logging_level(LoggingLevel::Warning).await;
         assert!(logger.would_send_to_target(&context)); // Error passes Warning threshold
         
         logger.send_to_target(&context);

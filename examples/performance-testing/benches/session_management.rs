@@ -23,16 +23,24 @@ fn create_session_context() -> SessionContext {
     SessionContext {
         session_id: Uuid::new_v4().to_string(),
         get_state: Arc::new(move |key: &str| {
-            state.lock().unwrap().get(key).cloned()
+            let state = state.clone();
+            let key = key.to_string();
+            Box::pin(async move { state.lock().unwrap().get(&key).cloned() })
         }),
         set_state: Arc::new(move |key: &str, value: Value| {
-            state_clone.lock().unwrap().insert(key.to_string(), value);
+            let state = state_clone.clone();
+            let key = key.to_string();
+            Box::pin(async move {
+                state.lock().unwrap().insert(key, value);
+            })
         }),
         remove_state: Arc::new(move |key: &str| {
-            state_clone2.lock().unwrap().remove(key)
+            let state = state_clone2.clone();
+            let key = key.to_string();
+            Box::pin(async move { state.lock().unwrap().remove(&key) })
         }),
-        is_initialized: Arc::new(|| true),
-        send_notification: Arc::new(|_| {}),
+        is_initialized: Arc::new(|| Box::pin(async { true })),
+        send_notification: Arc::new(|_| Box::pin(async {})),
         broadcaster: None,
     }
 }
@@ -64,27 +72,30 @@ fn session_state_benchmarks(c: &mut Criterion) {
     
     // Benchmark state operations
     group.bench_function("set_state", |b| {
+        let rt = Runtime::new().unwrap();
         let session = create_session_context();
         b.iter(|| {
-            (session.set_state)("test_key", black_box(json!(42)));
+            rt.block_on((session.set_state)("test_key", black_box(json!(42))))
         });
     });
     
     group.bench_function("get_state", |b| {
+        let rt = Runtime::new().unwrap();
         let session = create_session_context();
-        (session.set_state)("test_key", json!(42));
+        rt.block_on((session.set_state)("test_key", json!(42)));
         
         b.iter(|| {
-            let value = (session.get_state)("test_key");
+            let value = rt.block_on((session.get_state)("test_key"));
             black_box(value)
         });
     });
     
     group.bench_function("get_missing_state", |b| {
+        let rt = Runtime::new().unwrap();
         let session = create_session_context();
         
         b.iter(|| {
-            let value = (session.get_state)("missing_key");
+            let value = rt.block_on((session.get_state)("missing_key"));
             black_box(value)
         });
     });
@@ -95,6 +106,7 @@ fn session_state_benchmarks(c: &mut Criterion) {
             BenchmarkId::new("set_large_state", size),
             size,
             |b, &size| {
+                let rt = Runtime::new().unwrap();
                 let session = create_session_context();
                 let large_data = json!({
                     "data": (0..size).map(|i| format!("item_{}", i)).collect::<Vec<_>>(),
@@ -105,7 +117,7 @@ fn session_state_benchmarks(c: &mut Criterion) {
                 });
                 
                 b.iter(|| {
-                    (session.set_state)("large_data", black_box(large_data.clone()));
+                    rt.block_on((session.set_state)("large_data", black_box(large_data.clone())));
                 });
             },
         );
@@ -114,6 +126,7 @@ fn session_state_benchmarks(c: &mut Criterion) {
             BenchmarkId::new("get_large_state", size),
             size,
             |b, &size| {
+                let rt = Runtime::new().unwrap();
                 let session = create_session_context();
                 let large_data = json!({
                     "data": (0..size).map(|i| format!("item_{}", i)).collect::<Vec<_>>(),
@@ -122,10 +135,10 @@ fn session_state_benchmarks(c: &mut Criterion) {
                         "type": "benchmark_data"
                     }
                 });
-                (session.set_state)("large_data", large_data);
+                rt.block_on((session.set_state)("large_data", large_data));
                 
                 b.iter(|| {
-                    let value = (session.get_state)("large_data");
+                    let value = rt.block_on((session.get_state)("large_data"));
                     black_box(value)
                 });
             },
@@ -156,9 +169,9 @@ fn concurrent_session_benchmarks(c: &mut Criterion) {
                             for j in 0..10 {
                                 let key = format!("key_{}_{}", i, j);
                                 let value = json!({"session": i, "operation": j});
-                                (session.set_state)(&key, value);
+                                (session.set_state)(&key, value).await;
                                 
-                                let retrieved = (session.get_state)(&key);
+                                let retrieved = (session.get_state)(&key).await;
                                 black_box(retrieved);
                             }
                         });
@@ -183,6 +196,7 @@ fn session_memory_benchmarks(c: &mut Criterion) {
             BenchmarkId::new("many_keys", keys),
             keys,
             |b, &keys| {
+                let rt = Runtime::new().unwrap();
                 b.iter(|| {
                     let session = create_session_context();
                     
@@ -194,13 +208,13 @@ fn session_memory_benchmarks(c: &mut Criterion) {
                             "data": format!("value_{}", i),
                             "timestamp": chrono::Utc::now().timestamp()
                         });
-                        (session.set_state)(&key, value);
+                        rt.block_on((session.set_state)(&key, value));
                     }
                     
                     // Retrieve some keys
                     for i in (0..keys).step_by(10) {
                         let key = format!("key_{}", i);
-                        let value = (session.get_state)(&key);
+                        let value = rt.block_on((session.get_state)(&key));
                         black_box(value);
                     }
                     
@@ -219,54 +233,60 @@ fn session_notification_benchmarks(c: &mut Criterion) {
 
     // Test MCP spec notifications - logging
     group.bench_function("notify_log", |b| {
+        let rt = Runtime::new().unwrap();
         let session = create_session_context();
         b.iter(|| {
-            session.notify_log(
+            rt.block_on(session.notify_log(
                 LoggingLevel::Info,
                 json!("benchmark log message"),
                 Some("bench".to_string()),
                 None
-            );
+            ))
         });
     });
 
     // Test MCP spec notifications - progress
     group.bench_function("notify_progress", |b| {
+        let rt = Runtime::new().unwrap();
         let session = create_session_context();
         b.iter(|| {
-            session.notify_progress("bench-token", 50);
+            rt.block_on(session.notify_progress("bench-token", 50));
         });
     });
 
     // Test MCP spec notifications - progress with total
     group.bench_function("notify_progress_with_total", |b| {
+        let rt = Runtime::new().unwrap();
         let session = create_session_context();
         b.iter(|| {
-            session.notify_progress_with_total("bench-token", 75, 100);
+            rt.block_on(session.notify_progress_with_total("bench-token", 75, 100));
         });
     });
 
     // Test MCP spec notifications - resources changed
     group.bench_function("notify_resources_changed", |b| {
+        let rt = Runtime::new().unwrap();
         let session = create_session_context();
         b.iter(|| {
-            session.notify_resources_changed();
+            rt.block_on(session.notify_resources_changed());
         });
     });
 
     // Test MCP spec notifications - resource updated
     group.bench_function("notify_resource_updated", |b| {
+        let rt = Runtime::new().unwrap();
         let session = create_session_context();
         b.iter(|| {
-            session.notify_resource_updated("file:///test/resource.txt");
+            rt.block_on(session.notify_resource_updated("file:///test/resource.txt"));
         });
     });
 
     // Test MCP spec notifications - tools changed
     group.bench_function("notify_tools_changed", |b| {
+        let rt = Runtime::new().unwrap();
         let session = create_session_context();
         b.iter(|| {
-            session.notify_tools_changed();
+            rt.block_on(session.notify_tools_changed());
         });
     });
 
@@ -285,15 +305,19 @@ fn session_notification_benchmarks(c: &mut Criterion) {
                             let session = create_session_context();
 
                             // Send variety of MCP notifications per session
-                            session.notify_log(
+                            session
+                                .notify_log(
                                 LoggingLevel::Info,
                                 json!(format!("Concurrent session {} log", i)),
                                 Some("bench".to_string()),
                                 None
-                            );
-                            session.notify_progress(&format!("task-{}", i), (i as u64) * 10);
-                            session.notify_resources_changed();
-                            session.notify_tools_changed();
+                            )
+                            .await;
+                            session
+                                .notify_progress(&format!("task-{}", i), (i as u64) * 10)
+                                .await;
+                            session.notify_resources_changed().await;
+                            session.notify_tools_changed().await;
                         });
                         handles.push(handle);
                     }

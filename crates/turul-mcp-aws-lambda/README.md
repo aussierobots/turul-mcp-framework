@@ -147,9 +147,9 @@ struct CounterTool;
 impl CounterTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<i32> {
         if let Some(session) = session {
-            let count: i32 = session.get_typed_state("count").unwrap_or(0);
+            let count: i32 = session.get_typed_state("count").await.unwrap_or(0);
             let new_count = count + 1;
-            session.set_typed_state("count", new_count)?;
+            session.set_typed_state("count", new_count).await?;
             Ok(new_count)
         } else {
             Ok(0)
@@ -199,7 +199,7 @@ impl LongTaskTool {
         if let Some(session) = session {
             for i in 1..=5 {
                 // Send progress notification via SSE
-                session.notify_progress("long-task", i);
+                session.notify_progress("long-task", i).await;
                 
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }

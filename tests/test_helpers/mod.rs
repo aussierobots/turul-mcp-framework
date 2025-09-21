@@ -340,7 +340,7 @@ pub async fn assert_session_state<T>(session: &SessionContext, key: &str, expect
 where 
     T: serde::de::DeserializeOwned + PartialEq + std::fmt::Debug,
 {
-    let actual: Option<T> = session.get_typed_state(key);
+    let actual: Option<T> = session.get_typed_state(key).await;
     assert_eq!(actual, Some(expected), "Session state mismatch for key '{}'", key);
 }
 

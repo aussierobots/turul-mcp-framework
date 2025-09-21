@@ -167,7 +167,7 @@ impl McpTool for LogAuditEventTool {
         match result {
             Ok(_) => {
                 // Send progress notification
-                session.notify_progress(format!("audit_{}", event_type.to_lowercase()), 1);
+                session.notify_progress(format!("audit_{}", event_type.to_lowercase()), 1).await;
 
                 Ok(CallToolResult {
                     content: vec![ToolResult::text(json!({
