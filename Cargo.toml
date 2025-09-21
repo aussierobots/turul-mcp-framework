@@ -63,9 +63,13 @@ members = [
 
     # Tests
     "tests",
-    "tests/resources", 
+    "tests/resources",
     "tests/prompts",
     "tests/tools",
+    "tests/sampling",
+    "tests/roots",
+    "tests/elicitation",
+    "tests/shared",
 ]
 
 exclude = [

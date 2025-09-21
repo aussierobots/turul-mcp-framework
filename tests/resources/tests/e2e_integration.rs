@@ -482,15 +482,22 @@ async fn test_resource_subscription() {
     let server = TestServerManager::start().await.expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize().await.expect("Failed to initialize");
-    let result = client
-        .subscribe_resource("subscribe://updates")
-        .await
-        .expect("Failed to subscribe to resource");
+    // First, verify server correctly advertises that subscription is not supported
+    let init_response = client.initialize().await.expect("Failed to initialize");
+    let server_capabilities = &init_response["result"]["capabilities"]["resources"];
+    assert_eq!(server_capabilities["subscribe"], false, "Server should advertise subscribe=false until implemented");
 
-    // Should get acknowledgment
-    assert!(result.contains_key("result"));
-    // The specific response format depends on the server implementation
+    // Test that subscription request properly returns method not found error
+    let result = client
+        .subscribe_resource("file:///subscription/updates")
+        .await
+        .expect("Request should succeed but method should not be found");
+
+    // Should get a JSON-RPC error response for unimplemented method
+    assert!(result.contains_key("error"), "Should return error for unimplemented resources/subscribe method");
+    let error = result["error"].as_object().unwrap();
+    assert_eq!(error["code"], -32601, "Should return method not found error code");
+    assert!(error["message"].as_str().unwrap().contains("not found"), "Error message should indicate method not found");
 }
 
 #[tokio::test]

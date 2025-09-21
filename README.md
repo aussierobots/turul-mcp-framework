@@ -7,8 +7,8 @@ A comprehensive, battle-tested Rust framework for building Model Context Protoco
 
 ## ✨ Key Highlights
 
-- **🏗️ 10 Workspace Crates**: Complete MCP ecosystem with core framework, client library, and serverless support
-- **📚 65+ Comprehensive Examples**: Real-world business applications and framework demonstration examples (40+ active, 25+ archived)
+- **🏗️ 10 Framework Crates**: Complete MCP ecosystem with core framework, client library, and serverless support
+- **📚 68 Comprehensive Examples**: Real-world business applications and framework demonstration examples (42 active, 26 archived)
 - **🧪 100+ Comprehensive Tests**: Beta-grade test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
 - **🌐 Transport Flexibility**: HTTP/1.1 and SSE transport support (WebSocket and stdio planned)

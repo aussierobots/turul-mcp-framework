@@ -39,17 +39,17 @@ cargo test --test mcp_compliance_tests
 cargo test --test mcp_runtime_capability_validation
 
 # Protocol-specific E2E tests
-cargo test --package turul-mcp-framework-integration-tests --test resources_e2e_integration
-cargo test --package turul-mcp-framework-integration-tests --test prompts_e2e_integration
+cargo test --package mcp-resources-tests --test e2e_integration
+cargo test --package mcp-prompts-tests --test e2e_integration
 cargo test --package turul-mcp-framework-tools-integration-tests --test e2e_integration
 
 # Additional protocols
-cargo test --package tests --test sampling_protocol_e2e
-cargo test --package tests --test roots_protocol_e2e
-cargo test --package tests --test elicitation_protocol_e2e
+cargo test --package mcp-sampling-tests --test sampling_protocol_e2e
+cargo test --package mcp-roots-tests --test roots_protocol_e2e
+cargo test --package mcp-elicitation-tests --test elicitation_protocol_e2e
 
 # Concurrent session testing
-cargo test --package tests --test concurrent_session_advanced
+cargo test --package mcp-e2e-shared --test concurrent_session_advanced
 ```
 
 ### Test Server Verification
