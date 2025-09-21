@@ -299,18 +299,23 @@ impl LambdaMcpHandler {
                                 self.implementation.clone(),
                             );
 
-                            let response_value = match serde_json::to_value(initialize_result) {
-                                Ok(value) => value,
+                            let response = match serde_json::to_value(initialize_result) {
+                                Ok(value) => {
+                                    turul_mcp_json_rpc_server::JsonRpcMessage::success(
+                                        request.id,
+                                        turul_mcp_json_rpc_server::ResponseResult::Success(value),
+                                    )
+                                }
                                 Err(e) => {
                                     error!("Failed to serialize InitializeResult: {}", e);
-                                    serde_json::json!({"error": "Failed to serialize initialize result"})
+                                    turul_mcp_json_rpc_server::JsonRpcMessage::error(
+                                        turul_mcp_json_rpc_server::JsonRpcError::internal_error(
+                                            Some(request.id),
+                                            Some(format!("Failed to serialize initialize result: {}", e))
+                                        )
+                                    )
                                 }
                             };
-
-                            let response = turul_mcp_json_rpc_server::JsonRpcMessage::success(
-                                request.id,
-                                turul_mcp_json_rpc_server::ResponseResult::Success(response_value),
-                            );
 
                             // Return the session ID created by session storage for the HTTP header
                             (response, Some(session_info.session_id))
