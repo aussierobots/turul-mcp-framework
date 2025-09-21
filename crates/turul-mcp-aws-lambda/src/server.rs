@@ -190,8 +190,9 @@ impl LambdaMcpServer {
         use turul_mcp_server::SessionAwareMcpHandlerBridge;
         for (method, handler) in &self.handlers {
             let bridge_handler = SessionAwareMcpHandlerBridge::new(
-                handler.clone(), 
-                self.session_manager.clone()
+                handler.clone(),
+                self.session_manager.clone(),
+                self.strict_lifecycle,
             );
             dispatcher.register_method(method.clone(), bridge_handler);
         }
