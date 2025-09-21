@@ -307,9 +307,9 @@ impl LambdaMcpHandler {
                                 }
                             };
 
-                            let response = turul_mcp_json_rpc_server::JsonRpcResponse::success(
+                            let response = turul_mcp_json_rpc_server::JsonRpcMessage::success(
                                 request.id,
-                                response_value,
+                                turul_mcp_json_rpc_server::ResponseResult::Success(response_value),
                             );
 
                             // Return the session ID created by session storage for the HTTP header
@@ -318,11 +318,12 @@ impl LambdaMcpHandler {
                         Err(err) => {
                             error!("Failed to create session during initialize: {}", err);
                             let error_msg = format!("Session creation failed: {}", err);
-                            let error_response =
-                                turul_mcp_json_rpc_server::JsonRpcResponse::success(
-                                    request.id,
-                                    serde_json::json!({"error": error_msg}),
-                                );
+                            let error_response = turul_mcp_json_rpc_server::JsonRpcMessage::error(
+                                turul_mcp_json_rpc_server::JsonRpcError::internal_error(
+                                    Some(request.id),
+                                    Some(error_msg)
+                                )
+                            );
                             (error_response, None)
                         }
                     }
@@ -349,8 +350,17 @@ impl LambdaMcpHandler {
                     (response, session_id)
                 };
 
+                // Convert JsonRpcMessage to JsonRpcMessageResult
+                let message_result = match response {
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
+                        JsonRpcMessageResult::Response(resp)
+                    }
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
+                        JsonRpcMessageResult::Error(err)
+                    }
+                };
                 (
-                    JsonRpcMessageResult::Response(response),
+                    message_result,
                     response_session_id,
                     None::<String>,
                 )
