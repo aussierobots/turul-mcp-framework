@@ -172,7 +172,13 @@ impl McpHandler for PromptsListHandler {
             start_index, end_index, page_prompts.len(), has_more, next_cursor
         );
 
-        let base_response = ListPromptsResult::new(page_prompts);
+        let mut base_response = ListPromptsResult::new(page_prompts);
+
+        // Set top-level nextCursor field on the result before wrapping
+        if let Some(ref cursor) = next_cursor {
+            base_response = base_response.with_next_cursor(cursor.clone());
+        }
+
         let total = Some(all_prompts.len() as u64);
 
         let mut paginated_response = PaginatedResponse::with_pagination(
@@ -389,7 +395,13 @@ impl McpHandler for ResourcesListHandler {
             start_index, end_index, page_resources.len(), has_more, next_cursor
         );
 
-        let base_response = ListResourcesResult::new(page_resources);
+        let mut base_response = ListResourcesResult::new(page_resources);
+
+        // Set top-level nextCursor field on the result before wrapping
+        if let Some(ref cursor) = next_cursor {
+            base_response = base_response.with_next_cursor(cursor.clone());
+        }
+
         let total = Some(all_resources.len() as u64);
 
         let mut paginated_response = PaginatedResponse::with_pagination(
@@ -769,6 +781,9 @@ impl McpHandler for RootsHandler {
         );
 
         let base_response = ListRootsResult::new(page_roots);
+
+        // Note: ListRootsResult doesn't have next_cursor field - roots may not be paginatable per MCP spec
+
         let total = Some(all_roots.len() as u64);
 
         let paginated_response = PaginatedResponse::with_pagination(
@@ -858,15 +873,16 @@ impl ResourceTemplatesHandler {
 impl McpHandler for ResourceTemplatesHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         use turul_mcp_protocol::meta::Cursor;
-        use std::collections::HashMap;
 
-        // Parse cursor from params if provided
-        let cursor = params
-            .as_ref()
-            .and_then(|p| p.get("cursor"))
-            .and_then(|c| c.as_str())
-            .map(Cursor::from);
+        // Parse typed parameters for cursor and meta propagation
+        use turul_mcp_protocol::resources::ListResourceTemplatesParams;
+        let list_params = if let Some(params_value) = params {
+            serde_json::from_value::<ListResourceTemplatesParams>(params_value).unwrap_or_default()
+        } else {
+            ListResourceTemplatesParams::new()
+        };
 
+        let cursor = list_params.cursor;
         debug!("Listing resource templates with cursor: {:?}", cursor);
 
         tracing::info!("Resource templates list requested - {} templates registered", self.templates.len());
@@ -932,24 +948,29 @@ impl McpHandler for ResourceTemplatesHandler {
             page_templates.len(), has_more, next_cursor
         );
         
-        let mut result = ListResourceTemplatesResult::new(page_templates);
+        let mut base_response = ListResourceTemplatesResult::new(page_templates);
 
-        // Add pagination metadata directly to the result
-        if next_cursor.is_some() || total.is_some() {
-            let mut meta = HashMap::new();
-            if let Some(cursor) = next_cursor {
-                meta.insert("nextCursor".to_string(), serde_json::to_value(cursor)?);
-            }
-            if let Some(total_count) = total {
-                meta.insert("total".to_string(), serde_json::json!(total_count));
-            }
-            if has_more {
-                meta.insert("hasMore".to_string(), serde_json::json!(true));
-            }
-            result = result.with_meta(meta);
+        // Set top-level nextCursor field on the result before wrapping
+        if let Some(ref cursor) = next_cursor {
+            base_response = base_response.with_next_cursor(cursor.clone());
         }
 
-        serde_json::to_value(result).map_err(McpError::from)
+        use turul_mcp_protocol::meta::PaginatedResponse;
+        let mut paginated_response = PaginatedResponse::with_pagination(
+            base_response,
+            next_cursor,
+            total,
+            has_more,
+        );
+
+        // Propagate optional _meta from request to response (MCP 2025-06-18 compliance)
+        if let Some(meta) = list_params.meta {
+            let mut meta_obj = turul_mcp_protocol::meta::Meta::new();
+            meta_obj.extra = meta;
+            paginated_response = paginated_response.with_meta(meta_obj);
+        }
+
+        serde_json::to_value(paginated_response).map_err(McpError::from)
     }
 
     fn supported_methods(&self) -> Vec<String> {

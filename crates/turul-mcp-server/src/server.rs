@@ -209,7 +209,7 @@ impl McpServer {
         // Register all MCP handlers with session awareness
         for (method, handler) in &self.handlers {
             let bridge_handler =
-                SessionAwareMcpHandlerBridge::new(handler.clone(), self.session_manager.clone());
+                SessionAwareMcpHandlerBridge::new(handler.clone(), self.session_manager.clone(), self.strict_lifecycle);
             builder = builder.register_handler(vec![method.clone()], bridge_handler);
         }
 
@@ -219,6 +219,7 @@ impl McpServer {
         let initialized_bridge = SessionAwareMcpHandlerBridge::new(
             Arc::new(initialized_handler),
             self.session_manager.clone(),
+            self.strict_lifecycle,
         );
         builder = builder.register_handler(
             vec!["notifications/initialized".to_string()],
@@ -348,7 +349,7 @@ impl McpServer {
         // Register all MCP handlers with session awareness
         for (method, handler) in &self.handlers {
             let bridge_handler =
-                SessionAwareMcpHandlerBridge::new(handler.clone(), self.session_manager.clone());
+                SessionAwareMcpHandlerBridge::new(handler.clone(), self.session_manager.clone(), self.strict_lifecycle);
             builder = builder.register_handler(vec![method.clone()], bridge_handler);
         }
 
@@ -358,6 +359,7 @@ impl McpServer {
         let initialized_bridge = SessionAwareMcpHandlerBridge::new(
             Arc::new(initialized_handler),
             self.session_manager.clone(),
+            self.strict_lifecycle,
         );
         builder = builder.register_handler(
             vec!["notifications/initialized".to_string()],
@@ -393,13 +395,15 @@ impl McpServer {
 pub struct SessionAwareMcpHandlerBridge {
     handler: Arc<dyn McpHandler>,
     session_manager: Arc<SessionManager>,
+    strict_lifecycle: bool,
 }
 
 impl SessionAwareMcpHandlerBridge {
-    pub fn new(handler: Arc<dyn McpHandler>, session_manager: Arc<SessionManager>) -> Self {
+    pub fn new(handler: Arc<dyn McpHandler>, session_manager: Arc<SessionManager>, strict_lifecycle: bool) -> Self {
         Self {
             handler,
             session_manager,
+            strict_lifecycle,
         }
     }
 }
@@ -434,6 +438,24 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
                 None
             }
         };
+
+        // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled)
+        if self.strict_lifecycle && method != "initialize" && method != "notifications/initialized" {
+            if let Some(ref session_ctx) = mcp_session_context {
+                let session_initialized = self.session_manager.is_session_initialized(&session_ctx.session_id).await;
+                if !session_initialized {
+                    debug!(
+                        "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
+                        method, session_ctx.session_id
+                    );
+                    return Err(
+                        turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
+                            "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)".to_string(),
+                        ),
+                    );
+                }
+            }
+        }
 
         // Convert JSON-RPC params to Value
         let mcp_params = params.map(|p| p.to_value());
@@ -821,33 +843,53 @@ impl JsonRpcHandler for ListToolsHandler {
             );
         }
 
-        // Parse cursor from params if provided
-        let cursor = params
-            .as_ref()
-            .and_then(|p| p.get("cursor"))
-            .and_then(|c| c.as_str())
-            .map(Cursor::from);
+        // Parse typed parameters for cursor and meta propagation
+        use turul_mcp_protocol::tools::{ListToolsParams, ListToolsResult};
+        let list_params = if let Some(params_value) = params {
+            serde_json::from_value::<ListToolsParams>(params_value.to_value()).unwrap_or_default()
+        } else {
+            ListToolsParams::new()
+        };
 
+        let cursor = list_params.cursor;
         debug!("Listing tools with cursor: {:?}", cursor);
 
-        let tools: Vec<Tool> = self
+        // Convert tools to descriptors and sort by name for stable pagination
+        let mut tools: Vec<Tool> = self
             .tools
             .values()
             .map(|tool| tool_to_descriptor(tool.as_ref()))
             .collect();
 
-        let base_response = ListToolsResult::new(tools.clone());
+        // Sort by tool name to ensure stable ordering for pagination
+        tools.sort_by(|a, b| a.name.cmp(&b.name));
 
-        // Add pagination metadata
-        let has_more = false; // In a real implementation, this would depend on the actual data
+        let mut base_response = ListToolsResult::new(tools.clone());
+
+        // For simplicity, showing all tools in one page
+        // In a real implementation with many tools, implement proper pagination like other handlers
+        let has_more = false;
         let total = Some(tools.len() as u64);
+        let next_cursor: Option<Cursor> = None; // No next page in this simple implementation
 
-        let paginated_response = PaginatedResponse::with_pagination(
+        // Set top-level nextCursor field on the result before wrapping
+        if let Some(ref cursor) = next_cursor {
+            base_response = base_response.with_next_cursor(cursor.clone());
+        }
+
+        let mut paginated_response = PaginatedResponse::with_pagination(
             base_response,
-            None, // next_cursor - would be calculated based on current page
+            next_cursor,
             total,
             has_more,
         );
+
+        // Propagate optional _meta from request to response (MCP 2025-06-18 compliance)
+        if let Some(meta) = list_params.meta {
+            let mut meta_obj = turul_mcp_protocol::meta::Meta::new();
+            meta_obj.extra = meta;
+            paginated_response = paginated_response.with_meta(meta_obj);
+        }
 
         serde_json::to_value(paginated_response).map_err(|e| {
             turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
@@ -904,10 +946,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         // MCP Lifecycle Guard: Ensure session is initialized before allowing tool operations (if strict mode enabled)
         if self.strict_lifecycle {
             if let Some(ref session_ctx) = session_context {
-                let session_initialized = futures::executor::block_on(
-                    self.session_manager
-                        .is_session_initialized(&session_ctx.session_id),
-                );
+                let session_initialized = self.session_manager.is_session_initialized(&session_ctx.session_id).await;
                 if !session_initialized {
                     debug!(
                         "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
