@@ -102,12 +102,12 @@ cd ../prompts && cargo build
 cargo test --workspace --test "*e2e*" -- --nocapture
 
 # Or run each protocol test suite individually
-cargo test --package tests --test sampling_protocol_e2e -- --nocapture
-cargo test --package tests --test roots_protocol_e2e -- --nocapture
-cargo test --package tests --test elicitation_protocol_e2e -- --nocapture
-cargo test --package turul-mcp-framework-integration-tests --test resources_e2e_integration -- --nocapture
-cargo test --package turul-mcp-framework-integration-tests --test prompts_e2e_integration -- --nocapture
-cargo test --package turul-mcp-framework-tools-integration-tests --test e2e_integration -- --nocapture
+cargo test -p mcp-sampling-tests --test sampling_protocol_e2e -- --nocapture
+cargo test -p mcp-roots-tests --test roots_protocol_e2e -- --nocapture
+cargo test -p mcp-elicitation-tests --test elicitation_protocol_e2e -- --nocapture
+cargo test -p mcp-resources-tests --test e2e_integration -- --nocapture
+cargo test -p mcp-prompts-tests --test e2e_integration -- --nocapture
+cargo test -p turul-mcp-framework-tools-integration-tests --test e2e_integration -- --nocapture
 ```
 
 #### Run Specific Test Categories
@@ -115,26 +115,26 @@ cargo test --package turul-mcp-framework-tools-integration-tests --test e2e_inte
 **Protocol E2E Tests**:
 ```bash
 # All major protocol areas
-cargo test --package tests --test sampling_protocol_e2e
-cargo test --package tests --test roots_protocol_e2e
-cargo test --package tests --test elicitation_protocol_e2e
-cargo test --package turul-mcp-framework-integration-tests --test resources_e2e_integration
-cargo test --package turul-mcp-framework-integration-tests --test prompts_e2e_integration
-cargo test --package turul-mcp-framework-tools-integration-tests --test e2e_integration
+cargo test -p mcp-sampling-tests --test sampling_protocol_e2e
+cargo test -p mcp-roots-tests --test roots_protocol_e2e
+cargo test -p mcp-elicitation-tests --test elicitation_protocol_e2e
+cargo test -p mcp-resources-tests --test e2e_integration
+cargo test -p mcp-prompts-tests --test e2e_integration
+cargo test -p turul-mcp-framework-tools-integration-tests --test e2e_integration
 ```
 
 **Core Compliance Tests**:
 ```bash
-cargo test --package tests --test mcp_runtime_capability_validation
-cargo test --package tests --test mcp_compliance_tests
-cargo test --package tests --test mcp_specification_compliance
+cargo test -p turul-mcp-framework-integration-tests --test mcp_runtime_capability_validation
+cargo test -p turul-mcp-framework-integration-tests --test mcp_compliance_tests
+cargo test -p turul-mcp-framework-integration-tests --test mcp_specification_compliance
 ```
 
 **Session and Framework Tests**:
 ```bash
-cargo test --package tests --test basic_session_test
-cargo test --package tests --test concurrent_session_advanced
-cargo test --package tests --test framework_integration_tests
+cargo test -p turul-mcp-framework-integration-tests --test basic_session_test
+cargo test -p mcp-e2e-shared --test concurrent_session_advanced
+cargo test -p turul-mcp-framework-integration-tests --test framework_integration_tests
 ```
 
 #### Run Individual Tests

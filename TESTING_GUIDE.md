@@ -457,35 +457,35 @@ kill $SERVER_PID
 ### All E2E Protocol Tests
 ```bash
 # Run all E2E tests across all protocol areas
-cargo test --package tests --test sampling_protocol_e2e    # Sampling protocol
-cargo test --package tests --test roots_protocol_e2e       # Roots protocol
-cargo test --package tests --test elicitation_protocol_e2e # Elicitation protocol
+cargo test -p mcp-sampling-tests --test sampling_protocol_e2e    # Sampling protocol
+cargo test -p mcp-roots-tests --test roots_protocol_e2e         # Roots protocol
+cargo test -p mcp-elicitation-tests --test elicitation_protocol_e2e # Elicitation protocol
 
 # Resource and prompt E2E tests
-cargo test --package turul-mcp-framework-integration-tests --test resources_e2e_integration
-cargo test --package turul-mcp-framework-integration-tests --test prompts_e2e_integration
+cargo test -p mcp-resources-tests --test e2e_integration
+cargo test -p mcp-prompts-tests --test e2e_integration
 
 # Tools E2E tests
-cargo test --package turul-mcp-framework-tools-integration-tests --test e2e_integration
+cargo test -p turul-mcp-framework-tools-integration-tests --test e2e_integration
 
 # Advanced concurrent session tests
-cargo test --package tests --test concurrent_session_advanced
+cargo test -p mcp-e2e-shared --test concurrent_session_advanced
 ```
 
 ### Individual Test Categories
 ```bash
 # Core compliance tests
-cargo test --test mcp_compliance_tests
-cargo test --test mcp_specification_compliance
+cargo test -p turul-mcp-framework-integration-tests --test mcp_compliance_tests
+cargo test -p turul-mcp-framework-integration-tests --test mcp_specification_compliance
 
 # Framework integration tests
-cargo test --test framework_integration_tests
-cargo test --test working_examples_validation
+cargo test -p turul-mcp-framework-integration-tests --test framework_integration_tests
+cargo test -p turul-mcp-framework-integration-tests --test working_examples_validation
 
 # Session and client tests
-cargo test --test basic_session_test
-cargo test --test client_drop_test
-cargo test --test session_context_macro_tests
+cargo test -p turul-mcp-framework-integration-tests --test basic_session_test
+cargo test -p turul-mcp-framework-integration-tests --test client_drop_test
+cargo test -p turul-mcp-framework-integration-tests --test session_context_macro_tests
 ```
 
 ## Continuous Integration Testing
@@ -498,9 +498,14 @@ cargo test -p turul-mcp-framework-integration-tests --test mcp_runtime_capabilit
 cargo build --workspace --release
 
 # Run all E2E protocol tests
-cargo test --package tests
-cargo test --package turul-mcp-framework-integration-tests
-cargo test --package turul-mcp-framework-tools-integration-tests
+cargo test -p mcp-sampling-tests
+cargo test -p mcp-roots-tests
+cargo test -p mcp-elicitation-tests
+cargo test -p mcp-resources-tests
+cargo test -p mcp-prompts-tests
+cargo test -p mcp-e2e-shared
+cargo test -p turul-mcp-framework-integration-tests
+cargo test -p turul-mcp-framework-tools-integration-tests
 
 # Verify examples compile
 for example in examples/*/; do
