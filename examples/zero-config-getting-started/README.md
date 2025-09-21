@@ -66,7 +66,7 @@ server.run().await
 ## Running
 
 ```bash
-cargo run --example zero-config-getting-started
+cargo run --package zero-config-getting-started
 ```
 
 ## Testing

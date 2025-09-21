@@ -5,16 +5,16 @@
 //! Usage:
 //! ```bash
 //! # Default (port 8003, POST SSE enabled)
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-server
+//! RUST_LOG=info cargo run --package logging-test-server
 //!
 //! # Custom port with POST SSE enabled
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-server -- --port 8080
+//! RUST_LOG=info cargo run --package logging-test-server -- --port 8080
 //!
 //! # Disable POST SSE streaming (JSON-only responses)  
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-server -- --disable-post-sse
+//! RUST_LOG=info cargo run --package logging-test-server -- --disable-post-sse
 //!
 //! # Enable POST SSE explicitly
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-server -- --enable-post-sse
+//! RUST_LOG=info cargo run --package logging-test-server -- --enable-post-sse
 //! ```
 
 use anyhow::Result;

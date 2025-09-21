@@ -6,10 +6,10 @@ A comprehensive demonstration of **dynamic MCP resources** with parameterized UR
 
 Unlike static resources with fixed URIs like `file://config.json`, this server demonstrates **dynamic resources** that accept identifiers to access specific entities:
 
-- `users://user-123` - Specific user profile
-- `products://prod-456` - Specific product information  
-- `documents://doc-789` - Specific document content
-- `orders://order-2024-001` - Specific order details
+- `file:///users/user-123` - Specific user profile
+- `file:///products/prod-456` - Specific product information
+- `file:///documents/doc-789` - Specific document content
+- `file:///orders/order-2024-001` - Specific order details
 
 ## Features
 

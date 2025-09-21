@@ -10,7 +10,7 @@
 //! ## Usage
 //! ```bash
 //! # Test against a running MCP server
-//! cargo run --example client-initialise-report -- --url http://127.0.0.1:8000/mcp
+//! cargo run --package client-initialise-report -- --url http://127.0.0.1:8000/mcp
 //! ```
 //!
 //! ## Expected Output

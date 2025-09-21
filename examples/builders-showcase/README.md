@@ -50,7 +50,7 @@ This example demonstrates **all 9 MCP runtime builders** working together to cre
 
 ```bash
 # From the repository root
-cargo run --example builders-showcase
+cargo run --package builders-showcase
 ```
 
 The server will start at `http://127.0.0.1:8080/mcp` and provide:

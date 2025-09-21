@@ -8,7 +8,7 @@
 //!
 //! Usage:
 //! ```bash
-//! RUST_LOG=debug cargo run --package turul-mcp-server --example session-logging-proof-test
+//! RUST_LOG=debug cargo run --package session-logging-proof-test
 //! ```
 
 use anyhow::Result;

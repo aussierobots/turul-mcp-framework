@@ -9,13 +9,13 @@
 //! ## Usage
 //! ```bash
 //! # Start server on default port (8000)
-//! cargo run --example client-initialise-server
+//! cargo run --package client-initialise-server
 //! ```
 //!
 //! ## Test with Client
 //! ```bash
 //! # In another terminal:
-//! cargo run --example client-initialise-report -- --url http://127.0.0.1:8000/mcp
+//! cargo run --package client-initialise-report -- --url http://127.0.0.1:8000/mcp
 //! ```
 
 use anyhow::Result;
@@ -713,13 +713,13 @@ async fn main() -> Result<()> {
     info!("");
     info!("🧪 Test with client:");
     info!(
-        "   cargo run --example client-initialise-report -- --url http://127.0.0.1:{}/mcp",
+        "   cargo run --package client-initialise-report -- --url http://127.0.0.1:{}/mcp",
         port
     );
     info!("");
     info!("🗄️  Storage backends:");
-    info!("   • InMemory (default): cargo run --example client-initialise-server -- --port {} --storage-backend inmemory", port);
-    info!("   • SQLite (persistent): cargo run --example client-initialise-server -- --port {} --storage-backend sqlite", port);
+    info!("   • InMemory (default): cargo run --package client-initialise-server -- --port {} --storage-backend inmemory", port);
+    info!("   • SQLite (persistent): cargo run --package client-initialise-server -- --port {} --storage-backend sqlite", port);
     info!("   • PostgreSQL (enterprise): cargo run --features postgres --example client-initialise-server -- --port {} --storage-backend postgres", port);
     info!("   • DynamoDB (AWS cloud): cargo run --features dynamodb --example client-initialise-server -- --port {} --storage-backend dynamodb", port);
     info!("");

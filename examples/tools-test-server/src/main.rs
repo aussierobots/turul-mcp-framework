@@ -18,7 +18,7 @@
 //! ## Usage:
 //! ```bash
 //! # Start server on random port
-//! cargo run --example tools-test-server
+//! cargo run --package tools-test-server
 //! 
 //! # Test with curl
 //! curl -X POST http://127.0.0.1:PORT/mcp \

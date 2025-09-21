@@ -18,7 +18,7 @@
 //!
 //! ### Advanced Resources (Features)
 //! - `file:///session/info.json` - Returns session ID and metadata (session-aware)
-//! - `file:///subscribe/updates.json` - Supports resource subscriptions
+//! - `file:///subscribe/updates.json` - Resource for testing subscription behavior (returns MethodNotFound)
 //! - `file:///notify/trigger.json` - Triggers list change notifications via SSE
 //! - `file:///multi/contents.txt` - Returns multiple ResourceContent items
 //! - `file:///paginated/items.json` - Supports cursor-based pagination
@@ -32,7 +32,7 @@
 //! ## Usage:
 //! ```bash
 //! # Start server on random port
-//! cargo run --example resource-test-server
+//! cargo run --package resource-test-server
 //! 
 //! # Test with curl
 //! curl -X POST http://127.0.0.1:PORT/mcp \
@@ -1318,7 +1318,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("");
     info!("   🚀 Advanced Resources (Features):");
     info!("      • file:///session/info.json - Session-aware resource");
-    info!("      • file:///subscribe/updates.json - Subscription support");
+    info!("      • file:///subscribe/updates.json - Test subscription resource (returns MethodNotFound)");
     info!("      • file:///notify/trigger.json - SSE notification triggers");
     info!("      • file:///multi/contents.txt - Multiple ResourceContent items");
     info!("      • file:///paginated/items.json - Cursor-based pagination");

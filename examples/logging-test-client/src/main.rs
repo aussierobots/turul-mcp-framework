@@ -8,22 +8,22 @@
 //! Usage:
 //! ```bash
 //! # First, start the server in another terminal:
-//! cargo run --package turul-mcp-server --example logging-test-server
+//! cargo run --package logging-test-server
 //!
 //! # Default: Test GET SSE mode (comprehensive test)
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client
+//! RUST_LOG=info cargo run --package logging-test-client
 //!
 //! # Test POST SSE streaming mode only
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client -- --test-post-sse
+//! RUST_LOG=info cargo run --package logging-test-client -- --test-post-sse
 //!
 //! # Test both POST and GET SSE streaming modes
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client -- --test-both-modes
+//! RUST_LOG=info cargo run --package logging-test-client -- --test-both-modes
 //!
 //! # Quick verification test (faster)
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client -- --quick-test
+//! RUST_LOG=info cargo run --package logging-test-client -- --quick-test
 //!
 //! # Test against server on different port
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client -- --port 8080
+//! RUST_LOG=info cargo run --package logging-test-client -- --port 8080
 //! ```
 
 use anyhow::Result;
