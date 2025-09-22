@@ -28,8 +28,46 @@ struct Calculator;  // Framework → tools/call
 ### API Conventions
 - **SessionContext**: Use `get_typed_state(key).await` and `set_typed_state(key, value).await?`
 - **Builder Pattern**: `McpServer::builder()` not `McpServerBuilder::new()`
-- **Error Handling**: Use `McpError` types, avoid `.unwrap()` in production
+- **Error Handling**: Always use `McpError` types - NEVER create JsonRpcError directly in handlers
 - **Session IDs**: Always `Uuid::now_v7()` for temporal ordering
+
+### 🚨 Critical Error Handling Rules (2025-09-22)
+
+**MANDATORY**: Use the new unified error handling architecture. Never implement workarounds.
+
+```rust
+// ✅ CORRECT - Handlers return domain errors only
+#[async_trait]
+impl JsonRpcHandler for MyHandler {
+    type Error = McpError;  // Always use McpError
+
+    async fn handle(&self, method: &str, params: Option<RequestParams>, session: Option<SessionContext>)
+        -> Result<Value, McpError> {  // Domain errors only
+
+        // Return domain errors - dispatcher converts to JSON-RPC
+        Err(McpError::InvalidParameters("Missing required parameter".to_string()))
+    }
+}
+
+// ❌ WRONG - Never create JsonRpcError in handlers
+impl MyHandler {
+    async fn handle(&self, ...) -> Result<Value, JsonRpcError> {  // NO!
+        Err(JsonRpcError::new(...))  // NEVER DO THIS
+    }
+}
+
+// ❌ WRONG - Never use JsonRpcProcessingError (removed in 0.2.0)
+use turul_mcp_json_rpc_server::error::JsonRpcProcessingError;  // NO! Doesn't exist
+
+// ✅ CORRECT - Dispatcher owns all protocol conversion
+JsonRpcDispatcher<McpError>::new()  // Type-safe dispatcher
+```
+
+**Key Rules:**
+1. Handlers return `Result<Value, McpError>` ONLY
+2. Dispatcher converts McpError → JsonRpcError automatically
+3. Never create JsonRpcError, JsonRpcResponse in business logic
+4. Use `McpError::InvalidParameters`, `McpError::ToolNotFound`, etc.
 
 ### JSON-RPC Response Format (JSON-RPC 2.0 Compliance)
 The framework uses **separate response types** for success and error cases:
