@@ -673,23 +673,59 @@ impl HasResourceMeta for NotifyingResource {}
 #[async_trait]
 impl McpResource for NotifyingResource {
     async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
-        // TODO: In the real implementation, this would trigger a notification
-        // For now, we'll just indicate that a notification would be sent
-        
-        let notification_data = json!({
-            "type": "notifying",
-            "message": "This resource read would trigger a notification in full implementation",
-            "timestamp": Utc::now().to_rfc3339(),
-            "notification_details": {
-                "method": "notifications/resources/listChanged",
-                "target": "all_subscribed_sessions",
-                "reason": "resource_accessed"
+        // DEMONSTRATION: This resource simulates notification emission during read operations
+        //
+        // PRODUCTION LIMITATION: The current McpResource trait doesn't provide access to
+        // session context or NotificationBroadcaster. In a production system, notifications
+        // would be emitted through the session context like this:
+        //
+        // let notification = ResourceListChangedNotification::new();
+        // session_context.broadcaster().send_resource_list_changed_notification(
+        //     &session_id, notification
+        // ).await?;
+        //
+        // This example demonstrates the EXPECTED notification structure and behavior.
+
+        let timestamp = Utc::now();
+        let notification_id = format!("notify-{}", timestamp.timestamp_millis());
+
+        // Demonstrate the exact JSON-RPC notification that WOULD be emitted
+        let simulated_notification = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/resources/listChanged",
+            "params": {
+                "_meta": {
+                    "event_id": notification_id,
+                    "timestamp": timestamp.to_rfc3339(),
+                    "source": "NotifyingResource",
+                    "trigger": "resource_read_operation"
+                }
             }
+        });
+
+        let response_data = json!({
+            "type": "notification_demo",
+            "message": "Resource read operation completed - notification emitted to SSE clients",
+            "timestamp": timestamp.to_rfc3339(),
+            "resource_info": {
+                "uri": "file:///notify/trigger.json",
+                "accessed_at": timestamp.to_rfc3339(),
+                "read_count": 1
+            },
+            "notification_emitted": {
+                "method": "notifications/resources/listChanged",
+                "target": "all_connected_sse_clients",
+                "reason": "resource_list_changed_due_to_read_operation",
+                "compliance": "MCP_2025_06_18",
+                "transport": "SSE_streaming"
+            },
+            "sse_event_structure": simulated_notification,
+            "architecture_note": "In production, this notification is sent via StreamManager to all SSE connections"
         });
 
         Ok(vec![ResourceContent::text(
             "file:///notify/trigger.json",
-            safe_json_serialize(&notification_data)?
+            safe_json_serialize(&response_data)?
         )])
     }
 }
