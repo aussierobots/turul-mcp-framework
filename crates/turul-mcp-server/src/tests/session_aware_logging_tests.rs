@@ -454,7 +454,7 @@ mod edge_case_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Manually set invalid level string in session state
-        (context.set_state)("mcp:logging:level", json!("invalid_level"));
+        (context.set_state)("mcp:logging:level", json!("invalid_level")).await;
         
         // Should fall back to default Info level
         let level = context.get_logging_level().await;
@@ -470,7 +470,7 @@ mod edge_case_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Set non-string value in session state
-        (context.set_state)("mcp:logging:level", json!(42));
+        (context.set_state)("mcp:logging:level", json!(42)).await;
         
         // Should fall back to default Info level
         let level = context.get_logging_level().await;

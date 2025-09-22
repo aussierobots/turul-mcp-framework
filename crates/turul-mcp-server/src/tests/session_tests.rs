@@ -812,7 +812,7 @@ mod error_handling_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Set valid JSON data
-        (context.set_state)("valid_json", json!({"key": "value"}));
+        (context.set_state)("valid_json", json!({"key": "value"})).await;
         
         // Try to retrieve as wrong type
         #[derive(serde::Deserialize, Debug, PartialEq)]
