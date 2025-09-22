@@ -29,7 +29,16 @@ async fn add(
     #[param(description = "First number")] a: f64,
     #[param(description = "Second number")] b: f64,
 ) -> McpResult<f64> {
-    Ok(a + b)
+    Ok(a + b)  // Framework wraps as {"output": 8.0} in JSON-RPC response
+}
+
+// Optional: Customize the output field name
+#[mcp_tool(name = "multiply", description = "Multiply two numbers", output_field = "product")]
+async fn multiply(
+    #[param(description = "First number")] a: f64,
+    #[param(description = "Second number")] b: f64,
+) -> McpResult<f64> {
+    Ok(a * b)  // Framework wraps as {"product": 12.0} in JSON-RPC response
 }
 
 #[tokio::main]
@@ -38,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("calculator-server")
         .version("1.0.0")
         .tool_fn(add)  // Use function name directly
-        .bind_address("127.0.0.1:8080".parse()?)
+        .bind_address("127.0.0.1:8641".parse()?)  // Default port; customize as needed
         .build()?;
 
     server.run().await
@@ -86,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("calculator-server")
         .version("1.0.0")
         .tool(Calculator { a: 0.0, b: 0.0, operation: "+".to_string() })
-        .bind_address("127.0.0.1:8080".parse()?)
+        .bind_address("127.0.0.1:8642".parse()?)  // Different port to avoid conflicts
         .build()?;
 
     server.run().await
@@ -148,7 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .version("1.0.0")
         .resource_fn(get_config)       // Static resource
         .resource_fn(get_user_profile) // Template: file:///users/{user_id}.json
-        .bind_address("127.0.0.1:8080".parse()?)
+        .bind_address("127.0.0.1:8643".parse()?)  // Different port to avoid conflicts
         .build()?;
 
     server.run().await
@@ -176,7 +185,7 @@ cargo test -p turul-mcp-framework-integration-tests --test mcp_runtime_capabilit
 cargo run -p minimal-server
 
 # 4. Test the server (in another terminal)
-curl -X POST http://127.0.0.1:8000/mcp \
+curl -X POST http://127.0.0.1:8641/mcp \
   -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
 ```

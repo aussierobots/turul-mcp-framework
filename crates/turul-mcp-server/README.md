@@ -60,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("calculator-server")
         .version("1.0.0")
         .tool_fn(add) // Use original function name
-        .bind_address("127.0.0.1:8080".parse()?)
+        .bind_address("127.0.0.1:8641".parse()?)  // Default port
         .build()?;
 
     server.run().await
@@ -95,7 +95,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("calculator-server")
         .version("1.0.0")
         .tool(Calculator { a: 0.0, b: 0.0 })
-        .bind_address("127.0.0.1:8080".parse()?)
+        .bind_address("127.0.0.1:8641".parse()?)  // Default port
         .build()?;
 
     server.run().await
@@ -135,7 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("calculator-server")
         .version("1.0.0")
         .tool(calculator)
-        .bind_address("127.0.0.1:8080".parse()?)
+        .bind_address("127.0.0.1:8641".parse()?)  // Default port
         .build()?;
 
     server.run().await
@@ -202,7 +202,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .version("1.0.0")
         .resource_fn(get_config)       // Static resource
         .resource_fn(get_user_profile) // Template: file:///users/{user_id}.json
-        .bind_address("127.0.0.1:8080".parse()?)
+        .bind_address("127.0.0.1:8641".parse()?)  // Default port
         .build()?;
 
     // Framework automatically:

@@ -51,7 +51,7 @@ let server = McpServer::builder()
     .name("calculator-server")
     .version("1.0.0")
     .tool_fn(calculator)  // Framework knows the function name!
-    .bind_address("127.0.0.1:8080".parse()?)
+    .bind_address("127.0.0.1:8641".parse()?)  // Default port
     .build()?;
 
 server.run().await
@@ -507,7 +507,7 @@ let server = McpServer::builder()
     .name("prompt-server")
     .version("1.0.0")
     .prompt(CodeReviewPrompt::default())
-    .bind_address("127.0.0.1:8080".parse()?)
+    .bind_address("127.0.0.1:8641".parse()?)  // Default port
     .build()?;
 
 server.run().await
@@ -664,7 +664,7 @@ let server = McpServer::builder()
     .resource_fn(get_config)       // Static resource
     .resource_fn(get_user_profile) // Template: file:///users/{user_id}.json
     .resource_fn(get_log_entries)  // Template with params
-    .bind_address("127.0.0.1:8080".parse()?)
+    .bind_address("127.0.0.1:8641".parse()?)  // Default port
     .build()?;
 
 server.run().await
@@ -756,7 +756,7 @@ let server = McpServer::builder()
     .name("config-server")
     .version("1.0.0")
     .resource_fn(create_config_resource)  // Uses constructor function
-    .bind_address("127.0.0.1:8080".parse()?)
+    .bind_address("127.0.0.1:8641".parse()?)  // Default port
     .build()?;
 
 server.run().await
