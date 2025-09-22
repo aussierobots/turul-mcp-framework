@@ -98,7 +98,7 @@ pub struct RootsListChangedParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RootsListChangedNotification {
-    /// Method name (always "notifications/roots/list_changed")
+    /// Method name (always "notifications/roots/listChanged")
     pub method: String,
     /// Optional parameters (can be None, but _meta can be present)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -187,7 +187,7 @@ impl Default for RootsListChangedNotification {
 impl RootsListChangedNotification {
     pub fn new() -> Self {
         Self {
-            method: "notifications/roots/list_changed".to_string(),
+            method: "notifications/roots/listChanged".to_string(),
             params: None,
         }
     }
@@ -426,7 +426,7 @@ mod tests {
     #[test]
     fn test_roots_list_changed_notification() {
         let notification = RootsListChangedNotification::new();
-        assert_eq!(notification.method, "notifications/roots/list_changed");
+        assert_eq!(notification.method, "notifications/roots/listChanged");
     }
 
     #[test]
@@ -491,7 +491,7 @@ mod tests {
         
         let json_value = serde_json::to_value(&notification).unwrap();
         
-        assert_eq!(json_value["method"], "notifications/roots/list_changed");
+        assert_eq!(json_value["method"], "notifications/roots/listChanged");
         assert!(json_value["params"].is_object());
         assert_eq!(json_value["params"]["_meta"]["timestamp"], "2025-01-01T00:00:00Z");
     }
@@ -510,7 +510,7 @@ mod tests {
         let notification = RootsListChangedNotification::new();
         let json_value = serde_json::to_value(&notification).unwrap();
         
-        assert_eq!(json_value["method"], "notifications/roots/list_changed");
+        assert_eq!(json_value["method"], "notifications/roots/listChanged");
         assert!(json_value["params"].is_null() || !json_value.as_object().unwrap().contains_key("params"));
     }
 }

@@ -439,6 +439,19 @@ impl CallToolParams {
         }
     }
 
+    /// Get arguments as HashMap - CRITICAL: Use this instead of the trait method
+    /// The trait method has limitations due to lifetime issues with HashMap->Value conversion
+    pub fn get_arguments(&self) -> Option<&HashMap<String, Value>> {
+        self.arguments.as_ref()
+    }
+
+    /// Get arguments as Value (converted from HashMap)
+    pub fn get_arguments_as_value(&self) -> Option<Value> {
+        self.arguments.as_ref().map(|map| {
+            Value::Object(map.clone().into_iter().collect())
+        })
+    }
+
     pub fn with_arguments(mut self, arguments: HashMap<String, Value>) -> Self {
         self.arguments = Some(arguments);
         self
@@ -826,10 +839,14 @@ impl HasCallToolParams for CallToolParams {
     }
 
     fn arguments(&self) -> Option<&Value> {
-        // This is a temporary workaround for trait compatibility
-        // The trait expects &Value but we store HashMap<String, Value>
-        // TODO: Fix trait definition to use proper HashMap type
-        self.arguments.as_ref().and(None) // Return None for now
+        // Note: This trait method has limitations due to HashMap<String, Value> -> Value conversion
+        // The conversion creates a temporary Value that can't be borrowed for the required lifetime.
+        //
+        // For now, use CallToolParams::get_arguments() for HashMap access or
+        // get_arguments_as_value() for owned Value access in downstream code.
+        //
+        // The direct .arguments field access works fine and is used by the framework.
+        None
     }
 
     fn meta(&self) -> Option<&HashMap<String, Value>> {

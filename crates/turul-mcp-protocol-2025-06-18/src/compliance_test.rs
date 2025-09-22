@@ -79,7 +79,7 @@ mod tests {
 
         let json_value = serde_json::to_value(&notification).unwrap();
 
-        assert_eq!(json_value["method"], "notifications/resources/list_changed");
+        assert_eq!(json_value["method"], "notifications/resources/listChanged");
         assert!(json_value["params"].is_object());
         assert_eq!(json_value["params"]["_meta"]["timestamp"], "2025-01-01T00:00:00Z");
     }
@@ -127,7 +127,7 @@ mod tests {
         let notification = ResourceListChangedNotification::new();
         let json_value = serde_json::to_value(&notification).unwrap();
 
-        assert_eq!(json_value["method"], "notifications/resources/list_changed");
+        assert_eq!(json_value["method"], "notifications/resources/listChanged");
         // params should be null/absent since it's None
         assert!(json_value["params"].is_null() || !json_value.as_object().unwrap().contains_key("params"));
     }
