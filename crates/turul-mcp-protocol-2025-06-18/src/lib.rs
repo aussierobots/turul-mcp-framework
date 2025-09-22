@@ -159,9 +159,12 @@ pub enum McpError {
     
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
-    
-    #[error("JSON-RPC error: {0}")]
-    JsonRpcError(#[from] turul_mcp_json_rpc_server::JsonRpcError),
+
+    #[error("Transport error: {0}")]
+    TransportError(String),
+
+    #[error("JSON-RPC protocol error: {0}")]
+    JsonRpcProtocolError(String),
 }
 
 impl From<String> for McpError {
@@ -224,9 +227,19 @@ impl McpError {
     pub fn configuration(message: &str) -> Self {
         Self::ConfigurationError(message.to_string())
     }
-    
+
+    /// Create a transport error
+    pub fn transport(message: &str) -> Self {
+        Self::TransportError(message.to_string())
+    }
+
+    /// Create a JSON-RPC protocol error
+    pub fn json_rpc_protocol(message: &str) -> Self {
+        Self::JsonRpcProtocolError(message.to_string())
+    }
+
     /// Convert to a JsonRpcErrorObject for JSON-RPC 2.0 responses
-    pub fn to_json_rpc_error(&self) -> turul_mcp_json_rpc_server::error::JsonRpcErrorObject {
+    pub fn to_error_object(&self) -> turul_mcp_json_rpc_server::error::JsonRpcErrorObject {
         use turul_mcp_json_rpc_server::error::JsonRpcErrorObject;
         
         match self {
@@ -275,19 +288,37 @@ impl McpError {
             McpError::SessionError(msg) => 
                 JsonRpcErrorObject::server_error(-32031, &format!("Session error: {}", msg), None),
                 
+            // Transport and protocol layer errors
+            McpError::TransportError(msg) =>
+                JsonRpcErrorObject::server_error(-32040, &format!("Transport error: {}", msg), None),
+            McpError::JsonRpcProtocolError(msg) =>
+                JsonRpcErrorObject::server_error(-32041, &format!("JSON-RPC protocol error: {}", msg), None),
+
             // I/O and serialization errors map to internal errors
-            McpError::IoError(err) => 
+            McpError::IoError(err) =>
                 JsonRpcErrorObject::internal_error(Some(format!("IO error: {}", err))),
-            McpError::SerializationError(err) => 
+            McpError::SerializationError(err) =>
                 JsonRpcErrorObject::internal_error(Some(format!("Serialization error: {}", err))),
-                
-            // Nested JSON-RPC errors are passed through
-            McpError::JsonRpcError(err) => err.error.clone(),
         }
     }
     
     /// Create a JSON-RPC error response for this MCP error
     pub fn to_json_rpc_response(&self, id: Option<turul_mcp_json_rpc_server::RequestId>) -> turul_mcp_json_rpc_server::JsonRpcError {
-        turul_mcp_json_rpc_server::JsonRpcError::new(id, self.to_json_rpc_error())
+        turul_mcp_json_rpc_server::JsonRpcError::new(id, self.to_error_object())
+    }
+
+    /// Legacy method for backward compatibility - use to_error_object() instead
+    #[deprecated(note = "Use to_error_object() instead for cleaner architecture")]
+    pub fn to_json_rpc_error(&self) -> turul_mcp_json_rpc_server::error::JsonRpcErrorObject {
+        self.to_error_object()
     }
 }
+
+// Implement the ToJsonRpcError trait for MCP errors
+impl turul_mcp_json_rpc_server::r#async::ToJsonRpcError for McpError {
+    fn to_error_object(&self) -> turul_mcp_json_rpc_server::error::JsonRpcErrorObject {
+        // Delegate to our existing type-safe implementation
+        McpError::to_error_object(self)
+    }
+}
+

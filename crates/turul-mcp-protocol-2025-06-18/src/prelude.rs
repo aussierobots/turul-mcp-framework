@@ -5,9 +5,9 @@
 //!
 //! # Usage
 //!
-//! ```rust
-//! use turul_mcp_protocol::prelude::*;
-//! 
+//! ```rust,no_run
+//! use turul_mcp_protocol_2025_06_18::prelude::*;
+//!
 //! // Now you have access to all common MCP types and traits
 //! ```
 
