@@ -6,17 +6,15 @@ use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::{McpTool, McpServer, Result};
-use turul_mcp_protocol::McpError;
-use crate::resource::McpResource;
-use crate::{McpElicitation, McpPrompt, McpSampling, McpCompletion, McpLogger, McpRoot, McpNotification};
 use crate::handlers::*;
-use turul_mcp_protocol::{Implementation, ServerCapabilities};
+use crate::resource::McpResource;
+use crate::{
+    McpCompletion, McpElicitation, McpLogger, McpNotification, McpPrompt, McpRoot, McpSampling,
+};
+use crate::{McpServer, McpTool, Result};
+use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::initialize::*;
-
-
-
-
+use turul_mcp_protocol::{Implementation, ServerCapabilities};
 
 /// Builder for MCP servers
 pub struct McpServerBuilder {
@@ -24,62 +22,62 @@ pub struct McpServerBuilder {
     name: String,
     version: String,
     title: Option<String>,
-    
+
     /// Server capabilities
     capabilities: ServerCapabilities,
-    
+
     /// Tools registered with the server
     tools: HashMap<String, Arc<dyn McpTool>>,
-    
+
     /// Resources registered with the server
     resources: HashMap<String, Arc<dyn McpResource>>,
-    
+
     /// Template resources (URI template -> resource)
     template_resources: Vec<(crate::uri_template::UriTemplate, Arc<dyn McpResource>)>,
-    
+
     /// Prompts registered with the server
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
-    
+
     /// Elicitations registered with the server
     elicitations: HashMap<String, Arc<dyn McpElicitation>>,
-    
+
     /// Sampling providers registered with the server
     sampling: HashMap<String, Arc<dyn McpSampling>>,
-    
+
     /// Completion providers registered with the server
     completions: HashMap<String, Arc<dyn McpCompletion>>,
-    
+
     /// Loggers registered with the server
     loggers: HashMap<String, Arc<dyn McpLogger>>,
-    
+
     /// Root providers registered with the server
     root_providers: HashMap<String, Arc<dyn McpRoot>>,
-    
+
     /// Notification providers registered with the server
     notifications: HashMap<String, Arc<dyn McpNotification>>,
-    
+
     /// Handlers registered with the server
     handlers: HashMap<String, Arc<dyn McpHandler>>,
-    
+
     /// Roots configured for the server
     roots: Vec<turul_mcp_protocol::roots::Root>,
-    
+
     /// Optional instructions for clients
     instructions: Option<String>,
-    
+
     /// Session configuration
     session_timeout_minutes: Option<u64>,
     session_cleanup_interval_seconds: Option<u64>,
-    
+
     /// Session storage backend (defaults to InMemory if None)
     session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
-    
+
     /// MCP Lifecycle enforcement configuration
     strict_lifecycle: bool,
-    
+
     /// Test mode - disables security middleware for test servers
     test_mode: bool,
-    
+
     /// HTTP configuration (if enabled)
     #[cfg(feature = "http")]
     bind_address: SocketAddr,
@@ -89,7 +87,7 @@ pub struct McpServerBuilder {
     enable_cors: bool,
     #[cfg(feature = "http")]
     enable_sse: bool,
-    
+
     /// Validation errors collected during builder configuration
     validation_errors: Vec<String>,
 }
@@ -99,34 +97,74 @@ impl McpServerBuilder {
     pub fn new() -> Self {
         let tools = HashMap::new();
         let mut handlers: HashMap<String, Arc<dyn McpHandler>> = HashMap::new();
-        
+
         // Add all standard MCP 2025-06-18 handlers by default
         handlers.insert("ping".to_string(), Arc::new(PingHandler));
-        handlers.insert("completion/complete".to_string(), Arc::new(CompletionHandler));
-        handlers.insert("resources/list".to_string(), Arc::new(ResourcesListHandler::new()));
-        handlers.insert("resources/read".to_string(), Arc::new(ResourcesReadHandler::new()));
-        handlers.insert("prompts/list".to_string(), Arc::new(PromptsListHandler::new()));
-        handlers.insert("prompts/get".to_string(), Arc::new(PromptsGetHandler::new()));
+        handlers.insert(
+            "completion/complete".to_string(),
+            Arc::new(CompletionHandler),
+        );
+        handlers.insert(
+            "resources/list".to_string(),
+            Arc::new(ResourcesListHandler::new()),
+        );
+        handlers.insert(
+            "resources/read".to_string(),
+            Arc::new(ResourcesReadHandler::new()),
+        );
+        handlers.insert(
+            "prompts/list".to_string(),
+            Arc::new(PromptsListHandler::new()),
+        );
+        handlers.insert(
+            "prompts/get".to_string(),
+            Arc::new(PromptsGetHandler::new()),
+        );
         handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
         handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
-        handlers.insert("sampling/createMessage".to_string(), Arc::new(SamplingHandler));
+        handlers.insert(
+            "sampling/createMessage".to_string(),
+            Arc::new(SamplingHandler),
+        );
         // Note: resources/templates/list is only registered if template resources are configured (see build method)
-        handlers.insert("elicitation/create".to_string(), Arc::new(ElicitationHandler::with_mock_provider()));
-        
+        handlers.insert(
+            "elicitation/create".to_string(),
+            Arc::new(ElicitationHandler::with_mock_provider()),
+        );
+
         // Add all notification handlers (except notifications/initialized which is handled specially)
         let notifications_handler = Arc::new(NotificationsHandler);
-        handlers.insert("notifications/message".to_string(), notifications_handler.clone());
-        handlers.insert("notifications/progress".to_string(), notifications_handler.clone());
-        handlers.insert("notifications/resources/listChanged".to_string(), notifications_handler.clone());
-        handlers.insert("notifications/resources/updated".to_string(), notifications_handler.clone());
-        handlers.insert("notifications/tools/listChanged".to_string(), notifications_handler.clone());
-        handlers.insert("notifications/prompts/listChanged".to_string(), notifications_handler.clone());
-        handlers.insert("notifications/roots/listChanged".to_string(), notifications_handler);
-        
+        handlers.insert(
+            "notifications/message".to_string(),
+            notifications_handler.clone(),
+        );
+        handlers.insert(
+            "notifications/progress".to_string(),
+            notifications_handler.clone(),
+        );
+        handlers.insert(
+            "notifications/resources/listChanged".to_string(),
+            notifications_handler.clone(),
+        );
+        handlers.insert(
+            "notifications/resources/updated".to_string(),
+            notifications_handler.clone(),
+        );
+        handlers.insert(
+            "notifications/tools/listChanged".to_string(),
+            notifications_handler.clone(),
+        );
+        handlers.insert(
+            "notifications/prompts/listChanged".to_string(),
+            notifications_handler.clone(),
+        );
+        handlers.insert(
+            "notifications/roots/listChanged".to_string(),
+            notifications_handler,
+        );
+
         // Note: notifications/initialized is handled by InitializedNotificationHandler in server.rs
-        
-        
-        
+
         Self {
             name: "turul-mcp-server".to_string(),
             version: "1.0.0".to_string(),
@@ -147,9 +185,9 @@ impl McpServerBuilder {
             instructions: None,
             session_timeout_minutes: None,
             session_cleanup_interval_seconds: None,
-            session_storage: None, // Default: InMemory storage
+            session_storage: None,   // Default: InMemory storage
             strict_lifecycle: false, // Default: lenient mode for compatibility
-            test_mode: false, // Default: production mode with security
+            test_mode: false,        // Default: production mode with security
             #[cfg(feature = "http")]
             bind_address: "127.0.0.1:8000".parse().unwrap(),
             #[cfg(feature = "http")]
@@ -198,23 +236,23 @@ impl McpServerBuilder {
     /// This method provides a more intuitive way to register function tools.
     /// The `#[mcp_tool]` macro generates a constructor function with the same name
     /// as your async function, so you can use the function name directly.
-    /// 
+    ///
     /// # Example
     /// ```rust,ignore
     /// use turul_mcp_derive::mcp_tool;
     /// use turul_mcp_server::McpServer;
-    /// 
+    ///
     /// #[mcp_tool(name = "add", description = "Add numbers")]
     /// async fn add_numbers(a: f64, b: f64) -> Result<f64, String> {
     ///     Ok(a + b)
     /// }
-    /// 
+    ///
     /// let server = McpServer::builder()
     ///     .name("math-server")
     ///     .tool_fn(add_numbers) // Use the function name directly!
     ///     .build()?;
     /// ```
-    pub fn tool_fn<F, T>(self, func: F) -> Self 
+    pub fn tool_fn<F, T>(self, func: F) -> Self
     where
         F: Fn() -> T,
         T: McpTool + 'static,
@@ -257,12 +295,16 @@ impl McpServerBuilder {
                 Ok(template) => {
                     // Validate template pattern
                     if let Err(e) = self.validate_uri_template(template.pattern()) {
-                        self.validation_errors.push(format!("Invalid template resource URI '{}': {}", uri, e));
+                        self.validation_errors
+                            .push(format!("Invalid template resource URI '{}': {}", uri, e));
                     }
                     self.template_resources.push((template, Arc::new(resource)));
                 }
                 Err(e) => {
-                    self.validation_errors.push(format!("Failed to parse template resource URI '{}': {}", uri, e));
+                    self.validation_errors.push(format!(
+                        "Failed to parse template resource URI '{}': {}",
+                        uri, e
+                    ));
                 }
             }
         } else {
@@ -270,7 +312,8 @@ impl McpServerBuilder {
             tracing::debug!("Detected static resource: {}", uri);
             if let Err(e) = self.validate_uri(&uri) {
                 tracing::warn!("Static resource validation failed for '{}': {}", uri, e);
-                self.validation_errors.push(format!("Invalid resource URI '{}': {}", uri, e));
+                self.validation_errors
+                    .push(format!("Invalid resource URI '{}': {}", uri, e));
             } else {
                 tracing::debug!("Successfully added static resource: {}", uri);
                 self.resources.insert(uri, Arc::new(resource));
@@ -315,7 +358,10 @@ impl McpServerBuilder {
     }
 
     /// Register multiple resources
-    pub fn resources<R: McpResource + 'static, I: IntoIterator<Item = R>>(mut self, resources: I) -> Self {
+    pub fn resources<R: McpResource + 'static, I: IntoIterator<Item = R>>(
+        mut self,
+        resources: I,
+    ) -> Self {
         for resource in resources {
             self = self.resource(resource);
         }
@@ -340,13 +386,17 @@ impl McpServerBuilder {
     pub fn template_resource<R: McpResource + 'static>(
         mut self,
         template: crate::uri_template::UriTemplate,
-        resource: R
+        resource: R,
     ) -> Self {
         // Validate template pattern is well-formed (MCP 2025-06-18 compliance)
         if let Err(e) = self.validate_uri_template(template.pattern()) {
-            self.validation_errors.push(format!("Invalid resource template URI '{}': {}", template.pattern(), e));
+            self.validation_errors.push(format!(
+                "Invalid resource template URI '{}': {}",
+                template.pattern(),
+                e
+            ));
         }
-        
+
         self.template_resources.push((template, Arc::new(resource)));
         self
     }
@@ -359,7 +409,10 @@ impl McpServerBuilder {
     }
 
     /// Register multiple prompts
-    pub fn prompts<P: McpPrompt + 'static, I: IntoIterator<Item = P>>(mut self, prompts: I) -> Self {
+    pub fn prompts<P: McpPrompt + 'static, I: IntoIterator<Item = P>>(
+        mut self,
+        prompts: I,
+    ) -> Self {
         for prompt in prompts {
             self = self.prompt(prompt);
         }
@@ -374,7 +427,10 @@ impl McpServerBuilder {
     }
 
     /// Register multiple elicitation providers
-    pub fn elicitations<E: McpElicitation + 'static, I: IntoIterator<Item = E>>(mut self, elicitations: I) -> Self {
+    pub fn elicitations<E: McpElicitation + 'static, I: IntoIterator<Item = E>>(
+        mut self,
+        elicitations: I,
+    ) -> Self {
         for elicitation in elicitations {
             self = self.elicitation(elicitation);
         }
@@ -389,7 +445,10 @@ impl McpServerBuilder {
     }
 
     /// Register multiple sampling providers
-    pub fn sampling_providers<S: McpSampling + 'static, I: IntoIterator<Item = S>>(mut self, sampling: I) -> Self {
+    pub fn sampling_providers<S: McpSampling + 'static, I: IntoIterator<Item = S>>(
+        mut self,
+        sampling: I,
+    ) -> Self {
         for s in sampling {
             self = self.sampling_provider(s);
         }
@@ -404,7 +463,10 @@ impl McpServerBuilder {
     }
 
     /// Register multiple completion providers
-    pub fn completion_providers<C: McpCompletion + 'static, I: IntoIterator<Item = C>>(mut self, completions: I) -> Self {
+    pub fn completion_providers<C: McpCompletion + 'static, I: IntoIterator<Item = C>>(
+        mut self,
+        completions: I,
+    ) -> Self {
         for completion in completions {
             self = self.completion_provider(completion);
         }
@@ -419,7 +481,10 @@ impl McpServerBuilder {
     }
 
     /// Register multiple loggers
-    pub fn loggers<L: McpLogger + 'static, I: IntoIterator<Item = L>>(mut self, loggers: I) -> Self {
+    pub fn loggers<L: McpLogger + 'static, I: IntoIterator<Item = L>>(
+        mut self,
+        loggers: I,
+    ) -> Self {
         for logger in loggers {
             self = self.logger(logger);
         }
@@ -434,7 +499,10 @@ impl McpServerBuilder {
     }
 
     /// Register multiple root providers
-    pub fn root_providers<R: McpRoot + 'static, I: IntoIterator<Item = R>>(mut self, roots: I) -> Self {
+    pub fn root_providers<R: McpRoot + 'static, I: IntoIterator<Item = R>>(
+        mut self,
+        roots: I,
+    ) -> Self {
         for root in roots {
             self = self.root_provider(root);
         }
@@ -449,7 +517,10 @@ impl McpServerBuilder {
     }
 
     /// Register multiple notification providers
-    pub fn notification_providers<N: McpNotification + 'static, I: IntoIterator<Item = N>>(mut self, notifications: I) -> Self {
+    pub fn notification_providers<N: McpNotification + 'static, I: IntoIterator<Item = N>>(
+        mut self,
+        notifications: I,
+    ) -> Self {
         for notification in notifications {
             self = self.notification_provider(notification);
         }
@@ -465,14 +536,16 @@ impl McpServerBuilder {
     fn validate_uri(&self, uri: &str) -> std::result::Result<(), String> {
         // Check basic URI format - must have scheme
         if !uri.contains("://") {
-            return Err("URI must be absolute with scheme (e.g., file://, http://, memory://)".to_string());
+            return Err(
+                "URI must be absolute with scheme (e.g., file://, http://, memory://)".to_string(),
+            );
         }
-        
+
         // Check for whitespace and control characters
         if uri.chars().any(|c| c.is_whitespace() || c.is_control()) {
             return Err("URI must not contain whitespace or control characters".to_string());
         }
-        
+
         // For file URIs, require absolute paths
         if let Some(path_part) = uri.strip_prefix("file://") {
             // Skip "file://"
@@ -480,23 +553,23 @@ impl McpServerBuilder {
                 return Err("file:// URIs must use absolute paths".to_string());
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Validate URI template pattern (basic validation for template syntax)
     fn validate_uri_template(&self, template: &str) -> std::result::Result<(), String> {
         // First validate the base URI structure (ignoring template variables)
         let base_uri = template.replace(['{', '}'], "");
         self.validate_uri(&base_uri)?;
-        
+
         // Check template variable syntax is balanced
         let open_braces = template.matches('{').count();
         let close_braces = template.matches('}').count();
         if open_braces != close_braces {
             return Err("URI template has unbalanced braces".to_string());
         }
-        
+
         Ok(())
     }
 
@@ -511,7 +584,7 @@ impl McpServerBuilder {
         self.sampling_provider(sampling)
     }
 
-    /// Register a completer - convenient alias for completion_provider  
+    /// Register a completer - convenient alias for completion_provider
     /// Automatically uses "completion/complete" method
     pub fn completer<C: McpCompletion + 'static>(self, completion: C) -> Self {
         self.completion_provider(completion)
@@ -521,7 +594,7 @@ impl McpServerBuilder {
     /// This enables the `.notification::<T>()` pattern from universal-turul-mcp-server
     pub fn notification_type<N: McpNotification + 'static + Default>(self) -> Self {
         let notification = N::default();
-        self.notification_provider(notification)  
+        self.notification_provider(notification)
     }
 
     /// Register a handler with the server
@@ -534,7 +607,10 @@ impl McpServerBuilder {
     }
 
     /// Register multiple handlers
-    pub fn handlers<H: McpHandler + 'static, I: IntoIterator<Item = H>>(mut self, handlers: I) -> Self {
+    pub fn handlers<H: McpHandler + 'static, I: IntoIterator<Item = H>>(
+        mut self,
+        handlers: I,
+    ) -> Self {
         for handler in handlers {
             self = self.handler(handler);
         }
@@ -554,7 +630,7 @@ impl McpServerBuilder {
         self.capabilities.prompts = Some(PromptsCapabilities {
             list_changed: Some(false),
         });
-        
+
         // Prompts handlers are automatically registered when prompts are added via .prompt()
         // This method now just enables the capability
         self
@@ -569,24 +645,27 @@ impl McpServerBuilder {
     pub fn with_resources(mut self) -> Self {
         // Enable notifications if we have resources
         let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
-        
+
         self.capabilities.resources = Some(ResourcesCapabilities {
             subscribe: Some(false), // TODO: Implement resource subscriptions
             list_changed: Some(has_resources),
         });
-        
+
         // Create ResourcesListHandler and add all registered resources
         let mut list_handler = ResourcesListHandler::new();
-        tracing::debug!("with_resources() - adding {} static resources to list handler", self.resources.len());
+        tracing::debug!(
+            "with_resources() - adding {} static resources to list handler",
+            self.resources.len()
+        );
         for (uri, resource) in &self.resources {
             tracing::debug!("Adding static resource to list handler: {}", uri);
             list_handler = list_handler.add_resource_arc(resource.clone());
         }
-        
+
         // Template resources should NOT be added to ResourcesListHandler
         // They only appear in ResourceTemplatesHandler (resources/templates/list)
         // NOT in resources/list
-        
+
         // Create ResourcesReadHandler and add all registered resources
         // Auto-configure security based on registered resources
         let mut read_handler = if self.test_mode {
@@ -601,17 +680,17 @@ impl McpServerBuilder {
         for resource in self.resources.values() {
             read_handler = read_handler.add_resource_arc(resource.clone());
         }
-        
+
         // Add template resources to read handler with template support
         for (template, resource) in &self.template_resources {
-            read_handler = read_handler.add_template_resource_arc(template.clone(), resource.clone());
+            read_handler =
+                read_handler.add_template_resource_arc(template.clone(), resource.clone());
         }
-        
+
         // Update notification manager
-        
+
         // Register both handlers
-        self.handler(list_handler)
-            .handler(read_handler)
+        self.handler(list_handler).handler(read_handler)
     }
 
     /// Add logging support
@@ -645,15 +724,17 @@ impl McpServerBuilder {
         });
         self.handler(ElicitationHandler::with_mock_provider())
     }
-    
+
     /// Add elicitation support with custom provider
-    pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(mut self, provider: P) -> Self {
+    pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(
+        mut self,
+        provider: P,
+    ) -> Self {
         self.capabilities.elicitation = Some(ElicitationCapabilities {
             enabled: Some(true),
         });
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
-
 
     /// Add notifications support
     pub fn with_notifications(self) -> Self {
@@ -665,7 +746,7 @@ impl McpServerBuilder {
         self.session_timeout_minutes = Some(minutes);
         self
     }
-    
+
     /// Configure session cleanup interval (in seconds, default: 60)
     pub fn session_cleanup_interval_seconds(mut self, seconds: u64) -> Self {
         self.session_cleanup_interval_seconds = Some(seconds);
@@ -673,18 +754,18 @@ impl McpServerBuilder {
     }
 
     /// Enable strict MCP lifecycle enforcement
-    /// 
-    /// When enabled, the server will reject all operations (tools, resources, etc.) 
-    /// until the client sends `notifications/initialized` after receiving the 
+    ///
+    /// When enabled, the server will reject all operations (tools, resources, etc.)
+    /// until the client sends `notifications/initialized` after receiving the
     /// initialize response.
-    /// 
+    ///
     /// **Default: false (lenient mode)** - for compatibility with existing clients
     /// **Production: consider true** - for strict MCP spec compliance
-    /// 
+    ///
     /// # Example
     /// ```rust,no_run
     /// use turul_mcp_server::McpServer;
-    /// 
+    ///
     /// let server = McpServer::builder()
     ///     .name("strict-server")
     ///     .version("1.0.0")
@@ -698,7 +779,7 @@ impl McpServerBuilder {
     }
 
     /// Enable strict MCP lifecycle enforcement (convenience method)
-    /// 
+    ///
     /// Equivalent to `.strict_lifecycle(true)`. Enables strict enforcement where
     /// all operations are rejected until `notifications/initialized` is received.
     pub fn with_strict_lifecycle(self) -> Self {
@@ -706,11 +787,11 @@ impl McpServerBuilder {
     }
 
     /// Enable test mode - disables security middleware for test servers
-    /// 
+    ///
     /// In test mode, ResourcesReadHandler is created without security middleware,
     /// allowing custom URI schemes for testing (binary://, memory://, error://, etc.).
     /// Production servers should NOT use test mode as it bypasses security controls.
-    /// 
+    ///
     /// # Example
     /// ```rust,ignore
     /// let server = McpServer::builder()
@@ -724,14 +805,14 @@ impl McpServerBuilder {
         self.test_mode = true;
         self
     }
-    
+
     /// Configure sessions with recommended defaults for long-running sessions
     pub fn with_long_sessions(mut self) -> Self {
         self.session_timeout_minutes = Some(120); // 2 hours
         self.session_cleanup_interval_seconds = Some(300); // 5 minutes
         self
     }
-    
+
     /// Configure sessions with recommended defaults for short-lived sessions
     pub fn with_short_sessions(mut self) -> Self {
         self.session_timeout_minutes = Some(15); // 15 minutes
@@ -740,9 +821,13 @@ impl McpServerBuilder {
     }
 
     /// Configure session storage backend (defaults to InMemory if not specified)
-    pub fn with_session_storage<S: turul_mcp_session_storage::SessionStorage<Error = turul_mcp_session_storage::SessionStorageError> + 'static>(
-        mut self, 
-        storage: Arc<S>
+    pub fn with_session_storage<
+        S: turul_mcp_session_storage::SessionStorage<
+                Error = turul_mcp_session_storage::SessionStorageError,
+            > + 'static,
+    >(
+        mut self,
+        storage: Arc<S>,
     ) -> Self {
         // Convert concrete storage type to trait object
         let boxed_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> = storage;
@@ -778,11 +863,9 @@ impl McpServerBuilder {
         self
     }
 
-
-
     /// Auto-generate security configuration based on registered resources
     fn build_resource_security(&self) -> crate::security::SecurityMiddleware {
-        use crate::security::{SecurityMiddleware, ResourceAccessControl, AccessLevel};
+        use crate::security::{AccessLevel, ResourceAccessControl, SecurityMiddleware};
         use regex::Regex;
         use std::collections::HashSet;
 
@@ -829,18 +912,17 @@ impl McpServerBuilder {
             allowed_mime_types.len()
         );
 
-        SecurityMiddleware::new()
-            .with_resource_access_control(ResourceAccessControl {
-                access_level: AccessLevel::Public, // Allow access without session for auto-detected resources
-                allowed_patterns: regex_patterns,
-                blocked_patterns: vec![
-                    Regex::new(r"\.\.").unwrap(), // Still prevent directory traversal
-                    Regex::new(r"/etc/").unwrap(), // Block system directories
-                    Regex::new(r"/proc/").unwrap(),
-                ],
-                max_size: Some(50 * 1024 * 1024), // 50MB limit for auto-detected resources
-                allowed_mime_types: Some(allowed_mime_types),
-            })
+        SecurityMiddleware::new().with_resource_access_control(ResourceAccessControl {
+            access_level: AccessLevel::Public, // Allow access without session for auto-detected resources
+            allowed_patterns: regex_patterns,
+            blocked_patterns: vec![
+                Regex::new(r"\.\.").unwrap(),  // Still prevent directory traversal
+                Regex::new(r"/etc/").unwrap(), // Block system directories
+                Regex::new(r"/proc/").unwrap(),
+            ],
+            max_size: Some(50 * 1024 * 1024), // 50MB limit for auto-detected resources
+            allowed_mime_types: Some(allowed_mime_types),
+        })
     }
 
     /// Extract file extension from URI
@@ -908,10 +990,7 @@ impl McpServerBuilder {
         }
 
         // Always allow basic text types
-        mime_types.extend_from_slice(&[
-            "text/plain".to_string(),
-            "application/json".to_string(),
-        ]);
+        mime_types.extend_from_slice(&["text/plain".to_string(), "application/json".to_string()]);
 
         mime_types.sort();
         mime_types.dedup();
@@ -927,10 +1006,13 @@ impl McpServerBuilder {
         if self.version.is_empty() {
             return Err(McpError::configuration("Server version cannot be empty"));
         }
-        
+
         // Check for validation errors collected during registration
         if !self.validation_errors.is_empty() {
-            return Err(McpError::configuration(&format!("Resource validation errors:\n{}", self.validation_errors.join("\n"))));
+            return Err(McpError::configuration(&format!(
+                "Resource validation errors:\n{}",
+                self.validation_errors.join("\n")
+            )));
         }
 
         // Auto-register resource handlers if resources were registered
@@ -947,8 +1029,10 @@ impl McpServerBuilder {
         let has_roots = !self.roots.is_empty();
         let has_elicitations = !self.elicitations.is_empty();
         let has_completions = !self.completions.is_empty();
-        let _has_samplings = !self.sampling.is_empty();
+        let has_samplings = !self.sampling.is_empty();
+        tracing::debug!("🔧 Has sampling configured: {}", has_samplings);
         let has_logging = !self.loggers.is_empty();
+        tracing::debug!("🔧 Has logging configured: {}", has_logging);
 
         // Tools capabilities - support notifications only if tools are registered AND we have dynamic change sources
         // Note: In current static framework, tool set is fixed at build time and doesn't change
@@ -1005,17 +1089,16 @@ impl McpServerBuilder {
         }
 
         // Logging capabilities - always enabled with comprehensive level support
-        if has_logging || true { // Always enable logging for debugging/monitoring
-            self.capabilities.logging = Some(LoggingCapabilities {
-                enabled: Some(true),
-                levels: Some(vec![
-                    "debug".to_string(),
-                    "info".to_string(), 
-                    "warning".to_string(),
-                    "error".to_string()
-                ]),
-            });
-        }
+        // Always enable logging for debugging/monitoring
+        self.capabilities.logging = Some(LoggingCapabilities {
+            enabled: Some(true),
+            levels: Some(vec![
+                "debug".to_string(),
+                "info".to_string(),
+                "warning".to_string(),
+                "error".to_string(),
+            ]),
+        });
 
         tracing::debug!("🔧 Auto-configured server capabilities:");
         tracing::debug!("   - Tools: {}", has_tools);
@@ -1046,21 +1129,24 @@ impl McpServerBuilder {
         if !self.prompts.is_empty() {
             let mut prompts_list_handler = PromptsListHandler::new();
             let mut prompts_get_handler = PromptsGetHandler::new();
-            
+
             for prompt in self.prompts.values() {
                 prompts_list_handler = prompts_list_handler.add_prompt_arc(prompt.clone());
                 prompts_get_handler = prompts_get_handler.add_prompt_arc(prompt.clone());
             }
-            
+
             handlers.insert("prompts/list".to_string(), Arc::new(prompts_list_handler));
             handlers.insert("prompts/get".to_string(), Arc::new(prompts_get_handler));
         }
 
         // Add ResourceTemplatesHandler if template resources were configured
         if !self.template_resources.is_empty() {
-            let resource_templates_handler = ResourceTemplatesHandler::new()
-                .with_templates(self.template_resources.clone());
-            handlers.insert("resources/templates/list".to_string(), Arc::new(resource_templates_handler));
+            let resource_templates_handler =
+                ResourceTemplatesHandler::new().with_templates(self.template_resources.clone());
+            handlers.insert(
+                "resources/templates/list".to_string(),
+                Arc::new(resource_templates_handler),
+            );
         }
 
         // Create server
@@ -1097,10 +1183,13 @@ mod tests {
     use super::*;
     use crate::{McpTool, SessionContext};
     use async_trait::async_trait;
-    use turul_mcp_protocol::{ToolSchema, CallToolResult};
-    use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations};
     use serde_json::Value;
     use std::collections::HashMap;
+    use turul_mcp_protocol::tools::{
+        HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema,
+        HasToolMeta, ToolAnnotations,
+    };
+    use turul_mcp_protocol::{CallToolResult, ToolSchema};
 
     struct TestTool {
         input_schema: ToolSchema,
@@ -1116,34 +1205,54 @@ mod tests {
 
     // Implement fine-grained traits
     impl HasBaseMetadata for TestTool {
-        fn name(&self) -> &str { "test" }
-        fn title(&self) -> Option<&str> { None }
+        fn name(&self) -> &str {
+            "test"
+        }
+        fn title(&self) -> Option<&str> {
+            None
+        }
     }
 
     impl HasDescription for TestTool {
-        fn description(&self) -> Option<&str> { Some("Test tool") }
+        fn description(&self) -> Option<&str> {
+            Some("Test tool")
+        }
     }
 
     impl HasInputSchema for TestTool {
-        fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+        fn input_schema(&self) -> &ToolSchema {
+            &self.input_schema
+        }
     }
 
     impl HasOutputSchema for TestTool {
-        fn output_schema(&self) -> Option<&ToolSchema> { None }
+        fn output_schema(&self) -> Option<&ToolSchema> {
+            None
+        }
     }
 
     impl HasAnnotations for TestTool {
-        fn annotations(&self) -> Option<&ToolAnnotations> { None }
+        fn annotations(&self) -> Option<&ToolAnnotations> {
+            None
+        }
     }
 
     impl HasToolMeta for TestTool {
-        fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+        fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+            None
+        }
     }
 
     #[async_trait]
     impl McpTool for TestTool {
-        async fn call(&self, _args: Value, _session: Option<SessionContext>) -> crate::McpResult<CallToolResult> {
-            Ok(CallToolResult::success(vec![turul_mcp_protocol::ToolResult::text("test")]))
+        async fn call(
+            &self,
+            _args: Value,
+            _session: Option<SessionContext>,
+        ) -> crate::McpResult<CallToolResult> {
+            Ok(CallToolResult::success(vec![
+                turul_mcp_protocol::ToolResult::text("test"),
+            ]))
         }
     }
 
@@ -1170,10 +1279,11 @@ mod tests {
         assert_eq!(builder.name, "test-server");
         assert_eq!(builder.version, "2.0.0");
         assert_eq!(builder.title, Some("Test Server".to_string()));
-        assert_eq!(builder.instructions, Some("This is a test server".to_string()));
+        assert_eq!(
+            builder.instructions,
+            Some("This is a test server".to_string())
+        );
     }
-
-    
 
     #[test]
     fn test_builder_build() {
@@ -1190,92 +1300,126 @@ mod tests {
 
     #[test]
     fn test_builder_validation() {
-        let result = McpServerBuilder::new()
-            .name("")
-            .build();
+        let result = McpServerBuilder::new().name("").build();
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), McpError::ConfigurationError(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            McpError::ConfigurationError(_)
+        ));
     }
 
     // Test resources for auto-detection testing
     use turul_mcp_protocol::resources::{
-        HasResourceMetadata, HasResourceDescription, HasResourceUri,
-        HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta,
-        ResourceContent
+        HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
+        HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
     };
 
     struct StaticTestResource;
 
     impl HasResourceMetadata for StaticTestResource {
-        fn name(&self) -> &str { "static_test" }
+        fn name(&self) -> &str {
+            "static_test"
+        }
     }
 
     impl HasResourceDescription for StaticTestResource {
-        fn description(&self) -> Option<&str> { Some("Static test resource") }
+        fn description(&self) -> Option<&str> {
+            Some("Static test resource")
+        }
     }
 
     impl HasResourceUri for StaticTestResource {
-        fn uri(&self) -> &str { "file:///test.txt" }
+        fn uri(&self) -> &str {
+            "file:///test.txt"
+        }
     }
 
     impl HasResourceMimeType for StaticTestResource {
-        fn mime_type(&self) -> Option<&str> { Some("text/plain") }
+        fn mime_type(&self) -> Option<&str> {
+            Some("text/plain")
+        }
     }
 
     impl HasResourceSize for StaticTestResource {
-        fn size(&self) -> Option<u64> { None }
+        fn size(&self) -> Option<u64> {
+            None
+        }
     }
 
     impl HasResourceAnnotations for StaticTestResource {
-        fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+        fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+            None
+        }
     }
 
     impl HasResourceMeta for StaticTestResource {
-        fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+        fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
+            None
+        }
     }
 
     #[async_trait]
     impl McpResource for StaticTestResource {
         async fn read(&self, _params: Option<Value>) -> crate::McpResult<Vec<ResourceContent>> {
-            Ok(vec![ResourceContent::text("file:///test.txt", "test content")])
+            Ok(vec![ResourceContent::text(
+                "file:///test.txt",
+                "test content",
+            )])
         }
     }
 
     struct TemplateTestResource;
 
     impl HasResourceMetadata for TemplateTestResource {
-        fn name(&self) -> &str { "template_test" }
+        fn name(&self) -> &str {
+            "template_test"
+        }
     }
 
     impl HasResourceDescription for TemplateTestResource {
-        fn description(&self) -> Option<&str> { Some("Template test resource") }
+        fn description(&self) -> Option<&str> {
+            Some("Template test resource")
+        }
     }
 
     impl HasResourceUri for TemplateTestResource {
-        fn uri(&self) -> &str { "template://data/{id}.json" }
+        fn uri(&self) -> &str {
+            "template://data/{id}.json"
+        }
     }
 
     impl HasResourceMimeType for TemplateTestResource {
-        fn mime_type(&self) -> Option<&str> { Some("application/json") }
+        fn mime_type(&self) -> Option<&str> {
+            Some("application/json")
+        }
     }
 
     impl HasResourceSize for TemplateTestResource {
-        fn size(&self) -> Option<u64> { None }
+        fn size(&self) -> Option<u64> {
+            None
+        }
     }
 
     impl HasResourceAnnotations for TemplateTestResource {
-        fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+        fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+            None
+        }
     }
 
     impl HasResourceMeta for TemplateTestResource {
-        fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+        fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
+            None
+        }
     }
 
     #[async_trait]
     impl McpResource for TemplateTestResource {
         async fn read(&self, _params: Option<Value>) -> crate::McpResult<Vec<ResourceContent>> {
-            Ok(vec![ResourceContent::text("template://data/123.json", "test content")])
+            Ok(vec![ResourceContent::text(
+                "template://data/123.json",
+                "test content",
+            )])
         }
     }
 
@@ -1305,7 +1449,6 @@ mod tests {
         let builder = McpServerBuilder::new()
             .name("test-server")
             .resource(StaticTestResource);
-
 
         // Verify static resource was added to resources collection
         assert_eq!(builder.resources.len(), 1);
@@ -1368,31 +1511,45 @@ mod tests {
         struct InvalidTemplateResource;
 
         impl HasResourceMetadata for InvalidTemplateResource {
-            fn name(&self) -> &str { "invalid_template" }
+            fn name(&self) -> &str {
+                "invalid_template"
+            }
         }
 
         impl HasResourceDescription for InvalidTemplateResource {
-            fn description(&self) -> Option<&str> { Some("Invalid template resource") }
+            fn description(&self) -> Option<&str> {
+                Some("Invalid template resource")
+            }
         }
 
         impl HasResourceUri for InvalidTemplateResource {
-            fn uri(&self) -> &str { "not-a-valid-uri-{id}" } // Invalid base URI without scheme
+            fn uri(&self) -> &str {
+                "not-a-valid-uri-{id}"
+            } // Invalid base URI without scheme
         }
 
         impl HasResourceMimeType for InvalidTemplateResource {
-            fn mime_type(&self) -> Option<&str> { None }
+            fn mime_type(&self) -> Option<&str> {
+                None
+            }
         }
 
         impl HasResourceSize for InvalidTemplateResource {
-            fn size(&self) -> Option<u64> { None }
+            fn size(&self) -> Option<u64> {
+                None
+            }
         }
 
         impl HasResourceAnnotations for InvalidTemplateResource {
-            fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+            fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+                None
+            }
         }
 
         impl HasResourceMeta for InvalidTemplateResource {
-            fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+            fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
+                None
+            }
         }
 
         #[async_trait]
@@ -1405,7 +1562,6 @@ mod tests {
         let builder = McpServerBuilder::new()
             .name("test-server")
             .resource(InvalidTemplateResource);
-
 
         // The URI "not-a-valid-uri-{id}" has braces but lacks a scheme
         // So it will be detected as a template but fail validation during template creation
@@ -1434,9 +1590,7 @@ mod tests {
     #[test]
     fn test_no_resources_builds_successfully() {
         // Test that servers without resources build successfully
-        let server_result = McpServerBuilder::new()
-            .name("no-resources-server")
-            .build();
+        let server_result = McpServerBuilder::new().name("no-resources-server").build();
 
         assert!(server_result.is_ok());
     }

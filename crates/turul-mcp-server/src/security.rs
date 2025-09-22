@@ -6,11 +6,11 @@
 //! - Input validation and sanitization
 //! - Security middleware for handlers
 
+use regex::Regex;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use regex::Regex;
-use serde_json::Value;
 
 use crate::SessionContext;
 use turul_mcp_protocol::McpError;
@@ -37,11 +37,14 @@ impl Default for RateLimitConfig {
 }
 
 /// Rate limiter implementation using sliding window
+// Type alias for complex rate limiter bucket type
+type SessionBuckets = Arc<Mutex<HashMap<String, (Vec<Instant>, u32)>>>;
+
 #[derive(Debug)]
 pub struct RateLimiter {
     config: RateLimitConfig,
     // Session ID -> (request_times, burst_count)
-    session_buckets: Arc<Mutex<HashMap<String, (Vec<Instant>, u32)>>>,
+    session_buckets: SessionBuckets,
 }
 
 impl RateLimiter {
@@ -56,7 +59,7 @@ impl RateLimiter {
     pub fn check_rate_limit(&self, session_id: &str) -> Result<(), McpError> {
         let mut buckets = self.session_buckets.lock().unwrap();
         let now = Instant::now();
-        
+
         let (request_times, burst_count) = buckets
             .entry(session_id.to_string())
             .or_insert_with(|| (Vec::new(), 0));
@@ -66,7 +69,7 @@ impl RateLimiter {
 
         // Allow request and record timestamp first
         request_times.push(now);
-        
+
         // Check if we're over the limit after adding this request
         if request_times.len() > self.config.max_requests as usize {
             // Check burst allowance
@@ -74,17 +77,20 @@ impl RateLimiter {
                 *burst_count += 1;
                 return Ok(());
             }
-            
+
             // Remove the request we just added since it's not allowed
             request_times.pop();
-            
+
             return Err(McpError::param_out_of_range(
-                "request_rate", 
+                "request_rate",
                 &format!("{} requests", request_times.len() + 1),
-                &format!("max {} requests per {:?}", self.config.max_requests, self.config.window_duration)
+                &format!(
+                    "max {} requests per {:?}",
+                    self.config.max_requests, self.config.window_duration
+                ),
             ));
         }
-        
+
         // Reset burst count if we're below the limit
         if request_times.len() < (self.config.max_requests as f32 * 0.8) as usize {
             *burst_count = 0;
@@ -97,7 +103,7 @@ impl RateLimiter {
     pub fn cleanup_expired_sessions(&self) {
         let mut buckets = self.session_buckets.lock().unwrap();
         let now = Instant::now();
-        
+
         buckets.retain(|_, (request_times, _)| {
             request_times.retain(|&time| now.duration_since(time) < self.config.window_duration);
             !request_times.is_empty()
@@ -139,8 +145,8 @@ impl Default for ResourceAccessControl {
                 Regex::new(r"^file:///[a-zA-Z0-9_/-]+\.(json|txt|md|html)$").unwrap(),
             ],
             blocked_patterns: vec![
-                Regex::new(r"\.\.").unwrap(), // Directory traversal
-                Regex::new(r"/etc/").unwrap(), // System files
+                Regex::new(r"\.\.").unwrap(),   // Directory traversal
+                Regex::new(r"/etc/").unwrap(),  // System files
                 Regex::new(r"/proc/").unwrap(), // Process files
                 Regex::new(r"\.exe$").unwrap(), // Executables
             ],
@@ -166,22 +172,23 @@ impl ResourceAccessControl {
                 return Err(McpError::invalid_param_type(
                     "uri",
                     "URI not matching blocked patterns",
-                    uri
+                    uri,
                 ));
             }
         }
 
         // Check allowed patterns
         if !self.allowed_patterns.is_empty() {
-            let allowed = self.allowed_patterns
+            let allowed = self
+                .allowed_patterns
                 .iter()
                 .any(|pattern| pattern.is_match(uri));
-            
+
             if !allowed {
                 return Err(McpError::invalid_param_type(
                     "uri",
                     "URI matching allowed patterns",
-                    uri
+                    uri,
                 ));
             }
         }
@@ -192,26 +199,28 @@ impl ResourceAccessControl {
     /// Validate MIME type
     pub fn validate_mime_type(&self, mime_type: &str) -> Result<(), McpError> {
         if let Some(allowed_types) = &self.allowed_mime_types
-            && !allowed_types.contains(&mime_type.to_string()) {
-                return Err(McpError::invalid_param_type(
-                    "mime_type",
-                    "allowed MIME type",
-                    mime_type
-                ));
-            }
+            && !allowed_types.contains(&mime_type.to_string())
+        {
+            return Err(McpError::invalid_param_type(
+                "mime_type",
+                "allowed MIME type",
+                mime_type,
+            ));
+        }
         Ok(())
     }
 
     /// Validate content size
     pub fn validate_size(&self, size: u64) -> Result<(), McpError> {
         if let Some(max_size) = self.max_size
-            && size > max_size {
-                return Err(McpError::param_out_of_range(
-                    "content_size",
-                    &format!("{} bytes", size),
-                    &format!("max {} bytes", max_size)
-                ));
-            }
+            && size > max_size
+        {
+            return Err(McpError::param_out_of_range(
+                "content_size",
+                &format!("{} bytes", size),
+                &format!("max {} bytes", max_size),
+            ));
+        }
         Ok(())
     }
 }
@@ -237,7 +246,11 @@ impl Default for InputValidator {
 }
 
 impl InputValidator {
-    pub fn new(max_json_depth: usize, max_string_length: usize, max_collection_size: usize) -> Self {
+    pub fn new(
+        max_json_depth: usize,
+        max_string_length: usize,
+        max_collection_size: usize,
+    ) -> Self {
         Self {
             max_json_depth,
             max_string_length,
@@ -255,7 +268,7 @@ impl InputValidator {
             return Err(McpError::param_out_of_range(
                 "json_depth",
                 &format!("{}", depth),
-                &format!("max {}", self.max_json_depth)
+                &format!("max {}", self.max_json_depth),
             ));
         }
 
@@ -265,16 +278,16 @@ impl InputValidator {
                     return Err(McpError::param_out_of_range(
                         "string_length",
                         &format!("{}", s.len()),
-                        &format!("max {}", self.max_string_length)
+                        &format!("max {}", self.max_string_length),
                     ));
                 }
-                
+
                 // Check for potentially dangerous content
                 if s.contains("../") || s.contains("..\\") {
                     return Err(McpError::invalid_param_type(
                         "string_content",
                         "string without directory traversal sequences",
-                        s
+                        s,
                     ));
                 }
             }
@@ -283,10 +296,10 @@ impl InputValidator {
                     return Err(McpError::param_out_of_range(
                         "array_size",
                         &format!("{}", arr.len()),
-                        &format!("max {}", self.max_collection_size)
+                        &format!("max {}", self.max_collection_size),
                     ));
                 }
-                
+
                 for item in arr {
                     self.validate_json_recursive(item, depth + 1)?;
                 }
@@ -296,20 +309,20 @@ impl InputValidator {
                     return Err(McpError::param_out_of_range(
                         "object_size",
                         &format!("{}", obj.len()),
-                        &format!("max {}", self.max_collection_size)
+                        &format!("max {}", self.max_collection_size),
                     ));
                 }
-                
+
                 for (key, val) in obj {
                     // Validate key
                     if key.len() > self.max_string_length {
                         return Err(McpError::param_out_of_range(
                             "object_key_length",
                             &format!("{}", key.len()),
-                            &format!("max {}", self.max_string_length)
+                            &format!("max {}", self.max_string_length),
                         ));
                     }
-                    
+
                     self.validate_json_recursive(val, depth + 1)?;
                 }
             }
@@ -379,9 +392,10 @@ impl SecurityMiddleware {
     ) -> Result<(), McpError> {
         // Rate limiting check
         if let Some(rate_limiter) = &self.rate_limiter
-            && let Some(session) = session {
-                rate_limiter.check_rate_limit(&session.session_id)?;
-            }
+            && let Some(session) = session
+        {
+            rate_limiter.check_rate_limit(&session.session_id)?;
+        }
 
         // Input validation
         if let Some(params) = params {
@@ -389,27 +403,26 @@ impl SecurityMiddleware {
         }
 
         // Method-specific security checks
-        match method {
-            "resources/read" => {
-                if let Some(params) = params
-                    && let Some(uri) = params.get("uri").and_then(|v| v.as_str()) {
-                        self.resource_access_control.validate_uri(uri)?;
-                    }
-
-                // Check access level
-                match self.resource_access_control.access_level {
-                    AccessLevel::SessionRequired if session.is_none() => {
-                        return Err(McpError::invalid_param_type(
-                            "session",
-                            "valid session context",
-                            "none"
-                        ));
-                    }
-                    _ => {}
-                }
+        if method == "resources/read" {
+            if let Some(params) = params
+                && let Some(uri) = params.get("uri").and_then(|v| v.as_str())
+            {
+                self.resource_access_control.validate_uri(uri)?;
             }
-            _ => {} // Other methods have minimal restrictions for now
+
+            // Check access level
+            match self.resource_access_control.access_level {
+                AccessLevel::SessionRequired if session.is_none() => {
+                    return Err(McpError::invalid_param_type(
+                        "session",
+                        "valid session context",
+                        "none",
+                    ));
+                }
+                _ => {}
+            }
         }
+        // Other methods have minimal restrictions for now
 
         Ok(())
     }
@@ -478,13 +491,29 @@ mod tests {
         let access_control = ResourceAccessControl::default();
 
         // Valid URIs
-        assert!(access_control.validate_uri("file:///data/test.json").is_ok());
-        assert!(access_control.validate_uri("file:///docs/readme.txt").is_ok());
+        assert!(
+            access_control
+                .validate_uri("file:///data/test.json")
+                .is_ok()
+        );
+        assert!(
+            access_control
+                .validate_uri("file:///docs/readme.txt")
+                .is_ok()
+        );
 
         // Invalid URIs (blocked patterns)
         assert!(access_control.validate_uri("file:///etc/passwd").is_err());
-        assert!(access_control.validate_uri("file:///data/../etc/shadow").is_err());
-        assert!(access_control.validate_uri("file:///app/malware.exe").is_err());
+        assert!(
+            access_control
+                .validate_uri("file:///data/../etc/shadow")
+                .is_err()
+        );
+        assert!(
+            access_control
+                .validate_uri("file:///app/malware.exe")
+                .is_err()
+        );
     }
 
     #[test]
@@ -543,29 +572,53 @@ mod tests {
             send_notification: Arc::new(|_| Box::pin(futures::future::ready(()))),
             broadcaster: None,
         };
-        
+
         let middleware = SecurityMiddleware::new();
 
         // Valid resource read request
         let params = json!({"uri": "file:///data/test.json"});
-        assert!(middleware.validate_request("resources/read", Some(&params), Some(&session)).is_ok());
+        assert!(
+            middleware
+                .validate_request("resources/read", Some(&params), Some(&session))
+                .is_ok()
+        );
 
         // Invalid URI
         let bad_params = json!({"uri": "file:///etc/passwd"});
-        assert!(middleware.validate_request("resources/read", Some(&bad_params), Some(&session)).is_err());
+        assert!(
+            middleware
+                .validate_request("resources/read", Some(&bad_params), Some(&session))
+                .is_err()
+        );
 
         // No session when required
-        assert!(middleware.validate_request("resources/read", Some(&params), None).is_err());
+        assert!(
+            middleware
+                .validate_request("resources/read", Some(&params), None)
+                .is_err()
+        );
     }
 
     #[test]
     fn test_mime_type_validation() {
         let access_control = ResourceAccessControl::default();
 
-        assert!(access_control.validate_mime_type("application/json").is_ok());
+        assert!(
+            access_control
+                .validate_mime_type("application/json")
+                .is_ok()
+        );
         assert!(access_control.validate_mime_type("text/plain").is_ok());
-        assert!(access_control.validate_mime_type("application/octet-stream").is_err());
-        assert!(access_control.validate_mime_type("application/x-executable").is_err());
+        assert!(
+            access_control
+                .validate_mime_type("application/octet-stream")
+                .is_err()
+        );
+        assert!(
+            access_control
+                .validate_mime_type("application/x-executable")
+                .is_err()
+        );
     }
 
     #[test]

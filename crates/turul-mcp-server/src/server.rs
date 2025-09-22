@@ -14,8 +14,8 @@ use crate::session::{SessionContext, SessionManager};
 use crate::{McpServerBuilder, McpTool, Result, tool::tool_to_descriptor};
 use turul_mcp_json_rpc_server::JsonRpcHandler;
 
-use turul_mcp_protocol::*;
 use turul_mcp_protocol::McpError;
+use turul_mcp_protocol::*;
 
 /// Main MCP server
 pub struct McpServer {
@@ -49,6 +49,7 @@ pub struct McpServer {
 
 impl McpServer {
     /// Create a new MCP server (use builder instead)
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         implementation: Implementation,
         capabilities: ServerCapabilities,
@@ -135,12 +136,11 @@ impl McpServer {
     pub fn builder() -> McpServerBuilder {
         McpServerBuilder::new()
     }
-    
+
     /// Get the server's configured capabilities
     pub fn capabilities(&self) -> &turul_mcp_protocol::ServerCapabilities {
         &self.capabilities
     }
-    
 
     /// Run the server with the default transport (HTTP if available)
     pub async fn run(&self) -> Result<()> {
@@ -152,7 +152,7 @@ impl McpServer {
         {
             // If no HTTP feature, we can't run without transport
             Err(McpError::configuration(
-                "No transport available. Enable the 'http' feature to use HTTP transport."
+                "No transport available. Enable the 'http' feature to use HTTP transport.",
             ))
         }
     }
@@ -208,8 +208,11 @@ impl McpServer {
 
         // Register all MCP handlers with session awareness
         for (method, handler) in &self.handlers {
-            let bridge_handler =
-                SessionAwareMcpHandlerBridge::new(handler.clone(), self.session_manager.clone(), self.strict_lifecycle);
+            let bridge_handler = SessionAwareMcpHandlerBridge::new(
+                handler.clone(),
+                self.session_manager.clone(),
+                self.strict_lifecycle,
+            );
             builder = builder.register_handler(vec![method.clone()], bridge_handler);
         }
 
@@ -236,14 +239,20 @@ impl McpServer {
             self.setup_sse_event_bridge(&http_server).await;
         }
 
-        http_server.run().await.map_err(|http_err| {
-            match http_err {
-                turul_http_mcp_server::HttpMcpError::Mcp(mcp_err) => mcp_err,
-                turul_http_mcp_server::HttpMcpError::Http(http_err) => McpError::transport(&http_err.to_string()),
-                turul_http_mcp_server::HttpMcpError::JsonRpc(rpc_err) => McpError::json_rpc_protocol(&rpc_err.to_string()),
-                turul_http_mcp_server::HttpMcpError::Serialization(ser_err) => McpError::SerializationError(ser_err),
-                turul_http_mcp_server::HttpMcpError::Io(io_err) => McpError::IoError(io_err),
-                turul_http_mcp_server::HttpMcpError::InvalidRequest(msg) => McpError::InvalidParameters(msg),
+        http_server.run().await.map_err(|http_err| match http_err {
+            turul_http_mcp_server::HttpMcpError::Mcp(mcp_err) => mcp_err,
+            turul_http_mcp_server::HttpMcpError::Http(http_err) => {
+                McpError::transport(&http_err.to_string())
+            }
+            turul_http_mcp_server::HttpMcpError::JsonRpc(rpc_err) => {
+                McpError::json_rpc_protocol(&rpc_err.to_string())
+            }
+            turul_http_mcp_server::HttpMcpError::Serialization(ser_err) => {
+                McpError::SerializationError(ser_err)
+            }
+            turul_http_mcp_server::HttpMcpError::Io(io_err) => McpError::IoError(io_err),
+            turul_http_mcp_server::HttpMcpError::InvalidRequest(msg) => {
+                McpError::InvalidParameters(msg)
             }
         })?;
         Ok(())
@@ -357,8 +366,11 @@ impl McpServer {
         // TODO investigate if this also adds the tools/list and tools/call handlers
         // Register all MCP handlers with session awareness
         for (method, handler) in &self.handlers {
-            let bridge_handler =
-                SessionAwareMcpHandlerBridge::new(handler.clone(), self.session_manager.clone(), self.strict_lifecycle);
+            let bridge_handler = SessionAwareMcpHandlerBridge::new(
+                handler.clone(),
+                self.session_manager.clone(),
+                self.strict_lifecycle,
+            );
             builder = builder.register_handler(vec![method.clone()], bridge_handler);
         }
 
@@ -408,7 +420,11 @@ pub struct SessionAwareMcpHandlerBridge {
 }
 
 impl SessionAwareMcpHandlerBridge {
-    pub fn new(handler: Arc<dyn McpHandler>, session_manager: Arc<SessionManager>, strict_lifecycle: bool) -> Self {
+    pub fn new(
+        handler: Arc<dyn McpHandler>,
+        session_manager: Arc<SessionManager>,
+        strict_lifecycle: bool,
+    ) -> Self {
         Self {
             handler,
             session_manager,
@@ -436,8 +452,8 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
                 json_rpc_ctx.session_id
             );
             Some(SessionContext::from_json_rpc_with_broadcaster(
-                json_rpc_ctx, 
-                self.session_manager.get_storage()
+                json_rpc_ctx,
+                self.session_manager.get_storage(),
             ))
         } else {
             // Fallback: extract session ID from params (legacy behavior)
@@ -451,19 +467,25 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
         };
 
         // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled)
-        if self.strict_lifecycle && method != "initialize" && method != "notifications/initialized"
-            && let Some(ref session_ctx) = mcp_session_context {
-                let session_initialized = self.session_manager.is_session_initialized(&session_ctx.session_id).await;
-                if !session_initialized {
-                    debug!(
-                        "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
-                        method, session_ctx.session_id
-                    );
-                    return Err(McpError::SessionError(
+        if self.strict_lifecycle
+            && method != "initialize"
+            && method != "notifications/initialized"
+            && let Some(ref session_ctx) = mcp_session_context
+        {
+            let session_initialized = self
+                .session_manager
+                .is_session_initialized(&session_ctx.session_id)
+                .await;
+            if !session_initialized {
+                debug!(
+                    "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
+                    method, session_ctx.session_id
+                );
+                return Err(McpError::SessionError(
                         "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)".to_string()
                     ));
-                }
             }
+        }
 
         // Convert JSON-RPC params to Value
         let mcp_params = params.map(|p| p.to_value());
@@ -533,13 +555,16 @@ impl SessionAwareInitializeHandler {
         use turul_mcp_protocol::version::McpVersion;
 
         // Parse client's requested version
-        let requested_version = client_version.parse::<McpVersion>()
+        let requested_version = client_version
+            .parse::<McpVersion>()
             .map_err(|_| format!("Unsupported protocol version: {}", client_version))?;
 
         // Define server's supported versions (all versions from 2024-11-05 to current)
-        let supported_versions = [McpVersion::V2024_11_05,
+        let supported_versions = [
+            McpVersion::V2024_11_05,
             McpVersion::V2025_03_26,
-            McpVersion::V2025_06_18];
+            McpVersion::V2025_06_18,
+        ];
 
         // Strategy 1: If server supports client's requested version, use it
         if supported_versions.contains(&requested_version) {
@@ -619,10 +644,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
         let request = if let Some(params) = params {
             let params_value = params.to_value();
             serde_json::from_value::<InitializeRequest>(params_value).map_err(|e| {
-                McpError::InvalidParameters(format!(
-                    "Invalid initialize request: {}",
-                    e
-                ))
+                McpError::InvalidParameters(format!("Invalid initialize request: {}", e))
             })?
         } else {
             return Err(McpError::MissingParameter(
@@ -641,51 +663,75 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             }
             Err(e) => {
                 error!("Protocol version negotiation failed: {}", e);
-                return Err(McpError::ConfigurationError(
-                    format!("Version negotiation failed: {}", e),
-                ));
+                return Err(McpError::ConfigurationError(format!(
+                    "Version negotiation failed: {}",
+                    e
+                )));
             }
         };
 
         // Use session ID provided by HTTP layer, or create new one if not provided
         let session_id = if let Some(ctx) = &session_context {
             debug!("Using session from context: {}", ctx.session_id);
-            
+
             // Add session to cache if it doesn't exist there
             // This handles sessions created directly in storage by session_handler
-            let cache_exists = self.session_manager.session_exists_in_cache(&ctx.session_id).await;
-            debug!("Session {} exists in cache: {}", ctx.session_id, cache_exists);
-            
+            let cache_exists = self
+                .session_manager
+                .session_exists_in_cache(&ctx.session_id)
+                .await;
+            debug!(
+                "Session {} exists in cache: {}",
+                ctx.session_id, cache_exists
+            );
+
             if !cache_exists {
                 debug!("Session {} not in cache, checking storage", ctx.session_id);
-                
+
                 // Try to load session from storage with its actual capabilities
-                match self.session_manager.load_session_from_storage(&ctx.session_id).await {
+                match self
+                    .session_manager
+                    .load_session_from_storage(&ctx.session_id)
+                    .await
+                {
                     Ok(true) => {
-                        debug!("Session {} loaded from storage with preserved capabilities", ctx.session_id);
+                        debug!(
+                            "Session {} loaded from storage with preserved capabilities",
+                            ctx.session_id
+                        );
                     }
                     Ok(false) => {
                         // Session doesn't exist in storage either - this shouldn't happen
                         // in normal flow but handle gracefully
-                        warn!("Session {} not found in storage, creating with defaults", ctx.session_id);
-                        self.session_manager.add_session_to_cache(
-                            ctx.session_id.clone(),
-                            self.session_manager.get_default_capabilities()
-                        ).await;
+                        warn!(
+                            "Session {} not found in storage, creating with defaults",
+                            ctx.session_id
+                        );
+                        self.session_manager
+                            .add_session_to_cache(
+                                ctx.session_id.clone(),
+                                self.session_manager.get_default_capabilities(),
+                            )
+                            .await;
                     }
                     Err(e) => {
-                        error!("Failed to load session {} from storage: {}", ctx.session_id, e);
+                        error!(
+                            "Failed to load session {} from storage: {}",
+                            ctx.session_id, e
+                        );
                         // Fallback to defaults only on error
-                        self.session_manager.add_session_to_cache(
-                            ctx.session_id.clone(),
-                            self.session_manager.get_default_capabilities()
-                        ).await;
+                        self.session_manager
+                            .add_session_to_cache(
+                                ctx.session_id.clone(),
+                                self.session_manager.get_default_capabilities(),
+                            )
+                            .await;
                     }
                 }
             } else {
                 debug!("Session {} already exists in cache", ctx.session_id);
             }
-            
+
             ctx.session_id.clone()
         } else {
             debug!("No session context provided, creating new session");
@@ -698,9 +744,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             .set_session_state(
                 &session_id,
                 "client_info",
-                serde_json::to_value(&request.client_info).map_err(|e| {
-                    McpError::SerializationError(e)
-                })?,
+                serde_json::to_value(&request.client_info).map_err(McpError::SerializationError)?,
             )
             .await;
 
@@ -708,9 +752,8 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             .set_session_state(
                 &session_id,
                 "client_capabilities",
-                serde_json::to_value(&request.capabilities).map_err(|e| {
-                    McpError::SerializationError(e)
-                })?,
+                serde_json::to_value(&request.capabilities)
+                    .map_err(McpError::SerializationError)?,
             )
             .await;
 
@@ -718,9 +761,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             .set_session_state(
                 &session_id,
                 "negotiated_version",
-                serde_json::to_value(negotiated_version).map_err(|e| {
-                    McpError::SerializationError(e)
-                })?,
+                serde_json::to_value(negotiated_version).map_err(McpError::SerializationError)?,
             )
             .await;
 
@@ -753,9 +794,10 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
                 .await
             {
                 error!("❌ Failed to initialize session {}: {}", session_id, e);
-                return Err(McpError::SessionError(
-                    format!("Failed to initialize session: {}", e),
-                ));
+                return Err(McpError::SessionError(format!(
+                    "Failed to initialize session: {}",
+                    e
+                )));
             }
             info!(
                 "✅ Session {} created and immediately initialized with protocol version {} (lenient mode)",
@@ -782,9 +824,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
 
         // Session ID is communicated to HTTP layer via session manager
 
-        serde_json::to_value(response).map_err(|e| {
-            McpError::SerializationError(e)
-        })
+        serde_json::to_value(response).map_err(McpError::SerializationError)
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -819,7 +859,8 @@ impl JsonRpcHandler for ListToolsHandler {
 
         if method != "tools/list" {
             return Err(McpError::InvalidParameters(format!(
-                "Method '{}' not supported by tools/list handler", method
+                "Method '{}' not supported by tools/list handler",
+                method
             )));
         }
 
@@ -859,12 +900,8 @@ impl JsonRpcHandler for ListToolsHandler {
             base_response = base_response.with_next_cursor(cursor.clone());
         }
 
-        let mut paginated_response = PaginatedResponse::with_pagination(
-            base_response,
-            next_cursor,
-            total,
-            has_more,
-        );
+        let mut paginated_response =
+            PaginatedResponse::with_pagination(base_response, next_cursor, total, has_more);
 
         // Propagate optional _meta from request to response (MCP 2025-06-18 compliance)
         if let Some(meta) = list_params.meta {
@@ -873,9 +910,7 @@ impl JsonRpcHandler for ListToolsHandler {
             paginated_response = paginated_response.with_meta(meta_obj);
         }
 
-        serde_json::to_value(paginated_response).map_err(|e| {
-            McpError::SerializationError(e)
-        })
+        serde_json::to_value(paginated_response).map_err(McpError::SerializationError)
     }
 
     fn supported_methods(&self) -> Vec<String> {
@@ -918,14 +953,18 @@ impl JsonRpcHandler for SessionAwareToolHandler {
 
         if method != "tools/call" {
             return Err(McpError::InvalidParameters(format!(
-                "Method '{}' not supported by tools/call handler", method
+                "Method '{}' not supported by tools/call handler",
+                method
             )));
         }
 
         // MCP Lifecycle Guard: Ensure session is initialized before allowing tool operations (if strict mode enabled)
         if self.strict_lifecycle {
             if let Some(ref session_ctx) = session_context {
-                let session_initialized = self.session_manager.is_session_initialized(&session_ctx.session_id).await;
+                let session_initialized = self
+                    .session_manager
+                    .is_session_initialized(&session_ctx.session_id)
+                    .await;
                 if !session_initialized {
                     debug!(
                         "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
@@ -947,9 +986,8 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             );
         }
 
-        let params = params.ok_or_else(|| {
-            McpError::MissingParameter("CallToolRequest".to_string())
-        })?;
+        let params =
+            params.ok_or_else(|| McpError::MissingParameter("CallToolRequest".to_string()))?;
 
         // Use the parameter extraction pattern from the other project
         use turul_mcp_protocol::param_extraction::extract_params;
@@ -957,9 +995,10 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         let call_params: turul_mcp_protocol::tools::CallToolParams = extract_params(params)?;
 
         // Find the tool
-        let tool = self.tools.get(&call_params.name).ok_or_else(|| {
-            McpError::ToolNotFound(call_params.name.clone())
-        })?;
+        let tool = self
+            .tools
+            .get(&call_params.name)
+            .ok_or_else(|| McpError::ToolNotFound(call_params.name.clone()))?;
 
         // Convert JSON-RPC SessionContext to MCP SessionContext for tool execution
         let mcp_session_context = if let Some(json_rpc_ctx) = session_context {
@@ -968,8 +1007,8 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                 json_rpc_ctx.session_id
             );
             Some(SessionContext::from_json_rpc_with_broadcaster(
-                json_rpc_ctx, 
-                self.session_manager.get_storage()
+                json_rpc_ctx,
+                self.session_manager.get_storage(),
             ))
         } else {
             debug!("No session context provided for tool call");
@@ -985,16 +1024,12 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             })
             .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
         match tool.call(args, mcp_session_context).await {
-            Ok(response) => serde_json::to_value(response).map_err(|e| {
-                McpError::SerializationError(e)
-            }),
+            Ok(response) => serde_json::to_value(response).map_err(McpError::SerializationError),
             Err(error_msg) => {
                 error!("Tool execution error: {}", error_msg);
                 let error_content = vec![ToolResult::text(format!("Error: {}", error_msg))];
                 let response = CallToolResult::error(error_content);
-                serde_json::to_value(response).map_err(|e| {
-                    McpError::SerializationError(e)
-                })
+                serde_json::to_value(response).map_err(McpError::SerializationError)
             }
         }
     }
