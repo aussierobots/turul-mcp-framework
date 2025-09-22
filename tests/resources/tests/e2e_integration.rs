@@ -290,7 +290,7 @@ async fn test_resources_list() {
     assert!(result_data.contains_key("resources"));
 
     let resources = result_data["resources"].as_array().unwrap();
-    assert!(resources.len() > 0, "Should have test resources available");
+    assert!(!resources.is_empty(), "Should have test resources available");
 
     // Verify all expected test resources are present (using file:// scheme for security)
     let expected_uris = vec![
@@ -349,7 +349,7 @@ async fn test_file_resource_read() {
     assert!(result_data.contains_key("contents"));
 
     let contents = result_data["contents"].as_array().unwrap();
-    assert!(contents.len() > 0);
+    assert!(!contents.is_empty());
 
     let content = &contents[0];
     assert!(content.as_object().unwrap().contains_key("uri"));
@@ -375,7 +375,7 @@ async fn test_memory_resource_read() {
     assert!(result_data.contains_key("contents"));
 
     let contents = result_data["contents"].as_array().unwrap();
-    assert!(contents.len() > 0);
+    assert!(!contents.is_empty());
 
     let content = &contents[0];
     let content_obj = content.as_object().unwrap();
@@ -592,7 +592,7 @@ async fn test_complete_resource_specification() {
     assert!(result_data.contains_key("contents"));
 
     let contents = result_data["contents"].as_array().unwrap();
-    assert!(contents.len() > 0);
+    assert!(!contents.is_empty());
 
     let content = &contents[0];
     let content_obj = content.as_object().unwrap();

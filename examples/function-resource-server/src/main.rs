@@ -102,9 +102,7 @@ impl McpResource for UserProfileResource {
             if let Some(template_vars) = params.get("template_variables") {
                 if let Some(vars_obj) = template_vars.as_object() {
                     if let Some(user_id_val) = vars_obj.get("user_id") {
-                        if let Some(user_id_str) = user_id_val.as_str() {
-                            user_id_str
-                        } else { "unknown" }
+                        user_id_val.as_str().unwrap_or("unknown")
                     } else { "unknown" }
                 } else { "unknown" }
             } else { "unknown" }

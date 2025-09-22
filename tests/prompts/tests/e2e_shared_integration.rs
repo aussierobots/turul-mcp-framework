@@ -40,7 +40,7 @@ async fn test_prompts_list_with_shared_utils() {
     // Verify specific prompts are present
     let result_data = result["result"].as_object().unwrap();
     let prompts = result_data["prompts"].as_array().unwrap();
-    assert!(prompts.len() > 0, "Should have test prompts available");
+    assert!(!prompts.is_empty(), "Should have test prompts available");
 
     // Check for key prompt types
     let prompt_names: Vec<&str> = prompts

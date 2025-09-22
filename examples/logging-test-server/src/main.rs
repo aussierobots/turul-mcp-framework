@@ -231,7 +231,7 @@ async fn main() -> Result<()> {
     println!("🔧 Available tools:");
     println!("   • send_log(message, level, correlation_id?) - Sends log message at specified level");
     println!("   • set_log_level(level) - Changes session logging level");
-    println!("");
+    println!();
     println!("💡 Use the client to test session-aware logging filtering!");
     if post_sse_enabled {
         println!("📡 POST requests with 'Accept: text/event-stream' will return SSE streams");

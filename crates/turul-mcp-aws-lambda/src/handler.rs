@@ -138,13 +138,11 @@ impl LambdaMcpHandler {
 
         // Handle CORS preflight requests first
         #[cfg(feature = "cors")]
-        if method == http::Method::OPTIONS {
-            if let Some(ref cors_config) = self.cors_config {
+        if method == http::Method::OPTIONS
+            && let Some(ref cors_config) = self.cors_config {
                 debug!("Handling CORS preflight request");
-                return create_preflight_response(cors_config, request_origin.as_deref())
-                    .map_err(Into::into);
+                return create_preflight_response(cors_config, request_origin.as_deref());
             }
-        }
 
         // Extract MCP-specific headers
         let mcp_headers = extract_mcp_headers(&req);
@@ -471,7 +469,7 @@ impl LambdaMcpHandler {
         // Apply CORS headers if configured
         #[cfg(feature = "cors")]
         if let Some(ref cors_config) = self.cors_config {
-            inject_cors_headers(&mut lambda_resp, cors_config, request_origin.as_deref())?;
+            inject_cors_headers(&mut lambda_resp, cors_config, request_origin)?;
         }
 
         debug!(
@@ -528,7 +526,7 @@ impl LambdaMcpHandler {
             // Apply CORS headers if configured
             #[cfg(feature = "cors")]
             if let Some(ref cors_config) = self.cors_config {
-                inject_cors_headers(&mut lambda_resp, cors_config, request_origin.as_deref())?;
+                inject_cors_headers(&mut lambda_resp, cors_config, request_origin)?;
             }
 
             info!("✅ Lambda SSE stream for session: {}", session_id);

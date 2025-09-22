@@ -397,7 +397,7 @@ async fn main() -> Result<()> {
 
     // Keep server running for manual testing
     tracing::info!("🔄 Server will keep running for manual testing. Press Ctrl+C to stop.");
-    let _ = server_handle.await?;
+    server_handle.await?;
 
     Ok(())
 }

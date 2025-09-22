@@ -40,7 +40,7 @@ async fn test_resource_list_with_shared_utils() {
     // Verify specific resources are present
     let result_data = result["result"].as_object().unwrap();
     let resources = result_data["resources"].as_array().unwrap();
-    assert!(resources.len() > 0, "Should have test resources available");
+    assert!(!resources.is_empty(), "Should have test resources available");
 
     // Check for key resource types
     let resource_uris: Vec<&str> = resources
@@ -202,7 +202,7 @@ async fn test_multiple_resource_types_with_shared_utils() {
     ];
 
     for (uri, resource_type) in test_resources {
-        let result = client.read_resource(uri).await.expect(&format!("Failed to read {} resource", resource_type));
+        let result = client.read_resource(uri).await.unwrap_or_else(|_| panic!("Failed to read {} resource", resource_type));
 
         if result.contains_key("result") {
             info!("Successfully read {} resource: {}", resource_type, uri);

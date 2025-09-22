@@ -126,7 +126,7 @@ impl McpPrompt for StringArgsPrompt {
             .unwrap_or("(not provided)");
 
         Ok(vec![
-            PromptMessage::user_text(&format!(
+            PromptMessage::user_text(format!(
                 "You are processing a prompt with string arguments.\n\nRequired text: '{}'\nOptional text: '{}'\n\nPlease analyze these inputs.",
                 required_text, optional_text
             )),
@@ -194,7 +194,7 @@ impl McpPrompt for NumberArgsPrompt {
             .ok_or_else(|| McpError::missing_param("count"))
             .and_then(|s| s.parse::<f64>().map_err(|_| McpError::invalid_param_type("count", "number as string", s)))?;
             
-        if count < 1.0 || count > 100.0 {
+        if !(1.0..=100.0).contains(&count) {
             return Err(McpError::param_out_of_range("count", &count.to_string(), "1-100"));
         }
             
@@ -206,7 +206,7 @@ impl McpPrompt for NumberArgsPrompt {
         let result = count * multiplier;
 
         Ok(vec![
-            PromptMessage::user_text(&format!(
+            PromptMessage::user_text(format!(
                 "You are processing a prompt with number validation.\n\nCount: {}\nMultiplier: {}\nResult: {}\nPlease analyze these numbers.",
                 count, multiplier, result
             )),
@@ -280,7 +280,7 @@ impl McpPrompt for BooleanArgsPrompt {
         let debug_status = if debug_mode { "ON" } else { "OFF" };
 
         Ok(vec![
-            PromptMessage::user_text(&format!(
+            PromptMessage::user_text(format!(
                 "You are processing a prompt with boolean flags.\n\nFeature Status: {}\nDebug Mode: {}\n\nPlease provide guidance based on these settings.",
                 status, debug_status
             )),
@@ -370,7 +370,7 @@ impl McpPrompt for TemplatePrompt {
         };
 
         Ok(vec![
-            PromptMessage::user_text(&format!(
+            PromptMessage::user_text(format!(
                 "You are communicating in a {} style with {}. Adapt your response accordingly.\n\n{}\n\n{} {}. Please share your thoughts and insights.",
                 style, name, greeting, tone, topic
             )),
@@ -428,11 +428,11 @@ impl McpPrompt for MultiMessagePrompt {
             .ok_or_else(|| McpError::missing_param("scenario"))?;
 
         Ok(vec![
-            PromptMessage::user_text(&format!(
+            PromptMessage::user_text(format!(
                 "I'm interested in learning about {}. Can you give me an overview?",
                 scenario
             )),
-            PromptMessage::assistant_text(&format!(
+            PromptMessage::assistant_text(format!(
                 "I'd be happy to help you explore {}! This is a fascinating topic with many aspects to consider. Let me start with a foundational overview, and then we can dive deeper into specific areas that interest you most.",
                 scenario
             )),
@@ -481,7 +481,7 @@ impl McpPrompt for SessionAwarePrompt {
         );
 
         Ok(vec![
-            PromptMessage::user_text(&format!(
+            PromptMessage::user_text(format!(
                 "You are a session-aware AI assistant. You have access to session information for personalized responses.\n\nThis prompt is aware of the current session:\n{}\n\nPlease acknowledge the session context.",
                 session_info
             )),
@@ -555,12 +555,12 @@ impl McpPrompt for ValidationPrompt {
             .ok_or_else(|| McpError::missing_param("age"))
             .and_then(|s| s.parse::<f64>().map_err(|_| McpError::invalid_param_type("age", "number as string", s)))?;
             
-        if age < 18.0 || age > 120.0 {
+        if !(18.0..=120.0).contains(&age) {
             return Err(McpError::param_out_of_range("age", &age.to_string(), "18-120"));
         }
 
         Ok(vec![
-            PromptMessage::user_text(&format!(
+            PromptMessage::user_text(format!(
                 "You are processing validated user information with strict validation.\n\nValidated Information:\nEmail: {}\nAge: {}\n\nThis information has passed strict validation checks.",
                 email, age as u32
             )),
@@ -650,7 +650,7 @@ impl McpPrompt for DynamicPrompt {
         };
 
         Ok(vec![
-            PromptMessage::user_text(&format!(
+            PromptMessage::user_text(format!(
                 "{}\n\nMode: {} - {}\n\nContent to process:\n{}\n\nPlease respond according to the selected mode.",
                 persona, mode.to_uppercase(), approach, content
             )),
@@ -783,18 +783,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             • Edge cases: empty_messages, validation_failure"
         )
         // Basic Prompts (Coverage)
-        .prompt(SimplePrompt::default())
+        .prompt(SimplePrompt)
         .prompt(StringArgsPrompt::default())
         .prompt(NumberArgsPrompt::default())
         .prompt(BooleanArgsPrompt::default())
         .prompt(TemplatePrompt::default())
         .prompt(MultiMessagePrompt::default())
         // Advanced Prompts (Features)
-        .prompt(SessionAwarePrompt::default())
+        .prompt(SessionAwarePrompt)
         .prompt(ValidationPrompt::default())
         .prompt(DynamicPrompt::default())
         // Edge Case Prompts
-        .prompt(EmptyMessagesPrompt::default())
+        .prompt(EmptyMessagesPrompt)
         .prompt(ValidationFailurePrompt::default())
         .with_prompts()
         .bind_address(format!("127.0.0.1:{}", port).parse()?)

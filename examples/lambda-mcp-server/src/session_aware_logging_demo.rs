@@ -143,8 +143,7 @@ impl SessionLoggingDemoTool {
         session.notify_log(str_to_logging_level("info"), serde_json::json!("🔧 Starting LoggingBuilder demonstration"), Some("demo".to_string()), None).await;
         
         // Create various loggers using the builder pattern
-        let loggers = vec![
-            LoggingBuilder::debug(json!("Debug logger with structured data"))
+        let loggers = [LoggingBuilder::debug(json!("Debug logger with structured data"))
                 .logger("demo-debug")
                 .build_session_aware(),
             
@@ -163,8 +162,7 @@ impl SessionLoggingDemoTool {
                 "details": "This is just a demo, not a real error"
             }))
             .logger("demo-error")
-            .build_session_aware(),
-        ];
+            .build_session_aware()];
         
         session.notify_log(str_to_logging_level("info"), serde_json::json!("📤 Sending messages via LoggingBuilder (filtered by session level):"), Some("demo".to_string()), None).await;
         

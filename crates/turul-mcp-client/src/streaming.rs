@@ -17,13 +17,16 @@ pub struct StreamHandler {
     callbacks: Arc<parking_lot::Mutex<StreamCallbacks>>,
 }
 
+/// Type alias for request handler callback
+type RequestHandler = Box<dyn Fn(Value) -> Result<Value, String> + Send + Sync>;
+
 /// Callbacks for different types of server events
 #[derive(Default)]
 pub struct StreamCallbacks {
     /// Notification callback
     pub notification: Option<Box<dyn Fn(Value) + Send + Sync>>,
     /// Request callback (server asking client)
-    pub request: Option<Box<dyn Fn(Value) -> Result<Value, String> + Send + Sync>>,
+    pub request: Option<RequestHandler>,
     /// Connection lost callback
     pub connection_lost: Option<Box<dyn Fn() + Send + Sync>>,
     /// Error callback

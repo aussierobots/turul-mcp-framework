@@ -199,7 +199,7 @@ mod initialization_compliance {
     #[tokio::test]
     async fn test_protocol_version_validation() {
         let supported_versions = vec!["2025-06-18"];
-        let _unsupported_versions = vec!["2024-11-05", "invalid", ""];
+        let _unsupported_versions = ["2024-11-05", "invalid", ""];
 
         for version in supported_versions {
             // Should accept supported version

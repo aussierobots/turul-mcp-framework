@@ -10,7 +10,6 @@
 //! NOTE: These tests now use proper SessionContext creation via test helpers.
 
 use serde_json::{json, Value};
-use tokio;
 
 use turul_mcp_derive::{McpTool, mcp_tool};
 use turul_mcp_server::{McpResult, SessionContext, McpTool};

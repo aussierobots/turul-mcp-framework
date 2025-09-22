@@ -286,8 +286,8 @@ impl StreamManager {
 
         debug!("🔍 BEFORE unregister: HashMap has {} sessions", connections.len());
 
-        if let Some(session_connections) = connections.get_mut(session_id) {
-            if session_connections.remove(connection_id).is_some() {
+        if let Some(session_connections) = connections.get_mut(session_id)
+            && session_connections.remove(connection_id).is_some() {
                 debug!("🔌 Unregistered connection: session={}, connection={}", session_id, connection_id);
 
                 // Clean up empty sessions
@@ -296,7 +296,6 @@ impl StreamManager {
                     debug!("🧹 Removed empty session: {}", session_id);
                 }
             }
-        }
 
         debug!("🔍 AFTER unregister: HashMap has {} sessions", connections.len());
     }

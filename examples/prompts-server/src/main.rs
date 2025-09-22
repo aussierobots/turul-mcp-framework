@@ -25,6 +25,12 @@ pub struct CodeGenerationPrompt {
     template: String,
 }
 
+impl Default for CodeGenerationPrompt {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CodeGenerationPrompt {
     pub fn new() -> Self {
         Self {
@@ -176,6 +182,12 @@ pub struct CodeReviewPrompt {
     description: String,
     arguments: Vec<PromptArgument>,
     template: String,
+}
+
+impl Default for CodeReviewPrompt {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CodeReviewPrompt {
@@ -338,6 +350,12 @@ pub struct ArchitecturePrompt {
     name: String,
     description: String,
     arguments: Vec<PromptArgument>,
+}
+
+impl Default for ArchitecturePrompt {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ArchitecturePrompt {

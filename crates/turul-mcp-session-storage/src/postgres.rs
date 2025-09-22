@@ -218,13 +218,12 @@ impl PostgresSessionStorage {
                 }
                 
                 // Refresh materialized view if enabled
-                if config.enable_pooling_optimizations {
-                    if let Err(e) = sqlx::query("REFRESH MATERIALIZED VIEW CONCURRENTLY session_stats")
+                if config.enable_pooling_optimizations
+                    && let Err(e) = sqlx::query("REFRESH MATERIALIZED VIEW CONCURRENTLY session_stats")
                         .execute(&pool)
                         .await {
                         debug!("Materialized view refresh failed: {}", e);
                     }
-                }
             }
         });
     }
@@ -278,7 +277,7 @@ impl PostgresSessionStorage {
 
 /// Background cleanup for expired sessions and old events
 async fn cleanup_expired_data(pool: &PgPool, config: &PostgresConfig) -> Result<(), PostgresError> {
-    let now = chrono::Utc::now().timestamp_millis() as i64;
+    let now = chrono::Utc::now().timestamp_millis();
     let expiration_threshold = now - (config.session_timeout_minutes as i64 * 60 * 1000);
     
     // Use transaction for consistency
@@ -458,7 +457,7 @@ impl SessionStorage for PostgresSessionStorage {
         .bind(session_id)
         .bind(key)
         .bind(&value)
-        .bind(chrono::Utc::now().timestamp_millis() as i64)
+        .bind(chrono::Utc::now().timestamp_millis())
         .execute(&self.pool)
         .await?
         .rows_affected();
@@ -502,7 +501,7 @@ impl SessionStorage for PostgresSessionStorage {
         "#)
         .bind(session_id)
         .bind(key)
-        .bind(chrono::Utc::now().timestamp_millis() as i64)
+        .bind(chrono::Utc::now().timestamp_millis())
         .execute(&self.pool)
         .await?
         .rows_affected();
@@ -673,7 +672,7 @@ impl SessionStorage for PostgresSessionStorage {
     }
     
     async fn maintenance(&self) -> Result<(), Self::Error> {
-        let now = chrono::Utc::now().timestamp_millis() as i64;
+        let now = chrono::Utc::now().timestamp_millis();
         let expiration_threshold = now - (self.config.session_timeout_minutes as i64 * 60 * 1000);
         
         // Use transaction for consistency

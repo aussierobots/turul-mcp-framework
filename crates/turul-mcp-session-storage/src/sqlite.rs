@@ -329,12 +329,12 @@ impl SessionStorage for SqliteSessionStorage {
     async fn update_session(&self, session_info: SessionInfo) -> Result<(), Self::Error> {
         let client_capabilities_json = session_info.client_capabilities
             .as_ref()
-            .map(|c| serde_json::to_string(c))
+            .map(serde_json::to_string)
             .transpose()?;
         
         let server_capabilities_json = session_info.server_capabilities
             .as_ref()
-            .map(|c| serde_json::to_string(c))
+            .map(serde_json::to_string)
             .transpose()?
             .unwrap_or_default();
         
@@ -381,7 +381,7 @@ impl SessionStorage for SqliteSessionStorage {
         state.insert(key.to_string(), value);
         
         let new_state_json = serde_json::to_string(&state)?;
-        let now = chrono::Utc::now().timestamp_millis() as i64;
+        let now = chrono::Utc::now().timestamp_millis();
         
         sqlx::query("UPDATE sessions SET state = ?, last_activity = ? WHERE session_id = ?")
             .bind(new_state_json)
@@ -419,7 +419,7 @@ impl SessionStorage for SqliteSessionStorage {
         let removed_value = state.remove(key);
         
         let new_state_json = serde_json::to_string(&state)?;
-        let now = chrono::Utc::now().timestamp_millis() as i64;
+        let now = chrono::Utc::now().timestamp_millis();
         
         sqlx::query("UPDATE sessions SET state = ?, last_activity = ? WHERE session_id = ?")
             .bind(new_state_json)

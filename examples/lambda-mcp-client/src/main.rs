@@ -394,11 +394,10 @@ fn print_test_results(
         for result in results.iter().filter(|r| !r.passed) {
             println!("  {} - {}", result.name.red(), result.error.as_ref().unwrap_or(&"Unknown error".to_string()));
             
-            if detailed {
-                if let Some(details) = &result.details {
+            if detailed
+                && let Some(details) = &result.details {
                     println!("    Details: {}", serde_json::to_string_pretty(details)?);
                 }
-            }
         }
     }
     

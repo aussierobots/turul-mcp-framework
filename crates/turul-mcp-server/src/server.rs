@@ -451,8 +451,8 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
         };
 
         // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled)
-        if self.strict_lifecycle && method != "initialize" && method != "notifications/initialized" {
-            if let Some(ref session_ctx) = mcp_session_context {
+        if self.strict_lifecycle && method != "initialize" && method != "notifications/initialized"
+            && let Some(ref session_ctx) = mcp_session_context {
                 let session_initialized = self.session_manager.is_session_initialized(&session_ctx.session_id).await;
                 if !session_initialized {
                     debug!(
@@ -464,7 +464,6 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
                     ));
                 }
             }
-        }
 
         // Convert JSON-RPC params to Value
         let mcp_params = params.map(|p| p.to_value());
@@ -538,11 +537,9 @@ impl SessionAwareInitializeHandler {
             .map_err(|_| format!("Unsupported protocol version: {}", client_version))?;
 
         // Define server's supported versions (all versions from 2024-11-05 to current)
-        let supported_versions = vec![
-            McpVersion::V2024_11_05,
+        let supported_versions = [McpVersion::V2024_11_05,
             McpVersion::V2025_03_26,
-            McpVersion::V2025_06_18,
-        ];
+            McpVersion::V2025_06_18];
 
         // Strategy 1: If server supports client's requested version, use it
         if supported_versions.contains(&requested_version) {
@@ -551,11 +548,7 @@ impl SessionAwareInitializeHandler {
 
         // Strategy 2: Use the highest version the server supports that's <= client version
         // This allows clients to request newer versions while falling back gracefully
-        let negotiated = match requested_version {
-            McpVersion::V2025_06_18 => McpVersion::V2025_06_18, // Latest
-            McpVersion::V2025_03_26 => McpVersion::V2025_03_26, // Streamable HTTP
-            McpVersion::V2024_11_05 => McpVersion::V2024_11_05, // Base version
-        };
+        let negotiated = requested_version;
 
         // Verify the negotiated version is in our supported list
         if supported_versions.contains(&negotiated) {
@@ -725,7 +718,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             .set_session_state(
                 &session_id,
                 "negotiated_version",
-                serde_json::to_value(&negotiated_version).map_err(|e| {
+                serde_json::to_value(negotiated_version).map_err(|e| {
                     McpError::SerializationError(e)
                 })?,
             )
@@ -961,8 +954,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         // Use the parameter extraction pattern from the other project
         use turul_mcp_protocol::param_extraction::extract_params;
 
-        let call_params: turul_mcp_protocol::tools::CallToolParams = extract_params(params)
-            .map_err(|mcp_error| mcp_error)?;
+        let call_params: turul_mcp_protocol::tools::CallToolParams = extract_params(params)?;
 
         // Find the tool
         let tool = self.tools.get(&call_params.name).ok_or_else(|| {

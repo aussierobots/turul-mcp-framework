@@ -36,6 +36,12 @@ struct AlertMessage {
     delivered: bool,
 }
 
+impl Default for DevAlertNotification {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DevAlertNotification {
     pub fn new() -> Self {
         Self {
@@ -201,6 +207,12 @@ pub struct CiCdNotification {
     method: String,
 }
 
+impl Default for CiCdNotification {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CiCdNotification {
     pub fn new() -> Self {
         Self {
@@ -280,6 +292,12 @@ impl McpNotification for CiCdNotification {
 /// System monitoring notification handler
 pub struct MonitoringNotification {
     method: String,
+}
+
+impl Default for MonitoringNotification {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MonitoringNotification {

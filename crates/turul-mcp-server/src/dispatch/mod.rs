@@ -150,8 +150,7 @@ impl McpDispatcher {
     
     /// Check if a method matches a pattern (supports wildcards)
     fn matches_pattern(&self, method: &str, pattern: &str) -> bool {
-        if pattern.ends_with("/*") {
-            let prefix = &pattern[..pattern.len() - 2];
+        if let Some(prefix) = pattern.strip_suffix("/*") {
             method.starts_with(prefix) && method.len() > prefix.len()
         } else if pattern.contains('*') {
             // More sophisticated glob matching could be implemented here

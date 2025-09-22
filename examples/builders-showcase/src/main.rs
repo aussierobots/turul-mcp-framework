@@ -122,7 +122,7 @@ async fn demonstrate_all_builders() -> Result<(), Box<dyn std::error::Error>> {
     
     // Read the resource
     let config_content = project_config.read().await?;
-    println!("   ✅ Created config resource: {}", "file:///workspace/config.json");
+    println!("   ✅ Created config resource: file:///workspace/config.json");
     println!("   📋 Resource name: project_config");
     println!("   📄 Content available: true"); // Successfully read if we get here
     
@@ -152,7 +152,7 @@ impl {{component_name}} {
         .build()?;
     
     let template_content = template_resource.read().await?;
-    println!("   ✅ Created template resource: {}", "file:///templates/component.rs");
+    println!("   ✅ Created template resource: file:///templates/component.rs");
     println!("   📝 Template content type: {}", match &template_content {
         turul_mcp_protocol::resources::ResourceContent::Text { .. } => "Text template",
         turul_mcp_protocol::resources::ResourceContent::Blob { .. } => "Binary template"

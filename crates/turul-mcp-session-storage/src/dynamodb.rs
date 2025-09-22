@@ -229,13 +229,11 @@ impl DynamoDbSessionStorage {
         info!("Creating DynamoDB table: {}", self.config.table_name);
 
         // Define table schema
-        let key_schema = vec![
-            KeySchemaElement::builder()
+        let key_schema = [KeySchemaElement::builder()
                 .attribute_name("session_id")
                 .key_type(KeyType::Hash)
                 .build()
-                .map_err(|e| DynamoDbError::AwsError(e.to_string()))?,
-        ];
+                .map_err(|e| DynamoDbError::AwsError(e.to_string()))?];
 
         let attribute_definitions = vec![
             AttributeDefinition::builder()
@@ -468,12 +466,11 @@ impl DynamoDbSessionStorage {
                 .await
             {
                 Ok(output) => {
-                    if let Some(table) = output.table() {
-                        if let Some(TableStatus::Active) = table.table_status() {
+                    if let Some(table) = output.table()
+                        && let Some(TableStatus::Active) = table.table_status() {
                             info!("Table '{}' is now active", self.config.table_name);
                             return Ok(());
                         }
-                    }
                 }
                 Err(err) => {
                     warn!(
@@ -524,11 +521,10 @@ impl DynamoDbSessionStorage {
             .await
         {
             Ok(output) => {
-                if let Some(table) = output.table() {
-                    if let Some(TableStatus::Active) = table.table_status() {
+                if let Some(table) = output.table()
+                    && let Some(TableStatus::Active) = table.table_status() {
                         return Ok(());
                     }
-                }
             }
             Err(_) => {
                 if !self.config.create_tables_if_missing {
@@ -627,12 +623,11 @@ impl DynamoDbSessionStorage {
                 .await
             {
                 Ok(output) => {
-                    if let Some(table) = output.table() {
-                        if let Some(TableStatus::Active) = table.table_status() {
+                    if let Some(table) = output.table()
+                        && let Some(TableStatus::Active) = table.table_status() {
                             info!("Events table '{}' is now active", event_table);
                             return Ok(());
                         }
-                    }
                 }
                 Err(err) => {
                     warn!(
@@ -1313,7 +1308,7 @@ impl SessionStorage for DynamoDbSessionStorage {
 
                 // Use UpdateExpression to remove the key from the state map
                 let update_expression =
-                    format!("REMOVE #state.#key SET #last_activity = :timestamp");
+                    "REMOVE #state.#key SET #last_activity = :timestamp".to_string();
                 let expression_attribute_names = HashMap::from([
                     ("#state".to_string(), "state".to_string()),
                     ("#key".to_string(), key.to_string()),
@@ -1429,11 +1424,10 @@ impl SessionStorage for DynamoDbSessionStorage {
                     let mut session_ids = Vec::new();
 
                     for item in output.items() {
-                        if let Some(session_id_attr) = item.get("session_id") {
-                            if let Ok(session_id) = session_id_attr.as_s() {
+                        if let Some(session_id_attr) = item.get("session_id")
+                            && let Ok(session_id) = session_id_attr.as_s() {
                                 session_ids.push(session_id.clone());
                             }
-                        }
                     }
 
                     debug!("Listed {} session IDs from DynamoDB", session_ids.len());
@@ -1628,7 +1622,7 @@ impl SessionStorage for DynamoDbSessionStorage {
                         .and_then(|v| v.as_s().ok())
                         .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                         .map(|dt| dt.with_timezone(&Utc))
-                        .unwrap_or_else(|| Utc::now());
+                        .unwrap_or_else(Utc::now);
 
                     let event = SseEvent {
                         id: event_id,
@@ -1716,7 +1710,7 @@ impl SessionStorage for DynamoDbSessionStorage {
                         .and_then(|v| v.as_s().ok())
                         .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
                         .map(|dt| dt.with_timezone(&Utc))
-                        .unwrap_or_else(|| Utc::now());
+                        .unwrap_or_else(Utc::now);
 
                     let event = SseEvent {
                         id: event_id,
@@ -1881,14 +1875,13 @@ impl SessionStorage for DynamoDbSessionStorage {
         // Debug: Test legacy conversion methods periodically for compatibility
         if cfg!(debug_assertions) {
             let test_session = SessionInfo::new();
-            if let Ok(item) = self.session_to_item(&test_session) {
-                if let Ok(_converted_back) = self.item_to_session(&item) {
+            if let Ok(item) = self.session_to_item(&test_session)
+                && let Ok(_converted_back) = self.item_to_session(&item) {
                     debug!(
                         "Legacy JSON conversion methods working correctly for session: {}",
                         test_session.session_id
                     );
                 }
-            }
         }
 
         Ok(())

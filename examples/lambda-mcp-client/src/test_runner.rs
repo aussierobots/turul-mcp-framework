@@ -94,7 +94,7 @@ impl TestRunner {
         
         debug!("Executing test: {}", test_case.name);
         
-        let result = match Self::run_test_implementation(&test_case, client_config, session_id).await {
+        let result = match Self::run_test_implementation(test_case, client_config, session_id).await {
             Ok(details) => {
                 TestResult {
                     name: test_case.name.clone(),
@@ -181,7 +181,7 @@ impl TestRunner {
                 // Test DELETE with session ID - should return 204
                 let delete_client = reqwest::Client::new();
                 let delete_response = delete_client
-                    .delete(&format!("{}/mcp", client_config.base_url))
+                    .delete(format!("{}/mcp", client_config.base_url))
                     .header("Mcp-Session-Id", &session_id)
                     .send()
                     .await?;
@@ -191,7 +191,7 @@ impl TestRunner {
                 
                 // Test DELETE without session ID - should return 400
                 let delete_no_session_response = delete_client
-                    .delete(&format!("{}/mcp", client_config.base_url))
+                    .delete(format!("{}/mcp", client_config.base_url))
                     .send()
                     .await?;
                 

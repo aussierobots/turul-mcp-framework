@@ -141,7 +141,7 @@ impl DatabaseManager {
                 "#)
                 .bind(&name)
                 .bind(&email)
-                .bind(&created_at)
+                .bind(created_at)
                 .bind(is_active)
                 .bind(department)
                 .bind(last_login)

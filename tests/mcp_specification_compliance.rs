@@ -115,7 +115,7 @@ async fn test_mcp_response_structure_compliance() {
     let resources = &valid_response["result"]["resources"];
     assert!(resources.is_array());
     
-    if let Some(resource) = resources.as_array().and_then(|arr| arr.get(0)) {
+    if let Some(resource) = resources.as_array().and_then(|arr| arr.first()) {
         // Required fields per MCP spec
         assert!(resource["uri"].is_string());
         
@@ -301,8 +301,8 @@ fn is_valid_mcp_uri(uri: &str) -> bool {
     }
     
     // file:// URIs must be absolute
-    if uri.starts_with("file://") {
-        let path = &uri[7..]; // Remove "file://"
+    if let Some(path) = uri.strip_prefix("file://") {
+        // Remove "file://"
         return path.starts_with('/');
     }
     
@@ -373,9 +373,9 @@ mod regression_tests {
     
     fn would_be_compliance_violation(capabilities: &Value) -> bool {
         // Check if any capability claims listChanged:true (would need verification)
-        capabilities.as_object().map_or(false, |caps| {
+        capabilities.as_object().is_some_and(|caps| {
             caps.values().any(|cap| {
-                cap.get("listChanged").map_or(false, |lc| lc == true)
+                cap.get("listChanged").is_some_and(|lc| lc == true)
             })
         })
     }

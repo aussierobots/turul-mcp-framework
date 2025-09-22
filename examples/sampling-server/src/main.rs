@@ -26,6 +26,12 @@ pub struct CreativeWritingSampler {
     messages: Vec<SamplingMessage>,
 }
 
+impl Default for CreativeWritingSampler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CreativeWritingSampler {
     pub fn new() -> Self {
         Self {
@@ -107,7 +113,7 @@ impl McpSampling for CreativeWritingSampler {
 
         // Simulate creative writing response
         let creative_response = if last_user_message.to_lowercase().contains("story") {
-            format!(r#"Here's a creative story inspired by your request:
+            r#"Here's a creative story inspired by your request:
 
 **The Whispering Grove**
 
@@ -117,9 +123,9 @@ As she pressed her palm against the rough bark of the eldest tree, visions flood
 
 The forest had been waiting centuries for someone who could truly listen. Elena realized she wasn't just discovering stories—she was becoming part of the greatest tale ever told, one that would continue long after she was gone, whispered by the wind through leaves that remembered everything.
 
-*What happens next in Elena's journey? What stories do the other trees hold?*"#)
+*What happens next in Elena's journey? What stories do the other trees hold?*"#.to_string()
         } else if last_user_message.to_lowercase().contains("character") {
-            format!(r#"Here's a compelling character for your story:
+            r#"Here's a compelling character for your story:
 
 **Marcus "Echo" Thorne**
 
@@ -135,9 +141,9 @@ Marcus possesses a rare ability to experience the last moments of any object he 
 
 *Physical Description:* Tall and lean, with prematurely gray hair and intense green eyes. Always wears gloves in public to avoid unwanted echoes. Has a habit of staring at objects before deciding whether to touch them.
 
-*What drives Marcus? What case will finally push him to his breaking point?*"#)
+*What drives Marcus? What case will finally push him to his breaking point?*"#.to_string()
         } else if last_user_message.to_lowercase().contains("poem") {
-            format!(r#"Here's an original poem inspired by your request:
+            r#"Here's an original poem inspired by your request:
 
 **Digital Dreams**
 
@@ -161,7 +167,7 @@ These are the AI's waking dreams—
 Not electric sheep, but something more:  
 The future knocking at our door.
 
-*This poem explores the intersection of technology and consciousness. What themes resonate with you for your own creative work?*"#)
+*This poem explores the intersection of technology and consciousness. What themes resonate with you for your own creative work?*"#.to_string()
         } else {
             format!(r#"I'm your creative writing assistant, ready to help with:
 
@@ -220,11 +226,10 @@ I'd love to help you develop this further! What specific aspect would you like t
         }
         
         // Validate temperature if provided
-        if let Some(temp) = request.params.temperature {
-            if temp < 0.0 || temp > 2.0 {
+        if let Some(temp) = request.params.temperature
+            && (!(0.0..=2.0).contains(&temp)) {
                 return Err(McpError::validation("temperature must be between 0.0 and 2.0"));
             }
-        }
         
         Ok(())
     }
@@ -235,6 +240,12 @@ pub struct TechnicalWritingSampler {
     max_tokens: u32,
     temperature: Option<f64>,
     messages: Vec<SamplingMessage>,
+}
+
+impl Default for TechnicalWritingSampler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TechnicalWritingSampler {
@@ -368,6 +379,12 @@ pub struct ConversationalSampler {
     max_tokens: u32,
     temperature: Option<f64>,
     messages: Vec<SamplingMessage>,
+}
+
+impl Default for ConversationalSampler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConversationalSampler {

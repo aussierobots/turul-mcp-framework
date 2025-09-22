@@ -13,7 +13,6 @@ mod session_aware_logging_demo;
 use lambda_http::{run_with_streaming_response, service_fn, Error, Request, Body};
 use std::env;
 use tracing::{error, info};
-use tracing_subscriber;
 
 // Framework imports
 use turul_mcp_aws_lambda::LambdaMcpServerBuilder;

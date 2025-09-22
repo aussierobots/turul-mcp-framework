@@ -130,14 +130,12 @@ struct LogFileResource(String);
 
 impl LogFileResource {
     fn new() -> Self {
-        let log_content = vec![
-            "2024-01-01 10:00:00 INFO  Server starting up",
+        let log_content = ["2024-01-01 10:00:00 INFO  Server starting up",
             "2024-01-01 10:00:01 INFO  Configuration loaded",
             "2024-01-01 10:00:02 INFO  MCP resources initialized",
             "2024-01-01 10:00:03 INFO  Server ready to accept connections",
             "2024-01-01 10:00:10 DEBUG Resource accessed: config.json",
-            "2024-01-01 10:00:15 DEBUG Resource accessed: user-profile",
-        ].join("\n");
+            "2024-01-01 10:00:15 DEBUG Resource accessed: user-profile"].join("\n");
 
         Self(log_content)
     }

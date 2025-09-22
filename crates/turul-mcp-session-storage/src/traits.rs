@@ -40,6 +40,12 @@ pub struct SessionInfo {
     pub metadata: HashMap<String, Value>,
 }
 
+impl Default for SessionInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SessionInfo {
     /// Create a new session with UUID v7 for temporal ordering
     pub fn new() -> Self {

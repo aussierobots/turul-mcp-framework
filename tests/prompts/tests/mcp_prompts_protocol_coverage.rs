@@ -569,8 +569,7 @@ async fn test_edge_cases_and_robustness() {
 #[tokio::test]
 async fn test_complex_content_block_combinations() {
     // Test complex combinations of ContentBlock variants in messages
-    let complex_messages = vec![
-        PromptMessage::user_text("Please analyze this document:"),
+    let complex_messages = [PromptMessage::user_text("Please analyze this document:"),
         PromptMessage {
             role: Role::User,
             content: ContentBlock::ResourceLink {
@@ -602,8 +601,7 @@ async fn test_complex_content_block_combinations() {
                 data: "base64chartdata".to_string(),
                 mime_type: "image/svg+xml".to_string(),
             },
-        },
-    ];
+        }];
 
     assert_eq!(complex_messages.len(), 5);
 

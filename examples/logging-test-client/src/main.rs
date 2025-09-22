@@ -308,7 +308,7 @@ impl LoggingTestClient {
         sender: mpsc::UnboundedSender<(String, u64, String)>, // (notification_json, timestamp, test_context)
     ) -> Result<()> {
         let session_id = self.session_id.as_ref().unwrap();
-        let sse_url = format!("{}", self.base_url);
+        let sse_url = self.base_url.to_string();
         
         println!("📡 Starting persistent SSE connection for session: {}", session_id);
         
@@ -340,8 +340,8 @@ impl LoggingTestClient {
                         let line = line.trim();
 
                         // Look for SSE data lines
-                        if line.starts_with("data: ") {
-                            let data = &line[6..]; // Remove "data: " prefix
+                        if let Some(data) = line.strip_prefix("data: ") {
+                            // Remove "data: " prefix
 
                             // Check if this is a notification message
                             if data.contains("notifications/message")
@@ -420,7 +420,7 @@ impl LoggingTestClient {
         test_name: &str,
     ) -> Result<Vec<(String, u64)>> {
         let session_id = self.session_id.as_ref().unwrap();
-        let sse_url = format!("{}", self.base_url);
+        let sse_url = self.base_url.to_string();
 
         println!(
             "📡 [{}] Starting SSE connection (will monitor for {} seconds)...",
@@ -462,8 +462,8 @@ impl LoggingTestClient {
                         let line = line.trim();
 
                         // Look for SSE data lines
-                        if line.starts_with("data: ") {
-                            let data = &line[6..]; // Remove "data: " prefix
+                        if let Some(data) = line.strip_prefix("data: ") {
+                            // Remove "data: " prefix
 
                             // Check if this is a notification message
                             if data.contains("notifications/message")
@@ -479,7 +479,7 @@ impl LoggingTestClient {
 
                                 // Parse the JSON to extract level, message, and correlation ID
                                 let display_content = if let Ok(parsed) =
-                                    serde_json::from_str::<serde_json::Value>(&data)
+                                    serde_json::from_str::<serde_json::Value>(data)
                                 {
                                     if let Some(params) = parsed.get("params") {
                                         let level = params
@@ -519,7 +519,7 @@ impl LoggingTestClient {
 
                                 // Log the SSE response JSON clearly and formatted
                                 let correlation_id =
-                                    serde_json::from_str::<serde_json::Value>(&data)
+                                    serde_json::from_str::<serde_json::Value>(data)
                                         .ok()
                                         .and_then(|parsed| parsed.get("params").cloned())
                                         .and_then(|params| params.get("_meta").cloned())
@@ -593,7 +593,7 @@ async fn main() -> Result<()> {
     println!("======================");
     
     // Determine test modes
-    let test_get_sse = args.test_get_sse || args.test_both_modes || (!args.test_post_sse && !args.test_both_modes);
+    let test_get_sse = args.test_get_sse || args.test_both_modes || !args.test_post_sse;
     let test_post_sse = args.test_post_sse || args.test_both_modes;
     
     println!("🔧 Configuration:");
@@ -601,13 +601,13 @@ async fn main() -> Result<()> {
     println!("   • GET SSE Testing: {}", if test_get_sse { "✅ ENABLED" } else { "❌ DISABLED" });
     println!("   • POST SSE Testing: {}", if test_post_sse { "✅ ENABLED" } else { "❌ DISABLED" });
     println!("   • Test Mode: {}", if args.quick_test { "🚀 QUICK" } else { "🔍 COMPREHENSIVE" });
-    println!("");
+    println!();
 
     let mut client = LoggingTestClient::new(args.port);
 
     // Initialize session
     client.initialize().await?;
-    println!("");
+    println!();
 
     // Create channel for persistent SSE notifications
     let (notification_sender, mut notification_receiver) = mpsc::unbounded_channel();

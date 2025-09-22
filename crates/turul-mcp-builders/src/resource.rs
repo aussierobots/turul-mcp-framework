@@ -39,7 +39,7 @@ impl ResourceBuilder {
     pub fn new(uri: impl Into<String>) -> Self {
         let uri = uri.into();
         // Extract a reasonable default name from the URI
-        let name = uri.split('/').last().unwrap_or(&uri).to_string();
+        let name = uri.split('/').next_back().unwrap_or(&uri).to_string();
         
         Self {
             uri,
@@ -126,7 +126,7 @@ impl ResourceBuilder {
 
     /// Add annotation title (only field currently supported in Annotations)
     pub fn annotation_title(mut self, title: impl Into<String>) -> Self {
-        let mut annotations = self.annotations.unwrap_or_else(|| Annotations::new());
+        let mut annotations = self.annotations.unwrap_or_default();
         annotations.title = Some(title.into());
         self.annotations = Some(annotations);
         self

@@ -76,8 +76,8 @@ impl McpPrompt for SimpleTestPrompt {
         
         // Generate test messages
         let messages = vec![
-            PromptMessage::user_text(&format!("User message for prompt: {}", self.name)),
-            PromptMessage::assistant_text(&format!("Assistant response for prompt: {}", self.name)),
+            PromptMessage::user_text(format!("User message for prompt: {}", self.name)),
+            PromptMessage::assistant_text(format!("Assistant response for prompt: {}", self.name)),
         ];
         
         Ok(messages)

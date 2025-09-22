@@ -41,7 +41,7 @@ async fn test_roots_access_control_boundaries() {
 
     // Test path validation using tools that respect root boundaries
     let test_cases = vec![
-        ("valid workspace path", format!("{}/src/main.rs", allowed_roots.get(0).unwrap_or(&"file:///workspace".to_string())), true),
+        ("valid workspace path", format!("{}/src/main.rs", allowed_roots.first().unwrap_or(&"file:///workspace".to_string())), true),
         ("invalid system path", "file:///etc/passwd".to_string(), false),
         ("traversal attack", "file:///workspace/../../../etc/passwd".to_string(), false),
     ];
@@ -307,20 +307,18 @@ async fn test_roots_permission_levels() {
                         } else if !has_error {
                             info!("ℹ️  {} handled gracefully", test_name);
                         }
-                    } else {
-                        if has_error {
-                            let error = response.get("error").unwrap().as_object().unwrap();
-                            let message = error.get("message").unwrap().as_str().unwrap();
-                            info!("✅ {} properly denied: {}", test_name, message);
-                        } else if let Some(content) = TestFixtures::extract_tool_result_object(&response) {
-                            let content_str = content.to_string().to_lowercase();
-                            if content_str.contains("denied") ||
-                               content_str.contains("read-only") ||
-                               content_str.contains("not allowed") {
-                                info!("✅ {} properly denied in result", test_name);
-                            } else {
-                                warn!("⚠️  {} may have incorrectly succeeded", test_name);
-                            }
+                    } else if has_error {
+                        let error = response.get("error").unwrap().as_object().unwrap();
+                        let message = error.get("message").unwrap().as_str().unwrap();
+                        info!("✅ {} properly denied: {}", test_name, message);
+                    } else if let Some(content) = TestFixtures::extract_tool_result_object(&response) {
+                        let content_str = content.to_string().to_lowercase();
+                        if content_str.contains("denied") ||
+                           content_str.contains("read-only") ||
+                           content_str.contains("not allowed") {
+                            info!("✅ {} properly denied in result", test_name);
+                        } else {
+                            warn!("⚠️  {} may have incorrectly succeeded", test_name);
                         }
                     }
                 }
@@ -376,8 +374,8 @@ async fn test_roots_uri_validation() {
         }
         
         // For file:// URIs, should have absolute paths
-        if uri.starts_with("file://") {
-            let path_part = &uri[7..]; // Remove "file://"
+        if let Some(path_part) = uri.strip_prefix("file://") {
+            // Remove "file://"
             assert!(path_part.starts_with("/"), 
                    "Root {} file URI should have absolute path: {}", i, uri);
         }

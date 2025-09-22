@@ -495,7 +495,7 @@ async fn main() -> Result<()> {
     println!("Press Ctrl+C to stop when done verifying.");
     
     // Keep server running for manual verification
-    let _ = server_handle.await?;
+    server_handle.await?;
     
     Ok(())
 }

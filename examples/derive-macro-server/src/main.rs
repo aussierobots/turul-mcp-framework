@@ -563,7 +563,7 @@ fn generate_rust_struct(params: &Value) -> McpResult<String> {
         }
     }
     
-    result.push_str("}");
+    result.push('}');
     Ok(result)
 }
 
@@ -608,7 +608,7 @@ fn generate_rust_enum(params: &Value) -> McpResult<String> {
         }
     }
     
-    result.push_str("}");
+    result.push('}');
     Ok(result)
 }
 
@@ -669,7 +669,7 @@ fn generate_api_endpoint(params: &Value) -> McpResult<String> {
         result.push_str("    unimplemented!()\n");
     }
     
-    result.push_str("}");
+    result.push('}');
     Ok(result)
 }
 
@@ -723,7 +723,7 @@ fn generate_database_model(params: &Value) -> McpResult<String> {
         result.push_str(&format!("    pub {}: {},\n", field_name, field_type));
     }
     
-    result.push_str("}");
+    result.push('}');
     Ok(result)
 }
 
@@ -880,9 +880,9 @@ fn validate_security_practices(project_path: &str) -> McpResult<ValidationResult
     // Check for common security issues in source files
     if let Ok(entries) = fs::read_dir(path.join("src")) {
         for entry in entries.flatten() {
-            if let Some(extension) = entry.path().extension() {
-                if extension == "rs" || extension == "ts" || extension == "js" {
-                    if let Ok(content) = fs::read_to_string(entry.path()) {
+            if let Some(extension) = entry.path().extension()
+                && (extension == "rs" || extension == "ts" || extension == "js")
+                    && let Ok(content) = fs::read_to_string(entry.path()) {
                         if content.contains("unsafe {") {
                             vulnerabilities.push(format!("Unsafe block found in {}", entry.path().display()));
                         }
@@ -891,8 +891,6 @@ fn validate_security_practices(project_path: &str) -> McpResult<ValidationResult
                             recommendations.push(format!("Consider using proper error handling instead of unwrap() in {}", entry.path().display()));
                         }
                     }
-                }
-            }
         }
     }
     
@@ -997,7 +995,7 @@ fn analyze_transformation(original: &str, transformed: &str) -> McpResult<CodeAn
     let original_lines = original.lines().count();
     let transformed_lines = transformed.lines().count();
     let changes_count = if original_lines != transformed_lines {
-        ((original_lines as i32 - transformed_lines as i32).abs()) as u32
+        (original_lines as i32 - transformed_lines as i32).unsigned_abs()
     } else {
         // Count character differences as a simple heuristic
         let diff = original.chars().zip(transformed.chars()).filter(|(a, b)| a != b).count();
@@ -1053,10 +1051,10 @@ fn generate_config_suggestions(config: &Value, config_type: &str) -> McpResult<V
     
     match config_type {
         "database_config" => {
-            if !config.get("ssl_mode").is_some() {
+            if config.get("ssl_mode").is_none() {
                 suggestions.push("Consider enabling SSL mode for secure connections".to_string());
             }
-            if !config.get("connection_pool").is_some() {
+            if config.get("connection_pool").is_none() {
                 suggestions.push("Add connection pooling for better performance".to_string());
             }
         }
@@ -1079,16 +1077,14 @@ fn analyze_source_code(code: &str, language: &str) -> McpResult<CodeAnalysis> {
         "rust" => {
             for line in code.lines() {
                 let trimmed = line.trim();
-                if trimmed.starts_with("fn ") || trimmed.starts_with("pub fn ") {
-                    if let Some(name) = trimmed.split_whitespace().nth(1) {
+                if (trimmed.starts_with("fn ") || trimmed.starts_with("pub fn "))
+                    && let Some(name) = trimmed.split_whitespace().nth(1) {
                         functions.push(name.split('(').next().unwrap_or(name).to_string());
                     }
-                }
-                if trimmed.starts_with("struct ") || trimmed.starts_with("pub struct ") {
-                    if let Some(name) = trimmed.split_whitespace().nth(1) {
+                if (trimmed.starts_with("struct ") || trimmed.starts_with("pub struct "))
+                    && let Some(name) = trimmed.split_whitespace().nth(1) {
                         structs.push(name.split('{').next().unwrap_or(name).trim().to_string());
                     }
-                }
             }
         }
         _ => {
@@ -1173,7 +1169,7 @@ fn generate_test_fixtures(analysis: &CodeAnalysis) -> McpResult<String> {
     
     for struct_name in &analysis.structs {
         fixtures.push_str(&format!("impl {} {{\n", struct_name));
-        fixtures.push_str(&format!("    pub fn test_fixture() -> Self {{\n"));
+        fixtures.push_str("    pub fn test_fixture() -> Self {\n");
         fixtures.push_str("        // TODO: Create test fixture\n");
         fixtures.push_str(&format!("        {} {{\n", struct_name));
         fixtures.push_str("            // Initialize with test data\n");

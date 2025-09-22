@@ -98,7 +98,7 @@ impl McpTestClient {
         });
 
         if let Some(args) = arguments {
-            params["arguments"] = Value::Object(args.into_iter().map(|(k, v)| (k, v)).collect());
+            params["arguments"] = Value::Object(args.into_iter().collect());
         }
 
         let request = json!({
@@ -269,7 +269,7 @@ async fn test_prompts_list() {
     assert!(result_data.contains_key("prompts"));
 
     let prompts = result_data["prompts"].as_array().unwrap();
-    assert!(prompts.len() > 0, "Should have test prompts available");
+    assert!(!prompts.is_empty(), "Should have test prompts available");
 
     // Verify all expected test prompts are present
     let expected_names = vec![
@@ -316,7 +316,7 @@ async fn test_simple_prompt_get() {
     assert!(result_data.contains_key("messages"));
 
     let messages = result_data["messages"].as_array().unwrap();
-    assert!(messages.len() > 0);
+    assert!(!messages.is_empty());
 
     // Verify message structure
     let message = &messages[0];
@@ -348,7 +348,7 @@ async fn test_string_args_prompt() {
     assert!(result_data.contains_key("messages"));
 
     let messages = result_data["messages"].as_array().unwrap();
-    assert!(messages.len() > 0);
+    assert!(!messages.is_empty());
 
     // Check that arguments were used in the message content
     let message_content = messages[0]["content"]["text"].as_str().unwrap();
@@ -378,7 +378,7 @@ async fn test_number_args_prompt() {
     assert!(result_data.contains_key("messages"));
 
     let messages = result_data["messages"].as_array().unwrap();
-    assert!(messages.len() > 0);
+    assert!(!messages.is_empty());
 
     // Check that numbers were used in the message content
     let message_content = messages[0]["content"]["text"].as_str().unwrap();
@@ -408,7 +408,7 @@ async fn test_boolean_args_prompt() {
     assert!(result_data.contains_key("messages"));
 
     let messages = result_data["messages"].as_array().unwrap();
-    assert!(messages.len() > 0);
+    assert!(!messages.is_empty());
 
     // Check that booleans were used in the message content
     let message_content = messages[0]["content"]["text"].as_str().unwrap();
@@ -439,7 +439,7 @@ async fn test_template_prompt() {
     assert!(result_data.contains_key("messages"));
 
     let messages = result_data["messages"].as_array().unwrap();
-    assert!(messages.len() > 0);
+    assert!(!messages.is_empty());
 
     // Check that template variables were substituted
     let message_content = messages[0]["content"]["text"].as_str().unwrap();
@@ -500,7 +500,7 @@ async fn test_session_aware_prompt() {
     assert!(result_data.contains_key("messages"));
 
     let messages = result_data["messages"].as_array().unwrap();
-    assert!(messages.len() > 0);
+    assert!(!messages.is_empty());
 
     // Check that session information is included
     let message_content = messages[0]["content"]["text"].as_str().unwrap();
@@ -552,7 +552,7 @@ async fn test_dynamic_prompt() {
     assert!(result_data.contains_key("messages"));
 
     let messages = result_data["messages"].as_array().unwrap();
-    assert!(messages.len() > 0);
+    assert!(!messages.is_empty());
 
     // Check that dynamic mode was used
     let message_content = messages[0]["content"]["text"].as_str().unwrap();

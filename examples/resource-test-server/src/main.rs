@@ -355,7 +355,7 @@ impl McpResource for TemplateResource {
         });
 
         Ok(vec![ResourceContent::text(
-            &format!("file:///template/items/{}.json", id),
+            format!("file:///template/items/{}.json", id),
             safe_json_serialize(&item_data)?
         )])
     }
@@ -1100,7 +1100,7 @@ impl McpResource for UserTemplateResource {
         });
 
         Ok(vec![ResourceContent::text(
-            &format!("file:///template/users/{}.json", user_id),
+            format!("file:///template/users/{}.json", user_id),
             safe_json_serialize(&user_data)?
         )])
     }
@@ -1176,7 +1176,7 @@ impl McpResource for FileTemplateResource {
         );
 
         Ok(vec![ResourceContent::text(
-            &format!("file:///template/files/{}", path),
+            format!("file:///template/files/{}", path),
             file_info
         )])
     }
@@ -1308,26 +1308,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         // Basic Resources (Coverage)
         .resource(file_resource)
-        .resource(MemoryResource::default())
-        .resource(ErrorResource::default())
-        .resource(SlowResource::default())
-        .resource(EmptyResource::default())
-        .resource(LargeResource::default())
-        .resource(BinaryResource::default())
+        .resource(MemoryResource)
+        .resource(ErrorResource)
+        .resource(SlowResource)
+        .resource(EmptyResource)
+        .resource(LargeResource)
+        .resource(BinaryResource)
         // Template Resources (auto-detected based on URI patterns)
-        .resource(TemplateResource::default())
-        .resource(UserTemplateResource::default())
-        .resource(FileTemplateResource::default())
+        .resource(TemplateResource)
+        .resource(UserTemplateResource)
+        .resource(FileTemplateResource)
         // Advanced Resources (Features)
-        .resource(SessionResource::default())
+        .resource(SessionResource)
         .resource(SubscribableResource::default())
-        .resource(NotifyingResource::default())
-        .resource(MultiContentResource::default())
-        .resource(PaginatedResource::default())
+        .resource(NotifyingResource)
+        .resource(MultiContentResource)
+        .resource(PaginatedResource)
         // Edge Case Resources
-        .resource(InvalidUriResource::default())
+        .resource(InvalidUriResource)
         .resource(LongUriResource::default())
-        .resource(MetaDynamicResource::default())
+        .resource(MetaDynamicResource)
         .resource(CompleteResource::default())
         .test_mode()  // Disable security for test URI schemes
         // Note: .with_resources() no longer needed - automatically registered when resources are added

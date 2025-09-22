@@ -135,7 +135,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         generate_enhanced_output_schema(output_type, &field_name, Some(&input))
     } else {
         // Zero-config case - generate type-aware schema using heuristics
-        let field_name = tool_meta.output_field.as_ref().map(|s| s.as_str()).unwrap_or("output");
+        let field_name = tool_meta.output_field.as_deref().unwrap_or("output");
         let struct_name_str = name.to_string();
         quote! {
             fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {

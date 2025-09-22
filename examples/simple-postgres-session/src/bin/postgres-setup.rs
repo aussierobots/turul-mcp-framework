@@ -70,12 +70,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 /// Mask the password in a database URL for logging
 fn mask_password(url: &str) -> String {
-    if let Ok(parsed) = url::Url::parse(url) {
-        if parsed.password().is_some() {
+    if let Ok(parsed) = url::Url::parse(url)
+        && parsed.password().is_some() {
             let mut masked = parsed.clone();
             let _ = masked.set_password(Some("***"));
             return masked.to_string();
         }
-    }
     url.to_string()
 }

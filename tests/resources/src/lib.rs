@@ -17,6 +17,12 @@ pub struct UserProfileResource {
     pub include_preferences: bool,
 }
 
+impl Default for UserProfileResource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UserProfileResource {
     pub fn new() -> Self {
         Self {
@@ -56,7 +62,7 @@ impl UserProfileResource {
         }
 
         Ok(vec![ResourceContent::text(
-            &format!("app://users/{}", user_id),
+            format!("app://users/{}", user_id),
             serde_json::to_string_pretty(&profile_data)
                 .map_err(|e| McpError::tool_execution(&format!("Serialization error: {}", e)))?,
         )])
@@ -150,7 +156,7 @@ impl AppConfigResource {
         };
 
         Ok(vec![ResourceContent::blob(
-            &format!("app://config/{}", self.config_type),
+            format!("app://config/{}", self.config_type),
             serde_json::to_string_pretty(&config_data).map_err(|e| {
                 McpError::tool_execution(&format!("Config serialization error: {}", e))
             })?,
@@ -224,7 +230,7 @@ impl LogFilesResource {
             .join("\n");
 
         Ok(vec![ResourceContent::text(
-            &format!("app://logs/{}", self.log_type),
+            format!("app://logs/{}", self.log_type),
             format!(
                 "=== {} Logs (last {} lines) ===\n{}",
                 self.log_type.to_uppercase(),
@@ -277,7 +283,7 @@ impl FileUserResource {
         });
 
         Ok(vec![ResourceContent::text(
-            &format!("file:///user/{}.json", self.user_id),
+            format!("file:///user/{}.json", self.user_id),
             serde_json::to_string_pretty(&user_data).map_err(|e| {
                 McpError::tool_execution(&format!("User data serialization error: {}", e))
             })?,
@@ -318,7 +324,7 @@ impl UserAvatarResource {
         };
 
         Ok(vec![ResourceContent::blob(
-            &format!("file:///user/{}/avatar.png", self.user_id),
+            format!("file:///user/{}/avatar.png", self.user_id),
             base64_avatar.to_string(),
             "image/png",
         )])
@@ -361,7 +367,7 @@ impl BinaryDataResource {
         };
 
         Ok(vec![ResourceContent::blob(
-            &format!("file:///data/{}.{}", self.data_type, self.format),
+            format!("file:///data/{}.{}", self.data_type, self.format),
             base64_data.to_string(),
             mime_type,
         )])

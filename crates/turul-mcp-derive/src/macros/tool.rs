@@ -408,13 +408,11 @@ impl Parse for ToolMacroInput {
                         }
                         
                         // Auto-detect optional types (Option<T>)
-                        if let Type::Path(type_path) = &param_type {
-                            if let Some(segment) = type_path.path.segments.last() {
-                                if segment.ident == "Option" {
+                        if let Type::Path(type_path) = &param_type
+                            && let Some(segment) = type_path.path.segments.last()
+                                && segment.ident == "Option" {
                                     optional = true;
                                 }
-                            }
-                        }
                         
                         params.push(ToolParam {
                             name: param_name,

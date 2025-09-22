@@ -16,25 +16,22 @@ pub fn extract_mcp_headers(req: &LambdaRequest) -> HashMap<String, String> {
     let mut mcp_headers = HashMap::new();
     
     // Extract session ID from headers
-    if let Some(session_id) = req.headers().get("mcp-session-id") {
-        if let Ok(session_id_str) = session_id.to_str() {
+    if let Some(session_id) = req.headers().get("mcp-session-id")
+        && let Ok(session_id_str) = session_id.to_str() {
             mcp_headers.insert("mcp-session-id".to_string(), session_id_str.to_string());
         }
-    }
     
     // Extract protocol version
-    if let Some(protocol_version) = req.headers().get("mcp-protocol-version") {
-        if let Ok(version_str) = protocol_version.to_str() {
+    if let Some(protocol_version) = req.headers().get("mcp-protocol-version")
+        && let Ok(version_str) = protocol_version.to_str() {
             mcp_headers.insert("mcp-protocol-version".to_string(), version_str.to_string());
         }
-    }
     
     // Extract Last-Event-ID for SSE resumability
-    if let Some(last_event_id) = req.headers().get("last-event-id") {
-        if let Ok(event_id_str) = last_event_id.to_str() {
+    if let Some(last_event_id) = req.headers().get("last-event-id")
+        && let Ok(event_id_str) = last_event_id.to_str() {
             mcp_headers.insert("last-event-id".to_string(), event_id_str.to_string());
         }
-    }
     
     trace!("Extracted MCP headers: {:?}", mcp_headers);
     mcp_headers

@@ -8,7 +8,6 @@ use mcp_resources_tests::{
     UserProfileResource,
 };
 use tracing::info;
-use tracing_subscriber;
 use turul_mcp_server::prelude::*;
 
 #[tokio::main]

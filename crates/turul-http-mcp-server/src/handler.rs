@@ -86,16 +86,16 @@ impl McpHttpHandler {
         &self,
         req: Request<hyper::body::Incoming>,
     ) -> Result<Response<Full<Bytes>>> {
-        match req.method() {
-            &Method::POST => self.handle_json_rpc_request(req).await,
-            &Method::GET => {
+        match *req.method() {
+            Method::POST => self.handle_json_rpc_request(req).await,
+            Method::GET => {
                 if self.config.enable_get_sse {
                     self.handle_sse_request(req).await
                 } else {
                     self.method_not_allowed().await
                 }
             }
-            &Method::OPTIONS => self.handle_preflight().await,
+            Method::OPTIONS => self.handle_preflight().await,
             _ => self.method_not_allowed().await,
         }
     }

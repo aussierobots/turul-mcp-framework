@@ -17,7 +17,7 @@ pub fn extract_elicitation_request(response: &HashMap<String, Value>) -> Option<
         .and_then(|r| r.as_object())
         .and_then(|obj| obj.get("content"))
         .and_then(|content| content.as_array())
-        .and_then(|arr| arr.get(0))
+        .and_then(|arr| arr.first())
         .and_then(|item| item.as_object())
         .and_then(|item_obj| item_obj.get("text"))
         .and_then(|text| text.as_str())

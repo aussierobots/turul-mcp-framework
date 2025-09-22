@@ -227,17 +227,17 @@ impl SessionMcpHandler {
         &self,
         req: Request<hyper::body::Incoming>,
     ) -> Result<Response<UnifiedMcpBody>> {
-        match req.method() {
-            &Method::POST => {
+        match *req.method() {
+            Method::POST => {
                 let response = self.handle_json_rpc_request(req).await?;
                 Ok(response)
             },
-            &Method::GET => self.handle_sse_request(req).await,
-            &Method::DELETE => {
+            Method::GET => self.handle_sse_request(req).await,
+            Method::DELETE => {
                 let response = self.handle_delete_request(req).await?;
                 Ok(response.map(convert_to_unified_body))
             },
-            &Method::OPTIONS => {
+            Method::OPTIONS => {
                 let response = self.handle_preflight();
                 Ok(response.map(convert_to_unified_body))
             },
@@ -451,7 +451,7 @@ impl SessionMcpHandler {
             JsonRpcMessageResult::Response(response) => {
                 // Check if this is a tool call that should return SSE
                 // Only use SSE if explicitly requested via Accept: text/event-stream header
-                let is_tool_call = method_name.as_ref().map_or(false, |m| m == "tools/call");
+                let is_tool_call = method_name.as_ref().is_some_and(|m| m == "tools/call");
 
                 debug!("Decision point: method={:?}, accept_mode={:?}, accepts_sse={}, server_post_sse_enabled={}, session_id={:?}, is_tool_call={}",
                        method_name, accept_mode, accepts_sse, self.config.enable_post_sse, response_session_id, is_tool_call);

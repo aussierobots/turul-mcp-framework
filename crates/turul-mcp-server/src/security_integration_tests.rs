@@ -84,8 +84,8 @@ mod tests {
         async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
             let params = params.unwrap_or(json!({}));
             
-            if let Some(template_vars) = params.get("template_variables") {
-                if let Some(user_id) = template_vars.get("user_id").and_then(|v| v.as_str()) {
+            if let Some(template_vars) = params.get("template_variables")
+                && let Some(user_id) = template_vars.get("user_id").and_then(|v| v.as_str()) {
                     let secure_data = json!({
                         "user_id": user_id,
                         "sensitive_data": format!("classified-info-{}", user_id),
@@ -93,9 +93,8 @@ mod tests {
                     });
                     
                     let uri = format!("file:///secure/{}/data.json", user_id);
-                    return Ok(vec![ResourceContent::text(&uri, &secure_data.to_string())]);
+                    return Ok(vec![ResourceContent::text(&uri, secure_data.to_string())]);
                 }
-            }
             
             Ok(vec![ResourceContent::text(
                 &self.base_pattern,

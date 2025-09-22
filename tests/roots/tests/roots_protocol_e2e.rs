@@ -185,7 +185,7 @@ async fn test_roots_capability_advertising() {
             
             // Check listChanged capability
             if let Some(list_changed) = roots_cap.get("listChanged") {
-                assert_eq!(list_changed.as_bool().unwrap(), false, 
+                assert!(!list_changed.as_bool().unwrap(), 
                           "Static roots server should advertise listChanged=false");
                 info!("✅ Correct listChanged capability: false");
             }

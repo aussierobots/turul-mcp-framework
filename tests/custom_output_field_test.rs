@@ -112,7 +112,7 @@ async fn test_struct_custom_output_field_name() {
                 structured.as_object().unwrap().keys().collect::<Vec<_>>());
         assert!(structured.get("output").is_none(),
                 "Should not have 'output' field when custom field is specified");
-        assert!(structured.get("tileMetadata").is_none() == false,
+        assert!(!structured.get("tileMetadata").is_none(),
                 "Should not have struct name as field when custom field is specified");
 
         let tile_data = structured.get("tileMetadata").unwrap();
@@ -162,10 +162,9 @@ async fn test_struct_custom_output_field_name() {
     println!("Tool metadata: {:#?}", tool_metadata);
 
     // Verify the output schema in tool metadata matches our expectation
-    if let Some(output_schema) = tool_metadata.output_schema {
-        if let Some(properties) = &output_schema.properties {
+    if let Some(output_schema) = tool_metadata.output_schema
+        && let Some(properties) = &output_schema.properties {
             assert!(properties.contains_key("tileMetadata"),
                     "Tool metadata should have 'tileMetadata' in output schema");
         }
-    }
 }

@@ -16,32 +16,28 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
     for arg in args {
         match arg {
             Meta::NameValue(nv) if nv.path.is_ident("uri") => {
-                if let syn::Expr::Lit(expr_lit) = &nv.value {
-                    if let Lit::Str(s) = &expr_lit.lit {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Str(s) = &expr_lit.lit {
                         resource_uri = Some(s.value());
                     }
-                }
             }
             Meta::NameValue(nv) if nv.path.is_ident("name") => {
-                if let syn::Expr::Lit(expr_lit) = &nv.value {
-                    if let Lit::Str(s) = &expr_lit.lit {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Str(s) = &expr_lit.lit {
                         resource_name = Some(s.value());
                     }
-                }
             }
             Meta::NameValue(nv) if nv.path.is_ident("description") => {
-                if let syn::Expr::Lit(expr_lit) = &nv.value {
-                    if let Lit::Str(s) = &expr_lit.lit {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Str(s) = &expr_lit.lit {
                         resource_description = Some(s.value());
                     }
-                }
             }
             Meta::NameValue(nv) if nv.path.is_ident("mime_type") => {
-                if let syn::Expr::Lit(expr_lit) = &nv.value {
-                    if let Lit::Str(s) = &expr_lit.lit {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Str(s) = &expr_lit.lit {
                         mime_type = Some(s.value());
                     }
-                }
             }
             _ => {}
         }
@@ -88,8 +84,8 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
 
     // Process function parameters
     for input_arg in &input.sig.inputs {
-        if let FnArg::Typed(pat_type) = input_arg {
-            if let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
+        if let FnArg::Typed(pat_type) = input_arg
+            && let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
                 let param_name = &pat_ident.ident;
                 let param_type = &pat_type.ty;
 
@@ -129,7 +125,6 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
                     });
                 }
             }
-        }
     }
 
     // If function doesn't take params but we need template variables, add them

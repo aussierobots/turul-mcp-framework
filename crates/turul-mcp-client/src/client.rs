@@ -351,14 +351,14 @@ impl McpClient {
     ) -> McpClientResult<crate::transport::TransportResponse> {
         let mut transport = self.transport.lock().await;
 
-        let response = timeout(
+        
+
+        timeout(
             self.config.timeouts.request,
             transport.send_request_with_headers(request),
         )
         .await
-        .map_err(|_| McpClientError::Timeout)?;
-
-        response
+        .map_err(|_| McpClientError::Timeout)?
     }
 
     /// Send raw request without retries

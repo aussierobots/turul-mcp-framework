@@ -15,25 +15,22 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
     for arg in args {
         match arg {
             Meta::NameValue(nv) if nv.path.is_ident("name") => {
-                if let syn::Expr::Lit(expr_lit) = &nv.value {
-                    if let Lit::Str(s) = &expr_lit.lit {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Str(s) = &expr_lit.lit {
                         tool_name = Some(s.value());
                     }
-                }
             }
             Meta::NameValue(nv) if nv.path.is_ident("description") => {
-                if let syn::Expr::Lit(expr_lit) = &nv.value {
-                    if let Lit::Str(s) = &expr_lit.lit {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Str(s) = &expr_lit.lit {
                         tool_description = Some(s.value());
                     }
-                }
             }
             Meta::NameValue(nv) if nv.path.is_ident("output_field") => {
-                if let syn::Expr::Lit(expr_lit) = &nv.value {
-                    if let Lit::Str(s) = &expr_lit.lit {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Str(s) = &expr_lit.lit {
                         output_field_name = Some(s.value());
                     }
-                }
             }
             _ => {}
         }
@@ -83,8 +80,8 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
     let mut param_types = Vec::new();
 
     for input_arg in &input.sig.inputs {
-        if let FnArg::Typed(pat_type) = input_arg {
-            if let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
+        if let FnArg::Typed(pat_type) = input_arg
+            && let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
                 let param_name = &pat_ident.ident;
                 let param_type = &pat_type.ty;
                 
@@ -131,7 +128,6 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                     fn_call_args.push(quote! { #param_name });
                 }
             }
-        }
     }
 
     // Rename the function to avoid name collision with the tool constructor
@@ -280,13 +276,11 @@ fn is_session_context_type(field_type: &syn::Type) -> bool {
         syn::Type::Path(type_path) => {
             // Check if it's Option<SessionContext>
             if type_path.path.segments.len() == 1 && 
-               type_path.path.segments[0].ident == "Option" {
-                if let syn::PathArguments::AngleBracketed(args) = &type_path.path.segments[0].arguments {
-                    if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
+               type_path.path.segments[0].ident == "Option"
+                && let syn::PathArguments::AngleBracketed(args) = &type_path.path.segments[0].arguments
+                    && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
                         return is_session_context_type(inner_type);
                     }
-                }
-            }
             
             // Check if it's direct SessionContext (check last segment for qualified paths)
             if let Some(last_segment) = type_path.path.segments.last() {

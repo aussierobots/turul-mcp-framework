@@ -26,7 +26,7 @@ pub async fn adapt_sse_stream(
     
     let byte_stream = body.into_data_stream().map_err(|e| {
         debug!("Body stream error: {}", e);
-        std::io::Error::new(std::io::ErrorKind::Other, e.to_string())
+        std::io::Error::other(e.to_string())
     });
     
     // Create Lambda streaming body by collecting all bytes

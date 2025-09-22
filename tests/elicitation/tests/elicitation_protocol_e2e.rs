@@ -4,7 +4,7 @@
 //! Validates form generation, workflow management, and compliance features.
 
 use mcp_elicitation_tests::{McpTestClient, TestServerManager, TestFixtures, json, debug, info};
-use mcp_elicitation_tests::test_utils::{elicitation_capabilities, validate_workflow_structure};
+use mcp_elicitation_tests::test_utils::elicitation_capabilities;
 
 #[tokio::test]
 async fn test_elicitation_onboarding_workflow() {

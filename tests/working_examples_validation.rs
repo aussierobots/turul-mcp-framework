@@ -40,7 +40,7 @@ async fn test_working_examples_compilation() {
             // Add timeout to individual compilation check (60 seconds each for cold compilation)
             let result = timeout(Duration::from_secs(60), async {
                 AsyncCommand::new("cargo")
-                    .args(&["check", "-p", example, "--quiet"])
+                    .args(["check", "-p", example, "--quiet"])
                     .output()
                     .await
             }).await;
@@ -84,7 +84,7 @@ async fn test_working_examples_compilation() {
 async fn test_mcp_streamable_http_compliance() {
     // Start server in background
     let mut server = Command::new("cargo")
-        .args(&["run", "-p", "client-initialise-server", "--", "--port", "52940"])
+        .args(["run", "-p", "client-initialise-server", "--", "--port", "52940"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
@@ -96,7 +96,7 @@ async fn test_mcp_streamable_http_compliance() {
     // Run compliance test with timeout
     let test_result = timeout(Duration::from_secs(30), async {
         Command::new("cargo")
-            .args(&["run", "-p", "client-initialise-report", "--", "--url", "http://127.0.0.1:52940/mcp"])
+            .args(["run", "-p", "client-initialise-report", "--", "--url", "http://127.0.0.1:52940/mcp"])
             .env("RUST_LOG", "info")
             .output()
             .expect("Failed to execute compliance test")
@@ -141,7 +141,7 @@ async fn test_examples_startup() {
         println!("Testing startup of {}", example);
         
         let mut cmd = Command::new("cargo");
-        cmd.args(&["run", "-p", example]);
+        cmd.args(["run", "-p", example]);
         
         if let Some(p) = port {
             // Use a different port to avoid conflicts
@@ -153,7 +153,7 @@ async fn test_examples_startup() {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
-            .expect(&format!("Failed to start {}", example));
+            .unwrap_or_else(|_| panic!("Failed to start {}", example));
         
         // Let it run for 2 seconds
         tokio::time::sleep(Duration::from_millis(2000)).await;

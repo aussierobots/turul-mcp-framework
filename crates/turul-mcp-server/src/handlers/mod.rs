@@ -76,6 +76,12 @@ pub struct PromptsListHandler {
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
 }
 
+impl Default for PromptsListHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PromptsListHandler {
     pub fn new() -> Self {
         Self {
@@ -210,6 +216,12 @@ pub struct PromptsGetHandler {
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
 }
 
+impl Default for PromptsGetHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PromptsGetHandler {
     pub fn new() -> Self {
         Self {
@@ -310,6 +322,12 @@ pub use crate::prompt::McpPrompt;
 /// Resources list handler for resources/list endpoint only
 pub struct ResourcesListHandler {
     resources: HashMap<String, Arc<dyn McpResource>>,
+}
+
+impl Default for ResourcesListHandler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ResourcesListHandler {
@@ -435,6 +453,12 @@ pub struct ResourcesReadHandler {
     resources: HashMap<String, Arc<dyn McpResource>>,
     uri_registry: Arc<crate::uri_template::UriTemplateRegistry>,
     security_middleware: Option<Arc<crate::security::SecurityMiddleware>>,
+}
+
+impl Default for ResourcesReadHandler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ResourcesReadHandler {
@@ -715,6 +739,12 @@ pub struct RootsHandler {
     roots: Vec<turul_mcp_protocol::roots::Root>,
 }
 
+impl Default for RootsHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RootsHandler {
     pub fn new() -> Self {
         Self { roots: Vec::new() }
@@ -858,6 +888,12 @@ impl McpHandler for SamplingHandler {
 /// Resource templates handler for resources/templates/list endpoint
 pub struct ResourceTemplatesHandler {
     templates: Vec<(crate::uri_template::UriTemplate, Arc<dyn McpResource>)>,
+}
+
+impl Default for ResourceTemplatesHandler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ResourceTemplatesHandler {

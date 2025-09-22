@@ -200,7 +200,7 @@ mod mcp_notification_tests {
         let context = manager.create_session_context(&session_id).unwrap();
         
         // Test progress notifications with different patterns
-        let progress_tokens = vec!["upload", "download", "processing", "analysis"];
+        let progress_tokens = ["upload", "download", "processing", "analysis"];
         
         for (i, token) in progress_tokens.iter().enumerate() {
             let progress = (i as u64 + 1) * 25;

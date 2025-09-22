@@ -474,8 +474,8 @@ impl McpServerBuilder {
         }
         
         // For file URIs, require absolute paths
-        if uri.starts_with("file://") {
-            let path_part = &uri[7..]; // Skip "file://"
+        if let Some(path_part) = uri.strip_prefix("file://") {
+            // Skip "file://"
             if !path_part.starts_with('/') {
                 return Err("file:// URIs must use absolute paths".to_string());
             }
@@ -487,7 +487,7 @@ impl McpServerBuilder {
     /// Validate URI template pattern (basic validation for template syntax)
     fn validate_uri_template(&self, template: &str) -> std::result::Result<(), String> {
         // First validate the base URI structure (ignoring template variables)
-        let base_uri = template.replace(|c| c == '{' || c == '}', "");
+        let base_uri = template.replace(['{', '}'], "");
         self.validate_uri(&base_uri)?;
         
         // Check template variable syntax is balanced
@@ -598,7 +598,7 @@ impl McpServerBuilder {
         } else {
             ResourcesReadHandler::new()
         };
-        for (_, resource) in &self.resources {
+        for resource in self.resources.values() {
             read_handler = read_handler.add_resource_arc(resource.clone());
         }
         
@@ -846,7 +846,7 @@ impl McpServerBuilder {
     /// Extract file extension from URI
     fn extract_extension(uri: &str) -> Option<String> {
         uri.split('.')
-            .last()
+            .next_back()
             .filter(|ext| !ext.is_empty() && ext.len() <= 10)
             .map(|ext| ext.to_lowercase())
     }

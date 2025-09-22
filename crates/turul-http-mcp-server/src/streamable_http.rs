@@ -26,12 +26,14 @@ use crate::ServerConfig;
 
 /// MCP Protocol versions
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum McpProtocolVersion {
     /// Original protocol without streamable HTTP (2024-11-05)
     V2024_11_05,
     /// Protocol including streamable HTTP (2025-03-26)  
     V2025_03_26,
     /// Protocol with structured _meta, cursor, progressToken, and elicitation (2025-06-18)
+    #[default]
     V2025_06_18,
 }
 
@@ -102,11 +104,6 @@ impl McpProtocolVersion {
     }
 }
 
-impl Default for McpProtocolVersion {
-    fn default() -> Self {
-        Self::V2025_06_18
-    }
-}
 
 /// Streamable HTTP request context
 #[derive(Debug, Clone)]

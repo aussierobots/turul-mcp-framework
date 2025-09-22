@@ -79,8 +79,8 @@ mod tests {
             // Extract template variables from params
             let params = params.unwrap_or(json!({}));
             
-            if let Some(template_vars) = params.get("template_variables") {
-                if let Some(user_id) = template_vars.get("user_id").and_then(|v| v.as_str()) {
+            if let Some(template_vars) = params.get("template_variables")
+                && let Some(user_id) = template_vars.get("user_id").and_then(|v| v.as_str()) {
                     // Generate dynamic content based on user_id
                     let user_data = json!({
                         "user_id": user_id,
@@ -93,9 +93,8 @@ mod tests {
                     });
                     
                     let uri = format!("file:///user/{}.json", user_id);
-                    return Ok(vec![ResourceContent::text(&uri, &user_data.to_string())]);
+                    return Ok(vec![ResourceContent::text(&uri, user_data.to_string())]);
                 }
-            }
             
             // Fallback for static access
             Ok(vec![ResourceContent::text(

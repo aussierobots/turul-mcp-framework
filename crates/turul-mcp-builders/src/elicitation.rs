@@ -302,7 +302,7 @@ impl HasElicitationHandling for DynamicElicitation {
                         if !value.is_number() {
                             return Err(format!("Field '{}' must be a number", field_name));
                         }
-                        if num_schema.schema_type == "integer" && !value.as_i64().is_some() {
+                        if num_schema.schema_type == "integer" && value.as_i64().is_none() {
                             return Err(format!("Field '{}' must be an integer", field_name));
                         }
                     }
@@ -344,44 +344,40 @@ impl HasElicitationHandling for DynamicElicitation {
                     PrimitiveSchemaDefinition::String(string_schema) => {
                         if let Some(str_value) = value.as_str() {
                             // Apply length constraints if defined
-                            if let Some(min_len) = string_schema.min_length {
-                                if str_value.len() < min_len {
+                            if let Some(min_len) = string_schema.min_length
+                                && str_value.len() < min_len {
                                     return Err(format!(
                                         "Field '{}' must be at least {} characters long",
                                         field_name, min_len
                                     ));
                                 }
-                            }
-                            if let Some(max_len) = string_schema.max_length {
-                                if str_value.len() > max_len {
+                            if let Some(max_len) = string_schema.max_length
+                                && str_value.len() > max_len {
                                     return Err(format!(
                                         "Field '{}' must be at most {} characters long",
                                         field_name, max_len
                                     ));
                                 }
-                            }
                         }
                         processed.insert(field_name, value);
                     }
                     PrimitiveSchemaDefinition::Number(number_schema) => {
                         if let Some(num_value) = value.as_f64() {
                             // Apply range constraints if defined
-                            if let Some(min) = number_schema.minimum {
-                                if num_value < min {
+                            if let Some(min) = number_schema.minimum
+                                && num_value < min {
                                     return Err(format!(
                                         "Field '{}' must be at least {}",
                                         field_name, min
                                     ));
                                 }
-                            }
-                            if let Some(max) = number_schema.maximum {
-                                if num_value > max {
+                            if let Some(max) = number_schema.maximum
+                                && num_value > max {
                                     return Err(format!(
                                         "Field '{}' must be at most {}",
                                         field_name, max
                                     ));
                                 }
-                            }
                         }
                         processed.insert(field_name, value);
                     }

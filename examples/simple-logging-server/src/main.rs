@@ -175,7 +175,7 @@ impl GetLogsStatusTool {
         let session = session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
         
         let limit = self.limit.unwrap_or(10) as usize;
-        let level_filter = self.level_filter.as_ref().map(|s| s.as_str());
+        let level_filter = self.level_filter.as_deref();
 
         // Get current config and logs
         let log_config: LogLevelConfig = session.get_typed_state("log_config").await.unwrap_or_default();

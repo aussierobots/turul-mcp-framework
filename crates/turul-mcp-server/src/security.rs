@@ -191,29 +191,27 @@ impl ResourceAccessControl {
 
     /// Validate MIME type
     pub fn validate_mime_type(&self, mime_type: &str) -> Result<(), McpError> {
-        if let Some(allowed_types) = &self.allowed_mime_types {
-            if !allowed_types.contains(&mime_type.to_string()) {
+        if let Some(allowed_types) = &self.allowed_mime_types
+            && !allowed_types.contains(&mime_type.to_string()) {
                 return Err(McpError::invalid_param_type(
                     "mime_type",
                     "allowed MIME type",
                     mime_type
                 ));
             }
-        }
         Ok(())
     }
 
     /// Validate content size
     pub fn validate_size(&self, size: u64) -> Result<(), McpError> {
-        if let Some(max_size) = self.max_size {
-            if size > max_size {
+        if let Some(max_size) = self.max_size
+            && size > max_size {
                 return Err(McpError::param_out_of_range(
                     "content_size",
                     &format!("{} bytes", size),
                     &format!("max {} bytes", max_size)
                 ));
             }
-        }
         Ok(())
     }
 }
@@ -380,11 +378,10 @@ impl SecurityMiddleware {
         session: Option<&SessionContext>,
     ) -> Result<(), McpError> {
         // Rate limiting check
-        if let Some(rate_limiter) = &self.rate_limiter {
-            if let Some(session) = session {
+        if let Some(rate_limiter) = &self.rate_limiter
+            && let Some(session) = session {
                 rate_limiter.check_rate_limit(&session.session_id)?;
             }
-        }
 
         // Input validation
         if let Some(params) = params {
@@ -394,11 +391,10 @@ impl SecurityMiddleware {
         // Method-specific security checks
         match method {
             "resources/read" => {
-                if let Some(params) = params {
-                    if let Some(uri) = params.get("uri").and_then(|v| v.as_str()) {
+                if let Some(params) = params
+                    && let Some(uri) = params.get("uri").and_then(|v| v.as_str()) {
                         self.resource_access_control.validate_uri(uri)?;
                     }
-                }
 
                 // Check access level
                 match self.resource_access_control.access_level {

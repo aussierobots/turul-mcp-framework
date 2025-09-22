@@ -296,11 +296,10 @@ impl CheckAlertConditionsTool {
         let pattern = config.get("pattern")?.as_str()?;
         let log_message = data.get("message")?.as_str()?;
         
-        if let Ok(regex) = Regex::new(pattern) {
-            if regex.is_match(log_message) {
+        if let Ok(regex) = Regex::new(pattern)
+            && regex.is_match(log_message) {
                 return Some(format!("Log pattern '{}' matched: {}", pattern, log_message));
             }
-        }
         None
     }
 
@@ -311,17 +310,15 @@ impl CheckAlertConditionsTool {
         
         let mut violations = Vec::new();
         
-        if let Some(min) = config.get("min").and_then(|v| v.as_f64()) {
-            if current_value < min {
+        if let Some(min) = config.get("min").and_then(|v| v.as_f64())
+            && current_value < min {
                 violations.push(format!("{} below minimum {} (current: {})", value_path, min, current_value));
             }
-        }
         
-        if let Some(max) = config.get("max").and_then(|v| v.as_f64()) {
-            if current_value > max {
+        if let Some(max) = config.get("max").and_then(|v| v.as_f64())
+            && current_value > max {
                 violations.push(format!("{} above maximum {} (current: {})", value_path, max, current_value));
             }
-        }
         
         if violations.is_empty() { None } else { Some(violations.join(", ")) }
     }
@@ -382,12 +379,11 @@ impl McpToolTrait for CheckAlertConditionsTool {
             checked_rules += 1;
 
             // Check cooldown
-            if let Some(cooldown) = cooldowns.get(&rule.id) {
-                if now < cooldown.cooldown_until {
+            if let Some(cooldown) = cooldowns.get(&rule.id)
+                && now < cooldown.cooldown_until {
                     skipped_cooldown += 1;
                     continue;
                 }
-            }
 
             // Check condition based on rule type and data type compatibility
             let alert_message = match (&rule.condition_type[..], data_type) {

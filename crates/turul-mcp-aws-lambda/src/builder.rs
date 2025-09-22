@@ -510,7 +510,7 @@ impl LambdaMcpServerBuilder {
 
         // Create ResourcesHandler and add all registered resources
         let mut handler = ResourcesHandler::new();
-        for (_, resource) in &self.resources {
+        for resource in self.resources.values() {
             handler = handler.add_resource_arc(resource.clone());
         }
 

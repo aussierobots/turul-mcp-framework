@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 /// Main client configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ClientConfig {
     /// Client identification information
     pub client_info: ClientInfo,
@@ -145,17 +146,6 @@ pub struct LoggingConfig {
     pub redact_sensitive: bool,
 }
 
-impl Default for ClientConfig {
-    fn default() -> Self {
-        Self {
-            client_info: ClientInfo::default(),
-            timeouts: TimeoutConfig::default(),
-            retry: RetryConfig::default(),
-            connection: ConnectionConfig::default(),
-            logging: LoggingConfig::default(),
-        }
-    }
-}
 
 impl Default for ClientInfo {
     fn default() -> Self {

@@ -30,8 +30,8 @@ impl TestResource {
 impl McpResource for TestResource {
     async fn read(&self, _params: Option<Value>) -> crate::McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
-            &format!("test://item/{}", self.id),
-            &format!("Test content for {}", self.id)
+            format!("test://item/{}", self.id),
+            format!("Test content for {}", self.id)
         )])
     }
 }

@@ -134,7 +134,7 @@ pub trait McpRoot: RootDefinition + Send + Sync {
                     modified,
                     mime_type: if metadata.is_file() { 
                         // Simple MIME type detection based on extension
-                        match path.split('.').last() {
+                        match path.split('.').next_back() {
                             Some("txt") => Some("text/plain".to_string()),
                             Some("json") => Some("application/json".to_string()),
                             Some("html") => Some("text/html".to_string()),

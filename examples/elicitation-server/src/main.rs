@@ -24,7 +24,6 @@ use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema,
 // ElicitationBuilder import removed - using simplified demonstrations
 use serde::Deserialize;
 use serde_json::{json, Value};
-use serde_yml;
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -381,17 +380,13 @@ impl CustomerOnboardingPlatform {
 
     #[allow(dead_code)] // TODO: Use in workflow status reporting
     fn get_workflow_summary(&self, workflow_id: &str) -> Option<String> {
-        if let Some(workflow) = self.onboarding_config.customer_onboarding_workflows.get(workflow_id) {
-            Some(format!(
+        self.onboarding_config.customer_onboarding_workflows.get(workflow_id).map(|workflow| format!(
                 "Workflow: {} ({})\nSteps: {}\nDescription: {}",
                 workflow.name,
                 workflow.workflow_id,
                 workflow.steps.len(),
                 workflow.description
             ))
-        } else {
-            None
-        }
     }
 }
 
@@ -1214,7 +1209,7 @@ impl McpTool for DataValidationTool {
             }
             "business_rules" => {
                 let age_rules = &self.platform.validation_config.validation_rules.business_rules.age_verification;
-                &format!(
+                format!(
                     "⚖️ BUSINESS RULES VALIDATION:\n\
                     \n\
                     Age Verification:\n\

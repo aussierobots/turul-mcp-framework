@@ -8,7 +8,7 @@ pub fn derive_json_schema(input: DeriveInput) -> TokenStream {
     
     match input.data {
         Data::Struct(data_struct) => {
-            let schema_impl = generate_struct_schema(&name, &data_struct.fields);
+            let schema_impl = generate_struct_schema(name, &data_struct.fields);
             
             quote! {
                 impl turul_mcp_protocol::schema::JsonSchemaGenerator for #name {
@@ -19,68 +19,9 @@ pub fn derive_json_schema(input: DeriveInput) -> TokenStream {
             }
         }
         _ => {
-            syn::Error::new_spanned(&name, "JsonSchema can only be derived for structs")
+            syn::Error::new_spanned(name, "JsonSchema can only be derived for structs")
                 .to_compile_error()
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use syn::parse_quote;
-
-    #[test]
-    fn test_simple_struct_schema() {
-        let input: DeriveInput = parse_quote! {
-            struct TestStruct {
-                name: String,
-                age: i32,
-            }
-        };
-
-        let result = derive_json_schema(input);
-        assert!(!result.is_empty());
-    }
-
-    #[test]
-    fn test_unit_struct_schema() {
-        let input: DeriveInput = parse_quote! {
-            struct UnitStruct;
-        };
-
-        let result = derive_json_schema(input);
-        assert!(!result.is_empty());
-    }
-
-    #[test]
-    fn test_complex_struct_schema() {
-        let input: DeriveInput = parse_quote! {
-            struct ComplexStruct {
-                title: String,
-                count: Option<u32>,
-                active: bool,
-                tags: Vec<String>,
-            }
-        };
-
-        let result = derive_json_schema(input);
-        assert!(!result.is_empty());
-    }
-
-    #[test]
-    fn test_enum_should_error() {
-        let input: DeriveInput = parse_quote! {
-            enum TestEnum {
-                Variant1,
-                Variant2,
-            }
-        };
-
-        let result = derive_json_schema(input);
-        // Should contain error message about enums not being supported
-        let result_string = result.to_string();
-        assert!(result_string.contains("JsonSchema can only be derived for structs"));
     }
 }
 
@@ -147,14 +88,12 @@ fn generate_field_schema(ty: &Type) -> TokenStream {
                     "bool" => quote! { JsonSchema::boolean() },
                     "Vec" => {
                         // Handle Vec<T> types - extract the inner type if possible
-                        if let Some(segment) = type_path.path.segments.first() {
-                            if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                                if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
+                        if let Some(segment) = type_path.path.segments.first()
+                            && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+                                && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
                                     let inner_schema = generate_field_schema(inner_type);
                                     return quote! { JsonSchema::array(#inner_schema) };
                                 }
-                            }
-                        }
                         quote! { JsonSchema::array(JsonSchema::string()) }
                     }
                     // For custom struct types, create a nested object schema
@@ -165,12 +104,11 @@ fn generate_field_schema(ty: &Type) -> TokenStream {
                 if type_path.path.segments.len() == 1 {
                     let segment = &type_path.path.segments[0];
                     if segment.ident == "Vec" {
-                        if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                            if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
+                        if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+                            && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
                                 let inner_schema = generate_field_schema(inner_type);
                                 return quote! { JsonSchema::array(#inner_schema) };
                             }
-                        }
                         return quote! { JsonSchema::array(JsonSchema::string()) };
                     }
                 }
@@ -186,10 +124,68 @@ fn generate_field_schema(ty: &Type) -> TokenStream {
 }
 
 fn is_option_type(ty: &Type) -> bool {
-    if let Type::Path(type_path) = ty {
-        if let Some(segment) = type_path.path.segments.first() {
+    if let Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.first() {
             return segment.ident == "Option";
         }
-    }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn test_simple_struct_schema() {
+        let input: DeriveInput = parse_quote! {
+            struct TestStruct {
+                name: String,
+                age: i32,
+            }
+        };
+
+        let result = derive_json_schema(input);
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_unit_struct_schema() {
+        let input: DeriveInput = parse_quote! {
+            struct UnitStruct;
+        };
+
+        let result = derive_json_schema(input);
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_complex_struct_schema() {
+        let input: DeriveInput = parse_quote! {
+            struct ComplexStruct {
+                title: String,
+                count: Option<u32>,
+                active: bool,
+                tags: Vec<String>,
+            }
+        };
+
+        let result = derive_json_schema(input);
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn test_enum_should_error() {
+        let input: DeriveInput = parse_quote! {
+            enum TestEnum {
+                Variant1,
+                Variant2,
+            }
+        };
+
+        let result = derive_json_schema(input);
+        // Should contain error message about enums not being supported
+        let result_string = result.to_string();
+        assert!(result_string.contains("JsonSchema can only be derived for structs"));
+    }
 }

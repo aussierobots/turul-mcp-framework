@@ -311,7 +311,7 @@ async fn handle_request(
     debug!("Handling {} {}", method, path);
 
     // Route the request
-    let response = if path == &handler.config.mcp_path {
+    let response = if path == handler.config.mcp_path {
         match handler.handle_mcp_request(req).await {
             Ok(mcp_response) => mcp_response,
             Err(err) => {

@@ -18,8 +18,7 @@ pub fn extract_roots_list(response: &HashMap<String, Value>) -> Option<Vec<Value
         .get("result")
         .and_then(|r| r.as_object())
         .and_then(|obj| obj.get("roots"))
-        .and_then(|roots| roots.as_array())
-        .map(|arr| arr.clone())
+        .and_then(|roots| roots.as_array()).cloned()
 }
 
 /// Helper to validate root object structure

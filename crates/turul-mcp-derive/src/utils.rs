@@ -82,6 +82,7 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
 
 /// Extract parameter metadata from field attributes
 #[derive(Debug)]
+#[derive(Default)]
 pub struct ParamMeta {
     pub description: Option<String>,
     pub optional: bool,
@@ -89,16 +90,6 @@ pub struct ParamMeta {
     pub max: Option<f64>,
 }
 
-impl Default for ParamMeta {
-    fn default() -> Self {
-        Self {
-            description: None,
-            optional: false,
-            min: None,
-            max: None,
-        }
-    }
-}
 
 pub fn extract_param_meta(attrs: &[Attribute]) -> Result<ParamMeta> {
     let mut meta = ParamMeta::default();
@@ -210,15 +201,12 @@ pub fn generate_param_extraction(
 
     if is_option_type {
         // Field is already Option<T>, extract the inner type
-        if let syn::Type::Path(type_path) = field_type {
-            if let syn::PathArguments::AngleBracketed(args) = &type_path.path.segments[0].arguments
-            {
-                if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
+        if let syn::Type::Path(type_path) = field_type
+            && let syn::PathArguments::AngleBracketed(args) = &type_path.path.segments[0].arguments
+                && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
                     // Handle Option<T> field
                     return generate_option_extraction(field_name, inner_type, field_name_str);
                 }
-            }
-        }
         // Fallback for complex Option types
         quote! {
             let #field_name: #field_type = args.get(#field_name_str)
@@ -242,7 +230,7 @@ fn generate_optional_required_extraction(
 ) -> TokenStream {
     match field_type {
         syn::Type::Path(type_path)
-            if type_path.path.get_ident().map_or(false, |i| i == "String") =>
+            if type_path.path.get_ident().is_some_and(|i| i == "String") =>
         {
             quote! {
                 let #field_name: Option<String> = args.get(#field_name_str)
@@ -250,33 +238,33 @@ fn generate_optional_required_extraction(
                     .map(|s| s.to_string());
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "f64") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "f64") => {
             quote! {
                 let #field_name: Option<f64> = args.get(#field_name_str)
                     .and_then(|v| v.as_f64());
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "f32") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "f32") => {
             quote! {
                 let #field_name: Option<f32> = args.get(#field_name_str)
                     .and_then(|v| v.as_f64())
                     .map(|f| f as f32);
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "i32") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "i32") => {
             quote! {
                 let #field_name: Option<i32> = args.get(#field_name_str)
                     .and_then(|v| v.as_i64())
                     .and_then(|i| i.try_into().ok());
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "i64") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "i64") => {
             quote! {
                 let #field_name: Option<i64> = args.get(#field_name_str)
                     .and_then(|v| v.as_i64());
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "bool") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "bool") => {
             quote! {
                 let #field_name: Option<bool> = args.get(#field_name_str)
                     .and_then(|v| v.as_bool());
@@ -300,7 +288,7 @@ fn generate_option_extraction(
 ) -> TokenStream {
     match inner_type {
         syn::Type::Path(type_path)
-            if type_path.path.get_ident().map_or(false, |i| i == "String") =>
+            if type_path.path.get_ident().is_some_and(|i| i == "String") =>
         {
             quote! {
                 let #field_name: Option<String> = args.get(#field_name_str)
@@ -308,46 +296,46 @@ fn generate_option_extraction(
                     .map(|s| s.to_string());
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "f64") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "f64") => {
             quote! {
                 let #field_name: Option<f64> = args.get(#field_name_str)
                     .and_then(|v| v.as_f64());
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "i32") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "i32") => {
             quote! {
                 let #field_name: Option<i32> = args.get(#field_name_str)
                     .and_then(|v| v.as_i64())
                     .and_then(|i| i.try_into().ok());
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "i64") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "i64") => {
             quote! {
                 let #field_name: Option<i64> = args.get(#field_name_str)
                     .and_then(|v| v.as_i64());
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "u32") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "u32") => {
             quote! {
                 let #field_name: Option<u32> = args.get(#field_name_str)
                     .and_then(|v| v.as_u64())
                     .and_then(|i| i.try_into().ok());
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "u64") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "u64") => {
             quote! {
                 let #field_name: Option<u64> = args.get(#field_name_str)
                     .and_then(|v| v.as_u64());
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "f32") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "f32") => {
             quote! {
                 let #field_name: Option<f32> = args.get(#field_name_str)
                     .and_then(|v| v.as_f64())
                     .map(|f| f as f32);
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "bool") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "bool") => {
             quote! {
                 let #field_name: Option<bool> = args.get(#field_name_str)
                     .and_then(|v| v.as_bool());
@@ -355,8 +343,8 @@ fn generate_option_extraction(
         }
         _ => {
             // Check if this is Option<Vec<T>>
-            if let syn::Type::Path(inner_path) = inner_type {
-                if inner_path.path.segments.len() == 1 && inner_path.path.segments[0].ident == "Vec"
+            if let syn::Type::Path(inner_path) = inner_type
+                && inner_path.path.segments.len() == 1 && inner_path.path.segments[0].ident == "Vec"
                 {
                     return quote! {
                         let #field_name: Option<#inner_type> = args.get(#field_name_str)
@@ -368,7 +356,6 @@ fn generate_option_extraction(
                             .flatten();
                     };
                 }
-            }
 
             // Generic serde deserialization for complex Option types
             quote! {
@@ -387,7 +374,7 @@ fn generate_required_extraction(
 ) -> TokenStream {
     match field_type {
         syn::Type::Path(type_path)
-            if type_path.path.get_ident().map_or(false, |i| i == "String") =>
+            if type_path.path.get_ident().is_some_and(|i| i == "String") =>
         {
             quote! {
                 let #field_name = args.get(#field_name_str)
@@ -396,14 +383,14 @@ fn generate_required_extraction(
                     .to_string();
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "f64") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "f64") => {
             quote! {
                 let #field_name = args.get(#field_name_str)
                     .and_then(|v| v.as_f64())
                     .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "number", "other"))?;
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "i32") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "i32") => {
             quote! {
                 let #field_name = args.get(#field_name_str)
                     .and_then(|v| v.as_i64())
@@ -411,14 +398,14 @@ fn generate_required_extraction(
                     .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "integer", "other"))?;
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "i64") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "i64") => {
             quote! {
                 let #field_name = args.get(#field_name_str)
                     .and_then(|v| v.as_i64())
                     .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "integer", "other"))?;
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "u32") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "u32") => {
             quote! {
                 let #field_name = args.get(#field_name_str)
                     .and_then(|v| v.as_u64())
@@ -426,14 +413,14 @@ fn generate_required_extraction(
                     .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "integer", "other"))?;
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "u64") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "u64") => {
             quote! {
                 let #field_name = args.get(#field_name_str)
                     .and_then(|v| v.as_u64())
                     .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "integer", "other"))?;
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "f32") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "f32") => {
             quote! {
                 let #field_name = args.get(#field_name_str)
                     .and_then(|v| v.as_f64())
@@ -441,7 +428,7 @@ fn generate_required_extraction(
                     .ok_or_else(|| turul_mcp_protocol::McpError::invalid_param_type(#field_name_str, "number", "other"))?;
             }
         }
-        syn::Type::Path(type_path) if type_path.path.get_ident().map_or(false, |i| i == "bool") => {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "bool") => {
             quote! {
                 let #field_name = args.get(#field_name_str)
                     .and_then(|v| v.as_bool())
@@ -493,37 +480,27 @@ fn generate_required_extraction(
 /// Extract a string value from an attribute by name
 pub fn extract_string_attribute(attrs: &[Attribute], name: &str) -> Option<String> {
     for attr in attrs {
-        if attr.path().is_ident(name) {
-            if let Ok(value) = attr.meta.require_name_value() {
-                if let syn::Expr::Lit(syn::ExprLit {
+        if attr.path().is_ident(name)
+            && let Ok(value) = attr.meta.require_name_value()
+                && let syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Str(lit_str),
                     ..
                 }) = &value.value
                 {
                     return Some(lit_str.value());
                 }
-            }
-        }
     }
     None
 }
 
 /// Field metadata for resources
+#[derive(Default)]
 pub struct FieldMeta {
     pub content: Option<bool>,
     pub content_type: Option<String>,
     pub description: Option<String>,
 }
 
-impl Default for FieldMeta {
-    fn default() -> Self {
-        Self {
-            content: None,
-            content_type: None,
-            description: None,
-        }
-    }
-}
 
 /// Prompt metadata extracted from attributes
 #[derive(Debug)]
@@ -744,26 +721,23 @@ pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
         if attr.path().is_ident("content") {
             meta.content = Some(true);
         } else if attr.path().is_ident("content_type") {
-            if let Ok(value) = attr.meta.require_name_value() {
-                if let syn::Expr::Lit(syn::ExprLit {
+            if let Ok(value) = attr.meta.require_name_value()
+                && let syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Str(lit_str),
                     ..
                 }) = &value.value
                 {
                     meta.content_type = Some(lit_str.value());
                 }
-            }
-        } else if attr.path().is_ident("description") {
-            if let Ok(value) = attr.meta.require_name_value() {
-                if let syn::Expr::Lit(syn::ExprLit {
+        } else if attr.path().is_ident("description")
+            && let Ok(value) = attr.meta.require_name_value()
+                && let syn::Expr::Lit(syn::ExprLit {
                     lit: syn::Lit::Str(lit_str),
                     ..
                 }) = &value.value
                 {
                     meta.description = Some(lit_str.value());
                 }
-            }
-        }
     }
 
     Ok(meta)
@@ -921,17 +895,16 @@ pub fn generate_output_schema_for_return_type_with_field(
     field_name: &str,
 ) -> Option<TokenStream> {
     // Handle McpResult<T> by extracting the T type
-    if let syn::Type::Path(type_path) = return_type {
-        if let Some(segment) = type_path.path.segments.last() {
+    if let syn::Type::Path(type_path) = return_type
+        && let Some(segment) = type_path.path.segments.last() {
             if segment.ident == "McpResult" || segment.ident == "Result" {
                 // Extract the T from Result<T, E>
-                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments {
-                    if let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
+                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+                    && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
                         return Some(generate_output_schema_for_type_with_field(
                             inner_type, field_name,
                         ));
                     }
-                }
             } else {
                 // Direct type, not wrapped in Result
                 return Some(generate_output_schema_for_type_with_field(
@@ -940,7 +913,6 @@ pub fn generate_output_schema_for_return_type_with_field(
                 ));
             }
         }
-    }
     None
 }
 
@@ -952,8 +924,8 @@ pub fn determine_output_field_name(ty: &syn::Type, custom_field: Option<&String>
     }
 
     // For struct types, extract the struct name and convert to camelCase
-    if let syn::Type::Path(type_path) = ty {
-        if let Some(ident) = type_path.path.get_ident() {
+    if let syn::Type::Path(type_path) = ty
+        && let Some(ident) = type_path.path.get_ident() {
             let struct_name = ident.to_string();
             // Check if this looks like a custom struct (not a primitive)
             if !matches!(
@@ -978,7 +950,6 @@ pub fn determine_output_field_name(ty: &syn::Type, custom_field: Option<&String>
                 return struct_to_camel_case(&struct_name);
             }
         }
-    }
 
     // Default to "output" for primitives (as requested by user)
     "output".to_string()
@@ -1000,18 +971,15 @@ pub fn generate_enhanced_output_schema(
     input: Option<&DeriveInput>,
 ) -> TokenStream {
     // Try to introspect struct properties if we have the DeriveInput
-    if let (syn::Type::Path(type_path), Some(derive_input)) = (ty, input) {
-        if let Some(ident) = type_path.path.get_ident() {
+    if let (syn::Type::Path(type_path), Some(derive_input)) = (ty, input)
+        && let Some(ident) = type_path.path.get_ident() {
             // Check if this is the same struct we're deriving for
-            if ident == &derive_input.ident {
-                if let Data::Struct(data_struct) = &derive_input.data {
-                    if let Fields::Named(fields) = &data_struct.fields {
+            if ident == &derive_input.ident
+                && let Data::Struct(data_struct) = &derive_input.data
+                    && let Fields::Named(fields) = &data_struct.fields {
                         return generate_struct_schema_with_properties(fields, field_name);
                     }
-                }
-            }
         }
-    }
 
     // Fallback to basic type schema generation
     generate_output_schema_for_type_with_field(ty, field_name)

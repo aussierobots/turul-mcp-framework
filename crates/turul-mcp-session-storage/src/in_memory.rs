@@ -62,6 +62,12 @@ pub enum InMemoryError {
     SerializationError(#[from] serde_json::Error),
 }
 
+impl Default for InMemorySessionStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InMemorySessionStorage {
     /// Create new in-memory session storage with default configuration
     pub fn new() -> Self {

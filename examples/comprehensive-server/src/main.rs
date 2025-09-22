@@ -483,7 +483,7 @@ impl McpTool for TeamManagementTool {
                                 "total_projects": assigned_projects.len(),
                                 "active_projects": active_projects,
                                 "total_budget": total_budget,
-                                "avg_budget_per_member": if team.members.len() > 0 { 
+                                "avg_budget_per_member": if !team.members.is_empty() { 
                                     total_budget / team.members.len() as u64 
                                 } else { 0 },
                                 "utilization": if active_projects > 2 { "high" } 

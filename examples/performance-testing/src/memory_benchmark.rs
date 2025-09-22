@@ -177,13 +177,11 @@ fn get_rss_memory() -> Option<usize> {
         use std::fs;
         if let Ok(contents) = fs::read_to_string("/proc/self/status") {
             for line in contents.lines() {
-                if line.starts_with("VmRSS:") {
-                    if let Some(kb_str) = line.split_whitespace().nth(1) {
-                        if let Ok(kb) = kb_str.parse::<usize>() {
+                if line.starts_with("VmRSS:")
+                    && let Some(kb_str) = line.split_whitespace().nth(1)
+                        && let Ok(kb) = kb_str.parse::<usize>() {
                             return Some(kb * 1024); // Convert KB to bytes
                         }
-                    }
-                }
             }
         }
     }
@@ -324,7 +322,7 @@ async fn leak_detection_test(
         let growth_rate = growth as f64 / (iterations as f64 - checkpoint_interval as f64);
         
         info!("Memory growth: {} over {} iterations", 
-            MemorySnapshot::format_bytes(growth.abs() as usize), 
+            MemorySnapshot::format_bytes(growth.unsigned_abs() as usize), 
             iterations - checkpoint_interval
         );
         info!("Growth rate: {:.2} bytes per operation", growth_rate);
@@ -431,7 +429,7 @@ async fn growth_analysis_test(
         let time_span = last.timestamp.duration_since(first.timestamp);
         let growth_rate_per_minute = (total_growth as f64) / time_span.as_secs_f64() * 60.0;
         
-        info!("Total memory growth: {}", MemorySnapshot::format_bytes(total_growth.abs() as usize));
+        info!("Total memory growth: {}", MemorySnapshot::format_bytes(total_growth.unsigned_abs() as usize));
         info!("Growth rate: {:.2} bytes per minute", growth_rate_per_minute);
         
         // Find peak usage

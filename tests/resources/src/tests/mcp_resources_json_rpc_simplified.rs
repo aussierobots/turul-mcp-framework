@@ -31,7 +31,7 @@ impl McpResource for SimpleJsonRpcTestResource {
     async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
             &self.uri,
-            &format!("JSON-RPC test content for {}", self.id)
+            format!("JSON-RPC test content for {}", self.id)
         )])
     }
 }
@@ -196,7 +196,7 @@ async fn test_stable_uri_ordering() {
     let mut handler = ResourcesListHandler::new();
     
     // Add resources with predictable ordering
-    let test_uris = vec!["test://c", "test://a", "test://b"];
+    let test_uris = ["test://c", "test://a", "test://b"];
     for (i, base_uri) in test_uris.iter().enumerate() {
         let mut resource = SimpleJsonRpcTestResource::new(format!("item_{}", i));
         resource.uri = base_uri.to_string();

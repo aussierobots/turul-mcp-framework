@@ -164,7 +164,7 @@ impl SessionContext {
                                 debug!("📦 Notification JSON: {}", json_value);
 
                                 // Now we can directly await the notification sending
-                                match parse_and_send_notification_with_broadcaster(&session_id, &json_value, &broadcaster_any).await {
+                                match parse_and_send_notification_with_broadcaster(&session_id, &json_value, broadcaster_any).await {
                                     Ok(_) => debug!("✅ Bridge working: Successfully processed notification for session {}", session_id),
                                     Err(e) => error!("❌ Bridge error: Failed to process notification for session {}: {}", session_id, e),
                                 }
@@ -567,8 +567,8 @@ async fn parse_and_send_notification_with_broadcaster(
                     }
                 }
                 "notifications/progress" => {
-                    if let Some(params) = json_value.get("params") {
-                        if let Some(token) = params.get("progressToken").and_then(|v| v.as_str()) {
+                    if let Some(params) = json_value.get("params")
+                        && let Some(token) = params.get("progressToken").and_then(|v| v.as_str()) {
                             debug!("📊 Progress notification detected: token={}", token);
                             
                             // Get progress value
@@ -602,7 +602,6 @@ async fn parse_and_send_notification_with_broadcaster(
                                 }
                             }
                         }
-                    }
                 }
                 _ => {
                     debug!("🔧 Other notification method: {} - sending as generic JsonRpcNotification", method);
@@ -1223,7 +1222,7 @@ impl SessionManager {
         if let Some(session) = sessions.get(session_id) {
             // Send to the specific session
             session.send_event(event.clone())
-                .map_err(|e| SessionError::InvalidData(e))?;
+                .map_err(SessionError::InvalidData)?;
             
             // Also forward to global event broadcaster for SSE bridging
             debug!("🌐 Forwarding event to global broadcaster: session={}, event={:?}", session_id, event);

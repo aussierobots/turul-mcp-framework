@@ -309,7 +309,7 @@ impl MultiContentPrompt {
         let mut messages = vec![];
         
         // 1. Text ContentBlock
-        messages.push(PromptMessage::user_text(&format!(
+        messages.push(PromptMessage::user_text(format!(
             "Please perform a {} analysis using the provided elements.",
             self.analysis_type
         )));

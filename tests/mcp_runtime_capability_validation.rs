@@ -25,7 +25,7 @@ struct TestPrompt {
 #[async_trait]
 impl McpPrompt for TestPrompt {
     async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
-        Ok(vec![PromptMessage::user_text(&format!("Test prompt with input: {}", self.input))])
+        Ok(vec![PromptMessage::user_text(format!("Test prompt with input: {}", self.input))])
     }
 }
 
@@ -53,7 +53,7 @@ async fn test_tools_capability_truthfulness() {
     // Call initialize endpoint
     let client = reqwest::Client::new();
     let response = client
-        .post(&format!("http://127.0.0.1:{}/mcp", port))
+        .post(format!("http://127.0.0.1:{}/mcp", port))
         .json(&json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -117,7 +117,7 @@ async fn test_prompts_capability_truthfulness() {
     // Call initialize endpoint
     let client = reqwest::Client::new();
     let response = client
-        .post(&format!("http://127.0.0.1:{}/mcp", port))
+        .post(format!("http://127.0.0.1:{}/mcp", port))
         .json(&json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -178,7 +178,7 @@ async fn test_empty_server_capabilities() {
     
     let client = reqwest::Client::new();
     let response = client
-        .post(&format!("http://127.0.0.1:{}/mcp", port))
+        .post(format!("http://127.0.0.1:{}/mcp", port))
         .json(&json!({
             "jsonrpc": "2.0",
             "id": 1,
@@ -239,7 +239,7 @@ async fn test_json_rpc_protocol_compliance() {
     
     let client = reqwest::Client::new();
     let response = client
-        .post(&format!("http://127.0.0.1:{}/mcp", port))
+        .post(format!("http://127.0.0.1:{}/mcp", port))
         .json(&json!({
             "jsonrpc": "2.0",
             "id": 42,
@@ -301,7 +301,7 @@ mod integration {
         
         let client = reqwest::Client::new();
         let response = client
-            .post(&format!("http://127.0.0.1:{}/mcp", port))
+            .post(format!("http://127.0.0.1:{}/mcp", port))
             .json(&json!({
                 "jsonrpc": "2.0",
                 "id": 1,

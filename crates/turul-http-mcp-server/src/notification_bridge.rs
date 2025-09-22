@@ -304,7 +304,7 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
     async fn broadcast_to_all_sessions(&self, notification: JsonRpcNotification) -> Result<Vec<String>, BroadcastError> {
         // Convert JsonRpcNotification to SSE-formatted JSON
         let sse_data = serde_json::to_value(&notification)
-            .map_err(|e| BroadcastError::SerializationError(e))?;
+            .map_err(BroadcastError::SerializationError)?;
 
         // Use StreamManager's built-in broadcast_to_all_sessions method
         match self.stream_manager.broadcast_to_all_sessions(
@@ -331,7 +331,7 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
     ) -> Result<(), BroadcastError> {
         // Convert JsonRpcNotification to SSE-formatted JSON
         let sse_data = serde_json::to_value(&notification)
-            .map_err(|e| BroadcastError::SerializationError(e))?;
+            .map_err(BroadcastError::SerializationError)?;
 
         // Send via StreamManager with proper JSON-RPC format
         match self.stream_manager.broadcast_to_session(

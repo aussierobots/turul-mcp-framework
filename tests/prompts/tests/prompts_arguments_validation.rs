@@ -83,7 +83,7 @@ impl McpPrompt for ValidatedTestPrompt {
         
         // Create messages using provided arguments
         let mut messages = vec![
-            PromptMessage::user_text(&format!("Prompt: {}", self.name)),
+            PromptMessage::user_text(format!("Prompt: {}", self.name)),
         ];
         
         // Add argument values to assistant message

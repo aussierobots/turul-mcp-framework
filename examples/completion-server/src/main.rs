@@ -25,6 +25,12 @@ pub struct IdeCompletionTool {
     file_extensions: Vec<String>,
 }
 
+impl Default for IdeCompletionTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IdeCompletionTool {
     /// Create a new IDE completion tool with predefined data
     pub fn new() -> Self {

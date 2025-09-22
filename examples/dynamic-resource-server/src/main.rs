@@ -14,7 +14,6 @@ use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, M
 use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use serde_yaml;
 use tracing::{info, warn};
 use chrono::Utc;
 
