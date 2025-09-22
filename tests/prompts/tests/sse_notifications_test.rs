@@ -1,9 +1,9 @@
-//! SSE Notifications Tests for MCP Prompts  
+//! SSE Notifications Tests for MCP Prompts
 //!
 //! Tests Server-Sent Events functionality for prompts/list changes
 //! and other prompt-related notifications
 
-use mcp_e2e_shared::{McpTestClient, TestServerManager, TestFixtures};
+use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 use serde_json::json;
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
@@ -13,7 +13,9 @@ use tracing::{debug, info};
 async fn test_sse_prompts_connection_establishment() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     // Initialize with SSE-capable client
@@ -28,17 +30,27 @@ async fn test_sse_prompts_connection_establishment() {
         .await
         .expect("Failed to test SSE notifications");
 
-    info!("SSE connection test completed. Events received: {}", events.len());
-    
+    info!(
+        "SSE connection test completed. Events received: {}",
+        events.len()
+    );
+
     // Basic connection should work (events may be empty but no errors)
-    assert!(events.is_empty() || events.iter().any(|e| e.contains("data:") || e.contains("event:")));
+    assert!(
+        events.is_empty()
+            || events
+                .iter()
+                .any(|e| e.contains("data:") || e.contains("event:"))
+    );
 }
 
 #[tokio::test]
 async fn test_sse_prompts_list_changed_notification() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     // Initialize with listChanged capability
@@ -52,10 +64,7 @@ async fn test_sse_prompts_list_changed_notification() {
         .expect("Failed to initialize");
 
     // Trigger potential prompt list operations
-    let _list_result = client
-        .list_prompts()
-        .await
-        .expect("Failed to list prompts");
+    let _list_result = client.list_prompts().await.expect("Failed to list prompts");
 
     // Test for potential listChanged events
     let events = timeout(Duration::from_secs(3), async {
@@ -67,10 +76,10 @@ async fn test_sse_prompts_list_changed_notification() {
         Ok(events_result) => {
             let events = events_result.expect("Failed to get SSE events");
             info!("Received {} SSE events", events.len());
-            
+
             for event in &events {
                 debug!("SSE Event: {}", event);
-                
+
                 // Check for listChanged events (camelCase naming per MCP spec)
                 if event.contains("listChanged") {
                     info!("✅ Detected listChanged notification");
@@ -88,7 +97,9 @@ async fn test_sse_prompts_list_changed_notification() {
 async fn test_sse_prompt_operations_notifications() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -99,8 +110,14 @@ async fn test_sse_prompt_operations_notifications() {
     // Perform various prompt operations
     let operations = vec![
         ("simple_prompt", None),
-        ("string_args_prompt", Some(TestFixtures::create_string_args())),
-        ("number_args_prompt", Some(TestFixtures::create_number_args())),
+        (
+            "string_args_prompt",
+            Some(TestFixtures::create_string_args()),
+        ),
+        (
+            "number_args_prompt",
+            Some(TestFixtures::create_number_args()),
+        ),
     ];
 
     for (prompt_name, args) in operations {
@@ -115,7 +132,7 @@ async fn test_sse_prompt_operations_notifications() {
         .expect("Failed to test SSE notifications");
 
     info!("Prompt operations generated {} SSE events", events.len());
-    
+
     // Check for any prompt-related events
     for event in &events {
         debug!("SSE Event: {}", event);
@@ -129,8 +146,10 @@ async fn test_sse_prompt_operations_notifications() {
 async fn test_sse_prompts_session_isolation() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
-    
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
+
     // Create two separate clients
     let mut client1 = McpTestClient::new(server.port());
     let mut client2 = McpTestClient::new(server.port());
@@ -140,7 +159,7 @@ async fn test_sse_prompts_session_isolation() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize client1");
-    
+
     client2
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
@@ -156,7 +175,7 @@ async fn test_sse_prompts_session_isolation() {
         .test_sse_notifications()
         .await
         .expect("Failed to get events for client1");
-    
+
     let events2 = client2
         .test_sse_notifications()
         .await
@@ -166,15 +185,27 @@ async fn test_sse_prompts_session_isolation() {
     info!("Client2 events: {}", events2.len());
 
     // Both clients should be able to establish SSE connections independently
-    assert!(events1.is_empty() || events1.iter().any(|e| e.contains("data:") || e.contains("event:")));
-    assert!(events2.is_empty() || events2.iter().any(|e| e.contains("data:") || e.contains("event:")));
+    assert!(
+        events1.is_empty()
+            || events1
+                .iter()
+                .any(|e| e.contains("data:") || e.contains("event:"))
+    );
+    assert!(
+        events2.is_empty()
+            || events2
+                .iter()
+                .any(|e| e.contains("data:") || e.contains("event:"))
+    );
 }
 
 #[tokio::test]
 async fn test_sse_prompts_notification_format_compliance() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -192,23 +223,23 @@ async fn test_sse_prompts_notification_format_compliance() {
 
     for event in &events {
         debug!("Validating SSE event format: {}", event);
-        
+
         // Check SSE format compliance
         if !event.is_empty() {
             // SSE events should contain either data: or event: fields
             let lines: Vec<&str> = event.lines().collect();
-            
+
             for line in lines {
                 if line.starts_with("data:") {
                     info!("✅ Valid SSE data line: {}", line);
-                    
+
                     // If it's JSON data, validate structure
                     if let Some(json_part) = line.strip_prefix("data:").map(|s| s.trim()) {
                         if json_part.starts_with('{') {
                             match serde_json::from_str::<serde_json::Value>(json_part) {
                                 Ok(parsed) => {
                                     info!("✅ Valid JSON notification: {:?}", parsed);
-                                    
+
                                     // Check for MCP notification structure
                                     if parsed.get("method").is_some() {
                                         assert!(parsed.get("method").unwrap().is_string());
@@ -240,7 +271,9 @@ async fn test_sse_prompts_notification_format_compliance() {
 async fn test_sse_prompts_error_handling_notifications() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -249,13 +282,9 @@ async fn test_sse_prompts_error_handling_notifications() {
         .expect("Failed to initialize");
 
     // Try operations that might cause errors/validation failures
-    let _error_result = client
-        .get_prompt("validation_failure_prompt", None)
-        .await;
+    let _error_result = client.get_prompt("validation_failure_prompt", None).await;
 
-    let _nonexistent_result = client
-        .get_prompt("nonexistent_prompt", None)
-        .await;
+    let _nonexistent_result = client.get_prompt("nonexistent_prompt", None).await;
 
     // Check if error conditions generate notifications
     let events = client
@@ -263,7 +292,10 @@ async fn test_sse_prompts_error_handling_notifications() {
         .await
         .expect("Failed to test SSE notifications");
 
-    info!("Error prompt operations generated {} SSE events", events.len());
+    info!(
+        "Error prompt operations generated {} SSE events",
+        events.len()
+    );
 
     // Error operations might still generate valid notifications
     for event in &events {
@@ -273,11 +305,13 @@ async fn test_sse_prompts_error_handling_notifications() {
     }
 }
 
-#[tokio::test]  
+#[tokio::test]
 async fn test_sse_prompts_with_session_aware_operations() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -303,11 +337,17 @@ async fn test_sse_prompts_with_session_aware_operations() {
         .await
         .expect("Failed to test SSE notifications");
 
-    info!("Session-aware operations generated {} SSE events", events.len());
+    info!(
+        "Session-aware operations generated {} SSE events",
+        events.len()
+    );
 
     for event in &events {
         if event.contains("session") || event.contains("data:") {
-            info!("✅ Detected session-related notification: {}", event.lines().next().unwrap_or(""));
+            info!(
+                "✅ Detected session-related notification: {}",
+                event.lines().next().unwrap_or("")
+            );
         }
     }
 }
@@ -316,7 +356,9 @@ async fn test_sse_prompts_with_session_aware_operations() {
 async fn test_sse_prompts_concurrent_operations() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -327,14 +369,21 @@ async fn test_sse_prompts_concurrent_operations() {
     // Perform multiple concurrent-ish operations
     let operations = vec![
         ("simple_prompt", None),
-        ("template_prompt", Some(std::collections::HashMap::from([
-            ("template_name".to_string(), json!("test")),
-            ("template_value".to_string(), json!("value")),
-        ]))),
+        (
+            "template_prompt",
+            Some(std::collections::HashMap::from([
+                ("template_name".to_string(), json!("test")),
+                ("template_value".to_string(), json!("value")),
+            ])),
+        ),
         ("multi_message_prompt", None),
-        ("dynamic_prompt", Some(std::collections::HashMap::from([
-            ("dynamic_type".to_string(), json!("analysis")),
-        ]))),
+        (
+            "dynamic_prompt",
+            Some(std::collections::HashMap::from([(
+                "dynamic_type".to_string(),
+                json!("analysis"),
+            )])),
+        ),
     ];
 
     for (prompt_name, args) in operations {
@@ -348,14 +397,21 @@ async fn test_sse_prompts_concurrent_operations() {
         .await
         .expect("Failed to test SSE notifications");
 
-    info!("Concurrent operations generated {} SSE events", events.len());
+    info!(
+        "Concurrent operations generated {} SSE events",
+        events.len()
+    );
 
     // Analyze events for expected patterns
     let mut notification_count = 0;
     for event in &events {
         if event.contains("data:") || event.contains("event:") {
             notification_count += 1;
-            debug!("Notification {}: {}", notification_count, event.lines().next().unwrap_or(""));
+            debug!(
+                "Notification {}: {}",
+                notification_count,
+                event.lines().next().unwrap_or("")
+            );
         }
     }
 

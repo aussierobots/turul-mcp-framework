@@ -8,7 +8,7 @@
 //!
 //! ```rust
 //! use turul_mcp_builders::prelude::*;
-//! 
+//!
 //! // All builders and common types available
 //! ```
 //!
@@ -155,5 +155,5 @@ pub use root::{ListRootsRequestBuilder, RootBuilder, RootsNotificationBuilder};
 pub use tool::ToolBuilder;
 
 // Common types used across builders
-pub use serde_json::{json, Value};
+pub use serde_json::{Value, json};
 pub use std::collections::HashMap;

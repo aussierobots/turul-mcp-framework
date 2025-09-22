@@ -4,20 +4,25 @@
 //! without requiring procedural macros. This enables dynamic prompt creation
 //! for template-driven systems.
 
+use serde_json::Value;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
-use serde_json::Value;
 
 // Import from protocol via alias
 use turul_mcp_protocol::prompts::{
-    PromptArgument, PromptMessage, ContentBlock, GetPromptResult,
-    HasPromptMetadata, HasPromptDescription, HasPromptArguments,
-    HasPromptAnnotations, HasPromptMeta
+    ContentBlock, GetPromptResult, HasPromptAnnotations, HasPromptArguments, HasPromptDescription,
+    HasPromptMeta, HasPromptMetadata, PromptArgument, PromptMessage,
 };
 
 /// Type alias for dynamic prompt generation function
-pub type DynamicPromptFn = Box<dyn Fn(HashMap<String, String>) -> Pin<Box<dyn Future<Output = Result<GetPromptResult, String>> + Send>> + Send + Sync>;
+pub type DynamicPromptFn = Box<
+    dyn Fn(
+            HashMap<String, String>,
+        ) -> Pin<Box<dyn Future<Output = Result<GetPromptResult, String>> + Send>>
+        + Send
+        + Sync,
+>;
 
 /// Builder for creating prompts at runtime
 pub struct PromptBuilder {
@@ -63,7 +68,11 @@ impl PromptBuilder {
     }
 
     /// Add a string argument (required by default)
-    pub fn string_argument(mut self, name: impl Into<String>, description: impl Into<String>) -> Self {
+    pub fn string_argument(
+        mut self,
+        name: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Self {
         let arg = PromptArgument::new(name)
             .with_description(description)
             .required();
@@ -72,7 +81,11 @@ impl PromptBuilder {
     }
 
     /// Add an optional string argument
-    pub fn optional_string_argument(mut self, name: impl Into<String>, description: impl Into<String>) -> Self {
+    pub fn optional_string_argument(
+        mut self,
+        name: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Self {
         let arg = PromptArgument::new(name)
             .with_description(description)
             .optional();
@@ -89,7 +102,8 @@ impl PromptBuilder {
     /// Add a system message with text content
     pub fn system_message(mut self, text: impl Into<String>) -> Self {
         // Note: System role not defined in current MCP spec, using User as fallback
-        self.messages.push(PromptMessage::user_text(format!("System: {}", text.into())));
+        self.messages
+            .push(PromptMessage::user_text(format!("System: {}", text.into())));
         self
     }
 
@@ -107,7 +121,8 @@ impl PromptBuilder {
 
     /// Add a user message with image content
     pub fn user_image(mut self, data: impl Into<String>, mime_type: impl Into<String>) -> Self {
-        self.messages.push(PromptMessage::user_image(data, mime_type));
+        self.messages
+            .push(PromptMessage::user_image(data, mime_type));
         self
     }
 
@@ -135,9 +150,7 @@ impl PromptBuilder {
         F: Fn(HashMap<String, String>) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<GetPromptResult, String>> + Send + 'static,
     {
-        self.get_fn = Some(Box::new(move |args| {
-            Box::pin(f(args))
-        }));
+        self.get_fn = Some(Box::new(move |args| Box::pin(f(args))));
         self
     }
 
@@ -160,7 +173,8 @@ impl PromptBuilder {
                         result = result.with_description(desc);
                     }
                     Ok(result)
-                }) as Pin<Box<dyn Future<Output = Result<GetPromptResult, String>> + Send>>
+                })
+                    as Pin<Box<dyn Future<Output = Result<GetPromptResult, String>> + Send>>
             })
         };
 
@@ -249,9 +263,11 @@ fn process_template_messages(
                 let processed_text = process_template_string(&text, args);
                 PromptMessage {
                     role: message.role,
-                    content: ContentBlock::Text { text: processed_text },
+                    content: ContentBlock::Text {
+                        text: processed_text,
+                    },
                 }
-            },
+            }
             // For other content types, just pass through unchanged
             other_content => PromptMessage {
                 role: message.role,
@@ -295,7 +311,10 @@ mod tests {
 
         assert_eq!(prompt.name(), "greeting_prompt");
         assert_eq!(prompt.title(), Some("Greeting Generator"));
-        assert_eq!(prompt.description(), Some("Generate personalized greetings"));
+        assert_eq!(
+            prompt.description(),
+            Some("Generate personalized greetings")
+        );
         assert_eq!(prompt.arguments().unwrap().len(), 1);
     }
 
@@ -363,7 +382,10 @@ mod tests {
         let result = prompt.get(args).await.expect("Failed to get prompt");
 
         assert_eq!(result.messages.len(), 2);
-        assert_eq!(result.description, Some("Mood-based conversation".to_string()));
+        assert_eq!(
+            result.description,
+            Some("Mood-based conversation".to_string())
+        );
 
         if let ContentBlock::Text { text } = &result.messages[1].content {
             assert!(text.contains("wonderful"));
@@ -381,7 +403,7 @@ mod tests {
                 PromptArgument::new("custom_arg")
                     .with_title("Custom Argument")
                     .with_description("A custom argument")
-                    .required()
+                    .required(),
             )
             .build()
             .expect("Failed to build prompt");

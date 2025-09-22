@@ -7,7 +7,7 @@
 //!
 //! ```rust
 //! use turul_mcp_server::prelude::*;
-//! 
+//!
 //! // Now you have access to all common server types plus protocol types
 //! ```
 
@@ -15,25 +15,20 @@
 pub use turul_mcp_protocol::prelude::*;
 
 // Server core types
-pub use crate::{
-    McpServer, McpServerBuilder, McpResult,
-    SessionContext,
-};
+pub use crate::{McpResult, McpServer, McpServerBuilder, SessionContext};
 
 // HTTP server config (when available)
 #[cfg(feature = "http")]
 pub use crate::http::ServerConfig;
 
 // Server trait interfaces
-pub use crate::{
-    McpTool, McpResource, McpPrompt,
-};
+pub use crate::{McpPrompt, McpResource, McpTool};
 
 // Essential async trait for implementations
 pub use async_trait::async_trait;
 
 // Common serde types for serialization
-pub use serde::{Serialize, Deserialize};
+pub use serde::{Deserialize, Serialize};
 
 // Additional commonly used types
 pub use std::sync::Arc;

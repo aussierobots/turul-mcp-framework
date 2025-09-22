@@ -4,21 +4,24 @@
 //! without requiring procedural macros. This enables dynamic resource creation
 //! for configuration-driven systems.
 
+use serde_json::Value;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
-use serde_json::Value;
 
 // Import from protocol via alias
-use turul_mcp_protocol::resources::{
-    ResourceContent, 
-    HasResourceMetadata, HasResourceDescription, HasResourceUri, 
-    HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta
-};
 use turul_mcp_protocol::meta::Annotations;
+use turul_mcp_protocol::resources::{
+    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
+    HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
+};
 
 /// Type alias for dynamic resource read function
-pub type DynamicResourceFn = Box<dyn Fn(String) -> Pin<Box<dyn Future<Output = Result<ResourceContent, String>> + Send>> + Send + Sync>;
+pub type DynamicResourceFn = Box<
+    dyn Fn(String) -> Pin<Box<dyn Future<Output = Result<ResourceContent, String>> + Send>>
+        + Send
+        + Sync,
+>;
 
 /// Builder for creating resources at runtime
 pub struct ResourceBuilder {
@@ -40,7 +43,7 @@ impl ResourceBuilder {
         let uri = uri.into();
         // Extract a reasonable default name from the URI
         let name = uri.split('/').next_back().unwrap_or(&uri).to_string();
-        
+
         Self {
             uri,
             name,
@@ -98,8 +101,7 @@ impl ResourceBuilder {
 
     /// Set static JSON content for this resource
     pub fn json_content(mut self, json_value: Value) -> Self {
-        let text = serde_json::to_string_pretty(&json_value)
-            .unwrap_or_else(|_| "{}".to_string());
+        let text = serde_json::to_string_pretty(&json_value).unwrap_or_else(|_| "{}".to_string());
         self.size = Some(text.len() as u64);
         self.mime_type = Some("application/json".to_string());
         self.content = Some(ResourceContent::text(&self.uri, text));
@@ -110,7 +112,7 @@ impl ResourceBuilder {
     pub fn blob_content(mut self, blob: impl Into<String>, mime_type: impl Into<String>) -> Self {
         let blob = blob.into();
         let mime_type = mime_type.into();
-        
+
         // Estimate size from base64 (approximately 3/4 of encoded length)
         self.size = Some((blob.len() * 3 / 4) as u64);
         self.mime_type = Some(mime_type.clone());
@@ -144,9 +146,7 @@ impl ResourceBuilder {
         F: Fn(String) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<ResourceContent, String>> + Send + 'static,
     {
-        self.read_fn = Some(Box::new(move |uri| {
-            Box::pin(f(uri))
-        }));
+        self.read_fn = Some(Box::new(move |uri| Box::pin(f(uri))));
         self
     }
 
@@ -295,16 +295,16 @@ mod tests {
             .expect("Failed to build resource");
 
         let content = resource.read().await.expect("Failed to read content");
-        
+
         match content {
             ResourceContent::Text(text_content) => {
                 assert!(text_content.text.contains("version"));
                 assert!(text_content.text.contains("1.0"));
                 assert_eq!(text_content.uri, "file:///config.json");
-            },
+            }
             _ => panic!("Expected text content"),
         }
-        
+
         // Verify the resource itself has the correct MIME type
         assert_eq!(resource.mime_type(), Some("application/json"));
     }
@@ -313,18 +313,16 @@ mod tests {
     async fn test_resource_builder_dynamic_content() {
         let resource = ResourceBuilder::new("file:///dynamic.txt")
             .description("Dynamic content resource")
-            .read_text(|_uri| async move {
-                Ok("This is dynamic content!".to_string())
-            })
+            .read_text(|_uri| async move { Ok("This is dynamic content!".to_string()) })
             .build()
             .expect("Failed to build resource");
 
         let content = resource.read().await.expect("Failed to read content");
-        
+
         match content {
             ResourceContent::Text(text_content) => {
                 assert_eq!(text_content.text, "This is dynamic content!");
-            },
+            }
             _ => panic!("Expected text content"),
         }
     }
@@ -341,7 +339,7 @@ mod tests {
         assert_eq!(annotations.title, Some("Important File".to_string()));
     }
 
-    #[test] 
+    #[test]
     fn test_resource_builder_blob_content() {
         let resource = ResourceBuilder::new("data://example.png")
             .description("Example image")

@@ -4,8 +4,8 @@
 //! MCP tools from regular async functions with parameter attributes.
 
 use turul_mcp_derive::mcp_tool;
-use turul_mcp_server::{McpServer, McpResult};
 use turul_mcp_protocol::McpError;
+use turul_mcp_server::{McpResult, McpServer};
 
 // Test basic function macro - addition tool
 #[mcp_tool(name = "add", description = "Add two numbers together")]
@@ -16,19 +16,27 @@ async fn add_numbers(
     Ok(format!("{} + {} = {}", a, b, a + b))
 }
 
-// String repeat tool - demonstrates different parameter types  
+// String repeat tool - demonstrates different parameter types
 #[mcp_tool(name = "string_repeat", description = "Repeat a string multiple times")]
 async fn repeat_string(
     #[param(description = "Text to repeat")] text: String,
     #[param(description = "Number of repetitions")] count: i32,
 ) -> McpResult<String> {
     if count < 0 {
-        return Err(McpError::param_out_of_range("count", &count.to_string(), "must be non-negative"));
+        return Err(McpError::param_out_of_range(
+            "count",
+            &count.to_string(),
+            "must be non-negative",
+        ));
     }
     if count > 1000 {
-        return Err(McpError::param_out_of_range("count", &count.to_string(), "maximum 1000"));
+        return Err(McpError::param_out_of_range(
+            "count",
+            &count.to_string(),
+            "maximum 1000",
+        ));
     }
-    
+
     Ok(text.repeat(count as usize))
 }
 
@@ -36,21 +44,30 @@ async fn repeat_string(
 #[mcp_tool(name = "boolean_logic", description = "Perform boolean operations")]
 async fn boolean_logic(
     #[param(description = "First boolean value")] a: bool,
-    #[param(description = "Second boolean value")] b: bool, 
+    #[param(description = "Second boolean value")] b: bool,
     #[param(description = "Boolean operation to perform")] operation: String,
 ) -> McpResult<String> {
     let result = match operation.as_str() {
         "and" => a && b,
         "or" => a || b,
         "xor" => a ^ b,
-        _ => return Err(McpError::invalid_param_type("operation", "and|or|xor", &operation)),
+        _ => {
+            return Err(McpError::invalid_param_type(
+                "operation",
+                "and|or|xor",
+                &operation,
+            ));
+        }
     };
-    
+
     Ok(format!("{} {} {} = {}", a, operation, b, result))
 }
 
 // Optional parameter demonstration
-#[mcp_tool(name = "greet", description = "Greet someone with optional custom message")]
+#[mcp_tool(
+    name = "greet",
+    description = "Greet someone with optional custom message"
+)]
 async fn greet_person(
     #[param(description = "Name of person to greet")] name: String,
     #[param(description = "Optional custom greeting", optional)] greeting: Option<String>,
@@ -94,7 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ) -> McpResult<String> {{ /* ... */ }}");
     println!("\n🎨 Features demonstrated:");
     println!("  ✨ Automatic McpTool trait implementation");
-    println!("  ✨ JSON Schema generation from types"); 
+    println!("  ✨ JSON Schema generation from types");
     println!("  ✨ Parameter validation and extraction");
     println!("  ✨ Optional parameter support");
     println!("  ✨ Multiple parameter types (String, f64, i32, bool)");

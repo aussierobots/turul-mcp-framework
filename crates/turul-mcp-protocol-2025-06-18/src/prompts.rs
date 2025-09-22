@@ -2,10 +2,10 @@
 //!
 //! This module defines the types used for the MCP prompts functionality.
 
-use std::collections::HashMap;
+use crate::meta::Cursor;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::meta::Cursor;
+use std::collections::HashMap;
 
 // ===========================================
 // === Prompt Definition Trait Hierarchy ===
@@ -15,46 +15,56 @@ use crate::meta::Cursor;
 pub trait HasPromptMetadata {
     /// Programmatic identifier (fallback display name)
     fn name(&self) -> &str;
-    
+
     /// Human-readable display name (UI contexts)
-    fn title(&self) -> Option<&str> { None }
+    fn title(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Prompt description trait
 pub trait HasPromptDescription {
-    fn description(&self) -> Option<&str> { None }
+    fn description(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Prompt arguments trait
 pub trait HasPromptArguments {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { None }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        None
+    }
 }
 
 /// Prompt annotations trait
 pub trait HasPromptAnnotations {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 /// Prompt-specific meta trait (separate from RPC _meta)
 pub trait HasPromptMeta {
-    fn prompt_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn prompt_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 /// Complete prompt definition - composed from fine-grained traits
-pub trait PromptDefinition: 
+pub trait PromptDefinition:
     HasPromptMetadata +       // name, title (from BaseMetadata)
     HasPromptDescription +    // description
     HasPromptArguments +      // arguments
     HasPromptAnnotations +    // annotations
     HasPromptMeta +           // _meta (prompt-specific)
-    Send + 
-    Sync 
+    Send +
+    Sync
 {
     /// Display name precedence: title > name (matches TypeScript spec)
     fn display_name(&self) -> &str {
         self.title().unwrap_or_else(|| self.name())
     }
-    
+
     /// Convert to concrete Prompt struct for protocol serialization
     fn to_prompt(&self) -> Prompt {
         Prompt {
@@ -84,11 +94,9 @@ impl Default for PromptAnnotations {
 
 impl PromptAnnotations {
     pub fn new() -> Self {
-        Self {
-            title: None,
-        }
+        Self { title: None }
     }
-    
+
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
@@ -151,31 +159,49 @@ impl Prompt {
 // Implement fine-grained traits for the concrete Prompt struct
 
 impl HasPromptMetadata for Prompt {
-    fn name(&self) -> &str { &self.name }
-    fn title(&self) -> Option<&str> { self.title.as_deref() }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn title(&self) -> Option<&str> {
+        self.title.as_deref()
+    }
 }
 
 impl HasPromptDescription for Prompt {
-    fn description(&self) -> Option<&str> { self.description.as_deref() }
+    fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
 }
 
 impl HasPromptArguments for Prompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { self.arguments.as_ref() }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        self.arguments.as_ref()
+    }
 }
 
 impl HasPromptAnnotations for Prompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None } // Prompt doesn't have annotations per MCP spec
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    } // Prompt doesn't have annotations per MCP spec
 }
 
 impl HasPromptMeta for Prompt {
-    fn prompt_meta(&self) -> Option<&HashMap<String, Value>> { self.meta.as_ref() }
+    fn prompt_meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
 }
 
 // Blanket implementation: any type implementing all fine-grained traits automatically implements PromptDefinition
-impl<T> PromptDefinition for T 
-where 
-    T: HasPromptMetadata + HasPromptDescription + HasPromptArguments + HasPromptAnnotations + HasPromptMeta + Send + Sync 
-{}
+impl<T> PromptDefinition for T where
+    T: HasPromptMetadata
+        + HasPromptDescription
+        + HasPromptArguments
+        + HasPromptAnnotations
+        + HasPromptMeta
+        + Send
+        + Sync
+{
+}
 
 /// The sender or recipient of messages and data in a conversation (matches MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -255,7 +281,7 @@ impl Default for ListPromptsParams {
 
 impl ListPromptsParams {
     pub fn new() -> Self {
-        Self { 
+        Self {
             cursor: None,
             meta: None,
         }
@@ -424,9 +450,7 @@ pub struct PromptMessage {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
     /// Text content
-    Text {
-        text: String,
-    },
+    Text { text: String },
     /// Image content
     Image {
         data: String,
@@ -558,7 +582,6 @@ impl GetPromptResult {
     }
 }
 
-
 // Trait implementations for prompts
 
 use crate::traits::*;
@@ -595,9 +618,15 @@ impl HasParams for ListPromptsRequest {
 impl HasData for ListPromptsResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("prompts".to_string(), serde_json::to_value(&self.prompts).unwrap_or(Value::Null));
+        data.insert(
+            "prompts".to_string(),
+            serde_json::to_value(&self.prompts).unwrap_or(Value::Null),
+        );
         if let Some(ref next_cursor) = self.next_cursor {
-            data.insert("nextCursor".to_string(), Value::String(next_cursor.as_str().to_string()));
+            data.insert(
+                "nextCursor".to_string(),
+                Value::String(next_cursor.as_str().to_string()),
+            );
         }
         data
     }
@@ -615,7 +644,7 @@ impl crate::traits::ListPromptsResult for ListPromptsResult {
     fn prompts(&self) -> &Vec<Prompt> {
         &self.prompts
     }
-    
+
     fn next_cursor(&self) -> Option<&Cursor> {
         self.next_cursor.as_ref()
     }
@@ -628,7 +657,7 @@ impl HasGetPromptParams for GetPromptParams {
     fn name(&self) -> &String {
         &self.name
     }
-    
+
     fn arguments(&self) -> Option<&HashMap<String, String>> {
         self.arguments.as_ref()
     }
@@ -657,9 +686,15 @@ impl HasParams for GetPromptRequest {
 impl HasData for GetPromptResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("messages".to_string(), serde_json::to_value(&self.messages).unwrap_or(Value::Null));
+        data.insert(
+            "messages".to_string(),
+            serde_json::to_value(&self.messages).unwrap_or(Value::Null),
+        );
         if let Some(ref description) = self.description {
-            data.insert("description".to_string(), Value::String(description.clone()));
+            data.insert(
+                "description".to_string(),
+                Value::String(description.clone()),
+            );
         }
         data
     }
@@ -677,7 +712,7 @@ impl crate::traits::GetPromptResult for GetPromptResult {
     fn description(&self) -> Option<&String> {
         self.description.as_ref()
     }
-    
+
     fn messages(&self) -> &Vec<PromptMessage> {
         &self.messages
     }
@@ -711,12 +746,15 @@ mod tests {
         // Verify structure matches MCP spec: role + content
         assert_eq!(text_msg.role, Role::User);
         assert!(matches!(text_msg.content, ContentBlock::Text { .. }));
-        
+
         assert_eq!(user_image_msg.role, Role::User);
         assert!(matches!(user_image_msg.content, ContentBlock::Image { .. }));
-        
+
         assert_eq!(assistant_text_msg.role, Role::Assistant);
-        assert!(matches!(assistant_text_msg.content, ContentBlock::Text { .. }));
+        assert!(matches!(
+            assistant_text_msg.content,
+            ContentBlock::Text { .. }
+        ));
     }
 
     #[test]
@@ -724,12 +762,11 @@ mod tests {
         let mut args = HashMap::new();
         args.insert("topic".to_string(), "AI Safety".to_string()); // Now uses String instead of Value
 
-        let request = GetPromptRequest::new("write_essay")
-            .with_arguments(args);
+        let request = GetPromptRequest::new("write_essay").with_arguments(args);
 
         assert_eq!(request.params.name, "write_essay");
         assert!(request.params.arguments.is_some());
-        
+
         // Verify arguments are string-to-string mapping per MCP spec
         if let Some(ref arguments) = request.params.arguments {
             assert_eq!(arguments.get("topic"), Some(&"AI Safety".to_string()));
@@ -743,12 +780,11 @@ mod tests {
             PromptMessage::assistant_text("AI Safety"),
         ];
 
-        let response = GetPromptResult::new(messages)
-            .with_description("Generated essay prompt");
+        let response = GetPromptResult::new(messages).with_description("Generated essay prompt");
 
         assert_eq!(response.messages.len(), 2);
         assert!(response.description.is_some());
-        
+
         // Verify messages have proper role structure per MCP spec
         assert_eq!(response.messages[0].role, Role::User);
         assert_eq!(response.messages[1].role, Role::Assistant);
@@ -756,8 +792,7 @@ mod tests {
 
     #[test]
     fn test_serialization() {
-        let prompt = Prompt::new("test_prompt")
-            .with_description("A test prompt");
+        let prompt = Prompt::new("test_prompt").with_description("A test prompt");
 
         let json = serde_json::to_string(&prompt).unwrap();
         assert!(json.contains("test_prompt"));

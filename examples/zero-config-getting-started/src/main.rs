@@ -27,7 +27,6 @@ impl Calculator {
     }
 }
 
-
 /// ZERO CONFIGURATION - Framework auto-determines name: "log_progress"
 /// This tool demonstrates SessionContext usage for real-time notifications
 #[derive(McpTool)]
@@ -45,22 +44,30 @@ impl LogProgress {
     ) -> turul_mcp_server::McpResult<String> {
         if let Some(session) = session {
             // Send built-in MCP progress notification to connected clients via SSE
-            session.notify_progress(&self.message, self.percent as u64).await;
-            tracing::info!("Sent MCP progress notification: {} ({}%)", self.message, self.percent);
+            session
+                .notify_progress(&self.message, self.percent as u64)
+                .await;
+            tracing::info!(
+                "Sent MCP progress notification: {} ({}%)",
+                self.message,
+                self.percent
+            );
         }
-        
-        Ok(format!("Progress logged: {} ({}% complete)", self.message, self.percent))
+
+        Ok(format!(
+            "Progress logged: {} ({}% complete)",
+            self.message, self.percent
+        ))
     }
 }
 
-/// Test struct return type  
+/// Test struct return type
 #[derive(serde::Serialize)]
 struct CalculationResult {
     sum: f64,
     operation: String,
     timestamp: u64,
 }
-
 
 /// ZERO CONFIGURATION - Framework auto-determines name: "struct_calculator"
 #[derive(McpTool)]
@@ -89,7 +96,11 @@ impl StructCalculator {
 
 /// Enhanced calculator demonstrating custom field name for primitive output
 #[derive(McpTool)]
-#[tool(name = "enhanced_calculator", description = "Enhanced calculator with custom field name", field = "result")]
+#[tool(
+    name = "enhanced_calculator",
+    description = "Enhanced calculator with custom field name",
+    field = "result"
+)]
 struct EnhancedCalculator {
     #[param(description = "First number")]
     x: f64,
@@ -102,7 +113,7 @@ impl EnhancedCalculator {
         &self,
         _session: Option<turul_mcp_server::SessionContext>,
     ) -> turul_mcp_server::McpResult<f64> {
-        Ok(self.x * self.y)  // Simple multiplication 
+        Ok(self.x * self.y) // Simple multiplication
     }
 }
 
@@ -114,8 +125,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     println!("   Framework auto-determines tool name: Calculator → 'calculator'");
     println!("   Framework auto-determines tool name: LogProgress → 'log_progress'");
     println!("   Framework auto-determines tool name: StructCalculator → 'struct_calculator'");
-    println!("   Explicit tool definition: EnhancedCalculator → 'enhanced_calculator' (with custom field = 'result')");
-    println!("   Built-in MCP notifications: progress, logging, resources (no registration needed)");
+    println!(
+        "   Explicit tool definition: EnhancedCalculator → 'enhanced_calculator' (with custom field = 'result')"
+    );
+    println!(
+        "   Built-in MCP notifications: progress, logging, resources (no registration needed)"
+    );
     println!("   Session storage: InMemorySessionStorage (zero-config default)");
     println!("   HTTP transport: http://127.0.0.1:8641/mcp");
     println!();
@@ -124,8 +139,11 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let server = McpServer::builder()
         .name("zero-config-demo")
         .version("1.0.0")
-        .tool(Calculator { a: 0.0, b: 0.0 }) // Framework → tools/call  
-        .tool(LogProgress { message: String::new(), percent: 0 }) // Framework → tools/call
+        .tool(Calculator { a: 0.0, b: 0.0 }) // Framework → tools/call
+        .tool(LogProgress {
+            message: String::new(),
+            percent: 0,
+        }) // Framework → tools/call
         .tool(StructCalculator { a: 0.0, b: 0.0 }) // Framework → tools/call
         .tool(EnhancedCalculator { x: 0.0, y: 0.0 }) // Explicit output type + custom field → tools/call
         .bind_address("127.0.0.1:8641".parse()?)

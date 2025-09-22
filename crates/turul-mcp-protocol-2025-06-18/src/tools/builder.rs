@@ -3,16 +3,19 @@
 //! This module provides a builder pattern for creating tools at runtime
 //! without requiring procedural macros. This is Level 3 of the tool creation spectrum.
 
+use crate::schema::JsonSchema; // Keep for schema generation methods
+use crate::tools::{
+    HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasToolMeta,
+};
+use crate::tools::{ToolAnnotations, ToolSchema};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
-use serde_json::Value;
-use crate::schema::JsonSchema; // Keep for schema generation methods
-use crate::tools::{ToolSchema, ToolAnnotations};
-use crate::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
 
 /// Type alias for dynamic tool execution function
-pub type DynamicToolFn = Box<dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send>> + Send + Sync>;
+pub type DynamicToolFn =
+    Box<dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send>> + Send + Sync>;
 
 /// Builder for creating tools at runtime
 pub struct ToolBuilder {
@@ -88,7 +91,7 @@ impl ToolBuilder {
         self.required_param(name, JsonSchema::number().with_description(description))
     }
 
-    /// Add an integer parameter  
+    /// Add an integer parameter
     pub fn integer_param(self, name: impl Into<String>, description: impl Into<String>) -> Self {
         self.required_param(name, JsonSchema::integer().with_description(description))
     }
@@ -108,10 +111,11 @@ impl ToolBuilder {
     pub fn number_output(mut self) -> Self {
         self.output_schema = Some(
             ToolSchema::object()
-                .with_properties(HashMap::from([
-                    ("result".to_string(), JsonSchema::number())
-                ]))
-                .with_required(vec!["result".to_string()])
+                .with_properties(HashMap::from([(
+                    "result".to_string(),
+                    JsonSchema::number(),
+                )]))
+                .with_required(vec!["result".to_string()]),
         );
         self
     }
@@ -120,10 +124,11 @@ impl ToolBuilder {
     pub fn string_output(mut self) -> Self {
         self.output_schema = Some(
             ToolSchema::object()
-                .with_properties(HashMap::from([
-                    ("result".to_string(), JsonSchema::string())
-                ]))
-                .with_required(vec!["result".to_string()])
+                .with_properties(HashMap::from([(
+                    "result".to_string(),
+                    JsonSchema::string(),
+                )]))
+                .with_required(vec!["result".to_string()]),
         );
         self
     }
@@ -146,9 +151,7 @@ impl ToolBuilder {
         F: Fn(Value) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Value, String>> + Send + 'static,
     {
-        self.execute_fn = Some(Box::new(move |args| {
-            Box::pin(f(args))
-        }));
+        self.execute_fn = Some(Box::new(move |args| Box::pin(f(args))));
         self
     }
 

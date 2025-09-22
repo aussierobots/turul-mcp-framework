@@ -8,8 +8,10 @@
 //! - Schema generation for various types
 //! - Error handling and edge cases
 
-use crate::utils::{extract_tool_meta, extract_param_meta, type_to_schema, generate_param_extraction};
-use syn::{parse_quote, DeriveInput, Type, Ident};
+use crate::utils::{
+    extract_param_meta, extract_tool_meta, generate_param_extraction, type_to_schema,
+};
+use syn::{DeriveInput, Ident, Type, parse_quote};
 
 /// Helper function to normalize generated code strings for testing
 fn normalize_generated_code(code: &str) -> String {
@@ -76,7 +78,12 @@ mod tool_meta_tests {
 
         let result = extract_tool_meta(&input.attrs);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing 'description'"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Missing 'description'")
+        );
     }
 
     #[test]
@@ -180,7 +187,7 @@ mod schema_generation_tests {
 
         let schema = type_to_schema(&ty, &meta);
         let schema_str = schema.to_string();
-        
+
         assert!(contains_pattern(&schema_str, "JsonSchema::string"));
         assert!(contains_pattern(&schema_str, "with_description"));
     }
@@ -197,7 +204,7 @@ mod schema_generation_tests {
 
         let schema = type_to_schema(&ty, &meta);
         let schema_str = schema.to_string();
-        
+
         assert!(contains_pattern(&schema_str, "JsonSchema::number()"));
         assert!(schema_str.contains("with_minimum"));
         assert!(schema_str.contains("with_maximum"));
@@ -213,7 +220,7 @@ mod schema_generation_tests {
 
         let schema = type_to_schema(&ty, &meta);
         let schema_str = schema.to_string();
-        
+
         assert!(contains_pattern(&schema_str, "JsonSchema::integer()"));
     }
 
@@ -227,7 +234,7 @@ mod schema_generation_tests {
 
         let schema = type_to_schema(&ty, &meta);
         let schema_str = schema.to_string();
-        
+
         assert!(contains_pattern(&schema_str, "JsonSchema::boolean()"));
     }
 
@@ -238,7 +245,7 @@ mod schema_generation_tests {
 
         let schema = type_to_schema(&ty, &meta);
         let schema_str = schema.to_string();
-        
+
         // Should fall back to string schema for unknown types
         assert!(contains_pattern(&schema_str, "JsonSchema::string()"));
     }
@@ -256,7 +263,7 @@ mod param_extraction_tests {
 
         let extraction = generate_param_extraction(&field_name, &field_type, false);
         let extraction_str = extraction.to_string();
-        
+
         assert!(extraction_str.contains("let message"));
         assert!(contains_pattern(&extraction_str, "as_str()"));
         assert!(contains_pattern(&extraction_str, "to_string()"));
@@ -270,7 +277,7 @@ mod param_extraction_tests {
 
         let extraction = generate_param_extraction(&field_name, &field_type, false);
         let extraction_str = extraction.to_string();
-        
+
         assert!(extraction_str.contains("let value"));
         assert!(contains_pattern(&extraction_str, "as_f64()"));
         assert!(extraction_str.contains("invalid_param_type"));
@@ -283,7 +290,7 @@ mod param_extraction_tests {
 
         let extraction = generate_param_extraction(&field_name, &field_type, true);
         let extraction_str = extraction.to_string();
-        
+
         assert!(extraction_str.contains("let optional_value"));
         assert!(contains_pattern(&extraction_str, "Option<String>"));
         assert!(!extraction_str.contains("Missing or invalid parameter"));
@@ -296,7 +303,7 @@ mod param_extraction_tests {
 
         let extraction = generate_param_extraction(&field_name, &field_type, false);
         let extraction_str = extraction.to_string();
-        
+
         assert!(extraction_str.contains("let maybe_value"));
         assert!(contains_pattern(&extraction_str, "Option<String>"));
     }
@@ -322,12 +329,15 @@ mod derive_macro_tests {
 
         let result = derive_mcp_tool_impl(input);
         assert!(result.is_ok());
-        
+
         let generated = result.unwrap();
         let generated_str = generated.to_string();
-        
+
         // Check that the implementation contains expected elements (use contains_pattern for whitespace-insensitive matching)
-        assert!(contains_pattern(&generated_str, "impl turul_mcp_server::McpTool"));
+        assert!(contains_pattern(
+            &generated_str,
+            "impl turul_mcp_server::McpTool"
+        ));
         assert!(contains_pattern(&generated_str, "fn name(&self)"));
         assert!(contains_pattern(&generated_str, "fn description(&self)"));
         assert!(contains_pattern(&generated_str, "fn input_schema(&self)"));
@@ -348,10 +358,10 @@ mod derive_macro_tests {
 
         let result = derive_mcp_tool_impl(input);
         assert!(result.is_ok());
-        
+
         let generated = result.unwrap();
         let generated_str = generated.to_string();
-        
+
         // Should handle both required and optional parameters
         assert!(generated_str.contains("required"));
         assert!(generated_str.contains("optional"));
@@ -369,10 +379,10 @@ mod derive_macro_tests {
 
         let result = derive_mcp_tool_impl(input);
         assert!(result.is_ok());
-        
+
         let generated = result.unwrap();
         let generated_str = generated.to_string();
-        
+
         // Should include constraint information in schema
         assert!(generated_str.contains("with_minimum"));
         assert!(generated_str.contains("with_maximum"));
@@ -390,7 +400,12 @@ mod derive_macro_tests {
 
         let result = derive_mcp_tool_impl(input);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("can only be derived for structs"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("can only be derived for structs")
+        );
     }
 
     #[test]
@@ -411,7 +426,7 @@ mod derive_macro_tests {
 mod function_attribute_tests {
     use super::*;
     use crate::tool_attr::mcp_tool_impl;
-    use syn::{ItemFn, punctuated::Punctuated, Token, Meta};
+    use syn::{ItemFn, Meta, Token, punctuated::Punctuated};
 
     #[test]
     fn test_simple_function_attribute() {
@@ -427,13 +442,16 @@ mod function_attribute_tests {
 
         let result = mcp_tool_impl(args, input);
         assert!(result.is_ok());
-        
+
         let generated = result.unwrap();
         let generated_str = generated.to_string();
-        
+
         // Check for struct and tool implementation (no module structure anymore)
         assert!(generated_str.contains("struct Multiply"));
-        assert!(contains_pattern(&generated_str, "impl turul_mcp_server::McpTool"));
+        assert!(contains_pattern(
+            &generated_str,
+            "impl turul_mcp_server::McpTool"
+        ));
         assert!(contains_pattern(&generated_str, "fn name(&self)"));
         assert!(generated_str.contains("multiply"));
     }
@@ -459,10 +477,10 @@ mod function_attribute_tests {
 
         let result = mcp_tool_impl(args, input);
         assert!(result.is_ok());
-        
+
         let generated = result.unwrap();
         let generated_str = generated.to_string();
-        
+
         // Should include parameter descriptions in schema
         assert!(generated_str.contains("Dividend"));
         assert!(generated_str.contains("Divisor"));
@@ -499,7 +517,12 @@ mod function_attribute_tests {
 
         let result = mcp_tool_impl(args, input);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing 'description'"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Missing 'description'")
+        );
     }
 }
 
@@ -546,12 +569,15 @@ mod edge_case_tests {
 
         let result = crate::tool_derive::derive_mcp_tool_impl(input);
         assert!(result.is_ok());
-        
+
         let generated = result.unwrap();
         let generated_str = generated.to_string();
-        
+
         // Should still generate valid implementation even with no fields
-        assert!(contains_pattern(&generated_str, "impl turul_mcp_server::McpTool"));
+        assert!(contains_pattern(
+            &generated_str,
+            "impl turul_mcp_server::McpTool"
+        ));
     }
 
     #[test]
@@ -580,10 +606,10 @@ mod edge_case_tests {
 
         let result = crate::tool_derive::derive_mcp_tool_impl(input);
         assert!(result.is_ok());
-        
+
         let generated = result.unwrap();
         let generated_str = generated.to_string();
-        
+
         // Should handle all parameters correctly
         for i in 1..=8 {
             assert!(generated_str.contains(&format!("param{}", i)));
@@ -620,7 +646,7 @@ pub mod test_utilities {
     fn test_helper_functions() {
         let valid_code = "fn test() {}";
         assert_valid_rust_syntax(valid_code);
-        
+
         assert_contains_patterns(valid_code, &["fn", "test"]);
     }
 }

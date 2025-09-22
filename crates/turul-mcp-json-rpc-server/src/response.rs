@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::types::{RequestId, JsonRpcVersion};
 use crate::error::JsonRpcError;
+use crate::types::{JsonRpcVersion, RequestId};
 
 /// Result data for a JSON-RPC response
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,14 +138,11 @@ impl From<JsonRpcError> for JsonRpcMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, from_str, to_string};
+    use serde_json::{from_str, json, to_string};
 
     #[test]
     fn test_response_serialization() {
-        let response = JsonRpcResponse::success(
-            RequestId::Number(1),
-            json!({"result": "success"}),
-        );
+        let response = JsonRpcResponse::success(RequestId::Number(1), json!({"result": "success"}));
 
         let json_str = to_string(&response).unwrap();
         let parsed: JsonRpcResponse = from_str(&json_str).unwrap();
@@ -164,12 +161,12 @@ mod tests {
         println!("Parsed result: {:?}", parsed.result); // Debug output
 
         assert_eq!(parsed.id, RequestId::String("test".to_string()));
-        // The issue is that serde(untagged) causes null to deserialize as Success(null) 
+        // The issue is that serde(untagged) causes null to deserialize as Success(null)
         // instead of Null variant. This is expected behavior.
         match parsed.result {
-            ResponseResult::Success(ref val) if val.is_null() => {}, // This is what actually happens
-            ResponseResult::Null => {}, // This is what we expected
-            _ => panic!("Expected null result, got: {:?}", parsed.result)
+            ResponseResult::Success(ref val) if val.is_null() => {} // This is what actually happens
+            ResponseResult::Null => {}                              // This is what we expected
+            _ => panic!("Expected null result, got: {:?}", parsed.result),
         }
     }
 

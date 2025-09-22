@@ -1,11 +1,11 @@
 //! Test runner implementation for Lambda MCP Client
-//! 
+//!
 //! Simplified version without validation complexity
 
 use anyhow::{Context, Result};
 use colored::*;
 use indicatif::ProgressBar;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Semaphore;
@@ -60,19 +60,19 @@ impl TestRunner {
             let permit = semaphore.clone().acquire_owned().await?;
             let client_config = self.client_config.clone();
             let pb = progress_bar.clone();
-            
+
             let handle = tokio::spawn(async move {
                 let _permit = permit;
                 let result = Self::run_single_test(&test_case, client_config).await;
-                
+
                 if let Some(pb) = pb {
                     pb.inc(1);
                     pb.set_message(format!("Completed: {}", test_case.name));
                 }
-                
+
                 result
             });
-            
+
             handles.push(handle);
         }
 
@@ -91,19 +91,18 @@ impl TestRunner {
     ) -> Result<TestResult> {
         let start_time = Instant::now();
         let session_id = format!("test-{}", uuid::Uuid::new_v4());
-        
+
         debug!("Executing test: {}", test_case.name);
-        
-        let result = match Self::run_test_implementation(test_case, client_config, session_id).await {
-            Ok(details) => {
-                TestResult {
-                    name: test_case.name.clone(),
-                    passed: true,
-                    duration: start_time.elapsed(),
-                    error: None,
-                    details: Some(details),
-                    output: None,
-                }
+
+        let result = match Self::run_test_implementation(test_case, client_config, session_id).await
+        {
+            Ok(details) => TestResult {
+                name: test_case.name.clone(),
+                passed: true,
+                duration: start_time.elapsed(),
+                error: None,
+                details: Some(details),
+                output: None,
             },
             Err(e) => {
                 error!("Test '{}' failed: {}", test_case.name, e);
@@ -118,7 +117,11 @@ impl TestRunner {
             }
         };
 
-        debug!("Test '{}' completed in {:.2}s", test_case.name, result.duration.as_secs_f64());
+        debug!(
+            "Test '{}' completed in {:.2}s",
+            test_case.name,
+            result.duration.as_secs_f64()
+        );
         Ok(result)
     }
 
@@ -129,7 +132,7 @@ impl TestRunner {
         session_id: String,
     ) -> Result<Value> {
         let mut client = McpClient::new(client_config.clone()).await?;
-        
+
         match test_case.test_type.as_str() {
             "protocol_initialize" => {
                 let init_response = client.initialize().await?;
@@ -144,7 +147,7 @@ impl TestRunner {
                 client.initialize().await?;
                 let tools = client.list_tools().await?;
                 let mut results = Vec::new();
-                
+
                 for tool in tools.tools {
                     match client.call_tool(&tool.name, Some(json!({}))).await {
                         Ok(result) => {
@@ -163,21 +166,23 @@ impl TestRunner {
                         }
                     }
                 }
-                
+
                 Ok(json!({"tool_executions": results}))
             }
             "session_management" => {
                 client.initialize().await?;
-                let session_info = client.call_tool("session_info", Some(json!({}))).await
+                let session_info = client
+                    .call_tool("session_info", Some(json!({})))
+                    .await
                     .context("Failed to get session info")?;
                 Ok(serde_json::to_value(session_info)?)
             }
             "mcp_streamable_http_delete_session" => {
                 // Test DELETE method for session termination
                 use reqwest;
-                
+
                 client.initialize().await?;
-                
+
                 // Test DELETE with session ID - should return 204
                 let delete_client = reqwest::Client::new();
                 let delete_response = delete_client
@@ -185,18 +190,18 @@ impl TestRunner {
                     .header("Mcp-Session-Id", &session_id)
                     .send()
                     .await?;
-                
+
                 let delete_status = delete_response.status();
                 let delete_headers = delete_response.headers().clone();
-                
+
                 // Test DELETE without session ID - should return 400
                 let delete_no_session_response = delete_client
                     .delete(format!("{}/mcp", client_config.base_url))
                     .send()
                     .await?;
-                
+
                 let delete_no_session_status = delete_no_session_response.status();
-                
+
                 Ok(json!({
                     "protocol": "streamable_http_delete_session",
                     "delete_with_session_status": delete_status.as_u16(),

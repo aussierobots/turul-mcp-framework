@@ -186,9 +186,15 @@ impl HasParams for ElicitCreateRequest {
 impl HasData for ElicitResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("action".to_string(), serde_json::to_value(self.action).unwrap_or(Value::String("cancel".to_string())));
+        data.insert(
+            "action".to_string(),
+            serde_json::to_value(self.action).unwrap_or(Value::String("cancel".to_string())),
+        );
         if let Some(ref content) = self.content {
-            data.insert("content".to_string(), serde_json::to_value(content).unwrap_or(Value::Null));
+            data.insert(
+                "content".to_string(),
+                serde_json::to_value(content).unwrap_or(Value::Null),
+            );
         }
         data
     }
@@ -217,7 +223,11 @@ impl ElicitationSchema {
         }
     }
 
-    pub fn with_property(mut self, name: impl Into<String>, schema: PrimitiveSchemaDefinition) -> Self {
+    pub fn with_property(
+        mut self,
+        name: impl Into<String>,
+        schema: PrimitiveSchemaDefinition,
+    ) -> Self {
         self.properties.insert(name.into(), schema);
         self
     }
@@ -421,45 +431,51 @@ pub struct ElicitationBuilder;
 impl ElicitationBuilder {
     /// Create a simple text input elicitation (MCP spec compliant)
     pub fn text_input(
-        message: impl Into<String>, 
-        field_name: impl Into<String>, 
-        field_description: impl Into<String>
+        message: impl Into<String>,
+        field_name: impl Into<String>,
+        field_description: impl Into<String>,
     ) -> ElicitCreateRequest {
         let field_name = field_name.into();
         let schema = ElicitationSchema::new()
-            .with_property(field_name.clone(), PrimitiveSchemaDefinition::string_with_description(field_description))
+            .with_property(
+                field_name.clone(),
+                PrimitiveSchemaDefinition::string_with_description(field_description),
+            )
             .with_required(vec![field_name]);
-        
+
         ElicitCreateRequest::new(message, schema)
     }
 
     /// Create a number input elicitation (MCP spec compliant)
     pub fn number_input(
-        message: impl Into<String>, 
-        field_name: impl Into<String>, 
+        message: impl Into<String>,
+        field_name: impl Into<String>,
         field_description: impl Into<String>,
         min: Option<f64>,
-        max: Option<f64>
+        max: Option<f64>,
     ) -> ElicitCreateRequest {
         let field_name = field_name.into();
         let mut number_schema = NumberSchema::new().with_description(field_description);
         number_schema.minimum = min;
         number_schema.maximum = max;
         let number_schema = PrimitiveSchemaDefinition::Number(number_schema);
-        
+
         let schema = ElicitationSchema::new()
             .with_property(field_name.clone(), number_schema)
             .with_required(vec![field_name]);
-        
+
         ElicitCreateRequest::new(message, schema)
     }
 
     /// Create a boolean confirmation elicitation (MCP spec compliant)
     pub fn confirm(message: impl Into<String>) -> ElicitCreateRequest {
         let schema = ElicitationSchema::new()
-            .with_property("confirmed".to_string(), PrimitiveSchemaDefinition::boolean())
+            .with_property(
+                "confirmed".to_string(),
+                PrimitiveSchemaDefinition::boolean(),
+            )
             .with_required(vec!["confirmed".to_string()]);
-        
+
         ElicitCreateRequest::new(message, schema)
     }
 }
@@ -472,7 +488,7 @@ impl ElicitationBuilder {
 pub trait HasElicitationMetadata {
     /// The message to present to the user
     fn message(&self) -> &str;
-    
+
     /// Optional title for the elicitation dialog
     fn title(&self) -> Option<&str> {
         None
@@ -483,14 +499,13 @@ pub trait HasElicitationMetadata {
 pub trait HasElicitationSchema {
     /// Restricted schema defining structure of input to collect (primitives only)
     fn requested_schema(&self) -> &ElicitationSchema;
-    
+
     /// Validate that schema only contains primitive types (per MCP spec)
     fn validate_schema(&self) -> Result<(), String> {
         // All schemas in ElicitationSchema are already primitive-only by design
         Ok(())
     }
 }
-
 
 /// Trait for elicitation validation and handling
 pub trait HasElicitationHandling {
@@ -499,18 +514,19 @@ pub trait HasElicitationHandling {
         // Basic validation - can be extended
         Ok(())
     }
-    
+
     /// Process accepted content (transform, normalize, etc.)
-    fn process_content(&self, content: HashMap<String, Value>) -> Result<HashMap<String, Value>, String> {
+    fn process_content(
+        &self,
+        content: HashMap<String, Value>,
+    ) -> Result<HashMap<String, Value>, String> {
         Ok(content)
     }
 }
 
 /// Composed elicitation definition trait (automatically implemented via blanket impl)
-pub trait ElicitationDefinition: 
-    HasElicitationMetadata + 
-    HasElicitationSchema + 
-    HasElicitationHandling 
+pub trait ElicitationDefinition:
+    HasElicitationMetadata + HasElicitationSchema + HasElicitationHandling
 {
     /// Convert this elicitation definition to a protocol ElicitCreateRequest
     fn to_create_request(&self) -> ElicitCreateRequest {
@@ -519,10 +535,10 @@ pub trait ElicitationDefinition:
 }
 
 // Blanket implementation: any type implementing the fine-grained traits automatically gets ElicitationDefinition
-impl<T> ElicitationDefinition for T 
-where 
-    T: HasElicitationMetadata + HasElicitationSchema + HasElicitationHandling 
-{}
+impl<T> ElicitationDefinition for T where
+    T: HasElicitationMetadata + HasElicitationSchema + HasElicitationHandling
+{
+}
 
 #[cfg(test)]
 mod tests {
@@ -534,19 +550,31 @@ mod tests {
         let string_schema = PrimitiveSchemaDefinition::string_with_description("Enter your name");
         let number_schema = PrimitiveSchemaDefinition::number();
         let boolean_schema = PrimitiveSchemaDefinition::boolean();
-        
-        assert!(matches!(string_schema, PrimitiveSchemaDefinition::String { .. }));
-        assert!(matches!(number_schema, PrimitiveSchemaDefinition::Number { .. }));
-        assert!(matches!(boolean_schema, PrimitiveSchemaDefinition::Boolean { .. }));
+
+        assert!(matches!(
+            string_schema,
+            PrimitiveSchemaDefinition::String { .. }
+        ));
+        assert!(matches!(
+            number_schema,
+            PrimitiveSchemaDefinition::Number { .. }
+        ));
+        assert!(matches!(
+            boolean_schema,
+            PrimitiveSchemaDefinition::Boolean { .. }
+        ));
     }
 
     #[test]
     fn test_elicitation_schema() {
         let schema = ElicitationSchema::new()
-            .with_property("name".to_string(), PrimitiveSchemaDefinition::string_with_description("Your name"))
+            .with_property(
+                "name".to_string(),
+                PrimitiveSchemaDefinition::string_with_description("Your name"),
+            )
             .with_property("age".to_string(), PrimitiveSchemaDefinition::integer())
             .with_required(vec!["name".to_string()]);
-        
+
         assert_eq!(schema.schema_type, "object");
         assert_eq!(schema.properties.len(), 2);
         assert_eq!(schema.required, Some(vec!["name".to_string()]));
@@ -554,11 +582,13 @@ mod tests {
 
     #[test]
     fn test_elicit_create_request() {
-        let schema = ElicitationSchema::new()
-            .with_property("username".to_string(), PrimitiveSchemaDefinition::string_with_description("Username"));
-        
+        let schema = ElicitationSchema::new().with_property(
+            "username".to_string(),
+            PrimitiveSchemaDefinition::string_with_description("Username"),
+        );
+
         let request = ElicitCreateRequest::new("Please enter your username", schema);
-        
+
         assert_eq!(request.method, "elicitation/create");
         assert_eq!(request.params.message, "Please enter your username");
     }
@@ -567,36 +597,45 @@ mod tests {
     fn test_elicit_result() {
         let mut content = HashMap::new();
         content.insert("name".to_string(), json!("John"));
-        
+
         let accept_result = ElicitResult::accept(content);
         let decline_result = ElicitResult::decline();
         let cancel_result = ElicitResult::cancel();
-        
+
         assert!(matches!(accept_result.action, ElicitAction::Accept));
         assert!(accept_result.content.is_some());
-        
+
         assert!(matches!(decline_result.action, ElicitAction::Decline));
         assert!(decline_result.content.is_none());
-        
+
         assert!(matches!(cancel_result.action, ElicitAction::Cancel));
         assert!(cancel_result.content.is_none());
     }
 
     #[test]
     fn test_elicitation_builder() {
-        let text_request = ElicitationBuilder::text_input(
-            "Enter your name",
-            "name", 
-            "Your full name"
-        );
-        
+        let text_request =
+            ElicitationBuilder::text_input("Enter your name", "name", "Your full name");
+
         let confirm_request = ElicitationBuilder::confirm("Do you agree?");
-        
+
         assert_eq!(text_request.method, "elicitation/create");
-        assert!(text_request.params.requested_schema.properties.contains_key("name"));
-        
+        assert!(
+            text_request
+                .params
+                .requested_schema
+                .properties
+                .contains_key("name")
+        );
+
         assert_eq!(confirm_request.method, "elicitation/create");
-        assert!(confirm_request.params.requested_schema.properties.contains_key("confirmed"));
+        assert!(
+            confirm_request
+                .params
+                .requested_schema
+                .properties
+                .contains_key("confirmed")
+        );
     }
 
     #[test]
@@ -604,11 +643,11 @@ mod tests {
         let schema = ElicitationSchema::new()
             .with_property("test".to_string(), PrimitiveSchemaDefinition::string());
         let request = ElicitCreateRequest::new("Test message", schema);
-        
+
         let json = serde_json::to_string(&request).unwrap();
         assert!(json.contains("elicitation/create"));
         assert!(json.contains("Test message"));
-        
+
         let parsed: ElicitCreateRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.method, "elicitation/create");
         assert_eq!(parsed.params.message, "Test message");
@@ -619,20 +658,26 @@ mod tests {
         // Test ElicitRequest matches: { method: string, params: { message: string, requestedSchema: {...}, _meta?: {...} } }
         let mut meta = HashMap::new();
         meta.insert("requestId".to_string(), json!("req-123"));
-        
+
         let schema = ElicitationSchema::new()
-            .with_property("name".to_string(), PrimitiveSchemaDefinition::string_with_description("Your name"))
+            .with_property(
+                "name".to_string(),
+                PrimitiveSchemaDefinition::string_with_description("Your name"),
+            )
             .with_property("age".to_string(), PrimitiveSchemaDefinition::integer())
             .with_required(vec!["name".to_string()]);
-        
-        let request = ElicitCreateRequest::new("Please provide your details", schema)
-            .with_meta(meta);
-        
+
+        let request =
+            ElicitCreateRequest::new("Please provide your details", schema).with_meta(meta);
+
         let json_value = serde_json::to_value(&request).unwrap();
-        
+
         assert_eq!(json_value["method"], "elicitation/create");
         assert!(json_value["params"].is_object());
-        assert_eq!(json_value["params"]["message"], "Please provide your details");
+        assert_eq!(
+            json_value["params"]["message"],
+            "Please provide your details"
+        );
         assert!(json_value["params"]["requestedSchema"].is_object());
         assert_eq!(json_value["params"]["requestedSchema"]["type"], "object");
         assert!(json_value["params"]["requestedSchema"]["properties"].is_object());
@@ -644,28 +689,30 @@ mod tests {
         // Test ElicitResult matches: { action: "accept" | "decline" | "cancel", content?: {...}, _meta?: {...} }
         let mut meta = HashMap::new();
         meta.insert("responseTime".to_string(), json!(1234));
-        
+
         let mut content = HashMap::new();
         content.insert("name".to_string(), json!("John Doe"));
         content.insert("age".to_string(), json!(30));
-        
-        let result = ElicitResult::accept(content.clone())
-            .with_meta(meta);
-        
+
+        let result = ElicitResult::accept(content.clone()).with_meta(meta);
+
         let json_value = serde_json::to_value(&result).unwrap();
-        
+
         assert_eq!(json_value["action"], "accept");
         assert!(json_value["content"].is_object());
         assert_eq!(json_value["content"]["name"], "John Doe");
         assert_eq!(json_value["content"]["age"], 30);
         assert_eq!(json_value["_meta"]["responseTime"], 1234);
-        
+
         // Test decline without content
         let decline_result = ElicitResult::decline();
         let decline_json = serde_json::to_value(&decline_result).unwrap();
-        
+
         assert_eq!(decline_json["action"], "decline");
-        assert!(decline_json["content"].is_null() || !decline_json.as_object().unwrap().contains_key("content"));
+        assert!(
+            decline_json["content"].is_null()
+                || !decline_json.as_object().unwrap().contains_key("content")
+        );
     }
 
     #[test]
@@ -675,24 +722,28 @@ mod tests {
         let string_json = serde_json::to_value(&string_schema).unwrap();
         assert_eq!(string_json["type"], "string");
         assert_eq!(string_json["description"], "Enter text");
-        
+
         // Test NumberSchema
         let number_schema = PrimitiveSchemaDefinition::number();
         let number_json = serde_json::to_value(&number_schema).unwrap();
         assert_eq!(number_json["type"], "number");
-        
-        // Test IntegerSchema  
+
+        // Test IntegerSchema
         let integer_schema = PrimitiveSchemaDefinition::integer();
         let integer_json = serde_json::to_value(&integer_schema).unwrap();
         assert_eq!(integer_json["type"], "integer");
-        
+
         // Test BooleanSchema
         let boolean_schema = PrimitiveSchemaDefinition::boolean();
         let boolean_json = serde_json::to_value(&boolean_schema).unwrap();
         assert_eq!(boolean_json["type"], "boolean");
-        
+
         // Test EnumSchema
-        let enum_schema = PrimitiveSchemaDefinition::enum_values(vec!["red".to_string(), "green".to_string(), "blue".to_string()]);
+        let enum_schema = PrimitiveSchemaDefinition::enum_values(vec![
+            "red".to_string(),
+            "green".to_string(),
+            "blue".to_string(),
+        ]);
         let enum_json = serde_json::to_value(&enum_schema).unwrap();
         assert_eq!(enum_json["type"], "string");
         assert!(enum_json["enum"].is_array());

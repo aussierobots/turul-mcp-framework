@@ -24,7 +24,7 @@ impl CorsLayer {
     pub fn apply_cors_headers_for_origin(headers: &mut HeaderMap, origin: &str) {
         headers.insert("Access-Control-Allow-Origin", origin.parse().unwrap());
         headers.insert(
-            "Access-Control-Allow-Methods", 
+            "Access-Control-Allow-Methods",
             "GET, POST, OPTIONS".parse().unwrap(),
         );
         headers.insert(

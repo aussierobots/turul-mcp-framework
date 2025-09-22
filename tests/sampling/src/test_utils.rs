@@ -1,7 +1,7 @@
 //! Test utilities specific to sampling protocol testing
 
-use std::collections::HashMap;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 /// Helper to create sampling capabilities for initialize
 pub fn sampling_capabilities() -> Value {
@@ -26,9 +26,15 @@ pub fn extract_sampling_message(response: &HashMap<String, Value>) -> Option<Str
 
 /// Helper to validate CreateMessageRequest structure
 pub fn validate_create_message_request(params: &Value) -> bool {
-    params.is_object() 
-        && params.get("messages").map(|m| m.is_array()).unwrap_or(false)
-        && params.get("maxTokens").map(|t| t.is_number()).unwrap_or(false)
+    params.is_object()
+        && params
+            .get("messages")
+            .map(|m| m.is_array())
+            .unwrap_or(false)
+        && params
+            .get("maxTokens")
+            .map(|t| t.is_number())
+            .unwrap_or(false)
 }
 
 /// Helper to create a basic create message request

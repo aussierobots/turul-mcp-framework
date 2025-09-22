@@ -351,8 +351,6 @@ impl McpClient {
     ) -> McpClientResult<crate::transport::TransportResponse> {
         let mut transport = self.transport.lock().await;
 
-        
-
         timeout(
             self.config.timeouts.request,
             transport.send_request_with_headers(request),

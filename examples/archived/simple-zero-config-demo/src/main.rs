@@ -1,4 +1,4 @@
-//! # Simple Zero-Config Demo - Developer Friendly Patterns  
+//! # Simple Zero-Config Demo - Developer Friendly Patterns
 //!
 //! This demonstrates the CURRENT zero-configuration capabilities using
 //! the SIMPLE patterns developers actually want to use.
@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .instructions("Demonstrating developer-friendly zero-config patterns")
         // Pattern 1: Function macros - uses actual function names!
         .tool_fn(add_numbers)          // ✅ Auto-registers "tools/call" for add
-        .tool_fn(multiply_numbers)     // ✅ Auto-registers "tools/call" for multiply  
+        .tool_fn(multiply_numbers)     // ✅ Auto-registers "tools/call" for multiply
         // Pattern 2: Builder pattern - runtime flexibility!
         .tool(divide_tool)             // ✅ Auto-registers "tools/call" for divide
         .bind_address("127.0.0.1:8087".parse()?)

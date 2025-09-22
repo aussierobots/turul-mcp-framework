@@ -20,16 +20,16 @@ pub mod postgres;
 pub mod dynamodb;
 
 // Re-export for convenience
-pub use in_memory::{InMemorySessionStorage, InMemoryConfig, InMemoryError, InMemoryStats};
+pub use in_memory::{InMemoryConfig, InMemoryError, InMemorySessionStorage, InMemoryStats};
 
 #[cfg(feature = "sqlite")]
-pub use sqlite::{SqliteSessionStorage, SqliteConfig, SqliteError};
+pub use sqlite::{SqliteConfig, SqliteError, SqliteSessionStorage};
 
 #[cfg(feature = "postgres")]
-pub use postgres::{PostgresSessionStorage, PostgresConfig, PostgresError};
+pub use postgres::{PostgresConfig, PostgresError, PostgresSessionStorage};
 
 #[cfg(feature = "dynamodb")]
-pub use dynamodb::{DynamoDbSessionStorage, DynamoDbConfig, DynamoDbError};
+pub use dynamodb::{DynamoDbConfig, DynamoDbError, DynamoDbSessionStorage};
 
 /// Convenience type alias for session storage results
 pub type StorageResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -52,7 +52,9 @@ pub async fn create_sqlite_storage() -> Result<SqliteSessionStorage, SqliteError
 
 /// Create a SQLite session storage with custom configuration
 #[cfg(feature = "sqlite")]
-pub async fn create_sqlite_storage_with_config(config: SqliteConfig) -> Result<SqliteSessionStorage, SqliteError> {
+pub async fn create_sqlite_storage_with_config(
+    config: SqliteConfig,
+) -> Result<SqliteSessionStorage, SqliteError> {
     SqliteSessionStorage::with_config(config).await
 }
 
@@ -64,7 +66,9 @@ pub async fn create_postgres_storage() -> Result<PostgresSessionStorage, Postgre
 
 /// Create a PostgreSQL session storage with custom configuration
 #[cfg(feature = "postgres")]
-pub async fn create_postgres_storage_with_config(config: PostgresConfig) -> Result<PostgresSessionStorage, PostgresError> {
+pub async fn create_postgres_storage_with_config(
+    config: PostgresConfig,
+) -> Result<PostgresSessionStorage, PostgresError> {
     PostgresSessionStorage::with_config(config).await
 }
 
@@ -76,7 +80,9 @@ pub async fn create_dynamodb_storage() -> Result<DynamoDbSessionStorage, DynamoD
 
 /// Create a DynamoDB session storage with custom configuration
 #[cfg(feature = "dynamodb")]
-pub async fn create_dynamodb_storage_with_config(config: DynamoDbConfig) -> Result<DynamoDbSessionStorage, DynamoDbError> {
+pub async fn create_dynamodb_storage_with_config(
+    config: DynamoDbConfig,
+) -> Result<DynamoDbSessionStorage, DynamoDbError> {
     DynamoDbSessionStorage::with_config(config).await
 }
 
@@ -88,28 +94,34 @@ mod integration_tests {
     #[tokio::test]
     async fn test_storage_trait_compliance() {
         let storage = create_default_storage();
-        
+
         // Test that our storage implements all trait methods
-        let session = storage.create_session(ServerCapabilities::default()).await.unwrap();
+        let session = storage
+            .create_session(ServerCapabilities::default())
+            .await
+            .unwrap();
         let session_id = session.session_id.clone();
-        
+
         // Session operations
         assert!(storage.get_session(&session_id).await.unwrap().is_some());
         assert_eq!(storage.session_count().await.unwrap(), 1);
-        
+
         // State operations
-        storage.set_session_state(&session_id, "test", serde_json::json!("value")).await.unwrap();
-        let value = storage.get_session_state(&session_id, "test").await.unwrap();
+        storage
+            .set_session_state(&session_id, "test", serde_json::json!("value"))
+            .await
+            .unwrap();
+        let value = storage
+            .get_session_state(&session_id, "test")
+            .await
+            .unwrap();
         assert_eq!(value, Some(serde_json::json!("value")));
-        
+
         // Event operations
-        let event = crate::SseEvent::new(
-            "test".to_string(), 
-            serde_json::json!({"data": "test"})
-        );
+        let event = crate::SseEvent::new("test".to_string(), serde_json::json!({"data": "test"}));
         let stored = storage.store_event(&session_id, event).await.unwrap();
         assert!(stored.id > 0);
-        
+
         // Cleanup
         let deleted = storage.delete_session(&session_id).await.unwrap();
         assert!(deleted);

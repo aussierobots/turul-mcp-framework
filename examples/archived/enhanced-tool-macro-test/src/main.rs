@@ -38,7 +38,7 @@ impl EnhancedCalculatorTool {
             },
             _ => return Err(McpError::invalid_param_type("operation", "add|subtract|multiply|divide", &self.operation)),
         };
-        
+
         let precision = self.precision.unwrap_or(2) as usize;
         Ok(format!("{:.prec$}", result, prec = precision))
     }
@@ -62,7 +62,7 @@ impl MathFunctionsTool {
     async fn execute(&self) -> McpResult<String> {
         let degrees = self.degrees.unwrap_or(false);
         let precision = self.precision.unwrap_or(4) as usize;
-        
+
         let result = match self.function.as_str() {
             "sin" => {
                 let val = if degrees { self.value.to_radians() } else { self.value };
@@ -90,7 +90,7 @@ impl MathFunctionsTool {
             },
             _ => return Err(McpError::invalid_param_type("function", "sin|cos|tan|log|sqrt", &self.function)),
         };
-        
+
         Ok(format!("{:.prec$}", result, prec = precision))
     }
 }
@@ -105,14 +105,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("enhanced-tool-test")
-        .version("1.0.0") 
+        .version("1.0.0")
         .title("Enhanced Tool Test")
         .instructions("Testing enhanced derive macro patterns with parameter validation")
-        .tool(EnhancedCalculatorTool { 
-            a: 0.0, b: 0.0, operation: String::new(), precision: None 
+        .tool(EnhancedCalculatorTool {
+            a: 0.0, b: 0.0, operation: String::new(), precision: None
         })
-        .tool(MathFunctionsTool { 
-            function: String::new(), value: 0.0, degrees: None, precision: None 
+        .tool(MathFunctionsTool {
+            function: String::new(), value: 0.0, degrees: None, precision: None
         })
         .bind_address("127.0.0.1:8010".parse()?)
         .build()?;
@@ -121,7 +121,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Tools available:");
     println!("  - enhanced_calculator: Calculator with parameter validation");
     println!("  - math_functions: Advanced mathematical functions");
-    
+
     server.run().await?;
     Ok(())
 }

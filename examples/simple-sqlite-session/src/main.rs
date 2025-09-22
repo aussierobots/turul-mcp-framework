@@ -11,17 +11,21 @@
 //! - Lightweight, zero-configuration storage
 //! - Automatic database creation and schema migration
 
-use std::sync::Arc;
+use serde_json::{Value, json};
 use std::path::PathBuf;
-use turul_mcp_server::{McpServer, McpResult, SessionContext};
-use turul_mcp_session_storage::{SqliteSessionStorage, SqliteConfig};
+use std::sync::Arc;
+use tracing::{debug, error, info};
 use turul_mcp_derive::McpTool;
-use serde_json::{json, Value};
-use tracing::{info, error, debug};
+use turul_mcp_server::{McpResult, McpServer, SessionContext};
+use turul_mcp_session_storage::{SqliteConfig, SqliteSessionStorage};
 
 /// Tool that stores a key-value pair in this session's SQLite storage
 #[derive(McpTool, Default)]
-#[tool(name = "store_value", description = "Store a value in this session's SQLite storage (session-scoped)", field = "value")]
+#[tool(
+    name = "store_value",
+    description = "Store a value in this session's SQLite storage (session-scoped)",
+    field = "value"
+)]
 struct StoreValueTool {
     #[param(description = "Key to store in session")]
     key: String,
@@ -31,7 +35,9 @@ struct StoreValueTool {
 
 impl StoreValueTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| {
+            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
+        })?;
 
         debug!("Storing value in SQLite: {} = {}", self.key, self.value);
 
@@ -52,7 +58,11 @@ impl StoreValueTool {
 
 /// Tool that retrieves a value from this session's SQLite storage
 #[derive(McpTool, Default)]
-#[tool(name = "get_value", description = "Retrieve a value from this session's SQLite storage (session-scoped)", field = "value")]
+#[tool(
+    name = "get_value",
+    description = "Retrieve a value from this session's SQLite storage (session-scoped)",
+    field = "value"
+)]
 struct GetValueTool {
     #[param(description = "Key to retrieve from session")]
     key: String,
@@ -60,7 +70,9 @@ struct GetValueTool {
 
 impl GetValueTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| {
+            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
+        })?;
 
         debug!("Getting value from SQLite: {}", self.key);
 
@@ -85,12 +97,18 @@ impl GetValueTool {
 
 /// Tool that shows session information
 #[derive(McpTool, Default)]
-#[tool(name = "session_info", description = "Get information about the SQLite session", field = "value")]
+#[tool(
+    name = "session_info",
+    description = "Get information about the SQLite session",
+    field = "value"
+)]
 struct SessionInfoTool {}
 
 impl SessionInfoTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| {
+            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
+        })?;
 
         Ok(json!({
             "session_id": session.session_id,
@@ -99,7 +117,7 @@ impl SessionInfoTool {
             "database_file": "./sessions.db",
             "features": [
                 "File-based persistence",
-                "ACID transactions", 
+                "ACID transactions",
                 "Lightweight & embedded",
                 "Zero configuration",
                 "Automatic schema creation"
@@ -141,13 +159,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         create_database_if_missing: true,
     };
 
-    info!("Using SQLite database: {}", sqlite_config.database_path.display());
+    info!(
+        "Using SQLite database: {}",
+        sqlite_config.database_path.display()
+    );
 
     // Create SQLite session storage
     let sqlite_storage = match SqliteSessionStorage::with_config(sqlite_config.clone()).await {
         Ok(storage) => {
             info!("✅ SQLite session storage initialized successfully");
-            info!("📁 Database file: {}", sqlite_config.database_path.display());
+            info!(
+                "📁 Database file: {}",
+                sqlite_config.database_path.display()
+            );
             Arc::new(storage)
         }
         Err(e) => {
@@ -174,8 +198,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("🎉 SQLite session storage example server ready!");
     info!("🚀 Server running at: http://127.0.0.1:8061/mcp");
     info!("📊 Session Storage: SQLite (File-based persistence)");
-    info!("🔄 SSE Notifications: Enabled"); 
-    info!("📁 Database File: {}", sqlite_config.database_path.display());
+    info!("🔄 SSE Notifications: Enabled");
+    info!(
+        "📁 Database File: {}",
+        sqlite_config.database_path.display()
+    );
     info!("");
     info!("Available tools:");
     info!("  • store_value    - Store value in SQLite");
@@ -188,7 +215,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("  3. get_value(key='theme')  // Returns 'dark' - persisted in SQLite!");
     info!("  4. session_info()  // View SQLite backend info");
     info!("");
-    info!("🔧 Persistence: Data stored in {} survives server restarts", sqlite_config.database_path.display());
+    info!(
+        "🔧 Persistence: Data stored in {} survives server restarts",
+        sqlite_config.database_path.display()
+    );
 
     server.run().await?;
     Ok(())

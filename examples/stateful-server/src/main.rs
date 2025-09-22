@@ -7,10 +7,13 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use turul_mcp_server::{McpServer, McpTool, SessionContext};
-use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
-use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
 use serde_json::{Value, json};
+use turul_mcp_protocol::tools::{
+    CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
+    HasOutputSchema, HasToolMeta,
+};
+use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema};
+use turul_mcp_server::{McpServer, McpTool, SessionContext};
 
 /// Shopping cart tool that maintains state across requests
 struct ShoppingCartTool {
@@ -21,15 +24,28 @@ impl ShoppingCartTool {
     fn new() -> Self {
         let input_schema = ToolSchema::object()
             .with_properties(HashMap::from([
-                ("action".to_string(), JsonSchema::string_enum(vec![
-                    "add".to_string(), "remove".to_string(), "list".to_string(), "clear".to_string()
-                ]).with_description("Cart action to perform")),
-                ("item".to_string(), JsonSchema::string()
-                    .with_description("Item name (required for add/remove)")),
-                ("quantity".to_string(), JsonSchema::integer()
-                    .with_description("Item quantity (default: 1)")),
-                ("price".to_string(), JsonSchema::number()
-                    .with_description("Item price (required for add)")),
+                (
+                    "action".to_string(),
+                    JsonSchema::string_enum(vec![
+                        "add".to_string(),
+                        "remove".to_string(),
+                        "list".to_string(),
+                        "clear".to_string(),
+                    ])
+                    .with_description("Cart action to perform"),
+                ),
+                (
+                    "item".to_string(),
+                    JsonSchema::string().with_description("Item name (required for add/remove)"),
+                ),
+                (
+                    "quantity".to_string(),
+                    JsonSchema::integer().with_description("Item quantity (default: 1)"),
+                ),
+                (
+                    "price".to_string(),
+                    JsonSchema::number().with_description("Item price (required for add)"),
+                ),
             ]))
             .with_required(vec!["action".to_string()]);
         Self { input_schema }
@@ -74,44 +90,64 @@ impl HasToolMeta for ShoppingCartTool {
 
 #[async_trait]
 impl McpTool for ShoppingCartTool {
-    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
-        let action = args.get("action")
+    async fn call(
+        &self,
+        args: Value,
+        session: Option<SessionContext>,
+    ) -> McpResult<CallToolResult> {
+        let action = args
+            .get("action")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("action"))?;
 
-        let session = session.ok_or_else(|| McpError::SessionError("This tool requires session context".to_string()))?;
+        let session = session.ok_or_else(|| {
+            McpError::SessionError("This tool requires session context".to_string())
+        })?;
 
         // Get or create cart state for this session
-        let mut cart_items: HashMap<String, (i64, f64)> = session.get_typed_state("cart_items").await
+        let mut cart_items: HashMap<String, (i64, f64)> = session
+            .get_typed_state("cart_items")
+            .await
             .unwrap_or_default();
-        
+
         let result = match action {
             "add" => {
-                let item = args.get("item")
+                let item = args
+                    .get("item")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| McpError::missing_param("item"))?;
-                let quantity = args.get("quantity")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(1);
-                let price = args.get("price")
+                let quantity = args.get("quantity").and_then(|v| v.as_i64()).unwrap_or(1);
+                let price = args
+                    .get("price")
                     .and_then(|v| v.as_f64())
                     .ok_or_else(|| McpError::missing_param("price"))?;
 
                 if quantity <= 0 {
-                    return Err(McpError::param_out_of_range("quantity", &quantity.to_string(), "must be positive"));
+                    return Err(McpError::param_out_of_range(
+                        "quantity",
+                        &quantity.to_string(),
+                        "must be positive",
+                    ));
                 }
                 if price < 0.0 {
-                    return Err(McpError::param_out_of_range("price", &price.to_string(), "cannot be negative"));
+                    return Err(McpError::param_out_of_range(
+                        "price",
+                        &price.to_string(),
+                        "cannot be negative",
+                    ));
                 }
 
                 // Add or update item
-                let (existing_qty, existing_price) = cart_items.get(item).cloned().unwrap_or((0, price));
+                let (existing_qty, existing_price) =
+                    cart_items.get(item).cloned().unwrap_or((0, price));
                 cart_items.insert(item.to_string(), (existing_qty + quantity, existing_price));
 
                 session.set_typed_state("cart_items", &cart_items).await?;
-                
+
                 // Send progress notification
-                session.notify_progress(format!("cart_item_{}", item), 1).await;
+                session
+                    .notify_progress(format!("cart_item_{}", item), 1)
+                    .await;
 
                 json!({
                     "action": "add",
@@ -123,18 +159,19 @@ impl McpTool for ShoppingCartTool {
                 })
             }
             "remove" => {
-                let item = args.get("item")
+                let item = args
+                    .get("item")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| McpError::missing_param("item"))?;
-                let quantity = args.get("quantity")
-                    .and_then(|v| v.as_i64())
-                    .unwrap_or(1);
+                let quantity = args.get("quantity").and_then(|v| v.as_i64()).unwrap_or(1);
 
                 if let Some((existing_qty, price)) = cart_items.get(item).cloned() {
                     let new_qty = existing_qty - quantity;
                     if new_qty <= 0 {
                         cart_items.remove(item);
-                        session.notify_progress(format!("cart_remove_{}", item), 1).await;
+                        session
+                            .notify_progress(format!("cart_remove_{}", item), 1)
+                            .await;
                         json!({
                             "action": "remove",
                             "item": item,
@@ -144,7 +181,9 @@ impl McpTool for ShoppingCartTool {
                         })
                     } else {
                         cart_items.insert(item.to_string(), (new_qty, price));
-                        session.notify_progress(format!("cart_update_{}", item), 1).await;
+                        session
+                            .notify_progress(format!("cart_update_{}", item), 1)
+                            .await;
                         json!({
                             "action": "remove",
                             "item": item,
@@ -154,20 +193,27 @@ impl McpTool for ShoppingCartTool {
                         })
                     }
                 } else {
-                    return Err(McpError::tool_execution(&format!("Item '{}' not found in cart", item)));
+                    return Err(McpError::tool_execution(&format!(
+                        "Item '{}' not found in cart",
+                        item
+                    )));
                 }
             }
             "list" => {
-                let items: Vec<Value> = cart_items.iter().map(|(name, (qty, price))| {
-                    json!({
-                        "name": name,
-                        "quantity": qty,
-                        "price": price,
-                        "subtotal": *qty as f64 * price
+                let items: Vec<Value> = cart_items
+                    .iter()
+                    .map(|(name, (qty, price))| {
+                        json!({
+                            "name": name,
+                            "quantity": qty,
+                            "price": price,
+                            "subtotal": *qty as f64 * price
+                        })
                     })
-                }).collect();
+                    .collect();
 
-                let total: f64 = cart_items.values()
+                let total: f64 = cart_items
+                    .values()
                     .map(|(qty, price)| *qty as f64 * price)
                     .sum();
 
@@ -192,7 +238,13 @@ impl McpTool for ShoppingCartTool {
                     "message": "Shopping cart cleared"
                 })
             }
-            _ => return Err(McpError::invalid_param_type("action", "add|remove|list|clear", action))
+            _ => {
+                return Err(McpError::invalid_param_type(
+                    "action",
+                    "add|remove|list|clear",
+                    action,
+                ));
+            }
         };
 
         // Update session state
@@ -216,13 +268,24 @@ impl UserPreferencesTool {
     fn new() -> Self {
         let input_schema = ToolSchema::object()
             .with_properties(HashMap::from([
-                ("action".to_string(), JsonSchema::string_enum(vec![
-                    "set".to_string(), "get".to_string(), "list".to_string(), "reset".to_string()
-                ]).with_description("Preference action to perform")),
-                ("key".to_string(), JsonSchema::string()
-                    .with_description("Preference key (required for set/get)")),
-                ("value".to_string(), JsonSchema::object()
-                    .with_description("Preference value (required for set)")),
+                (
+                    "action".to_string(),
+                    JsonSchema::string_enum(vec![
+                        "set".to_string(),
+                        "get".to_string(),
+                        "list".to_string(),
+                        "reset".to_string(),
+                    ])
+                    .with_description("Preference action to perform"),
+                ),
+                (
+                    "key".to_string(),
+                    JsonSchema::string().with_description("Preference key (required for set/get)"),
+                ),
+                (
+                    "value".to_string(),
+                    JsonSchema::object().with_description("Preference value (required for set)"),
+                ),
             ]))
             .with_required(vec!["action".to_string()]);
         Self { input_schema }
@@ -267,27 +330,40 @@ impl HasToolMeta for UserPreferencesTool {
 
 #[async_trait]
 impl McpTool for UserPreferencesTool {
-    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
-        let action = args.get("action")
+    async fn call(
+        &self,
+        args: Value,
+        session: Option<SessionContext>,
+    ) -> McpResult<CallToolResult> {
+        let action = args
+            .get("action")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("action"))?;
 
-        let session = session.ok_or_else(|| McpError::SessionError("This tool requires session context".to_string()))?;
+        let session = session.ok_or_else(|| {
+            McpError::SessionError("This tool requires session context".to_string())
+        })?;
 
         // Get or create preferences state
-        let mut preferences: HashMap<String, Value> = session.get_typed_state("user_preferences").await
+        let mut preferences: HashMap<String, Value> = session
+            .get_typed_state("user_preferences")
+            .await
             .unwrap_or_default();
 
         let result = match action {
             "set" => {
-                let key = args.get("key")
+                let key = args
+                    .get("key")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| McpError::missing_param("key"))?;
-                let value = args.get("value")
+                let value = args
+                    .get("value")
                     .ok_or_else(|| McpError::missing_param("value"))?;
 
                 preferences.insert(key.to_string(), value.clone());
-                session.set_typed_state("user_preferences", &preferences).await?;
+                session
+                    .set_typed_state("user_preferences", &preferences)
+                    .await?;
 
                 json!({
                     "action": "set",
@@ -297,7 +373,8 @@ impl McpTool for UserPreferencesTool {
                 })
             }
             "get" => {
-                let key = args.get("key")
+                let key = args
+                    .get("key")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| McpError::missing_param("key"))?;
 
@@ -328,7 +405,9 @@ impl McpTool for UserPreferencesTool {
             "reset" => {
                 let cleared_count = preferences.len();
                 preferences.clear();
-                session.set_typed_state("user_preferences", &preferences).await?;
+                session
+                    .set_typed_state("user_preferences", &preferences)
+                    .await?;
 
                 json!({
                     "action": "reset",
@@ -336,7 +415,13 @@ impl McpTool for UserPreferencesTool {
                     "message": "All preferences cleared"
                 })
             }
-            _ => return Err(McpError::invalid_param_type("action", "set|get|list|reset", action))
+            _ => {
+                return Err(McpError::invalid_param_type(
+                    "action",
+                    "set|get|list|reset",
+                    action,
+                ));
+            }
         };
 
         Ok(CallToolResult {
@@ -398,7 +483,11 @@ impl HasToolMeta for SessionInfoTool {
 
 #[async_trait]
 impl McpTool for SessionInfoTool {
-    async fn call(&self, _args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
+    async fn call(
+        &self,
+        _args: Value,
+        session: Option<SessionContext>,
+    ) -> McpResult<CallToolResult> {
         if let Some(session) = session {
             let session_id = &session.session_id;
             let is_initialized = (session.is_initialized)().await;
@@ -418,10 +507,13 @@ impl McpTool for SessionInfoTool {
             })
         } else {
             Ok(CallToolResult {
-                content: vec![ToolResult::text(json!({
-                    "has_session": false,
-                    "message": "No session context available"
-                }).to_string())],
+                content: vec![ToolResult::text(
+                    json!({
+                        "has_session": false,
+                        "message": "No session context available"
+                    })
+                    .to_string(),
+                )],
                 is_error: None,
                 structured_content: None,
                 meta: None,
@@ -456,7 +548,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - user_preferences: Manage user preferences (set, get, list, reset)");
     println!("  - session_info: Get current session information");
     println!("\\nExample usage:");
-    println!("  1. Add items to cart: shopping_cart(action='add', item='apple', quantity=3, price=1.50)");
+    println!(
+        "  1. Add items to cart: shopping_cart(action='add', item='apple', quantity=3, price=1.50)"
+    );
     println!("  2. List cart contents: shopping_cart(action='list')");
     println!("  3. Set preference: user_preferences(action='set', key='theme', value='dark')");
     println!("  4. Get session info: session_info()");

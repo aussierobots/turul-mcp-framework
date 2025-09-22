@@ -1,7 +1,7 @@
 //! Test utilities specific to elicitation protocol testing
 
-use std::collections::HashMap;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 /// Helper to create elicitation capabilities for initialize
 pub fn elicitation_capabilities() -> Value {

@@ -3,25 +3,22 @@
 //! This server provides MCP 2025-06-18 compliant HTTP transport with
 //! pluggable session storage backends and proper SSE resumability.
 
-use std::net::SocketAddr;
-use std::sync::Arc;
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response};
-use http_body_util::{Full, BodyExt};
-use bytes::Bytes;
 use hyper_util::rt::TokioIo;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::{info, error, debug};
+use tracing::{debug, error, info};
 
-use turul_mcp_json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
+use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
 use turul_mcp_protocol::McpError;
 use turul_mcp_session_storage::InMemorySessionStorage;
 
-use crate::{
-    Result, SessionMcpHandler, StreamConfig, StreamManager,
-    CorsLayer
-};
+use crate::{CorsLayer, Result, SessionMcpHandler, StreamConfig, StreamManager};
 
 /// Configuration for the HTTP MCP server
 #[derive(Debug, Clone)]
@@ -48,7 +45,7 @@ impl Default for ServerConfig {
             bind_address: "127.0.0.1:8000".parse().unwrap(),
             mcp_path: "/mcp".to_string(),
             enable_cors: true,
-            max_body_size: 1024 * 1024, // 1MB
+            max_body_size: 1024 * 1024,            // 1MB
             enable_get_sse: cfg!(feature = "sse"), // GET SSE enabled if "sse" feature is compiled
             enable_post_sse: false, // Disabled by default for better client compatibility (e.g., MCP Inspector)
             session_expiry_minutes: 30, // 30 minutes default
@@ -78,7 +75,9 @@ impl HttpMcpServerBuilder {
 
 impl HttpMcpServerBuilder {
     /// Create a new builder with specific session storage
-    pub fn with_storage(session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>) -> Self {
+    pub fn with_storage(
+        session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
+    ) -> Self {
         Self {
             config: ServerConfig::default(),
             dispatcher: JsonRpcDispatcher::<McpError>::new(),
@@ -162,12 +161,14 @@ impl HttpMcpServerBuilder {
 
     /// Build the HTTP MCP server
     pub fn build(self) -> HttpMcpServer {
-        let session_storage = self.session_storage.expect("Session storage must be provided");
+        let session_storage = self
+            .session_storage
+            .expect("Session storage must be provided");
 
         // ✅ CORRECTED ARCHITECTURE: Create single shared StreamManager instance
         let stream_manager = Arc::new(StreamManager::with_config(
             Arc::clone(&session_storage),
-            self.stream_config.clone()
+            self.stream_config.clone(),
         ));
 
         HttpMcpServer {
@@ -206,7 +207,9 @@ impl HttpMcpServer {
 
 impl HttpMcpServer {
     /// Create a new builder with specific session storage
-    pub fn builder_with_storage(session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>) -> HttpMcpServerBuilder {
+    pub fn builder_with_storage(
+        session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
+    ) -> HttpMcpServerBuilder {
         HttpMcpServerBuilder::with_storage(session_storage)
     }
 
@@ -242,9 +245,7 @@ impl HttpMcpServer {
             let handler_clone = handler.clone();
             tokio::spawn(async move {
                 let io = TokioIo::new(stream);
-                let service = service_fn(move |req| {
-                    handle_request(req, handler_clone.clone())
-                });
+                let service = service_fn(move |req| handle_request(req, handler_clone.clone()));
 
                 if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
                     // Filter out common client disconnection errors that aren't actual problems
@@ -268,7 +269,8 @@ impl HttpMcpServer {
             loop {
                 interval.tick().await;
 
-                let expire_time = std::time::SystemTime::now() - std::time::Duration::from_secs(session_expiry_minutes * 60);
+                let expire_time = std::time::SystemTime::now()
+                    - std::time::Duration::from_secs(session_expiry_minutes * 60);
                 match storage.expire_sessions(expire_time).await {
                     Ok(expired) => {
                         if !expired.is_empty() {
@@ -303,7 +305,10 @@ impl HttpMcpServer {
 async fn handle_request(
     req: Request<hyper::body::Incoming>,
     handler: SessionMcpHandler,
-) -> std::result::Result<Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>, hyper::Error> {
+) -> std::result::Result<
+    Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>,
+    hyper::Error,
+> {
     let method = req.method().clone();
     let uri = req.uri().clone();
     let path = uri.path();
@@ -318,7 +323,11 @@ async fn handle_request(
                 error!("Request handling error: {}", err);
                 Response::builder()
                     .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Full::new(Bytes::from(format!("Internal Server Error: {}", err))).map_err(|never| match never {}).boxed_unsync())
+                    .body(
+                        Full::new(Bytes::from(format!("Internal Server Error: {}", err)))
+                            .map_err(|never| match never {})
+                            .boxed_unsync(),
+                    )
                     .unwrap()
             }
         }
@@ -326,7 +335,11 @@ async fn handle_request(
         // 404 for other paths
         Response::builder()
             .status(hyper::StatusCode::NOT_FOUND)
-            .body(Full::new(Bytes::from("Not Found")).map_err(|never| match never {}).boxed_unsync())
+            .body(
+                Full::new(Bytes::from("Not Found"))
+                    .map_err(|never| match never {})
+                    .boxed_unsync(),
+            )
             .unwrap()
     };
 

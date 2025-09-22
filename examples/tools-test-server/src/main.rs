@@ -8,7 +8,7 @@
 //!
 //! ### Basic Tools (Coverage)
 //! - `calculator` - Basic arithmetic operations with parameter validation
-//! - `string_processor` - Text manipulation with various input types  
+//! - `string_processor` - Text manipulation with various input types
 //! - `data_transformer` - JSON/data transformation operations
 //! - `session_counter` - Session-aware state management
 //! - `progress_tracker` - Long-running operation with progress updates
@@ -19,7 +19,7 @@
 //! ```bash
 //! # Start server on random port
 //! cargo run --package tools-test-server
-//! 
+//!
 //! # Test with curl
 //! curl -X POST http://127.0.0.1:PORT/mcp \
 //!   -H "Content-Type: application/json" \
@@ -47,10 +47,10 @@ use tokio::time::sleep;
 use tracing::info;
 use uuid::Uuid;
 
-use turul_mcp_server::prelude::*;
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::schema::{JsonSchema, JsonSchemaGenerator};
 use turul_mcp_protocol::tools::ToolSchema;
+use turul_mcp_server::prelude::*;
 
 // ===== BASIC TOOLS (Core functionality testing) =====
 
@@ -72,24 +72,32 @@ impl JsonSchemaGenerator for CalculatorResult {
                 ("a".to_string(), JsonSchema::number()),
                 ("b".to_string(), JsonSchema::number()),
             ]))
-            .with_required(vec!["result".to_string(), "operation".to_string(), "a".to_string(), "b".to_string()])
+            .with_required(vec![
+                "result".to_string(),
+                "operation".to_string(),
+                "a".to_string(),
+                "b".to_string(),
+            ])
     }
 }
 
 /// Basic calculator tool for testing arithmetic operations with parameter validation
 #[derive(McpTool, Clone)]
-#[tool(name = "calculator", description = "Performs basic arithmetic operations (add, subtract, multiply, divide) with validation")]
+#[tool(
+    name = "calculator",
+    description = "Performs basic arithmetic operations (add, subtract, multiply, divide) with validation"
+)]
 #[output_type(CalculatorResult)]
 pub struct CalculatorTool {
     /// The operation to perform
     #[param(description = "Operation: add, subtract, multiply, divide")]
     pub operation: String,
-    
+
     /// First number
     #[param(description = "First number")]
     pub a: f64,
-    
-    /// Second number  
+
+    /// Second number
     #[param(description = "Second number")]
     pub b: f64,
 }
@@ -106,9 +114,14 @@ impl CalculatorTool {
                 }
                 self.a / self.b
             }
-            _ => return Err(McpError::tool_execution(&format!("Invalid operation: {}", self.operation))),
+            _ => {
+                return Err(McpError::tool_execution(&format!(
+                    "Invalid operation: {}",
+                    self.operation
+                )))
+            }
         };
-        
+
         Ok(CalculatorResult {
             result,
             operation: self.operation.clone(),
@@ -136,19 +149,26 @@ impl JsonSchemaGenerator for StringResult {
                 ("original".to_string(), JsonSchema::string()),
                 ("metadata".to_string(), JsonSchema::object()),
             ]))
-            .with_required(vec!["result".to_string(), "operation".to_string(), "original".to_string()])
+            .with_required(vec![
+                "result".to_string(),
+                "operation".to_string(),
+                "original".to_string(),
+            ])
     }
 }
 
 /// String processing tool for text manipulation operations
 #[derive(McpTool, Clone)]
-#[tool(name = "string_processor", description = "Processes text with operations like uppercase, lowercase, reverse, length")]
+#[tool(
+    name = "string_processor",
+    description = "Processes text with operations like uppercase, lowercase, reverse, length"
+)]
 #[output_type(StringResult)]
 pub struct StringProcessorTool {
     /// Text to process
     #[param(description = "Input text to process")]
     pub text: String,
-    
+
     /// Operation to perform
     #[param(description = "Operation: uppercase, lowercase, reverse, length, trim")]
     pub operation: String,
@@ -157,7 +177,7 @@ pub struct StringProcessorTool {
 impl StringProcessorTool {
     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<StringResult> {
         let mut metadata = HashMap::new();
-        
+
         let result = match self.operation.as_str() {
             "uppercase" => self.text.to_uppercase(),
             "lowercase" => self.text.to_lowercase(),
@@ -170,9 +190,14 @@ impl StringProcessorTool {
                 format!("{} characters, {} bytes", char_count, byte_count)
             }
             "trim" => self.text.trim().to_string(),
-            _ => return Err(McpError::tool_execution(&format!("Invalid operation: {}", self.operation))),
+            _ => {
+                return Err(McpError::tool_execution(&format!(
+                    "Invalid operation: {}",
+                    self.operation
+                )))
+            }
         };
-        
+
         Ok(StringResult {
             result,
             operation: self.operation.clone(),
@@ -200,19 +225,26 @@ impl JsonSchemaGenerator for DataResult {
                 ("input_type".to_string(), JsonSchema::string()),
                 ("metadata".to_string(), JsonSchema::object()),
             ]))
-            .with_required(vec!["result".to_string(), "operation".to_string(), "input_type".to_string()])
+            .with_required(vec![
+                "result".to_string(),
+                "operation".to_string(),
+                "input_type".to_string(),
+            ])
     }
 }
 
 /// Data transformation tool for JSON operations
 #[derive(McpTool, Clone)]
-#[tool(name = "data_transformer", description = "Transforms JSON data with operations like extract, merge, validate")]
+#[tool(
+    name = "data_transformer",
+    description = "Transforms JSON data with operations like extract, merge, validate"
+)]
 #[output_type(DataResult)]
 pub struct DataTransformerTool {
     /// JSON data to transform
     #[param(description = "JSON data to transform")]
     pub data: serde_json::Value,
-    
+
     /// Operation to perform
     #[param(description = "Operation: extract_keys, count_items, validate, pretty_print")]
     pub operation: String,
@@ -221,7 +253,7 @@ pub struct DataTransformerTool {
 impl DataTransformerTool {
     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<DataResult> {
         let mut metadata = HashMap::new();
-        
+
         let input_type = match &self.data {
             serde_json::Value::Null => "null",
             serde_json::Value::Bool(_) => "boolean",
@@ -229,8 +261,9 @@ impl DataTransformerTool {
             serde_json::Value::String(_) => "string",
             serde_json::Value::Array(_) => "array",
             serde_json::Value::Object(_) => "object",
-        }.to_string();
-        
+        }
+        .to_string();
+
         let result = match self.operation.as_str() {
             "extract_keys" => {
                 if let serde_json::Value::Object(obj) = &self.data {
@@ -238,7 +271,9 @@ impl DataTransformerTool {
                     metadata.insert("key_count".to_string(), serde_json::json!(keys.len()));
                     serde_json::json!({"keys": keys})
                 } else {
-                    return Err(McpError::tool_execution("Data must be an object to extract keys"));
+                    return Err(McpError::tool_execution(
+                        "Data must be an object to extract keys",
+                    ));
                 }
             }
             "count_items" => {
@@ -257,13 +292,19 @@ impl DataTransformerTool {
                 })
             }
             "pretty_print" => {
-                let pretty = serde_json::to_string_pretty(&self.data)
-                    .map_err(|e| McpError::tool_execution(&format!("Failed to pretty print: {}", e)))?;
+                let pretty = serde_json::to_string_pretty(&self.data).map_err(|e| {
+                    McpError::tool_execution(&format!("Failed to pretty print: {}", e))
+                })?;
                 serde_json::json!({"formatted": pretty})
             }
-            _ => return Err(McpError::tool_execution(&format!("Invalid operation: {}", self.operation))),
+            _ => {
+                return Err(McpError::tool_execution(&format!(
+                    "Invalid operation: {}",
+                    self.operation
+                )))
+            }
         };
-        
+
         Ok(DataResult {
             result,
             operation: self.operation.clone(),
@@ -293,19 +334,26 @@ impl JsonSchemaGenerator for CounterResult {
                 ("amount".to_string(), JsonSchema::integer()),
                 ("total_sessions".to_string(), JsonSchema::integer()),
             ]))
-            .with_required(vec!["session_id".to_string(), "operation".to_string(), "current_value".to_string()])
+            .with_required(vec![
+                "session_id".to_string(),
+                "operation".to_string(),
+                "current_value".to_string(),
+            ])
     }
 }
 
 /// Session-aware counter tool that maintains state per session using proper SessionStorage integration
 #[derive(McpTool, Clone)]
-#[tool(name = "session_counter", description = "Maintains a counter per session, demonstrating proper SessionStorage integration")]
+#[tool(
+    name = "session_counter",
+    description = "Maintains a counter per session, demonstrating proper SessionStorage integration"
+)]
 #[output_type(CounterResult)]
 pub struct SessionCounterTool {
     /// Operation to perform on counter
     #[param(description = "Operation: increment, decrement, get, reset")]
     pub operation: String,
-    
+
     /// Amount to increment/decrement by (default 1)
     #[param(description = "Amount to change counter by (default 1)")]
     pub amount: Option<i64>,
@@ -316,41 +364,44 @@ impl SessionCounterTool {
         let session_context = session.ok_or_else(|| {
             McpError::tool_execution("SessionCounterTool requires session context")
         })?;
-        
+
         let session_id = session_context.session_id.clone();
         let amount = self.amount.unwrap_or(1);
         let counter_key = "counter_value";
-        
+
         // Get current counter value from session storage
         let state_value = (session_context.get_state)(counter_key).await;
-        let current_value = state_value
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
-        
+        let current_value = state_value.and_then(|v| v.as_i64()).unwrap_or(0);
+
         let new_value = match self.operation.as_str() {
             "increment" => {
                 let new_val = current_value + amount;
                 (session_context.set_state)(counter_key, json!(new_val)).await;
                 new_val
-            },
+            }
             "decrement" => {
                 let new_val = current_value - amount;
                 (session_context.set_state)(counter_key, json!(new_val)).await;
                 new_val
-            },
+            }
             "get" => current_value,
             "reset" => {
                 (session_context.set_state)(counter_key, json!(0)).await;
                 0
-            },
-            _ => return Err(McpError::tool_execution(&format!("Invalid operation: {}", self.operation))),
+            }
+            _ => {
+                return Err(McpError::tool_execution(&format!(
+                    "Invalid operation: {}",
+                    self.operation
+                )))
+            }
         };
-        
+
         // Note: total_sessions is not readily available from SessionContext
         // This would require additional API calls to the SessionStorage
         // For now, we'll set it to 1 to indicate single session isolation
         let total_sessions = 1;
-        
+
         Ok(CounterResult {
             session_id,
             operation: self.operation.clone(),
@@ -383,19 +434,27 @@ impl JsonSchemaGenerator for ProgressResult {
                 ("status".to_string(), JsonSchema::string()),
                 ("completed_at".to_string(), JsonSchema::string()),
             ]))
-            .with_required(vec!["operation".to_string(), "duration".to_string(), "steps".to_string(), "status".to_string()])
+            .with_required(vec![
+                "operation".to_string(),
+                "duration".to_string(),
+                "steps".to_string(),
+                "status".to_string(),
+            ])
     }
 }
 
 /// Progress tracking tool for long-running operations with progress notifications
 #[derive(McpTool, Clone)]
-#[tool(name = "progress_tracker", description = "Simulates long-running operation with progress notifications")]
+#[tool(
+    name = "progress_tracker",
+    description = "Simulates long-running operation with progress notifications"
+)]
 #[output_type(ProgressResult)]
 pub struct ProgressTrackerTool {
     /// Duration in seconds for the operation
     #[param(description = "Duration of operation in seconds")]
     pub duration: f64,
-    
+
     /// Number of progress updates to send
     #[param(description = "Number of progress steps (default 5)")]
     pub steps: Option<u32>,
@@ -406,28 +465,39 @@ impl ProgressTrackerTool {
         let steps = self.steps.unwrap_or(5).max(1);
         let step_duration = Duration::from_secs_f64(self.duration / steps as f64);
         let progress_token = Uuid::now_v7().to_string();
-        
-        info!("Starting progress tracking operation: {} seconds, {} steps", self.duration, steps);
-        
+
+        info!(
+            "Starting progress tracking operation: {} seconds, {} steps",
+            self.duration, steps
+        );
+
         // Send initial progress notification
         if let Some(session_context) = &session {
             session_context.notify_progress(&progress_token, 0).await;
-            info!("Starting progress tracking operation: {} seconds, {} steps", self.duration, steps);
+            info!(
+                "Starting progress tracking operation: {} seconds, {} steps",
+                self.duration, steps
+            );
         }
-        
+
         // Simulate work with progress updates
         for step in 1..=steps {
             sleep(step_duration).await;
-            
+
             if let Some(session_context) = &session {
                 let progress = (step as f64 / steps as f64 * 100.0) as u64;
-                session_context.notify_progress(&progress_token, progress).await;
-                info!("Progress: {}/{} steps completed ({}%)", step, steps, progress);
+                session_context
+                    .notify_progress(&progress_token, progress)
+                    .await;
+                info!(
+                    "Progress: {}/{} steps completed ({}%)",
+                    step, steps, progress
+                );
             } else {
                 info!("Progress: {}/{} steps completed (no session)", step, steps);
             }
         }
-        
+
         Ok(ProgressResult {
             operation: "progress_tracker".to_string(),
             duration: self.duration,
@@ -448,22 +518,26 @@ struct ErrorResult {
 impl JsonSchemaGenerator for ErrorResult {
     fn json_schema() -> ToolSchema {
         ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("message".to_string(), JsonSchema::string()),
-            ]))
+            .with_properties(HashMap::from([(
+                "message".to_string(),
+                JsonSchema::string(),
+            )]))
             .with_required(vec!["message".to_string()])
     }
 }
 
 /// Error generator tool for testing error handling
 #[derive(McpTool, Clone)]
-#[tool(name = "error_generator", description = "Generates specific types of errors for testing error handling")]
+#[tool(
+    name = "error_generator",
+    description = "Generates specific types of errors for testing error handling"
+)]
 #[output_type(ErrorResult)]
 pub struct ErrorGeneratorTool {
     /// Type of error to generate
     #[param(description = "Error type: invalid_params, tool_execution, timeout, resource_error")]
     pub error_type: String,
-    
+
     /// Custom error message
     #[param(description = "Custom error message (optional)")]
     pub message: Option<String>,
@@ -471,18 +545,26 @@ pub struct ErrorGeneratorTool {
 
 impl ErrorGeneratorTool {
     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<ErrorResult> {
-        let message = self.message.clone().unwrap_or_else(|| format!("Test error: {}", self.error_type));
-        
+        let message = self
+            .message
+            .clone()
+            .unwrap_or_else(|| format!("Test error: {}", self.error_type));
+
         match self.error_type.as_str() {
             "invalid_params" => Err(McpError::tool_execution(&message)),
             "tool_execution" => Err(McpError::tool_execution(&message)),
             "timeout" => {
                 sleep(Duration::from_secs(10)).await; // This should timeout in tests
-                Ok(ErrorResult { message: "should not reach here".to_string() })
+                Ok(ErrorResult {
+                    message: "should not reach here".to_string(),
+                })
             }
             "resource_error" => Err(McpError::resource_execution(&message)),
             "validation" => Err(McpError::validation(&message)),
-            _ => Err(McpError::tool_execution(&format!("Unknown error type: {}", self.error_type))),
+            _ => Err(McpError::tool_execution(&format!(
+                "Unknown error type: {}",
+                self.error_type
+            ))),
         }
     }
 }
@@ -505,31 +587,41 @@ impl JsonSchemaGenerator for ValidationResult {
                 ("validation_result".to_string(), JsonSchema::string()),
                 ("email".to_string(), JsonSchema::string()),
                 ("age".to_string(), JsonSchema::integer()),
-                ("config_keys".to_string(), JsonSchema::array(JsonSchema::string())),
+                (
+                    "config_keys".to_string(),
+                    JsonSchema::array(JsonSchema::string()),
+                ),
                 ("tag_count".to_string(), JsonSchema::integer()),
                 ("validated_at".to_string(), JsonSchema::string()),
             ]))
-            .with_required(vec!["validation_result".to_string(), "email".to_string(), "age".to_string()])
+            .with_required(vec![
+                "validation_result".to_string(),
+                "email".to_string(),
+                "age".to_string(),
+            ])
     }
 }
 
 /// Parameter validator tool for complex schema validation
 #[derive(McpTool, Clone)]
-#[tool(name = "parameter_validator", description = "Tests complex parameter validation scenarios")]
+#[tool(
+    name = "parameter_validator",
+    description = "Tests complex parameter validation scenarios"
+)]
 #[output_type(ValidationResult)]
 pub struct ParameterValidatorTool {
     /// Email address to validate
     #[param(description = "Email address")]
     pub email: String,
-    
+
     /// Age (must be 0-150)
     #[param(description = "Age in years (0-150)")]
     pub age: u32,
-    
+
     /// Configuration object
     #[param(description = "Configuration object")]
     pub config: serde_json::Value,
-    
+
     /// Optional tags
     #[param(description = "Optional tags array")]
     pub tags: Option<Vec<String>>,
@@ -541,22 +633,29 @@ impl ParameterValidatorTool {
         if !self.email.contains('@') || !self.email.contains('.') {
             return Err(McpError::validation("Invalid email format"));
         }
-        
+
         // Validate age range
         if self.age > 150 {
-            return Err(McpError::tool_execution(&format!("Age {} is out of range (0-150)", self.age)));
+            return Err(McpError::tool_execution(&format!(
+                "Age {} is out of range (0-150)",
+                self.age
+            )));
         }
-        
+
         // Validate config is an object
         if !self.config.is_object() {
             return Err(McpError::tool_execution("config must be an object"));
         }
-        
-        let config_keys = self.config.as_object()
+
+        let config_keys = self
+            .config
+            .as_object()
             .ok_or_else(|| McpError::tool_execution("config object validation failed"))?
-            .keys().cloned().collect();
+            .keys()
+            .cloned()
+            .collect();
         let tag_count = self.tags.as_ref().map(|t| t.len()).unwrap_or(0);
-        
+
         Ok(ValidationResult {
             validation_result: "passed".to_string(),
             email: self.email.clone(),
@@ -576,7 +675,7 @@ struct Args {
     /// Port to bind to (0 for random port)
     #[arg(short, long, default_value_t = 0)]
     port: u16,
-    
+
     /// Enable debug logging
     #[arg(short, long)]
     debug: bool,
@@ -585,51 +684,51 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    
+
     // Initialize tracing
     let log_level = if args.debug { "debug" } else { "info" };
     tracing_subscriber::fmt()
-        .with_env_filter(format!("tools_test_server={},turul_mcp_server={}", log_level, log_level))
+        .with_env_filter(format!(
+            "tools_test_server={},turul_mcp_server={}",
+            log_level, log_level
+        ))
         .init();
-    
+
     info!("🔧 MCP Tools Test Server starting...");
-    
+
     // Create server with comprehensive tool collection
     let server = McpServer::builder()
         .name("tools-test-server")
         .version("0.2.0")
         .title("MCP Tools Test Server")
         .instructions("Comprehensive test tools for E2E validation")
-        
         // Basic tools
-        .tool(CalculatorTool { 
-            operation: "add".to_string(), 
-            a: 0.0, 
-            b: 0.0 
+        .tool(CalculatorTool {
+            operation: "add".to_string(),
+            a: 0.0,
+            b: 0.0,
         })
-        .tool(StringProcessorTool { 
-            text: "".to_string(), 
-            operation: "uppercase".to_string() 
+        .tool(StringProcessorTool {
+            text: "".to_string(),
+            operation: "uppercase".to_string(),
         })
-        .tool(DataTransformerTool { 
-            data: serde_json::json!({}), 
+        .tool(DataTransformerTool {
+            data: serde_json::json!({}),
             operation: "validate".to_string(),
         })
-        
         // Advanced tools
-        .tool(SessionCounterTool { 
-            operation: "get".to_string(), 
-            amount: None 
+        .tool(SessionCounterTool {
+            operation: "get".to_string(),
+            amount: None,
         })
-        .tool(ProgressTrackerTool { 
-            duration: 1.0, 
-            steps: Some(3) 
+        .tool(ProgressTrackerTool {
+            duration: 1.0,
+            steps: Some(3),
         })
-        
         // Error testing tools
-        .tool(ErrorGeneratorTool { 
-            error_type: "tool_execution".to_string(), 
-            message: None 
+        .tool(ErrorGeneratorTool {
+            error_type: "tool_execution".to_string(),
+            message: None,
         })
         .tool(ParameterValidatorTool {
             email: "test@example.com".to_string(),
@@ -637,13 +736,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             config: serde_json::json!({}),
             tags: None,
         })
-        
         .bind_address(SocketAddr::from(([127, 0, 0, 1], args.port)))
         .build()?;
-    
+
     info!("🚀 Tools Test Server running on port {}", args.port);
     info!("📋 Available tools: calculator, string_processor, data_transformer, session_counter, progress_tracker, error_generator, parameter_validator");
-    
+
     server.run().await?;
     Ok(())
 }

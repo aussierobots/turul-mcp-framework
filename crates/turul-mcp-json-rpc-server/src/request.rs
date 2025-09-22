@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::types::{RequestId, JsonRpcVersion};
+use crate::types::{JsonRpcVersion, RequestId};
 
-/// Parameters for a JSON-RPC request  
+/// Parameters for a JSON-RPC request
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum RequestParams {
@@ -35,12 +35,11 @@ impl RequestParams {
     pub fn to_map(&self) -> HashMap<String, Value> {
         match self {
             RequestParams::Object(map) => map.clone(),
-            RequestParams::Array(vec) => {
-                vec.iter()
-                    .enumerate()
-                    .map(|(i, v)| (i.to_string(), v.clone()))
-                    .collect()
-            }
+            RequestParams::Array(vec) => vec
+                .iter()
+                .enumerate()
+                .map(|(i, v)| (i.to_string(), v.clone()))
+                .collect(),
         }
     }
 
@@ -55,9 +54,9 @@ impl RequestParams {
     /// Convert to a serde_json::Value for serialization
     pub fn to_value(&self) -> Value {
         match self {
-            RequestParams::Object(map) => Value::Object(map.iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect()),
+            RequestParams::Object(map) => {
+                Value::Object(map.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            }
             RequestParams::Array(arr) => Value::Array(arr.clone()),
         }
     }
@@ -129,14 +128,12 @@ impl JsonRpcRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, from_str, to_string};
+    use serde_json::{from_str, json, to_string};
 
     #[test]
     fn test_request_serialization() {
-        let request = JsonRpcRequest::new_no_params(
-            RequestId::Number(1),
-            "test_method".to_string(),
-        );
+        let request =
+            JsonRpcRequest::new_no_params(RequestId::Number(1), "test_method".to_string());
 
         let json = to_string(&request).unwrap();
         let parsed: JsonRpcRequest = from_str(&json).unwrap();

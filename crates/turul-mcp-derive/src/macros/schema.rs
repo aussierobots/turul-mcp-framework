@@ -10,12 +10,12 @@ use syn::{Result, Type};
 /// Implementation function for the schema_for!{} declarative macro
 pub fn schema_for_impl(input: TokenStream) -> Result<TokenStream> {
     let input = syn::parse::<Type>(input)?;
-    
+
     let expanded = quote! {
         {
             use turul_mcp_protocol::schema::JsonSchema;
             use std::collections::HashMap;
-            
+
             // Generate schema based on the type
             let schema = match stringify!(#input) {
                 "f64" | "f32" => JsonSchema::number(),
@@ -33,11 +33,11 @@ pub fn schema_for_impl(input: TokenStream) -> Result<TokenStream> {
                     JsonSchema::object().with_description("Custom type - manual schema recommended")
                 }
             };
-            
+
             schema
         }
     };
-    
+
     Ok(expanded.into())
 }
 
@@ -63,8 +63,8 @@ mod tests {
         // compile code using the macro
         for _type_input in types_to_test {
             // let result = schema_for_impl(quote::quote!(#type_input).into());
-            // assert!(result.is_ok(), "Failed to generate schema for type");
-            assert!(true, "Procedural macro testing requires compilation context");
+            // // Disabled assert:result.is_ok(), "Failed to generate schema for type"
+            // Procedural macro testing requires compilation context
         }
     }
 }

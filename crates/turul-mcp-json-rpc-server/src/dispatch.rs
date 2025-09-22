@@ -1,11 +1,8 @@
 use serde_json::Value;
 
 use crate::{
-    error::JsonRpcError,
-    notification::JsonRpcNotification,
-    request::JsonRpcRequest,
-    response::JsonRpcResponse,
-    types::RequestId,
+    error::JsonRpcError, notification::JsonRpcNotification, request::JsonRpcRequest,
+    response::JsonRpcResponse, types::RequestId,
 };
 
 /// Enum representing different types of JSON-RPC messages
@@ -30,12 +27,8 @@ impl JsonRpcMessageResult {
     /// Convert to JSON string if there's a response to send
     pub fn to_json_string(&self) -> Option<String> {
         match self {
-            JsonRpcMessageResult::Response(response) => {
-                serde_json::to_string(response).ok()
-            }
-            JsonRpcMessageResult::Error(error) => {
-                serde_json::to_string(error).ok()
-            }
+            JsonRpcMessageResult::Response(response) => serde_json::to_string(response).ok(),
+            JsonRpcMessageResult::Error(error) => serde_json::to_string(error).ok(),
             JsonRpcMessageResult::NoResponse => None,
         }
     }
@@ -53,8 +46,7 @@ impl JsonRpcMessageResult {
 
 /// Parse a JSON string into a JSON-RPC message
 pub fn parse_json_rpc_message(json_str: &str) -> Result<JsonRpcMessage, JsonRpcError> {
-    let value: Value = serde_json::from_str(json_str)
-        .map_err(|_| JsonRpcError::parse_error())?;
+    let value: Value = serde_json::from_str(json_str).map_err(|_| JsonRpcError::parse_error())?;
 
     // Check if it's a valid JSON-RPC message
     if !value.is_object() {
@@ -76,14 +68,11 @@ pub fn parse_json_rpc_message(json_str: &str) -> Result<JsonRpcMessage, JsonRpcE
             .map(JsonRpcMessage::Request)
             .map_err(|_| {
                 // Try to extract ID for error response
-                let id = obj.get("id")
-                    .and_then(|v| {
-                        match v {
-                            Value::String(s) => Some(RequestId::String(s.clone())),
-                            Value::Number(n) => n.as_i64().map(RequestId::Number),
-                            _ => None,
-                        }
-                    });
+                let id = obj.get("id").and_then(|v| match v {
+                    Value::String(s) => Some(RequestId::String(s.clone())),
+                    Value::Number(n) => n.as_i64().map(RequestId::Number),
+                    _ => None,
+                });
                 JsonRpcError::invalid_request(id)
             })
     } else {
@@ -136,7 +125,11 @@ pub fn create_success_response(id: RequestId, result: Value) -> JsonRpcMessageRe
 }
 
 /// Create a simple error response
-pub fn create_error_response(id: Option<RequestId>, code: i64, message: &str) -> JsonRpcMessageResult {
+pub fn create_error_response(
+    id: Option<RequestId>,
+    code: i64,
+    message: &str,
+) -> JsonRpcMessageResult {
     let error_obj = crate::error::JsonRpcErrorObject {
         code,
         message: message.to_string(),
@@ -192,10 +185,7 @@ mod tests {
 
     #[test]
     fn test_message_result_to_json() {
-        let response = create_success_response(
-            RequestId::Number(1),
-            json!({"result": "success"}),
-        );
+        let response = create_success_response(RequestId::Number(1), json!({"result": "success"}));
 
         let json_str = response.to_json_string().unwrap();
         assert!(json_str.contains("\"result\""));

@@ -2,10 +2,10 @@
 //!
 //! This module defines the types used for the MCP resources functionality.
 
+use crate::meta::Cursor;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use crate::meta::Cursor;
 
 // ===========================================
 // === Resource Definition Trait Hierarchy ===
@@ -15,14 +15,18 @@ use crate::meta::Cursor;
 pub trait HasResourceMetadata {
     /// Programmatic identifier (fallback display name)
     fn name(&self) -> &str;
-    
+
     /// Human-readable display name (UI contexts)
-    fn title(&self) -> Option<&str> { None }
+    fn title(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Resource description trait
 pub trait HasResourceDescription {
-    fn description(&self) -> Option<&str> { None }
+    fn description(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Resource URI trait
@@ -30,28 +34,36 @@ pub trait HasResourceUri {
     fn uri(&self) -> &str;
 }
 
-/// Resource MIME type trait  
+/// Resource MIME type trait
 pub trait HasResourceMimeType {
-    fn mime_type(&self) -> Option<&str> { None }
+    fn mime_type(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Resource size trait
 pub trait HasResourceSize {
-    fn size(&self) -> Option<u64> { None }
+    fn size(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// Resource annotations trait
 pub trait HasResourceAnnotations {
-    fn annotations(&self) -> Option<&crate::meta::Annotations> { None }
+    fn annotations(&self) -> Option<&crate::meta::Annotations> {
+        None
+    }
 }
 
 /// Resource-specific meta trait (separate from RPC _meta)
 pub trait HasResourceMeta {
-    fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 /// Complete resource definition - composed from fine-grained traits
-pub trait ResourceDefinition: 
+pub trait ResourceDefinition:
     HasResourceMetadata +       // name, title (from BaseMetadata)
     HasResourceDescription +    // description
     HasResourceUri +           // uri
@@ -59,14 +71,14 @@ pub trait ResourceDefinition:
     HasResourceSize +          // size
     HasResourceAnnotations +   // annotations
     HasResourceMeta +          // _meta (resource-specific)
-    Send + 
-    Sync 
+    Send +
+    Sync
 {
     /// Display name precedence: title > name (matches TypeScript spec)
     fn display_name(&self) -> &str {
         self.title().unwrap_or_else(|| self.name())
     }
-    
+
     /// Convert to concrete Resource struct for protocol serialization
     fn to_resource(&self) -> Resource {
         Resource {
@@ -121,27 +133,27 @@ impl ResourceTemplate {
             meta: None,
         }
     }
-    
+
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
-    
+
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
-    
+
     pub fn with_mime_type(mut self, mime_type: impl Into<String>) -> Self {
         self.mime_type = Some(mime_type.into());
         self
     }
-    
+
     pub fn with_annotations(mut self, annotations: crate::meta::Annotations) -> Self {
         self.annotations = Some(annotations);
         self
     }
-    
+
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
@@ -226,40 +238,63 @@ impl Resource {
 // Implement fine-grained traits for the concrete Resource struct
 
 impl HasResourceMetadata for Resource {
-    fn name(&self) -> &str { &self.name }
-    fn title(&self) -> Option<&str> { self.title.as_deref() }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn title(&self) -> Option<&str> {
+        self.title.as_deref()
+    }
 }
 
 impl HasResourceDescription for Resource {
-    fn description(&self) -> Option<&str> { self.description.as_deref() }
+    fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
 }
 
 impl HasResourceUri for Resource {
-    fn uri(&self) -> &str { &self.uri }
+    fn uri(&self) -> &str {
+        &self.uri
+    }
 }
 
 impl HasResourceMimeType for Resource {
-    fn mime_type(&self) -> Option<&str> { self.mime_type.as_deref() }
+    fn mime_type(&self) -> Option<&str> {
+        self.mime_type.as_deref()
+    }
 }
 
 impl HasResourceSize for Resource {
-    fn size(&self) -> Option<u64> { self.size }
+    fn size(&self) -> Option<u64> {
+        self.size
+    }
 }
 
 impl HasResourceAnnotations for Resource {
-    fn annotations(&self) -> Option<&crate::meta::Annotations> { self.annotations.as_ref() }
+    fn annotations(&self) -> Option<&crate::meta::Annotations> {
+        self.annotations.as_ref()
+    }
 }
 
 impl HasResourceMeta for Resource {
-    fn resource_meta(&self) -> Option<&HashMap<String, Value>> { self.meta.as_ref() }
+    fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
 }
 
 // Blanket implementation: any type implementing all fine-grained traits automatically implements ResourceDefinition
-impl<T> ResourceDefinition for T 
-where 
-    T: HasResourceMetadata + HasResourceDescription + HasResourceUri + HasResourceMimeType + 
-       HasResourceSize + HasResourceAnnotations + HasResourceMeta + Send + Sync 
-{}
+impl<T> ResourceDefinition for T where
+    T: HasResourceMetadata
+        + HasResourceDescription
+        + HasResourceUri
+        + HasResourceMimeType
+        + HasResourceSize
+        + HasResourceAnnotations
+        + HasResourceMeta
+        + Send
+        + Sync
+{
+}
 
 /// Parameters for resources/list request
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -275,7 +310,7 @@ pub struct ListResourcesParams {
 
 impl ListResourcesParams {
     pub fn new() -> Self {
-        Self { 
+        Self {
             cursor: None,
             meta: None,
         }
@@ -385,7 +420,7 @@ pub struct ReadResourceParams {
 
 impl ReadResourceParams {
     pub fn new(uri: impl Into<String>) -> Self {
-        Self { 
+        Self {
             uri: uri.into(),
             meta: None,
         }
@@ -485,7 +520,11 @@ impl ResourceContent {
         })
     }
 
-    pub fn blob(uri: impl Into<String>, blob: impl Into<String>, mime_type: impl Into<String>) -> Self {
+    pub fn blob(
+        uri: impl Into<String>,
+        blob: impl Into<String>,
+        mime_type: impl Into<String>,
+    ) -> Self {
         Self::Blob(BlobResourceContents {
             uri: uri.into(),
             mime_type: Some(mime_type.into()),
@@ -515,7 +554,7 @@ impl Default for ListResourceTemplatesParams {
 
 impl ListResourceTemplatesParams {
     pub fn new() -> Self {
-        Self { 
+        Self {
             cursor: None,
             meta: None,
         }
@@ -681,7 +720,7 @@ pub struct ReadResourceResult {
 
 impl ReadResourceResult {
     pub fn new(contents: Vec<ResourceContent>) -> Self {
-        Self { 
+        Self {
             contents,
             meta: None,
         }
@@ -701,7 +740,10 @@ impl ReadResourceResult {
 impl HasData for ReadResourceResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("contents".to_string(), serde_json::to_value(&self.contents).unwrap_or(Value::Null));
+        data.insert(
+            "contents".to_string(),
+            serde_json::to_value(&self.contents).unwrap_or(Value::Null),
+        );
         data
     }
 }
@@ -768,9 +810,15 @@ impl HasParams for ListResourcesRequest {
 impl HasData for ListResourceTemplatesResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("resourceTemplates".to_string(), serde_json::to_value(&self.resource_templates).unwrap_or(Value::Null));
+        data.insert(
+            "resourceTemplates".to_string(),
+            serde_json::to_value(&self.resource_templates).unwrap_or(Value::Null),
+        );
         if let Some(ref next_cursor) = self.next_cursor {
-            data.insert("nextCursor".to_string(), Value::String(next_cursor.as_str().to_string()));
+            data.insert(
+                "nextCursor".to_string(),
+                Value::String(next_cursor.as_str().to_string()),
+            );
         }
         data
     }
@@ -788,7 +836,7 @@ impl crate::traits::ListResourceTemplatesResult for ListResourceTemplatesResult 
     fn resource_templates(&self) -> &Vec<ResourceTemplate> {
         &self.resource_templates
     }
-    
+
     fn next_cursor(&self) -> Option<&Cursor> {
         self.next_cursor.as_ref()
     }
@@ -798,9 +846,15 @@ impl crate::traits::ListResourceTemplatesResult for ListResourceTemplatesResult 
 impl HasData for ListResourcesResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("resources".to_string(), serde_json::to_value(&self.resources).unwrap_or(Value::Null));
+        data.insert(
+            "resources".to_string(),
+            serde_json::to_value(&self.resources).unwrap_or(Value::Null),
+        );
         if let Some(ref next_cursor) = self.next_cursor {
-            data.insert("nextCursor".to_string(), Value::String(next_cursor.as_str().to_string()));
+            data.insert(
+                "nextCursor".to_string(),
+                Value::String(next_cursor.as_str().to_string()),
+            );
         }
         data
     }
@@ -819,7 +873,7 @@ impl crate::traits::ListResourcesResult for ListResourcesResult {
     fn resources(&self) -> &Vec<Resource> {
         &self.resources
     }
-    
+
     fn next_cursor(&self) -> Option<&Cursor> {
         self.next_cursor.as_ref()
     }
@@ -886,12 +940,12 @@ mod tests {
     fn test_trait_implementations() {
         let request = ListResourcesRequest::new();
         assert!(request.params.cursor.is_none());
-        
+
         let resources = vec![Resource::new("test://resource", "Test Resource")];
         let response = super::ListResourcesResult::new(resources);
         assert_eq!(response.resources().len(), 1);
         assert!(response.next_cursor().is_none());
-        
+
         let data = response.data();
         assert!(data.contains_key("resources"));
     }

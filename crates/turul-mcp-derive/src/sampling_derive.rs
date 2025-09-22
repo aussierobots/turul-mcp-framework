@@ -13,9 +13,9 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
     let max_tokens = extract_string_attribute(&input.attrs, "max_tokens")
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(1000);
-    
-    let temperature = extract_string_attribute(&input.attrs, "temperature")
-        .and_then(|s| s.parse::<f64>().ok());
+
+    let temperature =
+        extract_string_attribute(&input.attrs, "temperature").and_then(|s| s.parse::<f64>().ok());
 
     let model = extract_string_attribute(&input.attrs, "model");
 
@@ -90,7 +90,7 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
                         text: "This is a generated response. Override sample_impl() to customize.".to_string(),
                     },
                 };
-                
+
                 let model_name = #model.unwrap_or("unknown-model");
                 Ok(turul_mcp_protocol::sampling::CreateMessageResponse::new(response_message, model_name))
             }

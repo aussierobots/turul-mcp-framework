@@ -2,7 +2,7 @@
 //!
 //! This module implements the "Streamable HTTP" transport mechanism introduced
 //! in MCP 2025-03-26, which replaces the previous HTTP+SSE approach from 2024-11-05.
-//! 
+//!
 //! ## Key Improvements over HTTP+SSE
 //! - **Serverless Compatibility**: Enables deployment on AWS Lambda, Google Cloud Run
 //! - **Improved Scalability**: Supports chunked transfer encoding and progressive delivery
@@ -10,27 +10,26 @@
 //! - **Enterprise Network Friendly**: No long-lived connections or polling requirements
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::pin::Pin;
+use std::sync::Arc;
 
-use hyper::{Request, Response, Method, StatusCode, HeaderMap};
-use http_body_util::Full;
 use bytes::Bytes;
-use hyper::header::{CONTENT_TYPE, ACCEPT};
-use tracing::{warn, info};
 use futures::Stream;
 use http_body::Body;
+use http_body_util::Full;
+use hyper::header::{ACCEPT, CONTENT_TYPE};
+use hyper::{HeaderMap, Method, Request, Response, StatusCode};
 use serde_json::Value;
+use tracing::{info, warn};
 
 use crate::ServerConfig;
 
 /// MCP Protocol versions
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum McpProtocolVersion {
     /// Original protocol without streamable HTTP (2024-11-05)
     V2024_11_05,
-    /// Protocol including streamable HTTP (2025-03-26)  
+    /// Protocol including streamable HTTP (2025-03-26)
     V2025_03_26,
     /// Protocol with structured _meta, cursor, progressToken, and elicitation (2025-06-18)
     #[default]
@@ -39,7 +38,7 @@ pub enum McpProtocolVersion {
 
 impl McpProtocolVersion {
     /// Parse from header string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_version(s: &str) -> Option<Self> {
         match s {
             "2024-11-05" => Some(Self::V2024_11_05),
             "2025-03-26" => Some(Self::V2025_03_26),
@@ -52,7 +51,7 @@ impl McpProtocolVersion {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::V2024_11_05 => "2024-11-05",
-            Self::V2025_03_26 => "2025-03-26", 
+            Self::V2025_03_26 => "2025-03-26",
             Self::V2025_06_18 => "2025-06-18",
         }
     }
@@ -104,7 +103,6 @@ impl McpProtocolVersion {
     }
 }
 
-
 /// Streamable HTTP request context
 #[derive(Debug, Clone)]
 pub struct StreamableHttpContext {
@@ -124,12 +122,12 @@ impl StreamableHttpContext {
     /// Parse context from HTTP request headers
     pub fn from_request<T>(req: &Request<T>) -> Self {
         let headers = req.headers();
-        
+
         // Parse protocol version from MCP-Protocol-Version header
         let protocol_version = headers
             .get("MCP-Protocol-Version")
             .and_then(|h| h.to_str().ok())
-            .and_then(McpProtocolVersion::from_str)
+            .and_then(McpProtocolVersion::parse_version)
             .unwrap_or_default();
 
         // Extract session ID from Mcp-Session-Id header (note capitalization)
@@ -146,7 +144,8 @@ impl StreamableHttpContext {
             .to_ascii_lowercase();
 
         let wants_streaming = accept_header.contains("text/event-stream");
-        let accepts_json = accept_header.contains("application/json") || accept_header.contains("*/*");
+        let accepts_json =
+            accept_header.contains("application/json") || accept_header.contains("*/*");
 
         // Collect additional headers for debugging/logging
         let mut header_map = HashMap::new();
@@ -167,9 +166,9 @@ impl StreamableHttpContext {
 
     /// Check if request is compatible with streamable HTTP
     pub fn is_streamable_compatible(&self) -> bool {
-        self.protocol_version.supports_streamable_http() && 
-        self.wants_streaming &&
-        self.session_id.is_some()
+        self.protocol_version.supports_streamable_http()
+            && self.wants_streaming
+            && self.session_id.is_some()
     }
 
     /// Validate request for MCP compliance
@@ -195,28 +194,22 @@ impl StreamableHttpContext {
     /// Create response headers for this context
     pub fn response_headers(&self) -> HeaderMap {
         let mut headers = HeaderMap::new();
-        
+
         // Always include protocol version in response
         headers.insert(
             "MCP-Protocol-Version",
-            self.protocol_version.as_str().parse().unwrap()
+            self.protocol_version.as_str().parse().unwrap(),
         );
 
         // Include session ID if present
         if let Some(session_id) = &self.session_id {
-            headers.insert(
-                "Mcp-Session-Id", 
-                session_id.parse().unwrap()
-            );
+            headers.insert("Mcp-Session-Id", session_id.parse().unwrap());
         }
 
         // Add capabilities header showing supported features
         let features = self.protocol_version.supported_features();
         if !features.is_empty() {
-            headers.insert(
-                "MCP-Capabilities",
-                features.join(",").parse().unwrap()
-            );
+            headers.insert("MCP-Capabilities", features.join(",").parse().unwrap());
         }
 
         headers
@@ -238,7 +231,8 @@ impl std::fmt::Debug for StreamableResponse {
         match self {
             Self::Json(value) => f.debug_tuple("Json").field(value).finish(),
             Self::Stream(_) => f.debug_tuple("Stream").field(&"<stream>").finish(),
-            Self::Error { status, message } => f.debug_struct("Error")
+            Self::Error { status, message } => f
+                .debug_struct("Error")
                 .field("status", status)
                 .field("message", message)
                 .finish(),
@@ -250,26 +244,26 @@ impl StreamableResponse {
     /// Convert to HTTP response
     pub fn into_response(self, context: &StreamableHttpContext) -> Response<Full<Bytes>> {
         let mut response_headers = context.response_headers();
-        
+
         match self {
             StreamableResponse::Json(json) => {
                 response_headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-                
+
                 let body = serde_json::to_string(&json)
                     .unwrap_or_else(|_| r#"{"error": "Failed to serialize response"}"#.to_string());
-                
+
                 Response::builder()
                     .status(StatusCode::OK)
                     .body(Full::new(Bytes::from(body)))
                     .unwrap()
             }
-            
+
             StreamableResponse::Stream(_stream) => {
                 // For streaming responses, set appropriate headers
                 response_headers.insert(CONTENT_TYPE, "text/event-stream".parse().unwrap());
                 response_headers.insert("Cache-Control", "no-cache, no-transform".parse().unwrap());
                 response_headers.insert("Connection", "keep-alive".parse().unwrap());
-                
+
                 // TODO: Implement actual streaming body with chunked transfer encoding
                 // Should stream JSON messages over HTTP with proper Content-Type: text/event-stream
                 // For now, return 202 Accepted to indicate streaming would happen
@@ -278,20 +272,21 @@ impl StreamableResponse {
                     .body(Full::new(Bytes::from("Streaming response accepted")))
                     .unwrap()
             }
-            
+
             StreamableResponse::Error { status, message } => {
                 response_headers.insert(CONTENT_TYPE, "application/json".parse().unwrap());
-                
+
                 let error_json = serde_json::json!({
                     "error": {
                         "code": status.as_u16(),
                         "message": message
                     }
                 });
-                
-                let body = serde_json::to_string(&error_json)
-                    .unwrap_or_else(|_| r#"{"error": {"code": 500, "message": "Internal server error"}}"#.to_string());
-                
+
+                let body = serde_json::to_string(&error_json).unwrap_or_else(|_| {
+                    r#"{"error": {"code": 500, "message": "Internal server error"}}"#.to_string()
+                });
+
                 Response::builder()
                     .status(status)
                     .body(Full::new(Bytes::from(body)))
@@ -321,7 +316,7 @@ impl StreamableHttpHandler {
     {
         // Parse streamable HTTP context from request
         let context = StreamableHttpContext::from_request(&req);
-        
+
         info!(
             "Streamable HTTP request: method={}, protocol={}, session={:?}, streaming={}",
             req.method(),
@@ -336,7 +331,8 @@ impl StreamableHttpHandler {
             return StreamableResponse::Error {
                 status: StatusCode::BAD_REQUEST,
                 message: error,
-            }.into_response(&context);
+            }
+            .into_response(&context);
         }
 
         // Route based on method and streaming capability
@@ -345,103 +341,129 @@ impl StreamableHttpHandler {
             (&Method::POST, true) => self.handle_streaming_post(req, context).await,
             (&Method::POST, false) => self.handle_json_post(req, context).await,
             (&Method::DELETE, _) => self.handle_session_delete(req, context).await,
-            _ => {
-                StreamableResponse::Error {
-                    status: StatusCode::METHOD_NOT_ALLOWED,
-                    message: "Method not allowed for this endpoint".to_string(),
-                }.into_response(&context)
+            _ => StreamableResponse::Error {
+                status: StatusCode::METHOD_NOT_ALLOWED,
+                message: "Method not allowed for this endpoint".to_string(),
             }
+            .into_response(&context),
         }
     }
 
     /// Handle GET request for streaming connection
-    async fn handle_streaming_get<T>(&self, _req: Request<T>, context: StreamableHttpContext) -> Response<Full<Bytes>>
+    async fn handle_streaming_get<T>(
+        &self,
+        _req: Request<T>,
+        context: StreamableHttpContext,
+    ) -> Response<Full<Bytes>>
     where
         T: Body + Send + 'static,
     {
-        info!("Opening streaming connection for session: {:?}", context.session_id);
-        
+        info!(
+            "Opening streaming connection for session: {:?}",
+            context.session_id
+        );
+
         // TODO: Implement actual streaming connection for Streamable HTTP
         // This would typically:
         // 1. Validate session exists and is authorized
         // 2. Create bi-directional stream with chunked transfer encoding
         // 3. Return streaming response supporting progressive message delivery
         // 4. Handle connection lifecycle and graceful termination
-        
+
         StreamableResponse::Json(serde_json::json!({
             "status": "streaming_connection_opened",
             "session_id": context.session_id,
             "protocol_version": context.protocol_version.as_str(),
             "note": "Streaming implementation pending"
-        })).into_response(&context)
+        }))
+        .into_response(&context)
     }
 
     /// Handle POST request with streaming response
-    async fn handle_streaming_post<T>(&self, _req: Request<T>, context: StreamableHttpContext) -> Response<Full<Bytes>>
+    async fn handle_streaming_post<T>(
+        &self,
+        _req: Request<T>,
+        context: StreamableHttpContext,
+    ) -> Response<Full<Bytes>>
     where
         T: Body + Send + 'static,
     {
-        info!("Handling streaming POST for session: {:?}", context.session_id);
-        
+        info!(
+            "Handling streaming POST for session: {:?}",
+            context.session_id
+        );
+
         // TODO: Implement streaming POST handling for Streamable HTTP
         // This would typically:
         // 1. Parse JSON-RPC request(s) from chunked request body
         // 2. Process via dispatcher with session context
         // 3. Stream responses back with progressive message delivery
         // 4. Support multiple concurrent requests in the same session
-        
+
         StreamableResponse::Json(serde_json::json!({
             "status": "streaming_post_accepted",
             "session_id": context.session_id,
             "protocol_version": context.protocol_version.as_str(),
             "note": "Streaming POST implementation pending"
-        })).into_response(&context)
+        }))
+        .into_response(&context)
     }
 
     /// Handle POST request with JSON response
-    async fn handle_json_post<T>(&self, _req: Request<T>, context: StreamableHttpContext) -> Response<Full<Bytes>>
+    async fn handle_json_post<T>(
+        &self,
+        _req: Request<T>,
+        context: StreamableHttpContext,
+    ) -> Response<Full<Bytes>>
     where
         T: Body + Send + 'static,
     {
         info!("Handling JSON POST (non-streaming)");
-        
+
         // TODO: Implement standard JSON-RPC handling for legacy compatibility
         // This would typically:
         // 1. Parse JSON-RPC request(s) from request body
         // 2. Process via dispatcher (no session context for legacy clients)
         // 3. Return single JSON response (no streaming)
         // 4. Maintain backwards compatibility with MCP 2024-11-05 clients
-        
+
         StreamableResponse::Json(serde_json::json!({
             "status": "json_post_handled",
             "protocol_version": context.protocol_version.as_str(),
             "streaming": false,
             "note": "JSON POST implementation pending"
-        })).into_response(&context)
+        }))
+        .into_response(&context)
     }
 
     /// Handle DELETE request for session cleanup
-    async fn handle_session_delete<T>(&self, _req: Request<T>, context: StreamableHttpContext) -> Response<Full<Bytes>>
+    async fn handle_session_delete<T>(
+        &self,
+        _req: Request<T>,
+        context: StreamableHttpContext,
+    ) -> Response<Full<Bytes>>
     where
         T: Body + Send + 'static,
     {
         if let Some(session_id) = &context.session_id {
             info!("Deleting session: {}", session_id);
-            
+
             // TODO: Implement session cleanup for Streamable HTTP
             // Should clean up session state, close any active streams,
             // and release resources associated with the session ID
-            
+
             StreamableResponse::Json(serde_json::json!({
                 "status": "session_deleted",
                 "session_id": session_id,
                 "note": "Session cleanup implementation pending"
-            })).into_response(&context)
+            }))
+            .into_response(&context)
         } else {
             StreamableResponse::Error {
                 status: StatusCode::BAD_REQUEST,
                 message: "Mcp-Session-Id header required for session deletion".to_string(),
-            }.into_response(&context)
+            }
+            .into_response(&context)
         }
     }
 }
@@ -452,10 +474,19 @@ mod tests {
 
     #[test]
     fn test_protocol_version_parsing() {
-        assert_eq!(McpProtocolVersion::from_str("2024-11-05"), Some(McpProtocolVersion::V2024_11_05));
-        assert_eq!(McpProtocolVersion::from_str("2025-03-26"), Some(McpProtocolVersion::V2025_03_26));
-        assert_eq!(McpProtocolVersion::from_str("2025-06-18"), Some(McpProtocolVersion::V2025_06_18));
-        assert_eq!(McpProtocolVersion::from_str("invalid"), None);
+        assert_eq!(
+            McpProtocolVersion::parse_version("2024-11-05"),
+            Some(McpProtocolVersion::V2024_11_05)
+        );
+        assert_eq!(
+            McpProtocolVersion::parse_version("2025-03-26"),
+            Some(McpProtocolVersion::V2025_03_26)
+        );
+        assert_eq!(
+            McpProtocolVersion::parse_version("2025-06-18"),
+            Some(McpProtocolVersion::V2025_06_18)
+        );
+        assert_eq!(McpProtocolVersion::parse_version("invalid"), None);
     }
 
     #[test]

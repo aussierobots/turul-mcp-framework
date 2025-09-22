@@ -33,10 +33,10 @@ impl FileResource {
             description: format!("File resource at {}", path),
         }
     }
-    
+
     pub async fn read(&self) -> McpResult<String> {
         info!("📄 Reading file resource: {} ({})", self.uri, self.path.display());
-        
+
         // Simulate reading different file types
         let content = if self.path.extension().and_then(|s| s.to_str()) == Some("json") {
             serde_json::json!({
@@ -69,7 +69,7 @@ impl FileResource {
                 self.uri
             )
         };
-        
+
         info!("✅ Successfully read resource: {} ({} chars)", self.uri, content.len());
         Ok(content)
     }
@@ -96,10 +96,10 @@ impl ApiResource {
             description: format!("API endpoint resource: {}", endpoint),
         }
     }
-    
+
     pub async fn read(&self) -> McpResult<String> {
         info!("🌐 Reading API resource: {} -> {}", self.uri, self.endpoint);
-        
+
         // Simulate API response
         let response = serde_json::json!({
             "resource": self.uri,
@@ -120,7 +120,7 @@ impl ApiResource {
             },
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
-        
+
         info!("✅ Successfully fetched API resource: {}", self.uri);
         Ok(response.to_string())
     }
@@ -148,10 +148,10 @@ impl DatabaseResource {
             description: format!("Database query resource: {} on {}", query, table),
         }
     }
-    
+
     pub async fn read(&self) -> McpResult<String> {
         info!("💾 Reading database resource: {} ({})", self.uri, self.query);
-        
+
         // Simulate database query result
         let result = serde_json::json!({
             "resource": self.uri,
@@ -167,7 +167,7 @@ impl DatabaseResource {
             "execution_time_ms": 42,
             "timestamp": chrono::Utc::now().to_rfc3339()
         });
-        
+
         info!("✅ Successfully executed database query: {} ({} results)", self.uri, 3);
         Ok(result.to_string())
     }
@@ -198,24 +198,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "config/app.json",
         "application/json"
     );
-    
+
     let _docs_resource = FileResource::new(
         "file://docs/readme.md",
         "docs/readme.md",
         "text/markdown"
     );
-    
+
     let _api_resource = ApiResource::new(
         "api://users",
         "https://api.example.com/users"
     );
-    
+
     let _db_resource = DatabaseResource::new(
         "db://projects/active",
         "projects",
         "SELECT * FROM projects WHERE status = 'active'"
     );
-    
+
     info!("📋 Available Resources:");
     info!("   • FileResource (JSON) → resources/read (automatic)");
     info!("   • FileResource (Markdown) → resources/read (automatic)");

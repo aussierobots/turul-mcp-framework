@@ -2,13 +2,13 @@
 //!
 //! Tests for MCP security middleware integration.
 
-use crate::handlers::{ResourcesReadHandler, McpHandler};
+use crate::handlers::{McpHandler, ResourcesReadHandler};
 use crate::resource::McpResource;
-use crate::security::{SecurityMiddleware, ResourceAccessControl};
-use turul_mcp_protocol::resources::ResourceContent;
-use serde_json::{json, Value};
+use crate::security::{ResourceAccessControl, SecurityMiddleware};
 use async_trait::async_trait;
+use serde_json::{Value, json};
 use std::sync::Arc;
+use turul_mcp_protocol::resources::ResourceContent;
 
 // Simple test resource
 #[derive(Clone)]
@@ -18,7 +18,9 @@ struct SimpleTestResource {
 
 impl SimpleTestResource {
     fn new(content: impl Into<String>) -> Self {
-        Self { content: content.into() }
+        Self {
+            content: content.into(),
+        }
     }
 }
 
@@ -27,27 +29,33 @@ impl McpResource for SimpleTestResource {
     async fn read(&self, _params: Option<Value>) -> crate::McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
             "file:///tmp/test.txt",
-            &self.content
+            &self.content,
         )])
     }
 }
 
 // Required trait implementations
 use turul_mcp_protocol::resources::{
-    HasResourceMetadata, HasResourceDescription, HasResourceUri, 
-    HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta
+    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
+    HasResourceMimeType, HasResourceSize, HasResourceUri,
 };
 
 impl HasResourceMetadata for SimpleTestResource {
-    fn name(&self) -> &str { "simple_test" }
+    fn name(&self) -> &str {
+        "simple_test"
+    }
 }
 
 impl HasResourceDescription for SimpleTestResource {
-    fn description(&self) -> Option<&str> { Some("Simple test resource") }
+    fn description(&self) -> Option<&str> {
+        Some("Simple test resource")
+    }
 }
 
 impl HasResourceUri for SimpleTestResource {
-    fn uri(&self) -> &str { "file:///tmp/test.txt" }
+    fn uri(&self) -> &str {
+        "file:///tmp/test.txt"
+    }
 }
 
 impl HasResourceMimeType for SimpleTestResource {}
@@ -59,8 +67,8 @@ impl HasResourceMeta for SimpleTestResource {}
 async fn test_security_middleware_setup() {
     // Create security middleware (just test that it can be created)
     let access_control = ResourceAccessControl::default();
-    let security_middleware = SecurityMiddleware::new()
-        .with_resource_access_control(access_control);
+    let security_middleware =
+        SecurityMiddleware::new().with_resource_access_control(access_control);
 
     // Create handler with security (just test that it can be created)
     let resource = SimpleTestResource::new("Small test content");
@@ -69,10 +77,9 @@ async fn test_security_middleware_setup() {
         .add_resource(resource);
 
     // Test passes if handler can be created with security middleware
-    assert!(true, "Security middleware integration successful");
 }
 
-#[tokio::test] 
+#[tokio::test]
 async fn test_security_middleware_validates_parameters() {
     // Create restrictive security middleware
     let security_middleware = SecurityMiddleware::default();
@@ -105,5 +112,8 @@ async fn test_handler_without_security() {
     });
 
     let result = handler.handle(Some(params)).await;
-    assert!(result.is_ok(), "Handler should work without security middleware");
+    assert!(
+        result.is_ok(),
+        "Handler should work without security middleware"
+    );
 }

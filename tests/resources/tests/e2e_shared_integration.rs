@@ -2,14 +2,16 @@
 //!
 //! Tests real HTTP/SSE transport using resource-test-server with shared utilities
 
-use mcp_e2e_shared::{McpTestClient, TestServerManager, TestFixtures, SessionTestUtils};
+use mcp_e2e_shared::{McpTestClient, SessionTestUtils, TestFixtures, TestServerManager};
 use tracing::info;
 
 #[tokio::test]
 async fn test_resource_initialization_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     let result = client
@@ -25,7 +27,9 @@ async fn test_resource_initialization_with_shared_utils() {
 async fn test_resource_list_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -33,32 +37,43 @@ async fn test_resource_list_with_shared_utils() {
         .await
         .expect("Failed to initialize");
 
-    let result = client.list_resources().await.expect("Failed to list resources");
+    let result = client
+        .list_resources()
+        .await
+        .expect("Failed to list resources");
 
     TestFixtures::verify_resource_list_response(&result);
 
     // Verify specific resources are present
     let result_data = result["result"].as_object().unwrap();
     let resources = result_data["resources"].as_array().unwrap();
-    assert!(!resources.is_empty(), "Should have test resources available");
+    assert!(
+        !resources.is_empty(),
+        "Should have test resources available"
+    );
 
     // Check for key resource types
-    let resource_uris: Vec<&str> = resources
-        .iter()
-        .filter_map(|r| r["uri"].as_str())
-        .collect();
+    let resource_uris: Vec<&str> = resources.iter().filter_map(|r| r["uri"].as_str()).collect();
 
     assert!(resource_uris.iter().any(|uri| uri.starts_with("file://")));
-    assert!(resource_uris.iter().any(|uri| uri.starts_with("file:///memory/")));
-    assert!(resource_uris.iter().any(|uri| uri.starts_with("file:///error/")));
-    assert!(resource_uris.iter().any(|uri| uri.starts_with("file:///template/")));
+    assert!(resource_uris
+        .iter()
+        .any(|uri| uri.starts_with("file:///memory/")));
+    assert!(resource_uris
+        .iter()
+        .any(|uri| uri.starts_with("file:///error/")));
+    assert!(resource_uris
+        .iter()
+        .any(|uri| uri.starts_with("file:///template/")));
 }
 
 #[tokio::test]
 async fn test_resource_memory_read_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -70,7 +85,7 @@ async fn test_resource_memory_read_with_shared_utils() {
 
     if result.contains_key("result") {
         TestFixtures::verify_resource_content_response(&result);
-        
+
         let result_data = result["result"].as_object().unwrap();
         let contents = result_data["contents"].as_array().unwrap();
         let content = &contents[0];
@@ -83,7 +98,9 @@ async fn test_resource_memory_read_with_shared_utils() {
 async fn test_resource_error_handling_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -94,7 +111,10 @@ async fn test_resource_error_handling_with_shared_utils() {
         .expect("Request should succeed but resource should error");
 
     // Should get a JSON-RPC error response for not found resource
-    assert!(result.contains_key("error"), "Error resource should return JSON-RPC error response");
+    assert!(
+        result.contains_key("error"),
+        "Error resource should return JSON-RPC error response"
+    );
     TestFixtures::verify_error_response(&result);
 }
 
@@ -102,7 +122,9 @@ async fn test_resource_error_handling_with_shared_utils() {
 async fn test_session_consistency_resources() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -116,7 +138,9 @@ async fn test_session_consistency_resources() {
 async fn test_session_aware_resource_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -130,7 +154,9 @@ async fn test_session_aware_resource_with_shared_utils() {
 async fn test_resource_subscription_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -158,7 +184,9 @@ async fn test_resource_subscription_with_shared_utils() {
 async fn test_sse_notifications_resources_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -167,9 +195,7 @@ async fn test_sse_notifications_resources_with_shared_utils() {
         .expect("Failed to initialize");
 
     // Subscribe to notifications first
-    let _subscribe_result = client
-        .subscribe_resource("notify://trigger")
-        .await;
+    let _subscribe_result = client.subscribe_resource("notify://trigger").await;
 
     // Test SSE stream
     let events = client
@@ -180,7 +206,9 @@ async fn test_sse_notifications_resources_with_shared_utils() {
     // Should receive some SSE data format (if any events are available)
     if !events.is_empty() {
         info!("Received SSE events: {:?}", events);
-        assert!(events.iter().any(|e| e.contains("data:") || e.contains("event:")));
+        assert!(events
+            .iter()
+            .any(|e| e.contains("data:") || e.contains("event:")));
     }
 }
 
@@ -188,7 +216,9 @@ async fn test_sse_notifications_resources_with_shared_utils() {
 async fn test_multiple_resource_types_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -202,13 +232,19 @@ async fn test_multiple_resource_types_with_shared_utils() {
     ];
 
     for (uri, resource_type) in test_resources {
-        let result = client.read_resource(uri).await.unwrap_or_else(|_| panic!("Failed to read {} resource", resource_type));
+        let result = client
+            .read_resource(uri)
+            .await
+            .unwrap_or_else(|_| panic!("Failed to read {} resource", resource_type));
 
         if result.contains_key("result") {
             info!("Successfully read {} resource: {}", resource_type, uri);
             TestFixtures::verify_resource_content_response(&result);
         } else if result.contains_key("error") {
-            info!("{} resource returned error (expected for some): {}", resource_type, uri);
+            info!(
+                "{} resource returned error (expected for some): {}",
+                resource_type, uri
+            );
             TestFixtures::verify_error_response(&result);
         }
     }

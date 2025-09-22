@@ -23,7 +23,7 @@ struct ProjectReadme;
 impl ProjectReadme {
     async fn read_impl(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(format!(
-            "# Project Documentation\n\nWelcome to our project!\n\n## Getting Started\n\n1. Install dependencies\n2. Run the server\n3. Connect your MCP client\n\n## Features\n\n- ✅ Zero-configuration setup\n- ✅ Fine-grained trait architecture  \n- ✅ MCP 2025-06-18 specification compliant\n- ✅ Real-time SSE notifications\n\nLast updated: {}", 
+            "# Project Documentation\n\nWelcome to our project!\n\n## Getting Started\n\n1. Install dependencies\n2. Run the server\n3. Connect your MCP client\n\n## Features\n\n- ✅ Zero-configuration setup\n- ✅ Fine-grained trait architecture  \n- ✅ MCP 2025-06-18 specification compliant\n- ✅ Real-time SSE notifications\n\nLast updated: {}",
             chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
         ))])
     }
@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     info!("✨ Resources Available:");
-    info!("   • docs://project/readme - Project documentation");  
+    info!("   • docs://project/readme - Project documentation");
     info!("   • config://app/settings - Application configuration");
     info!("🎯 Server running at: http://127.0.0.1:8088/mcp");
 

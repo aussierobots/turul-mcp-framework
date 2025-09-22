@@ -3,9 +3,9 @@
 //! This module defines the high-level trait for implementing MCP notifications.
 
 use async_trait::async_trait;
-use turul_mcp_protocol::{McpResult, notifications::Notification};
-use turul_mcp_protocol::notifications::NotificationDefinition;
 use serde_json::Value;
+use turul_mcp_protocol::notifications::NotificationDefinition;
+use turul_mcp_protocol::{McpResult, notifications::Notification};
 
 /// Notification delivery status
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,20 +27,20 @@ pub struct DeliveryResult {
 }
 
 /// High-level trait for implementing MCP notifications
-/// 
+///
 /// McpNotification extends NotificationDefinition with execution capabilities.
 /// All metadata is provided by the NotificationDefinition trait, ensuring
 /// consistency between concrete Notification structs and dynamic implementations.
 #[async_trait]
 pub trait McpNotification: NotificationDefinition + Send + Sync {
     /// Send a notification (per MCP spec)
-    /// 
+    ///
     /// This method processes and delivers notifications to clients,
     /// handling serialization, transport, and error recovery.
     async fn send(&self, payload: Value) -> McpResult<DeliveryResult>;
 
     /// Optional: Check if this notification handler can send the given notification
-    /// 
+    ///
     /// This allows for conditional notification handling based on method type,
     /// payload content, or transport availability.
     fn can_send(&self, method: &str) -> bool {
@@ -48,7 +48,7 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
     }
 
     /// Optional: Get notification handler priority
-    /// 
+    ///
     /// Higher priority handlers are tried first when multiple handlers
     /// can send the same notification type.
     fn priority(&self) -> u32 {
@@ -56,18 +56,20 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
     }
 
     /// Optional: Validate the notification payload
-    /// 
+    ///
     /// This method can perform validation of notification data before sending.
     async fn validate_payload(&self, payload: &Value) -> McpResult<()> {
         // Basic validation - ensure payload is not null for required fields
         if payload.is_null() && self.requires_ack() {
-            return Err(turul_mcp_protocol::McpError::validation("Payload cannot be null for notifications requiring acknowledgment"));
+            return Err(turul_mcp_protocol::McpError::validation(
+                "Payload cannot be null for notifications requiring acknowledgment",
+            ));
         }
         Ok(())
     }
 
     /// Optional: Transform payload before sending
-    /// 
+    ///
     /// This allows for data enrichment, filtering, or formatting
     /// before the notification is transmitted.
     async fn transform_payload(&self, payload: Value) -> McpResult<Value> {
@@ -75,16 +77,20 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
     }
 
     /// Optional: Handle notification delivery errors
-    /// 
+    ///
     /// This method is called when notification delivery fails, allowing
     /// for retry logic, fallback notifications, or error logging.
-    async fn handle_error(&self, _error: &turul_mcp_protocol::McpError, attempt: u32) -> McpResult<bool> {
+    async fn handle_error(
+        &self,
+        _error: &turul_mcp_protocol::McpError,
+        attempt: u32,
+    ) -> McpResult<bool> {
         // Default: retry up to max_retries
         Ok(attempt < self.max_retries())
     }
 
     /// Optional: Batch multiple notifications
-    /// 
+    ///
     /// This method can be used to optimize notification delivery by batching
     /// multiple notifications together when supported.
     async fn batch_send(&self, payloads: Vec<Value>) -> McpResult<Vec<DeliveryResult>> {
@@ -97,7 +103,7 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
     }
 
     /// Optional: Subscribe to notification acknowledgments
-    /// 
+    ///
     /// This method can be used to track which notifications have been
     /// successfully received and processed by clients.
     async fn on_acknowledged(&self, _delivery_result: &DeliveryResult) -> McpResult<()> {
@@ -106,7 +112,7 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
     }
 
     /// Optional: Check delivery status
-    /// 
+    ///
     /// This method allows querying the current delivery status of notifications.
     async fn check_status(&self, _notification_id: &str) -> McpResult<DeliveryStatus> {
         // Default: assume sent immediately
@@ -115,16 +121,20 @@ pub trait McpNotification: NotificationDefinition + Send + Sync {
 }
 
 /// Convert an McpNotification trait object to a Notification
-/// 
+///
 /// This is a convenience function for converting notification definitions
 /// to protocol notifications.
-pub fn notification_to_protocol(notification: &dyn McpNotification, payload: Value) -> Notification {
+pub fn notification_to_protocol(
+    notification: &dyn McpNotification,
+    payload: Value,
+) -> Notification {
     let mut protocol_notification = notification.to_notification();
     // Add payload to params if not already present
     if protocol_notification.params.is_none() {
         use turul_mcp_protocol::notifications::NotificationParams;
         let mut params = NotificationParams::new();
-        if let Ok(obj) = serde_json::from_value::<std::collections::HashMap<String, Value>>(payload) {
+        if let Ok(obj) = serde_json::from_value::<std::collections::HashMap<String, Value>>(payload)
+        {
             params.other = obj;
         }
         protocol_notification.params = Some(params);
@@ -135,10 +145,10 @@ pub fn notification_to_protocol(notification: &dyn McpNotification, payload: Val
 #[cfg(test)]
 mod tests {
     use super::*;
-    use turul_mcp_protocol::notifications::{
-        HasNotificationMetadata, HasNotificationPayload, HasNotificationRules
-    };
     use serde_json::json;
+    use turul_mcp_protocol::notifications::{
+        HasNotificationMetadata, HasNotificationPayload, HasNotificationRules,
+    };
 
     struct TestNotification {
         method: String,
@@ -151,7 +161,7 @@ mod tests {
         fn method(&self) -> &str {
             &self.method
         }
-        
+
         fn requires_ack(&self) -> bool {
             self.method.contains("important")
         }
@@ -167,13 +177,17 @@ mod tests {
         fn priority(&self) -> u32 {
             self.priority
         }
-        
+
         fn can_batch(&self) -> bool {
             !self.method.contains("urgent")
         }
-        
+
         fn max_retries(&self) -> u32 {
-            if self.method.contains("critical") { 5 } else { 3 }
+            if self.method.contains("critical") {
+                5
+            } else {
+                3
+            }
         }
     }
 
@@ -183,16 +197,21 @@ mod tests {
     impl McpNotification for TestNotification {
         async fn send(&self, payload: Value) -> McpResult<DeliveryResult> {
             // Simulate notification sending
-            println!("Sending notification: {} with payload: {}", self.method, payload);
-            
+            println!(
+                "Sending notification: {} with payload: {}",
+                self.method, payload
+            );
+
             Ok(DeliveryResult {
                 status: DeliveryStatus::Sent,
                 attempts: 1,
                 error: None,
-                delivered_at: Some(std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()),
+                delivered_at: Some(
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                ),
             })
         }
     }
@@ -204,7 +223,7 @@ mod tests {
             payload: Some(json!({"data": "test"})),
             priority: 5,
         };
-        
+
         assert_eq!(notification.method(), "notifications/test");
         assert_eq!(HasNotificationRules::priority(&notification), 5);
         assert!(!notification.requires_ack());
@@ -237,7 +256,7 @@ mod tests {
 
         let payload = json!({"message": "test notification"});
         let result = notification.send(payload).await.unwrap();
-        
+
         assert_eq!(result.status, DeliveryStatus::Sent);
         assert_eq!(result.attempts, 1);
         assert!(result.error.is_none());
@@ -260,7 +279,7 @@ mod tests {
 
         let results = notification.batch_send(payloads).await.unwrap();
         assert_eq!(results.len(), 3);
-        
+
         for result in results {
             assert_eq!(result.status, DeliveryStatus::Sent);
             assert_eq!(result.attempts, 1);
@@ -275,7 +294,10 @@ mod tests {
             priority: 0,
         };
 
-        let status = notification.check_status("test-notification-123").await.unwrap();
+        let status = notification
+            .check_status("test-notification-123")
+            .await
+            .unwrap();
         assert_eq!(status, DeliveryStatus::Sent);
     }
 }

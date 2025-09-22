@@ -7,7 +7,7 @@
 #![allow(unused_imports)]
 #![allow(dead_code)]
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 
 /// A single test case
@@ -32,7 +32,7 @@ pub struct TestCase {
 pub struct TestSuite {
     /// Suite name
     pub name: String,
-    /// Suite description  
+    /// Suite description
     pub description: String,
     /// Test cases in this suite
     pub test_cases: Vec<TestCase>,
@@ -42,40 +42,40 @@ impl TestSuite {
     /// Create a comprehensive MCP 2025-06-18 specification compliance test suite
     pub fn comprehensive() -> Self {
         let mut test_cases = Vec::new();
-        
+
         // Core MCP protocol compliance tests (highest priority)
         test_cases.extend(Self::core_mcp_compliance_tests());
-        
+
         // JSON-RPC 2.0 specification tests
         test_cases.extend(Self::jsonrpc_compliance_tests());
-        
+
         // MCP Streamable HTTP specification tests
         test_cases.extend(Self::streamable_http_tests());
-        
+
         // MCP tool protocol compliance tests
         test_cases.extend(Self::tool_protocol_tests());
-        
-        // MCP resource protocol compliance tests  
+
+        // MCP resource protocol compliance tests
         test_cases.extend(Self::resource_protocol_tests());
-        
+
         // MCP notification protocol compliance tests
         test_cases.extend(Self::notification_protocol_tests());
-        
+
         // Error handling per MCP specification
         test_cases.extend(Self::mcp_error_handling_tests());
-        
+
         // Session management tests (DynamoDB, persistence, TTL)
         test_cases.extend(Self::session_management_tests());
-        
+
         // Tool notification tests (tokio broadcast channels)
         test_cases.extend(Self::tool_notification_tests());
-        
+
         // SNS integration tests (external event publishing)
         test_cases.extend(Self::sns_integration_tests());
-        
+
         // Global events broadcast tests (internal event system)
         test_cases.extend(Self::global_events_tests());
-        
+
         // DynamoDB persistence tests (session storage and retrieval)
         test_cases.extend(Self::ddb_persistence_tests());
 
@@ -90,7 +90,8 @@ impl TestSuite {
     pub fn protocol_only() -> Self {
         Self {
             name: "MCP Protocol Compliance Test Suite".to_string(),
-            description: "Validates MCP 2025-06-18 Streamable HTTP protocol implementation".to_string(),
+            description: "Validates MCP 2025-06-18 Streamable HTTP protocol implementation"
+                .to_string(),
             test_cases: Self::core_mcp_compliance_tests(),
         }
     }
@@ -108,7 +109,8 @@ impl TestSuite {
     pub fn session_only() -> Self {
         Self {
             name: "MCP Session Management Test Suite".to_string(),
-            description: "Validates session lifecycle, state management, and concurrency".to_string(),
+            description: "Validates session lifecycle, state management, and concurrency"
+                .to_string(),
             test_cases: Self::session_tests(),
         }
     }
@@ -117,7 +119,8 @@ impl TestSuite {
     pub fn infrastructure_only() -> Self {
         Self {
             name: "Infrastructure Integration Test Suite".to_string(),
-            description: "Validates AWS Lambda, DynamoDB, SNS, and other infrastructure components".to_string(),
+            description: "Validates AWS Lambda, DynamoDB, SNS, and other infrastructure components"
+                .to_string(),
             test_cases: Self::infrastructure_tests(),
         }
     }
@@ -146,7 +149,9 @@ impl TestSuite {
         vec![
             TestCase {
                 name: "MCP Initialization Protocol".to_string(),
-                description: "Validate MCP 2025-06-18 initialization handshake per specification section 4.1".to_string(),
+                description:
+                    "Validate MCP 2025-06-18 initialization handshake per specification section 4.1"
+                        .to_string(),
                 test_type: "mcp_spec_initialization".to_string(),
                 expected_duration_secs: 5,
                 parameters: Some(json!({
@@ -159,7 +164,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP Session Management Protocol".to_string(),
-                description: "Validate session lifecycle per MCP specification section 5.2".to_string(),
+                description: "Validate session lifecycle per MCP specification section 5.2"
+                    .to_string(),
                 test_type: "mcp_spec_session_lifecycle".to_string(),
                 expected_duration_secs: 8,
                 parameters: Some(json!({
@@ -171,7 +177,9 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP Protocol Version Negotiation".to_string(),
-                description: "Validate protocol version negotiation per MCP specification section 3.1".to_string(),
+                description:
+                    "Validate protocol version negotiation per MCP specification section 3.1"
+                        .to_string(),
                 test_type: "mcp_spec_version_negotiation".to_string(),
                 expected_duration_secs: 5,
                 parameters: Some(json!({
@@ -184,12 +192,13 @@ impl TestSuite {
         ]
     }
 
-    /// JSON-RPC 2.0 specification compliance tests  
+    /// JSON-RPC 2.0 specification compliance tests
     fn jsonrpc_compliance_tests() -> Vec<TestCase> {
         vec![
             TestCase {
                 name: "JSON-RPC 2.0 Request Format".to_string(),
-                description: "Validate JSON-RPC 2.0 request format per RFC specification".to_string(),
+                description: "Validate JSON-RPC 2.0 request format per RFC specification"
+                    .to_string(),
                 test_type: "jsonrpc_spec_request_format".to_string(),
                 expected_duration_secs: 5,
                 parameters: Some(json!({
@@ -202,7 +211,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "JSON-RPC 2.0 Response Format".to_string(),
-                description: "Validate JSON-RPC 2.0 response format per RFC specification".to_string(),
+                description: "Validate JSON-RPC 2.0 response format per RFC specification"
+                    .to_string(),
                 test_type: "jsonrpc_spec_response_format".to_string(),
                 expected_duration_secs: 5,
                 parameters: Some(json!({
@@ -215,7 +225,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "JSON-RPC 2.0 Error Handling".to_string(),
-                description: "Validate JSON-RPC 2.0 error response format per RFC specification".to_string(),
+                description: "Validate JSON-RPC 2.0 error response format per RFC specification"
+                    .to_string(),
                 test_type: "jsonrpc_spec_error_handling".to_string(),
                 expected_duration_secs: 8,
                 parameters: Some(json!({
@@ -235,7 +246,9 @@ impl TestSuite {
         vec![
             TestCase {
                 name: "MCP Streamable HTTP POST Requests".to_string(),
-                description: "Validate POST requests for JSON-RPC tools per MCP Streamable HTTP spec".to_string(),
+                description:
+                    "Validate POST requests for JSON-RPC tools per MCP Streamable HTTP spec"
+                        .to_string(),
                 test_type: "mcp_streamable_http_post".to_string(),
                 expected_duration_secs: 10,
                 parameters: Some(json!({
@@ -248,7 +261,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP Streamable HTTP GET SSE Streaming".to_string(),
-                description: "Validate GET requests for SSE streaming per MCP Streamable HTTP spec".to_string(),
+                description: "Validate GET requests for SSE streaming per MCP Streamable HTTP spec"
+                    .to_string(),
                 test_type: "mcp_streamable_http_get_sse".to_string(),
                 expected_duration_secs: 15,
                 parameters: Some(json!({
@@ -262,7 +276,9 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP Streamable HTTP DELETE Session Termination".to_string(),
-                description: "Validate DELETE requests for session termination per MCP 2025-06-18 spec".to_string(),
+                description:
+                    "Validate DELETE requests for session termination per MCP 2025-06-18 spec"
+                        .to_string(),
                 test_type: "mcp_streamable_http_delete_session".to_string(),
                 expected_duration_secs: 10,
                 parameters: Some(json!({
@@ -276,7 +292,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP Session Header Compliance".to_string(),
-                description: "Validate Mcp-Session-Id header handling per specification".to_string(),
+                description: "Validate Mcp-Session-Id header handling per specification"
+                    .to_string(),
                 test_type: "mcp_session_header_compliance".to_string(),
                 expected_duration_secs: 8,
                 parameters: Some(json!({
@@ -294,7 +311,9 @@ impl TestSuite {
         vec![
             TestCase {
                 name: "MCP tools/list Protocol".to_string(),
-                description: "Validate tools/list method response per MCP specification section 6.1".to_string(),
+                description:
+                    "Validate tools/list method response per MCP specification section 6.1"
+                        .to_string(),
                 test_type: "mcp_spec_tools_list".to_string(),
                 expected_duration_secs: 5,
                 parameters: Some(json!({
@@ -307,7 +326,9 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP tools/call Protocol".to_string(),
-                description: "Validate tools/call method request/response per MCP specification section 6.2".to_string(),
+                description:
+                    "Validate tools/call method request/response per MCP specification section 6.2"
+                        .to_string(),
                 test_type: "mcp_spec_tools_call".to_string(),
                 expected_duration_secs: 10,
                 parameters: Some(json!({
@@ -321,7 +342,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP Tool Input Schema Validation".to_string(),
-                description: "Validate tool input schemas conform to JSON Schema specification".to_string(),
+                description: "Validate tool input schemas conform to JSON Schema specification"
+                    .to_string(),
                 test_type: "mcp_spec_tool_schemas".to_string(),
                 expected_duration_secs: 15,
                 parameters: Some(json!({
@@ -334,7 +356,9 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP Tool Response Content Types".to_string(),
-                description: "Validate tool response content types per MCP specification section 6.3".to_string(),
+                description:
+                    "Validate tool response content types per MCP specification section 6.3"
+                        .to_string(),
                 test_type: "mcp_spec_tool_content_types".to_string(),
                 expected_duration_secs: 8,
                 parameters: Some(json!({
@@ -348,7 +372,7 @@ impl TestSuite {
         ]
     }
 
-    /// MCP resource protocol compliance tests  
+    /// MCP resource protocol compliance tests
     fn resource_protocol_tests() -> Vec<TestCase> {
         vec![
             TestCase {
@@ -385,7 +409,9 @@ impl TestSuite {
         vec![
             TestCase {
                 name: "MCP notifications/initialized Protocol".to_string(),
-                description: "Validate notifications/initialized method per MCP specification section 8.1".to_string(),
+                description:
+                    "Validate notifications/initialized method per MCP specification section 8.1"
+                        .to_string(),
                 test_type: "mcp_spec_notifications_initialized".to_string(),
                 expected_duration_secs: 5,
                 parameters: Some(json!({
@@ -397,7 +423,9 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP Progress Notifications".to_string(),
-                description: "Validate progress notification protocol per MCP specification section 8.2".to_string(),
+                description:
+                    "Validate progress notification protocol per MCP specification section 8.2"
+                        .to_string(),
                 test_type: "mcp_spec_progress_notifications".to_string(),
                 expected_duration_secs: 10,
                 parameters: Some(json!({
@@ -409,7 +437,9 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP Resource Update Notifications".to_string(),
-                description: "Validate resource update notifications per MCP specification section 8.3".to_string(),
+                description:
+                    "Validate resource update notifications per MCP specification section 8.3"
+                        .to_string(),
                 test_type: "mcp_spec_resource_notifications".to_string(),
                 expected_duration_secs: 8,
                 parameters: Some(json!({
@@ -427,7 +457,8 @@ impl TestSuite {
         vec![
             TestCase {
                 name: "MCP Standard Error Codes".to_string(),
-                description: "Validate MCP-specific error codes per specification section 9.1".to_string(),
+                description: "Validate MCP-specific error codes per specification section 9.1"
+                    .to_string(),
                 test_type: "mcp_spec_error_codes".to_string(),
                 expected_duration_secs: 10,
                 parameters: Some(json!({
@@ -441,7 +472,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP Error Response Format".to_string(),
-                description: "Validate error response format per MCP and JSON-RPC specifications".to_string(),
+                description: "Validate error response format per MCP and JSON-RPC specifications"
+                    .to_string(),
                 test_type: "mcp_spec_error_format".to_string(),
                 expected_duration_secs: 8,
                 parameters: Some(json!({
@@ -460,7 +492,8 @@ impl TestSuite {
         vec![
             TestCase {
                 name: "Session Lifecycle".to_string(),
-                description: "Test complete session lifecycle from initialization to cleanup".to_string(),
+                description: "Test complete session lifecycle from initialization to cleanup"
+                    .to_string(),
                 test_type: "session_lifecycle".to_string(),
                 expected_duration_secs: 10,
                 parameters: None,
@@ -511,7 +544,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "SNS Global Event Integration".to_string(),
-                description: "Test SNS global event publishing and tokio broadcast distribution".to_string(),
+                description: "Test SNS global event publishing and tokio broadcast distribution"
+                    .to_string(),
                 test_type: "sns_integration".to_string(),
                 expected_duration_secs: 20,
                 parameters: Some(json!({
@@ -620,7 +654,8 @@ impl TestSuite {
         vec![
             TestCase {
                 name: "SSE Streaming Basic".to_string(),
-                description: "Test basic Server-Sent Events streaming according to MCP 2025-06-18".to_string(),
+                description: "Test basic Server-Sent Events streaming according to MCP 2025-06-18"
+                    .to_string(),
                 test_type: "sse_streaming_basic".to_string(),
                 expected_duration_secs: 15,
                 parameters: Some(json!({
@@ -632,7 +667,9 @@ impl TestSuite {
             },
             TestCase {
                 name: "Multiple SSE Connections".to_string(),
-                description: "Test multiple concurrent SSE connections receiving tokio broadcast events".to_string(),
+                description:
+                    "Test multiple concurrent SSE connections receiving tokio broadcast events"
+                        .to_string(),
                 test_type: "sse_multiple_connections".to_string(),
                 expected_duration_secs: 20,
                 parameters: Some(json!({
@@ -644,7 +681,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "Global Event Broadcasting".to_string(),
-                description: "Test internal global event broadcasting via tokio channels".to_string(),
+                description: "Test internal global event broadcasting via tokio channels"
+                    .to_string(),
                 test_type: "global_event_broadcast".to_string(),
                 expected_duration_secs: 15,
                 parameters: Some(json!({
@@ -655,7 +693,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP Streamable HTTP Compliance".to_string(),
-                description: "Test MCP 2025-06-18 Streamable HTTP specification compliance".to_string(),
+                description: "Test MCP 2025-06-18 Streamable HTTP specification compliance"
+                    .to_string(),
                 test_type: "mcp_streamable_http".to_string(),
                 expected_duration_secs: 20,
                 parameters: Some(json!({
@@ -668,7 +707,9 @@ impl TestSuite {
             },
             TestCase {
                 name: "PUT vs GET Tool Invocation".to_string(),
-                description: "Test both PUT and GET methods for tool invocation per MCP specification".to_string(),
+                description:
+                    "Test both PUT and GET methods for tool invocation per MCP specification"
+                        .to_string(),
                 test_type: "http_methods_compliance".to_string(),
                 expected_duration_secs: 15,
                 parameters: Some(json!({
@@ -680,7 +721,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "Session Isolation in Streaming".to_string(),
-                description: "Test that session-specific events only go to correct SSE connections".to_string(),
+                description: "Test that session-specific events only go to correct SSE connections"
+                    .to_string(),
                 test_type: "session_isolation_streaming".to_string(),
                 expected_duration_secs: 25,
                 parameters: Some(json!({
@@ -692,7 +734,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "Legacy vs Clean Architecture".to_string(),
-                description: "Compare legacy SQS polling vs new tokio broadcast performance".to_string(),
+                description: "Compare legacy SQS polling vs new tokio broadcast performance"
+                    .to_string(),
                 test_type: "architecture_comparison".to_string(),
                 expected_duration_secs: 30,
                 parameters: Some(json!({
@@ -711,7 +754,8 @@ impl TestSuite {
         vec![
             TestCase {
                 name: "DynamoDB Session Persistence".to_string(),
-                description: "Test DynamoDB-backed session storage, retrieval, and TTL management".to_string(),
+                description: "Test DynamoDB-backed session storage, retrieval, and TTL management"
+                    .to_string(),
                 test_type: "session_management_tests".to_string(),
                 expected_duration_secs: 15,
                 parameters: Some(json!({
@@ -723,7 +767,9 @@ impl TestSuite {
             },
             TestCase {
                 name: "Session Cleanup and Management".to_string(),
-                description: "Test session cleanup, active session listing, and management operations".to_string(),
+                description:
+                    "Test session cleanup, active session listing, and management operations"
+                        .to_string(),
                 test_type: "session_management_tests".to_string(),
                 expected_duration_secs: 12,
                 parameters: Some(json!({
@@ -867,7 +913,8 @@ impl TestSuite {
         vec![
             TestCase {
                 name: "SNS Event Publishing".to_string(),
-                description: "Test SNS external event publishing for global notifications".to_string(),
+                description: "Test SNS external event publishing for global notifications"
+                    .to_string(),
                 test_type: "sns_integration_tests".to_string(),
                 expected_duration_secs: 25,
                 parameters: Some(json!({
@@ -897,7 +944,8 @@ impl TestSuite {
         vec![
             TestCase {
                 name: "Global Events Broadcast System".to_string(),
-                description: "Test tokio broadcast channels for internal global event distribution".to_string(),
+                description: "Test tokio broadcast channels for internal global event distribution"
+                    .to_string(),
                 test_type: "global_events_broadcast_tests".to_string(),
                 expected_duration_secs: 15,
                 parameters: Some(json!({
@@ -909,7 +957,8 @@ impl TestSuite {
             },
             TestCase {
                 name: "Event System Stress Test".to_string(),
-                description: "Test global event system under multiple concurrent operations".to_string(),
+                description: "Test global event system under multiple concurrent operations"
+                    .to_string(),
                 test_type: "global_events_broadcast_tests".to_string(),
                 expected_duration_secs: 22,
                 parameters: Some(json!({
@@ -927,7 +976,8 @@ impl TestSuite {
         vec![
             TestCase {
                 name: "DynamoDB Session Storage".to_string(),
-                description: "Test DynamoDB session persistence across multiple operations".to_string(),
+                description: "Test DynamoDB session persistence across multiple operations"
+                    .to_string(),
                 test_type: "ddb_persistence_tests".to_string(),
                 expected_duration_secs: 18,
                 parameters: Some(json!({

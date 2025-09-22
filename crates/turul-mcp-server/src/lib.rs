@@ -65,24 +65,24 @@
 //! - **Storage Layer**: Pluggable backends (InMemory, SQLite, PostgreSQL, DynamoDB)
 
 pub mod builder;
-pub mod tool;
-pub mod resource;
-pub mod elicitation;
-pub mod prompt;
-pub mod sampling;
 pub mod completion;
-pub mod logging;
-pub mod roots;
-pub mod notifications;
-pub mod server;
+pub mod elicitation;
 pub mod handlers;
+pub mod logging;
+pub mod notifications;
+pub mod prompt;
+pub mod resource;
+pub mod roots;
+pub mod sampling;
+pub mod server;
 pub mod session;
+pub mod tool;
 // Re-export session storage from separate crate (breaks circular dependency)
 pub use turul_mcp_session_storage as session_storage;
 pub mod dispatch;
 pub mod prelude;
-pub mod uri_template;
 pub mod security;
+pub mod uri_template;
 
 #[cfg(feature = "http")]
 pub mod http;
@@ -98,28 +98,32 @@ mod security_integration_tests;
 
 // Re-export main types
 pub use builder::McpServerBuilder;
-pub use tool::McpTool;
-pub use resource::McpResource;
-pub use elicitation::McpElicitation;
-pub use prompt::McpPrompt;
-pub use sampling::McpSampling;
 pub use completion::McpCompletion;
-pub use logging::McpLogger;
-pub use roots::McpRoot;
-pub use notifications::McpNotification;
-pub use server::{McpServer, SessionAwareInitializeHandler, SessionAwareToolHandler, ListToolsHandler, SessionAwareMcpHandlerBridge};
+pub use dispatch::{DispatchContext, DispatchMiddleware, McpDispatcher};
+pub use elicitation::McpElicitation;
 pub use handlers::*;
-pub use session::{SessionContext, SessionManager, SessionEvent};
-pub use dispatch::{McpDispatcher, DispatchMiddleware, DispatchContext};
-pub use security::{SecurityMiddleware, RateLimitConfig, ResourceAccessControl, AccessLevel, InputValidator};
+pub use logging::McpLogger;
+pub use notifications::McpNotification;
+pub use prompt::McpPrompt;
+pub use resource::McpResource;
+pub use roots::McpRoot;
+pub use sampling::McpSampling;
+pub use security::{
+    AccessLevel, InputValidator, RateLimitConfig, ResourceAccessControl, SecurityMiddleware,
+};
+pub use server::{
+    ListToolsHandler, McpServer, SessionAwareInitializeHandler, SessionAwareMcpHandlerBridge,
+    SessionAwareToolHandler,
+};
+pub use session::{SessionContext, SessionEvent, SessionManager};
+pub use tool::McpTool;
 
 // Re-export foundational types
-pub use turul_mcp_json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
+pub use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
 pub use turul_mcp_protocol::*;
 
-
 // Re-export builder pattern for Level 3 tool creation
-pub use turul_mcp_protocol::tools::builder::{ToolBuilder, DynamicTool};
+pub use turul_mcp_protocol::tools::builder::{DynamicTool, ToolBuilder};
 
 // Explicitly re-export error types for convenience
 pub use turul_mcp_protocol::{McpError, McpResult as ProtocolMcpResult};
@@ -136,15 +140,19 @@ pub type Result<T> = McpResult<T>;
 // Implement McpTool for DynamicTool (Level 3 builder pattern)
 #[async_trait::async_trait]
 impl McpTool for DynamicTool {
-    async fn call(&self, args: serde_json::Value, _session: Option<SessionContext>) -> McpResult<turul_mcp_protocol::tools::CallToolResult> {
-        use turul_mcp_protocol::tools::{HasOutputSchema, CallToolResult};
+    async fn call(
+        &self,
+        args: serde_json::Value,
+        _session: Option<SessionContext>,
+    ) -> McpResult<turul_mcp_protocol::tools::CallToolResult> {
+        use turul_mcp_protocol::tools::{CallToolResult, HasOutputSchema};
 
         match self.execute(args).await {
             Ok(result) => {
                 // Use smart response builder with automatic structured content
                 CallToolResult::from_result_with_schema(&result, self.output_schema())
             }
-            Err(e) => Err(McpError::tool_execution(&e))
+            Err(e) => Err(McpError::tool_execution(&e)),
         }
     }
 }

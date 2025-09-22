@@ -1,13 +1,13 @@
 //! DynamoDB Teardown Utility
-//! 
+//!
 //! Deletes both DynamoDB tables used by the session storage system:
 //! 1. Main session table (using MCP_SESSION_TABLE environment variable)
 //! 2. Events table ({MCP_SESSION_TABLE}-events)
 //!
 //! WARNING: This will permanently delete all session data!
 
-use turul_mcp_session_storage::{DynamoDbSessionStorage, DynamoDbConfig};
-use tracing::{info, warn, error};
+use tracing::{error, info, warn};
+use turul_mcp_session_storage::{DynamoDbConfig, DynamoDbSessionStorage};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -21,10 +21,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Deleting both session and events tables for MCP session storage");
 
     // Get configuration from environment variables (same as main server)
-    let table_name = std::env::var("MCP_SESSION_TABLE")
-        .unwrap_or_else(|_| "mcp-sessions".to_string());
-    let region = std::env::var("AWS_REGION")
-        .unwrap_or_else(|_| "us-east-1".to_string());
+    let table_name =
+        std::env::var("MCP_SESSION_TABLE").unwrap_or_else(|_| "mcp-sessions".to_string());
+    let region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
 
     info!("Configuration:");
     info!("  Session Table: {}", table_name);
@@ -36,8 +35,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = DynamoDbConfig {
         table_name: table_name.clone(),
         region: region.clone(),
-        session_ttl_minutes: 24 * 60,  // Not used for teardown
-        event_ttl_minutes: 24 * 60,    // Not used for teardown
+        session_ttl_minutes: 24 * 60, // Not used for teardown
+        event_ttl_minutes: 24 * 60,   // Not used for teardown
         max_events_per_session: 1000,
         enable_backup: true,
         enable_encryption: true,
@@ -50,13 +49,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(storage) => {
             info!("✅ Connected to DynamoDB successfully");
             storage
-        },
+        }
         Err(e) => {
             error!("❌ Failed to connect to DynamoDB: {}", e);
             error!("");
             error!("Make sure AWS credentials are configured:");
             error!("  export AWS_ACCESS_KEY_ID=your_access_key");
-            error!("  export AWS_SECRET_ACCESS_KEY=your_secret_key");  
+            error!("  export AWS_SECRET_ACCESS_KEY=your_secret_key");
             error!("  export AWS_REGION=us-east-1");
             error!("");
             error!("Or use AWS profiles:");
@@ -78,7 +77,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         error!("❌ Deletion cancelled for safety.");
         error!("");
         error!("To confirm deletion, run:");
-        error!("  CONFIRM_DELETE=yes MCP_SESSION_TABLE={} cargo run --bin dynamodb-teardown", table_name);
+        error!(
+            "  CONFIRM_DELETE=yes MCP_SESSION_TABLE={} cargo run --bin dynamodb-teardown",
+            table_name
+        );
         error!("");
         return Ok(());
     }
@@ -94,7 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("");
             info!("ℹ️  Note: It may take a few minutes for AWS to complete the deletion.");
             info!("🎉 Teardown complete!");
-        },
+        }
         Err(e) => {
             error!("❌ Failed to delete tables: {}", e);
             return Err(e.into());

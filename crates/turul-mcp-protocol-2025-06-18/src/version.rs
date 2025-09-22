@@ -9,14 +9,13 @@
 
 use serde::{Deserialize, Serialize};
 
-
 /// Supported MCP protocol versions
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum McpVersion {
     /// Original protocol without streamable HTTP (introduced 2024-11-05)
     #[serde(rename = "2024-11-05")]
     V2024_11_05,
-    /// Protocol including streamable HTTP (introduced 2025-03-26)  
+    /// Protocol including streamable HTTP (introduced 2025-03-26)
     #[serde(rename = "2025-03-26")]
     V2025_03_26,
     /// Protocol with structured _meta, cursor, progressToken, and elicitation (introduced 2025-06-18)
@@ -24,9 +23,7 @@ pub enum McpVersion {
     V2025_06_18,
 }
 
-
 impl McpVersion {
-
     /// Convert this version to its string representation
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -116,9 +113,18 @@ mod tests {
 
     #[test]
     fn test_version_parsing() {
-        assert_eq!("2024-11-05".parse::<McpVersion>().unwrap(), McpVersion::V2024_11_05);
-        assert_eq!("2025-03-26".parse::<McpVersion>().unwrap(), McpVersion::V2025_03_26);
-        assert_eq!("2025-06-18".parse::<McpVersion>().unwrap(), McpVersion::V2025_06_18);
+        assert_eq!(
+            "2024-11-05".parse::<McpVersion>().unwrap(),
+            McpVersion::V2024_11_05
+        );
+        assert_eq!(
+            "2025-03-26".parse::<McpVersion>().unwrap(),
+            McpVersion::V2025_03_26
+        );
+        assert_eq!(
+            "2025-06-18".parse::<McpVersion>().unwrap(),
+            McpVersion::V2025_06_18
+        );
         assert!("invalid".parse::<McpVersion>().is_err());
     }
 

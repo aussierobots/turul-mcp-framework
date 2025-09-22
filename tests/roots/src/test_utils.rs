@@ -1,7 +1,7 @@
 //! Test utilities specific to roots protocol testing
 
-use std::collections::HashMap;
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 /// Helper to create roots capabilities for initialize
 pub fn roots_capabilities() -> Value {
@@ -18,7 +18,8 @@ pub fn extract_roots_list(response: &HashMap<String, Value>) -> Option<Vec<Value
         .get("result")
         .and_then(|r| r.as_object())
         .and_then(|obj| obj.get("roots"))
-        .and_then(|roots| roots.as_array()).cloned()
+        .and_then(|roots| roots.as_array())
+        .cloned()
 }
 
 /// Helper to validate root object structure

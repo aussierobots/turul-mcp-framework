@@ -79,11 +79,21 @@ impl McpResource for UserProfileResource {
                     if let Some(user_id_val) = vars_obj.get("user_id") {
                         if let Some(user_id_str) = user_id_val.as_str() {
                             user_id_str.to_string()
-                        } else { "unknown".to_string() }
-                    } else { "unknown".to_string() }
-                } else { "unknown".to_string() }
-            } else { "unknown".to_string() }
-        } else { "unknown".to_string() };
+                        } else {
+                            "unknown".to_string()
+                        }
+                    } else {
+                        "unknown".to_string()
+                    }
+                } else {
+                    "unknown".to_string()
+                }
+            } else {
+                "unknown".to_string()
+            }
+        } else {
+            "unknown".to_string()
+        };
 
         self.fetch_profile_data(&user_id).await
     }

@@ -128,7 +128,7 @@ impl VersionTestTool {
     fn new() -> Self {
         let mut properties = HashMap::new();
         properties.insert("client_version".to_string(), JsonSchema::string());
-        
+
         Self {
             input_schema: ToolSchema::object()
                 .with_properties(properties)

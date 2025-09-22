@@ -585,10 +585,7 @@ mod tests {
     fn test_method_constants() {
         use super::methods::*;
 
-        assert_eq!(
-            RESOURCE_LIST_CHANGED,
-            "notifications/resources/listChanged"
-        );
+        assert_eq!(RESOURCE_LIST_CHANGED, "notifications/resources/listChanged");
         assert_eq!(TOOL_LIST_CHANGED, "notifications/tools/listChanged");
         assert_eq!(PROMPT_LIST_CHANGED, "notifications/prompts/listChanged");
         assert_eq!(ROOTS_LIST_CHANGED, "notifications/roots/listChanged");

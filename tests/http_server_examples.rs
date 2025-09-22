@@ -4,8 +4,8 @@
 //! turul-http-mcp-server README compile correctly.
 
 use turul_http_mcp_server::ServerConfig;
-use turul_mcp_server::McpServer;
 use turul_mcp_derive::mcp_tool;
+use turul_mcp_server::McpServer;
 use turul_mcp_server::{McpResult, SessionContext};
 
 /// Test basic HTTP MCP server example from turul-http-mcp-server README
@@ -48,18 +48,19 @@ fn test_sse_progress_notifications() {
     #[mcp_tool(name = "long_task", description = "Long-running task with progress")]
     async fn long_task(
         #[param(description = "Task duration in seconds")] duration: u32,
-        session: Option<SessionContext>,  // Automatic session injection
+        session: Option<SessionContext>, // Automatic session injection
     ) -> McpResult<String> {
-        for i in 1..=duration.min(3) { // Limit iterations for testing
+        for i in 1..=duration.min(3) {
+            // Limit iterations for testing
             if let Some(ref session) = session {
                 // Send progress notification via SSE
                 session.notify_progress("long-task", i as u64).await;
             }
-            
+
             // Don't actually sleep in tests
             // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
-        
+
         Ok("Task completed".to_string())
     }
 
@@ -78,25 +79,25 @@ fn test_sse_progress_notifications() {
 fn test_session_storage_configuration() {
     // Note: We can't actually test storage backends without setting up databases
     // This test verifies the configuration APIs compile correctly
-    
+
     // Note: SQLite session storage would be tested with feature flags in real usage
     // This test just verifies the configuration pattern compiles
 }
 
-/// Test session operations and graceful degradation from turul-http-mcp-server README  
+/// Test session operations and graceful degradation from turul-http-mcp-server README
 #[test]
 fn test_session_operations() {
     // This test verifies the session API calls shown in the README compile correctly
     async fn example_session_operations(session: &SessionContext) {
         let value = "test_value";
-        
+
         // Session operations should handle errors gracefully
         if let Err(e) = session.set_typed_state("key", value).await {
             // In real code: tracing::warn!("Failed to persist session state: {}", e);
             let _ = e; // Suppress unused variable warning in test
             // Operation continues without state persistence
         }
-        
+
         // Test progress and log notifications
         session.notify_progress("task-id", 50).await;
         // Note: notify_log API is more complex in practice, just test it compiles
@@ -117,11 +118,11 @@ fn test_error_handling_patterns() {
         if value.is_empty() {
             return Err("Value cannot be empty".into());
         }
-        
+
         if value.len() > 100 {
             return Err("Value too long (max 100 chars)".into());
         }
-        
+
         Ok(format!("Valid: {}", value))
     }
 

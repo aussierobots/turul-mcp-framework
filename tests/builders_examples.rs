@@ -3,9 +3,9 @@
 //! These tests verify that all builder pattern examples from the turul-mcp-builders README
 //! compile correctly and integrate properly with the server framework.
 
-use turul_mcp_server::{McpServer, ToolBuilder};
-use turul_mcp_builders::ResourceBuilder;
 use serde_json::json;
+use turul_mcp_builders::ResourceBuilder;
+use turul_mcp_server::{McpServer, ToolBuilder};
 
 /// Test basic ToolBuilder server integration example from turul-mcp-builders README
 #[test]
@@ -47,14 +47,20 @@ fn test_dynamic_tool_construction() {
         .boolean_param("validate", "Validate input data")
         .execute(|args| async move {
             let input = args.get("input").and_then(|v| v.as_str()).unwrap_or("");
-            let format = args.get("format").and_then(|v| v.as_str()).unwrap_or("json");
-            let validate = args.get("validate").and_then(|v| v.as_bool()).unwrap_or(false);
-            
+            let format = args
+                .get("format")
+                .and_then(|v| v.as_str())
+                .unwrap_or("json");
+            let validate = args
+                .get("validate")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+
             // Mock processing logic for test
             if validate && input.is_empty() {
                 return Err("Input cannot be empty".into());
             }
-            
+
             let result = format!("Processed {} as {}", input, format);
             Ok(json!({"processed": result, "format": format}))
         })
@@ -63,7 +69,7 @@ fn test_dynamic_tool_construction() {
 }
 
 /// Test ResourceBuilder example from turul-mcp-builders README
-#[test]  
+#[test]
 fn test_resource_builder() {
     let _config_resource = ResourceBuilder::new("file:///app/config.json")
         .name("app_config")
@@ -88,9 +94,12 @@ fn test_toolbuilder_parameter_types() {
         .execute(|args| async move {
             let text = args.get("text").and_then(|v| v.as_str()).unwrap_or("");
             let count = args.get("count").and_then(|v| v.as_f64()).unwrap_or(0.0);
-            let enabled = args.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false);
+            let enabled = args
+                .get("enabled")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let optional = args.get("optional").and_then(|v| v.as_str());
-            
+
             Ok(json!({
                 "result": {
                     "text": text,
@@ -112,15 +121,15 @@ fn test_toolbuilder_error_handling() {
         .string_param("input", "Input that might cause errors")
         .execute(|args| async move {
             let input = args.get("input").and_then(|v| v.as_str()).unwrap_or("");
-            
+
             if input == "error" {
                 return Err("Intentional error for testing".into());
             }
-            
+
             if input.is_empty() {
                 return Err("Input cannot be empty".into());
             }
-            
+
             Ok(json!({"processed": input}))
         })
         .build()

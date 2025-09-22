@@ -8,37 +8,36 @@
 //! - Last-Event-ID header support
 //! - Per-session event targeting
 
-use std::sync::Arc;
 use std::convert::Infallible;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
-use tracing::{debug, warn, error, info};
+use tracing::{debug, error, info, warn};
 
-use hyper::{Request, Response, Method, StatusCode};
 use bytes::Bytes;
-use hyper::header::{CONTENT_TYPE, ACCEPT};
-use http_body_util::{BodyExt, Full};
-use http_body::{Body, Frame};
 use futures::Stream;
+use http_body::{Body, Frame};
+use http_body_util::{BodyExt, Full};
+use hyper::header::{ACCEPT, CONTENT_TYPE};
+use hyper::{Method, Request, Response, StatusCode};
 
+use chrono;
 use turul_mcp_json_rpc_server::{
     JsonRpcDispatcher,
     r#async::SessionContext,
-    dispatch::{parse_json_rpc_message, JsonRpcMessage, JsonRpcMessageResult},
-    error::{JsonRpcError, JsonRpcErrorObject}
+    dispatch::{JsonRpcMessage, JsonRpcMessageResult, parse_json_rpc_message},
+    error::{JsonRpcError, JsonRpcErrorObject},
 };
 use turul_mcp_protocol::McpError;
-use turul_mcp_session_storage::InMemorySessionStorage;
 use turul_mcp_protocol::ServerCapabilities;
-use chrono;
+use turul_mcp_session_storage::InMemorySessionStorage;
 use uuid::Uuid;
 
 use crate::{
-    Result, ServerConfig, StreamConfig,
-    protocol::{extract_protocol_version, extract_session_id, extract_last_event_id},
+    Result, ServerConfig, StreamConfig, StreamManager,
     json_rpc_responses::*,
-    StreamManager,
-    notification_bridge::{StreamManagerNotificationBroadcaster, SharedNotificationBroadcaster}
+    notification_bridge::{SharedNotificationBroadcaster, StreamManagerNotificationBroadcaster},
+    protocol::{extract_last_event_id, extract_protocol_version, extract_session_id},
 };
 
 /// SSE stream body that implements hyper's Body trait
@@ -73,9 +72,7 @@ impl Body for SessionSseStream {
         cx: &mut Context<'_>,
     ) -> Poll<Option<std::result::Result<Frame<Self::Data>, Self::Error>>> {
         match self.stream.as_mut().poll_next(cx) {
-            Poll::Ready(Some(Ok(data))) => {
-                Poll::Ready(Some(Ok(Frame::data(data))))
-            }
+            Poll::Ready(Some(Ok(data))) => Poll::Ready(Some(Ok(Frame::data(data)))),
             Poll::Ready(Some(Err(never))) => match never {},
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
@@ -106,14 +103,14 @@ enum AcceptMode {
 fn parse_mcp_accept_header(accept_header: &str) -> (AcceptMode, bool) {
     let accepts_json = accept_header.contains("application/json") || accept_header.contains("*/*");
     let accepts_sse = accept_header.contains("text/event-stream");
-    
+
     let mode = match (accepts_json, accepts_sse) {
         (true, true) => AcceptMode::Compliant,
         (true, false) => AcceptMode::JsonOnly, // MCP Inspector case
         (false, true) => AcceptMode::SseOnly,
         (false, false) => AcceptMode::Invalid,
     };
-    
+
     // For SSE decision, we need both compliance and actual SSE support
     // In JsonOnly mode, we never use SSE even if server would prefer it
     let should_use_sse = match mode {
@@ -122,7 +119,7 @@ fn parse_mcp_accept_header(accept_header: &str) -> (AcceptMode, bool) {
         AcceptMode::SseOnly => true,   // Force SSE
         AcceptMode::Invalid => false,  // Fallback to JSON
     };
-    
+
     (mode, should_use_sse)
 }
 
@@ -172,7 +169,8 @@ impl SessionMcpHandler {
         dispatcher: Arc<JsonRpcDispatcher<McpError>>,
         stream_config: StreamConfig,
     ) -> Self {
-        let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> = Arc::new(InMemorySessionStorage::new());
+        let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
+            Arc::new(InMemorySessionStorage::new());
         Self::with_storage(config, dispatcher, storage, stream_config)
     }
 
@@ -204,7 +202,7 @@ impl SessionMcpHandler {
         // Create own StreamManager instance (not recommended for production)
         let stream_manager = Arc::new(StreamManager::with_config(
             Arc::clone(&session_storage),
-            stream_config.clone()
+            stream_config.clone(),
         ));
 
         Self {
@@ -221,7 +219,6 @@ impl SessionMcpHandler {
         &self.stream_manager
     }
 
-
     /// Handle MCP HTTP requests with full MCP 2025-06-18 compliance
     pub async fn handle_mcp_request(
         &self,
@@ -231,16 +228,16 @@ impl SessionMcpHandler {
             Method::POST => {
                 let response = self.handle_json_rpc_request(req).await?;
                 Ok(response)
-            },
+            }
             Method::GET => self.handle_sse_request(req).await,
             Method::DELETE => {
                 let response = self.handle_delete_request(req).await?;
                 Ok(response.map(convert_to_unified_body))
-            },
+            }
             Method::OPTIONS => {
                 let response = self.handle_preflight();
                 Ok(response.map(convert_to_unified_body))
-            },
+            }
             _ => {
                 let response = self.method_not_allowed();
                 Ok(response.map(convert_to_unified_body))
@@ -257,28 +254,38 @@ impl SessionMcpHandler {
         let protocol_version = extract_protocol_version(req.headers());
         let session_id = extract_session_id(req.headers());
 
-        debug!("POST request - Protocol: {}, Session: {:?}", protocol_version, session_id);
+        debug!(
+            "POST request - Protocol: {}, Session: {:?}",
+            protocol_version, session_id
+        );
 
         // Check content type
-        let content_type = req.headers()
+        let content_type = req
+            .headers()
             .get(CONTENT_TYPE)
             .and_then(|ct| ct.to_str().ok())
             .unwrap_or("");
 
         if !content_type.starts_with("application/json") {
             warn!("Invalid content type: {}", content_type);
-            return Ok(bad_request_response("Content-Type must be application/json").map(convert_to_unified_body));
+            return Ok(
+                bad_request_response("Content-Type must be application/json")
+                    .map(convert_to_unified_body),
+            );
         }
 
         // Parse Accept header for MCP Streamable HTTP compliance
-        let accept_header = req.headers()
+        let accept_header = req
+            .headers()
             .get(ACCEPT)
             .and_then(|accept| accept.to_str().ok())
             .unwrap_or("application/json");
 
         let (accept_mode, accepts_sse) = parse_mcp_accept_header(accept_header);
-        debug!("POST request Accept header: '{}', mode: {:?}, will use SSE for tool calls: {}", 
-               accept_header, accept_mode, accepts_sse);
+        debug!(
+            "POST request Accept header: '{}', mode: {:?}, will use SSE for tool calls: {}",
+            accept_header, accept_mode, accepts_sse
+        );
 
         // Read request body
         let body = req.into_body();
@@ -286,7 +293,8 @@ impl SessionMcpHandler {
             Ok(collected) => collected.to_bytes(),
             Err(err) => {
                 error!("Failed to read request body: {}", err);
-                return Ok(bad_request_response("Failed to read request body").map(convert_to_unified_body));
+                return Ok(bad_request_response("Failed to read request body")
+                    .map(convert_to_unified_body));
             }
         };
 
@@ -296,7 +304,9 @@ impl SessionMcpHandler {
             return Ok(Response::builder()
                 .status(StatusCode::PAYLOAD_TOO_LARGE)
                 .header(CONTENT_TYPE, "application/json")
-                .body(convert_to_unified_body(Full::new(Bytes::from("Request body too large"))))
+                .body(convert_to_unified_body(Full::new(Bytes::from(
+                    "Request body too large",
+                ))))
                 .unwrap());
         }
 
@@ -305,7 +315,8 @@ impl SessionMcpHandler {
             Ok(s) => s,
             Err(err) => {
                 error!("Invalid UTF-8 in request body: {}", err);
-                return Ok(bad_request_response("Request body must be valid UTF-8").map(convert_to_unified_body));
+                return Ok(bad_request_response("Request body must be valid UTF-8")
+                    .map(convert_to_unified_body));
             }
         };
 
@@ -317,12 +328,14 @@ impl SessionMcpHandler {
             Err(rpc_err) => {
                 error!("JSON-RPC parse error: {}", rpc_err);
                 // Extract request ID from the error if available
-                let error_response = serde_json::to_string(&rpc_err)
-                    .unwrap_or_else(|_| "{}".to_string());
+                let error_response =
+                    serde_json::to_string(&rpc_err).unwrap_or_else(|_| "{}".to_string());
                 return Ok(Response::builder()
                     .status(StatusCode::OK) // JSON-RPC parse errors still use 200 OK
                     .header(CONTENT_TYPE, "application/json")
-                    .body(convert_to_unified_body(Full::new(Bytes::from(error_response))))
+                    .body(convert_to_unified_body(Full::new(Bytes::from(
+                        error_response,
+                    ))))
                     .unwrap());
             }
         };
@@ -335,19 +348,26 @@ impl SessionMcpHandler {
 
                 // Special handling for initialize requests - they create new sessions
                 let (response, response_session_id) = if request.method == "initialize" {
-                    debug!("Handling initialize request - creating new session via session storage");
+                    debug!(
+                        "Handling initialize request - creating new session via session storage"
+                    );
 
                     // Let session storage create the session and generate the ID (GPS pattern)
                     let capabilities = ServerCapabilities::default();
                     match self.session_storage.create_session(capabilities).await {
                         Ok(session_info) => {
-                            debug!("Created new session via session storage: {}", session_info.session_id);
+                            debug!(
+                                "Created new session via session storage: {}",
+                                session_info.session_id
+                            );
 
                             // ✅ CORRECTED ARCHITECTURE: Create session-specific notification broadcaster from shared StreamManager
-                            let broadcaster: SharedNotificationBroadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(
-                                Arc::clone(&self.stream_manager)
-                            ));
-                            let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+                            let broadcaster: SharedNotificationBroadcaster =
+                                Arc::new(StreamManagerNotificationBroadcaster::new(Arc::clone(
+                                    &self.stream_manager,
+                                )));
+                            let broadcaster_any =
+                                Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
 
                             let session_context = SessionContext {
                                 session_id: session_info.session_id.clone(),
@@ -356,7 +376,10 @@ impl SessionMcpHandler {
                                 timestamp: chrono::Utc::now().timestamp_millis() as u64,
                             };
 
-                            let response = self.dispatcher.handle_request_with_context(request, session_context).await;
+                            let response = self
+                                .dispatcher
+                                .handle_request_with_context(request, session_context)
+                                .await;
 
                             // Return the session ID created by session storage for the HTTP header
                             (response, Some(session_info.session_id))
@@ -368,8 +391,8 @@ impl SessionMcpHandler {
                             let error_response = turul_mcp_json_rpc_server::JsonRpcMessage::error(
                                 turul_mcp_json_rpc_server::JsonRpcError::internal_error(
                                     Some(request.id),
-                                    Some(error_msg)
-                                )
+                                    Some(error_msg),
+                                ),
                             );
                             (error_response, None)
                         }
@@ -379,10 +402,12 @@ impl SessionMcpHandler {
                     // Let server-level handlers decide whether to enforce session requirements
                     let session_context = if let Some(ref session_id_str) = session_id {
                         debug!("Processing request with session: {}", session_id_str);
-                        let broadcaster: SharedNotificationBroadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(
-                            Arc::clone(&self.stream_manager)
-                        ));
-                        let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+                        let broadcaster: SharedNotificationBroadcaster =
+                            Arc::new(StreamManagerNotificationBroadcaster::new(Arc::clone(
+                                &self.stream_manager,
+                            )));
+                        let broadcaster_any =
+                            Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
                         Some(SessionContext {
                             session_id: session_id_str.clone(),
                             metadata: std::collections::HashMap::new(),
@@ -393,9 +418,11 @@ impl SessionMcpHandler {
                         debug!("Processing request without session (lenient mode)");
                         None
                     };
-                    
+
                     let response = if let Some(ctx) = session_context {
-                        self.dispatcher.handle_request_with_context(request, ctx).await
+                        self.dispatcher
+                            .handle_request_with_context(request, ctx)
+                            .await
                     } else {
                         self.dispatcher.handle_request(request).await
                     };
@@ -414,17 +441,21 @@ impl SessionMcpHandler {
                 (message_result, response_session_id, Some(method_name))
             }
             JsonRpcMessage::Notification(notification) => {
-                debug!("Processing JSON-RPC notification: method={}", notification.method);
+                debug!(
+                    "Processing JSON-RPC notification: method={}",
+                    notification.method
+                );
                 let method_name = notification.method.clone();
 
                 // For notifications, create session context if session ID is provided
-                // Let server-level handlers decide whether to enforce session requirements 
+                // Let server-level handlers decide whether to enforce session requirements
                 let session_context = if let Some(ref session_id_str) = session_id {
                     debug!("Processing notification with session: {}", session_id_str);
-                    let broadcaster: SharedNotificationBroadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(
-                        Arc::clone(&self.stream_manager)
-                    ));
-                    let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+                    let broadcaster: SharedNotificationBroadcaster = Arc::new(
+                        StreamManagerNotificationBroadcaster::new(Arc::clone(&self.stream_manager)),
+                    );
+                    let broadcaster_any =
+                        Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
 
                     Some(SessionContext {
                         session_id: session_id_str.clone(),
@@ -437,12 +468,19 @@ impl SessionMcpHandler {
                     None
                 };
 
-                let result = self.dispatcher.handle_notification_with_context(notification, session_context).await;
-                
+                let result = self
+                    .dispatcher
+                    .handle_notification_with_context(notification, session_context)
+                    .await;
+
                 if let Err(err) = result {
                     error!("Notification handling error: {}", err);
                 }
-                (JsonRpcMessageResult::NoResponse, session_id.clone(), Some(method_name))
+                (
+                    JsonRpcMessageResult::NoResponse,
+                    session_id.clone(),
+                    Some(method_name),
+                )
             }
         };
 
@@ -453,35 +491,64 @@ impl SessionMcpHandler {
                 // Only use SSE if explicitly requested via Accept: text/event-stream header
                 let is_tool_call = method_name.as_ref().is_some_and(|m| m == "tools/call");
 
-                debug!("Decision point: method={:?}, accept_mode={:?}, accepts_sse={}, server_post_sse_enabled={}, session_id={:?}, is_tool_call={}",
-                       method_name, accept_mode, accepts_sse, self.config.enable_post_sse, response_session_id, is_tool_call);
+                debug!(
+                    "Decision point: method={:?}, accept_mode={:?}, accepts_sse={}, server_post_sse_enabled={}, session_id={:?}, is_tool_call={}",
+                    method_name,
+                    accept_mode,
+                    accepts_sse,
+                    self.config.enable_post_sse,
+                    response_session_id,
+                    is_tool_call
+                );
 
                 // MCP Streamable HTTP decision logic based on Accept header compliance AND server configuration
                 let should_use_sse = match accept_mode {
-                    AcceptMode::JsonOnly => false,    // Force JSON for compatibility (MCP Inspector)
-                    AcceptMode::Invalid => false,     // Fallback to JSON for invalid headers
-                    AcceptMode::Compliant => self.config.enable_post_sse && accepts_sse && is_tool_call, // Server chooses for compliant clients
-                    AcceptMode::SseOnly => self.config.enable_post_sse && accepts_sse,  // Force SSE if server allows and client accepts
+                    AcceptMode::JsonOnly => false, // Force JSON for compatibility (MCP Inspector)
+                    AcceptMode::Invalid => false,  // Fallback to JSON for invalid headers
+                    AcceptMode::Compliant => {
+                        self.config.enable_post_sse && accepts_sse && is_tool_call
+                    } // Server chooses for compliant clients
+                    AcceptMode::SseOnly => self.config.enable_post_sse && accepts_sse, // Force SSE if server allows and client accepts
                 };
 
                 if should_use_sse && response_session_id.is_some() {
-                    debug!("📡 Creating POST SSE stream (mode: {:?}) for tool call with notifications", accept_mode);
-                    match self.stream_manager.create_post_sse_stream(
-                        response_session_id.clone().unwrap(),
-                        response.clone(), // Clone the response for SSE stream creation
-                    ).await {
+                    debug!(
+                        "📡 Creating POST SSE stream (mode: {:?}) for tool call with notifications",
+                        accept_mode
+                    );
+                    match self
+                        .stream_manager
+                        .create_post_sse_stream(
+                            response_session_id.clone().unwrap(),
+                            response.clone(), // Clone the response for SSE stream creation
+                        )
+                        .await
+                    {
                         Ok(sse_response) => {
                             debug!("✅ POST SSE stream created successfully");
-                            Ok(sse_response.map(|body| body.map_err(|never| match never {}).boxed_unsync()))
-                        },
+                            Ok(sse_response
+                                .map(|body| body.map_err(|never| match never {}).boxed_unsync()))
+                        }
                         Err(e) => {
-                            warn!("Failed to create POST SSE stream, falling back to JSON: {}", e);
-                            Ok(jsonrpc_response_with_session(response, response_session_id)?.map(convert_to_unified_body))
+                            warn!(
+                                "Failed to create POST SSE stream, falling back to JSON: {}",
+                                e
+                            );
+                            Ok(
+                                jsonrpc_response_with_session(response, response_session_id)?
+                                    .map(convert_to_unified_body),
+                            )
                         }
                     }
                 } else {
-                    debug!("📄 Returning standard JSON response (mode: {:?}) for method: {:?}", accept_mode, method_name);
-                    Ok(jsonrpc_response_with_session(response, response_session_id)?.map(convert_to_unified_body))
+                    debug!(
+                        "📄 Returning standard JSON response (mode: {:?}) for method: {:?}",
+                        accept_mode, method_name
+                    );
+                    Ok(
+                        jsonrpc_response_with_session(response, response_session_id)?
+                            .map(convert_to_unified_body),
+                    )
                 }
             }
             JsonRpcMessageResult::Error(error) => {
@@ -517,14 +584,16 @@ impl SessionMcpHandler {
             .unwrap_or("");
 
         if !accept.contains("text/event-stream") {
-            warn!("GET request received without SSE support - header does not contain 'text/event-stream'");
+            warn!(
+                "GET request received without SSE support - header does not contain 'text/event-stream'"
+            );
             let error = JsonRpcError::new(
                 None,
                 JsonRpcErrorObject::server_error(
                     -32001,
                     "SSE not accepted - missing 'text/event-stream' in Accept header",
-                    None
-                )
+                    None,
+                ),
             );
             return jsonrpc_error_to_unified_body(error);
         }
@@ -537,8 +606,8 @@ impl SessionMcpHandler {
                 JsonRpcErrorObject::server_error(
                     -32003,
                     "GET SSE is disabled on this server",
-                    None
-                )
+                    None,
+                ),
             );
             return jsonrpc_error_to_unified_body(error);
         }
@@ -547,7 +616,10 @@ impl SessionMcpHandler {
         let protocol_version = extract_protocol_version(headers);
         let session_id = extract_session_id(headers);
 
-        debug!("GET SSE request - Protocol: {}, Session: {:?}", protocol_version, session_id);
+        debug!(
+            "GET SSE request - Protocol: {}, Session: {:?}",
+            protocol_version, session_id
+        );
 
         // Session ID is required for SSE
         let session_id = match session_id {
@@ -556,11 +628,7 @@ impl SessionMcpHandler {
                 warn!("Missing Mcp-Session-Id header for SSE request");
                 let error = JsonRpcError::new(
                     None,
-                    JsonRpcErrorObject::server_error(
-                        -32002,
-                        "Missing Mcp-Session-Id header",
-                        None
-                    )
+                    JsonRpcErrorObject::server_error(-32002, "Missing Mcp-Session-Id header", None),
                 );
                 return jsonrpc_error_to_unified_body(error);
             }
@@ -568,14 +636,17 @@ impl SessionMcpHandler {
 
         // Validate session exists (do NOT create if missing)
         if let Err(err) = self.validate_session_exists(&session_id).await {
-            error!("Session validation failed for Session ID {}: {}", session_id, err);
+            error!(
+                "Session validation failed for Session ID {}: {}",
+                session_id, err
+            );
             let error = JsonRpcError::new(
                 None,
                 JsonRpcErrorObject::server_error(
                     -32003,
                     &format!("Session validation failed: {}", err),
-                    None
-                )
+                    None,
+                ),
             );
             return jsonrpc_error_to_unified_body(error);
         }
@@ -586,23 +657,26 @@ impl SessionMcpHandler {
         // Generate unique connection ID for MCP spec compliance
         let connection_id = Uuid::now_v7().to_string();
 
-        debug!("Creating SSE stream for session: {} with connection: {}, last_event_id: {:?}",
-               session_id, connection_id, last_event_id);
+        debug!(
+            "Creating SSE stream for session: {} with connection: {}, last_event_id: {:?}",
+            session_id, connection_id, last_event_id
+        );
 
         // ✅ CORRECTED ARCHITECTURE: Use shared StreamManager directly (no registry needed)
-        match self.stream_manager.handle_sse_connection(
-            session_id,
-            connection_id,
-            last_event_id,
-        ).await {
+        match self
+            .stream_manager
+            .handle_sse_connection(session_id, connection_id, last_event_id)
+            .await
+        {
             Ok(response) => Ok(response),
             Err(err) => {
                 error!("Failed to create SSE connection: {}", err);
                 let error = JsonRpcError::new(
                     None,
-                    JsonRpcErrorObject::internal_error(
-                        Some(format!("SSE connection failed: {}", err))
-                    )
+                    JsonRpcErrorObject::internal_error(Some(format!(
+                        "SSE connection failed: {}",
+                        err
+                    ))),
                 );
                 jsonrpc_error_to_unified_body(error)
             }
@@ -620,29 +694,46 @@ impl SessionMcpHandler {
 
         if let Some(session_id) = session_id {
             // First, close any active SSE connections for this session
-            let closed_connections = self.stream_manager.close_session_connections(&session_id).await;
-            debug!("Closed {} SSE connections for session: {}", closed_connections, session_id);
+            let closed_connections = self
+                .stream_manager
+                .close_session_connections(&session_id)
+                .await;
+            debug!(
+                "Closed {} SSE connections for session: {}",
+                closed_connections, session_id
+            );
 
             // Mark session as terminated instead of immediate deletion (for proper lifecycle management)
             match self.session_storage.get_session(&session_id).await {
                 Ok(Some(mut session_info)) => {
                     // Mark session as terminated in state
-                    session_info.state.insert("terminated".to_string(), serde_json::Value::Bool(true));
-                    session_info.state.insert("terminated_at".to_string(), serde_json::Value::Number(
-                        serde_json::Number::from(chrono::Utc::now().timestamp_millis())
-                    ));
+                    session_info
+                        .state
+                        .insert("terminated".to_string(), serde_json::Value::Bool(true));
+                    session_info.state.insert(
+                        "terminated_at".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(
+                            chrono::Utc::now().timestamp_millis(),
+                        )),
+                    );
                     session_info.touch();
 
                     match self.session_storage.update_session(session_info).await {
                         Ok(()) => {
-                            info!("Session {} marked as terminated (TTL will handle cleanup)", session_id);
+                            info!(
+                                "Session {} marked as terminated (TTL will handle cleanup)",
+                                session_id
+                            );
                             Ok(Response::builder()
                                 .status(StatusCode::OK)
                                 .body(Full::new(Bytes::from("Session terminated")))
                                 .unwrap())
                         }
                         Err(err) => {
-                            error!("Error marking session {} as terminated: {}", session_id, err);
+                            error!(
+                                "Error marking session {} as terminated: {}",
+                                session_id, err
+                            );
                             // Fallback to deletion if update fails
                             match self.session_storage.delete_session(&session_id).await {
                                 Ok(_) => {
@@ -653,7 +744,10 @@ impl SessionMcpHandler {
                                         .unwrap())
                                 }
                                 Err(delete_err) => {
-                                    error!("Error deleting session {} as fallback: {}", session_id, delete_err);
+                                    error!(
+                                        "Error deleting session {} as fallback: {}",
+                                        session_id, delete_err
+                                    );
                                     Ok(Response::builder()
                                         .status(StatusCode::INTERNAL_SERVER_ERROR)
                                         .body(Full::new(Bytes::from("Session termination error")))
@@ -663,14 +757,15 @@ impl SessionMcpHandler {
                         }
                     }
                 }
-                Ok(None) => {
-                    Ok(Response::builder()
-                        .status(StatusCode::NOT_FOUND)
-                        .body(Full::new(Bytes::from("Session not found")))
-                        .unwrap())
-                }
+                Ok(None) => Ok(Response::builder()
+                    .status(StatusCode::NOT_FOUND)
+                    .body(Full::new(Bytes::from("Session not found")))
+                    .unwrap()),
                 Err(err) => {
-                    error!("Error retrieving session {} for termination: {}", session_id, err);
+                    error!(
+                        "Error retrieving session {} for termination: {}",
+                        session_id, err
+                    );
                     Ok(Response::builder()
                         .status(StatusCode::INTERNAL_SERVER_ERROR)
                         .body(Full::new(Bytes::from("Session lookup error")))
@@ -705,13 +800,17 @@ impl SessionMcpHandler {
             }
             Ok(None) => {
                 error!("Session not found: {}", session_id);
-                Err(crate::HttpMcpError::InvalidRequest(
-                    format!("Session '{}' not found. Sessions must be created via initialize request first.", session_id)
-                ))
+                Err(crate::HttpMcpError::InvalidRequest(format!(
+                    "Session '{}' not found. Sessions must be created via initialize request first.",
+                    session_id
+                )))
             }
             Err(err) => {
                 error!("Failed to validate session {}: {}", session_id, err);
-                Err(crate::HttpMcpError::InvalidRequest(format!("Session validation failed: {}", err)))
+                Err(crate::HttpMcpError::InvalidRequest(format!(
+                    "Session validation failed: {}",
+                    err
+                )))
             }
         }
     }

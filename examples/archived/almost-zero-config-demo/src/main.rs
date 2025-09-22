@@ -16,7 +16,7 @@ use crate::types::{Calculator, ConfigResource, CreativeSampler, CodeCompleter};
 mod types {
     use turul_mcp_server::{McpTool, McpResource, McpSampling, McpCompletion, McpResult, SessionContext};
     use turul_mcp_protocol::tools::CallToolResult;
-    use turul_mcp_protocol::sampling::CreateMessageResult;  
+    use turul_mcp_protocol::sampling::CreateMessageResult;
     use turul_mcp_protocol::completion::CompleteResult;
     use async_trait::async_trait;
     use serde_json::Value;
@@ -39,7 +39,7 @@ mod types {
         }
     }
 
-    #[derive(Debug)]  
+    #[derive(Debug)]
     pub struct ConfigResource {
         pub name: String,
     }
@@ -79,7 +79,7 @@ mod types {
 
     #[derive(Debug)]
     pub struct CodeCompleter {
-        pub name: String, 
+        pub name: String,
     }
 
     impl CodeCompleter {
@@ -114,7 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create instances
     let calculator = Calculator::new();
-    let config_resource = ConfigResource::new(); 
+    let config_resource = ConfigResource::new();
     let creative_sampler = CreativeSampler::new();
     let code_completer = CodeCompleter::new();
 
@@ -125,7 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .title("Almost Zero-Config Demo")
         .instructions("Demonstrating current framework capabilities")
         // These methods exist and work RIGHT NOW:
-        .tool(calculator)                    // ✅ Uses "tools/call" automatically  
+        .tool(calculator)                    // ✅ Uses "tools/call" automatically
         .resource(config_resource)           // ✅ Uses "resources/read" automatically
         .sampler(creative_sampler)           // ✅ NEW: Uses "sampling/createMessage" automatically
         .completer(code_completer)           // ✅ NEW: Uses "completion/complete" automatically

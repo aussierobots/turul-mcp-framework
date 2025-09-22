@@ -92,7 +92,11 @@ impl McpTestClient {
     }
 
     /// Get a specific prompt
-    pub async fn get_prompt(&self, name: &str, arguments: Option<HashMap<String, Value>>) -> Result<HashMap<String, Value>, reqwest::Error> {
+    pub async fn get_prompt(
+        &self,
+        name: &str,
+        arguments: Option<HashMap<String, Value>>,
+    ) -> Result<HashMap<String, Value>, reqwest::Error> {
         let mut params = json!({
             "name": name
         });
@@ -125,7 +129,10 @@ impl McpTestClient {
 
     /// Test SSE prompt notifications
     pub async fn test_sse_notifications(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let mut req_builder = self.client.get(&self.base_url).header("Accept", "text/event-stream");
+        let mut req_builder = self
+            .client
+            .get(&self.base_url)
+            .header("Accept", "text/event-stream");
 
         if let Some(ref session_id) = self.session_id {
             req_builder = req_builder.header("mcp-session-id", session_id);
@@ -164,15 +171,30 @@ impl TestServerManager {
 
         // Find workspace root dynamically instead of using hardcoded path
         let workspace_root = std::env::var("CARGO_MANIFEST_DIR")
-            .map(|dir| std::path::PathBuf::from(dir).parent().unwrap().parent().unwrap().to_path_buf())
+            .map(|dir| {
+                std::path::PathBuf::from(dir)
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .to_path_buf()
+            })
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
-        
-        let binary_path = workspace_root.join("target").join("debug").join("prompts-test-server");
+
+        let binary_path = workspace_root
+            .join("target")
+            .join("debug")
+            .join("prompts-test-server");
         let mut server_process = Command::new(&binary_path)
             .args(["--port", &port.to_string()])
             .current_dir(&workspace_root)
             .spawn()
-            .map_err(|e| format!("Failed to start prompts-test-server: {}. Binary: {:?}", e, binary_path))?;
+            .map_err(|e| {
+                format!(
+                    "Failed to start prompts-test-server: {}. Binary: {:?}",
+                    e, binary_path
+                )
+            })?;
 
         // Wait for server to start
         let mut attempts = 0;
@@ -181,7 +203,7 @@ impl TestServerManager {
 
         while attempts < 50 {
             sleep(Duration::from_millis(300)).await;
-            
+
             // Try to make a simple POST request to check if server is responding
             let test_request = json!({
                 "jsonrpc": "2.0",
@@ -193,7 +215,7 @@ impl TestServerManager {
                     "clientInfo": {"name": "health-check", "version": "1.0.0"}
                 }
             });
-            
+
             if let Ok(response) = client
                 .post(&health_url)
                 .header("Content-Type", "application/json")
@@ -224,7 +246,7 @@ impl TestServerManager {
 impl Drop for TestServerManager {
     fn drop(&mut self) {
         if let Some(mut process) = self.server_process.take() {
-            let _ = process.kill();
+            std::mem::drop(process.kill());
         }
     }
 }
@@ -233,7 +255,9 @@ impl Drop for TestServerManager {
 async fn test_mcp_initialize_session() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     let result = client.initialize().await.expect("Failed to initialize");
@@ -257,7 +281,9 @@ async fn test_mcp_initialize_session() {
 async fn test_prompts_list() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -275,7 +301,7 @@ async fn test_prompts_list() {
     let expected_names = vec![
         "simple_prompt",
         "string_args_prompt",
-        "number_args_prompt", 
+        "number_args_prompt",
         "boolean_args_prompt",
         "template_prompt",
         "multi_message_prompt",
@@ -291,7 +317,7 @@ async fn test_prompts_list() {
             p.as_object()
                 .and_then(|obj| obj.get("name"))
                 .and_then(|name| name.as_str())
-            == Some(expected_name)
+                == Some(expected_name)
         });
         assert!(found, "Missing expected prompt: {}", expected_name);
     }
@@ -301,7 +327,9 @@ async fn test_prompts_list() {
 async fn test_simple_prompt_get() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -329,7 +357,9 @@ async fn test_simple_prompt_get() {
 async fn test_string_args_prompt() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -359,7 +389,9 @@ async fn test_string_args_prompt() {
 async fn test_number_args_prompt() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -382,14 +414,17 @@ async fn test_number_args_prompt() {
 
     // Check that numbers were used in the message content
     let message_content = messages[0]["content"]["text"].as_str().unwrap();
-    assert!(message_content.contains("42") || message_content.contains("125.4")); // 42 * 3.14 ≈ 131.88
+    assert!(message_content.contains("42") || message_content.contains("125.4"));
+    // 42 * 3.14 ≈ 131.88
 }
 
 #[tokio::test]
 async fn test_boolean_args_prompt() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -412,14 +447,21 @@ async fn test_boolean_args_prompt() {
 
     // Check that booleans were used in the message content
     let message_content = messages[0]["content"]["text"].as_str().unwrap();
-    assert!(message_content.contains("ENABLED") || message_content.contains("DISABLED") || message_content.contains("ON") || message_content.contains("OFF"));
+    assert!(
+        message_content.contains("ENABLED")
+            || message_content.contains("DISABLED")
+            || message_content.contains("ON")
+            || message_content.contains("OFF")
+    );
 }
 
 #[tokio::test]
 async fn test_template_prompt() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -451,7 +493,9 @@ async fn test_template_prompt() {
 async fn test_multi_message_prompt() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -470,13 +514,14 @@ async fn test_multi_message_prompt() {
 
     let messages = result_data["messages"].as_array().unwrap();
     // Multi-message prompt should return multiple messages
-    assert!(messages.len() > 1, "Multi message prompt should return multiple messages");
+    assert!(
+        messages.len() > 1,
+        "Multi message prompt should return multiple messages"
+    );
 
     // Verify different roles are used
-    let roles: Vec<&str> = messages.iter()
-        .filter_map(|m| m["role"].as_str())
-        .collect();
-    
+    let roles: Vec<&str> = messages.iter().filter_map(|m| m["role"].as_str()).collect();
+
     // Should have different roles (user and assistant)
     assert!(roles.contains(&"user") || roles.contains(&"assistant"));
 }
@@ -485,7 +530,9 @@ async fn test_multi_message_prompt() {
 async fn test_session_aware_prompt() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -511,7 +558,9 @@ async fn test_session_aware_prompt() {
 async fn test_validation_failure_prompt() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -523,7 +572,10 @@ async fn test_validation_failure_prompt() {
         .expect("Request should succeed but prompt should error");
 
     // Should get a JSON-RPC error response for validation failure
-    assert!(result.contains_key("error"), "Validation failure prompt should return JSON-RPC error response");
+    assert!(
+        result.contains_key("error"),
+        "Validation failure prompt should return JSON-RPC error response"
+    );
     let error = result["error"].as_object().unwrap();
     assert!(error.contains_key("code"));
     assert!(error.contains_key("message"));
@@ -533,7 +585,9 @@ async fn test_validation_failure_prompt() {
 async fn test_dynamic_prompt() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -563,7 +617,9 @@ async fn test_dynamic_prompt() {
 async fn test_empty_messages_prompt() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -579,14 +635,20 @@ async fn test_empty_messages_prompt() {
 
     let messages = result_data["messages"].as_array().unwrap();
     // Empty messages prompt should return an empty array
-    assert_eq!(messages.len(), 0, "Empty messages prompt should return no messages");
+    assert_eq!(
+        messages.len(),
+        0,
+        "Empty messages prompt should return no messages"
+    );
 }
 
 #[tokio::test]
 async fn test_sse_prompt_notifications() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -601,6 +663,8 @@ async fn test_sse_prompt_notifications() {
     if !events.is_empty() {
         info!("Received SSE events: {:?}", events);
         // Events should contain SSE format data
-        assert!(events.iter().any(|e| e.contains("data:") || e.contains("event:")));
+        assert!(events
+            .iter()
+            .any(|e| e.contains("data:") || e.contains("event:")));
     }
 }

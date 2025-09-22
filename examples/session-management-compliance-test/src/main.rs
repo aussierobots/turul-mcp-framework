@@ -43,7 +43,7 @@ async fn main() -> Result<()> {
     // Test 2: Session Persistence and Validation
     test_session_persistence(&client, url).await?;
 
-    // Test 3: Session Expiry and 404 Response  
+    // Test 3: Session Expiry and 404 Response
     test_session_expiry(&client, url).await?;
 
     // Test 4: Client Reinitialize on 404
@@ -67,7 +67,7 @@ async fn test_session_id_generation(client: &Client, url: &str) -> Result<()> {
     info!("🔐 Test 1: Session ID Generation and Security");
     info!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     info!("MCP Requirements:");
-    info!("  • Server MAY assign session ID at initialization");  
+    info!("  • Server MAY assign session ID at initialization");
     info!("  • Session ID SHOULD be globally unique and cryptographically secure");
     info!("  • Session ID MUST only contain visible ASCII characters (0x21 to 0x7E)");
     info!("");
@@ -100,7 +100,7 @@ async fn test_session_id_generation(client: &Client, url: &str) -> Result<()> {
     // Validate session ID format and security
     let session_bytes = session_id.as_bytes();
     let valid_ascii = session_bytes.iter().all(|&b| (0x21..=0x7E).contains(&b));
-    
+
     if valid_ascii {
         info!("✅ Session ID contains only visible ASCII characters (0x21-0x7E)");
     } else {
@@ -110,7 +110,9 @@ async fn test_session_id_generation(client: &Client, url: &str) -> Result<()> {
     // Check if it looks like a UUID v7 (cryptographically secure)
     let parts: Vec<&str> = session_id.split('-').collect();
     if parts.len() == 5 && parts[0].len() == 8 && parts[1].len() == 4 {
-        info!("✅ Session ID appears to be UUID format (likely UUID v7 - cryptographically secure)");
+        info!(
+            "✅ Session ID appears to be UUID format (likely UUID v7 - cryptographically secure)"
+        );
     } else {
         info!("📋 Session ID is not UUID format (still acceptable if cryptographically secure)");
     }
@@ -172,7 +174,10 @@ async fn test_session_persistence(client: &Client, url: &str) -> Result<()> {
     if tools_response.status().is_success() {
         info!("✅ Request with valid session ID accepted");
     } else {
-        warn!("❌ Request with valid session ID rejected: {}", tools_response.status());
+        warn!(
+            "❌ Request with valid session ID rejected: {}",
+            tools_response.status()
+        );
     }
 
     // Test without session ID (should get 400 Bad Request)
@@ -180,7 +185,7 @@ async fn test_session_persistence(client: &Client, url: &str) -> Result<()> {
         .post(url)
         .header("Content-Type", "application/json")
         .json(&json!({
-            "jsonrpc": "2.0", 
+            "jsonrpc": "2.0",
             "id": 3,
             "method": "tools/list",
             "params": {}
@@ -196,7 +201,10 @@ async fn test_session_persistence(client: &Client, url: &str) -> Result<()> {
             info!("📋 Server allows requests without session ID (acceptable but not recommended)");
         }
         _ => {
-            warn!("❌ Unexpected status for missing session ID: {}", no_session_response.status());
+            warn!(
+                "❌ Unexpected status for missing session ID: {}",
+                no_session_response.status()
+            );
         }
     }
 
@@ -249,9 +257,12 @@ async fn test_session_expiry(client: &Client, url: &str) -> Result<()> {
 
     // Test with a fake "expired" session ID to simulate the expiry behavior
     let expired_session_id = "0198ffff-ffff-ffff-ffff-ffffffffffff";
-    
-    info!("🧪 Testing with simulated expired session: {}", expired_session_id);
-    
+
+    info!(
+        "🧪 Testing with simulated expired session: {}",
+        expired_session_id
+    );
+
     let expired_response = client
         .post(url)
         .header("Content-Type", "application/json")
@@ -259,7 +270,7 @@ async fn test_session_expiry(client: &Client, url: &str) -> Result<()> {
         .json(&json!({
             "jsonrpc": "2.0",
             "id": 4,
-            "method": "tools/list", 
+            "method": "tools/list",
             "params": {}
         }))
         .send()
@@ -273,7 +284,10 @@ async fn test_session_expiry(client: &Client, url: &str) -> Result<()> {
             info!("📋 Server returns 400 Bad Request for invalid session (acceptable alternative)");
         }
         _ => {
-            warn!("❌ Unexpected status for expired session: {} (should be 404)", expired_response.status());
+            warn!(
+                "❌ Unexpected status for expired session: {} (should be 404)",
+                expired_response.status()
+            );
         }
     }
 
@@ -312,7 +326,7 @@ async fn test_client_reinitialize_on_404(client: &Client, url: &str) -> Result<(
 
     // Simulate receiving 404 by using invalid session
     let invalid_session = "0198dead-beef-dead-beef-deadbeefdeaf";
-    
+
     info!("🧪 Step 1: Attempting request with invalid session");
     let invalid_response = client
         .post(url)
@@ -331,10 +345,10 @@ async fn test_client_reinitialize_on_404(client: &Client, url: &str) -> Result<(
 
     if invalid_response.status().as_u16() == 404 {
         info!("✅ Received 404 for invalid session - proceeding with reinitialize");
-        
+
         // Step 2: Client reinitializes (without session ID)
         info!("🔄 Step 2: Client reinitializing without session ID");
-        
+
         let reinit_response = client
             .post(url)
             .header("Content-Type", "application/json")
@@ -359,8 +373,11 @@ async fn test_client_reinitialize_on_404(client: &Client, url: &str) -> Result<(
                 .and_then(|v| v.to_str().ok())
                 .ok_or_else(|| anyhow::anyhow!("No session ID in reinitialize response"))?;
 
-            info!("✅ Reinitialize successful - new session: {}", new_session_id);
-            
+            info!(
+                "✅ Reinitialize successful - new session: {}",
+                new_session_id
+            );
+
             // Step 3: Verify new session works
             let test_response = client
                 .post(url)
@@ -384,7 +401,10 @@ async fn test_client_reinitialize_on_404(client: &Client, url: &str) -> Result<(
             warn!("❌ Reinitialize failed: {}", reinit_response.status());
         }
     } else {
-        info!("📋 Server returned {} instead of 404 for invalid session", invalid_response.status());
+        info!(
+            "📋 Server returned {} instead of 404 for invalid session",
+            invalid_response.status()
+        );
     }
 
     info!("✅ Client reinitialize compliance verified");
@@ -409,7 +429,7 @@ async fn test_delete_session_termination(client: &Client, url: &str) -> Result<(
         .json(&json!({
             "jsonrpc": "2.0",
             "id": 1,
-            "method": "initialize", 
+            "method": "initialize",
             "params": {
                 "protocolVersion": "2025-06-18",
                 "capabilities": {},
@@ -429,7 +449,7 @@ async fn test_delete_session_termination(client: &Client, url: &str) -> Result<(
 
     // Try to delete the session
     info!("🗑️  Attempting to DELETE session");
-    
+
     let delete_response = client
         .delete(url)
         .header("Mcp-Session-Id", session_id)
@@ -439,7 +459,7 @@ async fn test_delete_session_termination(client: &Client, url: &str) -> Result<(
     match delete_response.status().as_u16() {
         200 | 204 => {
             info!("✅ DELETE session succeeded - server supports explicit termination");
-            
+
             // Verify session is actually deleted
             let test_response = client
                 .post(url)
@@ -457,14 +477,22 @@ async fn test_delete_session_termination(client: &Client, url: &str) -> Result<(
             if test_response.status().as_u16() == 404 {
                 info!("✅ Deleted session correctly returns 404");
             } else {
-                warn!("❌ Deleted session still accessible: {}", test_response.status());
+                warn!(
+                    "❌ Deleted session still accessible: {}",
+                    test_response.status()
+                );
             }
         }
         405 => {
-            info!("✅ Server returned 405 Method Not Allowed - explicit termination not supported (acceptable)");
+            info!(
+                "✅ Server returned 405 Method Not Allowed - explicit termination not supported (acceptable)"
+            );
         }
         _ => {
-            warn!("❌ Unexpected DELETE response: {}", delete_response.status());
+            warn!(
+                "❌ Unexpected DELETE response: {}",
+                delete_response.status()
+            );
         }
     }
 
@@ -558,7 +586,7 @@ async fn test_session_isolation(client: &Client, url: &str) -> Result<()> {
         .json(&json!({
             "jsonrpc": "2.0",
             "id": 4,
-            "method": "tools/list", 
+            "method": "tools/list",
             "params": {}
         }))
         .send()
@@ -567,22 +595,25 @@ async fn test_session_isolation(client: &Client, url: &str) -> Result<()> {
     if test1_response.status().is_success() && test2_response.status().is_success() {
         info!("✅ Both sessions work independently");
     } else {
-        warn!("❌ Session isolation issue - status1: {}, status2: {}", 
-              test1_response.status(), test2_response.status());
+        warn!(
+            "❌ Session isolation issue - status1: {}, status2: {}",
+            test1_response.status(),
+            test2_response.status()
+        );
     }
 
     // Test cross-session access (should fail)
     info!("🧪 Testing cross-session access (should be rejected)");
-    
+
     // This test would require session-specific state to really verify isolation
     // For now, we just verify that different session IDs are properly handled
-    
+
     info!("✅ Session isolation compliance verified");
     info!("");
 
     // Test 7: MCP Client Auto-DELETE verification
     info!("🧪 Test 7: Testing MCP Client Auto-DELETE on drop");
-    
+
     // Create a new session first to test deletion
     let delete_test_response = client
         .post(url)
@@ -620,13 +651,16 @@ async fn test_session_isolation(client: &Client, url: &str) -> Result<()> {
     if delete_response.status().is_success() {
         info!("✅ DELETE request successful - Session cleanup working");
     } else {
-        warn!("❌ DELETE request failed - status: {}", delete_response.status());
+        warn!(
+            "❌ DELETE request failed - status: {}",
+            delete_response.status()
+        );
     }
 
     // Verify session is actually deleted by trying to use it
     let verification_response = client
         .post(url)
-        .header("Content-Type", "application/json") 
+        .header("Content-Type", "application/json")
         .header("Mcp-Session-Id", delete_session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -638,8 +672,12 @@ async fn test_session_isolation(client: &Client, url: &str) -> Result<()> {
         .await?;
 
     // Should fail or create new session since old one was deleted
-    if verification_response.status() == 404 || 
-       verification_response.headers().get("mcp-session-id").is_some() {
+    if verification_response.status() == 404
+        || verification_response
+            .headers()
+            .get("mcp-session-id")
+            .is_some()
+    {
         info!("✅ Session properly deleted - verification confirms cleanup");
     } else {
         warn!("❌ Session may not have been properly deleted");
@@ -647,7 +685,10 @@ async fn test_session_isolation(client: &Client, url: &str) -> Result<()> {
 
     info!("✅ MCP Client DELETE compliance verified");
     info!("💡 Note: This tests server DELETE handling. For automatic MCP client DROP→DELETE,");
-    info!("   run: cargo run --package turul-mcp-client --example test-client-drop -- {}", url);
+    info!(
+        "   run: cargo run --package turul-mcp-client --example test-client-drop -- {}",
+        url
+    );
     info!("");
 
     Ok(())

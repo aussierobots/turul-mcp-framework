@@ -16,14 +16,18 @@ use std::collections::HashMap;
 pub trait HasBaseMetadata {
     /// Programmatic identifier (fallback display name)
     fn name(&self) -> &str;
-    
+
     /// Human-readable display name (UI contexts)
-    fn title(&self) -> Option<&str> { None }
+    fn title(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Tool description trait
 pub trait HasDescription {
-    fn description(&self) -> Option<&str> { None }
+    fn description(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Input schema trait
@@ -31,31 +35,37 @@ pub trait HasInputSchema {
     fn input_schema(&self) -> &ToolSchema;
 }
 
-/// Output schema trait  
+/// Output schema trait
 pub trait HasOutputSchema {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 /// Annotations trait
 pub trait HasAnnotations {
-    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
 }
 
 /// Tool-specific meta trait (separate from RPC _meta)
 pub trait HasToolMeta {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 /// Complete tool definition - composed from fine-grained traits
-pub trait ToolDefinition: 
+pub trait ToolDefinition:
     HasBaseMetadata +           // name, title
-    HasDescription +            // description  
+    HasDescription +            // description
     HasInputSchema +            // inputSchema
     HasOutputSchema +           // outputSchema
     HasAnnotations +            // annotations
     HasToolMeta +               // _meta (tool-specific)
-    Send + 
-    Sync 
+    Send +
+    Sync
 {
     /// Display name precedence: title > annotations.title > name (matches TypeScript spec)
     fn display_name(&self) -> &str {
@@ -71,7 +81,7 @@ pub trait ToolDefinition:
             self.name()
         }
     }
-    
+
     /// Convert to concrete Tool struct for protocol serialization
     fn to_tool(&self) -> Tool {
         Tool {
@@ -125,7 +135,7 @@ impl Default for ToolAnnotations {
 
 impl ToolAnnotations {
     pub fn new() -> Self {
-        Self { 
+        Self {
             title: None,
             read_only_hint: None,
             destructive_hint: None,
@@ -133,27 +143,27 @@ impl ToolAnnotations {
             open_world_hint: None,
         }
     }
-    
+
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
-    
+
     pub fn with_read_only_hint(mut self, read_only: bool) -> Self {
         self.read_only_hint = Some(read_only);
         self
     }
-    
+
     pub fn with_destructive_hint(mut self, destructive: bool) -> Self {
         self.destructive_hint = Some(destructive);
         self
     }
-    
+
     pub fn with_idempotent_hint(mut self, idempotent: bool) -> Self {
         self.idempotent_hint = Some(idempotent);
         self
     }
-    
+
     pub fn with_open_world_hint(mut self, open_world: bool) -> Self {
         self.open_world_hint = Some(open_world);
         self
@@ -278,34 +288,55 @@ impl Tool {
 // ===========================================
 
 impl HasBaseMetadata for Tool {
-    fn name(&self) -> &str { &self.name }
-    fn title(&self) -> Option<&str> { self.title.as_deref() }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn title(&self) -> Option<&str> {
+        self.title.as_deref()
+    }
 }
 
 impl HasDescription for Tool {
-    fn description(&self) -> Option<&str> { self.description.as_deref() }
+    fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
 }
 
 impl HasInputSchema for Tool {
-    fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
 }
 
 impl HasOutputSchema for Tool {
-    fn output_schema(&self) -> Option<&ToolSchema> { self.output_schema.as_ref() }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        self.output_schema.as_ref()
+    }
 }
 
 impl HasAnnotations for Tool {
-    fn annotations(&self) -> Option<&ToolAnnotations> { self.annotations.as_ref() }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        self.annotations.as_ref()
+    }
 }
 
 impl HasToolMeta for Tool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { self.meta.as_ref() }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
 }
 
 // Blanket implementation: any type that implements all component traits automatically implements ToolDefinition
-impl<T> ToolDefinition for T 
-where 
-    T: HasBaseMetadata + HasDescription + HasInputSchema + HasOutputSchema + HasAnnotations + HasToolMeta + Send + Sync,
+impl<T> ToolDefinition for T
+where
+    T: HasBaseMetadata
+        + HasDescription
+        + HasInputSchema
+        + HasOutputSchema
+        + HasAnnotations
+        + HasToolMeta
+        + Send
+        + Sync,
 {
     // Default implementations are provided by the trait definition
 }
@@ -409,7 +440,7 @@ impl ListToolsResult {
         self.next_cursor = Some(cursor);
         self
     }
-    
+
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
@@ -447,16 +478,16 @@ impl CallToolParams {
 
     /// Get arguments as Value (converted from HashMap)
     pub fn get_arguments_as_value(&self) -> Option<Value> {
-        self.arguments.as_ref().map(|map| {
-            Value::Object(map.clone().into_iter().collect())
-        })
+        self.arguments
+            .as_ref()
+            .map(|map| Value::Object(map.clone().into_iter().collect()))
     }
 
     pub fn with_arguments(mut self, arguments: HashMap<String, Value>) -> Self {
         self.arguments = Some(arguments);
         self
     }
-    
+
     pub fn with_arguments_value(mut self, arguments: Value) -> Self {
         // Helper for backward compatibility - convert Value to HashMap if it's an object
         if let Value::Object(map) = arguments {
@@ -493,7 +524,7 @@ impl CallToolRequest {
         self.params = self.params.with_arguments(arguments);
         self
     }
-    
+
     pub fn with_arguments_value(mut self, arguments: Value) -> Self {
         self.params = self.params.with_arguments_value(arguments);
         self
@@ -631,75 +662,79 @@ impl CallToolResult {
         self.meta = Some(meta);
         self
     }
-    
+
     // ===========================================
     // === Smart Response Builders ===
     // ===========================================
-    
+
     /// Create response from serializable result with automatic structured content based on ToolDefinition
     pub fn from_result_with_tool<T: serde::Serialize>(
         result: &T,
-        tool: &dyn ToolDefinition
+        tool: &dyn ToolDefinition,
     ) -> Result<Self, crate::McpError> {
         let text_content = serde_json::to_string(result)
             .map_err(|e| crate::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
-        
+
         let response = Self::success(vec![ToolResult::text(text_content)]);
-        
+
         // Auto-add structured content if tool has output schema
         if tool.output_schema().is_some() {
-            let structured = serde_json::to_value(result)
-                .map_err(|e| crate::McpError::tool_execution(&format!("Structured content error: {}", e)))?;
+            let structured = serde_json::to_value(result).map_err(|e| {
+                crate::McpError::tool_execution(&format!("Structured content error: {}", e))
+            })?;
             Ok(response.with_structured_content(structured))
         } else {
             Ok(response)
         }
     }
-    
+
     /// Create response from serializable result with automatic structured content based on schema
     pub fn from_result_with_schema<T: serde::Serialize>(
         result: &T,
-        schema: Option<&ToolSchema>
+        schema: Option<&ToolSchema>,
     ) -> Result<Self, crate::McpError> {
         let text_content = serde_json::to_string(result)
             .map_err(|e| crate::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
-        
+
         let response = Self::success(vec![ToolResult::text(text_content)]);
-        
+
         // Auto-add structured content if schema exists
         if schema.is_some() {
-            let structured = serde_json::to_value(result)
-                .map_err(|e| crate::McpError::tool_execution(&format!("Structured content error: {}", e)))?;
+            let structured = serde_json::to_value(result).map_err(|e| {
+                crate::McpError::tool_execution(&format!("Structured content error: {}", e))
+            })?;
             Ok(response.with_structured_content(structured))
         } else {
             Ok(response)
         }
     }
-    
+
     /// Create response with automatic structured content for primitives (zero-config)
     pub fn from_result_auto<T: serde::Serialize>(
         result: &T,
-        schema: Option<&ToolSchema>
+        schema: Option<&ToolSchema>,
     ) -> Result<Self, crate::McpError> {
         let text_content = serde_json::to_string(result)
             .map_err(|e| crate::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
-        
+
         let response = Self::success(vec![ToolResult::text(text_content)]);
-        
+
         // Auto-detect structured content for common types
-        let structured = serde_json::to_value(result)
-            .map_err(|e| crate::McpError::tool_execution(&format!("Structured content error: {}", e)))?;
-        
-        let should_add_structured = schema.is_some() || match &structured {
-            // Auto-add structured content for primitive types (zero-config)
-            Value::Number(_) | Value::Bool(_) => true,
-            // Auto-add for arrays and objects (structured data)
-            Value::Array(_) | Value::Object(_) => true,
-            // Skip for plain strings (text is sufficient)
-            Value::String(_) => false,
-            Value::Null => false,
-        };
-        
+        let structured = serde_json::to_value(result).map_err(|e| {
+            crate::McpError::tool_execution(&format!("Structured content error: {}", e))
+        })?;
+
+        let should_add_structured = schema.is_some()
+            || match &structured {
+                // Auto-add structured content for primitive types (zero-config)
+                Value::Number(_) | Value::Bool(_) => true,
+                // Auto-add for arrays and objects (structured data)
+                Value::Array(_) | Value::Object(_) => true,
+                // Skip for plain strings (text is sufficient)
+                Value::String(_) => false,
+                Value::Null => false,
+            };
+
         if should_add_structured {
             Ok(response.with_structured_content(structured))
         } else {
@@ -708,13 +743,10 @@ impl CallToolResult {
     }
 
     /// Create response from JSON value with automatic structured content
-    pub fn from_json_with_schema(
-        json_result: Value,
-        schema: Option<&ToolSchema>
-    ) -> Self {
+    pub fn from_json_with_schema(json_result: Value, schema: Option<&ToolSchema>) -> Self {
         let text_content = json_result.to_string();
         let response = Self::success(vec![ToolResult::text(text_content)]);
-        
+
         if schema.is_some() {
             response.with_structured_content(json_result)
         } else {

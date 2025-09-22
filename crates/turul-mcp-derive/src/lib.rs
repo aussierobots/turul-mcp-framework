@@ -26,7 +26,6 @@
 //! - **Declarative Macros**: Concise syntax macros in the macros/ module
 //! - **Utilities**: Shared functionality in utils module
 
-
 use proc_macro::TokenStream;
 use syn::{DeriveInput, ItemFn, Meta, Token, parse_macro_input, punctuated::Punctuated};
 
@@ -37,8 +36,8 @@ mod logging_derive;
 mod macros;
 mod notification_derive;
 mod prompt_derive;
-mod resource_derive;
 mod resource_attr;
+mod resource_derive;
 mod roots_derive;
 mod sampling_derive;
 mod tool_attr;

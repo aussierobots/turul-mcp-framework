@@ -119,7 +119,10 @@ impl McpTestClient {
     }
 
     /// Subscribe to resource changes
-    pub async fn subscribe_resource(&self, uri: &str) -> Result<HashMap<String, Value>, reqwest::Error> {
+    pub async fn subscribe_resource(
+        &self,
+        uri: &str,
+    ) -> Result<HashMap<String, Value>, reqwest::Error> {
         let request = json!({
             "jsonrpc": "2.0",
             "id": 4,
@@ -146,7 +149,10 @@ impl McpTestClient {
 
     /// Test SSE resource notifications
     pub async fn test_sse_notifications(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let mut req_builder = self.client.get(&self.base_url).header("Accept", "text/event-stream");
+        let mut req_builder = self
+            .client
+            .get(&self.base_url)
+            .header("Accept", "text/event-stream");
 
         if let Some(ref session_id) = self.session_id {
             req_builder = req_builder.header("mcp-session-id", session_id);
@@ -185,15 +191,30 @@ impl TestServerManager {
 
         // Find workspace root dynamically instead of using hardcoded path
         let workspace_root = std::env::var("CARGO_MANIFEST_DIR")
-            .map(|dir| std::path::PathBuf::from(dir).parent().unwrap().parent().unwrap().to_path_buf())
+            .map(|dir| {
+                std::path::PathBuf::from(dir)
+                    .parent()
+                    .unwrap()
+                    .parent()
+                    .unwrap()
+                    .to_path_buf()
+            })
             .unwrap_or_else(|_| std::path::PathBuf::from("."));
-        
-        let binary_path = workspace_root.join("target").join("debug").join("resource-test-server");
+
+        let binary_path = workspace_root
+            .join("target")
+            .join("debug")
+            .join("resource-test-server");
         let mut server_process = Command::new(&binary_path)
             .args(["--port", &port.to_string()])
             .current_dir(&workspace_root)
             .spawn()
-            .map_err(|e| format!("Failed to start resource-test-server: {}. Binary: {:?}", e, binary_path))?;
+            .map_err(|e| {
+                format!(
+                    "Failed to start resource-test-server: {}. Binary: {:?}",
+                    e, binary_path
+                )
+            })?;
 
         // Wait for server to start
         let mut attempts = 0;
@@ -202,7 +223,7 @@ impl TestServerManager {
 
         while attempts < 50 {
             sleep(Duration::from_millis(300)).await;
-            
+
             // Try to make a simple POST request to check if server is responding
             let test_request = json!({
                 "jsonrpc": "2.0",
@@ -214,7 +235,7 @@ impl TestServerManager {
                     "clientInfo": {"name": "health-check", "version": "1.0.0"}
                 }
             });
-            
+
             if let Ok(response) = client
                 .post(&health_url)
                 .header("Content-Type", "application/json")
@@ -245,7 +266,7 @@ impl TestServerManager {
 impl Drop for TestServerManager {
     fn drop(&mut self) {
         if let Some(mut process) = self.server_process.take() {
-            let _ = process.kill();
+            std::mem::drop(process.kill());
         }
     }
 }
@@ -254,7 +275,9 @@ impl Drop for TestServerManager {
 async fn test_mcp_initialize_session() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     let result = client.initialize().await.expect("Failed to initialize");
@@ -278,11 +301,16 @@ async fn test_mcp_initialize_session() {
 async fn test_resources_list() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
-    let result = client.list_resources().await.expect("Failed to list resources");
+    let result = client
+        .list_resources()
+        .await
+        .expect("Failed to list resources");
 
     // Verify response structure
     assert!(result.contains_key("result"));
@@ -290,7 +318,10 @@ async fn test_resources_list() {
     assert!(result_data.contains_key("resources"));
 
     let resources = result_data["resources"].as_array().unwrap();
-    assert!(!resources.is_empty(), "Should have test resources available");
+    assert!(
+        !resources.is_empty(),
+        "Should have test resources available"
+    );
 
     // Verify all expected test resources are present (using file:// scheme for security)
     let expected_uris = vec![
@@ -315,13 +346,16 @@ async fn test_resources_list() {
 
     for expected_uri in expected_uris {
         let found = resources.iter().any(|r| {
-            let actual_uri = r.as_object()
+            let actual_uri = r
+                .as_object()
                 .and_then(|obj| obj.get("uri"))
                 .and_then(|uri| uri.as_str());
-            
+
             if expected_uri.starts_with("file:///long/") {
                 // Long URI is dynamically generated, just check it starts with file:///long/
-                actual_uri.map(|uri| uri.starts_with("file:///long/")).unwrap_or(false)
+                actual_uri
+                    .map(|uri| uri.starts_with("file:///long/"))
+                    .unwrap_or(false)
             } else {
                 actual_uri == Some(expected_uri)
             }
@@ -334,7 +368,9 @@ async fn test_resources_list() {
 async fn test_file_resource_read() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -360,7 +396,9 @@ async fn test_file_resource_read() {
 async fn test_memory_resource_read() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -387,7 +425,9 @@ async fn test_memory_resource_read() {
 async fn test_error_resource_handling() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -408,7 +448,9 @@ async fn test_error_resource_handling() {
 async fn test_template_resource_with_variables() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -428,7 +470,9 @@ async fn test_template_resource_with_variables() {
 async fn test_binary_resource_read() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -454,7 +498,9 @@ async fn test_binary_resource_read() {
 async fn test_session_aware_resource() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -479,13 +525,18 @@ async fn test_session_aware_resource() {
 async fn test_resource_subscription() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     // First, verify server correctly advertises that subscription is not supported
     let init_response = client.initialize().await.expect("Failed to initialize");
     let server_capabilities = &init_response["result"]["capabilities"]["resources"];
-    assert_eq!(server_capabilities["subscribe"], false, "Server should advertise subscribe=false until implemented");
+    assert_eq!(
+        server_capabilities["subscribe"], false,
+        "Server should advertise subscribe=false until implemented"
+    );
 
     // Test that subscription request properly returns method not found error
     let result = client
@@ -494,17 +545,28 @@ async fn test_resource_subscription() {
         .expect("Request should succeed but method should not be found");
 
     // Should get a JSON-RPC error response for unimplemented method
-    assert!(result.contains_key("error"), "Should return error for unimplemented resources/subscribe method");
+    assert!(
+        result.contains_key("error"),
+        "Should return error for unimplemented resources/subscribe method"
+    );
     let error = result["error"].as_object().unwrap();
-    assert_eq!(error["code"], -32601, "Should return method not found error code");
-    assert!(error["message"].as_str().unwrap().contains("not found"), "Error message should indicate method not found");
+    assert_eq!(
+        error["code"], -32601,
+        "Should return method not found error code"
+    );
+    assert!(
+        error["message"].as_str().unwrap().contains("not found"),
+        "Error message should indicate method not found"
+    );
 }
 
 #[tokio::test]
 async fn test_paginated_resource() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -529,7 +591,9 @@ async fn test_paginated_resource() {
 async fn test_large_resource_handling() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -547,14 +611,19 @@ async fn test_large_resource_handling() {
     let text = content.as_object().unwrap()["text"].as_str().unwrap();
 
     // Should handle large content properly
-    assert!(text.len() > 1000, "Large resource should return substantial content");
+    assert!(
+        text.len() > 1000,
+        "Large resource should return substantial content"
+    );
 }
 
 #[tokio::test]
 async fn test_resource_with_metadata() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -574,11 +643,13 @@ async fn test_resource_with_metadata() {
     }
 }
 
-#[tokio::test] 
+#[tokio::test]
 async fn test_complete_resource_specification() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -600,7 +671,7 @@ async fn test_complete_resource_specification() {
     // Complete resource should have all optional fields
     assert!(content_obj.contains_key("uri"));
     assert!(content_obj.contains_key("text"));
-    
+
     if content_obj.contains_key("mimeType") {
         assert!(content_obj["mimeType"].is_string());
     }
@@ -610,7 +681,9 @@ async fn test_complete_resource_specification() {
 async fn test_sse_resource_notifications() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -631,7 +704,9 @@ async fn test_sse_resource_notifications() {
     if !events.is_empty() {
         info!("Received SSE events: {:?}", events);
         // Events should contain SSE format data
-        assert!(events.iter().any(|e| e.contains("data:") || e.contains("event:")));
+        assert!(events
+            .iter()
+            .any(|e| e.contains("data:") || e.contains("event:")));
     }
 }
 
@@ -639,7 +714,9 @@ async fn test_sse_resource_notifications() {
 async fn test_multi_resource_collection() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start().await.expect("Failed to start server");
+    let server = TestServerManager::start()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -654,5 +731,8 @@ async fn test_multi_resource_collection() {
 
     let contents = result_data["contents"].as_array().unwrap();
     // Multi resource should return multiple content items
-    assert!(contents.len() > 1, "Multi resource should return multiple content items");
+    assert!(
+        contents.len() > 1,
+        "Multi resource should return multiple content items"
+    );
 }

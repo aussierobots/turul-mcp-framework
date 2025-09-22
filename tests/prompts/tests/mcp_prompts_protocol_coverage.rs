@@ -517,7 +517,7 @@ async fn test_mcp_error_handling_prompt_not_found() {
     use turul_mcp_json_rpc_server::error::JsonRpcError;
 
     let error = JsonRpcError::invalid_params(1.into(), "nonexistent_prompt");
-    assert_eq!(error.error.code, -32602); // JSON-RPC InvalidParams code  
+    assert_eq!(error.error.code, -32602); // JSON-RPC InvalidParams code
     assert!(error.error.message.contains("nonexistent_prompt"));
     // data field is optional for error details
     // assert!(error.error.data.is_some()); // Not guaranteed
@@ -569,7 +569,8 @@ async fn test_edge_cases_and_robustness() {
 #[tokio::test]
 async fn test_complex_content_block_combinations() {
     // Test complex combinations of ContentBlock variants in messages
-    let complex_messages = [PromptMessage::user_text("Please analyze this document:"),
+    let complex_messages = [
+        PromptMessage::user_text("Please analyze this document:"),
         PromptMessage {
             role: Role::User,
             content: ContentBlock::ResourceLink {
@@ -601,7 +602,8 @@ async fn test_complex_content_block_combinations() {
                 data: "base64chartdata".to_string(),
                 mime_type: "image/svg+xml".to_string(),
             },
-        }];
+        },
+    ];
 
     assert_eq!(complex_messages.len(), 5);
 

@@ -1,10 +1,10 @@
 //! SQLite Setup Utility
-//! 
+//!
 //! Creates the SQLite database and required tables for the session storage system.
 
-use turul_mcp_session_storage::{SqliteSessionStorage, SqliteConfig};
 use std::path::PathBuf;
-use tracing::{info, error};
+use tracing::{error, info};
+use turul_mcp_session_storage::{SqliteConfig, SqliteSessionStorage};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session_timeout_minutes: 30,
         cleanup_interval_minutes: 5,
         max_events_per_session: 500,
-        create_tables_if_missing: true, // Always true for setup
+        create_tables_if_missing: true,   // Always true for setup
         create_database_if_missing: true, // Always true for setup
     };
 
@@ -45,9 +45,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("📊 Database created at: {}", database_path.display());
             info!("");
             info!("🎉 Setup complete! You can now run the MCP server:");
-            info!("  SQLITE_PATH={} cargo run --bin simple-sqlite-session", database_path.display());
+            info!(
+                "  SQLITE_PATH={} cargo run --bin simple-sqlite-session",
+                database_path.display()
+            );
             storage
-        },
+        }
         Err(e) => {
             error!("❌ Failed to create SQLite database: {}", e);
             error!("");

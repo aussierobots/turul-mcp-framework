@@ -36,7 +36,6 @@ impl LoggingBuilder {
             batch_size: None,
         }
     }
-    
 
     /// Set the logger name/identifier
     pub fn logger(mut self, logger: impl Into<String>) -> Self {
@@ -147,7 +146,7 @@ impl HasLogTransport for DynamicLogger {
 // LoggerDefinition is automatically implemented via blanket impl!
 
 /// Session-aware logger that can send messages to sessions with filtering
-/// 
+///
 /// This logger is designed to work with session contexts that implement
 /// logging level checking and message sending capabilities.
 #[derive(Debug)]
@@ -164,9 +163,15 @@ pub struct SessionAwareLogger {
 pub trait LoggingTarget {
     /// Check if this target should receive a message at the given level
     fn should_log(&self, level: LoggingLevel) -> bool;
-    
+
     /// Send a log message to this target
-    fn notify_log(&self, level: LoggingLevel, data: serde_json::Value, logger: Option<String>, meta: Option<std::collections::HashMap<String, serde_json::Value>>);
+    fn notify_log(
+        &self,
+        level: LoggingLevel,
+        data: serde_json::Value,
+        logger: Option<String>,
+        meta: Option<std::collections::HashMap<String, serde_json::Value>>,
+    );
 }
 
 impl SessionAwareLogger {
@@ -174,30 +179,37 @@ impl SessionAwareLogger {
     pub fn send_to_target<T: LoggingTarget>(&self, target: &T) {
         if target.should_log(self.level) {
             let message = self.format_message();
-            target.notify_log(self.level, serde_json::json!(message), self.logger.clone(), self.meta.clone());
+            target.notify_log(
+                self.level,
+                serde_json::json!(message),
+                self.logger.clone(),
+                self.meta.clone(),
+            );
         }
     }
-    
+
     /// Send this log message to multiple targets with per-target filtering
     pub fn send_to_targets<T: LoggingTarget>(&self, targets: &[&T]) {
         for &target in targets {
             self.send_to_target(target);
         }
     }
-    
+
     /// Check if this message would be sent to the given target
     pub fn would_send_to_target<T: LoggingTarget>(&self, target: &T) -> bool {
         target.should_log(self.level)
     }
-    
+
     /// Get the formatted message that would be sent
     pub fn format_message(&self) -> String {
         match &self.data {
             Value::String(s) => s.clone(),
-            other => serde_json::to_string(other).unwrap_or_else(|_| "<invalid log data>".to_string()),
+            other => {
+                serde_json::to_string(other).unwrap_or_else(|_| "<invalid log data>".to_string())
+            }
         }
     }
-    
+
     /// Convert logging level to string representation
     pub fn level_to_string(&self) -> &'static str {
         match self.level {

@@ -2,12 +2,12 @@
 //!
 //! Tests for MCP 2025-06-18 pagination features.
 
-use crate::handlers::{ResourcesListHandler, McpHandler};
+use crate::handlers::{McpHandler, ResourcesListHandler};
 use crate::resource::McpResource;
-use turul_mcp_protocol::resources::{ResourceContent, ListResourcesResult};
-use turul_mcp_protocol::meta::PaginatedResponse;
-use serde_json::{json, Value};
 use async_trait::async_trait;
+use serde_json::{Value, json};
+use turul_mcp_protocol::meta::PaginatedResponse;
+use turul_mcp_protocol::resources::{ListResourcesResult, ResourceContent};
 
 // Simple test resource for pagination
 #[derive(Clone)]
@@ -19,7 +19,7 @@ struct TestResource {
 impl TestResource {
     fn new(id: impl Into<String>) -> Self {
         let id_str = id.into();
-        Self { 
+        Self {
             uri: format!("test://item/{}", id_str),
             id: id_str,
         }
@@ -31,27 +31,31 @@ impl McpResource for TestResource {
     async fn read(&self, _params: Option<Value>) -> crate::McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
             format!("test://item/{}", self.id),
-            format!("Test content for {}", self.id)
+            format!("Test content for {}", self.id),
         )])
     }
 }
 
 // Required trait implementations for TestResource
 use turul_mcp_protocol::resources::{
-    HasResourceMetadata, HasResourceDescription, HasResourceUri, 
-    HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta
+    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
+    HasResourceMimeType, HasResourceSize, HasResourceUri,
 };
 
 impl HasResourceMetadata for TestResource {
-    fn name(&self) -> &str { "test_resource" }
+    fn name(&self) -> &str {
+        "test_resource"
+    }
 }
 
 impl HasResourceDescription for TestResource {
-    fn description(&self) -> Option<&str> { Some("Test resource for pagination") }
+    fn description(&self) -> Option<&str> {
+        Some("Test resource for pagination")
+    }
 }
 
 impl HasResourceUri for TestResource {
-    fn uri(&self) -> &str { 
+    fn uri(&self) -> &str {
         &self.uri
     }
 }
@@ -65,47 +69,47 @@ impl HasResourceMeta for TestResource {}
 async fn test_resources_list_pagination() {
     // Create handler with multiple resources
     let mut handler = ResourcesListHandler::new();
-    
+
     // Add resources in predictable order (will be sorted by URI)
     for i in 1..=75 {
         let resource = TestResource::new(format!("item_{:03}", i));
         handler = handler.add_resource(resource);
     }
-    
+
     // Test first page (no cursor)
     let page1_response = handler.handle(None).await.unwrap();
-    let page1_data: PaginatedResponse<ListResourcesResult> = 
+    let page1_data: PaginatedResponse<ListResourcesResult> =
         serde_json::from_value(page1_response).unwrap();
-    
+
     // Validate first page
     assert_eq!(page1_data.data.resources.len(), 50); // Default page size
     assert!(page1_data.meta.is_some());
-    
+
     let page1_meta = page1_data.meta.as_ref().unwrap();
     assert_eq!(page1_meta.total, Some(75));
     assert_eq!(page1_meta.has_more, Some(true));
     assert!(page1_meta.cursor.is_some());
-    
+
     // Test second page using cursor
     let cursor = page1_meta.cursor.as_ref().unwrap();
     let page2_params = json!({ "cursor": cursor.as_str() });
     let page2_response = handler.handle(Some(page2_params)).await.unwrap();
-    let page2_data: PaginatedResponse<ListResourcesResult> = 
+    let page2_data: PaginatedResponse<ListResourcesResult> =
         serde_json::from_value(page2_response).unwrap();
-    
+
     // Validate second page
     assert_eq!(page2_data.data.resources.len(), 25); // Remaining items
     assert!(page2_data.meta.is_some());
-    
+
     let page2_meta = page2_data.meta.as_ref().unwrap();
     assert_eq!(page2_meta.total, Some(75));
     assert_eq!(page2_meta.has_more, Some(false)); // No more pages
     assert!(page2_meta.cursor.is_none()); // No next cursor
-    
+
     // Verify no overlap between pages
     let page1_uris: Vec<&String> = page1_data.data.resources.iter().map(|r| &r.uri).collect();
     let page2_uris: Vec<&String> = page2_data.data.resources.iter().map(|r| &r.uri).collect();
-    
+
     for page1_uri in &page1_uris {
         assert!(!page2_uris.contains(page1_uri), "Pages should not overlap");
     }
@@ -115,21 +119,20 @@ async fn test_resources_list_pagination() {
 async fn test_pagination_cursor_consistency() {
     // Test that cursors work consistently
     let mut handler = ResourcesListHandler::new();
-    
+
     // Add fewer resources to test edge cases
     for i in 1..=10 {
         let resource = TestResource::new(format!("cursor_test_{:02}", i));
         handler = handler.add_resource(resource);
     }
-    
+
     // All resources should fit in one page
     let response = handler.handle(None).await.unwrap();
-    let data: PaginatedResponse<ListResourcesResult> = 
-        serde_json::from_value(response).unwrap();
-    
+    let data: PaginatedResponse<ListResourcesResult> = serde_json::from_value(response).unwrap();
+
     assert_eq!(data.data.resources.len(), 10);
     assert!(data.meta.is_some());
-    
+
     let meta = data.meta.as_ref().unwrap();
     assert_eq!(meta.total, Some(10));
     assert_eq!(meta.has_more, Some(false)); // No more pages
@@ -140,18 +143,17 @@ async fn test_pagination_cursor_consistency() {
 async fn test_pagination_with_invalid_cursor() {
     // Test that invalid cursors are handled gracefully
     let mut handler = ResourcesListHandler::new();
-    
+
     for i in 1..=5 {
         let resource = TestResource::new(format!("invalid_test_{}", i));
         handler = handler.add_resource(resource);
     }
-    
+
     // Test with invalid cursor (should start from beginning)
     let invalid_params = json!({ "cursor": "invalid_cursor_value" });
     let response = handler.handle(Some(invalid_params)).await.unwrap();
-    let data: PaginatedResponse<ListResourcesResult> = 
-        serde_json::from_value(response).unwrap();
-    
+    let data: PaginatedResponse<ListResourcesResult> = serde_json::from_value(response).unwrap();
+
     // Should return all resources (graceful fallback)
     assert_eq!(data.data.resources.len(), 5);
     assert!(data.meta.is_some());
@@ -162,15 +164,14 @@ async fn test_pagination_with_invalid_cursor() {
 async fn test_empty_resources_pagination() {
     // Test pagination with no resources
     let handler = ResourcesListHandler::new();
-    
+
     let response = handler.handle(None).await.unwrap();
-    let data: PaginatedResponse<ListResourcesResult> = 
-        serde_json::from_value(response).unwrap();
-    
+    let data: PaginatedResponse<ListResourcesResult> = serde_json::from_value(response).unwrap();
+
     // Empty list should have proper pagination metadata
     assert_eq!(data.data.resources.len(), 0);
     assert!(data.meta.is_some());
-    
+
     let meta = data.meta.as_ref().unwrap();
     assert_eq!(meta.total, Some(0));
     assert_eq!(meta.has_more, Some(false));
@@ -201,8 +202,7 @@ async fn test_pagination_sorting_order_validation() {
 
     // Get all resources in one page
     let response = handler.handle(None).await.unwrap();
-    let data: PaginatedResponse<ListResourcesResult> =
-        serde_json::from_value(response).unwrap();
+    let data: PaginatedResponse<ListResourcesResult> = serde_json::from_value(response).unwrap();
 
     // Extract URIs from response
     let returned_uris: Vec<&String> = data.data.resources.iter().map(|r| &r.uri).collect();
@@ -286,7 +286,11 @@ async fn test_pagination_page_size_behavior() {
     let page1_data: PaginatedResponse<ListResourcesResult> =
         serde_json::from_value(page1_response).unwrap();
 
-    assert_eq!(page1_data.data.resources.len(), 50, "First page should have 50 resources");
+    assert_eq!(
+        page1_data.data.resources.len(),
+        50,
+        "First page should have 50 resources"
+    );
     assert_eq!(page1_data.meta.as_ref().unwrap().has_more, Some(true));
 
     // Second page should have remaining 25 resources
@@ -296,7 +300,11 @@ async fn test_pagination_page_size_behavior() {
     let page2_data: PaginatedResponse<ListResourcesResult> =
         serde_json::from_value(page2_response).unwrap();
 
-    assert_eq!(page2_data.data.resources.len(), 25, "Second page should have 25 resources");
+    assert_eq!(
+        page2_data.data.resources.len(),
+        25,
+        "Second page should have 25 resources"
+    );
     assert_eq!(page2_data.meta.as_ref().unwrap().has_more, Some(false));
 
     // Test with exactly 50 resources
@@ -310,9 +318,20 @@ async fn test_pagination_page_size_behavior() {
     let data_50: PaginatedResponse<ListResourcesResult> =
         serde_json::from_value(response_50).unwrap();
 
-    assert_eq!(data_50.data.resources.len(), 50, "Should return all 50 resources in one page");
-    assert_eq!(data_50.meta.as_ref().unwrap().has_more, Some(false), "Should not have more pages");
-    assert!(data_50.meta.as_ref().unwrap().cursor.is_none(), "Should not have next cursor");
+    assert_eq!(
+        data_50.data.resources.len(),
+        50,
+        "Should return all 50 resources in one page"
+    );
+    assert_eq!(
+        data_50.meta.as_ref().unwrap().has_more,
+        Some(false),
+        "Should not have more pages"
+    );
+    assert!(
+        data_50.meta.as_ref().unwrap().cursor.is_none(),
+        "Should not have next cursor"
+    );
 }
 
 #[tokio::test]
@@ -321,8 +340,11 @@ async fn test_pagination_resource_content_correctness() {
     let mut handler = ResourcesListHandler::new();
 
     // Add resources with predictable naming pattern
-    let expected_ids = (1..=10).map(|i| format!("content_test_{:02}", i)).collect::<Vec<_>>();
-    let expected_uris = expected_ids.iter()
+    let expected_ids = (1..=10)
+        .map(|i| format!("content_test_{:02}", i))
+        .collect::<Vec<_>>();
+    let expected_uris = expected_ids
+        .iter()
         .map(|id| format!("test://item/{}", id))
         .collect::<Vec<_>>();
 
@@ -336,17 +358,26 @@ async fn test_pagination_resource_content_correctness() {
     }
 
     let response = handler.handle(None).await.unwrap();
-    let data: PaginatedResponse<ListResourcesResult> =
-        serde_json::from_value(response).unwrap();
+    let data: PaginatedResponse<ListResourcesResult> = serde_json::from_value(response).unwrap();
 
     // Verify all resources are present and correctly ordered
     assert_eq!(data.data.resources.len(), expected_uris.len());
 
     // Check each resource has correct URI and metadata
     for (i, resource) in data.data.resources.iter().enumerate() {
-        assert_eq!(resource.uri, expected_uris[i], "Resource {} should have correct URI", i);
-        assert_eq!(resource.name, "test_resource", "Resource should have correct name");
-        assert_eq!(resource.description, Some("Test resource for pagination".to_string()));
+        assert_eq!(
+            resource.uri, expected_uris[i],
+            "Resource {} should have correct URI",
+            i
+        );
+        assert_eq!(
+            resource.name, "test_resource",
+            "Resource should have correct name"
+        );
+        assert_eq!(
+            resource.description,
+            Some("Test resource for pagination".to_string())
+        );
         assert_eq!(resource.mime_type, None); // TestResource returns None for mime_type
     }
 }

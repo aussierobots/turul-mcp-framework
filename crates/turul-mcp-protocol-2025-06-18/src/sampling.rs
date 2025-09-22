@@ -2,9 +2,9 @@
 //!
 //! This module defines types for sampling requests in MCP.
 
+use crate::prompts::ContentBlock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::prompts::ContentBlock;
 
 /// Sampling request parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -256,31 +256,31 @@ impl HasCreateMessageParams for CreateMessageParams {
     fn messages(&self) -> &Vec<SamplingMessage> {
         &self.messages
     }
-    
+
     fn model_preferences(&self) -> Option<&ModelPreferences> {
         self.model_preferences.as_ref()
     }
-    
+
     fn system_prompt(&self) -> Option<&String> {
         self.system_prompt.as_ref()
     }
-    
+
     fn include_context(&self) -> Option<&String> {
         self.include_context.as_ref()
     }
-    
+
     fn temperature(&self) -> Option<&f64> {
         self.temperature.as_ref()
     }
-    
+
     fn max_tokens(&self) -> u32 {
         self.max_tokens
     }
-    
+
     fn stop_sequences(&self) -> Option<&Vec<String>> {
         self.stop_sequences.as_ref()
     }
-    
+
     fn metadata(&self) -> Option<&Value> {
         self.metadata.as_ref()
     }
@@ -309,8 +309,14 @@ impl HasParams for CreateMessageRequest {
 impl HasData for CreateMessageResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("role".to_string(), serde_json::to_value(&self.message.role).unwrap_or(Value::String("user".to_string())));
-        data.insert("content".to_string(), serde_json::to_value(&self.message.content).unwrap_or(Value::Null));
+        data.insert(
+            "role".to_string(),
+            serde_json::to_value(&self.message.role).unwrap_or(Value::String("user".to_string())),
+        );
+        data.insert(
+            "content".to_string(),
+            serde_json::to_value(&self.message.content).unwrap_or(Value::Null),
+        );
         data.insert("model".to_string(), Value::String(self.model.clone()));
         if let Some(ref stop_reason) = self.stop_reason {
             data.insert("stopReason".to_string(), Value::String(stop_reason.clone()));
@@ -331,15 +337,15 @@ impl crate::traits::CreateMessageResult for CreateMessageResult {
     fn role(&self) -> &Role {
         &self.message.role
     }
-    
+
     fn content(&self) -> &ContentBlock {
         &self.message.content
     }
-    
+
     fn model(&self) -> &String {
         &self.model
     }
-    
+
     fn stop_reason(&self) -> Option<&String> {
         self.stop_reason.as_ref()
     }
@@ -353,7 +359,7 @@ impl crate::traits::CreateMessageResult for CreateMessageResult {
 pub trait HasSamplingMessageMetadata {
     /// Role of the message (from spec)
     fn role(&self) -> &Role;
-    
+
     /// Content of the message (from spec)
     fn content(&self) -> &ContentBlock;
 }
@@ -362,12 +368,12 @@ pub trait HasSamplingMessageMetadata {
 pub trait HasSamplingConfig {
     /// Maximum tokens to generate (required field from spec)
     fn max_tokens(&self) -> u32;
-    
+
     /// Temperature for sampling (optional from spec)
     fn temperature(&self) -> Option<f64> {
         None
     }
-    
+
     /// Stop sequences (optional from spec)
     fn stop_sequences(&self) -> Option<&Vec<String>> {
         None
@@ -378,12 +384,12 @@ pub trait HasSamplingConfig {
 pub trait HasSamplingContext {
     /// Messages for context (required from spec)
     fn messages(&self) -> &[SamplingMessage];
-    
+
     /// System prompt (optional from spec)
     fn system_prompt(&self) -> Option<&str> {
         None
     }
-    
+
     /// Include context setting (optional from spec)
     fn include_context(&self) -> Option<&str> {
         None
@@ -396,7 +402,7 @@ pub trait HasModelPreferences {
     fn model_preferences(&self) -> Option<&ModelPreferences> {
         None
     }
-    
+
     /// Metadata (optional from spec)
     fn metadata(&self) -> Option<&Value> {
         None
@@ -404,11 +410,7 @@ pub trait HasModelPreferences {
 }
 
 /// Composed sampling definition trait (automatically implemented via blanket impl)
-pub trait SamplingDefinition: 
-    HasSamplingConfig + 
-    HasSamplingContext + 
-    HasModelPreferences 
-{
+pub trait SamplingDefinition: HasSamplingConfig + HasSamplingContext + HasModelPreferences {
     /// Convert to CreateMessageParams
     fn to_create_params(&self) -> CreateMessageParams {
         CreateMessageParams {
@@ -426,33 +428,53 @@ pub trait SamplingDefinition:
 }
 
 // Blanket implementation: any type implementing the fine-grained traits automatically gets SamplingDefinition
-impl<T> SamplingDefinition for T 
-where 
-    T: HasSamplingConfig + HasSamplingContext + HasModelPreferences 
-{}
+impl<T> SamplingDefinition for T where
+    T: HasSamplingConfig + HasSamplingContext + HasModelPreferences
+{
+}
 
 // ================== TRAIT IMPLEMENTATIONS FOR CONCRETE TYPES ==================
 
 impl HasSamplingMessageMetadata for SamplingMessage {
-    fn role(&self) -> &Role { &self.role }
-    fn content(&self) -> &ContentBlock { &self.content }
+    fn role(&self) -> &Role {
+        &self.role
+    }
+    fn content(&self) -> &ContentBlock {
+        &self.content
+    }
 }
 
 impl HasSamplingConfig for CreateMessageParams {
-    fn max_tokens(&self) -> u32 { self.max_tokens }
-    fn temperature(&self) -> Option<f64> { self.temperature }
-    fn stop_sequences(&self) -> Option<&Vec<String>> { self.stop_sequences.as_ref() }
+    fn max_tokens(&self) -> u32 {
+        self.max_tokens
+    }
+    fn temperature(&self) -> Option<f64> {
+        self.temperature
+    }
+    fn stop_sequences(&self) -> Option<&Vec<String>> {
+        self.stop_sequences.as_ref()
+    }
 }
 
 impl HasSamplingContext for CreateMessageParams {
-    fn messages(&self) -> &[SamplingMessage] { &self.messages }
-    fn system_prompt(&self) -> Option<&str> { self.system_prompt.as_deref() }
-    fn include_context(&self) -> Option<&str> { self.include_context.as_deref() }
+    fn messages(&self) -> &[SamplingMessage] {
+        &self.messages
+    }
+    fn system_prompt(&self) -> Option<&str> {
+        self.system_prompt.as_deref()
+    }
+    fn include_context(&self) -> Option<&str> {
+        self.include_context.as_deref()
+    }
 }
 
 impl HasModelPreferences for CreateMessageParams {
-    fn model_preferences(&self) -> Option<&ModelPreferences> { self.model_preferences.as_ref() }
-    fn metadata(&self) -> Option<&Value> { self.metadata.as_ref() }
+    fn model_preferences(&self) -> Option<&ModelPreferences> {
+        self.model_preferences.as_ref()
+    }
+    fn metadata(&self) -> Option<&Value> {
+        self.metadata.as_ref()
+    }
 }
 
 // CreateMessageParams automatically implements SamplingDefinition via trait composition!

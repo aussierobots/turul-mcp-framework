@@ -96,11 +96,11 @@ impl InspectRootTool {
     fn new() -> Self {
         let mut properties = HashMap::new();
         properties.insert("root_uri".to_string(), JsonSchema::string());
-        
+
         let input_schema = ToolSchema::object()
             .with_properties(properties)
             .with_required(vec!["root_uri".to_string()]);
-        
+
         Self { input_schema }
     }
 }
@@ -218,11 +218,11 @@ impl FileOperationTool {
         let mut properties = HashMap::new();
         properties.insert("operation".to_string(), JsonSchema::string());
         properties.insert("path".to_string(), JsonSchema::string());
-        
+
         let input_schema = ToolSchema::object()
             .with_properties(properties)
             .with_required(vec!["operation".to_string(), "path".to_string()]);
-        
+
         Self { input_schema }
     }
 }
@@ -274,7 +274,7 @@ impl McpTool for FileOperationTool {
         let operation = args.get("operation")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("operation"))?;
-            
+
         let path = args.get("path")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("path"))?;
@@ -282,7 +282,7 @@ impl McpTool for FileOperationTool {
         // Validate path is within allowed roots
         let allowed_roots = [
             "file:///workspace",
-            "file:///data", 
+            "file:///data",
             "file:///tmp",
             "file:///config",
             "file:///logs"
@@ -420,7 +420,7 @@ impl McpTool for RootSecurityTool {
                    • MCP server operates in isolated environment\n\
                    • Cannot access files outside defined roots\n\
                    • Prevents unauthorized system access".to_string()),
-            
+
             ToolResult::text("🛡️ SECURITY EXAMPLES\n\
                 \n\
                 ALLOWED OPERATIONS:\n\

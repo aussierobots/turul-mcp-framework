@@ -2,9 +2,9 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{DeriveInput, Data, Fields, Result};
+use syn::{Data, DeriveInput, Fields, Result};
 
-use crate::utils::{extract_prompt_meta, extract_field_meta};
+use crate::utils::{extract_field_meta, extract_prompt_meta};
 
 pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
     let struct_name = &input.ident;
@@ -17,7 +17,12 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
     // Check if it's a struct
     let data = match &input.data {
         Data::Struct(data) => data,
-        _ => return Err(syn::Error::new_spanned(&input, "McpPrompt can only be derived for structs")),
+        _ => {
+            return Err(syn::Error::new_spanned(
+                &input,
+                "McpPrompt can only be derived for structs",
+            ));
+        }
     };
 
     // Generate argument definitions from struct fields
@@ -77,7 +82,10 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
     Ok(expanded)
 }
 
-fn generate_argument_fields(struct_name: &syn::Ident, data: &syn::DataStruct) -> Result<Vec<TokenStream>> {
+fn generate_argument_fields(
+    struct_name: &syn::Ident,
+    data: &syn::DataStruct,
+) -> Result<Vec<TokenStream>> {
     let mut argument_fields = Vec::new();
 
     match &data.fields {
@@ -85,10 +93,12 @@ fn generate_argument_fields(struct_name: &syn::Ident, data: &syn::DataStruct) ->
             for field in &fields.named {
                 let field_name = field.ident.as_ref().unwrap();
                 let field_name_str = field_name.to_string();
-                
+
                 let field_meta = extract_field_meta(&field.attrs)?;
-                let description = field_meta.description.unwrap_or_else(|| "No description".to_string());
-                
+                let description = field_meta
+                    .description
+                    .unwrap_or_else(|| "No description".to_string());
+
                 // For now, all prompt arguments are optional - can be enhanced later
                 argument_fields.push(quote! {
                     turul_mcp_protocol::prompts::PromptArgument::new(#field_name_str)
@@ -97,7 +107,10 @@ fn generate_argument_fields(struct_name: &syn::Ident, data: &syn::DataStruct) ->
             }
         }
         Fields::Unnamed(_) => {
-            return Err(syn::Error::new_spanned(struct_name, "Tuple structs are not supported for prompts"));
+            return Err(syn::Error::new_spanned(
+                struct_name,
+                "Tuple structs are not supported for prompts",
+            ));
         }
         Fields::Unit => {
             // Unit structs can have prompts with no arguments
@@ -106,7 +119,6 @@ fn generate_argument_fields(struct_name: &syn::Ident, data: &syn::DataStruct) ->
 
     Ok(argument_fields)
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -184,7 +196,7 @@ mod tests {
 
         let result = derive_mcp_prompt_impl(input);
         assert!(result.is_ok());
-        
+
         // The derive should succeed - actual argument handling will work at runtime
         let _code = result.unwrap();
         // NOTE: Argument generation works but fields with descriptions need proper field attribute parsing
@@ -199,7 +211,7 @@ mod tests {
 
         let result = derive_mcp_prompt_impl(input);
         assert!(result.is_ok());
-        
+
         // Check that metadata traits are implemented (but not McpPrompt)
         let code = result.unwrap().to_string();
         assert!(code.contains("HasPromptMetadata"));

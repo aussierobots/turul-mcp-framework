@@ -4,17 +4,16 @@
 //! for communicating with MCP servers.
 
 use anyhow::{Context, Result};
-use serde::{Serialize, Deserialize};
-use serde_json::{json, Value};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use std::time::Duration;
 use tracing::{debug, info, warn};
 
 // Use the framework client and transport
 use turul_mcp_client::{
-    McpClient as FrameworkClient, 
-    McpClientResult,
+    McpClient as FrameworkClient, McpClientResult,
     config::ClientConfig,
-    transport::{HttpTransport, BoxedTransport}
+    transport::{BoxedTransport, HttpTransport},
 };
 
 // Import protocol types directly since the framework re-exports them
@@ -61,7 +60,7 @@ impl McpClient {
     /// Create a new MCP client using the framework
     pub async fn new(config: McpClientConfig) -> Result<Self> {
         info!("🔧 Creating MCP client using turul-mcp-client framework");
-        
+
         // Create HTTP transport for the framework client
         // Add /mcp endpoint to the base URL for MCP protocol
         let mcp_url = if config.base_url.ends_with("/mcp") {
@@ -69,8 +68,7 @@ impl McpClient {
         } else {
             format!("{}/mcp", config.base_url.trim_end_matches('/'))
         };
-        let transport = HttpTransport::new(&mcp_url)
-            .context("Failed to create HTTP transport")?;
+        let transport = HttpTransport::new(&mcp_url).context("Failed to create HTTP transport")?;
 
         // Convert to BoxedTransport
         let boxed_transport: BoxedTransport = Box::new(transport);
@@ -92,9 +90,11 @@ impl McpClient {
     /// Initialize connection with the server using framework
     pub async fn initialize(&mut self) -> Result<InitializeResult> {
         info!("🚀 Initializing MCP connection using framework");
-        
+
         // Connect to the server
-        self.framework_client.connect().await
+        self.framework_client
+            .connect()
+            .await
             .context("Framework connection failed")?;
 
         // For now, return a simple initialization result
@@ -111,7 +111,7 @@ impl McpClient {
                 "framework": "turul-mcp-client",
                 "transport": "HTTP",
                 "base_url": self.config.base_url
-            })
+            }),
         };
 
         info!("✅ MCP connection initialized successfully");
@@ -123,12 +123,15 @@ impl McpClient {
     /// List available tools using framework
     pub async fn list_tools(&self) -> Result<ListToolsResult> {
         debug!("📋 Listing tools using framework");
-        
-        let tools = self.framework_client.list_tools().await
+
+        let tools = self
+            .framework_client
+            .list_tools()
+            .await
             .context("Framework list_tools failed")?;
 
         debug!("Found {} tools", tools.len());
-        
+
         Ok(ListToolsResult { tools })
     }
 
@@ -136,10 +139,13 @@ impl McpClient {
     pub async fn call_tool(&self, name: &str, arguments: Option<Value>) -> Result<CallToolResult> {
         info!("🔧 Calling tool '{}' using framework", name);
         debug!("Tool arguments: {:?}", arguments);
-        
+
         let args = arguments.unwrap_or(json!({}));
-        
-        let content = self.framework_client.call_tool(name, args).await
+
+        let content = self
+            .framework_client
+            .call_tool(name, args)
+            .await
             .context("Framework call_tool failed")?;
 
         info!("✅ Tool '{}' executed successfully", name);
@@ -162,7 +168,7 @@ impl McpClient {
     /// Test the client connection
     pub async fn test_connection(&self) -> Result<Value> {
         info!("🔍 Testing MCP client connection using framework");
-        
+
         // Use framework's list_tools as a connection test
         match self.list_tools().await {
             Ok(tools_result) => {

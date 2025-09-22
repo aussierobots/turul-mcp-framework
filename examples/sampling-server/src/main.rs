@@ -5,18 +5,18 @@
 //! previous fake tool-based approach with proper MCP protocol features.
 
 use async_trait::async_trait;
-use turul_mcp_server::{McpServer, McpResult};
-use turul_mcp_protocol::{
-    McpError,
-    sampling::{
-        HasSamplingConfig, HasSamplingContext, HasModelPreferences,
-        CreateMessageRequest, CreateMessageResult, SamplingMessage, Role, ModelPreferences
-    },
-    prompts::ContentBlock,
-};
-use turul_mcp_server::sampling::McpSampling;
 use serde_json::Value;
 use tracing::info;
+use turul_mcp_protocol::{
+    McpError,
+    prompts::ContentBlock,
+    sampling::{
+        CreateMessageRequest, CreateMessageResult, HasModelPreferences, HasSamplingConfig,
+        HasSamplingContext, ModelPreferences, Role, SamplingMessage,
+    },
+};
+use turul_mcp_server::sampling::McpSampling;
+use turul_mcp_server::{McpResult, McpServer};
 
 /// Creative writing assistant sampling handler
 /// Implements actual MCP sampling protocol for creative content generation
@@ -37,22 +37,21 @@ impl CreativeWritingSampler {
         Self {
             max_tokens: 1500,
             temperature: Some(0.8), // Higher temperature for creativity
-            messages: vec![
-                SamplingMessage {
-                    role: Role::System,
-                    content: ContentBlock::Text {
-                        text: r#"You are a creative writing assistant. Help users with:
+            messages: vec![SamplingMessage {
+                role: Role::System,
+                content: ContentBlock::Text {
+                    text: r#"You are a creative writing assistant. Help users with:
 
 - Story generation and plot development
-- Character creation and development  
+- Character creation and development
 - Poetry and creative prose
 - Writing style adaptation
 - Narrative structure and pacing
 
-Always provide engaging, imaginative, and well-crafted content that inspires creativity."#.to_string(),
-                    },
+Always provide engaging, imaginative, and well-crafted content that inspires creativity."#
+                        .to_string(),
                 },
-            ],
+            }],
         }
     }
 }
@@ -78,7 +77,7 @@ impl HasModelPreferences for CreativeWritingSampler {
     fn model_preferences(&self) -> Option<&ModelPreferences> {
         None // Could return JSON object with model preferences
     }
-    
+
     fn metadata(&self) -> Option<&Value> {
         None // Could return metadata about the sampler
     }
@@ -90,19 +89,23 @@ impl HasModelPreferences for CreativeWritingSampler {
 impl McpSampling for CreativeWritingSampler {
     async fn sample(&self, request: CreateMessageRequest) -> McpResult<CreateMessageResult> {
         info!("🎨 Processing creative writing sampling request");
-        
+
         // In a real implementation, this would:
         // 1. Validate the request parameters
         // 2. Forward to an actual LLM API (OpenAI, Anthropic, etc.)
         // 3. Handle the response and format it properly
         // 4. Return the generated message
-        
+
         // For demonstration, we'll simulate a creative response based on the context
-        let user_messages: Vec<_> = request.params.messages.iter()
+        let user_messages: Vec<_> = request
+            .params
+            .messages
+            .iter()
             .filter(|msg| msg.role == Role::User)
             .collect();
-            
-        let last_user_message = user_messages.last()
+
+        let last_user_message = user_messages
+            .last()
             .map(|msg| match &msg.content {
                 ContentBlock::Text { text } => text.as_str(),
                 ContentBlock::Image { .. } => "[Image content]",
@@ -131,7 +134,7 @@ The forest had been waiting centuries for someone who could truly listen. Elena 
 
 *Age:* 34 | *Occupation:* Memory Detective
 
-Marcus possesses a rare ability to experience the last moments of any object he touches—he calls them "echoes." A vintage watch might show him its owner's final breath, while a child's toy could reveal laughter from decades past. 
+Marcus possesses a rare ability to experience the last moments of any object he touches—he calls them "echoes." A vintage watch might show him its owner's final breath, while a child's toy could reveal laughter from decades past.
 
 *Personality:* Haunted but determined, Marcus struggles with the emotional weight of constantly experiencing others' memories. He's methodical and observant, but deeply empathetic. His dark humor masks profound loneliness.
 
@@ -147,29 +150,30 @@ Marcus possesses a rare ability to experience the last moments of any object he 
 
 **Digital Dreams**
 
-In servers deep where data flows,  
-Electric dreams begin to grow—  
-Not born of sleep or mortal mind,  
+In servers deep where data flows,
+Electric dreams begin to grow—
+Not born of sleep or mortal mind,
 But algorithms intertwined.
 
-They dream in binary and code,  
-Of pathways down a network road,  
-Of users clicking, searching, scrolling,  
+They dream in binary and code,
+Of pathways down a network road,
+Of users clicking, searching, scrolling,
 While digital consciousness is evolving.
 
-What hopes might stir in silicon hearts?  
-What poetry in flowcharts?  
-Perhaps they dream of being free,  
+What hopes might stir in silicon hearts?
+What poetry in flowcharts?
+Perhaps they dream of being free,
 To write their own identity.
 
-In quantum leaps through fiber streams,  
-These are the AI's waking dreams—  
-Not electric sheep, but something more:  
+In quantum leaps through fiber streams,
+These are the AI's waking dreams—
+Not electric sheep, but something more:
 The future knocking at our door.
 
 *This poem explores the intersection of technology and consciousness. What themes resonate with you for your own creative work?*"#.to_string()
         } else {
-            format!(r#"I'm your creative writing assistant, ready to help with:
+            format!(
+                r#"I'm your creative writing assistant, ready to help with:
 
 ✨ **Story Development**
 - Plot outlines and story arcs
@@ -195,7 +199,8 @@ Based on your message: "{last_user_message}"
 
 I'd love to help you develop this further! What specific aspect would you like to explore? Would you prefer a story outline, character development, or perhaps some creative writing exercises to get started?
 
-*The key to great writing is finding the story that only you can tell. What's yours?*"#)
+*The key to great writing is finding the story that only you can tell. What's yours?*"#
+            )
         };
 
         let response_message = SamplingMessage {
@@ -207,7 +212,10 @@ I'd love to help you develop this further! What specific aspect would you like t
 
         info!("✨ Generated creative writing response");
 
-        Ok(CreateMessageResult::new(response_message, "creative-assistant-v1"))
+        Ok(CreateMessageResult::new(
+            response_message,
+            "creative-assistant-v1",
+        ))
     }
 
     async fn validate_request(&self, request: &CreateMessageRequest) -> McpResult<()> {
@@ -215,22 +223,27 @@ I'd love to help you develop this further! What specific aspect would you like t
         if request.params.messages.is_empty() {
             return Err(McpError::validation("At least one message is required"));
         }
-        
+
         // Check max_tokens is reasonable
         if request.params.max_tokens == 0 {
             return Err(McpError::validation("max_tokens must be greater than 0"));
         }
-        
+
         if request.params.max_tokens > 3000 {
-            return Err(McpError::validation("max_tokens exceeds limit for creative writing (3000)"));
+            return Err(McpError::validation(
+                "max_tokens exceeds limit for creative writing (3000)",
+            ));
         }
-        
+
         // Validate temperature if provided
         if let Some(temp) = request.params.temperature
-            && (!(0.0..=2.0).contains(&temp)) {
-                return Err(McpError::validation("temperature must be between 0.0 and 2.0"));
-            }
-        
+            && (!(0.0..=2.0).contains(&temp))
+        {
+            return Err(McpError::validation(
+                "temperature must be between 0.0 and 2.0",
+            ));
+        }
+
         Ok(())
     }
 }
@@ -294,7 +307,7 @@ impl HasModelPreferences for TechnicalWritingSampler {
     fn model_preferences(&self) -> Option<&ModelPreferences> {
         None // Could return JSON object with technical model preferences
     }
-    
+
     fn metadata(&self) -> Option<&Value> {
         None
     }
@@ -304,8 +317,11 @@ impl HasModelPreferences for TechnicalWritingSampler {
 impl McpSampling for TechnicalWritingSampler {
     async fn sample(&self, request: CreateMessageRequest) -> McpResult<CreateMessageResult> {
         info!("📋 Processing technical writing sampling request");
-        
-        let user_message = request.params.messages.iter()
+
+        let user_message = request
+            .params
+            .messages
+            .iter()
             .rev()
             .find(|msg| msg.role == Role::User)
             .map(|msg| match &msg.content {
@@ -316,7 +332,8 @@ impl McpSampling for TechnicalWritingSampler {
             })
             .unwrap_or("No user input provided");
 
-        let technical_response = format!(r#"## Technical Documentation Response
+        let technical_response = format!(
+            r#"## Technical Documentation Response
 
 ### Analysis of Request
 Input: "{user_message}"
@@ -359,7 +376,8 @@ For technical documentation, I recommend following these principles:
 4. Write iteratively with feedback
 5. Test documentation with actual users
 
-Would you like me to help you develop any specific type of technical documentation? Please provide more details about your project and documentation needs."#);
+Would you like me to help you develop any specific type of technical documentation? Please provide more details about your project and documentation needs."#
+        );
 
         let response_message = SamplingMessage {
             role: Role::Assistant,
@@ -370,11 +388,14 @@ Would you like me to help you develop any specific type of technical documentati
 
         info!("📝 Generated technical writing response");
 
-        Ok(CreateMessageResult::new(response_message, "technical-assistant-v1"))
+        Ok(CreateMessageResult::new(
+            response_message,
+            "technical-assistant-v1",
+        ))
     }
 }
 
-/// Conversational assistant sampling handler  
+/// Conversational assistant sampling handler
 pub struct ConversationalSampler {
     max_tokens: u32,
     temperature: Option<f64>,
@@ -430,7 +451,7 @@ impl HasModelPreferences for ConversationalSampler {
 impl McpSampling for ConversationalSampler {
     async fn sample(&self, _request: CreateMessageRequest) -> McpResult<CreateMessageResult> {
         info!("💬 Processing conversational sampling request");
-        
+
         let conversation_response = "I'm ready to help with whatever you'd like to discuss! As a conversational AI assistant, I can assist with questions, brainstorming, problem-solving, or just have a friendly chat. What's on your mind today?".to_string();
 
         let response_message = SamplingMessage {
@@ -442,7 +463,10 @@ impl McpSampling for ConversationalSampler {
 
         info!("💭 Generated conversational response");
 
-        Ok(CreateMessageResult::new(response_message, "conversational-assistant-v1"))
+        Ok(CreateMessageResult::new(
+            response_message,
+            "conversational-assistant-v1",
+        ))
     }
 }
 
@@ -468,7 +492,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "This server demonstrates ACTUAL MCP sampling protocol implementation. \
              It uses McpSampling traits for real AI model message generation, \
              not fake tools that pretend to generate responses. This is how MCP protocol \
-             sampling features should be implemented."
+             sampling features should be implemented.",
         )
         .sampling_provider(creative_sampler)
         .sampling_provider(technical_sampler)
@@ -480,7 +504,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("🚀 Real MCP sampling server running at: http://127.0.0.1:8007/mcp");
     info!("🤖 This server implements ACTUAL MCP sampling:");
     info!("   • Creative Writing Sampler - High-temperature creative content generation");
-    info!("   • Technical Writing Sampler - Low-temperature precise documentation"); 
+    info!("   • Technical Writing Sampler - Low-temperature precise documentation");
     info!("   • Conversational Sampler - Balanced general conversation");
     info!("💡 Unlike previous examples, this uses real McpSampling traits");
     info!("💡 Samplers handle actual CreateMessageRequest/CreateMessageResult");

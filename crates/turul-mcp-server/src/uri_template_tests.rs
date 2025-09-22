@@ -4,15 +4,14 @@
 mod tests {
     use super::super::*;
     use crate::uri_template::{UriTemplate, VariableValidator};
-    use turul_mcp_protocol::resources::{
-        HasResourceMetadata, HasResourceUri, HasResourceDescription, 
-        HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta,
-        ResourceContent
-    };
-    use turul_mcp_protocol::meta;
-    use serde_json::{json, Value};
-    use std::collections::HashMap;
     use async_trait::async_trait;
+    use serde_json::{Value, json};
+    use std::collections::HashMap;
+    use turul_mcp_protocol::meta;
+    use turul_mcp_protocol::resources::{
+        HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
+        HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
+    };
 
     /// Test resource that supports URI templates
     #[derive(Clone)]
@@ -78,28 +77,29 @@ mod tests {
         async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
             // Extract template variables from params
             let params = params.unwrap_or(json!({}));
-            
+
             if let Some(template_vars) = params.get("template_variables")
-                && let Some(user_id) = template_vars.get("user_id").and_then(|v| v.as_str()) {
-                    // Generate dynamic content based on user_id
-                    let user_data = json!({
-                        "user_id": user_id,
-                        "name": format!("User {}", user_id),
-                        "email": format!("{}@example.com", user_id),
-                        "profile": {
-                            "created": "2024-01-01",
-                            "active": true
-                        }
-                    });
-                    
-                    let uri = format!("file:///user/{}.json", user_id);
-                    return Ok(vec![ResourceContent::text(&uri, user_data.to_string())]);
-                }
-            
+                && let Some(user_id) = template_vars.get("user_id").and_then(|v| v.as_str())
+            {
+                // Generate dynamic content based on user_id
+                let user_data = json!({
+                    "user_id": user_id,
+                    "name": format!("User {}", user_id),
+                    "email": format!("{}@example.com", user_id),
+                    "profile": {
+                        "created": "2024-01-01",
+                        "active": true
+                    }
+                });
+
+                let uri = format!("file:///user/{}.json", user_id);
+                return Ok(vec![ResourceContent::text(&uri, user_data.to_string())]);
+            }
+
             // Fallback for static access
             Ok(vec![ResourceContent::text(
                 &self.base_pattern,
-                r#"{"error": "Template variables required"}"#
+                r#"{"error": "Template variables required"}"#,
             )])
         }
     }
@@ -107,7 +107,7 @@ mod tests {
     #[tokio::test]
     async fn test_uri_template_resource_handler_integration() {
         use crate::handlers::ResourcesReadHandler;
-        
+
         // Create URI template with validation
         let template = UriTemplate::new("file:///user/{user_id}.json")
             .unwrap()
@@ -120,37 +120,49 @@ mod tests {
         let read_handler = ResourcesReadHandler::new()
             .without_security()
             .add_template_resource(template, resource);
-        
+
         // Test with dynamic URI
         let read_params = json!({
             "uri": "file:///user/alice123.json"
         });
 
         let result = read_handler.handle(Some(read_params)).await.unwrap();
-        
+
         // Verify the response structure
         assert!(result.is_object());
-        
+
         let contents = result.get("contents").unwrap().as_array().unwrap();
         assert_eq!(contents.len(), 1);
-        
+
         let content = &contents[0];
-        assert_eq!(content.get("mimeType").unwrap().as_str().unwrap(), "text/plain");
-        assert_eq!(content.get("uri").unwrap().as_str().unwrap(), "file:///user/alice123.json");
-        
+        assert_eq!(
+            content.get("mimeType").unwrap().as_str().unwrap(),
+            "text/plain"
+        );
+        assert_eq!(
+            content.get("uri").unwrap().as_str().unwrap(),
+            "file:///user/alice123.json"
+        );
+
         let text = content.get("text").unwrap().as_str().unwrap();
         let parsed: Value = serde_json::from_str(text).unwrap();
-        
+
         // Verify dynamic content was generated
         assert_eq!(parsed.get("user_id").unwrap().as_str().unwrap(), "alice123");
-        assert_eq!(parsed.get("name").unwrap().as_str().unwrap(), "User alice123");
-        assert_eq!(parsed.get("email").unwrap().as_str().unwrap(), "alice123@example.com");
+        assert_eq!(
+            parsed.get("name").unwrap().as_str().unwrap(),
+            "User alice123"
+        );
+        assert_eq!(
+            parsed.get("email").unwrap().as_str().unwrap(),
+            "alice123@example.com"
+        );
     }
 
     #[tokio::test]
     async fn test_template_validation() {
         use crate::handlers::ResourcesReadHandler;
-        
+
         let template = UriTemplate::new("file:///user/{user_id}.json")
             .unwrap()
             .with_validator("user_id", VariableValidator::user_id());
@@ -160,14 +172,14 @@ mod tests {
         let read_handler = ResourcesReadHandler::new()
             .without_security()
             .add_template_resource(template, resource);
-        
+
         // Test with invalid user_id (contains @)
         let read_params = json!({
             "uri": "file:///user/invalid@user.json"
         });
 
         let result = read_handler.handle(Some(read_params)).await;
-        
+
         // Should return error due to validation failure
         assert!(result.is_err());
     }
@@ -175,13 +187,13 @@ mod tests {
     #[tokio::test]
     async fn test_template_fallback_to_exact_uri() {
         use crate::handlers::ResourcesReadHandler;
-        
+
         let template = UriTemplate::new("file:///user/{user_id}.json")
             .unwrap()
             .with_validator("user_id", VariableValidator::user_id());
 
         let template_resource = UserProfileResource::new();
-        
+
         // Also add a static resource
         let static_resource = UserProfileResource {
             base_pattern: "file:///static.json".to_string(),
@@ -191,14 +203,14 @@ mod tests {
             .without_security()
             .add_template_resource(template, template_resource)
             .add_resource(static_resource);
-        
+
         // Test static resource access (should fall back to exact matching)
         let read_params = json!({
             "uri": "file:///static.json"
         });
 
         let result = read_handler.handle(Some(read_params)).await.unwrap();
-        
+
         // Should succeed without template processing
         assert!(result.is_object());
         assert!(result.get("contents").is_some());
@@ -212,7 +224,9 @@ mod tests {
             .with_validator("format", VariableValidator::image_format());
 
         // Test successful extraction
-        let vars = template.extract("file:///user/alice123/avatar.png").unwrap();
+        let vars = template
+            .extract("file:///user/alice123/avatar.png")
+            .unwrap();
         assert_eq!(vars.get("user_id"), Some(&"alice123".to_string()));
         assert_eq!(vars.get("format"), Some(&"png".to_string()));
 
@@ -220,7 +234,7 @@ mod tests {
         let mut test_vars = HashMap::new();
         test_vars.insert("user_id".to_string(), "bob456".to_string());
         test_vars.insert("format".to_string(), "jpg".to_string());
-        
+
         let resolved = template.resolve(&test_vars).unwrap();
         assert_eq!(resolved, "file:///user/bob456/avatar.jpg");
     }
@@ -242,14 +256,14 @@ mod tests {
         // Test that builder collects validation errors instead of panicking
         let valid_template = UriTemplate::new("file:///valid/{id}.json").unwrap();
         let invalid_template_pattern = "invalid template pattern {"; // Missing closing brace
-        
+
         // This should succeed - valid template
         let builder = McpServer::builder()
             .name("test")
             .version("1.0.0")
             .bind_address("127.0.0.1:0".parse().unwrap())
             .template_resource(valid_template, UserProfileResource::new());
-            
+
         // This should collect an error but not panic - invalid template
         let invalid_template = match UriTemplate::new(invalid_template_pattern) {
             Ok(t) => t,
@@ -258,13 +272,17 @@ mod tests {
                 return;
             }
         };
-        
-        let builder_with_invalid = builder.template_resource(invalid_template, UserProfileResource::new());
+
+        let builder_with_invalid =
+            builder.template_resource(invalid_template, UserProfileResource::new());
         let result = builder_with_invalid.build();
-        
+
         // Should fail with validation error, not panic
         assert!(result.is_err());
         let error_msg = result.unwrap_err().to_string();
-        assert!(error_msg.contains("validation errors") || error_msg.contains("Invalid resource template"));
+        assert!(
+            error_msg.contains("validation errors")
+                || error_msg.contains("Invalid resource template")
+        );
     }
 }

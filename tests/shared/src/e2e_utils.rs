@@ -15,7 +15,7 @@ use tracing::{debug, info};
 fn find_workspace_root() -> Result<PathBuf, Box<dyn std::error::Error>> {
     // Start from current directory and walk up
     let mut current = std::env::current_dir()?;
-    
+
     loop {
         let cargo_toml = current.join("Cargo.toml");
         if cargo_toml.exists() {
@@ -25,14 +25,14 @@ fn find_workspace_root() -> Result<PathBuf, Box<dyn std::error::Error>> {
                 return Ok(current);
             }
         }
-        
+
         // Move up one directory
         match current.parent() {
             Some(parent) => current = parent.to_path_buf(),
             None => break,
         }
     }
-    
+
     // Fallback: use CARGO_MANIFEST_DIR if available (works in tests)
     if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
         let manifest_path = PathBuf::from(manifest_dir);
@@ -49,7 +49,7 @@ fn find_workspace_root() -> Result<PathBuf, Box<dyn std::error::Error>> {
             current = parent.to_path_buf();
         }
     }
-    
+
     Err("Could not find workspace root with [workspace] in Cargo.toml".into())
 }
 
@@ -73,8 +73,8 @@ impl McpTestClient {
 
     /// Initialize MCP session with custom capabilities
     pub async fn initialize_with_capabilities(
-        &mut self, 
-        capabilities: Value
+        &mut self,
+        capabilities: Value,
     ) -> Result<HashMap<String, Value>, reqwest::Error> {
         let request = json!({
             "jsonrpc": "2.0",
@@ -150,12 +150,17 @@ impl McpTestClient {
 
     /// Read a specific resource
     pub async fn read_resource(&self, uri: &str) -> Result<HashMap<String, Value>, reqwest::Error> {
-        self.make_request("resources/read", json!({"uri": uri}), 3).await
+        self.make_request("resources/read", json!({"uri": uri}), 3)
+            .await
     }
 
     /// Subscribe to resource changes
-    pub async fn subscribe_resource(&self, uri: &str) -> Result<HashMap<String, Value>, reqwest::Error> {
-        self.make_request("resources/subscribe", json!({"uri": uri}), 4).await
+    pub async fn subscribe_resource(
+        &self,
+        uri: &str,
+    ) -> Result<HashMap<String, Value>, reqwest::Error> {
+        self.make_request("resources/subscribe", json!({"uri": uri}), 4)
+            .await
     }
 
     /// List available prompts
@@ -165,12 +170,12 @@ impl McpTestClient {
 
     /// Get a specific prompt
     pub async fn get_prompt(
-        &self, 
-        name: &str, 
-        arguments: Option<HashMap<String, Value>>
+        &self,
+        name: &str,
+        arguments: Option<HashMap<String, Value>>,
     ) -> Result<HashMap<String, Value>, reqwest::Error> {
         let mut params = json!({"name": name});
-        
+
         if let Some(args) = arguments {
             params["arguments"] = Value::Object(args.into_iter().collect());
         }
@@ -180,7 +185,10 @@ impl McpTestClient {
 
     /// Test SSE notifications
     pub async fn test_sse_notifications(&self) -> Result<Vec<String>, Box<dyn std::error::Error>> {
-        let mut req_builder = self.client.get(&self.base_url).header("Accept", "text/event-stream");
+        let mut req_builder = self
+            .client
+            .get(&self.base_url)
+            .header("Accept", "text/event-stream");
 
         if let Some(ref session_id) = self.session_id {
             req_builder = req_builder.header("mcp-session-id", session_id);
@@ -209,12 +217,24 @@ impl McpTestClient {
     }
 
     /// Call a specific tool
-    pub async fn call_tool(&self, name: &str, arguments: Value) -> Result<HashMap<String, Value>, reqwest::Error> {
-        self.make_request("tools/call", json!({"name": name, "arguments": arguments}), 8).await
+    pub async fn call_tool(
+        &self,
+        name: &str,
+        arguments: Value,
+    ) -> Result<HashMap<String, Value>, reqwest::Error> {
+        self.make_request(
+            "tools/call",
+            json!({"name": name, "arguments": arguments}),
+            8,
+        )
+        .await
     }
 
     /// Send a notification (no response expected)
-    pub async fn send_notification(&self, notification: Value) -> Result<HashMap<String, Value>, reqwest::Error> {
+    pub async fn send_notification(
+        &self,
+        notification: Value,
+    ) -> Result<HashMap<String, Value>, reqwest::Error> {
         let mut req_builder = self
             .client
             .post(&self.base_url)
@@ -226,7 +246,7 @@ impl McpTestClient {
         }
 
         let response = req_builder.send().await?;
-        
+
         // For notifications, we might get an empty response or a simple acknowledgment
         // Try to parse as JSON, but handle empty responses gracefully
         let text = response.text().await?;
@@ -280,16 +300,23 @@ impl TestServerManager {
         info!("Starting {} on port {}", server_name, port);
 
         // Find workspace root dynamically instead of using hardcoded path
-        let workspace_root = find_workspace_root()
-            .map_err(|e| format!("Failed to find workspace root: {}", e))?;
-        
-        let binary_path = workspace_root.join("target").join("debug").join(server_name);
+        let workspace_root =
+            find_workspace_root().map_err(|e| format!("Failed to find workspace root: {}", e))?;
+
+        let binary_path = workspace_root
+            .join("target")
+            .join("debug")
+            .join(server_name);
         let mut server_process = Command::new(&binary_path)
             .args(["--port", &port.to_string()])
             .current_dir(&workspace_root)
             .spawn()
-            .map_err(|e| format!("Failed to start server {}: {}. Binary path: {:?}, Workspace: {:?}", 
-                                server_name, e, binary_path, workspace_root))?;
+            .map_err(|e| {
+                format!(
+                    "Failed to start server {}: {}. Binary path: {:?}, Workspace: {:?}",
+                    server_name, e, binary_path, workspace_root
+                )
+            })?;
 
         // Wait for server to start
         let mut attempts = 0;
@@ -298,7 +325,7 @@ impl TestServerManager {
 
         while attempts < 50 {
             sleep(Duration::from_millis(300)).await;
-            
+
             // Try to make a simple POST request to check if server is responding
             let test_request = json!({
                 "jsonrpc": "2.0",
@@ -310,7 +337,7 @@ impl TestServerManager {
                     "clientInfo": {"name": "health-check", "version": "1.0.0"}
                 }
             });
-            
+
             if let Ok(response) = client
                 .post(&health_url)
                 .header("Content-Type", "application/json")
@@ -319,7 +346,10 @@ impl TestServerManager {
                 .await
             {
                 if response.status().is_success() {
-                    info!("Server {} started successfully on port {}", server_name, port);
+                    info!(
+                        "Server {} started successfully on port {}",
+                        server_name, port
+                    );
                     return Ok(Self {
                         server_process: Some(server_process),
                         port,
@@ -482,15 +512,15 @@ impl TestFixtures {
         }
         None
     }
-    
-    /// Extract text content from tool result response  
+
+    /// Extract text content from tool result response
     pub fn extract_tool_content_text(result: &HashMap<String, Value>) -> String {
         result["result"]["content"][0]["text"]
             .as_str()
             .unwrap_or("{}")
             .to_string()
     }
-    
+
     /// Extract structured content from tool result for direct access
     pub fn extract_tool_structured_content(result: &HashMap<String, Value>) -> Option<&Value> {
         result.get("result")?.get("structuredContent")
@@ -542,10 +572,12 @@ impl TestFixtures {
 
     /// Extract tools list from tools/list response
     pub fn extract_tools_list(result: &HashMap<String, Value>) -> Option<Vec<Value>> {
-        result.get("result")?
+        result
+            .get("result")?
             .as_object()?
             .get("tools")?
-            .as_array().cloned()
+            .as_array()
+            .cloned()
     }
 }
 
@@ -554,7 +586,9 @@ pub struct SessionTestUtils;
 
 impl SessionTestUtils {
     /// Verify session context is maintained across requests
-    pub async fn verify_session_consistency(client: &McpTestClient) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn verify_session_consistency(
+        client: &McpTestClient,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let _session_id = client.session_id().expect("Session ID should be available");
 
         // Make multiple requests and verify session consistency
@@ -580,17 +614,22 @@ impl SessionTestUtils {
     }
 
     /// Test session-aware resource behavior
-    pub async fn test_session_aware_resource(client: &McpTestClient) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn test_session_aware_resource(
+        client: &McpTestClient,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = client.read_resource("file:///session/info.json").await?;
 
         if result.contains_key("result") {
             let result_data = result["result"].as_object().unwrap();
             let contents = result_data["contents"].as_array().unwrap();
-            
+
             if !contents.is_empty() {
                 let content = &contents[0];
                 let text = content.as_object().unwrap()["text"].as_str().unwrap();
-                assert!(text.contains("session"), "Session-aware resource should include session info");
+                assert!(
+                    text.contains("session"),
+                    "Session-aware resource should include session info"
+                );
             }
         }
 
@@ -598,16 +637,21 @@ impl SessionTestUtils {
     }
 
     /// Test session-aware prompt behavior
-    pub async fn test_session_aware_prompt(client: &McpTestClient) -> Result<(), Box<dyn std::error::Error>> {
+    pub async fn test_session_aware_prompt(
+        client: &McpTestClient,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let result = client.get_prompt("session_aware_prompt", None).await?;
 
         if result.contains_key("result") {
             let result_data = result["result"].as_object().unwrap();
             let messages = result_data["messages"].as_array().unwrap();
-            
+
             if !messages.is_empty() {
                 let message_content = messages[0]["content"]["text"].as_str().unwrap();
-                assert!(message_content.contains("session"), "Session-aware prompt should include session info");
+                assert!(
+                    message_content.contains("session"),
+                    "Session-aware prompt should include session info"
+                );
             }
         }
 

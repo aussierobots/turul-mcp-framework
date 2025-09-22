@@ -3,9 +3,12 @@
 //! This module defines the high-level trait for implementing MCP roots functionality.
 
 use async_trait::async_trait;
-use turul_mcp_protocol::{McpResult, roots::{ListRootsRequest, ListRootsResult, RootsListChangedNotification}};
-use turul_mcp_protocol::roots::RootDefinition;
 use std::path::PathBuf;
+use turul_mcp_protocol::roots::RootDefinition;
+use turul_mcp_protocol::{
+    McpResult,
+    roots::{ListRootsRequest, ListRootsResult, RootsListChangedNotification},
+};
 
 /// File information for root directory listings
 #[derive(Debug, Clone)]
@@ -32,32 +35,32 @@ pub enum AccessLevel {
 }
 
 /// High-level trait for implementing MCP roots functionality
-/// 
+///
 /// McpRoot extends RootDefinition with execution capabilities.
 /// All metadata is provided by the RootDefinition trait, ensuring
 /// consistency between concrete Root structs and dynamic implementations.
 #[async_trait]
 pub trait McpRoot: RootDefinition + Send + Sync {
     /// List available roots (per MCP spec)
-    /// 
+    ///
     /// This method processes the roots/list request and returns
     /// the complete list of available root directories.
     async fn list_roots(&self, request: ListRootsRequest) -> McpResult<ListRootsResult>;
 
     /// List files within a root directory
-    /// 
+    ///
     /// This method lists files and directories within the specified path,
     /// respecting permissions and filtering rules.
     async fn list_files(&self, path: &str) -> McpResult<Vec<FileInfo>>;
 
     /// Check access level for a specific path
-    /// 
+    ///
     /// This method determines what access level the client has
     /// for the specified file or directory path.
     async fn check_access(&self, path: &str) -> McpResult<AccessLevel>;
 
     /// Optional: Check if this root handler can manage the given path
-    /// 
+    ///
     /// This allows for conditional root handling based on path patterns,
     /// URI schemes, or other factors.
     fn can_handle(&self, path: &str) -> bool {
@@ -65,7 +68,7 @@ pub trait McpRoot: RootDefinition + Send + Sync {
     }
 
     /// Optional: Get root priority for request routing
-    /// 
+    ///
     /// Higher priority handlers are tried first when multiple handlers
     /// can manage the same path.
     fn priority(&self) -> u32 {
@@ -73,23 +76,25 @@ pub trait McpRoot: RootDefinition + Send + Sync {
     }
 
     /// Optional: Validate a file path
-    /// 
+    ///
     /// This method can perform additional validation beyond basic access checks.
     async fn validate_path(&self, path: &str) -> McpResult<()> {
         // Basic validation - ensure path is within root
         let root_path = self.uri().replace("file://", "");
         let canonical_path = PathBuf::from(path);
         let canonical_root = PathBuf::from(&root_path);
-        
+
         if !canonical_path.starts_with(&canonical_root) {
-            return Err(turul_mcp_protocol::McpError::validation("Path is outside root directory"));
+            return Err(turul_mcp_protocol::McpError::validation(
+                "Path is outside root directory",
+            ));
         }
-        
+
         Ok(())
     }
 
     /// Optional: Watch for changes in root directories
-    /// 
+    ///
     /// This method can be used to monitor root directories for changes
     /// and send RootsListChangedNotification when needed.
     async fn start_watching(&self) -> McpResult<()> {
@@ -104,7 +109,7 @@ pub trait McpRoot: RootDefinition + Send + Sync {
     }
 
     /// Optional: Send a roots list changed notification
-    /// 
+    ///
     /// This method should be called when the list of roots changes
     /// to notify clients about the update.
     async fn notify_roots_changed(&self) -> McpResult<RootsListChangedNotification> {
@@ -112,27 +117,32 @@ pub trait McpRoot: RootDefinition + Send + Sync {
     }
 
     /// Optional: Get file metadata
-    /// 
+    ///
     /// This method retrieves detailed metadata for a specific file or directory.
     async fn get_file_info(&self, path: &str) -> McpResult<Option<FileInfo>> {
         use std::fs;
         use std::time::UNIX_EPOCH;
-        
+
         let full_path = self.uri().replace("file://", "") + "/" + path;
-        
+
         match fs::metadata(&full_path) {
             Ok(metadata) => {
-                let modified = metadata.modified()
+                let modified = metadata
+                    .modified()
                     .ok()
                     .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
                     .map(|duration| duration.as_secs());
-                
+
                 let info = FileInfo {
                     path: path.to_string(),
                     is_directory: metadata.is_dir(),
-                    size: if metadata.is_file() { Some(metadata.len()) } else { None },
+                    size: if metadata.is_file() {
+                        Some(metadata.len())
+                    } else {
+                        None
+                    },
                     modified,
-                    mime_type: if metadata.is_file() { 
+                    mime_type: if metadata.is_file() {
                         // Simple MIME type detection based on extension
                         match path.split('.').next_back() {
                             Some("txt") => Some("text/plain".to_string()),
@@ -141,8 +151,8 @@ pub trait McpRoot: RootDefinition + Send + Sync {
                             Some("md") => Some("text/markdown".to_string()),
                             _ => Some("application/octet-stream".to_string()),
                         }
-                    } else { 
-                        None 
+                    } else {
+                        None
                     },
                 };
                 Ok(Some(info))
@@ -153,7 +163,7 @@ pub trait McpRoot: RootDefinition + Send + Sync {
 }
 
 /// Convert an McpRoot trait object to a ListRootsRequest
-/// 
+///
 /// This is a convenience function for creating protocol requests.
 pub fn root_to_list_request(_root: &dyn McpRoot) -> ListRootsRequest {
     ListRootsRequest::new()
@@ -162,10 +172,10 @@ pub fn root_to_list_request(_root: &dyn McpRoot) -> ListRootsRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use turul_mcp_protocol::roots::{
-        HasRootMetadata, HasRootPermissions, HasRootFiltering, HasRootAnnotations
-    };
     use std::collections::HashMap;
+    use turul_mcp_protocol::roots::{
+        HasRootAnnotations, HasRootFiltering, HasRootMetadata, HasRootPermissions,
+    };
 
     struct TestRoot {
         uri: String,
@@ -178,7 +188,7 @@ mod tests {
         fn uri(&self) -> &str {
             &self.uri
         }
-        
+
         fn name(&self) -> Option<&str> {
             self.name.as_deref()
         }
@@ -188,11 +198,11 @@ mod tests {
         fn can_read(&self, _path: &str) -> bool {
             true
         }
-        
+
         fn can_write(&self, _path: &str) -> bool {
             !self.read_only
         }
-        
+
         fn max_depth(&self) -> Option<usize> {
             Some(10) // Limit depth for testing
         }
@@ -202,7 +212,11 @@ mod tests {
         fn excluded_patterns(&self) -> Option<&[String]> {
             // Example: exclude hidden files and build directories
             static PATTERNS: &[String] = &[];
-            if PATTERNS.is_empty() { None } else { Some(PATTERNS) }
+            if PATTERNS.is_empty() {
+                None
+            } else {
+                Some(PATTERNS)
+            }
         }
     }
 
@@ -261,7 +275,7 @@ mod tests {
             name: Some("Test Project".to_string()),
             read_only: false,
         };
-        
+
         assert_eq!(root.uri(), "file:///home/user/project");
         assert_eq!(root.name(), Some("Test Project"));
         assert!(root.can_read("any/path"));
@@ -311,8 +325,14 @@ mod tests {
             read_only: false,
         };
 
-        assert_eq!(read_only_root.check_access("test").await.unwrap(), AccessLevel::Read);
-        assert_eq!(full_access_root.check_access("test").await.unwrap(), AccessLevel::Full);
+        assert_eq!(
+            read_only_root.check_access("test").await.unwrap(),
+            AccessLevel::Read
+        );
+        assert_eq!(
+            full_access_root.check_access("test").await.unwrap(),
+            AccessLevel::Full
+        );
     }
 
     #[tokio::test]

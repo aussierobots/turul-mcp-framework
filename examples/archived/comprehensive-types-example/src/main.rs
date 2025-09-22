@@ -22,10 +22,10 @@ struct MathOperationsTool {
 
 impl MathOperationsTool {
     async fn execute(&self) -> McpResult<f64> {
-        let result = self.int_val as f64 + 
-                    self.long_val as f64 + 
-                    self.uint_val as f64 + 
-                    self.float_val as f64 + 
+        let result = self.int_val as f64 +
+                    self.long_val as f64 +
+                    self.uint_val as f64 +
+                    self.float_val as f64 +
                     self.double_val;
         Ok(result)
     }
@@ -110,7 +110,7 @@ struct AnalysisResult {
 
 impl std::fmt::Display for AnalysisResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AnalysisResult {{ count: {}, average: {:.2}, min: {:.2}, max: {:.2}, has_negatives: {} }}", 
+        write!(f, "AnalysisResult {{ count: {}, average: {:.2}, min: {:.2}, max: {:.2}, has_negatives: {} }}",
                self.count, self.average, self.min, self.max, self.has_negatives)
     }
 }
@@ -128,7 +128,7 @@ struct DataAnalyzerTool {
 impl DataAnalyzerTool {
     async fn execute(&self) -> McpResult<AnalysisResult> {
         tracing::debug!("DataAnalyzerTool executing with {} data points, detailed: {:?}", self.data.len(), self.detailed);
-        
+
         if self.data.is_empty() {
             return Err(turul_mcp_protocol::McpError::invalid_param_type("data", "non-empty array", "empty array"));
         }
@@ -170,23 +170,23 @@ struct OptionalParamsTool {
 impl OptionalParamsTool {
     async fn execute(&self) -> McpResult<String> {
         let mut parts = vec![format!("required: {}", self.required_text)];
-        
+
         if let Some(ref text) = self.optional_text {
             parts.push(format!("text: {}", text));
         }
-        
+
         if let Some(num) = self.optional_number {
             parts.push(format!("number: {}", num));
         }
-        
+
         if let Some(b) = self.optional_bool {
             parts.push(format!("bool: {}", b));
         }
-        
+
         if let Some(ref arr) = self.optional_array {
             parts.push(format!("array: {:?}", arr));
         }
-        
+
         Ok(parts.join(", "))
     }
 }

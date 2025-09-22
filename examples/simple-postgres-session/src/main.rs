@@ -22,16 +22,19 @@
 //! - Multi-instance session sharing
 //! - PostgreSQL-backed state management
 
+use serde_json::{Value, json};
 use std::sync::Arc;
-use turul_mcp_server::{McpServer, McpResult, SessionContext};
-use turul_mcp_session_storage::{PostgresSessionStorage, PostgresConfig};
+use tracing::{debug, error, info};
 use turul_mcp_derive::McpTool;
-use serde_json::{json, Value};
-use tracing::{info, error, debug};
+use turul_mcp_server::{McpResult, McpServer, SessionContext};
+use turul_mcp_session_storage::{PostgresConfig, PostgresSessionStorage};
 
 /// Tool that stores a key-value pair in this session's PostgreSQL storage
 #[derive(McpTool, Default)]
-#[tool(name = "store_value", description = "Store a value in this session's PostgreSQL storage (session-scoped)")]
+#[tool(
+    name = "store_value",
+    description = "Store a value in this session's PostgreSQL storage (session-scoped)"
+)]
 struct StoreValueTool {
     #[param(description = "Key to store in session")]
     key: String,
@@ -41,7 +44,9 @@ struct StoreValueTool {
 
 impl StoreValueTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| {
+            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
+        })?;
 
         debug!("Storing value in PostgreSQL: {} = {}", self.key, self.value);
 
@@ -62,7 +67,10 @@ impl StoreValueTool {
 
 /// Tool that retrieves a value from this session's PostgreSQL storage
 #[derive(McpTool, Default)]
-#[tool(name = "get_value", description = "Retrieve a value from this session's PostgreSQL storage (session-scoped)")]
+#[tool(
+    name = "get_value",
+    description = "Retrieve a value from this session's PostgreSQL storage (session-scoped)"
+)]
 struct GetValueTool {
     #[param(description = "Key to retrieve from session")]
     key: String,
@@ -70,7 +78,9 @@ struct GetValueTool {
 
 impl GetValueTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| {
+            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
+        })?;
 
         debug!("Getting value from PostgreSQL: {}", self.key);
 
@@ -95,12 +105,17 @@ impl GetValueTool {
 
 /// Tool that shows session information
 #[derive(McpTool, Default)]
-#[tool(name = "session_info", description = "Get information about the PostgreSQL session")]
+#[tool(
+    name = "session_info",
+    description = "Get information about the PostgreSQL session"
+)]
 struct SessionInfoTool {}
 
 impl SessionInfoTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| {
+            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
+        })?;
 
         Ok(json!({
             "session_id": session.session_id,
@@ -141,7 +156,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         create_tables_if_missing: true,
     };
 
-    info!("Connecting to PostgreSQL at {}", mask_db_url(&postgres_config.database_url));
+    info!(
+        "Connecting to PostgreSQL at {}",
+        mask_db_url(&postgres_config.database_url)
+    );
 
     // Create PostgreSQL session storage
     let postgres_storage = match PostgresSessionStorage::with_config(postgres_config).await {
@@ -183,7 +201,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("");
     info!("Available tools:");
     info!("  • store_value    - Store value in PostgreSQL");
-    info!("  • get_value      - Retrieve value from PostgreSQL");  
+    info!("  • get_value      - Retrieve value from PostgreSQL");
     info!("  • session_info   - View session storage information");
     info!("");
     info!("Example usage:");

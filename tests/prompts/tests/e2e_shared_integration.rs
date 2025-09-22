@@ -2,14 +2,16 @@
 //!
 //! Tests real HTTP/SSE transport using prompts-test-server with shared utilities
 
-use mcp_e2e_shared::{McpTestClient, TestServerManager, TestFixtures, SessionTestUtils};
+use mcp_e2e_shared::{McpTestClient, SessionTestUtils, TestFixtures, TestServerManager};
 use tracing::info;
 
 #[tokio::test]
 async fn test_prompts_initialization_with_shared_utils() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     let result = client
@@ -25,7 +27,9 @@ async fn test_prompts_initialization_with_shared_utils() {
 async fn test_prompts_list_with_shared_utils() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -43,10 +47,7 @@ async fn test_prompts_list_with_shared_utils() {
     assert!(!prompts.is_empty(), "Should have test prompts available");
 
     // Check for key prompt types
-    let prompt_names: Vec<&str> = prompts
-        .iter()
-        .filter_map(|p| p["name"].as_str())
-        .collect();
+    let prompt_names: Vec<&str> = prompts.iter().filter_map(|p| p["name"].as_str()).collect();
 
     assert!(prompt_names.contains(&"simple_prompt"));
     assert!(prompt_names.contains(&"string_args_prompt"));
@@ -59,7 +60,9 @@ async fn test_prompts_list_with_shared_utils() {
 async fn test_simple_prompt_with_shared_utils() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -76,7 +79,9 @@ async fn test_simple_prompt_with_shared_utils() {
 async fn test_string_args_prompt_with_shared_utils() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -102,7 +107,9 @@ async fn test_string_args_prompt_with_shared_utils() {
 async fn test_number_args_prompt_with_shared_utils() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -128,7 +135,9 @@ async fn test_number_args_prompt_with_shared_utils() {
 async fn test_boolean_args_prompt_with_shared_utils() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -154,7 +163,9 @@ async fn test_boolean_args_prompt_with_shared_utils() {
 async fn test_multi_message_prompt_with_shared_utils() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -168,15 +179,16 @@ async fn test_multi_message_prompt_with_shared_utils() {
 
     let result_data = result["result"].as_object().unwrap();
     let messages = result_data["messages"].as_array().unwrap();
-    
+
     // Multi-message prompt should return multiple messages
-    assert!(messages.len() > 1, "Multi message prompt should return multiple messages");
+    assert!(
+        messages.len() > 1,
+        "Multi message prompt should return multiple messages"
+    );
 
     // Verify different roles are used
-    let roles: Vec<&str> = messages.iter()
-        .filter_map(|m| m["role"].as_str())
-        .collect();
-    
+    let roles: Vec<&str> = messages.iter().filter_map(|m| m["role"].as_str()).collect();
+
     // Should have different roles (user and assistant)
     assert!(roles.contains(&"user") || roles.contains(&"assistant"));
 }
@@ -185,7 +197,9 @@ async fn test_multi_message_prompt_with_shared_utils() {
 async fn test_session_consistency_prompts() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -199,7 +213,9 @@ async fn test_session_consistency_prompts() {
 async fn test_session_aware_prompt_with_shared_utils() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -213,14 +229,22 @@ async fn test_session_aware_prompt_with_shared_utils() {
 async fn test_template_prompt_with_shared_utils() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
 
     let mut arguments = std::collections::HashMap::new();
-    arguments.insert("template_name".to_string(), serde_json::json!("test_template"));
-    arguments.insert("template_value".to_string(), serde_json::json!("test value"));
+    arguments.insert(
+        "template_name".to_string(),
+        serde_json::json!("test_template"),
+    );
+    arguments.insert(
+        "template_value".to_string(),
+        serde_json::json!("test value"),
+    );
 
     let result = client
         .get_prompt("template_prompt", Some(arguments))
@@ -243,7 +267,9 @@ async fn test_template_prompt_with_shared_utils() {
 async fn test_empty_messages_prompt_with_shared_utils() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -257,16 +283,22 @@ async fn test_empty_messages_prompt_with_shared_utils() {
 
     let result_data = result["result"].as_object().unwrap();
     let messages = result_data["messages"].as_array().unwrap();
-    
+
     // Empty messages prompt should return an empty array
-    assert_eq!(messages.len(), 0, "Empty messages prompt should return no messages");
+    assert_eq!(
+        messages.len(),
+        0,
+        "Empty messages prompt should return no messages"
+    );
 }
 
 #[tokio::test]
 async fn test_validation_failure_prompt_with_shared_utils() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
@@ -290,7 +322,9 @@ async fn test_validation_failure_prompt_with_shared_utils() {
 async fn test_sse_notifications_prompts_with_shared_utils() {
     tracing_subscriber::fmt::init();
 
-    let server = TestServerManager::start_prompts_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -307,6 +341,8 @@ async fn test_sse_notifications_prompts_with_shared_utils() {
     // Should receive some SSE data format (if any events are available)
     if !events.is_empty() {
         info!("Received SSE events: {:?}", events);
-        assert!(events.iter().any(|e| e.contains("data:") || e.contains("event:")));
+        assert!(events
+            .iter()
+            .any(|e| e.contains("data:") || e.contains("event:")));
     }
 }

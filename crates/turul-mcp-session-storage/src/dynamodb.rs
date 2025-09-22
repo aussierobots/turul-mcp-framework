@@ -191,16 +191,22 @@ impl DynamoDbSessionStorage {
                         self.wait_for_table_active().await?;
                         // Enable TTL after table becomes active
                         self.enable_ttl().await?;
-                        
+
                         // Also create the events table upfront
                         let event_table = format!("{}-events", self.config.table_name);
                         warn!(
                             "Creating events table '{}' upfront to ensure both tables exist",
                             event_table
                         );
-                        self.ensure_events_table_exists(&event_table).await
-                            .map_err(|e| DynamoDbError::AwsError(format!("Failed to create events table: {}", e)))?;
-                        
+                        self.ensure_events_table_exists(&event_table)
+                            .await
+                            .map_err(|e| {
+                                DynamoDbError::AwsError(format!(
+                                    "Failed to create events table: {}",
+                                    e
+                                ))
+                            })?;
+
                         Ok(())
                     } else {
                         let error_msg = format!(
@@ -230,10 +236,10 @@ impl DynamoDbSessionStorage {
 
         // Define table schema
         let key_schema = [KeySchemaElement::builder()
-                .attribute_name("session_id")
-                .key_type(KeyType::Hash)
-                .build()
-                .map_err(|e| DynamoDbError::AwsError(e.to_string()))?];
+            .attribute_name("session_id")
+            .key_type(KeyType::Hash)
+            .build()
+            .map_err(|e| DynamoDbError::AwsError(e.to_string()))?];
 
         let attribute_definitions = vec![
             AttributeDefinition::builder()
@@ -467,10 +473,11 @@ impl DynamoDbSessionStorage {
             {
                 Ok(output) => {
                     if let Some(table) = output.table()
-                        && let Some(TableStatus::Active) = table.table_status() {
-                            info!("Table '{}' is now active", self.config.table_name);
-                            return Ok(());
-                        }
+                        && let Some(TableStatus::Active) = table.table_status()
+                    {
+                        info!("Table '{}' is now active", self.config.table_name);
+                        return Ok(());
+                    }
                 }
                 Err(err) => {
                     warn!(
@@ -522,9 +529,10 @@ impl DynamoDbSessionStorage {
         {
             Ok(output) => {
                 if let Some(table) = output.table()
-                    && let Some(TableStatus::Active) = table.table_status() {
-                        return Ok(());
-                    }
+                    && let Some(TableStatus::Active) = table.table_status()
+                {
+                    return Ok(());
+                }
             }
             Err(_) => {
                 if !self.config.create_tables_if_missing {
@@ -624,10 +632,11 @@ impl DynamoDbSessionStorage {
             {
                 Ok(output) => {
                     if let Some(table) = output.table()
-                        && let Some(TableStatus::Active) = table.table_status() {
-                            info!("Events table '{}' is now active", event_table);
-                            return Ok(());
-                        }
+                        && let Some(TableStatus::Active) = table.table_status()
+                    {
+                        info!("Events table '{}' is now active", event_table);
+                        return Ok(());
+                    }
                 }
                 Err(err) => {
                     warn!(
@@ -901,17 +910,20 @@ impl DynamoDbSessionStorage {
     /// Public method to create both DynamoDB tables (for setup utilities)
     pub async fn create_tables(&self) -> Result<(), DynamoDbError> {
         info!("Creating both DynamoDB tables: session and events");
-        
+
         // Create main session table
         self.create_table().await?;
         self.wait_for_table_active().await?;
         self.enable_ttl().await?;
-        
+
         // Create events table
         let event_table = format!("{}-events", self.config.table_name);
-        self.ensure_events_table_exists(&event_table).await
-            .map_err(|e| DynamoDbError::AwsError(format!("Failed to create events table: {}", e)))?;
-        
+        self.ensure_events_table_exists(&event_table)
+            .await
+            .map_err(|e| {
+                DynamoDbError::AwsError(format!("Failed to create events table: {}", e))
+            })?;
+
         info!("Successfully created both DynamoDB tables");
         Ok(())
     }
@@ -922,25 +934,40 @@ impl DynamoDbSessionStorage {
         {
             let main_table = &self.config.table_name;
             let event_table = format!("{}-events", self.config.table_name);
-            
-            info!("Deleting DynamoDB tables: {} and {}", main_table, event_table);
-            
+
+            info!(
+                "Deleting DynamoDB tables: {} and {}",
+                main_table, event_table
+            );
+
             // Delete main session table
-            match self.client.delete_table().table_name(main_table).send().await {
+            match self
+                .client
+                .delete_table()
+                .table_name(main_table)
+                .send()
+                .await
+            {
                 Ok(_) => info!("Successfully initiated deletion of table: {}", main_table),
                 Err(err) => warn!("Failed to delete table '{}': {}", main_table, err),
             }
-            
+
             // Delete events table
-            match self.client.delete_table().table_name(&event_table).send().await {
+            match self
+                .client
+                .delete_table()
+                .table_name(&event_table)
+                .send()
+                .await
+            {
                 Ok(_) => info!("Successfully initiated deletion of table: {}", event_table),
                 Err(err) => warn!("Failed to delete table '{}': {}", event_table, err),
             }
-            
+
             info!("Table deletion initiated for both tables");
             Ok(())
         }
-        
+
         #[cfg(not(feature = "dynamodb"))]
         {
             error!("DynamoDB feature is not enabled");
@@ -1425,9 +1452,10 @@ impl SessionStorage for DynamoDbSessionStorage {
 
                     for item in output.items() {
                         if let Some(session_id_attr) = item.get("session_id")
-                            && let Ok(session_id) = session_id_attr.as_s() {
-                                session_ids.push(session_id.clone());
-                            }
+                            && let Ok(session_id) = session_id_attr.as_s()
+                        {
+                            session_ids.push(session_id.clone());
+                        }
                     }
 
                     debug!("Listed {} session IDs from DynamoDB", session_ids.len());
@@ -1876,12 +1904,13 @@ impl SessionStorage for DynamoDbSessionStorage {
         if cfg!(debug_assertions) {
             let test_session = SessionInfo::new();
             if let Ok(item) = self.session_to_item(&test_session)
-                && let Ok(_converted_back) = self.item_to_session(&item) {
-                    debug!(
-                        "Legacy JSON conversion methods working correctly for session: {}",
-                        test_session.session_id
-                    );
-                }
+                && let Ok(_converted_back) = self.item_to_session(&item)
+            {
+                debug!(
+                    "Legacy JSON conversion methods working correctly for session: {}",
+                    test_session.session_id
+                );
+            }
         }
 
         Ok(())

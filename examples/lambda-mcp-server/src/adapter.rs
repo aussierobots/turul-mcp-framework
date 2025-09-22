@@ -17,14 +17,14 @@ pub async fn lambda_adapter(
 ) -> Result<LambdaResponse<LambdaBody>, Error> {
     let method = lambda_req.method().clone();
     let uri = lambda_req.uri().clone();
-    
+
     info!("🌐 Lambda MCP request: {} {}", method, uri);
 
     // For now, return a simple MCP initialization response
     match (method.as_str(), uri.path()) {
         ("POST", "/mcp") => {
             debug!("📞 Handling MCP POST request");
-            
+
             // Return a basic MCP initialize response
             let response_body = json!({
                 "jsonrpc": "2.0",
@@ -45,33 +45,33 @@ pub async fn lambda_adapter(
                     }
                 }
             });
-            
+
             let response = LambdaResponse::builder()
                 .status(200)
                 .header("Content-Type", "application/json")
                 .header("Mcp-Session-Id", uuid::Uuid::new_v4().to_string())
                 .body(LambdaBody::Text(response_body.to_string()))?;
-                
+
             debug!("✅ Returning MCP initialize response");
             Ok(response)
         },
         ("OPTIONS", _) => {
             debug!("📞 Handling CORS preflight");
-            
+
             let response = LambdaResponse::builder()
                 .status(200)
                 .header("Access-Control-Allow-Origin", "*")
                 .header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
                 .header("Access-Control-Allow-Headers", "Content-Type, Accept, Mcp-Session-Id")
                 .body(LambdaBody::Empty)?;
-                
+
             Ok(response)
         },
         _ => {
             debug!("📞 Unsupported method/path: {} {}", method, uri.path());
-            
+
             let error_body = json!({
-                "jsonrpc": "2.0", 
+                "jsonrpc": "2.0",
                 "id": null,
                 "error": {
                     "code": -32601,
@@ -79,12 +79,12 @@ pub async fn lambda_adapter(
                     "data": format!("{} {} is not supported", method, uri.path())
                 }
             });
-            
+
             let response = LambdaResponse::builder()
                 .status(404)
                 .header("Content-Type", "application/json")
                 .body(LambdaBody::Text(error_body.to_string()))?;
-                
+
             Ok(response)
         }
     }
@@ -94,7 +94,7 @@ pub async fn lambda_adapter(
 mod tests {
     use super::*;
     use hyper::Method;
-    
+
     #[tokio::test]
     async fn test_options_request() {
         let lambda_req = LambdaRequest::builder()
@@ -102,15 +102,15 @@ mod tests {
             .uri("https://example.com/mcp")
             .body(LambdaBody::Empty)
             .unwrap();
-            
-        // Create a dummy handler for testing  
+
+        // Create a dummy handler for testing
         let session_handler = Arc::new(turul_http_mcp_server::SessionMcpHandler::new(
             turul_http_mcp_server::ServerConfig::default(),
             Arc::new(turul_mcp_json_rpc_server::JsonRpcDispatcher::new())
         ));
-        
+
         let response = lambda_adapter(lambda_req, session_handler).await.unwrap();
-        
+
         assert_eq!(response.status(), 200);
     }
 }

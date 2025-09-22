@@ -370,7 +370,6 @@ impl InitializedNotification {
     }
 }
 
-
 /// Method: "notifications/message"
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -441,12 +440,12 @@ impl HasMetaParam for NotificationParams {
 pub trait HasNotificationMetadata {
     /// The notification method name
     fn method(&self) -> &str;
-    
+
     /// Optional notification type or category
     fn notification_type(&self) -> Option<&str> {
         None
     }
-    
+
     /// Whether this notification requires acknowledgment
     fn requires_ack(&self) -> bool {
         false
@@ -459,12 +458,13 @@ pub trait HasNotificationPayload {
     fn payload(&self) -> Option<&Value> {
         None
     }
-    
+
     /// Serialize notification to JSON
     fn serialize_payload(&self) -> Result<String, String> {
         match self.payload() {
-            Some(data) => serde_json::to_string(data)
-                .map_err(|e| format!("Serialization error: {}", e)),
+            Some(data) => {
+                serde_json::to_string(data).map_err(|e| format!("Serialization error: {}", e))
+            }
             None => Ok("{}".to_string()),
         }
     }
@@ -476,17 +476,17 @@ pub trait HasNotificationRules {
     fn priority(&self) -> u32 {
         0
     }
-    
+
     /// Whether this notification can be batched with others
     fn can_batch(&self) -> bool {
         true
     }
-    
+
     /// Maximum retry attempts for delivery
     fn max_retries(&self) -> u32 {
         3
     }
-    
+
     /// Check if notification should be delivered
     fn should_deliver(&self) -> bool {
         true
@@ -494,10 +494,8 @@ pub trait HasNotificationRules {
 }
 
 /// Composed notification definition trait (automatically implemented via blanket impl)
-pub trait NotificationDefinition: 
-    HasNotificationMetadata + 
-    HasNotificationPayload + 
-    HasNotificationRules 
+pub trait NotificationDefinition:
+    HasNotificationMetadata + HasNotificationPayload + HasNotificationRules
 {
     /// Convert this notification definition to a base Notification
     fn to_notification(&self) -> Notification {
@@ -512,7 +510,7 @@ pub trait NotificationDefinition:
         }
         notification
     }
-    
+
     /// Validate this notification
     fn validate(&self) -> Result<(), String> {
         if self.method().is_empty() {
@@ -526,10 +524,10 @@ pub trait NotificationDefinition:
 }
 
 // Blanket implementation: any type implementing the fine-grained traits automatically gets NotificationDefinition
-impl<T> NotificationDefinition for T 
-where 
-    T: HasNotificationMetadata + HasNotificationPayload + HasNotificationRules 
-{}
+impl<T> NotificationDefinition for T where
+    T: HasNotificationMetadata + HasNotificationPayload + HasNotificationRules
+{
+}
 
 #[cfg(test)]
 mod tests {
@@ -565,12 +563,15 @@ mod tests {
         let notification = ProgressNotification::new("token123", 50)
             .with_total(100)
             .with_message("Processing...");
-        
+
         assert_eq!(notification.method, "notifications/progress");
         assert_eq!(notification.params.progress_token, "token123");
         assert_eq!(notification.params.progress, 50);
         assert_eq!(notification.params.total, Some(100));
-        assert_eq!(notification.params.message, Some("Processing...".to_string()));
+        assert_eq!(
+            notification.params.message,
+            Some("Processing...".to_string())
+        );
     }
 
     #[test]
@@ -583,12 +584,15 @@ mod tests {
     #[test]
     fn test_cancelled_notification() {
         use turul_mcp_json_rpc_server::types::RequestId;
-        let notification = CancelledNotification::new(RequestId::Number(123))
-            .with_reason("User cancelled");
-        
+        let notification =
+            CancelledNotification::new(RequestId::Number(123)).with_reason("User cancelled");
+
         assert_eq!(notification.method, "notifications/cancelled");
         assert_eq!(notification.params.request_id, RequestId::Number(123));
-        assert_eq!(notification.params.reason, Some("User cancelled".to_string()));
+        assert_eq!(
+            notification.params.reason,
+            Some("User cancelled".to_string())
+        );
     }
 
     #[test]
@@ -603,7 +607,7 @@ mod tests {
         let data = json!({"message": "Test log message", "context": "test"});
         let notification = LoggingMessageNotification::new(LoggingLevel::Info, data.clone())
             .with_logger("test-logger");
-        
+
         assert_eq!(notification.method, "notifications/message");
         assert_eq!(notification.params.level, LoggingLevel::Info);
         assert_eq!(notification.params.logger, Some("test-logger".to_string()));
@@ -615,7 +619,7 @@ mod tests {
         let notification = InitializedNotification::new();
         let json = serde_json::to_string(&notification).unwrap();
         assert!(json.contains("notifications/initialized"));
-        
+
         let parsed: InitializedNotification = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.method, "notifications/initialized");
     }

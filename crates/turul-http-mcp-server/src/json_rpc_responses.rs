@@ -5,12 +5,12 @@
 
 use bytes::Bytes;
 use http_body_util::Full;
-use hyper::{header, Response, StatusCode};
+use hyper::{Response, StatusCode, header};
 use serde_json::Value;
 use tracing::error;
 
 use turul_mcp_json_rpc_server::{
-    error::JsonRpcErrorObject, types::RequestId, JsonRpcError, JsonRpcResponse,
+    JsonRpcError, JsonRpcResponse, error::JsonRpcErrorObject, types::RequestId,
 };
 
 /// HTTP body type for JSON-RPC responses

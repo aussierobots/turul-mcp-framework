@@ -72,7 +72,7 @@ impl BusinessCalculatorState {
         let formulas_path = Path::new("data/business_formulas.json");
         let benchmarks_path = Path::new("data/industry_benchmarks.yaml");
         let templates_path = Path::new("data/calculation_templates.md");
-        
+
         let formulas = match fs::read_to_string(formulas_path) {
             Ok(content) => {
                 from_str::<BusinessFormulas>(&content)
@@ -89,7 +89,7 @@ impl BusinessCalculatorState {
                 }
             }
         };
-        
+
         let benchmarks = match fs::read_to_string(benchmarks_path) {
             Ok(content) => {
                 serde_yml::from_str::<IndustryBenchmarks>(&content)
@@ -105,10 +105,10 @@ impl BusinessCalculatorState {
                 }
             }
         };
-        
+
         let calculation_templates = fs::read_to_string(templates_path)
             .unwrap_or_else(|_| "# Business Calculation Templates\n\nNo templates loaded.".to_string());
-        
+
         Ok(Self {
             formulas,
             benchmarks,
@@ -125,7 +125,7 @@ struct FinancialCalculatorTool {
 
 impl FinancialCalculatorTool {
     fn new(state: Arc<BusinessCalculatorState>) -> Self {
-        Self { 
+        Self {
             state,
             input_schema: ToolSchema::object()
                 .with_properties(HashMap::from([
@@ -187,11 +187,11 @@ impl McpTool for FinancialCalculatorTool {
         let calc_type = args.get("calculation_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("calculation_type"))?;
-        
+
         let params = args.get("parameters")
             .and_then(|v| v.as_object())
             .ok_or_else(|| McpError::missing_param("parameters"))?;
-        
+
         let include_explanation = args.get("include_explanation")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
@@ -237,7 +237,7 @@ impl McpTool for FinancialCalculatorTool {
 
                 let monthly_rate = annual_rate / 12.0;
                 let num_payments = years * 12.0;
-                let payment = principal * (monthly_rate * (1.0 + monthly_rate).powf(num_payments)) / 
+                let payment = principal * (monthly_rate * (1.0 + monthly_rate).powf(num_payments)) /
                     ((1.0 + monthly_rate).powf(num_payments) - 1.0);
                 let total_paid = payment * num_payments;
                 let total_interest = total_paid - principal;
@@ -269,7 +269,7 @@ impl McpTool for FinancialCalculatorTool {
 
                 let mut npv = -initial_investment;
                 let mut present_values = Vec::new();
-                
+
                 for (i, cf) in cash_flows.iter().enumerate() {
                     if let Some(cash_flow) = cf.as_f64() {
                         let pv = cash_flow / (1.0 + discount_rate).powf((i + 1) as f64);
@@ -388,12 +388,12 @@ struct BusinessMetricsTool {
 
 impl BusinessMetricsTool {
     fn new(state: Arc<BusinessCalculatorState>) -> Self {
-        Self { 
+        Self {
             state,
             input_schema: ToolSchema::object()
                 .with_properties(HashMap::from([
                     ("metric_type".to_string(), JsonSchema::string_enum(vec![
-                        "customer_lifetime_value".to_string(), "conversion_rate".to_string(), 
+                        "customer_lifetime_value".to_string(), "conversion_rate".to_string(),
                         "churn_rate".to_string(), "employee_productivity".to_string(),
                         "customer_acquisition_cost".to_string(), "marketing_roi".to_string()
                     ]).with_description("Type of business metric to calculate")),
@@ -450,11 +450,11 @@ impl McpTool for BusinessMetricsTool {
         let metric_type = args.get("metric_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("metric_type"))?;
-        
+
         let params = args.get("parameters")
             .and_then(|v| v.as_object())
             .ok_or_else(|| McpError::missing_param("parameters"))?;
-        
+
         let industry = args.get("industry").and_then(|v| v.as_str());
 
         let result = match metric_type {
@@ -594,7 +594,7 @@ impl McpTool for BusinessMetricsTool {
                     },
                     "results": {
                         "revenue_per_employee": format!("${:.0}", revenue_per_employee),
-                        "productivity_tier": if revenue_per_employee > 200000.0 { "High Productivity" } 
+                        "productivity_tier": if revenue_per_employee > 200000.0 { "High Productivity" }
                                           else if revenue_per_employee > 100000.0 { "Average Productivity" }
                                           else { "Below Average Productivity" }
                     },
@@ -646,7 +646,7 @@ struct IndustryBenchmarkTool {
 
 impl IndustryBenchmarkTool {
     fn new(state: Arc<BusinessCalculatorState>) -> Self {
-        Self { 
+        Self {
             state,
             input_schema: ToolSchema::object()
                 .with_properties(HashMap::from([
@@ -710,16 +710,16 @@ impl McpTool for IndustryBenchmarkTool {
         let industry = args.get("industry")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("industry"))?;
-        
+
         let metric_category = args.get("metric_category")
             .and_then(|v| v.as_str())
             .unwrap_or("all");
-        
+
         let region = args.get("region").and_then(|v| v.as_str());
 
         if let Some(industry_data) = self.state.benchmarks.industry_benchmarks.get(industry) {
             let mut filtered_metrics = HashMap::new();
-            
+
             if metric_category == "all" {
                 filtered_metrics = industry_data.metrics.clone();
             } else if let Some(category_metrics) = self.state.benchmarks.benchmark_categories.get(metric_category) {
@@ -742,7 +742,7 @@ impl McpTool for IndustryBenchmarkTool {
                     "last_updated": "2025-01-19",
                     "data_sources": [
                         "Industry reports from McKinsey & Company",
-                        "PwC Annual Industry Surveys", 
+                        "PwC Annual Industry Surveys",
                         "Deloitte Industry Benchmarking Studies"
                     ]
                 },
@@ -790,12 +790,12 @@ struct CalculatorDocumentationTool {
 
 impl CalculatorDocumentationTool {
     fn new(state: Arc<BusinessCalculatorState>) -> Self {
-        Self { 
+        Self {
             state,
             input_schema: ToolSchema::object()
                 .with_properties(HashMap::from([
                     ("doc_type".to_string(), JsonSchema::string_enum(vec![
-                        "formulas".to_string(), "templates".to_string(), "examples".to_string(), 
+                        "formulas".to_string(), "templates".to_string(), "examples".to_string(),
                         "best_practices".to_string(), "all".to_string()
                     ]).with_description("Type of documentation to retrieve")),
                     ("category".to_string(), JsonSchema::string()
@@ -849,7 +849,7 @@ impl McpTool for CalculatorDocumentationTool {
         let doc_type = args.get("doc_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("doc_type"))?;
-        
+
         let category = args.get("category").and_then(|v| v.as_str());
 
         match doc_type {

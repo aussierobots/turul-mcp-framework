@@ -7,14 +7,17 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use turul_mcp_server::{McpServer, McpResult};
-use turul_mcp_protocol::{
-    McpError,
-    prompts::{HasPromptMetadata, HasPromptDescription, HasPromptArguments, HasPromptAnnotations, HasPromptMeta, PromptAnnotations, PromptArgument, PromptMessage},
-};
-use turul_mcp_server::prompt::{McpPrompt};
 use serde_json::Value;
 use tracing::info;
+use turul_mcp_protocol::{
+    McpError,
+    prompts::{
+        HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
+        HasPromptMetadata, PromptAnnotations, PromptArgument, PromptMessage,
+    },
+};
+use turul_mcp_server::prompt::McpPrompt;
+use turul_mcp_server::{McpResult, McpServer};
 
 /// Code generation prompt handler
 /// Implements actual MCP prompt protocol for code generation templates
@@ -79,7 +82,7 @@ Generate the {language} code now:"#.to_string(),
 
     fn render_template(&self, args: &HashMap<String, Value>) -> String {
         let mut rendered = self.template.clone();
-        
+
         // Replace required arguments
         for arg in &self.arguments {
             if let Some(value) = args.get(&arg.name) {
@@ -91,18 +94,22 @@ Generate the {language} code now:"#.to_string(),
                 rendered = rendered.replace(&placeholder, &value_str);
             }
         }
-        
+
         // Handle optional arguments with defaults
-        rendered = rendered.replace("{style|functional}", 
+        rendered = rendered.replace(
+            "{style|functional}",
             args.get("style")
                 .and_then(|v| v.as_str())
-                .unwrap_or("functional"));
-                
-        rendered = rendered.replace("{framework|standard library}", 
+                .unwrap_or("functional"),
+        );
+
+        rendered = rendered.replace(
+            "{framework|standard library}",
             args.get("framework")
                 .and_then(|v| v.as_str())
-                .unwrap_or("standard library"));
-        
+                .unwrap_or("standard library"),
+        );
+
         rendered
     }
 }
@@ -141,37 +148,60 @@ impl McpPrompt for CodeGenerationPrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let empty_map = HashMap::new();
         let args = args.as_ref().unwrap_or(&empty_map);
-        
+
         // Check required arguments
         for arg in &self.arguments {
             if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(McpError::validation(&format!("Missing required argument: {}", arg.name)));
+                return Err(McpError::validation(&format!(
+                    "Missing required argument: {}",
+                    arg.name
+                )));
             }
         }
-        
+
         let rendered_content = self.render_template(args);
         Ok(vec![PromptMessage::text(rendered_content)])
     }
-    
+
     async fn validate_args(&self, args: &HashMap<String, Value>) -> McpResult<()> {
         // Check required arguments
         for arg in &self.arguments {
             if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(McpError::validation(&format!("Missing required argument: {}", arg.name)));
+                return Err(McpError::validation(&format!(
+                    "Missing required argument: {}",
+                    arg.name
+                )));
             }
         }
-        
+
         // Validate language argument
         if let Some(language) = args.get("language").and_then(|v| v.as_str()) {
             let supported_languages = &[
-                "rust", "python", "javascript", "typescript", "java", "go", "c", "cpp",
-                "csharp", "php", "ruby", "swift", "kotlin", "scala", "haskell", "sql"
+                "rust",
+                "python",
+                "javascript",
+                "typescript",
+                "java",
+                "go",
+                "c",
+                "cpp",
+                "csharp",
+                "php",
+                "ruby",
+                "swift",
+                "kotlin",
+                "scala",
+                "haskell",
+                "sql",
             ];
             if !supported_languages.contains(&language.to_lowercase().as_str()) {
-                return Err(McpError::validation(&format!("Unsupported language: {}", language)));
+                return Err(McpError::validation(&format!(
+                    "Unsupported language: {}",
+                    language
+                )));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -206,7 +236,8 @@ impl CodeReviewPrompt {
                     .with_description("Review focus (security, performance, readability, all)")
                     .optional(),
             ],
-            template: r#"Please perform a comprehensive code review of the following {language} code.
+            template:
+                r#"Please perform a comprehensive code review of the following {language} code.
 
 ## Code to Review
 ```{language}
@@ -256,13 +287,14 @@ Please analyze the code for:
 - Positive aspects worth noting
 - Priority ranking of issues (High/Medium/Low)
 
-Begin your review now:"#.to_string(),
+Begin your review now:"#
+                    .to_string(),
         }
     }
-    
+
     fn render_template(&self, args: &HashMap<String, Value>) -> String {
         let mut rendered = self.template.clone();
-        
+
         for (key, value) in args {
             let value_str = match value {
                 Value::String(s) => s.clone(),
@@ -271,13 +303,15 @@ Begin your review now:"#.to_string(),
             let placeholder = format!("{{{}}}", key);
             rendered = rendered.replace(&placeholder, &value_str);
         }
-        
+
         // Handle optional focus with default
-        rendered = rendered.replace("{focus|all aspects}", 
+        rendered = rendered.replace(
+            "{focus|all aspects}",
             args.get("focus")
                 .and_then(|v| v.as_str())
-                .unwrap_or("all aspects"));
-        
+                .unwrap_or("all aspects"),
+        );
+
         rendered
     }
 }
@@ -300,7 +334,6 @@ impl HasPromptArguments for CodeReviewPrompt {
     }
 }
 
-
 impl HasPromptAnnotations for CodeReviewPrompt {
     fn annotations(&self) -> Option<&PromptAnnotations> {
         None
@@ -314,33 +347,42 @@ impl McpPrompt for CodeReviewPrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let empty_map = HashMap::new();
         let args = args.as_ref().unwrap_or(&empty_map);
-        
+
         // Check required arguments
         for arg in &self.arguments {
             if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(McpError::validation(&format!("Missing required argument: {}", arg.name)));
+                return Err(McpError::validation(&format!(
+                    "Missing required argument: {}",
+                    arg.name
+                )));
             }
         }
-        
+
         let rendered_content = self.render_template(args);
         Ok(vec![PromptMessage::text(rendered_content)])
     }
-    
+
     async fn validate_args(&self, args: &HashMap<String, Value>) -> McpResult<()> {
         for arg in &self.arguments {
             if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(McpError::validation(&format!("Missing required argument: {}", arg.name)));
+                return Err(McpError::validation(&format!(
+                    "Missing required argument: {}",
+                    arg.name
+                )));
             }
         }
-        
+
         // Validate focus area if provided
         if let Some(focus) = args.get("focus").and_then(|v| v.as_str()) {
             let valid_focus = &["security", "performance", "readability", "all"];
             if !valid_focus.contains(&focus.to_lowercase().as_str()) {
-                return Err(McpError::validation(&format!("Invalid focus area: {}", focus)));
+                return Err(McpError::validation(&format!(
+                    "Invalid focus area: {}",
+                    focus
+                )));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -365,7 +407,9 @@ impl ArchitecturePrompt {
             description: "Get architectural guidance and design recommendations".to_string(),
             arguments: vec![
                 PromptArgument::new("project_type")
-                    .with_description("Type of project (web-app, api, microservice, mobile, desktop)")
+                    .with_description(
+                        "Type of project (web-app, api, microservice, mobile, desktop)",
+                    )
                     .required(),
                 PromptArgument::new("requirements")
                     .with_description("Project requirements and constraints")
@@ -399,7 +443,6 @@ impl HasPromptArguments for ArchitecturePrompt {
     }
 }
 
-
 impl HasPromptAnnotations for ArchitecturePrompt {
     fn annotations(&self) -> Option<&PromptAnnotations> {
         None
@@ -413,31 +456,39 @@ impl McpPrompt for ArchitecturePrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let empty_map = HashMap::new();
         let args = args.as_ref().unwrap_or(&empty_map);
-        
+
         // Check required arguments
         for arg in &self.arguments {
             if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(McpError::validation(&format!("Missing required argument: {}", arg.name)));
+                return Err(McpError::validation(&format!(
+                    "Missing required argument: {}",
+                    arg.name
+                )));
             }
         }
-        
-        let project_type = args.get("project_type")
+
+        let project_type = args
+            .get("project_type")
             .and_then(|v| v.as_str())
             .unwrap_or("general");
-            
-        let requirements = args.get("requirements")
+
+        let requirements = args
+            .get("requirements")
             .and_then(|v| v.as_str())
             .unwrap_or("No specific requirements provided");
-            
-        let scale = args.get("scale")
+
+        let scale = args
+            .get("scale")
             .and_then(|v| v.as_str())
             .unwrap_or("medium");
-            
-        let tech_stack = args.get("technology_stack")
+
+        let tech_stack = args
+            .get("technology_stack")
             .and_then(|v| v.as_str())
             .unwrap_or("flexible");
 
-        let template = format!(r#"You are a senior software architect. Please provide comprehensive architectural guidance for a {project_type} project.
+        let template = format!(
+            r#"You are a senior software architect. Please provide comprehensive architectural guidance for a {project_type} project.
 
 ## Project Overview
 - **Type**: {project_type}
@@ -479,31 +530,45 @@ impl McpPrompt for ArchitecturePrompt {
 - Maintenance and operational concerns
 - Documentation and knowledge transfer
 
-Please provide detailed, actionable recommendations:"#, 
+Please provide detailed, actionable recommendations:"#,
             project_type = project_type,
-            scale = scale, 
+            scale = scale,
             tech_stack = tech_stack,
             requirements = requirements
         );
 
         Ok(vec![PromptMessage::text(template)])
     }
-    
+
     async fn validate_args(&self, args: &HashMap<String, Value>) -> McpResult<()> {
         for arg in &self.arguments {
             if arg.required.unwrap_or(false) && !args.contains_key(&arg.name) {
-                return Err(McpError::validation(&format!("Missing required argument: {}", arg.name)));
+                return Err(McpError::validation(&format!(
+                    "Missing required argument: {}",
+                    arg.name
+                )));
             }
         }
-        
+
         // Validate project type
         if let Some(project_type) = args.get("project_type").and_then(|v| v.as_str()) {
-            let valid_types = &["web-app", "api", "microservice", "mobile", "desktop", "cli", "library"];
+            let valid_types = &[
+                "web-app",
+                "api",
+                "microservice",
+                "mobile",
+                "desktop",
+                "cli",
+                "library",
+            ];
             if !valid_types.contains(&project_type.to_lowercase().as_str()) {
-                return Err(McpError::validation(&format!("Invalid project type: {}", project_type)));
+                return Err(McpError::validation(&format!(
+                    "Invalid project type: {}",
+                    project_type
+                )));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -530,7 +595,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "This server demonstrates ACTUAL MCP prompt protocol implementation. \
              It uses McpPrompt traits to render real prompts with template substitution, \
              not fake tools that pretend to generate prompts. This is how MCP protocol \
-             features should be implemented."
+             features should be implemented.",
         )
         .prompt(code_generation)
         .prompt(code_review)
@@ -542,7 +607,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("🚀 Real MCP prompts server running at: http://127.0.0.1:8006/mcp");
     info!("📝 This server implements ACTUAL MCP prompts:");
     info!("   • generate_code - AI-assisted code generation with language and style options");
-    info!("   • review_code - Comprehensive code review with security, performance, and quality analysis");
+    info!(
+        "   • review_code - Comprehensive code review with security, performance, and quality analysis"
+    );
     info!("   • architecture_guidance - Software architecture recommendations and design patterns");
     info!("💡 Unlike previous examples, this uses real McpPrompt traits");
     info!("💡 Prompts are rendered with proper template substitution and validation");

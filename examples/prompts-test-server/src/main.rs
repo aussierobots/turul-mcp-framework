@@ -7,17 +7,17 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use turul_mcp_server::{McpServer, McpResult};
-use turul_mcp_server::prompt::McpPrompt;
-use turul_mcp_protocol::prompts::{
-    HasPromptMetadata, HasPromptDescription, HasPromptArguments, HasPromptAnnotations, HasPromptMeta,
-    PromptArgument, PromptMessage, PromptAnnotations
-};
-use turul_mcp_protocol::McpError;
-use serde_json::Value;
-use tracing::info;
 use chrono::Utc;
 use clap::Parser;
+use serde_json::Value;
+use tracing::info;
+use turul_mcp_protocol::prompts::{
+    HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
+    HasPromptMetadata, PromptAnnotations, PromptArgument, PromptMessage,
+};
+use turul_mcp_protocol::McpError;
+use turul_mcp_server::prompt::McpPrompt;
+use turul_mcp_server::{McpResult, McpServer};
 
 #[derive(Parser)]
 #[command(name = "prompts-test-server")]
@@ -37,7 +37,9 @@ struct Args {
 struct SimplePrompt;
 
 impl HasPromptMetadata for SimplePrompt {
-    fn name(&self) -> &str { "simple_prompt" }
+    fn name(&self) -> &str {
+        "simple_prompt"
+    }
 }
 
 impl HasPromptDescription for SimplePrompt {
@@ -47,11 +49,15 @@ impl HasPromptDescription for SimplePrompt {
 }
 
 impl HasPromptArguments for SimplePrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { None }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        None
+    }
 }
 
 impl HasPromptAnnotations for SimplePrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 impl HasPromptMeta for SimplePrompt {}
@@ -92,7 +98,9 @@ impl Default for StringArgsPrompt {
 }
 
 impl HasPromptMetadata for StringArgsPrompt {
-    fn name(&self) -> &str { "string_args_prompt" }
+    fn name(&self) -> &str {
+        "string_args_prompt"
+    }
 }
 
 impl HasPromptDescription for StringArgsPrompt {
@@ -102,11 +110,15 @@ impl HasPromptDescription for StringArgsPrompt {
 }
 
 impl HasPromptArguments for StringArgsPrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { Some(&self.arguments) }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        Some(&self.arguments)
+    }
 }
 
 impl HasPromptAnnotations for StringArgsPrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 impl HasPromptMeta for StringArgsPrompt {}
@@ -115,13 +127,15 @@ impl HasPromptMeta for StringArgsPrompt {}
 impl McpPrompt for StringArgsPrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let args = args.unwrap_or_default();
-        
+
         // Validate required arguments
-        let required_text = args.get("required_text")
+        let required_text = args
+            .get("required_text")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("required_text"))?;
-            
-        let optional_text = args.get("optional_text")
+
+        let optional_text = args
+            .get("optional_text")
             .and_then(|v| v.as_str())
             .unwrap_or("(not provided)");
 
@@ -161,7 +175,9 @@ impl Default for NumberArgsPrompt {
 }
 
 impl HasPromptMetadata for NumberArgsPrompt {
-    fn name(&self) -> &str { "number_args_prompt" }
+    fn name(&self) -> &str {
+        "number_args_prompt"
+    }
 }
 
 impl HasPromptDescription for NumberArgsPrompt {
@@ -171,11 +187,15 @@ impl HasPromptDescription for NumberArgsPrompt {
 }
 
 impl HasPromptArguments for NumberArgsPrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { Some(&self.arguments) }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        Some(&self.arguments)
+    }
 }
 
 impl HasPromptAnnotations for NumberArgsPrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 impl HasPromptMeta for NumberArgsPrompt {}
@@ -189,20 +209,29 @@ impl McpPrompt for NumberArgsPrompt {
         tracing::info!("NumberArgsPrompt received arguments: {:?}", args);
 
         // Validate required number argument - MCP spec requires string arguments
-        let count = args.get("count")
+        let count = args
+            .get("count")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("count"))
-            .and_then(|s| s.parse::<f64>().map_err(|_| McpError::invalid_param_type("count", "number as string", s)))?;
-            
+            .and_then(|s| {
+                s.parse::<f64>()
+                    .map_err(|_| McpError::invalid_param_type("count", "number as string", s))
+            })?;
+
         if !(1.0..=100.0).contains(&count) {
-            return Err(McpError::param_out_of_range("count", &count.to_string(), "1-100"));
+            return Err(McpError::param_out_of_range(
+                "count",
+                &count.to_string(),
+                "1-100",
+            ));
         }
-            
-        let multiplier = args.get("multiplier")
+
+        let multiplier = args
+            .get("multiplier")
             .and_then(|v| v.as_str())
             .and_then(|s| s.parse::<f64>().ok())
             .unwrap_or(1.0);
-            
+
         let result = count * multiplier;
 
         Ok(vec![
@@ -241,7 +270,9 @@ impl Default for BooleanArgsPrompt {
 }
 
 impl HasPromptMetadata for BooleanArgsPrompt {
-    fn name(&self) -> &str { "boolean_args_prompt" }
+    fn name(&self) -> &str {
+        "boolean_args_prompt"
+    }
 }
 
 impl HasPromptDescription for BooleanArgsPrompt {
@@ -251,11 +282,15 @@ impl HasPromptDescription for BooleanArgsPrompt {
 }
 
 impl HasPromptArguments for BooleanArgsPrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { Some(&self.arguments) }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        Some(&self.arguments)
+    }
 }
 
 impl HasPromptAnnotations for BooleanArgsPrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 impl HasPromptMeta for BooleanArgsPrompt {}
@@ -264,19 +299,29 @@ impl HasPromptMeta for BooleanArgsPrompt {}
 impl McpPrompt for BooleanArgsPrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let args = args.unwrap_or_default();
-        
+
         // Validate required boolean argument - MCP spec requires string arguments
-        let enable_feature = args.get("enable_feature")
+        let enable_feature = args
+            .get("enable_feature")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("enable_feature"))
-            .and_then(|s| s.parse::<bool>().map_err(|_| McpError::invalid_param_type("enable_feature", "boolean as string", s)))?;
-            
-        let debug_mode = args.get("debug_mode")
+            .and_then(|s| {
+                s.parse::<bool>().map_err(|_| {
+                    McpError::invalid_param_type("enable_feature", "boolean as string", s)
+                })
+            })?;
+
+        let debug_mode = args
+            .get("debug_mode")
             .and_then(|v| v.as_str())
             .and_then(|s| s.parse::<bool>().ok())
             .unwrap_or(false);
 
-        let status = if enable_feature { "ENABLED" } else { "DISABLED" };
+        let status = if enable_feature {
+            "ENABLED"
+        } else {
+            "DISABLED"
+        };
         let debug_status = if debug_mode { "ON" } else { "OFF" };
 
         Ok(vec![
@@ -321,7 +366,9 @@ impl Default for TemplatePrompt {
 }
 
 impl HasPromptMetadata for TemplatePrompt {
-    fn name(&self) -> &str { "template_prompt" }
+    fn name(&self) -> &str {
+        "template_prompt"
+    }
 }
 
 impl HasPromptDescription for TemplatePrompt {
@@ -331,11 +378,15 @@ impl HasPromptDescription for TemplatePrompt {
 }
 
 impl HasPromptArguments for TemplatePrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { Some(&self.arguments) }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        Some(&self.arguments)
+    }
 }
 
 impl HasPromptAnnotations for TemplatePrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 impl HasPromptMeta for TemplatePrompt {}
@@ -344,16 +395,19 @@ impl HasPromptMeta for TemplatePrompt {}
 impl McpPrompt for TemplatePrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let args = args.unwrap_or_default();
-        
-        let name = args.get("name")
+
+        let name = args
+            .get("name")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("name"))?;
-            
-        let topic = args.get("topic")
+
+        let topic = args
+            .get("topic")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("topic"))?;
-            
-        let style = args.get("style")
+
+        let style = args
+            .get("style")
             .and_then(|v| v.as_str())
             .unwrap_or("casual");
 
@@ -362,7 +416,7 @@ impl McpPrompt for TemplatePrompt {
         } else {
             format!("Hi {},", name)
         };
-        
+
         let tone = if style == "formal" {
             "Please provide a comprehensive analysis of"
         } else {
@@ -386,20 +440,20 @@ struct MultiMessagePrompt {
 
 impl Default for MultiMessagePrompt {
     fn default() -> Self {
-        let arguments = vec![
-            PromptArgument {
-                name: "scenario".to_string(),
-                title: None,
-                description: Some("Scenario to create multi-turn conversation for".to_string()),
-                required: Some(true),
-            },
-        ];
+        let arguments = vec![PromptArgument {
+            name: "scenario".to_string(),
+            title: None,
+            description: Some("Scenario to create multi-turn conversation for".to_string()),
+            required: Some(true),
+        }];
         Self { arguments }
     }
 }
 
 impl HasPromptMetadata for MultiMessagePrompt {
-    fn name(&self) -> &str { "multi_message_prompt" }
+    fn name(&self) -> &str {
+        "multi_message_prompt"
+    }
 }
 
 impl HasPromptDescription for MultiMessagePrompt {
@@ -409,11 +463,15 @@ impl HasPromptDescription for MultiMessagePrompt {
 }
 
 impl HasPromptArguments for MultiMessagePrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { Some(&self.arguments) }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        Some(&self.arguments)
+    }
 }
 
 impl HasPromptAnnotations for MultiMessagePrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 impl HasPromptMeta for MultiMessagePrompt {}
@@ -422,8 +480,9 @@ impl HasPromptMeta for MultiMessagePrompt {}
 impl McpPrompt for MultiMessagePrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let args = args.unwrap_or_default();
-        
-        let scenario = args.get("scenario")
+
+        let scenario = args
+            .get("scenario")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("scenario"))?;
 
@@ -450,7 +509,9 @@ impl McpPrompt for MultiMessagePrompt {
 struct SessionAwarePrompt;
 
 impl HasPromptMetadata for SessionAwarePrompt {
-    fn name(&self) -> &str { "session_aware_prompt" }
+    fn name(&self) -> &str {
+        "session_aware_prompt"
+    }
 }
 
 impl HasPromptDescription for SessionAwarePrompt {
@@ -460,11 +521,15 @@ impl HasPromptDescription for SessionAwarePrompt {
 }
 
 impl HasPromptArguments for SessionAwarePrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { None }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        None
+    }
 }
 
 impl HasPromptAnnotations for SessionAwarePrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 impl HasPromptMeta for SessionAwarePrompt {}
@@ -476,7 +541,7 @@ impl McpPrompt for SessionAwarePrompt {
         // For testing, we'll simulate session awareness
         let session_info = format!(
             "Session ID: example-session-{}\nTimestamp: {}",
-            "12345", 
+            "12345",
             Utc::now().to_rfc3339()
         );
 
@@ -516,7 +581,9 @@ impl Default for ValidationPrompt {
 }
 
 impl HasPromptMetadata for ValidationPrompt {
-    fn name(&self) -> &str { "validation_prompt" }
+    fn name(&self) -> &str {
+        "validation_prompt"
+    }
 }
 
 impl HasPromptDescription for ValidationPrompt {
@@ -526,11 +593,15 @@ impl HasPromptDescription for ValidationPrompt {
 }
 
 impl HasPromptArguments for ValidationPrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { Some(&self.arguments) }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        Some(&self.arguments)
+    }
 }
 
 impl HasPromptAnnotations for ValidationPrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 impl HasPromptMeta for ValidationPrompt {}
@@ -539,24 +610,37 @@ impl HasPromptMeta for ValidationPrompt {}
 impl McpPrompt for ValidationPrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let args = args.unwrap_or_default();
-        
+
         // Strict email validation
-        let email = args.get("email")
+        let email = args
+            .get("email")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("email"))?;
-            
+
         if !email.contains('@') || !email.contains('.') {
-            return Err(McpError::invalid_param_type("email", "valid email address", email));
+            return Err(McpError::invalid_param_type(
+                "email",
+                "valid email address",
+                email,
+            ));
         }
-        
+
         // Strict age validation - MCP spec requires string arguments
-        let age = args.get("age")
+        let age = args
+            .get("age")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("age"))
-            .and_then(|s| s.parse::<f64>().map_err(|_| McpError::invalid_param_type("age", "number as string", s)))?;
-            
+            .and_then(|s| {
+                s.parse::<f64>()
+                    .map_err(|_| McpError::invalid_param_type("age", "number as string", s))
+            })?;
+
         if !(18.0..=120.0).contains(&age) {
-            return Err(McpError::param_out_of_range("age", &age.to_string(), "18-120"));
+            return Err(McpError::param_out_of_range(
+                "age",
+                &age.to_string(),
+                "18-120",
+            ));
         }
 
         Ok(vec![
@@ -595,7 +679,9 @@ impl Default for DynamicPrompt {
 }
 
 impl HasPromptMetadata for DynamicPrompt {
-    fn name(&self) -> &str { "dynamic_prompt" }
+    fn name(&self) -> &str {
+        "dynamic_prompt"
+    }
 }
 
 impl HasPromptDescription for DynamicPrompt {
@@ -605,11 +691,15 @@ impl HasPromptDescription for DynamicPrompt {
 }
 
 impl HasPromptArguments for DynamicPrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { Some(&self.arguments) }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        Some(&self.arguments)
+    }
 }
 
 impl HasPromptAnnotations for DynamicPrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 impl HasPromptMeta for DynamicPrompt {}
@@ -618,12 +708,14 @@ impl HasPromptMeta for DynamicPrompt {}
 impl McpPrompt for DynamicPrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let args = args.unwrap_or_default();
-        
-        let mode = args.get("mode")
+
+        let mode = args
+            .get("mode")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("mode"))?;
-            
-        let content = args.get("content")
+
+        let content = args
+            .get("content")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("content"))?;
 
@@ -642,8 +734,8 @@ impl McpPrompt for DynamicPrompt {
             ),
             _ => {
                 return Err(McpError::invalid_param_type(
-                    "mode", 
-                    "creative, analytical, or supportive", 
+                    "mode",
+                    "creative, analytical, or supportive",
                     mode
                 ));
             }
@@ -667,7 +759,9 @@ impl McpPrompt for DynamicPrompt {
 struct EmptyMessagesPrompt;
 
 impl HasPromptMetadata for EmptyMessagesPrompt {
-    fn name(&self) -> &str { "empty_messages_prompt" }
+    fn name(&self) -> &str {
+        "empty_messages_prompt"
+    }
 }
 
 impl HasPromptDescription for EmptyMessagesPrompt {
@@ -677,11 +771,15 @@ impl HasPromptDescription for EmptyMessagesPrompt {
 }
 
 impl HasPromptArguments for EmptyMessagesPrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { None }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        None
+    }
 }
 
 impl HasPromptAnnotations for EmptyMessagesPrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 impl HasPromptMeta for EmptyMessagesPrompt {}
@@ -701,20 +799,20 @@ struct ValidationFailurePrompt {
 
 impl Default for ValidationFailurePrompt {
     fn default() -> Self {
-        let arguments = vec![
-            PromptArgument {
-                name: "impossible_param".to_string(),
-                title: None,
-                description: Some("This parameter can never be satisfied".to_string()),
-                required: Some(true),
-            },
-        ];
+        let arguments = vec![PromptArgument {
+            name: "impossible_param".to_string(),
+            title: None,
+            description: Some("This parameter can never be satisfied".to_string()),
+            required: Some(true),
+        }];
         Self { arguments }
     }
 }
 
 impl HasPromptMetadata for ValidationFailurePrompt {
-    fn name(&self) -> &str { "validation_failure_prompt" }
+    fn name(&self) -> &str {
+        "validation_failure_prompt"
+    }
 }
 
 impl HasPromptDescription for ValidationFailurePrompt {
@@ -724,11 +822,15 @@ impl HasPromptDescription for ValidationFailurePrompt {
 }
 
 impl HasPromptArguments for ValidationFailurePrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { Some(&self.arguments) }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        Some(&self.arguments)
+    }
 }
 
 impl HasPromptAnnotations for ValidationFailurePrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 impl HasPromptMeta for ValidationFailurePrompt {}
@@ -737,12 +839,12 @@ impl HasPromptMeta for ValidationFailurePrompt {}
 impl McpPrompt for ValidationFailurePrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
         let _args = args.unwrap_or_default();
-        
+
         // This prompt always fails for testing error handling
         Err(McpError::invalid_param_type(
             "impossible_param",
             "a value that cannot exist",
-            "any provided value"
+            "any provided value",
         ))
     }
 }
@@ -758,11 +860,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let args = Args::parse();
-    
+
     // Use specified port or pick random if 0
     let port = if args.port == 0 {
-        portpicker::pick_unused_port()
-            .ok_or("Failed to find unused port")?
+        portpicker::pick_unused_port().ok_or("Failed to find unused port")?
     } else {
         args.port
     };
@@ -780,7 +881,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Available test prompts:\n\
             • Basic: simple, string_args, number_args, boolean_args, template, multi_message\n\
             • Advanced: session_aware, validation, dynamic\n\
-            • Edge cases: empty_messages, validation_failure"
+            • Edge cases: empty_messages, validation_failure",
         )
         // Basic Prompts (Coverage)
         .prompt(SimplePrompt)
@@ -814,7 +915,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("   🚀 Advanced Prompts (Features):");
     info!("      • session_aware_prompt - Uses session context in messages");
     info!("      • validation_prompt - Strict email/age validation with detailed errors");
-    info!("      • dynamic_prompt - Behavior changes based on mode (creative/analytical/supportive)");
+    info!(
+        "      • dynamic_prompt - Behavior changes based on mode (creative/analytical/supportive)"
+    );
     info!("");
     info!("   ⚠️  Edge Case Prompts:");
     info!("      • empty_messages_prompt - Returns empty messages array");
@@ -830,7 +933,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("     -H 'Mcp-Session-Id: SESSION_ID' \\");
     info!("     -d '{{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"prompts/list\",\"params\":{{}}}}'");
     info!("");
-    
+
     server.run().await?;
     Ok(())
 }

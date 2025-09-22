@@ -3,8 +3,8 @@
 //! This module focuses on testing the core functionality of the MCP derive framework
 //! with robust assertions that work reliably across different formatting.
 
-use crate::utils::{extract_tool_meta, extract_param_meta, ParamMeta};
-use syn::{parse_quote, DeriveInput};
+use crate::utils::{ParamMeta, extract_param_meta, extract_tool_meta};
+use syn::{DeriveInput, parse_quote};
 
 /// Test suite for basic functionality that we know works
 #[cfg(test)]
@@ -20,7 +20,7 @@ mod basic_tests {
 
         let result = extract_tool_meta(&input.attrs);
         assert!(result.is_ok());
-        
+
         let meta = result.unwrap();
         assert_eq!(meta.name, "test_tool");
         assert_eq!(meta.description, "A test tool");
@@ -35,7 +35,7 @@ mod basic_tests {
 
         let result = extract_param_meta(&field.attrs);
         assert!(result.is_ok());
-        
+
         let meta = result.unwrap();
         assert_eq!(meta.description, Some("Test parameter".to_string()));
         assert!(!meta.optional);
@@ -50,7 +50,7 @@ mod basic_tests {
 
         let result = extract_param_meta(&field.attrs);
         assert!(result.is_ok());
-        
+
         let meta = result.unwrap();
         assert_eq!(meta.description, Some("Optional parameter".to_string()));
         assert!(meta.optional);
@@ -65,7 +65,7 @@ mod basic_tests {
 
         let result = extract_param_meta(&field.attrs);
         assert!(result.is_ok());
-        
+
         let meta = result.unwrap();
         assert_eq!(meta.description, Some("Constrained parameter".to_string()));
         assert_eq!(meta.min, Some(0.0));
@@ -101,7 +101,10 @@ mod basic_tests {
         };
 
         let result = crate::tool_attr::mcp_tool_impl(args, input);
-        assert!(result.is_ok(), "Function attribute macro should compile successfully");
+        assert!(
+            result.is_ok(),
+            "Function attribute macro should compile successfully"
+        );
     }
 
     #[test]
@@ -176,8 +179,8 @@ mod basic_tests {
 #[cfg(test)]
 mod generation_tests {
     use super::*;
-    use crate::utils::{type_to_schema, generate_param_extraction};
-    use syn::{Type, Ident};
+    use crate::utils::{generate_param_extraction, type_to_schema};
+    use syn::{Ident, Type};
 
     #[test]
     fn test_type_to_schema_generates_valid_tokens() {
@@ -192,10 +195,13 @@ mod generation_tests {
         for ty in types {
             let meta = ParamMeta::default();
             let schema = type_to_schema(&ty, &meta);
-            
+
             // The main test is that this doesn't panic and produces valid tokens
             let token_string = schema.to_string();
-            assert!(!token_string.is_empty(), "Schema generation should produce non-empty output");
+            assert!(
+                !token_string.is_empty(),
+                "Schema generation should produce non-empty output"
+            );
         }
     }
 
@@ -213,15 +219,18 @@ mod generation_tests {
         for ty in field_types {
             for optional in [true, false] {
                 let extraction = generate_param_extraction(&field_name, &ty, optional);
-                
+
                 // The main test is that this doesn't panic and produces valid tokens
                 let token_string = extraction.to_string();
-                assert!(!token_string.is_empty(), "Parameter extraction should produce non-empty output");
+                assert!(
+                    !token_string.is_empty(),
+                    "Parameter extraction should produce non-empty output"
+                );
             }
         }
     }
 
-    #[test] 
+    #[test]
     fn test_complex_derive_macro_scenario() {
         let input: DeriveInput = parse_quote! {
             #[tool(name = "complex_tool", description = "A complex tool with many parameter types")]
@@ -242,11 +251,14 @@ mod generation_tests {
         };
 
         let result = crate::tool_derive::derive_mcp_tool_impl(input);
-        assert!(result.is_ok(), "Complex derive macro should compile successfully");
-        
+        assert!(
+            result.is_ok(),
+            "Complex derive macro should compile successfully"
+        );
+
         let generated = result.unwrap();
         let generated_str = generated.to_string();
-        
+
         // Basic sanity checks on the generated code
         assert!(!generated_str.is_empty());
         assert!(generated_str.contains("impl"));
@@ -282,16 +294,16 @@ mod integration_tests {
         // Generate derive macro
         let derive_result = crate::tool_derive::derive_mcp_tool_impl(input);
         assert!(derive_result.is_ok());
-        
+
         let generated = derive_result.unwrap();
         let generated_str = generated.to_string();
-        
+
         // Verify the generated code contains expected elements
         assert!(generated_str.contains("add_numbers"));
         assert!(generated_str.contains("Add two numbers together"));
     }
 
-    #[test] 
+    #[test]
     fn test_end_to_end_function_tool() {
         let args: syn::punctuated::Punctuated<syn::Meta, syn::Token![,]> = parse_quote! {
             name = "multiply", description = "Multiply two numbers"
@@ -308,10 +320,10 @@ mod integration_tests {
 
         let result = crate::tool_attr::mcp_tool_impl(args, input);
         assert!(result.is_ok());
-        
+
         let generated = result.unwrap();
         let generated_str = generated.to_string();
-        
+
         // Verify basic structure is present
         assert!(generated_str.contains("multiply"));
         assert!(generated_str.contains("McpTool"));

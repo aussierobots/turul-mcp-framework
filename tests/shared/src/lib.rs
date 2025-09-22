@@ -6,4 +6,4 @@
 pub mod e2e_utils;
 
 // Re-export the main types for convenience
-pub use e2e_utils::{McpTestClient, TestServerManager, TestFixtures, SessionTestUtils};
+pub use e2e_utils::{McpTestClient, SessionTestUtils, TestFixtures, TestServerManager};

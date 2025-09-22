@@ -3,17 +3,20 @@
 //! This example demonstrates a compliance-focused audit trail system using SQLite for persistence.
 //! It shows how to log immutable audit events, search audit logs, and generate compliance reports.
 
-use std::collections::HashMap;
-use std::sync::Arc;
 use async_trait::async_trait;
-use turul_mcp_server::{McpServer, McpTool, SessionContext};
-use turul_mcp_session_storage::SqliteSessionStorage;
-use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
-use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use chrono::{DateTime, Utc};
-use sqlx::{SqlitePool, Row};
+use sqlx::{Row, SqlitePool};
+use std::collections::HashMap;
+use std::sync::Arc;
+use turul_mcp_protocol::tools::{
+    CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
+    HasOutputSchema, HasToolMeta,
+};
+use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema};
+use turul_mcp_server::{McpServer, McpTool, SessionContext};
+use turul_mcp_session_storage::SqliteSessionStorage;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,7 +47,7 @@ async fn init_database(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             result TEXT NOT NULL,
             metadata TEXT NOT NULL
         );
-        
+
         CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);
         CREATE INDEX IF NOT EXISTS idx_audit_session ON audit_logs(session_id);
         CREATE INDEX IF NOT EXISTS idx_audit_event_type ON audit_logs(event_type);
@@ -53,7 +56,7 @@ async fn init_database(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
-    
+
     Ok(())
 }
 
@@ -67,29 +70,61 @@ impl LogAuditEventTool {
     fn new(db_pool: Arc<SqlitePool>) -> Self {
         let input_schema = ToolSchema::object()
             .with_properties(HashMap::from([
-                ("event_type".to_string(), JsonSchema::string_enum(vec![
-                    "ACCESS".to_string(), "MODIFICATION".to_string(), "DELETION".to_string(), 
-                    "AUTHENTICATION".to_string(), "AUTHORIZATION".to_string(), "SYSTEM".to_string()
-                ]).with_description("Type of audit event")),
-                ("action".to_string(), JsonSchema::string()
-                    .with_description("Specific action performed")),
-                ("result".to_string(), JsonSchema::string_enum(vec![
-                    "SUCCESS".to_string(), "FAILURE".to_string(), "PARTIAL".to_string()
-                ]).with_description("Result of the action")),
-                ("actor".to_string(), JsonSchema::string()
-                    .with_description("Optional actor who performed the action")),
-                ("resource".to_string(), JsonSchema::string()
-                    .with_description("Optional resource that was acted upon")),
-                ("metadata".to_string(), JsonSchema::object()
-                    .with_description("Optional additional metadata")),
+                (
+                    "event_type".to_string(),
+                    JsonSchema::string_enum(vec![
+                        "ACCESS".to_string(),
+                        "MODIFICATION".to_string(),
+                        "DELETION".to_string(),
+                        "AUTHENTICATION".to_string(),
+                        "AUTHORIZATION".to_string(),
+                        "SYSTEM".to_string(),
+                    ])
+                    .with_description("Type of audit event"),
+                ),
+                (
+                    "action".to_string(),
+                    JsonSchema::string().with_description("Specific action performed"),
+                ),
+                (
+                    "result".to_string(),
+                    JsonSchema::string_enum(vec![
+                        "SUCCESS".to_string(),
+                        "FAILURE".to_string(),
+                        "PARTIAL".to_string(),
+                    ])
+                    .with_description("Result of the action"),
+                ),
+                (
+                    "actor".to_string(),
+                    JsonSchema::string()
+                        .with_description("Optional actor who performed the action"),
+                ),
+                (
+                    "resource".to_string(),
+                    JsonSchema::string().with_description("Optional resource that was acted upon"),
+                ),
+                (
+                    "metadata".to_string(),
+                    JsonSchema::object().with_description("Optional additional metadata"),
+                ),
             ]))
-            .with_required(vec!["event_type".to_string(), "action".to_string(), "result".to_string()]);
-        Self { input_schema, db_pool }
+            .with_required(vec![
+                "event_type".to_string(),
+                "action".to_string(),
+                "result".to_string(),
+            ]);
+        Self {
+            input_schema,
+            db_pool,
+        }
     }
 }
 
 impl HasBaseMetadata for LogAuditEventTool {
-    fn name(&self) -> &str { "log_audit_event" }
+    fn name(&self) -> &str {
+        "log_audit_event"
+    }
 }
 
 impl HasDescription for LogAuditEventTool {
@@ -99,33 +134,49 @@ impl HasDescription for LogAuditEventTool {
 }
 
 impl HasInputSchema for LogAuditEventTool {
-    fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
 }
 
 impl HasOutputSchema for LogAuditEventTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 impl HasAnnotations for LogAuditEventTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
 }
 
 impl HasToolMeta for LogAuditEventTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
 impl McpTool for LogAuditEventTool {
-    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
-        let session = session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
-        
-        let event_type = args.get("event_type")
+    async fn call(
+        &self,
+        args: Value,
+        session: Option<SessionContext>,
+    ) -> McpResult<CallToolResult> {
+        let session =
+            session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
+
+        let event_type = args
+            .get("event_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("event_type"))?;
-        let action = args.get("action")
+        let action = args
+            .get("action")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("action"))?;
-        let result = args.get("result")
+        let result = args
+            .get("result")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("result"))?;
         let actor = args.get("actor").and_then(|v| v.as_str());
@@ -167,25 +218,33 @@ impl McpTool for LogAuditEventTool {
         match result {
             Ok(_) => {
                 // Send progress notification
-                session.notify_progress(format!("audit_{}", event_type.to_lowercase()), 1).await;
+                session
+                    .notify_progress(format!("audit_{}", event_type.to_lowercase()), 1)
+                    .await;
 
                 Ok(CallToolResult {
-                    content: vec![ToolResult::text(json!({
-                        "logged": true,
-                        "audit_id": audit_event.id,
-                        "timestamp": audit_event.timestamp,
-                        "event_type": audit_event.event_type,
-                        "action": audit_event.action,
-                        "result": audit_event.result,
-                        "immutable": true,
-                        "compliance": "LOGGED"
-                    }).to_string())],
+                    content: vec![ToolResult::text(
+                        json!({
+                            "logged": true,
+                            "audit_id": audit_event.id,
+                            "timestamp": audit_event.timestamp,
+                            "event_type": audit_event.event_type,
+                            "action": audit_event.action,
+                            "result": audit_event.result,
+                            "immutable": true,
+                            "compliance": "LOGGED"
+                        })
+                        .to_string(),
+                    )],
                     is_error: None,
                     structured_content: None,
                     meta: None,
                 })
             }
-            Err(e) => Err(McpError::tool_execution(&format!("Failed to log audit event: {}", e)))
+            Err(e) => Err(McpError::tool_execution(&format!(
+                "Failed to log audit event: {}",
+                e
+            ))),
         }
     }
 }
@@ -198,29 +257,48 @@ struct SearchAuditTrailTool {
 
 impl SearchAuditTrailTool {
     fn new(db_pool: Arc<SqlitePool>) -> Self {
-        let input_schema = ToolSchema::object()
-            .with_properties(HashMap::from([
-                ("start_time".to_string(), JsonSchema::string()
-                    .with_description("Start time filter (ISO 8601)")),
-                ("end_time".to_string(), JsonSchema::string()
-                    .with_description("End time filter (ISO 8601)")),
-                ("event_type".to_string(), JsonSchema::string()
-                    .with_description("Filter by event type")),
-                ("actor".to_string(), JsonSchema::string()
-                    .with_description("Filter by actor")),
-                ("resource".to_string(), JsonSchema::string()
-                    .with_description("Filter by resource")),
-                ("limit".to_string(), JsonSchema::integer()
-                    .with_description("Maximum results (default: 50, max: 1000)")),
-                ("offset".to_string(), JsonSchema::integer()
-                    .with_description("Results offset for pagination (default: 0)")),
-            ]));
-        Self { input_schema, db_pool }
+        let input_schema = ToolSchema::object().with_properties(HashMap::from([
+            (
+                "start_time".to_string(),
+                JsonSchema::string().with_description("Start time filter (ISO 8601)"),
+            ),
+            (
+                "end_time".to_string(),
+                JsonSchema::string().with_description("End time filter (ISO 8601)"),
+            ),
+            (
+                "event_type".to_string(),
+                JsonSchema::string().with_description("Filter by event type"),
+            ),
+            (
+                "actor".to_string(),
+                JsonSchema::string().with_description("Filter by actor"),
+            ),
+            (
+                "resource".to_string(),
+                JsonSchema::string().with_description("Filter by resource"),
+            ),
+            (
+                "limit".to_string(),
+                JsonSchema::integer().with_description("Maximum results (default: 50, max: 1000)"),
+            ),
+            (
+                "offset".to_string(),
+                JsonSchema::integer()
+                    .with_description("Results offset for pagination (default: 0)"),
+            ),
+        ]));
+        Self {
+            input_schema,
+            db_pool,
+        }
     }
 }
 
 impl HasBaseMetadata for SearchAuditTrailTool {
-    fn name(&self) -> &str { "search_audit_trail" }
+    fn name(&self) -> &str {
+        "search_audit_trail"
+    }
 }
 
 impl HasDescription for SearchAuditTrailTool {
@@ -230,36 +308,47 @@ impl HasDescription for SearchAuditTrailTool {
 }
 
 impl HasInputSchema for SearchAuditTrailTool {
-    fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
 }
 
 impl HasOutputSchema for SearchAuditTrailTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 impl HasAnnotations for SearchAuditTrailTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
 }
 
 impl HasToolMeta for SearchAuditTrailTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
 impl McpTool for SearchAuditTrailTool {
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
-        let limit = args.get("limit")
+    async fn call(
+        &self,
+        args: Value,
+        _session: Option<SessionContext>,
+    ) -> McpResult<CallToolResult> {
+        let limit = args
+            .get("limit")
             .and_then(|v| v.as_i64())
             .unwrap_or(50)
             .min(1000) as i32;
-        let offset = args.get("offset")
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0) as i32;
+        let offset = args.get("offset").and_then(|v| v.as_i64()).unwrap_or(0) as i32;
 
         // Build dynamic query
         let mut query = "SELECT * FROM audit_logs WHERE 1=1".to_string();
         let mut conditions = Vec::new();
-        
+
         if let Some(start_time) = args.get("start_time").and_then(|v| v.as_str()) {
             conditions.push(format!(" AND timestamp >= '{}'", start_time));
         }
@@ -288,22 +377,25 @@ impl McpTool for SearchAuditTrailTool {
             .await
             .map_err(|e| McpError::tool_execution(&format!("Database query failed: {}", e)))?;
 
-        let audit_events: Vec<Value> = rows.iter().map(|row| {
-            let timestamp_str: String = row.get("timestamp");
-            let metadata_str: String = row.get("metadata");
-            
-            json!({
-                "id": row.get::<String, _>("id"),
-                "timestamp": timestamp_str,
-                "session_id": row.get::<String, _>("session_id"),
-                "event_type": row.get::<String, _>("event_type"),
-                "actor": row.get::<Option<String>, _>("actor"),
-                "resource": row.get::<Option<String>, _>("resource"),
-                "action": row.get::<String, _>("action"),
-                "result": row.get::<String, _>("result"),
-                "metadata": serde_json::from_str::<Value>(&metadata_str).unwrap_or(json!({}))
+        let audit_events: Vec<Value> = rows
+            .iter()
+            .map(|row| {
+                let timestamp_str: String = row.get("timestamp");
+                let metadata_str: String = row.get("metadata");
+
+                json!({
+                    "id": row.get::<String, _>("id"),
+                    "timestamp": timestamp_str,
+                    "session_id": row.get::<String, _>("session_id"),
+                    "event_type": row.get::<String, _>("event_type"),
+                    "actor": row.get::<Option<String>, _>("actor"),
+                    "resource": row.get::<Option<String>, _>("resource"),
+                    "action": row.get::<String, _>("action"),
+                    "result": row.get::<String, _>("result"),
+                    "metadata": serde_json::from_str::<Value>(&metadata_str).unwrap_or(json!({}))
+                })
             })
-        }).collect();
+            .collect();
 
         // Get total count for pagination
         let count_query = "SELECT COUNT(*) as total FROM audit_logs WHERE 1=1".to_string();
@@ -343,21 +435,36 @@ impl GenerateComplianceReportTool {
     fn new(db_pool: Arc<SqlitePool>) -> Self {
         let input_schema = ToolSchema::object()
             .with_properties(HashMap::from([
-                ("report_type".to_string(), JsonSchema::string_enum(vec![
-                    "SUMMARY".to_string(), "DETAILED".to_string(), "COMPLIANCE".to_string()
-                ]).with_description("Type of compliance report")),
-                ("start_date".to_string(), JsonSchema::string()
-                    .with_description("Start date for report (ISO 8601)")),
-                ("end_date".to_string(), JsonSchema::string()
-                    .with_description("End date for report (ISO 8601)")),
+                (
+                    "report_type".to_string(),
+                    JsonSchema::string_enum(vec![
+                        "SUMMARY".to_string(),
+                        "DETAILED".to_string(),
+                        "COMPLIANCE".to_string(),
+                    ])
+                    .with_description("Type of compliance report"),
+                ),
+                (
+                    "start_date".to_string(),
+                    JsonSchema::string().with_description("Start date for report (ISO 8601)"),
+                ),
+                (
+                    "end_date".to_string(),
+                    JsonSchema::string().with_description("End date for report (ISO 8601)"),
+                ),
             ]))
             .with_required(vec!["report_type".to_string()]);
-        Self { input_schema, db_pool }
+        Self {
+            input_schema,
+            db_pool,
+        }
     }
 }
 
 impl HasBaseMetadata for GenerateComplianceReportTool {
-    fn name(&self) -> &str { "generate_compliance_report" }
+    fn name(&self) -> &str {
+        "generate_compliance_report"
+    }
 }
 
 impl HasDescription for GenerateComplianceReportTool {
@@ -367,25 +474,38 @@ impl HasDescription for GenerateComplianceReportTool {
 }
 
 impl HasInputSchema for GenerateComplianceReportTool {
-    fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
 }
 
 impl HasOutputSchema for GenerateComplianceReportTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 impl HasAnnotations for GenerateComplianceReportTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
 }
 
 impl HasToolMeta for GenerateComplianceReportTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
 impl McpTool for GenerateComplianceReportTool {
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
-        let report_type = args.get("report_type")
+    async fn call(
+        &self,
+        args: Value,
+        _session: Option<SessionContext>,
+    ) -> McpResult<CallToolResult> {
+        let report_type = args
+            .get("report_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("report_type"))?;
 
@@ -408,8 +528,14 @@ impl McpTool for GenerateComplianceReportTool {
             .await
             .map_err(|e| McpError::tool_execution(&format!("Event counts query failed: {}", e)))?;
 
-        let event_counts: HashMap<String, i32> = event_rows.iter()
-            .map(|row| (row.get::<String, _>("event_type"), row.get::<i32, _>("count")))
+        let event_counts: HashMap<String, i32> = event_rows
+            .iter()
+            .map(|row| {
+                (
+                    row.get::<String, _>("event_type"),
+                    row.get::<i32, _>("count"),
+                )
+            })
             .collect();
 
         // Get result counts
@@ -422,7 +548,8 @@ impl McpTool for GenerateComplianceReportTool {
             .await
             .map_err(|e| McpError::tool_execution(&format!("Result counts query failed: {}", e)))?;
 
-        let result_counts: HashMap<String, i32> = result_rows.iter()
+        let result_counts: HashMap<String, i32> = result_rows
+            .iter()
             .map(|row| (row.get::<String, _>("result"), row.get::<i32, _>("count")))
             .collect();
 
@@ -489,7 +616,13 @@ impl McpTool for GenerateComplianceReportTool {
                     vec!["Audit trail is healthy"]
                 }
             }),
-            _ => return Err(McpError::invalid_param_type("report_type", "SUMMARY|DETAILED|COMPLIANCE", report_type))
+            _ => {
+                return Err(McpError::invalid_param_type(
+                    "report_type",
+                    "SUMMARY|DETAILED|COMPLIANCE",
+                    report_type,
+                ));
+            }
         };
 
         Ok(CallToolResult {
@@ -522,7 +655,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("audit-trail-server")
         .version("1.0.0")
         .title("Audit Trail Server")
-        .instructions("This server provides compliance-focused audit trail logging with SQLite persistence.")
+        .instructions(
+            "This server provides compliance-focused audit trail logging with SQLite persistence.",
+        )
         .tool(LogAuditEventTool::new(db_pool.clone()))
         .tool(SearchAuditTrailTool::new(db_pool.clone()))
         .tool(GenerateComplianceReportTool::new(db_pool.clone()))
@@ -538,7 +673,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  - search_audit_trail: Search audit logs with filters");
     println!("  - generate_compliance_report: Generate compliance reports");
     println!("\nExample usage:");
-    println!("  1. log_audit_event(event_type='ACCESS', action='login', result='SUCCESS', actor='user123')");
+    println!(
+        "  1. log_audit_event(event_type='ACCESS', action='login', result='SUCCESS', actor='user123')"
+    );
     println!("  2. search_audit_trail(event_type='ACCESS', limit=10)");
     println!("  3. generate_compliance_report(report_type='SUMMARY')");
 

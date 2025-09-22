@@ -5,104 +5,104 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse::Parse, parse::ParseStream, Result, Token, Expr, Ident, LitStr};
+use syn::{Expr, Ident, LitStr, Result, Token, parse::Parse, parse::ParseStream};
 
 use crate::macros::shared::capitalize;
 
 /// Implementation function for the resource!{} declarative macro
 pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let input = syn::parse::<ResourceMacroInput>(input)?;
-    
+
     let resource_name_ident = syn::Ident::new(
         &format!("{}Resource", capitalize(&input.name.replace(" ", ""))),
-        proc_macro2::Span::call_site()
+        proc_macro2::Span::call_site(),
     );
-    
+
     let uri = &input.uri;
     let name = &input.name;
     let description = &input.description;
     let content_closure = &input.content;
-    
+
     let expanded = quote! {
         {
             #[derive(Clone)]
             struct #resource_name_ident;
-            
+
             impl #resource_name_ident {
                 fn new() -> Self {
                     Self
                 }
             }
-            
+
             // Implement fine-grained traits
             impl turul_mcp_protocol::resources::HasResourceMetadata for #resource_name_ident {
                 fn name(&self) -> &str {
                     #name
                 }
-                
+
                 fn title(&self) -> Option<&str> {
                     None
                 }
             }
-            
+
             impl turul_mcp_protocol::resources::HasResourceDescription for #resource_name_ident {
                 fn description(&self) -> Option<&str> {
                     Some(#description)
                 }
             }
-            
+
             impl turul_mcp_protocol::resources::HasResourceUri for #resource_name_ident {
                 fn uri(&self) -> &str {
                     #uri
                 }
             }
-            
+
             impl turul_mcp_protocol::resources::HasResourceMimeType for #resource_name_ident {
                 fn mime_type(&self) -> Option<&str> {
                     None
                 }
             }
-            
+
             impl turul_mcp_protocol::resources::HasResourceSize for #resource_name_ident {
                 fn size(&self) -> Option<u64> {
                     None
                 }
             }
-            
+
             impl turul_mcp_protocol::resources::HasResourceAnnotations for #resource_name_ident {
                 fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
                     None
                 }
             }
-            
+
             impl turul_mcp_protocol::resources::HasResourceMeta for #resource_name_ident {
                 fn resource_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
                     None
                 }
             }
-            
+
             // ResourceDefinition automatically implemented via blanket impl!
-            
+
             #[async_trait::async_trait]
             impl turul_mcp_server::McpResource for #resource_name_ident {
                 async fn read(&self, _params: Option<serde_json::Value>) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
                     let content_fn = #content_closure;
                     content_fn(self).await
                 }
-                
+
                 async fn subscribe(&self, _params: Option<serde_json::Value>) -> turul_mcp_server::McpResult<()> {
                     Err(turul_mcp_protocol::McpError::validation("subscribe not supported"))
                 }
-                
+
                 async fn unsubscribe(&self, _params: Option<serde_json::Value>) -> turul_mcp_server::McpResult<()> {
                     Err(turul_mcp_protocol::McpError::validation("unsubscribe not supported"))
                 }
             }
-            
+
             #resource_name_ident::new()
         }
     };
-    
+
     Ok(expanded.into())
 }
 
@@ -120,11 +120,11 @@ impl Parse for ResourceMacroInput {
         let mut name = None;
         let mut description = None;
         let mut content = None;
-        
+
         while !input.is_empty() {
             let ident: Ident = input.parse()?;
             input.parse::<Token![:]>()?;
-            
+
             match ident.to_string().as_str() {
                 "uri" => {
                     let lit: LitStr = input.parse()?;
@@ -143,20 +143,25 @@ impl Parse for ResourceMacroInput {
                     content = Some(expr);
                 }
                 _ => {
-                    return Err(syn::Error::new_spanned(&ident, format!("Unknown field: {}", ident)));
+                    return Err(syn::Error::new_spanned(
+                        &ident,
+                        format!("Unknown field: {}", ident),
+                    ));
                 }
             }
-            
+
             if input.peek(Token![,]) {
                 input.parse::<Token![,]>()?;
             }
         }
-        
+
         Ok(ResourceMacroInput {
             uri: uri.ok_or_else(|| syn::Error::new(input.span(), "Missing 'uri' field"))?,
             name: name.ok_or_else(|| syn::Error::new(input.span(), "Missing 'name' field"))?,
-            description: description.ok_or_else(|| syn::Error::new(input.span(), "Missing 'description' field"))?,
-            content: content.ok_or_else(|| syn::Error::new(input.span(), "Missing 'content' field"))?,
+            description: description
+                .ok_or_else(|| syn::Error::new(input.span(), "Missing 'description' field"))?,
+            content: content
+                .ok_or_else(|| syn::Error::new(input.span(), "Missing 'content' field"))?,
         })
     }
 }

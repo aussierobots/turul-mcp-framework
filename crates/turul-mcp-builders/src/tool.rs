@@ -3,21 +3,21 @@
 //! This module provides a builder pattern for creating tools at runtime
 //! without requiring procedural macros. This is Level 3 of the tool creation spectrum.
 
+use serde_json::Value;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
-use serde_json::Value;
 
 // Import from protocol via alias
 use turul_mcp_protocol::schema::JsonSchema;
-use turul_mcp_protocol::tools::{ToolSchema, ToolAnnotations};
 use turul_mcp_protocol::tools::{
-    HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema,
-    HasAnnotations, HasToolMeta
+    HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasToolMeta,
 };
+use turul_mcp_protocol::tools::{ToolAnnotations, ToolSchema};
 
 /// Type alias for dynamic tool execution function
-pub type DynamicToolFn = Box<dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send>> + Send + Sync>;
+pub type DynamicToolFn =
+    Box<dyn Fn(Value) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send>> + Send + Sync>;
 
 /// Builder for creating tools at runtime
 pub struct ToolBuilder {
@@ -113,10 +113,11 @@ impl ToolBuilder {
     pub fn number_output(mut self) -> Self {
         self.output_schema = Some(
             ToolSchema::object()
-                .with_properties(HashMap::from([
-                    ("result".to_string(), JsonSchema::number())
-                ]))
-                .with_required(vec!["result".to_string()])
+                .with_properties(HashMap::from([(
+                    "result".to_string(),
+                    JsonSchema::number(),
+                )]))
+                .with_required(vec!["result".to_string()]),
         );
         self
     }
@@ -125,10 +126,11 @@ impl ToolBuilder {
     pub fn string_output(mut self) -> Self {
         self.output_schema = Some(
             ToolSchema::object()
-                .with_properties(HashMap::from([
-                    ("result".to_string(), JsonSchema::string())
-                ]))
-                .with_required(vec!["result".to_string()])
+                .with_properties(HashMap::from([(
+                    "result".to_string(),
+                    JsonSchema::string(),
+                )]))
+                .with_required(vec!["result".to_string()]),
         );
         self
     }
@@ -151,9 +153,7 @@ impl ToolBuilder {
         F: Fn(Value) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<Value, String>> + Send + 'static,
     {
-        self.execute_fn = Some(Box::new(move |args| {
-            Box::pin(f(args))
-        }));
+        self.execute_fn = Some(Box::new(move |args| Box::pin(f(args))));
         self
     }
 
@@ -250,7 +250,9 @@ mod tests {
             .description("A test tool")
             .string_param("input", "Test input parameter")
             .execute(|args| async move {
-                let input = args.get("input").and_then(|v| v.as_str())
+                let input = args
+                    .get("input")
+                    .and_then(|v| v.as_str())
                     .ok_or("Missing input parameter")?;
                 Ok(json!({"result": format!("Hello, {}", input)}))
             })
@@ -260,7 +262,9 @@ mod tests {
         assert_eq!(tool.name(), "test_tool");
         assert_eq!(tool.description(), Some("A test tool"));
 
-        let result = tool.execute(json!({"input": "World"})).await
+        let result = tool
+            .execute(json!({"input": "World"}))
+            .await
             .expect("Tool execution failed");
 
         assert_eq!(result, json!({"result": "Hello, World"}));

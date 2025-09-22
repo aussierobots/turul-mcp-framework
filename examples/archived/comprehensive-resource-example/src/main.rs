@@ -44,7 +44,7 @@ impl ConfigResource {
             "features": ["resources", "derive_macros", "json_config"],
             "created_at": "2024-08-24T05:00:00Z"
         });
-        
+
         Self {
             config_data: serde_json::to_string_pretty(&config).unwrap(),
         }
@@ -60,15 +60,15 @@ struct UserProfileResource {
     #[content]
     #[content_type = "application/json"]
     pub profile_data: String,
-    
+
     #[content]
     #[content_type = "text/plain"]
     pub bio: String,
-    
+
     #[content]
     #[content_type = "text/csv"]
     pub activity_log: String,
-    
+
     pub user_id: u64, // Not marked as content, won't be included
 }
 
@@ -89,7 +89,7 @@ impl UserProfileResource {
                 "last_login": "2024-08-24T04:00:00Z"
             }
         });
-        
+
         let activity_log = vec![
             "timestamp,action,details",
             "2024-08-24T04:00:00Z,login,successful",
@@ -97,7 +97,7 @@ impl UserProfileResource {
             "2024-08-24T04:10:00Z,update_settings,theme_changed",
             "2024-08-24T04:15:00Z,logout,session_ended"
         ].join("\n");
-        
+
         Self {
             profile_data: serde_json::to_string_pretty(&profile).unwrap(),
             bio: format!("This is user {} - a demo account created for testing the comprehensive MCP resource functionality. This user has been active since 2024.", user_id),
@@ -185,7 +185,7 @@ impl McpResource for FileSystemResource {
             .extension()
             .and_then(|ext| ext.to_str())
             .unwrap_or("");
-            
+
         if !self.allowed_extensions.contains(&extension.to_string()) {
             return Err(turul_mcp_protocol::McpError::param_out_of_range(
                 "path",
@@ -254,7 +254,7 @@ impl DatabaseResource {
         connection_info.insert("host".to_string(), "localhost".to_string());
         connection_info.insert("port".to_string(), "5432".to_string());
         connection_info.insert("database".to_string(), "example_db".to_string());
-        
+
         Self { connection_info }
     }
 }
@@ -347,14 +347,14 @@ impl McpResource for DatabaseResource {
                 },
                 {
                     "id": 2,
-                    "name": "Example Row 2", 
+                    "name": "Example Row 2",
                     "created_at": "2024-08-24T04:30:00Z",
                     "status": "pending"
                 },
                 {
                     "id": 3,
                     "name": "Example Row 3",
-                    "created_at": "2024-08-24T05:00:00Z", 
+                    "created_at": "2024-08-24T05:00:00Z",
                     "status": "completed"
                 }
             ],
@@ -389,7 +389,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // =============================================================================
     // APPROACH 1: DERIVE MACRO RESOURCES
     // =============================================================================
-    
+
     println!("📦 APPROACH 1: DERIVE MACRO RESOURCES (#[derive(McpResource)])");
     println!("----------------------------------------------------------------");
 
@@ -404,7 +404,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test derive macro resources
     println!("\n🧪 Testing derive macro resources:");
-    
+
     println!("\n1. Config Resource:");
     println!("   URI: {}", config_resource.uri());
     println!("   Name: {}", config_resource.name());
@@ -456,14 +456,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "2024-08-24 05:00:01 INFO  [config] Configuration loaded successfully",
                 "2024-08-24 05:00:02 INFO  [resources] Initializing MCP resources",
                 "2024-08-24 05:00:03 INFO  [resources] - ConfigResource: ready",
-                "2024-08-24 05:00:04 INFO  [resources] - UserProfileResource: ready", 
+                "2024-08-24 05:00:04 INFO  [resources] - UserProfileResource: ready",
                 "2024-08-24 05:00:05 INFO  [resources] - SystemStatusResource: ready",
                 "2024-08-24 05:00:06 INFO  [server] MCP server listening on 127.0.0.1:8020",
                 "2024-08-24 05:00:07 DEBUG [resources] Resource macro examples initialized",
                 "2024-08-24 05:00:08 INFO  [main] All systems operational",
                 "2024-08-24 05:00:09 DEBUG [resources] Log resource accessed",
             ].join("\n");
-            
+
             Ok(vec![ResourceContent::text(format!(
                 "APPLICATION LOG\n===============\n\n{}\n\n--- LOG STATISTICS ---\nTotal entries: 10\nLog level breakdown:\n  INFO:  8 entries\n  DEBUG: 2 entries\n  ERROR: 0 entries\n\nLast updated: {}",
                 log_entries,
@@ -492,7 +492,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     },
                     {
-                        "path": "/resources/list", 
+                        "path": "/resources/list",
                         "method": "POST",
                         "description": "List available MCP resources",
                         "example": {
@@ -502,12 +502,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     },
                     {
                         "path": "/resources/read",
-                        "method": "POST", 
+                        "method": "POST",
                         "description": "Read content from a specific resource",
                         "example": {
                             "request": {
-                                "jsonrpc": "2.0", 
-                                "id": 3, 
+                                "jsonrpc": "2.0",
+                                "id": 3,
                                 "method": "resources/read",
                                 "params": {"uri": "file://config.json"}
                             }
@@ -516,7 +516,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 ],
                 "generated_at": chrono::Utc::now().to_rfc3339()
             });
-            
+
             Ok(vec![ResourceContent::blob(
                 serde_json::to_string_pretty(&endpoints_data).unwrap(),
                 "application/json".to_string()
@@ -530,7 +530,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test declarative macro resources
     println!("\n🧪 Testing declarative macro resources:");
-    
+
     println!("\n1. Log Resource:");
     println!("   URI: {}", log_resource.uri());
     println!("   Name: {}", log_resource.name());
@@ -538,10 +538,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(content) => {
             println!("   Content items: {}", content.len());
             if let Some(ResourceContent::Text { text }) = content.first() {
-                let preview = if text.len() > 100 { 
-                    format!("{}...", &text[..100]) 
-                } else { 
-                    text.clone() 
+                let preview = if text.len() > 100 {
+                    format!("{}...", &text[..100])
+                } else {
+                    text.clone()
                 };
                 println!("   Preview: {}", preview.replace('\n', " "));
             }
@@ -583,7 +583,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   URI: {}", filesystem_resource.uri());
     println!("   Name: {}", filesystem_resource.name());
     println!("   Annotations: {}", filesystem_resource.annotations().map_or("None".to_string(), |a| a.to_string()));
-    
+
     // Test with different file types
     let test_files = vec!["config.json", "readme.txt", "changelog.md", "app.log"];
     for file in test_files {
@@ -599,13 +599,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n2. Database Resource (with SQL parameters):");
     println!("   URI: {}", database_resource.uri());
     println!("   Name: {}", database_resource.name());
-    
+
     let test_queries = vec![
         ("SELECT * FROM users LIMIT 5", Some(json!({"query": "SELECT * FROM users", "limit": 5}))),
         ("SHOW TABLES", Some(json!({"query": "SHOW TABLES"}))),
         ("Invalid query", Some(json!({"query": "DROP TABLE users"}))), // This should fail
     ];
-    
+
     for (desc, params) in test_queries {
         match database_resource.read(params).await {
             Ok(content) => {
@@ -627,20 +627,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .version("1.0.0")
         .title("Comprehensive Resource Example Server")
         .instructions("This server demonstrates all three approaches for creating MCP resources with various content types and parameter handling.")
-        
+
         // Add derive macro resources
         .resource(config_resource)
-        .resource(user_profile) 
+        .resource(user_profile)
         .resource(system_status)
-        
+
         // Add declarative macro resources
         .resource(log_resource)
         .resource(api_endpoints)
-        
+
         // Add manual implementation resources
         .resource(filesystem_resource)
         .resource(database_resource)
-        
+
         .with_resources()
         .bind_address("127.0.0.1:8020".parse()?)
         .build()?;
@@ -649,7 +649,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📋 Available Resources:");
     println!("   DERIVE MACROS:");
     println!("   • file://config.json - Application Configuration (JSON)");
-    println!("   • data://user-profile - User Profile Data (JSON + Text + CSV)");  
+    println!("   • data://user-profile - User Profile Data (JSON + Text + CSV)");
     println!("   • system://status - System Status (Auto-generated)");
     println!("\n   DECLARATIVE MACROS:");
     println!("   • file://application.log - Real-time Application Log");

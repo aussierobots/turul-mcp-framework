@@ -5,7 +5,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse::Parse, parse::ParseStream, Result, Token, Ident, LitStr};
+use syn::{Ident, LitStr, Result, Token, parse::Parse, parse::ParseStream};
 
 use crate::macros::shared::capitalize;
 
@@ -17,12 +17,14 @@ pub fn notification_declarative_impl(input: TokenStream) -> Result<TokenStream> 
 }
 
 /// Internal implementation that works with proc_macro2::TokenStream for testing
-pub fn notification_declarative_impl_inner(input: NotificationMacroInput) -> proc_macro2::TokenStream {
+pub fn notification_declarative_impl_inner(
+    input: NotificationMacroInput,
+) -> proc_macro2::TokenStream {
     let notification_name_ident = syn::Ident::new(
         &format!("{}Notification", capitalize(&input.name)),
-        proc_macro2::Span::call_site()
+        proc_macro2::Span::call_site(),
     );
-    
+
     let struct_fields = generate_struct_fields(&input.fields);
     let default_impl = generate_default_impl(&notification_name_ident, &input.fields);
 
@@ -47,10 +49,10 @@ impl Parse for NotificationMacroInput {
     fn parse(input: ParseStream) -> Result<Self> {
         let name_ident: Ident = input.parse()?;
         let name = name_ident.to_string();
-        
+
         let content;
         syn::braced!(content in input);
-        
+
         let mut fields = Vec::new();
         while !content.is_empty() {
             fields.push(content.parse()?);
@@ -58,7 +60,7 @@ impl Parse for NotificationMacroInput {
                 content.parse::<Token![,]>()?;
             }
         }
-        
+
         Ok(NotificationMacroInput { name, fields })
     }
 }
@@ -74,18 +76,22 @@ impl Parse for NotificationField {
     fn parse(input: ParseStream) -> Result<Self> {
         let name_ident: Ident = input.parse()?;
         let name = name_ident.to_string();
-        
+
         input.parse::<Token![:]>()?;
         let field_type: syn::Type = input.parse()?;
-        
+
         let mut description = None;
         if input.peek(Token![=]) {
             input.parse::<Token![=]>()?;
             let desc_str: LitStr = input.parse()?;
             description = Some(desc_str.value());
         }
-        
-        Ok(NotificationField { name, field_type, description })
+
+        Ok(NotificationField {
+            name,
+            field_type,
+            description,
+        })
     }
 }
 
@@ -93,11 +99,11 @@ fn generate_struct_fields(fields: &[NotificationField]) -> proc_macro2::TokenStr
     if fields.is_empty() {
         return quote! {};
     }
-    
+
     let field_definitions = fields.iter().map(|field| {
         let field_name = syn::Ident::new(&field.name, proc_macro2::Span::call_site());
         let field_type = &field.field_type;
-        
+
         if let Some(desc) = &field.description {
             quote! {
                 #[doc = #desc]
@@ -109,13 +115,16 @@ fn generate_struct_fields(fields: &[NotificationField]) -> proc_macro2::TokenStr
             }
         }
     });
-    
+
     quote! {
         #(#field_definitions)*
     }
 }
 
-fn generate_default_impl(struct_name: &syn::Ident, fields: &[NotificationField]) -> proc_macro2::TokenStream {
+fn generate_default_impl(
+    struct_name: &syn::Ident,
+    fields: &[NotificationField],
+) -> proc_macro2::TokenStream {
     if fields.is_empty() {
         return quote! {
             impl Default for #struct_name {
@@ -125,7 +134,7 @@ fn generate_default_impl(struct_name: &syn::Ident, fields: &[NotificationField])
             }
         };
     }
-    
+
     let field_defaults = fields.iter().map(|field| {
         let field_name = syn::Ident::new(&field.name, proc_macro2::Span::call_site());
         // Generate sensible defaults based on type
@@ -138,12 +147,12 @@ fn generate_default_impl(struct_name: &syn::Ident, fields: &[NotificationField])
             syn::Type::Path(path) if path.path.is_ident("bool") => quote! { false },
             _ => quote! { Default::default() },
         };
-        
+
         quote! {
             #field_name: #default_value,
         }
     });
-    
+
     quote! {
         impl Default for #struct_name {
             fn default() -> Self {
@@ -161,7 +170,9 @@ mod tests {
 
     #[test]
     fn test_notification_macro_parse() {
-        let input = syn::parse_str::<NotificationMacroInput>("progress { message: String, percent: u32 }").unwrap();
+        let input =
+            syn::parse_str::<NotificationMacroInput>("progress { message: String, percent: u32 }")
+                .unwrap();
 
         let result = notification_declarative_impl_inner(input);
         let code = result.to_string();
@@ -181,7 +192,8 @@ mod tests {
     #[test]
     fn test_zero_config_method_generation() {
         // The derive macro should auto-generate method names
-        let input = syn::parse_str::<NotificationMacroInput>("resources_changed { uri: String }").unwrap();
+        let input =
+            syn::parse_str::<NotificationMacroInput>("resources_changed { uri: String }").unwrap();
 
         let result = notification_declarative_impl_inner(input);
         // Should generate ResourcesChangedNotification which maps to "notifications/resources/list_changed"

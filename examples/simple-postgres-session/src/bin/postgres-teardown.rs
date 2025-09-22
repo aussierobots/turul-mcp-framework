@@ -1,11 +1,11 @@
 //! PostgreSQL Teardown Utility
-//! 
+//!
 //! Drops the PostgreSQL tables used by the session storage system.
 //!
 //! WARNING: This will permanently delete all session data!
 
-use tracing::{info, warn, error};
-use sqlx::{PgPool, Executor};
+use sqlx::{Executor, PgPool};
+use tracing::{error, info, warn};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -39,7 +39,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         error!("❌ Deletion cancelled for safety.");
         error!("");
         error!("To confirm deletion, run:");
-        error!("  CONFIRM_DELETE=yes DATABASE_URL='{}' cargo run --bin postgres-teardown", mask_password(&database_url));
+        error!(
+            "  CONFIRM_DELETE=yes DATABASE_URL='{}' cargo run --bin postgres-teardown",
+            mask_password(&database_url)
+        );
         error!("");
         return Ok(());
     }
@@ -50,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(pool) => {
             info!("✅ Connected to PostgreSQL successfully");
             pool
-        },
+        }
         Err(e) => {
             error!("❌ Failed to connect to PostgreSQL: {}", e);
             error!("Database URL: {}", mask_password(&database_url));
@@ -60,9 +63,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Drop the tables
     info!("🗑️  Dropping PostgreSQL tables...");
-    
+
     // Drop events table first (due to foreign key constraints)
-    match pool.execute("DROP TABLE IF EXISTS mcp_session_events").await {
+    match pool
+        .execute("DROP TABLE IF EXISTS mcp_session_events")
+        .await
+    {
         Ok(_) => info!("✅ Dropped table: mcp_session_events"),
         Err(e) => {
             error!("❌ Failed to drop table mcp_session_events: {}", e);
@@ -92,10 +98,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// Mask the password in a database URL for logging
 fn mask_password(url: &str) -> String {
     if let Ok(parsed) = url::Url::parse(url)
-        && parsed.password().is_some() {
-            let mut masked = parsed.clone();
-            let _ = masked.set_password(Some("***"));
-            return masked.to_string();
-        }
+        && parsed.password().is_some()
+    {
+        let mut masked = parsed.clone();
+        let _ = masked.set_password(Some("***"));
+        return masked.to_string();
+    }
     url.to_string()
 }

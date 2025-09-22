@@ -6,6 +6,6 @@
 pub mod test_utils;
 
 // Re-export common dependencies for tests
-pub use mcp_e2e_shared::{McpTestClient, TestServerManager, TestFixtures};
+pub use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 pub use serde_json::{json, Value};
 pub use tracing::{debug, info, warn};

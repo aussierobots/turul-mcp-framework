@@ -2,7 +2,7 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{ItemFn, Result, FnArg, Pat, Meta, Lit, punctuated::Punctuated, Token};
+use syn::{FnArg, ItemFn, Lit, Meta, Pat, Result, Token, punctuated::Punctuated};
 
 use crate::macros::shared::capitalize;
 
@@ -17,34 +17,41 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
         match arg {
             Meta::NameValue(nv) if nv.path.is_ident("uri") => {
                 if let syn::Expr::Lit(expr_lit) = &nv.value
-                    && let Lit::Str(s) = &expr_lit.lit {
-                        resource_uri = Some(s.value());
-                    }
+                    && let Lit::Str(s) = &expr_lit.lit
+                {
+                    resource_uri = Some(s.value());
+                }
             }
             Meta::NameValue(nv) if nv.path.is_ident("name") => {
                 if let syn::Expr::Lit(expr_lit) = &nv.value
-                    && let Lit::Str(s) = &expr_lit.lit {
-                        resource_name = Some(s.value());
-                    }
+                    && let Lit::Str(s) = &expr_lit.lit
+                {
+                    resource_name = Some(s.value());
+                }
             }
             Meta::NameValue(nv) if nv.path.is_ident("description") => {
                 if let syn::Expr::Lit(expr_lit) = &nv.value
-                    && let Lit::Str(s) = &expr_lit.lit {
-                        resource_description = Some(s.value());
-                    }
+                    && let Lit::Str(s) = &expr_lit.lit
+                {
+                    resource_description = Some(s.value());
+                }
             }
             Meta::NameValue(nv) if nv.path.is_ident("mime_type") => {
                 if let syn::Expr::Lit(expr_lit) = &nv.value
-                    && let Lit::Str(s) = &expr_lit.lit {
-                        mime_type = Some(s.value());
-                    }
+                    && let Lit::Str(s) = &expr_lit.lit
+                {
+                    mime_type = Some(s.value());
+                }
             }
             _ => {}
         }
     }
 
     let resource_uri = resource_uri.ok_or_else(|| {
-        syn::Error::new_spanned(&input.sig.ident, "Missing 'uri' parameter in #[mcp_resource(...)]")
+        syn::Error::new_spanned(
+            &input.sig.ident,
+            "Missing 'uri' parameter in #[mcp_resource(...)]",
+        )
     })?;
 
     let fn_name = &input.sig.ident;
@@ -54,14 +61,15 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
     // Generate struct name from function name with proper capitalization
     let struct_name = syn::Ident::new(
         &format!("{}ResourceImpl", capitalize(&fn_name.to_string())),
-        fn_name.span()
+        fn_name.span(),
     );
 
     // Use function name as resource name if not provided
     let resource_name = resource_name.unwrap_or_else(|| fn_name.to_string());
 
     // Default description if not provided
-    let resource_description = resource_description.unwrap_or_else(|| format!("Resource: {}", resource_name));
+    let resource_description =
+        resource_description.unwrap_or_else(|| format!("Resource: {}", resource_name));
 
     // Handle mime_type properly for quote! generation
     let mime_type_expr = match mime_type {
@@ -85,15 +93,16 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
     // Process function parameters
     for input_arg in &input.sig.inputs {
         if let FnArg::Typed(pat_type) = input_arg
-            && let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
-                let param_name = &pat_ident.ident;
-                let param_type = &pat_type.ty;
+            && let Pat::Ident(pat_ident) = pat_type.pat.as_ref()
+        {
+            let param_name = &pat_ident.ident;
+            let param_type = &pat_type.ty;
 
-                // Check if this parameter name matches a template variable
-                if template_vars.contains(&param_name.to_string()) {
-                    // Generate parameter extraction from template variables
-                    let param_name_str = param_name.to_string();
-                    fn_call_args.push(quote! {
+            // Check if this parameter name matches a template variable
+            if template_vars.contains(&param_name.to_string()) {
+                // Generate parameter extraction from template variables
+                let param_name_str = param_name.to_string();
+                fn_call_args.push(quote! {
                         {
                             let template_vars = params
                                 .as_ref()
@@ -107,14 +116,16 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
                                 .ok_or_else(|| turul_mcp_protocol::McpError::missing_param(#param_name_str))?
                         }
                     });
-                } else if param_name == "params" && matches!(**param_type, syn::Type::Path(ref p) if p.path.segments.last().unwrap().ident == "Value") {
-                    // This is the params argument - unwrap the Option
-                    has_params_arg = true;
-                    fn_call_args.push(quote! { params.unwrap_or_default() });
-                } else {
-                    // Regular parameter - extract from params
-                    let param_name_str = param_name.to_string();
-                    fn_call_args.push(quote! {
+            } else if param_name == "params"
+                && matches!(**param_type, syn::Type::Path(ref p) if p.path.segments.last().unwrap().ident == "Value")
+            {
+                // This is the params argument - unwrap the Option
+                has_params_arg = true;
+                fn_call_args.push(quote! { params.unwrap_or_default() });
+            } else {
+                // Regular parameter - extract from params
+                let param_name_str = param_name.to_string();
+                fn_call_args.push(quote! {
                         {
                             params
                                 .as_ref()
@@ -123,8 +134,8 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
                                 .ok_or_else(|| turul_mcp_protocol::McpError::missing_param(#param_name_str))?
                         }
                     });
-                }
             }
+        }
     }
 
     // If function doesn't take params but we need template variables, add them
@@ -137,7 +148,9 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
 
     // Rename the function to avoid name collision with the resource constructor
     let mut clean_input = input.clone();
-    clean_input.attrs.retain(|attr| !attr.path().is_ident("mcp_resource"));
+    clean_input
+        .attrs
+        .retain(|attr| !attr.path().is_ident("mcp_resource"));
 
     // Rename the function with _impl suffix
     let impl_fn_name = syn::Ident::new(&format!("{}_impl", fn_name), fn_name.span());
@@ -262,7 +275,8 @@ mod tests {
 
     #[test]
     fn test_mcp_resource_with_multiple_parameters() {
-        let args = parse_quote! { uri = "file:///timeline/{ticker}.json", description = "Timeline data" };
+        let args =
+            parse_quote! { uri = "file:///timeline/{ticker}.json", description = "Timeline data" };
         let input = parse_quote! {
             async fn get_timeline(ticker: String, days: i32) -> McpResult<Vec<ResourceContent>> {
                 Ok(vec![])
@@ -289,12 +303,18 @@ mod tests {
 
         let result = mcp_resource_impl(args, input);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing 'uri' parameter"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Missing 'uri' parameter")
+        );
     }
 
     #[test]
     fn test_mcp_resource_with_params_argument() {
-        let args = parse_quote! { uri = "file:///custom/{id}.json", description = "Custom resource" };
+        let args =
+            parse_quote! { uri = "file:///custom/{id}.json", description = "Custom resource" };
         let input = parse_quote! {
             async fn custom_resource(id: String, params: serde_json::Value) -> McpResult<Vec<ResourceContent>> {
                 Ok(vec![])
@@ -324,7 +344,9 @@ mod tests {
         let code = result.unwrap().to_string();
         // Should capitalize properly: load_user_profile -> LoadUserProfileResourceImpl
         assert!(code.contains("LoadUserProfileResourceImpl"));
-        assert!(code.contains("fn load_user_profile") && code.contains("LoadUserProfileResourceImpl"));
+        assert!(
+            code.contains("fn load_user_profile") && code.contains("LoadUserProfileResourceImpl")
+        );
     }
 
     #[test]
@@ -349,4 +371,3 @@ mod tests {
         assert!(code.contains("\"Metadata test\""));
     }
 }
-

@@ -9,14 +9,12 @@ use std::sync::Arc;
 use tracing::info;
 
 use turul_http_mcp_server::{ServerConfig, StreamConfig, StreamManager};
+use turul_mcp_protocol::{Implementation, ServerCapabilities};
 use turul_mcp_server::{
     McpCompletion, McpElicitation, McpLogger, McpNotification, McpPrompt, McpResource, McpRoot,
-    McpSampling, McpTool,
-    handlers::McpHandler,
-    session::SessionManager,
+    McpSampling, McpTool, handlers::McpHandler, session::SessionManager,
 };
 use turul_mcp_session_storage::BoxedSessionStorage;
-use turul_mcp_protocol::{Implementation, ServerCapabilities};
 
 use crate::error::Result;
 use crate::handler::LambdaMcpHandler;
@@ -25,7 +23,7 @@ use crate::handler::LambdaMcpHandler;
 use crate::cors::CorsConfig;
 
 /// Main Lambda MCP server
-/// 
+///
 /// This server stores all configuration and can create Lambda handlers when needed.
 /// It mirrors the architecture of McpServer but is designed for Lambda deployment.
 #[allow(dead_code)]
@@ -77,6 +75,7 @@ pub struct LambdaMcpServer {
 
 impl LambdaMcpServer {
     /// Create a new Lambda MCP server (use builder instead)
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         implementation: Implementation,
         capabilities: ServerCapabilities,
@@ -97,8 +96,7 @@ impl LambdaMcpServer {
         server_config: ServerConfig,
         enable_sse: bool,
         stream_config: StreamConfig,
-        #[cfg(feature = "cors")]
-        cors_config: Option<CorsConfig>,
+        #[cfg(feature = "cors")] cors_config: Option<CorsConfig>,
     ) -> Self {
         // Create session manager with server capabilities
         let session_manager = Arc::new(SessionManager::with_storage_and_timeouts(
@@ -135,7 +133,7 @@ impl LambdaMcpServer {
     }
 
     /// Create a Lambda handler ready for use with Lambda runtime
-    /// 
+    ///
     /// This is equivalent to McpServer::run_http() but creates a handler instead of running a server.
     pub async fn handler(&self) -> Result<LambdaMcpHandler> {
         info!(
@@ -143,7 +141,7 @@ impl LambdaMcpServer {
             self.implementation.name, self.implementation.version
         );
         info!("Session management: enabled with automatic cleanup");
-        
+
         if self.enable_sse {
             info!("SSE notifications: enabled for Lambda responses");
         }
@@ -154,9 +152,9 @@ impl LambdaMcpServer {
         // Create stream manager for SSE
         let stream_manager = Arc::new(StreamManager::with_config(
             self.session_storage.clone(),
-            self.stream_config.clone()
+            self.stream_config.clone(),
         ));
-        
+
         // Create JSON-RPC dispatcher
         use turul_mcp_json_rpc_server::JsonRpcDispatcher;
         let mut dispatcher = JsonRpcDispatcher::new();

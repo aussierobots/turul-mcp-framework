@@ -12,7 +12,7 @@
 //!     McpVersion, InitializeRequest, InitializeResult,
 //!     Tool, CallToolRequest, CallToolResult
 //! };
-//! 
+//!
 //! // Or use the prelude for common types
 //! use turul_mcp_protocol::prelude::*;
 //! ```
@@ -57,13 +57,13 @@ mod tests {
     #[test]
     fn test_prelude_works() {
         use crate::prelude::*;
-        
+
         // Test that prelude types are available
         let _tool = Tool::new("test", ToolSchema::object());
         let _resource = Resource::new("test://resource", "test_resource");
         let _prompt = Prompt::new("test_prompt");
         let _error = McpError::tool_execution("test error");
-        
+
         // If this compiles, the prelude is working
     }
 }

@@ -3,7 +3,7 @@
 //! Tests Server-Sent Events functionality for resources/list changes
 //! and other resource-related notifications
 
-use mcp_e2e_shared::{McpTestClient, TestServerManager, TestFixtures};
+use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 use serde_json::json;
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
@@ -13,7 +13,9 @@ use tracing::{debug, info};
 async fn test_sse_connection_establishment() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     // Initialize with SSE-capable client
@@ -28,17 +30,27 @@ async fn test_sse_connection_establishment() {
         .await
         .expect("Failed to test SSE notifications");
 
-    info!("SSE connection test completed. Events received: {}", events.len());
-    
+    info!(
+        "SSE connection test completed. Events received: {}",
+        events.len()
+    );
+
     // Basic connection should work (events may be empty but no errors)
-    assert!(events.is_empty() || events.iter().any(|e| e.contains("data:") || e.contains("event:")));
+    assert!(
+        events.is_empty()
+            || events
+                .iter()
+                .any(|e| e.contains("data:") || e.contains("event:"))
+    );
 }
 
 #[tokio::test]
 async fn test_sse_resource_list_changed_notification() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     // Initialize with listChanged capability
@@ -70,10 +82,10 @@ async fn test_sse_resource_list_changed_notification() {
         Ok(events_result) => {
             let events = events_result.expect("Failed to get SSE events");
             info!("Received {} SSE events", events.len());
-            
+
             for event in &events {
                 debug!("SSE Event: {}", event);
-                
+
                 // Check for listChanged events (camelCase naming per MCP spec)
                 if event.contains("listChanged") {
                     info!("✅ Detected listChanged notification");
@@ -91,7 +103,9 @@ async fn test_sse_resource_list_changed_notification() {
 async fn test_sse_resource_subscription_notifications() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -100,14 +114,10 @@ async fn test_sse_resource_subscription_notifications() {
         .expect("Failed to initialize");
 
     // Subscribe to a subscribable resource
-    let _subscribe_result = client
-        .subscribe_resource("subscribe://updates")
-        .await;
+    let _subscribe_result = client.subscribe_resource("subscribe://updates").await;
 
     // Try to trigger notifications by reading the resource
-    let _read_result = client
-        .read_resource("subscribe://updates")
-        .await;
+    let _read_result = client.read_resource("subscribe://updates").await;
 
     // Check for subscription-related notifications
     let events = client
@@ -115,8 +125,11 @@ async fn test_sse_resource_subscription_notifications() {
         .await
         .expect("Failed to test SSE notifications");
 
-    info!("Subscription notification test completed. Events: {}", events.len());
-    
+    info!(
+        "Subscription notification test completed. Events: {}",
+        events.len()
+    );
+
     // Check for any subscription-related events
     for event in &events {
         debug!("SSE Event: {}", event);
@@ -130,8 +143,10 @@ async fn test_sse_resource_subscription_notifications() {
 async fn test_sse_session_isolation() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
-    
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
+
     // Create two separate clients
     let mut client1 = McpTestClient::new(server.port());
     let mut client2 = McpTestClient::new(server.port());
@@ -141,7 +156,7 @@ async fn test_sse_session_isolation() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize client1");
-    
+
     client2
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
@@ -157,7 +172,7 @@ async fn test_sse_session_isolation() {
         .test_sse_notifications()
         .await
         .expect("Failed to get events for client1");
-    
+
     let events2 = client2
         .test_sse_notifications()
         .await
@@ -167,15 +182,27 @@ async fn test_sse_session_isolation() {
     info!("Client2 events: {}", events2.len());
 
     // Both clients should be able to establish SSE connections independently
-    assert!(events1.is_empty() || events1.iter().any(|e| e.contains("data:") || e.contains("event:")));
-    assert!(events2.is_empty() || events2.iter().any(|e| e.contains("data:") || e.contains("event:")));
+    assert!(
+        events1.is_empty()
+            || events1
+                .iter()
+                .any(|e| e.contains("data:") || e.contains("event:"))
+    );
+    assert!(
+        events2.is_empty()
+            || events2
+                .iter()
+                .any(|e| e.contains("data:") || e.contains("event:"))
+    );
 }
 
 #[tokio::test]
 async fn test_sse_notification_format_compliance() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -184,9 +211,7 @@ async fn test_sse_notification_format_compliance() {
         .expect("Failed to initialize");
 
     // Subscribe to trigger potential notifications
-    let _subscribe_result = client
-        .subscribe_resource("notify://trigger")
-        .await;
+    let _subscribe_result = client.subscribe_resource("notify://trigger").await;
 
     let events = client
         .test_sse_notifications()
@@ -195,23 +220,23 @@ async fn test_sse_notification_format_compliance() {
 
     for event in &events {
         debug!("Validating SSE event format: {}", event);
-        
+
         // Check SSE format compliance
         if !event.is_empty() {
             // SSE events should contain either data: or event: fields
             let lines: Vec<&str> = event.lines().collect();
-            
+
             for line in lines {
                 if line.starts_with("data:") {
                     info!("✅ Valid SSE data line: {}", line);
-                    
+
                     // If it's JSON data, validate structure
                     if let Some(json_part) = line.strip_prefix("data:").map(|s| s.trim()) {
                         if json_part.starts_with('{') {
                             match serde_json::from_str::<serde_json::Value>(json_part) {
                                 Ok(parsed) => {
                                     info!("✅ Valid JSON notification: {:?}", parsed);
-                                    
+
                                     // Check for MCP notification structure
                                     if parsed.get("method").is_some() {
                                         assert!(parsed.get("method").unwrap().is_string());
@@ -243,7 +268,9 @@ async fn test_sse_notification_format_compliance() {
 async fn test_sse_with_multiple_resource_operations() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -269,7 +296,7 @@ async fn test_sse_with_multiple_resource_operations() {
             }
             _ => {}
         }
-        
+
         // Small delay between operations
         sleep(Duration::from_millis(100)).await;
     }
@@ -298,7 +325,9 @@ async fn test_sse_with_multiple_resource_operations() {
 async fn test_sse_error_resource_notifications() {
     let _ = tracing_subscriber::fmt::try_init();
 
-    let server = TestServerManager::start_resource_server().await.expect("Failed to start server");
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
     client
@@ -307,14 +336,10 @@ async fn test_sse_error_resource_notifications() {
         .expect("Failed to initialize");
 
     // Try to subscribe to an error resource
-    let _error_result = client
-        .subscribe_resource("error://not_found")
-        .await;
+    let _error_result = client.subscribe_resource("error://not_found").await;
 
     // Read the error resource
-    let _read_result = client
-        .read_resource("error://not_found")
-        .await;
+    let _read_result = client.read_resource("error://not_found").await;
 
     // Check if error conditions generate notifications
     let events = client
@@ -322,7 +347,10 @@ async fn test_sse_error_resource_notifications() {
         .await
         .expect("Failed to test SSE notifications");
 
-    info!("Error resource operations generated {} SSE events", events.len());
+    info!(
+        "Error resource operations generated {} SSE events",
+        events.len()
+    );
 
     // Error operations might still generate valid notifications
     for event in &events {

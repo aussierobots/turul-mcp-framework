@@ -7,10 +7,10 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 // Import from protocol via alias
+use turul_mcp_protocol::prompts::ContentBlock;
 use turul_mcp_protocol::sampling::{
     CreateMessageParams, CreateMessageRequest, ModelHint, ModelPreferences, Role, SamplingMessage,
 };
-use turul_mcp_protocol::prompts::ContentBlock;
 
 /// Builder for creating sampling messages and requests at runtime
 pub struct MessageBuilder {

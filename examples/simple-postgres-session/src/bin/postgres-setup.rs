@@ -1,9 +1,9 @@
 //! PostgreSQL Setup Utility
-//! 
+//!
 //! Creates the PostgreSQL tables required for the session storage system.
 
-use turul_mcp_session_storage::{PostgresSessionStorage, PostgresConfig};
-use tracing::{info, error};
+use tracing::{error, info};
+use turul_mcp_session_storage::{PostgresConfig, PostgresSessionStorage};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -42,12 +42,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _storage = match PostgresSessionStorage::with_config(config).await {
         Ok(storage) => {
             info!("✅ Successfully created PostgreSQL tables!");
-            info!("📊 Tables created in database: {}", mask_password(&database_url));
+            info!(
+                "📊 Tables created in database: {}",
+                mask_password(&database_url)
+            );
             info!("");
             info!("🎉 Setup complete! You can now run the MCP server:");
-            info!("  DATABASE_URL='{}' cargo run --bin simple-postgres-session", mask_password(&database_url));
+            info!(
+                "  DATABASE_URL='{}' cargo run --bin simple-postgres-session",
+                mask_password(&database_url)
+            );
             storage
-        },
+        }
         Err(e) => {
             error!("❌ Failed to create PostgreSQL tables: {}", e);
             error!("");
@@ -71,10 +77,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// Mask the password in a database URL for logging
 fn mask_password(url: &str) -> String {
     if let Ok(parsed) = url::Url::parse(url)
-        && parsed.password().is_some() {
-            let mut masked = parsed.clone();
-            let _ = masked.set_password(Some("***"));
-            return masked.to_string();
-        }
+        && parsed.password().is_some()
+    {
+        let mut masked = parsed.clone();
+        let _ = masked.set_password(Some("***"));
+        return masked.to_string();
+    }
     url.to_string()
 }

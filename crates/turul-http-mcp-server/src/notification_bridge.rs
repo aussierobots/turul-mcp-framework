@@ -9,17 +9,17 @@
 //! Without this bridge: Tools send notifications → NotificationBroadcaster → VOID
 //! With this bridge: Tools send notifications → NotificationBroadcaster → StreamManager → SSE clients ✅
 
-use std::sync::Arc;
 use async_trait::async_trait;
-use tracing::{info, error};
+use std::sync::Arc;
+use tracing::{error, info};
 
+use crate::StreamManager;
 use turul_mcp_json_rpc_server::JsonRpcNotification;
 use turul_mcp_protocol::notifications::{
-    ProgressNotification, LoggingMessageNotification, ResourceUpdatedNotification,
-    ResourceListChangedNotification, ToolListChangedNotification,
-    PromptListChangedNotification, CancelledNotification
+    CancelledNotification, LoggingMessageNotification, ProgressNotification,
+    PromptListChangedNotification, ResourceListChangedNotification, ResourceUpdatedNotification,
+    ToolListChangedNotification,
 };
-use crate::StreamManager;
 
 /// MCP-compliant notification broadcaster trait for sending ALL notification types over SSE
 ///
@@ -89,7 +89,10 @@ pub trait NotificationBroadcaster: Send + Sync {
     // ================== BROADCAST METHODS ==================
 
     /// Broadcast any JSON-RPC notification to all active sessions (server-wide notifications)
-    async fn broadcast_to_all_sessions(&self, notification: JsonRpcNotification) -> Result<Vec<String>, BroadcastError>;
+    async fn broadcast_to_all_sessions(
+        &self,
+        notification: JsonRpcNotification,
+    ) -> Result<Vec<String>, BroadcastError>;
 
     /// Send any generic JSON-RPC notification to a specific session
     async fn send_notification(
@@ -135,8 +138,14 @@ pub mod conversion {
 
     pub fn progress_to_json_rpc(notification: ProgressNotification) -> JsonRpcNotification {
         let mut params = HashMap::new();
-        params.insert("progressToken".to_string(), serde_json::json!(notification.params.progress_token));
-        params.insert("progress".to_string(), serde_json::json!(notification.params.progress));
+        params.insert(
+            "progressToken".to_string(),
+            serde_json::json!(notification.params.progress_token),
+        );
+        params.insert(
+            "progress".to_string(),
+            serde_json::json!(notification.params.progress),
+        );
         if let Some(total) = notification.params.total {
             params.insert("total".to_string(), serde_json::json!(total));
         }
@@ -152,7 +161,10 @@ pub mod conversion {
 
     pub fn message_to_json_rpc(notification: LoggingMessageNotification) -> JsonRpcNotification {
         let mut params = HashMap::new();
-        params.insert("level".to_string(), serde_json::json!(notification.params.level));
+        params.insert(
+            "level".to_string(),
+            serde_json::json!(notification.params.level),
+        );
         params.insert("data".to_string(), notification.params.data);
         if let Some(logger) = notification.params.logger {
             params.insert("logger".to_string(), serde_json::json!(logger));
@@ -164,9 +176,14 @@ pub mod conversion {
         JsonRpcNotification::new_with_object_params(notification.method, params)
     }
 
-    pub fn resource_updated_to_json_rpc(notification: ResourceUpdatedNotification) -> JsonRpcNotification {
+    pub fn resource_updated_to_json_rpc(
+        notification: ResourceUpdatedNotification,
+    ) -> JsonRpcNotification {
         let mut params = HashMap::new();
-        params.insert("uri".to_string(), serde_json::json!(notification.params.uri));
+        params.insert(
+            "uri".to_string(),
+            serde_json::json!(notification.params.uri),
+        );
         if let Some(meta) = notification.params.meta {
             params.insert("_meta".to_string(), serde_json::json!(meta));
         }
@@ -174,7 +191,9 @@ pub mod conversion {
         JsonRpcNotification::new_with_object_params(notification.method, params)
     }
 
-    pub fn resource_list_changed_to_json_rpc(notification: ResourceListChangedNotification) -> JsonRpcNotification {
+    pub fn resource_list_changed_to_json_rpc(
+        notification: ResourceListChangedNotification,
+    ) -> JsonRpcNotification {
         if let Some(params) = notification.params {
             if let Some(meta) = params.meta {
                 let mut param_map = HashMap::new();
@@ -188,7 +207,9 @@ pub mod conversion {
         }
     }
 
-    pub fn tool_list_changed_to_json_rpc(notification: ToolListChangedNotification) -> JsonRpcNotification {
+    pub fn tool_list_changed_to_json_rpc(
+        notification: ToolListChangedNotification,
+    ) -> JsonRpcNotification {
         if let Some(params) = notification.params {
             if let Some(meta) = params.meta {
                 let mut param_map = HashMap::new();
@@ -202,7 +223,9 @@ pub mod conversion {
         }
     }
 
-    pub fn prompt_list_changed_to_json_rpc(notification: PromptListChangedNotification) -> JsonRpcNotification {
+    pub fn prompt_list_changed_to_json_rpc(
+        notification: PromptListChangedNotification,
+    ) -> JsonRpcNotification {
         if let Some(params) = notification.params {
             if let Some(meta) = params.meta {
                 let mut param_map = HashMap::new();
@@ -218,7 +241,10 @@ pub mod conversion {
 
     pub fn cancelled_to_json_rpc(notification: CancelledNotification) -> JsonRpcNotification {
         let mut params = HashMap::new();
-        params.insert("requestId".to_string(), serde_json::json!(notification.params.request_id));
+        params.insert(
+            "requestId".to_string(),
+            serde_json::json!(notification.params.request_id),
+        );
         if let Some(reason) = notification.params.reason {
             params.insert("reason".to_string(), serde_json::json!(reason));
         }
@@ -240,7 +266,8 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
         notification: ProgressNotification,
     ) -> Result<(), BroadcastError> {
         let json_rpc_notification = conversion::progress_to_json_rpc(notification);
-        self.send_notification(session_id, json_rpc_notification).await
+        self.send_notification(session_id, json_rpc_notification)
+            .await
     }
 
     async fn send_message_notification(
@@ -249,7 +276,8 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
         notification: LoggingMessageNotification,
     ) -> Result<(), BroadcastError> {
         let json_rpc_notification = conversion::message_to_json_rpc(notification);
-        self.send_notification(session_id, json_rpc_notification).await
+        self.send_notification(session_id, json_rpc_notification)
+            .await
     }
 
     async fn send_resource_updated_notification(
@@ -258,7 +286,8 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
         notification: ResourceUpdatedNotification,
     ) -> Result<(), BroadcastError> {
         let json_rpc_notification = conversion::resource_updated_to_json_rpc(notification);
-        self.send_notification(session_id, json_rpc_notification).await
+        self.send_notification(session_id, json_rpc_notification)
+            .await
     }
 
     async fn send_resource_list_changed_notification(
@@ -267,7 +296,8 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
         notification: ResourceListChangedNotification,
     ) -> Result<(), BroadcastError> {
         let json_rpc_notification = conversion::resource_list_changed_to_json_rpc(notification);
-        self.send_notification(session_id, json_rpc_notification).await
+        self.send_notification(session_id, json_rpc_notification)
+            .await
     }
 
     async fn send_tool_list_changed_notification(
@@ -276,7 +306,8 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
         notification: ToolListChangedNotification,
     ) -> Result<(), BroadcastError> {
         let json_rpc_notification = conversion::tool_list_changed_to_json_rpc(notification);
-        self.send_notification(session_id, json_rpc_notification).await
+        self.send_notification(session_id, json_rpc_notification)
+            .await
     }
 
     async fn send_prompt_list_changed_notification(
@@ -285,7 +316,8 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
         notification: PromptListChangedNotification,
     ) -> Result<(), BroadcastError> {
         let json_rpc_notification = conversion::prompt_list_changed_to_json_rpc(notification);
-        self.send_notification(session_id, json_rpc_notification).await
+        self.send_notification(session_id, json_rpc_notification)
+            .await
     }
 
     // ================== BIDIRECTIONAL NOTIFICATIONS ==================
@@ -296,29 +328,42 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
         notification: CancelledNotification,
     ) -> Result<(), BroadcastError> {
         let json_rpc_notification = conversion::cancelled_to_json_rpc(notification);
-        self.send_notification(session_id, json_rpc_notification).await
+        self.send_notification(session_id, json_rpc_notification)
+            .await
     }
 
     // ================== BROADCAST METHODS ==================
 
-    async fn broadcast_to_all_sessions(&self, notification: JsonRpcNotification) -> Result<Vec<String>, BroadcastError> {
+    async fn broadcast_to_all_sessions(
+        &self,
+        notification: JsonRpcNotification,
+    ) -> Result<Vec<String>, BroadcastError> {
         // Convert JsonRpcNotification to SSE-formatted JSON
-        let sse_data = serde_json::to_value(&notification)
-            .map_err(BroadcastError::SerializationError)?;
+        let sse_data =
+            serde_json::to_value(&notification).map_err(BroadcastError::SerializationError)?;
 
         // Use StreamManager's built-in broadcast_to_all_sessions method
-        match self.stream_manager.broadcast_to_all_sessions(
-            notification.method.clone(), // Use MCP method name as event type
-            sse_data
-        ).await {
+        match self
+            .stream_manager
+            .broadcast_to_all_sessions(
+                notification.method.clone(), // Use MCP method name as event type
+                sse_data,
+            )
+            .await
+        {
             Ok(failed_sessions) => {
-                info!("📡 Broadcast JSON-RPC notification to all sessions: method={}, failed={}",
-                      notification.method, failed_sessions.len());
+                info!(
+                    "📡 Broadcast JSON-RPC notification to all sessions: method={}, failed={}",
+                    notification.method,
+                    failed_sessions.len()
+                );
                 Ok(failed_sessions)
             }
             Err(e) => {
-                error!("❌ Failed to broadcast JSON-RPC notification: method={}, error={}",
-                       notification.method, e);
+                error!(
+                    "❌ Failed to broadcast JSON-RPC notification: method={}, error={}",
+                    notification.method, e
+                );
                 Err(BroadcastError::BroadcastFailed(e.to_string()))
             }
         }
@@ -330,23 +375,31 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
         notification: JsonRpcNotification,
     ) -> Result<(), BroadcastError> {
         // Convert JsonRpcNotification to SSE-formatted JSON
-        let sse_data = serde_json::to_value(&notification)
-            .map_err(BroadcastError::SerializationError)?;
+        let sse_data =
+            serde_json::to_value(&notification).map_err(BroadcastError::SerializationError)?;
 
         // Send via StreamManager with proper JSON-RPC format
-        match self.stream_manager.broadcast_to_session(
-            session_id,
-            notification.method.clone(), // Use actual MCP method name as event type
-            sse_data
-        ).await {
+        match self
+            .stream_manager
+            .broadcast_to_session(
+                session_id,
+                notification.method.clone(), // Use actual MCP method name as event type
+                sse_data,
+            )
+            .await
+        {
             Ok(event_id) => {
-                info!("✅ Sent JSON-RPC notification: session={}, method={}, event_id={}",
-                      session_id, notification.method, event_id);
+                info!(
+                    "✅ Sent JSON-RPC notification: session={}, method={}, event_id={}",
+                    session_id, notification.method, event_id
+                );
                 Ok(())
             }
             Err(e) => {
-                error!("❌ Failed to send JSON-RPC notification: session={}, method={}, error={}",
-                       session_id, notification.method, e);
+                error!(
+                    "❌ Failed to send JSON-RPC notification: session={}, method={}, error={}",
+                    session_id, notification.method, e
+                );
                 Err(BroadcastError::BroadcastFailed(e.to_string()))
             }
         }

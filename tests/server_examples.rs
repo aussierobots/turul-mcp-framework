@@ -3,15 +3,15 @@
 //! These tests verify that all code examples in the turul-mcp-server README
 //! compile correctly and use the correct API patterns.
 
-use turul_mcp_derive::{mcp_tool, McpTool};
-use turul_mcp_server::{McpServer, McpResult, SessionContext};
+use turul_mcp_derive::{McpTool, mcp_tool};
+use turul_mcp_server::{McpResult, McpServer, SessionContext};
 
 /// Test Level 1: Function Macros example from turul-mcp-server README
 /// Verifies the basic function macro pattern compiles correctly
 #[test]
 fn test_level1_function_macros() {
     // This test just verifies compilation - the code itself is in the function definitions
-    
+
     #[mcp_tool(name = "add", description = "Add two numbers")]
     async fn add(
         #[param(description = "First number")] a: f64,
@@ -63,8 +63,8 @@ fn test_level2_derive_macros() {
 /// Verifies the runtime builder pattern compiles correctly
 #[test]
 fn test_level3_builder_pattern() {
-    use turul_mcp_server::ToolBuilder;
     use serde_json::json;
+    use turul_mcp_server::ToolBuilder;
 
     let calculator = ToolBuilder::new("calculator")
         .description("Add two numbers")
@@ -72,11 +72,15 @@ fn test_level3_builder_pattern() {
         .number_param("b", "Second number")
         .number_output() // Generates {"result": number} schema
         .execute(|args| async move {
-            let a = args.get("a").and_then(|v| v.as_f64())
+            let a = args
+                .get("a")
+                .and_then(|v| v.as_f64())
                 .ok_or("Missing parameter 'a'")?;
-            let b = args.get("b").and_then(|v| v.as_f64())
+            let b = args
+                .get("b")
+                .and_then(|v| v.as_f64())
                 .ok_or("Missing parameter 'b'")?;
-            
+
             Ok(json!({"result": a + b}))
         })
         .build()
@@ -108,13 +112,13 @@ fn test_session_context() {
                 // Get current counter or start at 0
                 let current: i32 = session.get_typed_state("counter").await.unwrap_or(0);
                 let new_count = current + 1;
-                
+
                 // Save updated counter
                 session.set_typed_state("counter", new_count).await.unwrap();
-                
+
                 // Send progress notification
                 session.notify_progress("counting", new_count as u64).await;
-                
+
                 Ok(new_count)
             } else {
                 Ok(0) // No session available

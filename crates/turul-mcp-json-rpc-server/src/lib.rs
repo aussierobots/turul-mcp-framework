@@ -28,11 +28,11 @@
 //! let dispatcher: JsonRpcDispatcher<MyDomainError> = JsonRpcDispatcher::new();
 //! ```
 
-pub mod error;
-pub mod request;
-pub mod response; 
-pub mod notification;
 pub mod dispatch;
+pub mod error;
+pub mod notification;
+pub mod request;
+pub mod response;
 pub mod types;
 
 #[cfg(feature = "async")]
@@ -40,13 +40,13 @@ pub mod r#async;
 
 // Re-export main types
 pub use error::{JsonRpcError, JsonRpcErrorCode};
-pub use request::{JsonRpcRequest, RequestParams};
-pub use response::{JsonRpcResponse, ResponseResult, JsonRpcMessage};
 pub use notification::JsonRpcNotification;
-pub use types::{RequestId, JsonRpcVersion};
+pub use request::{JsonRpcRequest, RequestParams};
+pub use response::{JsonRpcMessage, JsonRpcResponse, ResponseResult};
+pub use types::{JsonRpcVersion, RequestId};
 
 #[cfg(feature = "async")]
-pub use r#async::{JsonRpcHandler, JsonRpcDispatcher, SessionContext};
+pub use r#async::{JsonRpcDispatcher, JsonRpcHandler, SessionContext};
 
 /// JSON-RPC 2.0 version constant
 pub const JSONRPC_VERSION: &str = "2.0";
@@ -58,7 +58,7 @@ pub mod error_codes {
     pub const METHOD_NOT_FOUND: i64 = -32601;
     pub const INVALID_PARAMS: i64 = -32602;
     pub const INTERNAL_ERROR: i64 = -32603;
-    
+
     // Server error range: -32099 to -32000
     pub const SERVER_ERROR_START: i64 = -32099;
     pub const SERVER_ERROR_END: i64 = -32000;

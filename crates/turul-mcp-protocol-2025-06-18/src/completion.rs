@@ -124,7 +124,6 @@ impl CompleteRequest {
     }
 }
 
-
 /// Completion result (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -241,9 +240,7 @@ impl Default for CompletionContext {
 
 impl CompletionContext {
     pub fn new() -> Self {
-        Self {
-            arguments: None,
-        }
+        Self { arguments: None }
     }
 
     pub fn with_arguments(mut self, arguments: HashMap<String, String>) -> Self {
@@ -278,7 +275,10 @@ impl HasParams for CompleteRequest {
 impl HasData for CompleteResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("completion".to_string(), serde_json::to_value(&self.completion).unwrap_or(Value::Null));
+        data.insert(
+            "completion".to_string(),
+            serde_json::to_value(&self.completion).unwrap_or(Value::Null),
+        );
         data
     }
 }
@@ -299,7 +299,7 @@ impl RpcResult for CompleteResult {}
 pub trait HasCompletionMetadata {
     /// The completion method name
     fn method(&self) -> &str;
-    
+
     /// The reference being completed (prompt or resource)
     fn reference(&self) -> &CompletionReference;
 }
@@ -308,7 +308,7 @@ pub trait HasCompletionMetadata {
 pub trait HasCompletionContext {
     /// The argument being completed
     fn argument(&self) -> &CompleteArgument;
-    
+
     /// Optional completion context
     fn context(&self) -> Option<&CompletionContext> {
         None
@@ -321,7 +321,7 @@ pub trait HasCompletionHandling {
     fn validate_request(&self, _request: &CompleteRequest) -> Result<(), String> {
         Ok(())
     }
-    
+
     /// Filter completion values based on current input
     fn filter_completions(&self, values: Vec<String>, current_value: &str) -> Vec<String> {
         // Default: simple prefix matching
@@ -333,17 +333,12 @@ pub trait HasCompletionHandling {
 }
 
 /// Composed completion definition trait (automatically implemented via blanket impl)
-pub trait CompletionDefinition: 
-    HasCompletionMetadata + 
-    HasCompletionContext + 
-    HasCompletionHandling 
+pub trait CompletionDefinition:
+    HasCompletionMetadata + HasCompletionContext + HasCompletionHandling
 {
     /// Convert this completion definition to a protocol CompleteRequest
     fn to_complete_request(&self) -> CompleteRequest {
-        let mut request = CompleteRequest::new(
-            self.reference().clone(),
-            self.argument().clone()
-        );
+        let mut request = CompleteRequest::new(self.reference().clone(), self.argument().clone());
         if let Some(context) = self.context() {
             request = request.with_context(context.clone());
         }
@@ -352,10 +347,10 @@ pub trait CompletionDefinition:
 }
 
 // Blanket implementation: any type implementing the fine-grained traits automatically gets CompletionDefinition
-impl<T> CompletionDefinition for T 
-where 
-    T: HasCompletionMetadata + HasCompletionContext + HasCompletionHandling 
-{}
+impl<T> CompletionDefinition for T where
+    T: HasCompletionMetadata + HasCompletionContext + HasCompletionHandling
+{
+}
 
 #[cfg(test)]
 mod tests {
@@ -365,10 +360,10 @@ mod tests {
     #[test]
     fn test_resource_template_reference() {
         let ref_obj = ResourceTemplateReference::new("file:///test/{name}.txt");
-        
+
         assert_eq!(ref_obj.ref_type, "ref/resource");
         assert_eq!(ref_obj.uri, "file:///test/{name}.txt");
-        
+
         let json_value = serde_json::to_value(&ref_obj).unwrap();
         assert_eq!(json_value["type"], "ref/resource");
         assert_eq!(json_value["uri"], "file:///test/{name}.txt");
@@ -376,13 +371,12 @@ mod tests {
 
     #[test]
     fn test_prompt_reference() {
-        let ref_obj = PromptReference::new("test_prompt")
-            .with_description("A test prompt");
-        
+        let ref_obj = PromptReference::new("test_prompt").with_description("A test prompt");
+
         assert_eq!(ref_obj.ref_type, "ref/prompt");
         assert_eq!(ref_obj.name, "test_prompt");
         assert_eq!(ref_obj.description, Some("A test prompt".to_string()));
-        
+
         let json_value = serde_json::to_value(&ref_obj).unwrap();
         assert_eq!(json_value["type"], "ref/prompt");
         assert_eq!(json_value["name"], "test_prompt");
@@ -393,14 +387,14 @@ mod tests {
     fn test_completion_reference_union() {
         let resource_ref = CompletionReference::resource("file:///test.txt");
         let prompt_ref = CompletionReference::prompt("my_prompt");
-        
+
         // Test serialization
         let resource_json = serde_json::to_value(&resource_ref).unwrap();
         let prompt_json = serde_json::to_value(&prompt_ref).unwrap();
-        
+
         assert_eq!(resource_json["type"], "ref/resource");
         assert_eq!(resource_json["uri"], "file:///test.txt");
-        
+
         assert_eq!(prompt_json["type"], "ref/prompt");
         assert_eq!(prompt_json["name"], "my_prompt");
     }
@@ -410,21 +404,21 @@ mod tests {
         // Test CompleteRequest matches: { method: string, params: { ref: ..., argument: ..., context?: ..., _meta?: ... } }
         let mut meta = HashMap::new();
         meta.insert("requestId".to_string(), json!("req-123"));
-        
+
         let mut context_args = HashMap::new();
         context_args.insert("userId".to_string(), "123".to_string());
-        
+
         let context = CompletionContext::new().with_arguments(context_args);
-        
+
         let request = CompleteRequest::new(
             CompletionReference::prompt("test_prompt"),
-            CompleteArgument::new("arg_name", "partial_value")
+            CompleteArgument::new("arg_name", "partial_value"),
         )
         .with_context(context)
         .with_meta(meta);
-        
+
         let json_value = serde_json::to_value(&request).unwrap();
-        
+
         assert_eq!(json_value["method"], "completion/complete");
         assert!(json_value["params"].is_object());
         assert!(json_value["params"]["ref"].is_object());
@@ -433,7 +427,10 @@ mod tests {
         assert_eq!(json_value["params"]["argument"]["name"], "arg_name");
         assert_eq!(json_value["params"]["argument"]["value"], "partial_value");
         assert!(json_value["params"]["context"].is_object());
-        assert_eq!(json_value["params"]["context"]["arguments"]["userId"], "123");
+        assert_eq!(
+            json_value["params"]["context"]["arguments"]["userId"],
+            "123"
+        );
         assert_eq!(json_value["params"]["_meta"]["requestId"], "req-123");
     }
 
@@ -442,23 +439,25 @@ mod tests {
         // Test CompleteResult matches: { completion: { values: string[], total?: number, hasMore?: boolean }, _meta?: ... }
         let mut meta = HashMap::new();
         meta.insert("executionTime".to_string(), json!(42));
-        
+
         let completion = CompletionResult::new(vec![
             "option1".to_string(),
             "option2".to_string(),
-            "option3".to_string()
+            "option3".to_string(),
         ])
         .with_total(100)
         .with_has_more(true);
-        
-        let result = CompleteResult::new(completion)
-            .with_meta(meta);
-        
+
+        let result = CompleteResult::new(completion).with_meta(meta);
+
         let json_value = serde_json::to_value(&result).unwrap();
-        
+
         assert!(json_value["completion"].is_object());
         assert!(json_value["completion"]["values"].is_array());
-        assert_eq!(json_value["completion"]["values"].as_array().unwrap().len(), 3);
+        assert_eq!(
+            json_value["completion"]["values"].as_array().unwrap().len(),
+            3
+        );
         assert_eq!(json_value["completion"]["values"][0], "option1");
         assert_eq!(json_value["completion"]["total"], 100);
         assert_eq!(json_value["completion"]["hasMore"], true);
@@ -469,14 +468,14 @@ mod tests {
     fn test_serialization() {
         let request = CompleteRequest::new(
             CompletionReference::resource("file:///test/{id}.txt"),
-            CompleteArgument::new("id", "test")
+            CompleteArgument::new("id", "test"),
         );
-        
+
         let json = serde_json::to_string(&request).unwrap();
         assert!(json.contains("completion/complete"));
         assert!(json.contains("ref/resource"));
         assert!(json.contains("file:///test/{id}.txt"));
-        
+
         let parsed: CompleteRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.method, "completion/complete");
     }

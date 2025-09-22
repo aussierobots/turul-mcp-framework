@@ -68,7 +68,6 @@ pub struct ListRootsRequest {
     pub params: Option<ListRootsParams>,
 }
 
-
 /// Response for roots/list (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -113,9 +112,7 @@ impl Default for ListRootsParams {
 
 impl ListRootsParams {
     pub fn new() -> Self {
-        Self {
-            meta: None,
-        }
+        Self { meta: None }
     }
 
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
@@ -144,13 +141,9 @@ impl ListRootsRequest {
     }
 }
 
-
 impl ListRootsResult {
     pub fn new(roots: Vec<Root>) -> Self {
-        Self { 
-            roots,
-            meta: None,
-        }
+        Self { roots, meta: None }
     }
 
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
@@ -161,9 +154,7 @@ impl ListRootsResult {
 
 impl RootsListChangedParams {
     pub fn new() -> Self {
-        Self {
-            meta: None,
-        }
+        Self { meta: None }
     }
 
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
@@ -243,7 +234,10 @@ impl HasParams for RootsListChangedNotification {
 impl HasData for ListRootsResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("roots".to_string(), serde_json::to_value(&self.roots).unwrap_or(Value::Null));
+        data.insert(
+            "roots".to_string(),
+            serde_json::to_value(&self.roots).unwrap_or(Value::Null),
+        );
         data
     }
 }
@@ -264,12 +258,12 @@ impl RpcResult for ListRootsResult {}
 pub trait HasRootMetadata {
     /// The root URI (must start with "file://")
     fn uri(&self) -> &str;
-    
+
     /// Optional human-readable name
     fn name(&self) -> Option<&str> {
         None
     }
-    
+
     /// Optional description or additional metadata
     fn description(&self) -> Option<&str> {
         None
@@ -282,12 +276,12 @@ pub trait HasRootPermissions {
     fn can_read(&self, _path: &str) -> bool {
         true
     }
-    
+
     /// Check if write access is allowed for this path
     fn can_write(&self, _path: &str) -> bool {
         false // Default: read-only
     }
-    
+
     /// Get maximum depth for directory traversal
     fn max_depth(&self) -> Option<usize> {
         None // No limit by default
@@ -300,12 +294,12 @@ pub trait HasRootFiltering {
     fn allowed_extensions(&self) -> Option<&[String]> {
         None
     }
-    
+
     /// File patterns to exclude (glob patterns)
     fn excluded_patterns(&self) -> Option<&[String]> {
         None
     }
-    
+
     /// Check if a file should be included
     fn should_include(&self, path: &str) -> bool {
         // Default: include everything unless filtered
@@ -316,14 +310,14 @@ pub trait HasRootFiltering {
                 }
             }
         }
-        
+
         if let Some(extensions) = self.allowed_extensions() {
             if let Some(ext) = path.split('.').next_back() {
                 return extensions.contains(&ext.to_string());
             }
             return false;
         }
-        
+
         true
     }
 }
@@ -334,7 +328,7 @@ pub trait HasRootAnnotations {
     fn annotations(&self) -> Option<&HashMap<String, Value>> {
         None
     }
-    
+
     /// Get root-specific tags or labels
     fn tags(&self) -> Option<&[String]> {
         None
@@ -342,11 +336,8 @@ pub trait HasRootAnnotations {
 }
 
 /// Composed root definition trait (automatically implemented via blanket impl)
-pub trait RootDefinition: 
-    HasRootMetadata + 
-    HasRootPermissions + 
-    HasRootFiltering + 
-    HasRootAnnotations 
+pub trait RootDefinition:
+    HasRootMetadata + HasRootPermissions + HasRootFiltering + HasRootAnnotations
 {
     /// Convert this root definition to a protocol Root
     fn to_root(&self) -> Root {
@@ -359,7 +350,7 @@ pub trait RootDefinition:
         }
         root
     }
-    
+
     /// Validate this root definition
     fn validate(&self) -> Result<(), String> {
         if !self.uri().starts_with("file://") {
@@ -370,10 +361,10 @@ pub trait RootDefinition:
 }
 
 // Blanket implementation: any type implementing the fine-grained traits automatically gets RootDefinition
-impl<T> RootDefinition for T 
-where 
-    T: HasRootMetadata + HasRootPermissions + HasRootFiltering + HasRootAnnotations 
-{}
+impl<T> RootDefinition for T where
+    T: HasRootMetadata + HasRootPermissions + HasRootFiltering + HasRootAnnotations
+{
+}
 
 #[cfg(test)]
 mod tests {
@@ -382,15 +373,14 @@ mod tests {
 
     #[test]
     fn test_root_creation() {
-        let mut root = Root::new("file:///home/user/project")
-            .with_name("My Project");
-        
+        let mut root = Root::new("file:///home/user/project").with_name("My Project");
+
         let meta = HashMap::from([
             ("version".to_string(), json!("1.0")),
             ("type".to_string(), json!("workspace")),
         ]);
         root = root.with_meta(meta.clone());
-        
+
         assert_eq!(root.uri, "file:///home/user/project");
         assert_eq!(root.name, Some("My Project".to_string()));
         assert_eq!(root.meta, Some(meta));
@@ -400,7 +390,7 @@ mod tests {
     fn test_root_validation() {
         let valid_root = Root::new("file:///valid/path");
         assert!(valid_root.validate().is_ok());
-        
+
         let invalid_root = Root::new("http://invalid/path");
         assert!(invalid_root.validate().is_err());
     }
@@ -417,7 +407,7 @@ mod tests {
             Root::new("file:///path1").with_name("Root 1"),
             Root::new("file:///path2").with_name("Root 2"),
         ];
-        
+
         let result = ListRootsResult::new(roots.clone());
         assert_eq!(result.roots.len(), 2);
         assert_eq!(result.roots[0].name, Some("Root 1".to_string()));
@@ -435,7 +425,7 @@ mod tests {
         let json = serde_json::to_string(&root).unwrap();
         assert!(json.contains("file:///test/path"));
         assert!(json.contains("Test Root"));
-        
+
         let parsed: Root = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.uri, "file:///test/path");
         assert_eq!(parsed.name, Some("Test Root".to_string()));
@@ -446,12 +436,11 @@ mod tests {
         // Test ListRootsRequest matches: { method: string, params?: { _meta?: {...} } }
         let mut meta = HashMap::new();
         meta.insert("requestId".to_string(), json!("req-123"));
-        
-        let request = ListRootsRequest::new()
-            .with_meta(meta);
-        
+
+        let request = ListRootsRequest::new().with_meta(meta);
+
         let json_value = serde_json::to_value(&request).unwrap();
-        
+
         assert_eq!(json_value["method"], "roots/list");
         assert!(json_value["params"].is_object());
         assert_eq!(json_value["params"]["_meta"]["requestId"], "req-123");
@@ -462,17 +451,16 @@ mod tests {
         // Test ListRootsResult matches: { roots: Root[], _meta?: {...} }
         let mut meta = HashMap::new();
         meta.insert("totalCount".to_string(), json!(2));
-        
+
         let roots = vec![
             Root::new("file:///path1").with_name("Root 1"),
             Root::new("file:///path2").with_name("Root 2"),
         ];
-        
-        let result = ListRootsResult::new(roots)
-            .with_meta(meta);
-        
+
+        let result = ListRootsResult::new(roots).with_meta(meta);
+
         let json_value = serde_json::to_value(&result).unwrap();
-        
+
         assert!(json_value["roots"].is_array());
         assert_eq!(json_value["roots"].as_array().unwrap().len(), 2);
         assert_eq!(json_value["roots"][0]["uri"], "file:///path1");
@@ -485,15 +473,17 @@ mod tests {
         // Test RootsListChangedNotification matches: { method: string, params?: { _meta?: {...} } }
         let mut meta = HashMap::new();
         meta.insert("timestamp".to_string(), json!("2025-01-01T00:00:00Z"));
-        
-        let notification = RootsListChangedNotification::new()
-            .with_meta(meta);
-        
+
+        let notification = RootsListChangedNotification::new().with_meta(meta);
+
         let json_value = serde_json::to_value(&notification).unwrap();
-        
+
         assert_eq!(json_value["method"], "notifications/roots/listChanged");
         assert!(json_value["params"].is_object());
-        assert_eq!(json_value["params"]["_meta"]["timestamp"], "2025-01-01T00:00:00Z");
+        assert_eq!(
+            json_value["params"]["_meta"]["timestamp"],
+            "2025-01-01T00:00:00Z"
+        );
     }
 
     #[test]
@@ -501,16 +491,22 @@ mod tests {
         // Test that requests without _meta don't serialize params when None
         let request = ListRootsRequest::new();
         let json_value = serde_json::to_value(&request).unwrap();
-        
+
         assert_eq!(json_value["method"], "roots/list");
         // params should be absent since it's None
-        assert!(json_value["params"].is_null() || !json_value.as_object().unwrap().contains_key("params"));
-        
+        assert!(
+            json_value["params"].is_null()
+                || !json_value.as_object().unwrap().contains_key("params")
+        );
+
         // Similar test for notification
         let notification = RootsListChangedNotification::new();
         let json_value = serde_json::to_value(&notification).unwrap();
-        
+
         assert_eq!(json_value["method"], "notifications/roots/listChanged");
-        assert!(json_value["params"].is_null() || !json_value.as_object().unwrap().contains_key("params"));
+        assert!(
+            json_value["params"].is_null()
+                || !json_value.as_object().unwrap().contains_key("params")
+        );
     }
 }

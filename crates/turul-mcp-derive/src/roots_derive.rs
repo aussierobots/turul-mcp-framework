@@ -137,7 +137,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
                 // Default: basic file listing using std::fs
                 use std::fs;
                 use std::path::Path;
-                
+
                 let root_path = self.uri().replace("file://", "");
                 let full_path = if path.is_empty() || path == "/" {
                     root_path
@@ -262,7 +262,7 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[test]  
+    #[test]
     fn test_root_with_boolean_literal() {
         let input: DeriveInput = parse_quote! {
             #[root(uri = "file:///readonly", name = "Read Only", read_only = true)]
@@ -283,7 +283,7 @@ mod tests {
 
         let result = derive_mcp_root_impl(input);
         assert!(result.is_ok());
-        
+
         // Check that the generated code contains required trait implementations
         let code = result.unwrap().to_string();
         assert!(code.contains("HasRootMetadata"));

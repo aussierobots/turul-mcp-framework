@@ -37,7 +37,7 @@ pub use notification_bridge::{
     StreamManagerNotificationBroadcaster,
 };
 pub use protocol::{
-    extract_last_event_id, extract_protocol_version, extract_session_id, McpProtocolVersion,
+    McpProtocolVersion, extract_last_event_id, extract_protocol_version, extract_session_id,
 };
 pub use server::{HttpMcpServer, HttpMcpServerBuilder, ServerConfig, ServerStats};
 pub use session_handler::{SessionMcpHandler, SessionSseStream};

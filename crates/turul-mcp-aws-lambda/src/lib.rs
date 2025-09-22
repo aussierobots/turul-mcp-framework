@@ -43,12 +43,12 @@
 //!         .cors_allow_all_origins()
 //!         .build()
 //!         .await?;
-//!     
+//!
 //!     let handler = server.handler().await?;
-//!     
+//!
 //!     run_with_streaming_response(service_fn(move |req| {
 //!         let handler = handler.clone();
-//!         async move { 
+//!         async move {
 //!             handler.handle(req).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
 //!         }
 //!     })).await
@@ -56,10 +56,10 @@
 //! ```
 
 pub mod adapter;
-pub mod handler;
 pub mod builder;
-pub mod server;
 pub mod error;
+pub mod handler;
+pub mod server;
 
 #[cfg(feature = "cors")]
 pub mod cors;
@@ -69,9 +69,9 @@ pub mod streaming;
 
 // Re-exports for convenience
 pub use builder::LambdaMcpServerBuilder;
+pub use error::{LambdaError, Result};
 pub use handler::LambdaMcpHandler;
 pub use server::LambdaMcpServer;
-pub use error::{LambdaError, Result};
 
 #[cfg(feature = "cors")]
 pub use cors::CorsConfig;

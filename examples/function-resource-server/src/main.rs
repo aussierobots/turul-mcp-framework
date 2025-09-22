@@ -3,41 +3,58 @@
 //! This example demonstrates using .resource_fn() to register function-created resources.
 //! It shows both static and template resources using constructor functions.
 
-use turul_mcp_server::{McpServer, McpResult, McpResource};
-use turul_mcp_protocol::resources::{ResourceContent, HasResourceUri, HasResourceMetadata, HasResourceDescription, HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta};
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
+use turul_mcp_protocol::resources::{
+    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
+    HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
+};
+use turul_mcp_server::{McpResource, McpResult, McpServer};
 
 // Static configuration resource
 struct ConfigResource;
 
 impl HasResourceMetadata for ConfigResource {
-    fn name(&self) -> &str { "config" }
+    fn name(&self) -> &str {
+        "config"
+    }
 }
 
 impl HasResourceDescription for ConfigResource {
-    fn description(&self) -> Option<&str> { Some("Application configuration file") }
+    fn description(&self) -> Option<&str> {
+        Some("Application configuration file")
+    }
 }
 
 impl HasResourceUri for ConfigResource {
-    fn uri(&self) -> &str { "file:///config.json" }
+    fn uri(&self) -> &str {
+        "file:///config.json"
+    }
 }
 
 impl HasResourceMimeType for ConfigResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for ConfigResource {
-    fn size(&self) -> Option<u64> { None }
+    fn size(&self) -> Option<u64> {
+        None
+    }
 }
 
 impl HasResourceAnnotations for ConfigResource {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+        None
+    }
 }
 
 impl HasResourceMeta for ConfigResource {
-    fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
@@ -53,7 +70,7 @@ impl McpResource for ConfigResource {
         Ok(vec![ResourceContent::blob(
             "file:///config.json",
             serde_json::to_string_pretty(&config).unwrap(),
-            "application/json".to_string()
+            "application/json".to_string(),
         )])
     }
 }
@@ -67,31 +84,45 @@ fn create_config_resource() -> ConfigResource {
 struct UserProfileResource;
 
 impl HasResourceMetadata for UserProfileResource {
-    fn name(&self) -> &str { "user_profile" }
+    fn name(&self) -> &str {
+        "user_profile"
+    }
 }
 
 impl HasResourceDescription for UserProfileResource {
-    fn description(&self) -> Option<&str> { Some("User profile data for a specific user ID") }
+    fn description(&self) -> Option<&str> {
+        Some("User profile data for a specific user ID")
+    }
 }
 
 impl HasResourceUri for UserProfileResource {
-    fn uri(&self) -> &str { "file:///users/{user_id}.json" }
+    fn uri(&self) -> &str {
+        "file:///users/{user_id}.json"
+    }
 }
 
 impl HasResourceMimeType for UserProfileResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for UserProfileResource {
-    fn size(&self) -> Option<u64> { None }
+    fn size(&self) -> Option<u64> {
+        None
+    }
 }
 
 impl HasResourceAnnotations for UserProfileResource {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+        None
+    }
 }
 
 impl HasResourceMeta for UserProfileResource {
-    fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
@@ -103,10 +134,18 @@ impl McpResource for UserProfileResource {
                 if let Some(vars_obj) = template_vars.as_object() {
                     if let Some(user_id_val) = vars_obj.get("user_id") {
                         user_id_val.as_str().unwrap_or("unknown")
-                    } else { "unknown" }
-                } else { "unknown" }
-            } else { "unknown" }
-        } else { "unknown" };
+                    } else {
+                        "unknown"
+                    }
+                } else {
+                    "unknown"
+                }
+            } else {
+                "unknown"
+            }
+        } else {
+            "unknown"
+        };
 
         let profile = json!({
             "user_id": user_id,
@@ -126,7 +165,7 @@ impl McpResource for UserProfileResource {
         Ok(vec![ResourceContent::blob(
             format!("file:///users/{}.json", user_id),
             serde_json::to_string_pretty(&profile).unwrap(),
-            "application/json".to_string()
+            "application/json".to_string(),
         )])
     }
 }
@@ -140,31 +179,45 @@ fn create_user_profile_resource() -> UserProfileResource {
 struct SystemStatusResource;
 
 impl HasResourceMetadata for SystemStatusResource {
-    fn name(&self) -> &str { "system_status" }
+    fn name(&self) -> &str {
+        "system_status"
+    }
 }
 
 impl HasResourceDescription for SystemStatusResource {
-    fn description(&self) -> Option<&str> { Some("Current system health and status information") }
+    fn description(&self) -> Option<&str> {
+        Some("Current system health and status information")
+    }
 }
 
 impl HasResourceUri for SystemStatusResource {
-    fn uri(&self) -> &str { "system://status" }
+    fn uri(&self) -> &str {
+        "system://status"
+    }
 }
 
 impl HasResourceMimeType for SystemStatusResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for SystemStatusResource {
-    fn size(&self) -> Option<u64> { None }
+    fn size(&self) -> Option<u64> {
+        None
+    }
 }
 
 impl HasResourceAnnotations for SystemStatusResource {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+        None
+    }
 }
 
 impl HasResourceMeta for SystemStatusResource {
-    fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
@@ -200,7 +253,7 @@ impl McpResource for SystemStatusResource {
         Ok(vec![ResourceContent::blob(
             "system://status",
             serde_json::to_string_pretty(&status).unwrap(),
-            "application/json".to_string()
+            "application/json".to_string(),
         )])
     }
 }

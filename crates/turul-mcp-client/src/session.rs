@@ -459,7 +459,10 @@ mod tests {
         let manager = SessionManager::new(config);
 
         // Set a mock session ID to simulate server initialization
-        manager.set_session_id("test-session-id".to_string()).await.unwrap();
+        manager
+            .set_session_id("test-session-id".to_string())
+            .await
+            .unwrap();
         let _original_id = manager.session_id().await.unwrap();
 
         manager.reset().await;
@@ -467,7 +470,7 @@ mod tests {
         // After reset, session_id should return NotInitialized error
         assert!(manager.session_id().await.is_err());
         assert_eq!(manager.state().await, SessionState::Uninitialized);
-        
+
         // Verify the session ID was actually cleared
         assert!(manager.session_id_optional().await.is_none());
     }

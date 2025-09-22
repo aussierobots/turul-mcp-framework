@@ -5,8 +5,8 @@ use quote::quote;
 use syn::{Data, DeriveInput, Fields, Result};
 
 use crate::utils::{
-    extract_tool_meta, extract_param_meta, type_to_schema, generate_param_extraction, 
-    determine_output_field_name, generate_enhanced_output_schema
+    determine_output_field_name, extract_param_meta, extract_tool_meta,
+    generate_enhanced_output_schema, generate_param_extraction, type_to_schema,
 };
 
 /// Auto-determine tool name from struct name (ZERO CONFIGURATION!)
@@ -21,11 +21,10 @@ fn auto_determine_tool_name(struct_name: String) -> String {
     } else {
         &struct_name
     };
-    
+
     // Convert CamelCase to snake_case
     camel_to_snake_case(base_name)
 }
-
 
 /// Convert CamelCase to snake_case
 fn camel_to_snake_case(input: &str) -> String {
@@ -53,10 +52,10 @@ fn camel_to_readable(input: &str) -> String {
 
 pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     let name = &input.ident;
-    
+
     // AUTO-DETERMINE tool name from struct name (ZERO CONFIGURATION!)
     let auto_name = auto_determine_tool_name(name.to_string());
-    
+
     // Try to extract attributes, but use auto-determined values as defaults
     let tool_meta = match extract_tool_meta(&input.attrs) {
         Ok(meta) => meta,
@@ -70,20 +69,24 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
     };
-    
+
     // Only support named structs for now
     let fields = match &input.data {
         Data::Struct(data_struct) => match &data_struct.fields {
             Fields::Named(fields) => &fields.named,
-            _ => return Err(syn::Error::new_spanned(
-                name,
-                "McpTool can only be derived for structs with named fields"
-            )),
+            _ => {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    "McpTool can only be derived for structs with named fields",
+                ));
+            }
         },
-        _ => return Err(syn::Error::new_spanned(
-            name,
-            "McpTool can only be derived for structs"
-        )),
+        _ => {
+            return Err(syn::Error::new_spanned(
+                name,
+                "McpTool can only be derived for structs",
+            ));
+        }
     };
 
     // Process each field to build schema and parameter extraction
@@ -96,11 +99,11 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         let field_name = field.ident.as_ref().unwrap();
         let field_type = &field.ty;
         let param_meta = extract_param_meta(&field.attrs)?;
-        
+
         // Generate schema for this field
         let field_name_str = field_name.to_string();
         let schema = type_to_schema(field_type, &param_meta);
-        
+
         schema_properties.push(quote! {
             (#field_name_str.to_string(), #schema)
         });
@@ -127,7 +130,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         Some(field_name) => quote! { Some(#field_name) },
         None => quote! { None },
     };
-    
+
     // Generate enhanced output schema with struct property introspection
     let output_schema_tokens = if let Some(ref output_type) = tool_meta.output_type {
         // User specified output type - determine field name and generate enhanced schema
@@ -154,7 +157,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             fn name(&self) -> &str {
                 #tool_name
             }
-            
+
             fn title(&self) -> Option<&str> {
                 // TODO: Extract from tool attributes when available
                 None
@@ -187,15 +190,15 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         impl turul_mcp_protocol::tools::HasOutputSchema for #name {
             #output_schema_tokens
         }
-        
-        // Schema generation for zero-config derive macros  
+
+        // Schema generation for zero-config derive macros
         impl #name {
             /// Generate schema using heuristics from struct name and common patterns
             /// Note: Zero-config mode has limitations for struct outputs - use #[tool(output = Type)] for exact schemas
             fn generate_heuristic_schema(field_name: &str, struct_name: &str) -> turul_mcp_protocol::tools::ToolSchema {
                 use std::collections::HashMap;
                 use turul_mcp_protocol::schema::JsonSchema;
-                
+
                 // For struct outputs in zero-config mode, we can't predict the exact field name
                 // since it depends on the actual return type. Use a flexible schema instead.
                 if struct_name.contains("Struct") || struct_name.contains("Complex") || struct_name.contains("Result") {
@@ -205,7 +208,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                     schema.additional.insert("description".to_string(), serde_json::json!("Complex object output (zero-config heuristic)"));
                     return schema;
                 }
-                
+
                 // For primitive types, use specific schemas with provided field name (or "output" as default)
                 let field_schema = if struct_name.contains("String") || struct_name.contains("Text") || struct_name.contains("Message") || struct_name.contains("Log") || struct_name.contains("Progress") {
                     JsonSchema::string()
@@ -230,19 +233,19 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                         additional_properties: Some(true),
                     }
                 };
-                
+
                 turul_mcp_protocol::tools::ToolSchema::object()
                     .with_properties(HashMap::from([
                         (field_name.to_string(), field_schema)
                     ]))
                     .with_required(vec![field_name.to_string()])
             }
-            
+
             /// Update schema based on actual return value (called during execution)
             fn update_schema_from_value(field_name: &str, value: &serde_json::Value) -> turul_mcp_protocol::tools::ToolSchema {
                 use std::collections::HashMap;
                 use turul_mcp_protocol::schema::JsonSchema;
-                
+
                 let field_schema = match value {
                     serde_json::Value::Number(n) if n.is_f64() => JsonSchema::number(),
                     serde_json::Value::Number(_) => JsonSchema::integer(),
@@ -302,7 +305,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                     },
                     serde_json::Value::Null => JsonSchema::string(), // Fallback
                 };
-                
+
                 turul_mcp_protocol::tools::ToolSchema::object()
                     .with_properties(HashMap::from([
                         (field_name.to_string(), field_schema)
@@ -332,7 +335,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             async fn call(&self, args: serde_json::Value, session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
                 use serde_json::Value;
                 use turul_mcp_protocol::tools::HasOutputSchema;
-                
+
                 // Extract parameters
                 #(#param_extractions)*
 
@@ -347,7 +350,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                         // Serialize result for output
                         let result_value = serde_json::to_value(&result)
                             .map_err(|e| turul_mcp_protocol::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
-                        
+
                         // Determine field name using enhanced logic with custom field support
                         let field_name = {
                             // Use custom field name if specified during macro expansion
@@ -360,11 +363,11 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                                 if let Some(struct_name) = type_name.split("::").last() {
                                     // Check if this is a struct type (not a primitive)
                                     let is_primitive = matches!(struct_name,
-                                        "f64" | "f32" | "i64" | "i32" | "i16" | "i8" | 
+                                        "f64" | "f32" | "i64" | "i32" | "i16" | "i8" |
                                         "u64" | "u32" | "u16" | "u8" | "isize" | "usize" |
                                         "&str" | "String" | "bool"
                                     );
-                                    
+
                                     if !is_primitive && matches!(result_value, serde_json::Value::Object(_)) {
                                         // Convert struct name to camelCase
                                         let mut chars: Vec<char> = struct_name.chars().collect();
@@ -381,7 +384,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                                 }
                             }
                         };
-                        
+
                         // Wrap result to match MCP object schema format
                         let wrapped_result = serde_json::json!({field_name: result});
 
@@ -426,17 +429,17 @@ mod tests {
             struct CalculatorTool {
                 #[param(description = "First number")]
                 a: f64,
-                #[param(description = "Second number")]  
+                #[param(description = "Second number")]
                 b: f64,
             }
         };
 
         let result = derive_mcp_tool_impl(input);
         assert!(result.is_ok());
-        
+
         // Framework auto-determines name as "calculator"
     }
-    
+
     #[test]
     fn test_zero_config_without_tool_suffix() {
         // ✅ ZERO CONFIGURATION - Works without "Tool" suffix
@@ -449,7 +452,7 @@ mod tests {
 
         let result = derive_mcp_tool_impl(input);
         assert!(result.is_ok());
-        
+
         // Framework auto-determines name as "calculator"
     }
 }

@@ -2,9 +2,12 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{ItemFn, Result, FnArg, Pat, Meta, Lit, punctuated::Punctuated, Token};
+use syn::{FnArg, ItemFn, Lit, Meta, Pat, Result, Token, punctuated::Punctuated};
 
-use crate::utils::{extract_param_meta, type_to_schema, generate_param_extraction, generate_output_schema_for_return_type_with_field};
+use crate::utils::{
+    extract_param_meta, generate_output_schema_for_return_type_with_field,
+    generate_param_extraction, type_to_schema,
+};
 
 pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result<TokenStream> {
     // Parse macro arguments
@@ -16,34 +19,43 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         match arg {
             Meta::NameValue(nv) if nv.path.is_ident("name") => {
                 if let syn::Expr::Lit(expr_lit) = &nv.value
-                    && let Lit::Str(s) = &expr_lit.lit {
-                        tool_name = Some(s.value());
-                    }
+                    && let Lit::Str(s) = &expr_lit.lit
+                {
+                    tool_name = Some(s.value());
+                }
             }
             Meta::NameValue(nv) if nv.path.is_ident("description") => {
                 if let syn::Expr::Lit(expr_lit) = &nv.value
-                    && let Lit::Str(s) = &expr_lit.lit {
-                        tool_description = Some(s.value());
-                    }
+                    && let Lit::Str(s) = &expr_lit.lit
+                {
+                    tool_description = Some(s.value());
+                }
             }
             Meta::NameValue(nv) if nv.path.is_ident("output_field") => {
                 if let syn::Expr::Lit(expr_lit) = &nv.value
-                    && let Lit::Str(s) = &expr_lit.lit {
-                        output_field_name = Some(s.value());
-                    }
+                    && let Lit::Str(s) = &expr_lit.lit
+                {
+                    output_field_name = Some(s.value());
+                }
             }
             _ => {}
         }
     }
 
     let tool_name = tool_name.ok_or_else(|| {
-        syn::Error::new_spanned(&input.sig.ident, "Missing 'name' parameter in #[mcp_tool(...)]")
+        syn::Error::new_spanned(
+            &input.sig.ident,
+            "Missing 'name' parameter in #[mcp_tool(...)]",
+        )
     })?;
 
     let tool_description = tool_description.ok_or_else(|| {
-        syn::Error::new_spanned(&input.sig.ident, "Missing 'description' parameter in #[mcp_tool(...)]")
+        syn::Error::new_spanned(
+            &input.sig.ident,
+            "Missing 'description' parameter in #[mcp_tool(...)]",
+        )
     })?;
-    
+
     // Use custom output field name or default to "result"
     let output_field_name = output_field_name.unwrap_or_else(|| "result".to_string());
 
@@ -54,19 +66,20 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
     // Generate struct name from function name with proper capitalization
     let struct_name = syn::Ident::new(
         &format!("{}ToolImpl", capitalize(&fn_name.to_string())),
-        fn_name.span()
+        fn_name.span(),
     );
-
 
     // Analyze return type for output schema generation
     let output_schema_tokens = match return_type {
-        syn::ReturnType::Type(_, ty) => {
-            generate_output_schema_for_return_type_with_field(ty, &output_field_name).unwrap_or_else(|| {
-                quote! {
-                    fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> { None }
-                }
-            })
-        }
+        syn::ReturnType::Type(_, ty) => generate_output_schema_for_return_type_with_field(
+            ty,
+            &output_field_name,
+        )
+        .unwrap_or_else(|| {
+            quote! {
+                fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> { None }
+            }
+        }),
         _ => quote! {
             fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> { None }
         },
@@ -81,63 +94,66 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
 
     for input_arg in &input.sig.inputs {
         if let FnArg::Typed(pat_type) = input_arg
-            && let Pat::Ident(pat_ident) = pat_type.pat.as_ref() {
-                let param_name = &pat_ident.ident;
-                let param_type = &pat_type.ty;
-                
-                // Check if this is a SessionContext parameter
-                if is_session_context_type(param_type) {
-                    // Add session to function call arguments
-                    fn_call_args.push(quote! { session });
-                    continue; // Don't process SessionContext as a regular parameter
-                }
-                
-                // Collect parameter type for trait implementation
-                param_types.push(param_type);
-                
-                // Extract parameter metadata from attributes
-                let param_meta = extract_param_meta(&pat_type.attrs)?;
-                
-                let param_name_str = param_name.to_string();
-                
-                // Generate property insertion for this parameter - use same pattern as derive macro
-                let schema = type_to_schema(param_type, &param_meta);
-                
-                schema_properties.push(quote! {
-                    (#param_name_str.to_string(), #schema)
+            && let Pat::Ident(pat_ident) = pat_type.pat.as_ref()
+        {
+            let param_name = &pat_ident.ident;
+            let param_type = &pat_type.ty;
+
+            // Check if this is a SessionContext parameter
+            if is_session_context_type(param_type) {
+                // Add session to function call arguments
+                fn_call_args.push(quote! { session });
+                continue; // Don't process SessionContext as a regular parameter
+            }
+
+            // Collect parameter type for trait implementation
+            param_types.push(param_type);
+
+            // Extract parameter metadata from attributes
+            let param_meta = extract_param_meta(&pat_type.attrs)?;
+
+            let param_name_str = param_name.to_string();
+
+            // Generate property insertion for this parameter - use same pattern as derive macro
+            let schema = type_to_schema(param_type, &param_meta);
+
+            schema_properties.push(quote! {
+                (#param_name_str.to_string(), #schema)
+            });
+
+            if !param_meta.optional {
+                required_fields.push(quote! {
+                    #param_name_str.to_string()
                 });
+            }
 
-                if !param_meta.optional {
-                    required_fields.push(quote! {
-                        #param_name_str.to_string()
-                    });
-                }
+            // Generate parameter extraction code based on type
+            let extraction = generate_param_extraction(param_name, param_type, param_meta.optional);
+            param_extractions.push(extraction);
 
-                // Generate parameter extraction code based on type
-                let extraction = generate_param_extraction(param_name, param_type, param_meta.optional);
-                param_extractions.push(extraction);
-
-                // Add to function call arguments - handle Optional unwrapping
-                if param_meta.optional && !is_option_type(param_type) {
-                    // Function expects T but we have Option<T>, so unwrap with error
-                    fn_call_args.push(quote! { 
+            // Add to function call arguments - handle Optional unwrapping
+            if param_meta.optional && !is_option_type(param_type) {
+                // Function expects T but we have Option<T>, so unwrap with error
+                fn_call_args.push(quote! {
                         #param_name.ok_or_else(|| turul_mcp_protocol::McpError::missing_param(#param_name_str))?
                     });
-                } else {
-                    // Direct use - either required T or Option<T>
-                    fn_call_args.push(quote! { #param_name });
-                }
+            } else {
+                // Direct use - either required T or Option<T>
+                fn_call_args.push(quote! { #param_name });
             }
+        }
     }
 
     // Rename the function to avoid name collision with the tool constructor
     let mut clean_input = input.clone();
-    clean_input.attrs.retain(|attr| !attr.path().is_ident("mcp_tool"));
-    
+    clean_input
+        .attrs
+        .retain(|attr| !attr.path().is_ident("mcp_tool"));
+
     // Rename the function with _impl suffix
     let impl_fn_name = syn::Ident::new(&format!("{}_impl", fn_name), fn_name.span());
     clean_input.sig.ident = impl_fn_name.clone();
-    
+
     // Clean parameter attributes
     for input_arg in &mut clean_input.sig.inputs {
         if let FnArg::Typed(pat_type) = input_arg {
@@ -210,7 +226,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
             async fn call(&self, args: serde_json::Value, session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
                 use serde_json::Value;
                 use turul_mcp_protocol::tools::HasOutputSchema;
-                
+
                 // Extract parameters
                 #(#param_extractions)*
 
@@ -224,7 +240,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                         } else {
                             serde_json::to_value(&result).unwrap_or_else(|_| serde_json::json!(result.to_string()))
                         };
-                        
+
                         // Use smart response builder with automatic structured content
                         turul_mcp_protocol::tools::CallToolResult::from_result_with_schema(&schema_result, self.output_schema())
                     }
@@ -263,8 +279,7 @@ fn capitalize(s: &str) -> String {
 /// Check if a type is Option<T>
 fn is_option_type(field_type: &syn::Type) -> bool {
     if let syn::Type::Path(type_path) = field_type {
-        type_path.path.segments.len() == 1 && 
-        type_path.path.segments[0].ident == "Option"
+        type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Option"
     } else {
         false
     }
@@ -275,29 +290,30 @@ fn is_session_context_type(field_type: &syn::Type) -> bool {
     match field_type {
         syn::Type::Path(type_path) => {
             // Check if it's Option<SessionContext>
-            if type_path.path.segments.len() == 1 && 
-               type_path.path.segments[0].ident == "Option"
-                && let syn::PathArguments::AngleBracketed(args) = &type_path.path.segments[0].arguments
-                    && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
-                        return is_session_context_type(inner_type);
-                    }
-            
+            if type_path.path.segments.len() == 1
+                && type_path.path.segments[0].ident == "Option"
+                && let syn::PathArguments::AngleBracketed(args) =
+                    &type_path.path.segments[0].arguments
+                && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
+            {
+                return is_session_context_type(inner_type);
+            }
+
             // Check if it's direct SessionContext (check last segment for qualified paths)
             if let Some(last_segment) = type_path.path.segments.last() {
                 last_segment.ident == "SessionContext"
             } else {
                 false
             }
-        },
+        }
         _ => false,
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use syn::{parse_quote, punctuated::Punctuated, Token, Meta};
+    use syn::{Meta, Token, parse_quote, punctuated::Punctuated};
 
     #[test]
     fn test_capitalize() {

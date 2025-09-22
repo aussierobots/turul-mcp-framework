@@ -3,16 +3,16 @@
 //! This client generates various load patterns to test MCP server performance,
 //! including concurrent requests, burst patterns, and sustained load.
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 use clap::{Parser, Subcommand};
-use turul_mcp_client::{McpClient, McpClientBuilder};
-use serde_json::{json, Value};
-use tokio::time::sleep;
-use tracing::{info, warn};
 use futures::future::join_all;
 use rand::Rng;
+use serde_json::{Value, json};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
+use tokio::time::sleep;
+use tracing::{info, warn};
+use turul_mcp_client::{McpClient, McpClientBuilder};
 
 #[derive(Parser)]
 #[command(name = "performance_client")]
@@ -20,13 +20,13 @@ use rand::Rng;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
-    
+
     #[arg(long, default_value = "http://127.0.0.1:8080/mcp")]
     server_url: String,
-    
+
     #[arg(long, default_value = "10")]
     concurrency: usize,
-    
+
     #[arg(long, default_value = "60")]
     duration_seconds: u64,
 }
@@ -64,7 +64,7 @@ enum Commands {
     Burst {
         #[arg(long, default_value = "5")]
         burst_interval_seconds: u64,
-        
+
         #[arg(long, default_value = "100")]
         burst_size: usize,
     },
@@ -88,27 +88,34 @@ impl Metrics {
             ..Default::default()
         })
     }
-    
+
     fn record_request(&self, response_time_ms: u64, success: bool) {
         self.requests_completed.fetch_add(1, Ordering::Relaxed);
         if success {
-            self.total_response_time_ms.fetch_add(response_time_ms, Ordering::Relaxed);
-            
+            self.total_response_time_ms
+                .fetch_add(response_time_ms, Ordering::Relaxed);
+
             // Update min/max response times
             let mut current_min = self.min_response_time_ms.load(Ordering::Relaxed);
             while response_time_ms < current_min {
                 match self.min_response_time_ms.compare_exchange_weak(
-                    current_min, response_time_ms, Ordering::Relaxed, Ordering::Relaxed
+                    current_min,
+                    response_time_ms,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
                 ) {
                     Ok(_) => break,
                     Err(x) => current_min = x,
                 }
             }
-            
+
             let mut current_max = self.max_response_time_ms.load(Ordering::Relaxed);
             while response_time_ms > current_max {
                 match self.max_response_time_ms.compare_exchange_weak(
-                    current_max, response_time_ms, Ordering::Relaxed, Ordering::Relaxed
+                    current_max,
+                    response_time_ms,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
                 ) {
                     Ok(_) => break,
                     Err(x) => current_max = x,
@@ -118,7 +125,7 @@ impl Metrics {
             self.requests_failed.fetch_add(1, Ordering::Relaxed);
         }
     }
-    
+
     fn print_stats(&self) {
         let sent = self.requests_sent.load(Ordering::Relaxed);
         let completed = self.requests_completed.load(Ordering::Relaxed);
@@ -126,18 +133,36 @@ impl Metrics {
         let total_time = self.total_response_time_ms.load(Ordering::Relaxed);
         let min_time = self.min_response_time_ms.load(Ordering::Relaxed);
         let max_time = self.max_response_time_ms.load(Ordering::Relaxed);
-        
+
         let successful = completed - failed;
-        let avg_time = if successful > 0 { total_time / successful } else { 0 };
-        
+        let avg_time = if successful > 0 {
+            total_time / successful
+        } else {
+            0
+        };
+
         info!("=== Performance Test Results ===");
         info!("Requests sent: {}", sent);
-        info!("Requests completed: {} ({:.1}%)", completed, (completed as f64 / sent as f64) * 100.0);
-        info!("Requests failed: {} ({:.1}%)", failed, (failed as f64 / sent as f64) * 100.0);
+        info!(
+            "Requests completed: {} ({:.1}%)",
+            completed,
+            (completed as f64 / sent as f64) * 100.0
+        );
+        info!(
+            "Requests failed: {} ({:.1}%)",
+            failed,
+            (failed as f64 / sent as f64) * 100.0
+        );
         info!("Average response time: {} ms", avg_time);
-        info!("Min response time: {} ms", if min_time == u64::MAX { 0 } else { min_time });
+        info!(
+            "Min response time: {} ms",
+            if min_time == u64::MAX { 0 } else { min_time }
+        );
         info!("Max response time: {} ms", max_time);
-        info!("Requests per second: {:.2}", completed as f64 / (total_time as f64 / 1000.0));
+        info!(
+            "Requests per second: {:.2}",
+            completed as f64 / (total_time as f64 / 1000.0)
+        );
     }
 }
 
@@ -147,11 +172,9 @@ async fn send_mcp_tool_call(
     arguments: Value,
 ) -> Result<Duration, Box<dyn std::error::Error + Send + Sync>> {
     let start = Instant::now();
-    
-    let _results = client
-        .call_tool(tool_name, arguments)
-        .await?;
-    
+
+    let _results = client.call_tool(tool_name, arguments).await?;
+
     let elapsed = start.elapsed();
     Ok(elapsed)
 }
@@ -163,26 +186,30 @@ async fn throughput_test(
     concurrency: usize,
     metrics: Arc<Metrics>,
 ) {
-    info!("Starting throughput test: {} RPS for {} seconds", rps, duration.as_secs());
-    
+    info!(
+        "Starting throughput test: {} RPS for {} seconds",
+        rps,
+        duration.as_secs()
+    );
+
     let interval = Duration::from_nanos(1_000_000_000 / rps);
     let end_time = Instant::now() + duration;
-    
+
     let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency));
-    
+
     while Instant::now() < end_time {
         let permit = semaphore.clone().acquire_owned().await.unwrap();
         let client = client.clone();
         let metrics = metrics.clone();
-        
+
         tokio::spawn(async move {
             let _permit = permit;
             metrics.requests_sent.fetch_add(1, Ordering::Relaxed);
-            
+
             let arguments = json!({
                 "input": rand::rng().random::<i64>()
             });
-            
+
             match send_mcp_tool_call(&client, "fast_compute", arguments).await {
                 Ok(duration) => {
                     metrics.record_request(duration.as_millis() as u64, true);
@@ -193,10 +220,10 @@ async fn throughput_test(
                 }
             }
         });
-        
+
         sleep(interval).await;
     }
-    
+
     // Wait for remaining requests to complete
     let _all_permits = semaphore.acquire_many(concurrency as u32).await.unwrap();
 }
@@ -208,24 +235,28 @@ async fn stress_test(
     concurrency: usize,
     metrics: Arc<Metrics>,
 ) {
-    info!("Starting stress test: computation size {} for {} seconds", computation_size, duration.as_secs());
-    
+    info!(
+        "Starting stress test: computation size {} for {} seconds",
+        computation_size,
+        duration.as_secs()
+    );
+
     let end_time = Instant::now() + duration;
     let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency));
-    
+
     while Instant::now() < end_time {
         let permit = semaphore.clone().acquire_owned().await.unwrap();
         let client = client.clone();
         let metrics = metrics.clone();
-        
+
         tokio::spawn(async move {
             let _permit = permit;
             metrics.requests_sent.fetch_add(1, Ordering::Relaxed);
-            
+
             let arguments = json!({
                 "size": computation_size
             });
-            
+
             match send_mcp_tool_call(&client, "cpu_intensive", arguments).await {
                 Ok(duration) => {
                     metrics.record_request(duration.as_millis() as u64, true);
@@ -236,10 +267,10 @@ async fn stress_test(
                 }
             }
         });
-        
+
         sleep(Duration::from_millis(100)).await; // Throttle stress test
     }
-    
+
     let _all_permits = semaphore.acquire_many(concurrency as u32).await.unwrap();
 }
 
@@ -250,24 +281,28 @@ async fn memory_test(
     concurrency: usize,
     metrics: Arc<Metrics>,
 ) {
-    info!("Starting memory test: {} MB per request for {} seconds", mb_per_request, duration.as_secs());
-    
+    info!(
+        "Starting memory test: {} MB per request for {} seconds",
+        mb_per_request,
+        duration.as_secs()
+    );
+
     let end_time = Instant::now() + duration;
     let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency));
-    
+
     while Instant::now() < end_time {
         let permit = semaphore.clone().acquire_owned().await.unwrap();
         let client = client.clone();
         let metrics = metrics.clone();
-        
+
         tokio::spawn(async move {
             let _permit = permit;
             metrics.requests_sent.fetch_add(1, Ordering::Relaxed);
-            
+
             let arguments = json!({
                 "mb_size": mb_per_request
             });
-            
+
             match send_mcp_tool_call(&client, "memory_allocate", arguments).await {
                 Ok(duration) => {
                     metrics.record_request(duration.as_millis() as u64, true);
@@ -278,10 +313,10 @@ async fn memory_test(
                 }
             }
         });
-        
+
         sleep(Duration::from_secs(2)).await; // Throttle memory test
     }
-    
+
     let _all_permits = semaphore.acquire_many(concurrency as u32).await.unwrap();
 }
 
@@ -292,24 +327,28 @@ async fn latency_test(
     concurrency: usize,
     metrics: Arc<Metrics>,
 ) {
-    info!("Starting latency test: {} ms I/O delay for {} seconds", io_delay_ms, duration.as_secs());
-    
+    info!(
+        "Starting latency test: {} ms I/O delay for {} seconds",
+        io_delay_ms,
+        duration.as_secs()
+    );
+
     let end_time = Instant::now() + duration;
     let semaphore = Arc::new(tokio::sync::Semaphore::new(concurrency));
-    
+
     while Instant::now() < end_time {
         let permit = semaphore.clone().acquire_owned().await.unwrap();
         let client = client.clone();
         let metrics = metrics.clone();
-        
+
         tokio::spawn(async move {
             let _permit = permit;
             metrics.requests_sent.fetch_add(1, Ordering::Relaxed);
-            
+
             let arguments = json!({
                 "delay_ms": io_delay_ms
             });
-            
+
             match send_mcp_tool_call(&client, "async_io", arguments).await {
                 Ok(duration) => {
                     metrics.record_request(duration.as_millis() as u64, true);
@@ -320,10 +359,10 @@ async fn latency_test(
                 }
             }
         });
-        
+
         sleep(Duration::from_millis(500)).await;
     }
-    
+
     let _all_permits = semaphore.acquire_many(concurrency as u32).await.unwrap();
 }
 
@@ -334,25 +373,29 @@ async fn burst_test(
     duration: Duration,
     metrics: Arc<Metrics>,
 ) {
-    info!("Starting burst test: {} requests every {} seconds", burst_size, burst_interval.as_secs());
-    
+    info!(
+        "Starting burst test: {} requests every {} seconds",
+        burst_size,
+        burst_interval.as_secs()
+    );
+
     let end_time = Instant::now() + duration;
-    
+
     while Instant::now() < end_time {
         info!("Sending burst of {} requests...", burst_size);
-        
+
         let mut handles = Vec::new();
         for _ in 0..burst_size {
             let client = client.clone();
             let metrics = metrics.clone();
-            
+
             let handle = tokio::spawn(async move {
                 metrics.requests_sent.fetch_add(1, Ordering::Relaxed);
-                
+
                 let arguments = json!({
                     "input": rand::rng().random::<i64>()
                 });
-                
+
                 match send_mcp_tool_call(&client, "fast_compute", arguments).await {
                     Ok(duration) => {
                         metrics.record_request(duration.as_millis() as u64, true);
@@ -365,7 +408,7 @@ async fn burst_test(
             });
             handles.push(handle);
         }
-        
+
         join_all(handles).await;
         sleep(burst_interval).await;
     }
@@ -378,15 +421,13 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let cli = Cli::parse();
-    
+
     // Create MCP client and connect
-    let client = McpClientBuilder::new()
-        .with_url(&cli.server_url)?
-        .build();
-    
+    let client = McpClientBuilder::new().with_url(&cli.server_url)?.build();
+
     client.connect().await?;
     let client = Arc::new(client);
-    
+
     let metrics = Metrics::new();
     let duration = Duration::from_secs(cli.duration_seconds);
 
@@ -396,29 +437,62 @@ async fn main() -> anyhow::Result<()> {
         let mut interval = tokio::time::interval(Duration::from_secs(5));
         loop {
             interval.tick().await;
-            
+
             let sent = metrics_clone.requests_sent.load(Ordering::Relaxed);
             let completed = metrics_clone.requests_completed.load(Ordering::Relaxed);
             let failed = metrics_clone.requests_failed.load(Ordering::Relaxed);
-            
+
             if sent > 0 {
-                info!("Progress: {} sent, {} completed, {} failed", sent, completed, failed);
+                info!(
+                    "Progress: {} sent, {} completed, {} failed",
+                    sent, completed, failed
+                );
             }
         }
     });
 
     match cli.command {
-        Commands::Throughput { requests_per_second } => {
-            throughput_test(client.clone(), requests_per_second, duration, cli.concurrency, metrics.clone()).await;
+        Commands::Throughput {
+            requests_per_second,
+        } => {
+            throughput_test(
+                client.clone(),
+                requests_per_second,
+                duration,
+                cli.concurrency,
+                metrics.clone(),
+            )
+            .await;
         }
         Commands::Stress { computation_size } => {
-            stress_test(client.clone(), computation_size, duration, cli.concurrency, metrics.clone()).await;
+            stress_test(
+                client.clone(),
+                computation_size,
+                duration,
+                cli.concurrency,
+                metrics.clone(),
+            )
+            .await;
         }
         Commands::Memory { mb_per_request } => {
-            memory_test(client.clone(), mb_per_request, duration, cli.concurrency, metrics.clone()).await;
+            memory_test(
+                client.clone(),
+                mb_per_request,
+                duration,
+                cli.concurrency,
+                metrics.clone(),
+            )
+            .await;
         }
         Commands::Latency { io_delay_ms } => {
-            latency_test(client.clone(), io_delay_ms, duration, cli.concurrency, metrics.clone()).await;
+            latency_test(
+                client.clone(),
+                io_delay_ms,
+                duration,
+                cli.concurrency,
+                metrics.clone(),
+            )
+            .await;
         }
         Commands::Session { sessions: _ } => {
             // TODO: Implement session test using MCP client session awareness
@@ -428,14 +502,18 @@ async fn main() -> anyhow::Result<()> {
             // TODO: Implement mixed workload test
             info!("Mixed workload test not yet implemented");
         }
-        Commands::Burst { burst_interval_seconds, burst_size } => {
+        Commands::Burst {
+            burst_interval_seconds,
+            burst_size,
+        } => {
             burst_test(
                 client.clone(),
                 Duration::from_secs(burst_interval_seconds),
                 burst_size,
                 duration,
                 metrics.clone(),
-            ).await;
+            )
+            .await;
         }
     }
 

@@ -81,15 +81,13 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
 }
 
 /// Extract parameter metadata from field attributes
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ParamMeta {
     pub description: Option<String>,
     pub optional: bool,
     pub min: Option<f64>,
     pub max: Option<f64>,
 }
-
 
 pub fn extract_param_meta(attrs: &[Attribute]) -> Result<ParamMeta> {
     let mut meta = ParamMeta::default();
@@ -203,10 +201,11 @@ pub fn generate_param_extraction(
         // Field is already Option<T>, extract the inner type
         if let syn::Type::Path(type_path) = field_type
             && let syn::PathArguments::AngleBracketed(args) = &type_path.path.segments[0].arguments
-                && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
-                    // Handle Option<T> field
-                    return generate_option_extraction(field_name, inner_type, field_name_str);
-                }
+            && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
+        {
+            // Handle Option<T> field
+            return generate_option_extraction(field_name, inner_type, field_name_str);
+        }
         // Fallback for complex Option types
         quote! {
             let #field_name: #field_type = args.get(#field_name_str)
@@ -229,9 +228,7 @@ fn generate_optional_required_extraction(
     field_name_str: String,
 ) -> TokenStream {
     match field_type {
-        syn::Type::Path(type_path)
-            if type_path.path.get_ident().is_some_and(|i| i == "String") =>
-        {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "String") => {
             quote! {
                 let #field_name: Option<String> = args.get(#field_name_str)
                     .and_then(|v| v.as_str())
@@ -287,9 +284,7 @@ fn generate_option_extraction(
     field_name_str: String,
 ) -> TokenStream {
     match inner_type {
-        syn::Type::Path(type_path)
-            if type_path.path.get_ident().is_some_and(|i| i == "String") =>
-        {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "String") => {
             quote! {
                 let #field_name: Option<String> = args.get(#field_name_str)
                     .and_then(|v| v.as_str())
@@ -344,18 +339,19 @@ fn generate_option_extraction(
         _ => {
             // Check if this is Option<Vec<T>>
             if let syn::Type::Path(inner_path) = inner_type
-                && inner_path.path.segments.len() == 1 && inner_path.path.segments[0].ident == "Vec"
-                {
-                    return quote! {
-                        let #field_name: Option<#inner_type> = args.get(#field_name_str)
-                            .and_then(|v| v.as_array())
-                            .map(|arr| arr.iter()
-                                .map(|item| serde_json::from_value(item.clone()))
-                                .collect::<Result<Vec<_>, _>>()
-                                .ok())
-                            .flatten();
-                    };
-                }
+                && inner_path.path.segments.len() == 1
+                && inner_path.path.segments[0].ident == "Vec"
+            {
+                return quote! {
+                    let #field_name: Option<#inner_type> = args.get(#field_name_str)
+                        .and_then(|v| v.as_array())
+                        .map(|arr| arr.iter()
+                            .map(|item| serde_json::from_value(item.clone()))
+                            .collect::<Result<Vec<_>, _>>()
+                            .ok())
+                        .flatten();
+                };
+            }
 
             // Generic serde deserialization for complex Option types
             quote! {
@@ -373,9 +369,7 @@ fn generate_required_extraction(
     field_name_str: String,
 ) -> TokenStream {
     match field_type {
-        syn::Type::Path(type_path)
-            if type_path.path.get_ident().is_some_and(|i| i == "String") =>
-        {
+        syn::Type::Path(type_path) if type_path.path.get_ident().is_some_and(|i| i == "String") => {
             quote! {
                 let #field_name = args.get(#field_name_str)
                     .and_then(|v| v.as_str())
@@ -482,13 +476,13 @@ pub fn extract_string_attribute(attrs: &[Attribute], name: &str) -> Option<Strin
     for attr in attrs {
         if attr.path().is_ident(name)
             && let Ok(value) = attr.meta.require_name_value()
-                && let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Str(lit_str),
-                    ..
-                }) = &value.value
-                {
-                    return Some(lit_str.value());
-                }
+            && let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(lit_str),
+                ..
+            }) = &value.value
+        {
+            return Some(lit_str.value());
+        }
     }
     None
 }
@@ -500,7 +494,6 @@ pub struct FieldMeta {
     pub content_type: Option<String>,
     pub description: Option<String>,
 }
-
 
 /// Prompt metadata extracted from attributes
 #[derive(Debug)]
@@ -726,18 +719,18 @@ pub fn extract_field_meta(attrs: &[Attribute]) -> Result<FieldMeta> {
                     lit: syn::Lit::Str(lit_str),
                     ..
                 }) = &value.value
-                {
-                    meta.content_type = Some(lit_str.value());
-                }
+            {
+                meta.content_type = Some(lit_str.value());
+            }
         } else if attr.path().is_ident("description")
             && let Ok(value) = attr.meta.require_name_value()
-                && let syn::Expr::Lit(syn::ExprLit {
-                    lit: syn::Lit::Str(lit_str),
-                    ..
-                }) = &value.value
-                {
-                    meta.description = Some(lit_str.value());
-                }
+            && let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(lit_str),
+                ..
+            }) = &value.value
+        {
+            meta.description = Some(lit_str.value());
+        }
     }
 
     Ok(meta)
@@ -896,23 +889,25 @@ pub fn generate_output_schema_for_return_type_with_field(
 ) -> Option<TokenStream> {
     // Handle McpResult<T> by extracting the T type
     if let syn::Type::Path(type_path) = return_type
-        && let Some(segment) = type_path.path.segments.last() {
-            if segment.ident == "McpResult" || segment.ident == "Result" {
-                // Extract the T from Result<T, E>
-                if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
-                    && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first() {
-                        return Some(generate_output_schema_for_type_with_field(
-                            inner_type, field_name,
-                        ));
-                    }
-            } else {
-                // Direct type, not wrapped in Result
+        && let Some(segment) = type_path.path.segments.last()
+    {
+        if segment.ident == "McpResult" || segment.ident == "Result" {
+            // Extract the T from Result<T, E>
+            if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+                && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
+            {
                 return Some(generate_output_schema_for_type_with_field(
-                    return_type,
-                    field_name,
+                    inner_type, field_name,
                 ));
             }
+        } else {
+            // Direct type, not wrapped in Result
+            return Some(generate_output_schema_for_type_with_field(
+                return_type,
+                field_name,
+            ));
         }
+    }
     None
 }
 
@@ -925,31 +920,32 @@ pub fn determine_output_field_name(ty: &syn::Type, custom_field: Option<&String>
 
     // For struct types, extract the struct name and convert to camelCase
     if let syn::Type::Path(type_path) = ty
-        && let Some(ident) = type_path.path.get_ident() {
-            let struct_name = ident.to_string();
-            // Check if this looks like a custom struct (not a primitive)
-            if !matches!(
-                struct_name.as_str(),
-                "f64"
-                    | "f32"
-                    | "i64"
-                    | "i32"
-                    | "i16"
-                    | "i8"
-                    | "u64"
-                    | "u32"
-                    | "u16"
-                    | "u8"
-                    | "isize"
-                    | "usize"
-                    | "String"
-                    | "str"
-                    | "bool"
-            ) {
-                // Convert struct name to camelCase (e.g., CalculationResult -> calculationResult)
-                return struct_to_camel_case(&struct_name);
-            }
+        && let Some(ident) = type_path.path.get_ident()
+    {
+        let struct_name = ident.to_string();
+        // Check if this looks like a custom struct (not a primitive)
+        if !matches!(
+            struct_name.as_str(),
+            "f64"
+                | "f32"
+                | "i64"
+                | "i32"
+                | "i16"
+                | "i8"
+                | "u64"
+                | "u32"
+                | "u16"
+                | "u8"
+                | "isize"
+                | "usize"
+                | "String"
+                | "str"
+                | "bool"
+        ) {
+            // Convert struct name to camelCase (e.g., CalculationResult -> calculationResult)
+            return struct_to_camel_case(&struct_name);
         }
+    }
 
     // Default to "output" for primitives (as requested by user)
     "output".to_string()
@@ -972,14 +968,16 @@ pub fn generate_enhanced_output_schema(
 ) -> TokenStream {
     // Try to introspect struct properties if we have the DeriveInput
     if let (syn::Type::Path(type_path), Some(derive_input)) = (ty, input)
-        && let Some(ident) = type_path.path.get_ident() {
-            // Check if this is the same struct we're deriving for
-            if ident == &derive_input.ident
-                && let Data::Struct(data_struct) = &derive_input.data
-                    && let Fields::Named(fields) = &data_struct.fields {
-                        return generate_struct_schema_with_properties(fields, field_name);
-                    }
+        && let Some(ident) = type_path.path.get_ident()
+    {
+        // Check if this is the same struct we're deriving for
+        if ident == &derive_input.ident
+            && let Data::Struct(data_struct) = &derive_input.data
+            && let Fields::Named(fields) = &data_struct.fields
+        {
+            return generate_struct_schema_with_properties(fields, field_name);
         }
+    }
 
     // Fallback to basic type schema generation
     generate_output_schema_for_type_with_field(ty, field_name)

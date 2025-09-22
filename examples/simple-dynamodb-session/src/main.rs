@@ -18,16 +18,19 @@
 //! - Automatic TTL-based cleanup
 //! - AWS-native storage backend
 
+use serde_json::{Value, json};
 use std::sync::Arc;
-use turul_mcp_server::{McpServer, McpResult, SessionContext};
-use turul_mcp_session_storage::{DynamoDbSessionStorage, DynamoDbConfig};
+use tracing::{debug, error, info};
 use turul_mcp_derive::McpTool;
-use serde_json::{json, Value};
-use tracing::{info, error, debug};
+use turul_mcp_server::{McpResult, McpServer, SessionContext};
+use turul_mcp_session_storage::{DynamoDbConfig, DynamoDbSessionStorage};
 
 /// Tool that stores a key-value pair in this session's DynamoDB storage
 #[derive(McpTool, Default)]
-#[tool(name = "store_value", description = "Store a value in this session's DynamoDB storage (session-scoped)")]
+#[tool(
+    name = "store_value",
+    description = "Store a value in this session's DynamoDB storage (session-scoped)"
+)]
 struct StoreValueTool {
     #[param(description = "Key to store in session")]
     key: String,
@@ -37,7 +40,9 @@ struct StoreValueTool {
 
 impl StoreValueTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| {
+            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
+        })?;
 
         debug!("Storing value in DynamoDB: {} = {}", self.key, self.value);
 
@@ -58,7 +63,10 @@ impl StoreValueTool {
 
 /// Tool that retrieves a value from this session's DynamoDB storage
 #[derive(McpTool, Default)]
-#[tool(name = "get_value", description = "Retrieve a value from this session's DynamoDB storage (session-scoped)")]
+#[tool(
+    name = "get_value",
+    description = "Retrieve a value from this session's DynamoDB storage (session-scoped)"
+)]
 struct GetValueTool {
     #[param(description = "Key to retrieve from session")]
     key: String,
@@ -66,7 +74,9 @@ struct GetValueTool {
 
 impl GetValueTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| {
+            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
+        })?;
 
         debug!("Getting value from DynamoDB: {}", self.key);
 
@@ -91,12 +101,17 @@ impl GetValueTool {
 
 /// Tool that shows session information
 #[derive(McpTool, Default)]
-#[tool(name = "session_info", description = "Get information about the DynamoDB session")]
+#[tool(
+    name = "session_info",
+    description = "Get information about the DynamoDB session"
+)]
 struct SessionInfoTool {}
 
 impl SessionInfoTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.ok_or_else(|| turul_mcp_protocol::McpError::SessionError("Session required".to_string()))?;
+        let session = session.ok_or_else(|| {
+            turul_mcp_protocol::McpError::SessionError("Session required".to_string())
+        })?;
 
         Ok(json!({
             "session_id": session.session_id,
@@ -125,9 +140,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dynamodb_config = DynamoDbConfig {
         table_name: std::env::var("MCP_SESSION_TABLE")
             .unwrap_or_else(|_| "mcp-sessions".to_string()),
-        region: std::env::var("AWS_REGION")
-            .unwrap_or_else(|_| "us-east-1".to_string()),
-        session_ttl_minutes: 24 * 60,  // 24 hours in minutes
+        region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
+        session_ttl_minutes: 24 * 60, // 24 hours in minutes
         event_ttl_minutes: 24 * 60,   // 24 hours in minutes
         max_events_per_session: 1000,
         enable_backup: true,

@@ -33,11 +33,11 @@ fn test_basic_lambda_server_configuration() {
             .cors_allow_all_origins()
             .build()
             .await?;
-            
+
         // We don't actually create the handler since that would require Lambda runtime
         Ok(())
     }
-    
+
     // Just verify the async function compiles
     let _ = example_lambda_server;
 }
@@ -47,27 +47,27 @@ fn test_basic_lambda_server_configuration() {
 fn test_lambda_dynamodb_session_storage() {
     // Note: We can't actually test storage backends without setting up databases
     // This test verifies the configuration APIs compile correctly
-    
+
     async fn example_dynamodb_storage() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Note: We can't actually create DynamoDB storage without AWS credentials
         // This just verifies the API compiles
-        
+
         // let storage = Arc::new(DynamoDbSessionStorage::new().await?);
-        
+
         let _server = LambdaMcpServerBuilder::new()
             .name("my-lambda-server")
             // .storage(storage)  // Would be uncommented in real usage
             .build()
             .await?;
-            
+
         Ok(())
     }
-    
+
     let _ = example_dynamodb_storage;
 }
 
 /// Test session persistence example from turul-mcp-aws-lambda README
-#[test] 
+#[test]
 fn test_session_persistence() {
     #[derive(McpTool, Clone, Default)]
     #[tool(name = "counter", description = "Session-persistent counter")]
@@ -87,7 +87,7 @@ fn test_session_persistence() {
             }
         }
     }
-    
+
     // Verify session-persistent tool compiles
     async fn example_with_session_tool() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let _server = LambdaMcpServerBuilder::new()
@@ -96,10 +96,10 @@ fn test_session_persistence() {
             .tool(CounterTool::default())
             .build()
             .await?;
-            
+
         Ok(())
     }
-    
+
     let _ = example_with_session_tool;
 }
 
@@ -107,26 +107,23 @@ fn test_session_persistence() {
 #[test]
 fn test_lambda_cors_configuration() {
     use turul_mcp_aws_lambda::CorsConfig;
-    
+
     async fn example_cors_config() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Test permissive CORS (development)
         let _server1 = LambdaMcpServerBuilder::new()
             .cors_allow_all_origins()
             .build()
             .await?;
-        
+
         // Test custom CORS configuration (production)
         let mut cors = CorsConfig::for_origins(vec!["https://myapp.com".to_string()]);
         cors.allow_credentials = true;
 
-        let _server2 = LambdaMcpServerBuilder::new()
-            .cors(cors)
-            .build()
-            .await?;
-            
+        let _server2 = LambdaMcpServerBuilder::new().cors(cors).build().await?;
+
         Ok(())
     }
-    
+
     let _ = example_cors_config;
 }
 
@@ -142,19 +139,20 @@ fn test_lambda_sse_streaming() {
     impl LongTaskTool {
         async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
             if let Some(session) = session {
-                for i in 1..=3 { // Limit for testing
+                for i in 1..=3 {
+                    // Limit for testing
                     // Send progress notification via SSE
-                session.notify_progress("long-task", i as u64).await;
-                    
+                    session.notify_progress("long-task", i as u64).await;
+
                     // Don't actually sleep in tests
                     // tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                 }
             }
-            
+
             Ok("Task completed".to_string())
         }
     }
-    
+
     // Verify SSE streaming tool compiles
     async fn example_sse_tool() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let _server = LambdaMcpServerBuilder::new()
@@ -164,10 +162,10 @@ fn test_lambda_sse_streaming() {
             .sse(true)
             .build()
             .await?;
-            
+
         Ok(())
     }
-    
+
     let _ = example_sse_tool;
 }
 
@@ -186,7 +184,7 @@ fn test_lambda_handler_creation() {
                 Ok("test".to_string())
             }
         }
-        
+
         let server = LambdaMcpServerBuilder::new()
             .name("test-lambda-server")
             .version("1.0.0")
@@ -200,15 +198,15 @@ fn test_lambda_handler_creation() {
         // The actual service_fn usage would be:
         // run_with_streaming_response(service_fn(move |req| {
         //     let handler = handler.clone();
-        //     async move { 
+        //     async move {
         //         handler.handle(req).await
         //             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
         //     }
         // })).await
-        
+
         Ok(())
     }
-    
+
     let _ = example_handler_creation;
 }
 
@@ -217,7 +215,7 @@ fn test_lambda_handler_creation() {
 fn test_production_lambda_configuration() {
     use turul_mcp_aws_lambda::CorsConfig;
     // Production configuration test
-    
+
     async fn example_production_config() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         #[derive(McpTool, Clone, Default)]
         #[tool(name = "status", description = "Check server status")]
@@ -226,7 +224,10 @@ fn test_production_lambda_configuration() {
         }
 
         impl StatusTool {
-            async fn execute(&self, _session: Option<SessionContext>) -> McpResult<serde_json::Value> {
+            async fn execute(
+                &self,
+                _session: Option<SessionContext>,
+            ) -> McpResult<serde_json::Value> {
                 Ok(serde_json::json!({
                     "status": "healthy",
                     "version": "1.0.0"
@@ -249,6 +250,6 @@ fn test_production_lambda_configuration() {
 
         Ok(())
     }
-    
+
     let _ = example_production_config;
 }

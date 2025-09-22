@@ -1,12 +1,12 @@
 //! SQLite Teardown Utility
-//! 
+//!
 //! Deletes the SQLite database file used by the session storage system.
 //!
 //! WARNING: This will permanently delete all session data!
 
-use tracing::{info, warn, error};
 use std::fs;
 use std::path::Path;
+use tracing::{error, info, warn};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -20,8 +20,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Deleting SQLite database file for MCP session storage");
 
     // Get configuration from environment variables (same as main server)
-    let database_path = std::env::var("SQLITE_PATH")
-        .unwrap_or_else(|_| "./sessions.db".to_string());
+    let database_path =
+        std::env::var("SQLITE_PATH").unwrap_or_else(|_| "./sessions.db".to_string());
 
     info!("Configuration:");
     info!("  Database Path: {}", database_path);
@@ -47,7 +47,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         error!("❌ Deletion cancelled for safety.");
         error!("");
         error!("To confirm deletion, run:");
-        error!("  CONFIRM_DELETE=yes SQLITE_PATH={} cargo run --bin sqlite-teardown", database_path);
+        error!(
+            "  CONFIRM_DELETE=yes SQLITE_PATH={} cargo run --bin sqlite-teardown",
+            database_path
+        );
         error!("");
         return Ok(());
     }
@@ -60,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("🗑️  Deleted: {}", database_path);
             info!("");
             info!("🎉 Teardown complete!");
-        },
+        }
         Err(e) => {
             error!("❌ Failed to delete database file: {}", e);
             error!("Path: {}", database_path);
@@ -71,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Also try to delete WAL and SHM files if they exist
     let wal_path = format!("{}-wal", database_path);
     let shm_path = format!("{}-shm", database_path);
-    
+
     if Path::new(&wal_path).exists() {
         if let Err(e) = fs::remove_file(&wal_path) {
             warn!("⚠️  Failed to delete WAL file {}: {}", wal_path, e);
@@ -79,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("🗑️  Also deleted WAL file: {}", wal_path);
         }
     }
-    
+
     if Path::new(&shm_path).exists() {
         if let Err(e) = fs::remove_file(&shm_path) {
             warn!("⚠️  Failed to delete SHM file {}: {}", shm_path, e);
