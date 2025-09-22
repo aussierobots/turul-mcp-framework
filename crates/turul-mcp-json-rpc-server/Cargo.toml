@@ -6,7 +6,7 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "MCP-aware JSON-RPC 2.0 server implementation with session management"
+description = "Pure JSON-RPC 2.0 server implementation with type-safe domain/protocol separation"
 
 [features]
 default = ["async"]
