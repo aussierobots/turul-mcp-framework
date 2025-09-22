@@ -627,7 +627,7 @@ mod tests {
             .meta_value("timestamp", json!("2025-01-01T00:00:00Z"))
             .build();
 
-        assert_eq!(notification.method, "notifications/roots/list_changed");
+        assert_eq!(notification.method, "notifications/roots/listChanged");
         let params = notification.params.expect("Expected params");
         let meta = params.meta.expect("Expected meta");
         assert_eq!(meta.get("timestamp"), Some(&json!("2025-01-01T00:00:00Z")));
