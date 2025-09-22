@@ -263,8 +263,8 @@ mod tests {
         // Test zero-configuration method generation for different naming patterns
         let test_cases = vec![
             ("ProgressNotification", "notifications/progress"),
-            ("ResourcesListChangedNotification", "notifications/resources/list_changed"),
-            ("ToolsChangedNotification", "notifications/tools/list_changed"),
+            ("ResourcesListChangedNotification", "notifications/resources/listChanged"),
+            ("ToolsChangedNotification", "notifications/tools/listChanged"),
             ("InitializedNotification", "notifications/initialized"),
             ("CancelledNotification", "notifications/cancelled"),
         ];

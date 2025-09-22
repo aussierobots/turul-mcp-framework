@@ -13,10 +13,10 @@
 //!
 //! ## Quick Start
 //!
-//! ```rust
-//! use turul_mcp_derive::prelude::*;
-//! 
-//! // All derive macros and common imports available
+//! ```rust,no_run
+//! use turul_mcp_derive::{McpTool, McpResource, mcp_tool};
+//!
+//! // Derive macros and function attributes available
 //! ```
 //!
 //! ## Code Organization
