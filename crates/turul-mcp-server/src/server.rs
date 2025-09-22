@@ -15,6 +15,7 @@ use crate::{McpServerBuilder, McpTool, Result, tool::tool_to_descriptor};
 use turul_mcp_json_rpc_server::JsonRpcHandler;
 
 use turul_mcp_protocol::*;
+use turul_mcp_protocol::McpError;
 
 /// Main MCP server
 pub struct McpServer {
@@ -150,9 +151,8 @@ impl McpServer {
         #[cfg(not(feature = "http"))]
         {
             // If no HTTP feature, we can't run without transport
-            Err(McpFrameworkError::Config(
+            Err(McpError::configuration(
                 "No transport available. Enable the 'http' feature to use HTTP transport."
-                    .to_string(),
             ))
         }
     }
@@ -236,7 +236,16 @@ impl McpServer {
             self.setup_sse_event_bridge(&http_server).await;
         }
 
-        http_server.run().await?;
+        http_server.run().await.map_err(|http_err| {
+            match http_err {
+                turul_http_mcp_server::HttpMcpError::Mcp(mcp_err) => mcp_err,
+                turul_http_mcp_server::HttpMcpError::Http(http_err) => McpError::transport(&http_err.to_string()),
+                turul_http_mcp_server::HttpMcpError::JsonRpc(rpc_err) => McpError::json_rpc_protocol(&rpc_err.to_string()),
+                turul_http_mcp_server::HttpMcpError::Serialization(ser_err) => McpError::SerializationError(ser_err),
+                turul_http_mcp_server::HttpMcpError::Io(io_err) => McpError::IoError(io_err),
+                turul_http_mcp_server::HttpMcpError::InvalidRequest(msg) => McpError::InvalidParameters(msg),
+            }
+        })?;
         Ok(())
     }
 
@@ -410,12 +419,14 @@ impl SessionAwareMcpHandlerBridge {
 
 #[async_trait]
 impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
+    type Error = McpError;
+
     async fn handle(
         &self,
         method: &str,
         params: Option<turul_mcp_json_rpc_server::RequestParams>,
         session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
-    ) -> turul_mcp_json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
+    ) -> std::result::Result<serde_json::Value, McpError> {
         debug!("Handling {} request via session-aware bridge", method);
 
         // Convert JSON-RPC SessionContext to MCP SessionContext
@@ -448,11 +459,9 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
                         "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
                         method, session_ctx.session_id
                     );
-                    return Err(
-                        turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                            "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)".to_string(),
-                        ),
-                    );
+                    return Err(McpError::SessionError(
+                        "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)".to_string()
+                    ));
                 }
             }
         }
@@ -460,20 +469,16 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
         // Convert JSON-RPC params to Value
         let mcp_params = params.map(|p| p.to_value());
 
-        // Call the MCP handler with session context
+        // Call the MCP handler with session context - propagate errors directly
         match self
             .handler
             .handle_with_session(mcp_params, mcp_session_context)
             .await
         {
             Ok(result) => Ok(result),
-            Err(error_msg) => {
-                error!("MCP handler error: {}", error_msg);
-                Err(
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                        error_msg.to_string(),
-                    ),
-                )
+            Err(error) => {
+                error!("MCP handler error: {}", error);
+                Err(error) // Propagate McpError directly, no double-wrapping!
             }
         }
     }
@@ -600,38 +605,36 @@ impl SessionAwareInitializeHandler {
 
 #[async_trait]
 impl JsonRpcHandler for SessionAwareInitializeHandler {
+    type Error = McpError;
+
     async fn handle(
         &self,
         method: &str,
         params: Option<turul_mcp_json_rpc_server::RequestParams>,
         session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
-    ) -> turul_mcp_json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
+    ) -> std::result::Result<serde_json::Value, McpError> {
         debug!("Handling {} request with session support", method);
 
         if method != "initialize" {
-            return Err(
-                turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
-                    "Method not supported: {}",
-                    method
-                )),
-            );
+            return Err(McpError::InvalidParameters(format!(
+                "Method not supported: {}",
+                method
+            )));
         }
 
         // Parse initialize request
         let request = if let Some(params) = params {
             let params_value = params.to_value();
             serde_json::from_value::<InitializeRequest>(params_value).map_err(|e| {
-                turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
+                McpError::InvalidParameters(format!(
                     "Invalid initialize request: {}",
                     e
                 ))
             })?
         } else {
-            return Err(
-                turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                    "Missing parameters for initialize".to_string(),
-                ),
-            );
+            return Err(McpError::MissingParameter(
+                "Missing parameters for initialize".to_string(),
+            ));
         };
 
         // Perform protocol version negotiation
@@ -645,11 +648,9 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             }
             Err(e) => {
                 error!("Protocol version negotiation failed: {}", e);
-                return Err(
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                        format!("Version negotiation failed: {}", e),
-                    ),
-                );
+                return Err(McpError::ConfigurationError(
+                    format!("Version negotiation failed: {}", e),
+                ));
             }
         };
 
@@ -705,10 +706,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
                 &session_id,
                 "client_info",
                 serde_json::to_value(&request.client_info).map_err(|e| {
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
-                        "Failed to serialize client info: {}",
-                        e
-                    ))
+                    McpError::SerializationError(e)
                 })?,
             )
             .await;
@@ -718,10 +716,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
                 &session_id,
                 "client_capabilities",
                 serde_json::to_value(&request.capabilities).map_err(|e| {
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
-                        "Failed to serialize client capabilities: {}",
-                        e
-                    ))
+                    McpError::SerializationError(e)
                 })?,
             )
             .await;
@@ -731,10 +726,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
                 &session_id,
                 "negotiated_version",
                 serde_json::to_value(&negotiated_version).map_err(|e| {
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(format!(
-                        "Failed to serialize negotiated version: {}",
-                        e
-                    ))
+                    McpError::SerializationError(e)
                 })?,
             )
             .await;
@@ -768,11 +760,9 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
                 .await
             {
                 error!("❌ Failed to initialize session {}: {}", session_id, e);
-                return Err(
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                        format!("Failed to initialize session: {}", e),
-                    ),
-                );
+                return Err(McpError::SessionError(
+                    format!("Failed to initialize session: {}", e),
+                ));
             }
             info!(
                 "✅ Session {} created and immediately initialized with protocol version {} (lenient mode)",
@@ -800,7 +790,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
         // Session ID is communicated to HTTP layer via session manager
 
         serde_json::to_value(response).map_err(|e| {
-            turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
+            McpError::SerializationError(e)
         })
     }
 
@@ -822,31 +812,30 @@ impl ListToolsHandler {
 
 #[async_trait]
 impl JsonRpcHandler for ListToolsHandler {
+    type Error = McpError;
+
     async fn handle(
         &self,
         method: &str,
         params: Option<turul_mcp_json_rpc_server::RequestParams>,
         _session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
-    ) -> turul_mcp_json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
+    ) -> std::result::Result<serde_json::Value, McpError> {
         use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
 
         debug!("Handling {} request", method);
 
         if method != "tools/list" {
-            return Err(
-                turul_mcp_json_rpc_server::error::JsonRpcProcessingError::RpcError(
-                    turul_mcp_json_rpc_server::JsonRpcError::method_not_found(
-                        turul_mcp_json_rpc_server::types::RequestId::Number(0),
-                        method,
-                    ),
-                ),
-            );
+            return Err(McpError::InvalidParameters(format!(
+                "Method '{}' not supported by tools/list handler", method
+            )));
         }
 
         // Parse typed parameters for cursor and meta propagation
         use turul_mcp_protocol::tools::{ListToolsParams, ListToolsResult};
         let list_params = if let Some(params_value) = params {
-            serde_json::from_value::<ListToolsParams>(params_value.to_value()).unwrap_or_default()
+            serde_json::from_value::<ListToolsParams>(params_value.to_value()).map_err(|e| {
+                McpError::InvalidParameters(format!("Invalid parameters for tools/list: {}", e))
+            })?
         } else {
             ListToolsParams::new()
         };
@@ -892,7 +881,7 @@ impl JsonRpcHandler for ListToolsHandler {
         }
 
         serde_json::to_value(paginated_response).map_err(|e| {
-            turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(e.to_string())
+            McpError::SerializationError(e)
         })
     }
 
@@ -924,23 +913,20 @@ impl SessionAwareToolHandler {
 
 #[async_trait]
 impl JsonRpcHandler for SessionAwareToolHandler {
+    type Error = McpError;
+
     async fn handle(
         &self,
         method: &str,
         params: Option<turul_mcp_json_rpc_server::RequestParams>,
         session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
-    ) -> turul_mcp_json_rpc_server::r#async::JsonRpcResult<serde_json::Value> {
+    ) -> std::result::Result<serde_json::Value, McpError> {
         debug!("Handling {} request with session support", method);
 
         if method != "tools/call" {
-            return Err(
-                turul_mcp_json_rpc_server::error::JsonRpcProcessingError::RpcError(
-                    turul_mcp_json_rpc_server::JsonRpcError::method_not_found(
-                        turul_mcp_json_rpc_server::types::RequestId::Number(0),
-                        method,
-                    ),
-                ),
-            );
+            return Err(McpError::InvalidParameters(format!(
+                "Method '{}' not supported by tools/call handler", method
+            )));
         }
 
         // MCP Lifecycle Guard: Ensure session is initialized before allowing tool operations (if strict mode enabled)
@@ -952,17 +938,9 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                         "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
                         method, session_ctx.session_id
                     );
-                    let mcp_error = turul_mcp_protocol::McpError::configuration(
+                    return Err(McpError::configuration(
                         "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)",
-                    );
-                    return Err(
-                        turul_mcp_json_rpc_server::error::JsonRpcProcessingError::RpcError(
-                            turul_mcp_json_rpc_server::JsonRpcError::new(
-                                None,
-                                mcp_error.to_json_rpc_error(),
-                            ),
-                        ),
-                    );
+                    ));
                 }
                 debug!(
                     "✅ STRICT MODE: Session {} is initialized - allowing {} request",
@@ -977,32 +955,18 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         }
 
         let params = params.ok_or_else(|| {
-            let mcp_error =
-                turul_mcp_protocol::McpError::MissingParameter("CallToolRequest".to_string());
-            turul_mcp_json_rpc_server::error::JsonRpcProcessingError::RpcError(
-                turul_mcp_json_rpc_server::JsonRpcError::new(None, mcp_error.to_json_rpc_error()),
-            )
+            McpError::MissingParameter("CallToolRequest".to_string())
         })?;
 
         // Use the parameter extraction pattern from the other project
         use turul_mcp_protocol::param_extraction::extract_params;
 
         let call_params: turul_mcp_protocol::tools::CallToolParams = extract_params(params)
-            .map_err(|mcp_error| {
-                turul_mcp_json_rpc_server::error::JsonRpcProcessingError::RpcError(
-                    turul_mcp_json_rpc_server::JsonRpcError::new(
-                        None,
-                        mcp_error.to_json_rpc_error(),
-                    ),
-                )
-            })?;
+            .map_err(|mcp_error| mcp_error)?;
 
         // Find the tool
         let tool = self.tools.get(&call_params.name).ok_or_else(|| {
-            let mcp_error = turul_mcp_protocol::McpError::ToolNotFound(call_params.name.clone());
-            turul_mcp_json_rpc_server::error::JsonRpcProcessingError::RpcError(
-                turul_mcp_json_rpc_server::JsonRpcError::new(None, mcp_error.to_json_rpc_error()),
-            )
+            McpError::ToolNotFound(call_params.name.clone())
         })?;
 
         // Convert JSON-RPC SessionContext to MCP SessionContext for tool execution
@@ -1030,18 +994,14 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
         match tool.call(args, mcp_session_context).await {
             Ok(response) => serde_json::to_value(response).map_err(|e| {
-                turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                    e.to_string(),
-                )
+                McpError::SerializationError(e)
             }),
             Err(error_msg) => {
                 error!("Tool execution error: {}", error_msg);
                 let error_content = vec![ToolResult::text(format!("Error: {}", error_msg))];
                 let response = CallToolResult::error(error_content);
                 serde_json::to_value(response).map_err(|e| {
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                        e.to_string(),
-                    )
+                    McpError::SerializationError(e)
                 })
             }
         }

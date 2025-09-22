@@ -102,9 +102,11 @@ impl McpHandler for PromptsListHandler {
         use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
         use turul_mcp_protocol::prompts::{ListPromptsParams, ListPromptsResult, Prompt};
 
-        // Parse typed parameters instead of manual cursor extraction
+        // Parse typed parameters with proper error handling (MCP compliance)
         let list_params = if let Some(params_value) = params {
-            serde_json::from_value::<ListPromptsParams>(params_value).unwrap_or_default()
+            serde_json::from_value::<ListPromptsParams>(params_value).map_err(|e| {
+                McpError::InvalidParameters(format!("Invalid parameters for prompts/list: {}", e))
+            })?
         } else {
             ListPromptsParams::new()
         };
@@ -335,9 +337,11 @@ impl McpHandler for ResourcesListHandler {
         use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
         use turul_mcp_protocol::resources::{ListResourcesParams, ListResourcesResult, Resource};
 
-        // Parse typed parameters instead of manual cursor extraction
+        // Parse typed parameters with proper error handling (MCP compliance)
         let list_params = if let Some(params_value) = params {
-            serde_json::from_value::<ListResourcesParams>(params_value).unwrap_or_default()
+            serde_json::from_value::<ListResourcesParams>(params_value).map_err(|e| {
+                McpError::InvalidParameters(format!("Invalid parameters for resources/list: {}", e))
+            })?
         } else {
             ListResourcesParams::new()
         };
@@ -874,10 +878,12 @@ impl McpHandler for ResourceTemplatesHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         use turul_mcp_protocol::meta::Cursor;
 
-        // Parse typed parameters for cursor and meta propagation
+        // Parse typed parameters with proper error handling (MCP compliance)
         use turul_mcp_protocol::resources::ListResourceTemplatesParams;
         let list_params = if let Some(params_value) = params {
-            serde_json::from_value::<ListResourceTemplatesParams>(params_value).unwrap_or_default()
+            serde_json::from_value::<ListResourceTemplatesParams>(params_value).map_err(|e| {
+                McpError::InvalidParameters(format!("Invalid parameters for resources/templates/list: {}", e))
+            })?
         } else {
             ListResourceTemplatesParams::new()
         };
