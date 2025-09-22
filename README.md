@@ -1,19 +1,19 @@
-# Turul MCP Framework - Beta-Grade Rust Implementation
+# Turul MCP Framework - Production-Ready Rust Implementation
 
-A comprehensive, battle-tested Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-06-18 specification**.
+A comprehensive, production-ready Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-06-18 specification**.
 
-## ✅ **Beta-Grade Quality** - Comprehensive Test Coverage
-**100+ passing tests across workspace** • **Full SessionContext integration** • **Framework-native testing patterns**
+## ✅ **Production Ready** - Comprehensive Test Coverage
+**100+ passing tests across workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
 
 ## ✨ Key Highlights
 
 - **🏗️ 10 Framework Crates**: Complete MCP ecosystem with core framework, client library, and serverless support
 - **📚 68 Comprehensive Examples**: Real-world business applications and framework demonstration examples (42 active, 26 archived)
-- **🧪 100+ Comprehensive Tests**: Beta-grade test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
+- **🧪 100+ Comprehensive Tests**: Production-grade test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
-- **🌐 Transport Flexibility**: HTTP/1.1 and SSE transport support (WebSocket and stdio planned)
+- **🌐 Transport Flexibility**: HTTP/1.1 and production SSE streaming via SessionMcpHandler (WebSocket and stdio planned)
 - **☁️ Serverless Ready**: AWS Lambda integration with streaming responses and SQS event processing
-- **🔧 Beta Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
+- **🔧 Production Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
 - **⚡ Performance Optimized**: Comprehensive benchmarking suite with >1000 RPS throughput, <100ms response times, and extensive stress testing
 
 ## 🚀 Quick Start
@@ -430,14 +430,16 @@ let server = McpServer::builder()
 
 ### Transport Support
 - **HTTP/1.1 & HTTP/2** - Standard web transport with JSON-RPC
-- **Server-Sent Events (SSE)** - Real-time notifications and streaming
+- **Server-Sent Events (SSE)** - Production streaming via `SessionMcpHandler` (basic handler is example-only)
 - **Stdio** - Command-line integration
 - **AWS Lambda** - Serverless deployment with streaming responses
+
+> **Note**: For production SSE streaming, use `SessionMcpHandler` which provides full real-time event streaming. The basic `McpHttpHandler` includes SSE endpoints for examples but has limited streaming capabilities.
 
 ## 📚 Examples Overview
 
 ### 🏢 Real-World Business Applications
-Beta-grade servers solving actual business problems:
+Production-ready servers solving actual business problems:
 
 1. **comprehensive-server** → Development Team Integration Platform
 2. **dynamic-resource-server** → Enterprise API Data Gateway
@@ -483,9 +485,9 @@ sam deploy --guided
 
 ## 🧪 Testing & Quality
 
-### 🧪 **Comprehensive Test Coverage - Beta Quality**
+### 🧪 **Comprehensive Test Coverage - Production Quality**
 
-**Framework Excellence**: 100+ tests across all components with full SessionContext integration:
+**Framework Excellence**: 100+ tests across all components with complete async SessionContext integration:
 
 - **✅ Core Framework Tests** - Protocol, server, client, derive macros (36+ passing)
 - **✅ SessionContext Integration** - Full session state management (8/8 passing) 
@@ -815,7 +817,7 @@ let content = client.read_resource("config://app.json").await?;
 - **Rust 2024 Edition** - Latest language features and performance improvements
 - **Tokio/Hyper** - High-performance async runtime with HTTP/2 support
 
-### Beta Quality
+### Production Quality
 - **Session Management** - Automatic cleanup and state persistence
 - **Real-time Notifications** - SSE-based event streaming
 - **CORS Support** - Browser client compatibility
@@ -983,6 +985,6 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 ---
 
-**🚀 Ready to build beta-grade MCP servers?** Start with our [comprehensive examples](examples/) or check the [getting started guide](EXAMPLES.md).
+**🚀 Ready to build production-ready MCP servers?** Start with our [comprehensive examples](examples/) or check the [getting started guide](EXAMPLES.md).
 
 **💡 Need help?** Open an issue or check our [65+ working examples](examples/) covering everything from simple calculators to enterprise systems.
