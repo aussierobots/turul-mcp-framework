@@ -36,7 +36,7 @@
 //!
 //! ## Transport Types
 //!
-//! ### HTTP Transport (Streamable HTTP 2025-03-26+)
+//! ### HTTP Transport (Streamable HTTP)
 //!
 //! ```rust,no_run
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -47,7 +47,7 @@
 //! # }
 //! ```
 //!
-//! ### SSE Transport (HTTP+SSE 2024-11-05)
+//! ### SSE Transport (HTTP+SSE)
 //!
 //! ```rust,no_run
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

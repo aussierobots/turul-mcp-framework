@@ -31,9 +31,9 @@ pub use sse::SseTransport;
 /// Transport type enumeration
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransportType {
-    /// HTTP transport (Streamable HTTP 2025-03-26+)
+    /// HTTP transport (Streamable HTTP)
     Http,
-    /// Server-Sent Events transport (HTTP+SSE 2024-11-05)
+    /// Server-Sent Events transport (HTTP+SSE)
     Sse,
     // Future transport types:
     // WebSocket,

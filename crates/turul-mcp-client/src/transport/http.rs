@@ -16,7 +16,7 @@ use crate::transport::{
     EventReceiver, ServerEvent, TransportStatistics
 };
 
-/// HTTP transport for MCP client (Streamable HTTP 2025-03-26+)
+/// HTTP transport for MCP client (Streamable HTTP)
 #[derive(Debug)]
 pub struct HttpTransport {
     /// HTTP client

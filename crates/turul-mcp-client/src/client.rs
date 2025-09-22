@@ -247,10 +247,10 @@ impl McpClient {
             )
             .await?;
 
-        // Send initialized notification
+        // Send initialized notification per MCP 2025-06-18 spec
         let initialized_notification = json!({
             "jsonrpc": "2.0",
-            "method": "initialized",
+            "method": "notifications/initialized",
             "params": {}
         });
 
