@@ -59,9 +59,10 @@ mod tests;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::McpTool;
 /// use turul_mcp_protocol::McpResult;
+/// use turul_mcp_server::SessionContext;
 ///
 /// #[derive(McpTool, Clone)]
 /// #[tool(name = "add", description = "Add two numbers")]
@@ -73,7 +74,7 @@ mod tests;
 /// }
 ///
 /// impl AddTool {
-///     async fn execute(&self) -> McpResult<String> {
+///     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
 ///         Ok(format!("{} + {} = {}", self.a, self.b, self.a + self.b))
 ///     }
 /// }

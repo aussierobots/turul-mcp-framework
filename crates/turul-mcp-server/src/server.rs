@@ -133,6 +133,15 @@ impl McpServer {
     }
 
     /// Create a new builder
+    ///
+    /// # Example
+    /// ```rust
+    /// use turul_mcp_server::McpServer;
+    ///
+    /// let builder = McpServer::builder()
+    ///     .name("my-server")
+    ///     .version("1.0.0");
+    /// ```
     pub fn builder() -> McpServerBuilder {
         McpServerBuilder::new()
     }
