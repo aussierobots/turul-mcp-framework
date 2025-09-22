@@ -199,20 +199,38 @@ let server = HttpMcpServerBuilder::new()
 use turul_http_mcp_server::{HttpMcpServerBuilder, JsonRpcHandler};
 use async_trait::async_trait;
 
+// Domain error type for handlers
+#[derive(thiserror::Error, Debug)]
+enum MyError {
+    #[error("Unknown method: {0}")]
+    UnknownMethod(String),
+}
+
+impl turul_mcp_json_rpc_server::r#async::ToJsonRpcError for MyError {
+    fn to_error_object(&self) -> turul_mcp_json_rpc_server::error::JsonRpcErrorObject {
+        match self {
+            MyError::UnknownMethod(method) =>
+                turul_mcp_json_rpc_server::error::JsonRpcErrorObject::method_not_found(method),
+        }
+    }
+}
+
 // Custom handler implementation
 struct CustomHandler;
 
 #[async_trait]
 impl JsonRpcHandler for CustomHandler {
+    type Error = MyError;  // Use domain errors
+
     async fn handle(
-        &self, 
-        method: &str, 
+        &self,
+        method: &str,
         params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        session_context: Option<turul_mcp_json_rpc_server::SessionContext>
-    ) -> turul_mcp_json_rpc_server::JsonRpcResult<serde_json::Value> {
+        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>
+    ) -> Result<serde_json::Value, Self::Error> {
         match method {
             "custom/method" => Ok(serde_json::json!({"result": "success"})),
-            _ => Err(turul_mcp_json_rpc_server::JsonRpcProcessingError::MethodNotFound(method.to_string()).into()),
+            _ => Err(MyError::UnknownMethod(method.to_string())),
         }
     }
 }
@@ -501,9 +519,9 @@ Available features:
 
 This transport layer supports all MCP protocol versions:
 
-- **2024-11-05**: Basic MCP without streamable HTTP
-- **2025-03-26**: Streamable HTTP with SSE support  
-- **2025-06-18**: Full feature set with meta fields and enhanced capabilities
+- **Basic MCP**: Core protocol without streamable HTTP
+- **Streamable HTTP**: Enhanced protocol with SSE support
+- **Full Feature Set**: Complete protocol with meta fields and enhanced capabilities
 
 ### HTTP Specifications
 
