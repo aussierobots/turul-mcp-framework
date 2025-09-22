@@ -6,7 +6,8 @@ use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use crate::{McpTool, McpServer, Result, McpFrameworkError};
+use crate::{McpTool, McpServer, Result};
+use turul_mcp_protocol::McpError;
 use crate::resource::McpResource;
 use crate::{McpElicitation, McpPrompt, McpSampling, McpCompletion, McpLogger, McpRoot, McpNotification};
 use crate::handlers::*;
@@ -921,17 +922,15 @@ impl McpServerBuilder {
     pub fn build(mut self) -> Result<McpServer> {
         // Validate configuration
         if self.name.is_empty() {
-            return Err(McpFrameworkError::Config("Server name cannot be empty".to_string()));
+            return Err(McpError::configuration("Server name cannot be empty"));
         }
         if self.version.is_empty() {
-            return Err(McpFrameworkError::Config("Server version cannot be empty".to_string()));
+            return Err(McpError::configuration("Server version cannot be empty"));
         }
         
         // Check for validation errors collected during registration
         if !self.validation_errors.is_empty() {
-            return Err(McpFrameworkError::Config(
-                format!("Resource validation errors:\n{}", self.validation_errors.join("\n"))
-            ));
+            return Err(McpError::configuration(&format!("Resource validation errors:\n{}", self.validation_errors.join("\n"))));
         }
 
         // Auto-register resource handlers if resources were registered
@@ -1196,7 +1195,7 @@ mod tests {
             .build();
 
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), McpFrameworkError::Config(_)));
+        assert!(matches!(result.unwrap_err(), McpError::ConfigurationError(_)));
     }
 
     // Test resources for auto-detection testing

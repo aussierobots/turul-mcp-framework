@@ -31,9 +31,13 @@ type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 /// ## Async API
 ///
 /// All session state operations return futures and must be awaited:
-/// ```rust
+/// ```rust,no_run
+/// # use turul_mcp_server::SessionContext;
+/// # use serde_json::json;
+/// # async fn example(ctx: SessionContext) {
 /// let value = (ctx.get_state)("key").await;
 /// (ctx.set_state)("key", json!("value")).await;
+/// # }
 /// ```
 #[derive(Clone)]
 pub struct SessionContext {
