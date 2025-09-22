@@ -3,7 +3,7 @@
 //! Tests the security aspects of the roots protocol, including access control,
 //! path validation, and file system boundaries.
 
-use mcp_roots_tests::{McpTestClient, TestServerManager, TestFixtures, json, debug, info};
+use mcp_roots_tests::{McpTestClient, TestServerManager, TestFixtures, json, info, warn};
 use mcp_roots_tests::test_utils::{roots_capabilities, extract_roots_list, is_uri_in_allowed_roots};
 
 #[tokio::test]
@@ -72,11 +72,12 @@ async fn test_roots_file_operation_security() {
     let tools_result = client.make_request("tools/list", json!({}), 71).await
         .expect("Failed to list tools");
 
+    let empty_vec = vec![];
     let tools = tools_result.get("result")
         .and_then(|r| r.as_object())
         .and_then(|obj| obj.get("tools"))
         .and_then(|tools| tools.as_array())
-        .unwrap_or(&vec![]);
+        .unwrap_or(&empty_vec);
 
     // Look for file operation tools
     let file_operation_tool = tools.iter()
@@ -104,8 +105,9 @@ async fn test_roots_file_operation_security() {
 
         match allowed_operation {
             Ok(response) => {
-                if let Some(content) = TestFixtures::extract_tool_result_text(&response) {
-                    assert!(content.contains("✅") || content.contains("Success"), 
+                if let Some(content) = TestFixtures::extract_tool_result_object(&response) {
+                    let content_str = content.to_string();
+                    assert!(content_str.contains("✅") || content_str.contains("Success"),
                            "Allowed operation should succeed");
                     info!("✅ Allowed file operation succeeded");
                 } else {
@@ -133,10 +135,11 @@ async fn test_roots_file_operation_security() {
                            message.to_lowercase().contains("outside"),
                            "Error should indicate access denial: {}", message);
                     info!("✅ Blocked operation properly denied: {}", message);
-                } else if let Some(content) = TestFixtures::extract_tool_result_text(&response) {
-                    assert!(content.to_lowercase().contains("denied") || 
-                           content.to_lowercase().contains("outside") ||
-                           content.to_lowercase().contains("not allowed"),
+                } else if let Some(content) = TestFixtures::extract_tool_result_object(&response) {
+                    let content_str = content.to_string().to_lowercase();
+                    assert!(content_str.contains("denied") ||
+                           content_str.contains("outside") ||
+                           content_str.contains("not allowed"),
                            "Should indicate access denial in result");
                     info!("✅ Blocked operation properly denied in result");
                 }
@@ -163,11 +166,12 @@ async fn test_roots_path_traversal_protection() {
     let tools_result = client.make_request("tools/list", json!({}), 72).await
         .expect("Failed to list tools");
 
+    let empty_vec = vec![];
     let tools = tools_result.get("result")
         .and_then(|r| r.as_object())
         .and_then(|obj| obj.get("tools"))
         .and_then(|tools| tools.as_array())
-        .unwrap_or(&vec![]);
+        .unwrap_or(&empty_vec);
 
     // Look for file operation tools
     let file_tool = tools.iter()
@@ -209,12 +213,13 @@ async fn test_roots_path_traversal_protection() {
                                message.to_lowercase().contains("outside"),
                                "Should block traversal attack: {}", attack_path);
                         info!("✅ Path traversal attack blocked: {}", attack_path);
-                    } else if let Some(content) = TestFixtures::extract_tool_result_text(&response) {
+                    } else if let Some(content) = TestFixtures::extract_tool_result_object(&response) {
                         // If it succeeds, it should be because path is actually allowed
                         // or because the tool validates and rejects it in the result
-                        if content.to_lowercase().contains("denied") || 
-                           content.to_lowercase().contains("outside") ||
-                           content.to_lowercase().contains("not allowed") {
+                        let content_str = content.to_string().to_lowercase();
+                        if content_str.contains("denied") ||
+                           content_str.contains("outside") ||
+                           content_str.contains("not allowed") {
                             info!("✅ Path traversal attack blocked in result: {}", attack_path);
                         } else {
                             // This should not happen - traversal should be blocked
@@ -222,7 +227,7 @@ async fn test_roots_path_traversal_protection() {
                         }
                     }
                 }
-                Err(e) => {
+                Err(_e) => {
                     info!("✅ Path traversal attack rejected at HTTP level: {}", attack_path);
                 }
             }
@@ -245,11 +250,12 @@ async fn test_roots_permission_levels() {
     let tools_result = client.make_request("tools/list", json!({}), 73).await
         .expect("Failed to list tools");
 
+    let empty_vec = vec![];
     let tools = tools_result.get("result")
         .and_then(|r| r.as_object())
         .and_then(|obj| obj.get("tools"))
         .and_then(|tools| tools.as_array())
-        .unwrap_or(&vec![]);
+        .unwrap_or(&empty_vec);
 
     let file_tool = tools.iter()
         .find(|tool| {
@@ -286,8 +292,9 @@ async fn test_roots_permission_levels() {
             match result {
                 Ok(response) => {
                     let has_error = response.contains_key("error");
-                    let success_in_result = if let Some(content) = TestFixtures::extract_tool_result_text(&response) {
-                        content.contains("✅") || content.to_lowercase().contains("success")
+                    let success_in_result = if let Some(content) = TestFixtures::extract_tool_result_object(&response) {
+                        let content_str = content.to_string();
+                        content_str.contains("✅") || content_str.to_lowercase().contains("success")
                     } else {
                         false
                     };
@@ -305,10 +312,11 @@ async fn test_roots_permission_levels() {
                             let error = response.get("error").unwrap().as_object().unwrap();
                             let message = error.get("message").unwrap().as_str().unwrap();
                             info!("✅ {} properly denied: {}", test_name, message);
-                        } else if let Some(content) = TestFixtures::extract_tool_result_text(&response) {
-                            if content.to_lowercase().contains("denied") || 
-                               content.to_lowercase().contains("read-only") ||
-                               content.to_lowercase().contains("not allowed") {
+                        } else if let Some(content) = TestFixtures::extract_tool_result_object(&response) {
+                            let content_str = content.to_string().to_lowercase();
+                            if content_str.contains("denied") ||
+                               content_str.contains("read-only") ||
+                               content_str.contains("not allowed") {
                                 info!("✅ {} properly denied in result", test_name);
                             } else {
                                 warn!("⚠️  {} may have incorrectly succeeded", test_name);

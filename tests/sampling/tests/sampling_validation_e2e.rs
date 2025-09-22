@@ -3,7 +3,7 @@
 //! Tests the robustness and validation logic of the sampling protocol implementation.
 //! Focuses on error handling, parameter validation, and edge cases.
 
-use mcp_sampling_tests::{McpTestClient, TestServerManager, TestFixtures, json, debug, info};
+use mcp_sampling_tests::{McpTestClient, TestServerManager, json, debug, info};
 use mcp_sampling_tests::test_utils::{sampling_capabilities, extract_sampling_message, create_message_request};
 
 #[tokio::test]
@@ -255,10 +255,10 @@ async fn test_sampling_concurrent_requests() {
 
     // Send concurrent requests
     let mut handles = Vec::new();
-    for (i, mut client) in clients.into_iter().enumerate() {
+    for (i, client) in clients.into_iter().enumerate() {
         let request = create_message_request(&format!("Concurrent request {}", i + 1), 100);
         let handle = tokio::spawn(async move {
-            client.make_request("sampling/createMessage", request, 35 + i as i64).await
+            client.make_request("sampling/createMessage", request, 35 + i as u64).await
         });
         handles.push((i, handle));
     }

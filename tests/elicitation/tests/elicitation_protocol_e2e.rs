@@ -53,8 +53,9 @@ async fn test_elicitation_onboarding_workflow() {
     // Verify workflow started successfully
     assert!(workflow_result.contains_key("result"), "Should have workflow result");
 
-    if let Some(content) = TestFixtures::extract_tool_result_text(&workflow_result) {
-        assert!(content.contains("WORKFLOW STARTED") || content.contains("onboarding"), 
+    if let Some(content) = TestFixtures::extract_tool_result_object(&workflow_result) {
+        let content_str = content.to_string();
+        assert!(content_str.contains("WORKFLOW STARTED") || content_str.contains("onboarding"), 
                "Should indicate workflow started");
         info!("✅ Personal onboarding workflow started successfully");
     }
@@ -65,8 +66,9 @@ async fn test_elicitation_onboarding_workflow() {
         "step_index": 0
     })).await.expect("Business workflow should start");
 
-    if let Some(content) = TestFixtures::extract_tool_result_text(&business_workflow) {
-        assert!(content.contains("WORKFLOW STARTED") || content.contains("onboarding"), 
+    if let Some(content) = TestFixtures::extract_tool_result_object(&business_workflow) {
+        let content_str = content.to_string();
+        assert!(content_str.contains("WORKFLOW STARTED") || content_str.contains("onboarding"), 
                "Should indicate business workflow started");
         info!("✅ Business onboarding workflow started successfully");
     }
@@ -114,8 +116,9 @@ async fn test_elicitation_compliance_forms() {
             "form_type": "gdpr_data_request"
         })).await.expect("GDPR form should work");
 
-        if let Some(content) = TestFixtures::extract_tool_result_text(&gdpr_result) {
-            assert!(content.contains("GDPR") || content.contains("data request"), 
+        if let Some(content) = TestFixtures::extract_tool_result_object(&gdpr_result) {
+        let content_str = content.to_string();
+            assert!(content_str.contains("GDPR") || content_str.contains("data request"), 
                    "Should indicate GDPR form");
             info!("✅ GDPR compliance form generated successfully");
         }
@@ -125,8 +128,9 @@ async fn test_elicitation_compliance_forms() {
             "form_type": "ccpa_opt_out"
         })).await.expect("CCPA form should work");
 
-        if let Some(content) = TestFixtures::extract_tool_result_text(&ccpa_result) {
-            assert!(content.contains("CCPA") || content.contains("opt out"), 
+        if let Some(content) = TestFixtures::extract_tool_result_object(&ccpa_result) {
+        let content_str = content.to_string();
+            assert!(content_str.contains("CCPA") || content_str.contains("opt out"), 
                    "Should indicate CCPA form");
             info!("✅ CCPA compliance form generated successfully");
         }
@@ -177,8 +181,9 @@ async fn test_elicitation_preference_collection() {
             "preference_type": "notification_preferences"
         })).await.expect("Notification preferences should work");
 
-        if let Some(content) = TestFixtures::extract_tool_result_text(&notification_result) {
-            assert!(content.contains("NOTIFICATION") || content.contains("preference"), 
+        if let Some(content) = TestFixtures::extract_tool_result_object(&notification_result) {
+        let content_str = content.to_string();
+            assert!(content_str.contains("NOTIFICATION") || content_str.contains("preference"), 
                    "Should indicate notification preferences");
             info!("✅ Notification preferences collection working");
         }
@@ -188,8 +193,9 @@ async fn test_elicitation_preference_collection() {
             "preference_type": "accessibility_preferences"
         })).await.expect("Accessibility preferences should work");
 
-        if let Some(content) = TestFixtures::extract_tool_result_text(&accessibility_result) {
-            assert!(content.contains("ACCESSIBILITY") || content.contains("preference"), 
+        if let Some(content) = TestFixtures::extract_tool_result_object(&accessibility_result) {
+        let content_str = content.to_string();
+            assert!(content_str.contains("ACCESSIBILITY") || content_str.contains("preference"), 
                    "Should indicate accessibility preferences");
             info!("✅ Accessibility preferences collection working");
         }
@@ -241,8 +247,9 @@ async fn test_elicitation_customer_surveys() {
             "customer_segment": "new_customer"
         })).await.expect("Customer survey should work");
 
-        if let Some(content) = TestFixtures::extract_tool_result_text(&survey_result) {
-            assert!(content.contains("SURVEY") || content.contains("satisfaction"), 
+        if let Some(content) = TestFixtures::extract_tool_result_object(&survey_result) {
+        let content_str = content.to_string();
+            assert!(content_str.contains("SURVEY") || content_str.contains("satisfaction"), 
                    "Should indicate customer survey");
             info!("✅ Customer satisfaction survey working");
         }
@@ -257,8 +264,9 @@ async fn test_elicitation_customer_surveys() {
 
             match segment_result {
                 Ok(response) => {
-                    if let Some(content) = TestFixtures::extract_tool_result_text(&response) {
-                        assert!(content.contains(segment) || content.contains("SURVEY"), 
+                    if let Some(content) = TestFixtures::extract_tool_result_object(&response) {
+        let content_str = content.to_string();
+                        assert!(content_str.contains(segment) || content_str.contains("SURVEY"), 
                                "Should handle segment: {}", segment);
                         info!("✅ Survey for {} segment working", segment);
                     }
@@ -325,8 +333,9 @@ async fn test_elicitation_data_validation() {
 
             match validation_result {
                 Ok(response) => {
-                    if let Some(content) = TestFixtures::extract_tool_result_text(&response) {
-                        assert!(content.contains("VALIDATION") || content.contains(category), 
+                    if let Some(content) = TestFixtures::extract_tool_result_object(&response) {
+        let content_str = content.to_string();
+                        assert!(content_str.contains("VALIDATION") || content_str.contains(category), 
                                "Should handle validation category: {}", category);
                         info!("✅ {} validation working", category);
                     }

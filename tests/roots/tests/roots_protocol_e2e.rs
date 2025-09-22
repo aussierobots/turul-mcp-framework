@@ -3,7 +3,7 @@
 //! Tests the roots/list endpoint implementation and root directory discovery.
 //! Validates protocol compliance and file system access control.
 
-use mcp_roots_tests::{McpTestClient, TestServerManager, TestFixtures, json, debug, info};
+use mcp_roots_tests::{McpTestClient, TestServerManager, json, debug, info};
 use mcp_roots_tests::test_utils::{roots_capabilities, extract_roots_list, validate_root_object};
 
 #[tokio::test]
@@ -294,9 +294,9 @@ async fn test_roots_concurrent_access() {
 
     // Send concurrent requests
     let mut handles = Vec::new();
-    for (i, mut client) in clients.into_iter().enumerate() {
+    for (i, client) in clients.into_iter().enumerate() {
         let handle = tokio::spawn(async move {
-            client.make_request("roots/list", json!({}), 60 + i as i64).await
+            client.make_request("roots/list", json!({}), 60 + i as u64).await
         });
         handles.push((i, handle));
     }

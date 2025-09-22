@@ -3,11 +3,11 @@
 //! Tests the sampling/createMessage endpoint implementation with real sampling handlers.
 //! Validates protocol compliance, message generation, and error handling.
 
-use mcp_sampling_tests::{McpTestClient, TestServerManager, TestFixtures, json, debug, info};
+use mcp_sampling_tests::{McpTestClient, TestServerManager, json, debug, info};
 use mcp_sampling_tests::test_utils::{sampling_capabilities, extract_sampling_message, create_message_request};
 
 #[tokio::test]
-async fn test_sampling_createMessage_endpoint() {
+async fn test_sampling_create_message_endpoint() {
     let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_sampling_server().await.expect("Failed to start sampling server");
