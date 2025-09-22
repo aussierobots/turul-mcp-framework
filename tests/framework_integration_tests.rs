@@ -3,13 +3,11 @@
 //! These tests use the framework's actual APIs and typed structures,
 //! not raw JSON manipulation.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
-use turul_mcp_server::{McpServerBuilder, McpResult, SessionContext, McpTool, ToolBuilder};
-use turul_mcp_protocol::{
-    tools::{CallToolRequest, CallToolParams, ToolResult},
-};
 use turul_mcp_derive::{McpTool, mcp_tool};
+use turul_mcp_protocol::tools::{CallToolParams, CallToolRequest, ToolResult};
+use turul_mcp_server::{McpResult, McpServerBuilder, McpTool, SessionContext, ToolBuilder};
 
 /// Test tool using derive macro - proper framework usage
 #[derive(McpTool, Default)]
@@ -32,7 +30,7 @@ impl CalculatorTool {
 async fn multiply_tool(
     #[param(description = "First number")] a: f64,
     #[param(description = "Second number")] b: f64,
-    _session: Option<SessionContext>
+    _session: Option<SessionContext>,
 ) -> McpResult<f64> {
     Ok(a * b)
 }
@@ -45,13 +43,13 @@ mod integration_tests {
     async fn test_framework_tool_creation_and_execution() {
         // Test 1: Derive macro tool
         let calc_tool = CalculatorTool { a: 5.0, b: 3.0 };
-        
+
         // Use framework's tool trait, not raw JSON
-        let result = calc_tool.call(
-            json!({"a": 5.0, "b": 3.0}), 
-            None
-        ).await.unwrap();
-        
+        let result = calc_tool
+            .call(json!({"a": 5.0, "b": 3.0}), None)
+            .await
+            .unwrap();
+
         // Verify using framework types
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
@@ -60,31 +58,31 @@ mod integration_tests {
                 // Derive macro uses "output" as the default field name
                 assert_eq!(parsed["output"], 8.0);
             }
-            _ => panic!("Expected text result")
+            _ => panic!("Expected text result"),
         }
     }
 
     #[tokio::test]
     async fn test_framework_function_macro_tool() {
-        // Test 2: Function macro tool  
+        // Test 2: Function macro tool
         let multiply = multiply_tool();
-        
-        let result = multiply.call(
-            json!({"a": 4.0, "b": 6.0}),
-            None
-        ).await.unwrap();
-        
+
+        let result = multiply
+            .call(json!({"a": 4.0, "b": 6.0}), None)
+            .await
+            .unwrap();
+
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
             ToolResult::Text { text } => {
                 let parsed: Value = serde_json::from_str(text).unwrap();
                 assert_eq!(parsed["result"], 24.0);
             }
-            _ => panic!("Expected text result")
+            _ => panic!("Expected text result"),
         }
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_framework_builder_pattern_tool() {
         // Test 3: Builder pattern - using framework builders
         let tool = ToolBuilder::new("division")
@@ -101,12 +99,12 @@ mod integration_tests {
             })
             .build()
             .unwrap();
-            
-        let result = tool.call(
-            json!({"dividend": 15.0, "divisor": 3.0}),
-            None  
-        ).await.unwrap();
-        
+
+        let result = tool
+            .call(json!({"dividend": 15.0, "divisor": 3.0}), None)
+            .await
+            .unwrap();
+
         assert_eq!(result.content.len(), 1);
     }
 
@@ -123,7 +121,7 @@ mod integration_tests {
 
         // Note: Server integration tests would require HTTP server setup
         // For now, just verify the server builds successfully
-        assert!(true); // Server built successfully
+        // Server built successfully - continuing with test
     }
 
     #[tokio::test]
@@ -132,19 +130,19 @@ mod integration_tests {
         let mut args_map = HashMap::new();
         args_map.insert("a".to_string(), json!(10.0));
         args_map.insert("b".to_string(), json!(5.0));
-        
+
         let _call_request = CallToolRequest {
             method: "tools/call".to_string(),
             params: CallToolParams {
                 name: "calculator".to_string(),
                 arguments: Some(args_map),
                 meta: None,
-            }
+            },
         };
-        
+
         // Note: Protocol request handling would require full server dispatch
         // This test verifies proper type construction
-        assert!(true); // Request constructed successfully
+        // Request constructed successfully - continuing with test
     }
 
     #[tokio::test]
@@ -152,35 +150,30 @@ mod integration_tests {
         // Test 6: Proper error handling using framework types
         let tool = ToolBuilder::new("error_test")
             .description("Tool that errors")
-            .execute(|_| async move {
-                Err("Intentional test error".into())
-            })
+            .execute(|_| async move { Err("Intentional test error".into()) })
             .build()
             .unwrap();
-            
+
         let result = tool.call(json!({}), None).await;
-        
+
         // Use framework error types
         assert!(result.is_err());
         match result.unwrap_err() {
             turul_mcp_protocol::McpError::ToolExecutionError(msg) => {
                 assert!(msg.contains("Intentional test error"));
             }
-            _ => panic!("Expected ToolExecutionError")
+            _ => panic!("Expected ToolExecutionError"),
         }
     }
 
-    #[tokio::test] 
+    #[tokio::test]
     async fn test_framework_session_integration() {
         // Test 7: Basic SessionContext usage (without test helpers for now)
         let tool = CalculatorTool { a: 7.0, b: 2.0 };
-        
+
         // Test with None session (should still work for basic tools)
-        let result = tool.call(
-            json!({"a": 7.0, "b": 2.0}),
-            None
-        ).await.unwrap();
-        
+        let result = tool.call(json!({"a": 7.0, "b": 2.0}), None).await.unwrap();
+
         // Verify result structure
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
@@ -189,7 +182,7 @@ mod integration_tests {
                 // Derive macro uses "output" as the default field name
                 assert_eq!(parsed["output"], 9.0);
             }
-            _ => panic!("Expected text result")
+            _ => panic!("Expected text result"),
         }
     }
 }

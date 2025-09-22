@@ -1,10 +1,14 @@
 //! Test for custom output field name feature
 
-use turul_mcp_derive::mcp_tool;
-use turul_mcp_server::{McpTool, McpResult};
 use serde_json::json;
+use turul_mcp_derive::mcp_tool;
+use turul_mcp_server::{McpResult, McpTool};
 
-#[mcp_tool(name = "test_custom_field", description = "Test custom output field", output_field = "sum")]
+#[mcp_tool(
+    name = "test_custom_field",
+    description = "Test custom output field",
+    output_field = "sum"
+)]
 async fn test_custom_field_tool(
     #[param(description = "First number")] a: f64,
     #[param(description = "Second number")] b: f64,
@@ -16,20 +20,20 @@ async fn test_custom_field_tool(
 async fn test_custom_output_field_name() {
     let tool = test_custom_field_tool();
     let args = json!({"a": 5.0, "b": 3.0});
-    
+
     let result = tool.call(args, None).await.unwrap();
-    
+
     // Verify structured content uses "sum" instead of "result"
     assert!(result.structured_content.is_some());
     if let Some(structured) = result.structured_content {
         // Should have "sum" field, not "result" field
         assert!(structured.get("sum").is_some());
         assert!(structured.get("result").is_none());
-        
+
         let sum_value = structured.get("sum").unwrap().as_f64().unwrap();
         assert_eq!(sum_value, 8.0);
     }
-    
+
     // Verify basic properties
     assert!(!result.content.is_empty());
     assert_eq!(result.is_error, Some(false));
@@ -79,7 +83,10 @@ struct GetTileMetadataTool {
 }
 
 impl GetTileMetadataTool {
-    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<TileMetadata> {
+    async fn execute(
+        &self,
+        _session: Option<turul_mcp_server::SessionContext>,
+    ) -> turul_mcp_server::McpResult<TileMetadata> {
         Ok(TileMetadata {
             tile_id: self.tile_id.clone(),
             elevation: 1234.5,
@@ -107,17 +114,29 @@ async fn test_struct_custom_output_field_name() {
         println!("Structured content: {:#}", structured);
 
         // Should have "tileMetadata" field as specified in output_field
-        assert!(structured.get("tileMetadata").is_some(),
-                "Expected 'tileMetadata' field, got keys: {:?}",
-                structured.as_object().unwrap().keys().collect::<Vec<_>>());
-        assert!(structured.get("output").is_none(),
-                "Should not have 'output' field when custom field is specified");
-        assert!(!structured.get("tileMetadata").is_none(),
-                "Should not have struct name as field when custom field is specified");
+        assert!(
+            structured.get("tileMetadata").is_some(),
+            "Expected 'tileMetadata' field, got keys: {:?}",
+            structured.as_object().unwrap().keys().collect::<Vec<_>>()
+        );
+        assert!(
+            structured.get("output").is_none(),
+            "Should not have 'output' field when custom field is specified"
+        );
+        assert!(
+            structured.get("tileMetadata").is_some(),
+            "Should not have struct name as field when custom field is specified"
+        );
 
         let tile_data = structured.get("tileMetadata").unwrap();
-        assert_eq!(tile_data.get("tile_id").unwrap().as_str().unwrap(), "TILE_123");
-        assert_eq!(tile_data.get("elevation").unwrap().as_f64().unwrap(), 1234.5);
+        assert_eq!(
+            tile_data.get("tile_id").unwrap().as_str().unwrap(),
+            "TILE_123"
+        );
+        assert_eq!(
+            tile_data.get("elevation").unwrap().as_f64().unwrap(),
+            1234.5
+        );
     }
 
     // Test the schema
@@ -129,11 +148,15 @@ async fn test_struct_custom_output_field_name() {
 
         // Verify schema properties match the custom field name
         if let Some(properties) = &schema.properties {
-            assert!(properties.contains_key("tileMetadata"),
-                    "Schema should have 'tileMetadata' property, got properties: {:?}",
-                    properties.keys().collect::<Vec<_>>());
-            assert!(!properties.contains_key("output"),
-                    "Schema should not have 'output' property when custom field is specified");
+            assert!(
+                properties.contains_key("tileMetadata"),
+                "Schema should have 'tileMetadata' property, got properties: {:?}",
+                properties.keys().collect::<Vec<_>>()
+            );
+            assert!(
+                !properties.contains_key("output"),
+                "Schema should not have 'output' property when custom field is specified"
+            );
 
             // Verify we have the basic tileMetadata schema structure
             if let Some(tile_metadata_schema) = properties.get("tileMetadata") {
@@ -142,9 +165,12 @@ async fn test_struct_custom_output_field_name() {
                         println!("✅ TileMetadata has Object schema (basic structure)");
                         // Note: Detailed schema generation is not yet implemented
                         // See DETAILED_SCHEMA_ANALYSIS.md for implementation plan
-                    },
+                    }
                     _ => {
-                        panic!("TileMetadata should have Object schema, got: {:#?}", tile_metadata_schema);
+                        panic!(
+                            "TileMetadata should have Object schema, got: {:#?}",
+                            tile_metadata_schema
+                        );
                     }
                 }
             }
@@ -152,8 +178,11 @@ async fn test_struct_custom_output_field_name() {
 
         // Verify required fields match
         if let Some(required) = &schema.required {
-            assert!(required.contains(&"tileMetadata".to_string()),
-                    "Schema should require 'tileMetadata' field, got required: {:?}", required);
+            assert!(
+                required.contains(&"tileMetadata".to_string()),
+                "Schema should require 'tileMetadata' field, got required: {:?}",
+                required
+            );
         }
     }
 
@@ -163,8 +192,11 @@ async fn test_struct_custom_output_field_name() {
 
     // Verify the output schema in tool metadata matches our expectation
     if let Some(output_schema) = tool_metadata.output_schema
-        && let Some(properties) = &output_schema.properties {
-            assert!(properties.contains_key("tileMetadata"),
-                    "Tool metadata should have 'tileMetadata' in output schema");
-        }
+        && let Some(properties) = &output_schema.properties
+    {
+        assert!(
+            properties.contains_key("tileMetadata"),
+            "Tool metadata should have 'tileMetadata' in output schema"
+        );
+    }
 }

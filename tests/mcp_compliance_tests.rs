@@ -14,11 +14,12 @@
 //! - _meta field handling
 //! - Session and context management
 
-use std::collections::HashMap;
 use serde_json::json;
+use std::collections::HashMap;
 
 use turul_mcp_protocol::{
-    JsonRpcRequest, JsonRpcResponse, JsonRpcError, JsonRpcNotification, ResultWithMeta, RequestParams
+    JsonRpcError, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, RequestParams,
+    ResultWithMeta,
 };
 
 /// Test JSON-RPC 2.0 compliance
@@ -45,7 +46,7 @@ mod json_rpc_compliance {
 
         // Parse as MCP request
         let request: JsonRpcRequest = serde_json::from_value(valid_request).unwrap();
-        
+
         // Validate required fields
         assert_eq!(request.jsonrpc, "2.0");
         assert_eq!(request.method, "initialize");
@@ -59,11 +60,14 @@ mod json_rpc_compliance {
         let mut data = HashMap::new();
         data.insert("protocolVersion".to_string(), json!("2025-06-18"));
         data.insert("capabilities".to_string(), json!({}));
-        data.insert("serverInfo".to_string(), json!({
-            "name": "test-server",
-            "version": "1.0.0"
-        }));
-        
+        data.insert(
+            "serverInfo".to_string(),
+            json!({
+                "name": "test-server",
+                "version": "1.0.0"
+            }),
+        );
+
         let result = ResultWithMeta::new(data);
         let success_response = JsonRpcResponse::success(json!(1), result);
 
@@ -73,16 +77,13 @@ mod json_rpc_compliance {
         assert!(success_response.error.is_none());
 
         // Test error response
-        let error_response = JsonRpcResponse::error(
-            json!(2), 
-            JsonRpcError::method_not_found()
-        );
+        let error_response = JsonRpcResponse::error(json!(2), JsonRpcError::method_not_found());
 
         assert_eq!(error_response.jsonrpc, "2.0");
         assert_eq!(error_response.id, json!(2));
         assert!(error_response.result.is_none());
         assert!(error_response.error.is_some());
-        
+
         let error = error_response.error.unwrap();
         assert_eq!(error.code, -32601); // Method not found
     }
@@ -91,7 +92,7 @@ mod json_rpc_compliance {
     async fn test_json_rpc_notification_structure() {
         // Notifications should not have an id field
         let notification = JsonRpcNotification::new("notifications/initialized".to_string());
-        
+
         let serialized = serde_json::to_value(&notification).unwrap();
         assert_eq!(serialized["jsonrpc"], "2.0");
         assert_eq!(serialized["method"], "notifications/initialized");
@@ -146,9 +147,12 @@ mod initialization_compliance {
         // Validate request structure
         let request: JsonRpcRequest = serde_json::from_value(initialize_request).unwrap();
         assert_eq!(request.method, "initialize");
-        
+
         let params = request.params.unwrap();
-        assert_eq!(params.other.get("protocolVersion"), Some(&json!("2025-06-18")));
+        assert_eq!(
+            params.other.get("protocolVersion"),
+            Some(&json!("2025-06-18"))
+        );
         assert!(params.other.get("capabilities").unwrap().is_object());
         assert!(params.other.get("clientInfo").unwrap().is_object());
 
@@ -180,9 +184,12 @@ mod initialization_compliance {
 
         let response: JsonRpcResponse = serde_json::from_value(initialize_response).unwrap();
         assert!(response.result.is_some());
-        
+
         let result = response.result.unwrap();
-        assert_eq!(result.data.get("protocolVersion"), Some(&json!("2025-06-18")));
+        assert_eq!(
+            result.data.get("protocolVersion"),
+            Some(&json!("2025-06-18"))
+        );
         assert!(result.data.get("capabilities").unwrap().is_object());
         assert!(result.data.get("serverInfo").unwrap().is_object());
 
@@ -192,7 +199,8 @@ mod initialization_compliance {
             "method": "notifications/initialized"
         });
 
-        let notification: JsonRpcNotification = serde_json::from_value(initialized_notification).unwrap();
+        let notification: JsonRpcNotification =
+            serde_json::from_value(initialized_notification).unwrap();
         assert_eq!(notification.method, "notifications/initialized");
     }
 
@@ -290,11 +298,11 @@ mod message_structure_compliance {
 
         let request: JsonRpcRequest = serde_json::from_value(tool_call).unwrap();
         assert_eq!(request.method, "tools/call");
-        
+
         let params = request.params.unwrap();
         assert_eq!(params.other.get("name"), Some(&json!("calculator")));
         assert!(params.other.get("arguments").unwrap().is_object());
-        
+
         // _meta should be parsed into the meta field, not other
         assert!(params.meta.is_some());
         let meta = params.meta.unwrap();
@@ -326,11 +334,19 @@ mod message_structure_compliance {
 
         let response: JsonRpcResponse = serde_json::from_value(tool_response).unwrap();
         assert!(response.result.is_some());
-        
+
         let result = response.result.unwrap();
         assert!(result.data.get("content").unwrap().is_array());
         assert_eq!(result.data.get("isError"), Some(&json!(false)));
-        assert!(result.meta.as_ref().unwrap().get("usage").unwrap().is_object());
+        assert!(
+            result
+                .meta
+                .as_ref()
+                .unwrap()
+                .get("usage")
+                .unwrap()
+                .is_object()
+        );
     }
 
     #[tokio::test]
@@ -350,10 +366,10 @@ mod message_structure_compliance {
 
         let request: JsonRpcRequest = serde_json::from_value(resource_list).unwrap();
         assert_eq!(request.method, "resources/list");
-        
+
         let params = request.params.unwrap();
         assert_eq!(params.other.get("cursor"), Some(&json!("page-2")));
-        
+
         // _meta should be parsed into the meta field, not other
         assert!(params.meta.is_some());
 
@@ -372,10 +388,10 @@ mod message_structure_compliance {
 
         let request: JsonRpcRequest = serde_json::from_value(resource_read).unwrap();
         assert_eq!(request.method, "resources/read");
-        
+
         let params = request.params.unwrap();
         assert_eq!(params.other.get("uri"), Some(&json!("file:///example.txt")));
-        
+
         // _meta should be parsed into the meta field
         assert!(params.meta.is_some());
     }
@@ -417,11 +433,11 @@ mod message_structure_compliance {
 
         let request: JsonRpcRequest = serde_json::from_value(prompt_get).unwrap();
         assert_eq!(request.method, "prompts/get");
-        
+
         let params = request.params.unwrap();
         assert_eq!(params.other.get("name"), Some(&json!("code_review")));
         assert!(params.other.get("arguments").unwrap().is_object());
-        
+
         // _meta should be parsed into the meta field, not other
         assert!(params.meta.is_some());
     }
@@ -445,11 +461,15 @@ mod notification_compliance {
             }
         });
 
-        let notification: JsonRpcNotification = serde_json::from_value(progress_notification).unwrap();
+        let notification: JsonRpcNotification =
+            serde_json::from_value(progress_notification).unwrap();
         assert_eq!(notification.method, "notifications/progress");
-        
+
         let params = notification.params.unwrap();
-        assert_eq!(params.other.get("progressToken"), Some(&json!("operation-123")));
+        assert_eq!(
+            params.other.get("progressToken"),
+            Some(&json!("operation-123"))
+        );
         assert_eq!(params.other.get("progress"), Some(&json!(75)));
         assert_eq!(params.other.get("total"), Some(&json!(100)));
     }
@@ -476,7 +496,7 @@ mod notification_compliance {
 
         let notification: JsonRpcNotification = serde_json::from_value(resource_updated).unwrap();
         assert_eq!(notification.method, "notifications/resources/updated");
-        
+
         let params = notification.params.unwrap();
         assert_eq!(params.other.get("uri"), Some(&json!("file:///updated.txt")));
     }
@@ -508,7 +528,7 @@ mod notification_compliance {
 
         let notification: JsonRpcNotification = serde_json::from_value(log_message).unwrap();
         assert_eq!(notification.method, "notifications/message");
-        
+
         let params = notification.params.unwrap();
         assert_eq!(params.other.get("level"), Some(&json!("info")));
         assert_eq!(params.other.get("logger"), Some(&json!("mcp.server")));
@@ -540,7 +560,7 @@ mod meta_field_compliance {
 
         let request: JsonRpcRequest = serde_json::from_value(request_with_meta).unwrap();
         let params = request.params.unwrap();
-        
+
         // _meta should be parsed into the meta field
         assert!(params.meta.is_some());
         let meta = params.meta.unwrap();
@@ -576,7 +596,7 @@ mod meta_field_compliance {
 
         let response: JsonRpcResponse = serde_json::from_value(response_with_meta).unwrap();
         let result = response.result.unwrap();
-        
+
         // _meta should be preserved with usage and timing info
         assert!(result.meta.is_some());
         let meta = result.meta.as_ref().unwrap();
@@ -599,7 +619,7 @@ mod meta_field_compliance {
 
         let request: JsonRpcRequest = serde_json::from_value(request_without_meta).unwrap();
         let params = request.params.unwrap();
-        
+
         // Should work fine without _meta field
         assert!(params.meta.is_none());
     }
@@ -627,13 +647,13 @@ mod meta_field_compliance {
 
         let request: JsonRpcRequest = serde_json::from_value(request_with_custom_meta).unwrap();
         let params = request.params.unwrap();
-        
+
         // Custom fields should be preserved
         assert!(params.meta.is_some());
         let meta = params.meta.unwrap();
         // Standard field should be parsed correctly
         assert_eq!(meta.progress_token, Some("token-123".into()));
-        
+
         // Custom fields should be preserved in meta.extra
         assert_eq!(meta.extra.get("customField"), Some(&json!("custom_value")));
         assert!(meta.extra.get("experimentalData").unwrap().is_object());
@@ -679,7 +699,7 @@ mod error_handling_compliance {
 
         assert_eq!(tool_error.code, -32001);
         assert!(tool_error.data.is_some());
-        
+
         let data = tool_error.data.unwrap();
         assert_eq!(data["toolName"], "nonexistent_tool");
         assert!(data["availableTools"].is_array());
@@ -711,11 +731,11 @@ mod error_handling_compliance {
 
         let response: JsonRpcResponse = serde_json::from_value(error_response).unwrap();
         assert!(response.error.is_some());
-        
+
         let error = response.error.unwrap();
         assert_eq!(error.code, -32602);
         assert!(error.data.is_some());
-        
+
         let data = error.data.unwrap();
         assert!(data["_meta"].is_object());
         assert_eq!(data["_meta"]["requestId"], "req-error-123");
@@ -791,7 +811,7 @@ mod content_type_compliance {
         assert!(mixed_content.is_array());
         let content_array = mixed_content.as_array().unwrap();
         assert_eq!(content_array.len(), 3);
-        
+
         // Check each content item has required type field
         for item in content_array {
             assert!(item["type"].is_string());
@@ -828,7 +848,7 @@ mod pagination_compliance {
                         "name": "First File"
                     },
                     {
-                        "uri": "file:///second.txt", 
+                        "uri": "file:///second.txt",
                         "name": "Second File"
                     }
                 ],
@@ -839,9 +859,12 @@ mod pagination_compliance {
 
         let response: JsonRpcResponse = serde_json::from_value(paginated_response).unwrap();
         let result = response.result.unwrap();
-        
+
         assert!(result.data.get("resources").unwrap().is_array());
-        assert_eq!(result.data.get("nextCursor"), Some(&json!("page-2-token-abc123")));
+        assert_eq!(
+            result.data.get("nextCursor"),
+            Some(&json!("page-2-token-abc123"))
+        );
 
         // Follow-up request with cursor
         let next_request = json!({
@@ -855,7 +878,10 @@ mod pagination_compliance {
 
         let request: JsonRpcRequest = serde_json::from_value(next_request).unwrap();
         let params = request.params.unwrap();
-        assert_eq!(params.other.get("cursor"), Some(&json!("page-2-token-abc123")));
+        assert_eq!(
+            params.other.get("cursor"),
+            Some(&json!("page-2-token-abc123"))
+        );
     }
 
     #[tokio::test]
@@ -877,9 +903,9 @@ mod pagination_compliance {
 
         let response: JsonRpcResponse = serde_json::from_value(final_page_response).unwrap();
         let result = response.result.unwrap();
-        
+
         assert!(result.data.get("resources").unwrap().is_array());
-        assert!(result.data.get("nextCursor").is_none());
+        assert!(!result.data.contains_key("nextCursor"));
     }
 }
 
@@ -894,11 +920,14 @@ mod framework_integration_compliance {
         let mut params_map = HashMap::new();
         params_map.insert("protocolVersion".to_string(), json!("2025-06-18"));
         params_map.insert("capabilities".to_string(), json!({}));
-        params_map.insert("clientInfo".to_string(), json!({
-            "name": "compliance-test",
-            "version": "1.0.0"
-        }));
-        
+        params_map.insert(
+            "clientInfo".to_string(),
+            json!({
+                "name": "compliance-test",
+                "version": "1.0.0"
+            }),
+        );
+
         let request = JsonRpcRequest {
             jsonrpc: "2.0".to_string(),
             method: "initialize".to_string(),
@@ -912,7 +941,7 @@ mod framework_integration_compliance {
         // Serialize and deserialize to ensure round-trip compatibility
         let serialized = serde_json::to_string(&request).unwrap();
         let deserialized: JsonRpcRequest = serde_json::from_str(&serialized).unwrap();
-        
+
         assert_eq!(deserialized.jsonrpc, "2.0");
         assert_eq!(deserialized.method, "initialize");
         assert_eq!(deserialized.id, json!(1));
@@ -933,17 +962,17 @@ mod framework_integration_compliance {
                     "name": "mcp-test-server",
                     "version": "1.0.0"
                 }
-            }))
+            })),
         );
 
         // Serialize and validate structure
         let serialized = serde_json::to_value(&response).unwrap();
-        
+
         assert_eq!(serialized["jsonrpc"], "2.0");
         assert_eq!(serialized["id"], "test-id");
         assert!(serialized["result"].is_object());
         assert!(serialized.get("error").is_none());
-        
+
         let result = &serialized["result"];
         assert_eq!(result.get("protocolVersion"), Some(&json!("2025-06-18")));
         assert!(result.get("capabilities").unwrap().is_object());
@@ -954,13 +983,13 @@ mod framework_integration_compliance {
     async fn test_notification_compliance() {
         // Test framework notification generation
         let notification = JsonRpcNotification::new("notifications/tools/listChanged".to_string());
-        
+
         let serialized = serde_json::to_value(&notification).unwrap();
-        
+
         assert_eq!(serialized["jsonrpc"], "2.0");
         assert_eq!(serialized["method"], "notifications/tools/listChanged");
         assert!(serialized.get("id").is_none()); // Notifications must not have id
-        
+
         println!("Framework notification compliance verified");
     }
 }
@@ -1003,23 +1032,26 @@ mod mcp_2025_06_18_features {
 
         let request: JsonRpcRequest = serde_json::from_value(request_with_structured_meta).unwrap();
         let params = request.params.unwrap();
-        
+
         assert!(params.meta.is_some());
         let meta = params.meta.unwrap();
-        
+
         // Verify structured _meta fields are preserved
-        assert_eq!(meta.progress_token, Some("structured-progress-token".into()));
-        
+        assert_eq!(
+            meta.progress_token,
+            Some("structured-progress-token".into())
+        );
+
         // Structured fields should be preserved in meta.extra
         assert!(meta.extra.get("elicitation").unwrap().is_object());
         let elicitation = meta.extra.get("elicitation").unwrap();
         assert_eq!(elicitation.get("type"), Some(&json!("confirmation")));
-        
+
         // Custom cursor in meta.extra (using customCursor to avoid field name conflict)
         assert!(meta.extra.get("customCursor").unwrap().is_object());
         let cursor = meta.extra.get("customCursor").unwrap();
         assert_eq!(cursor.get("page"), Some(&json!(2)));
-        
+
         println!("MCP 2025-06-18 structured _meta support verified");
     }
 
@@ -1052,17 +1084,17 @@ mod mcp_2025_06_18_features {
 
         let response: JsonRpcResponse = serde_json::from_value(enhanced_error).unwrap();
         assert!(response.error.is_some());
-        
+
         let error = response.error.unwrap();
         assert!(error.data.is_some());
-        
+
         let data = error.data.unwrap();
         assert_eq!(data["toolName"], "failing_tool");
         assert_eq!(data["errorType"], "ValidationError");
         assert!(data["details"].is_object());
         assert!(data["_meta"].is_object());
         assert_eq!(data["_meta"]["retryable"], true);
-        
+
         println!("Enhanced error reporting compliance verified");
     }
 
@@ -1098,18 +1130,18 @@ mod mcp_2025_06_18_features {
         // Verify extended content types are properly structured
         assert!(extended_content.is_array());
         let content_array = extended_content.as_array().unwrap();
-        
+
         // Check image with annotations
         let image_content = &content_array[1];
         assert_eq!(image_content["type"], "image");
         assert_eq!(image_content["mimeType"], "image/webp");
         assert!(image_content["annotations"].is_object());
-        
+
         // Check resource with headers
         let resource_content = &content_array[2];
         assert_eq!(resource_content["type"], "resource");
         assert!(resource_content["resource"]["headers"].is_object());
-        
+
         println!("Extended content type support verified");
     }
 }
