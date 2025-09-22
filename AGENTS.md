@@ -18,6 +18,20 @@
 - `turul-mcp-aws-lambda`: AWS Lambda entrypoint integration for serverless deployments.
 - `turul-mcp-derive` / `turul-mcp-builders`: Macros and builders for ergonomics.
 
+## Building MCP Services (Servers)
+- Prefer `turul_mcp_server::McpServer::builder()` for integrated HTTP transport; choose function macros, derive macros, builders, or manual traits depending on ergonomics.
+- Custom transports (Hyper/AWS Lambda/etc.) should construct an `McpServer` configuration and pass it to `turul-http-mcp-server` or `turul-mcp-aws-lambda`.
+- Handlers must return domain errors: derive `thiserror::Error` for new error types and implement `turul_mcp_json_rpc_server::r#async::ToJsonRpcError`; avoid creating `JsonRpcError` directly.
+- Register additional JSON-RPC methods via `JsonRpcDispatcher<McpError>` (or your custom error type) to guarantee type-safe conversion to protocol errors.
+- Always advertise only the capabilities actually wired (e.g., leave `resources.listChanged=false` when notifications are not emitted) and back responses with cursor-aware pagination helpers from `turul_mcp_protocol`.
+
+## Building MCP Clients
+- Use `turul_mcp_client::McpClientBuilder` with an appropriate transport (`HttpTransport`, `SseTransport`, etc.); the builder owns connection retries and timeouts.
+- Invoke `client.connect().await?` to perform the JSON-RPC handshake; the client automatically sends `initialize` and the required `notifications/initialized` follow-up.
+- Interact through the high-level APIs (`list_tools`, `call_tool`, `list_resources`, `read_resource`, `list_prompts`, `get_prompt`, etc.) which all return `McpClientResult<T>` with rich `McpClientError` variants.
+- For streaming notifications, subscribe through the transport-specific stream helpers and always handle progress tokens echoed by tools.
+- When embedding in other applications, propagate errors using the typed enums rather than string matching and surface meaningful diagnostics (e.g., include `McpClientError::Lifecycle` messaging when initialization fails).
+
 ## Build, Test, and Development Commands
 - Build: `cargo build --workspace`
 - Test (all): `cargo test --workspace`
