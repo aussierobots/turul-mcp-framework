@@ -582,7 +582,10 @@ mod tests {
 
         // Test that handler was created successfully
         // Verify handler has stream_manager (critical invariant)
-        assert!(handler.stream_manager().as_ref() as *const _ as usize > 0, "Stream manager must be initialized");
+        assert!(
+            handler.stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
     }
 
     #[tokio::test]

@@ -988,8 +988,10 @@ mod tests {
         // Create handler from server and verify it has stream_manager
         let handler = server.handler().await.unwrap();
         // Verify handler has stream_manager (critical invariant)
-        // Verify handler has stream_manager (critical invariant)
-        assert!(handler.stream_manager().as_ref() as *const _ as usize > 0, "Stream manager must be initialized");
+        assert!(
+            handler.stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
     }
 
     #[tokio::test]
@@ -1001,7 +1003,10 @@ mod tests {
         let handler = server.handler().await.unwrap();
         // Verify handler has stream_manager
         // Verify handler has stream_manager (critical invariant)
-        assert!(handler.stream_manager().as_ref() as *const _ as usize > 0, "Stream manager must be initialized");
+        assert!(
+            handler.stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
     }
 
     #[tokio::test]
@@ -1018,7 +1023,10 @@ mod tests {
         let handler = server.handler().await.unwrap();
         // Verify handler has stream_manager
         // Verify handler has stream_manager (critical invariant)
-        assert!(handler.stream_manager().as_ref() as *const _ as usize > 0, "Stream manager must be initialized");
+        assert!(
+            handler.stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
     }
 
     #[cfg(feature = "cors")]
@@ -1034,6 +1042,9 @@ mod tests {
         let handler = server.handler().await.unwrap();
         // Verify handler has stream_manager
         // Verify handler has stream_manager (critical invariant)
-        assert!(handler.stream_manager().as_ref() as *const _ as usize > 0, "Stream manager must be initialized");
+        assert!(
+            handler.stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
     }
 }
