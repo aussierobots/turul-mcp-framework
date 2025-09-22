@@ -33,7 +33,7 @@
 //! ```bash
 //! # Start server on random port
 //! cargo run --package resource-test-server
-//! 
+//!
 //! # Test with curl
 //! curl -X POST http://127.0.0.1:PORT/mcp \
 //!   -H "Content-Type: application/json" \
@@ -46,25 +46,28 @@
 //! ```
 
 use std::collections::HashMap;
-use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use turul_mcp_server::{McpServer, McpResult};
-use turul_mcp_server::McpResource;
-use turul_mcp_protocol::resources::{
-    ResourceContent, HasResourceMetadata, HasResourceDescription, HasResourceUri,
-    HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta
-};
-use turul_mcp_protocol::{McpError, meta::Annotations};
-use serde_json::{json, Value};
-use tracing::info;
+use base64::{engine::general_purpose, Engine as _};
 use chrono::Utc;
-use tempfile::NamedTempFile;
-use std::io::Write;
-use tokio::time::sleep;
-use base64::{Engine as _, engine::general_purpose};
 use clap::Parser;
+use serde_json::{json, Value};
+use std::io::Write;
+use tempfile::NamedTempFile;
+use tokio::time::sleep;
+use tracing::info;
+use turul_mcp_protocol::resources::{
+    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
+    HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
+};
+use turul_mcp_protocol::{meta::Annotations, McpError};
+use turul_mcp_server::McpResource;
+use turul_mcp_server::{McpResult, McpServer};
 
 /// Helper function to serialize JSON with proper error handling
 /// Avoids unwrap() usage as per production code guidelines
@@ -94,15 +97,23 @@ struct FileResource {
 
 impl FileResource {
     fn new() -> McpResult<Self> {
-        let mut temp_file = NamedTempFile::new()
-            .map_err(|e| McpError::resource_execution(&format!("Failed to create temp file: {}", e)))?;
-        
-        writeln!(temp_file, "Test file content for E2E testing")
-            .map_err(|e| McpError::resource_execution(&format!("Failed to write temp file: {}", e)))?;
-        writeln!(temp_file, "Line 2: This file is created in-memory for testing")
-            .map_err(|e| McpError::resource_execution(&format!("Failed to write temp file: {}", e)))?;
-        writeln!(temp_file, "Line 3: Contains sample data for file:// resource testing")
-            .map_err(|e| McpError::resource_execution(&format!("Failed to write temp file: {}", e)))?;
+        let mut temp_file = NamedTempFile::new().map_err(|e| {
+            McpError::resource_execution(&format!("Failed to create temp file: {}", e))
+        })?;
+
+        writeln!(temp_file, "Test file content for E2E testing").map_err(|e| {
+            McpError::resource_execution(&format!("Failed to write temp file: {}", e))
+        })?;
+        writeln!(
+            temp_file,
+            "Line 2: This file is created in-memory for testing"
+        )
+        .map_err(|e| McpError::resource_execution(&format!("Failed to write temp file: {}", e)))?;
+        writeln!(
+            temp_file,
+            "Line 3: Contains sample data for file:// resource testing"
+        )
+        .map_err(|e| McpError::resource_execution(&format!("Failed to write temp file: {}", e)))?;
 
         Ok(Self {
             temp_file: Some(Arc::new(temp_file)),
@@ -111,11 +122,15 @@ impl FileResource {
 }
 
 impl HasResourceMetadata for FileResource {
-    fn name(&self) -> &str { "file_resource" }
+    fn name(&self) -> &str {
+        "file_resource"
+    }
 }
 
 impl HasResourceUri for FileResource {
-    fn uri(&self) -> &str { "file:///tmp/test.txt" }
+    fn uri(&self) -> &str {
+        "file:///tmp/test.txt"
+    }
 }
 
 impl HasResourceDescription for FileResource {
@@ -125,12 +140,16 @@ impl HasResourceDescription for FileResource {
 }
 
 impl HasResourceMimeType for FileResource {
-    fn mime_type(&self) -> Option<&str> { Some("text/plain") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("text/plain")
+    }
 }
 
 impl HasResourceSize for FileResource {}
 impl HasResourceAnnotations for FileResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for FileResource {}
 
@@ -139,13 +158,14 @@ impl McpResource for FileResource {
     async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
         if let Some(temp_file) = &self.temp_file {
             match std::fs::read_to_string(temp_file.path()) {
-                Ok(content) => {
-                    Ok(vec![ResourceContent::text(
-                        "file:///tmp/test.txt",
-                        format!("File Content:\n{}", content)
-                    )])
-                },
-                Err(e) => Err(McpError::resource_execution(&format!("Failed to read file: {}", e)))
+                Ok(content) => Ok(vec![ResourceContent::text(
+                    "file:///tmp/test.txt",
+                    format!("File Content:\n{}", content),
+                )]),
+                Err(e) => Err(McpError::resource_execution(&format!(
+                    "Failed to read file: {}",
+                    e
+                ))),
             }
         } else {
             Err(McpError::resource_execution("No file available"))
@@ -158,11 +178,15 @@ impl McpResource for FileResource {
 struct MemoryResource;
 
 impl HasResourceMetadata for MemoryResource {
-    fn name(&self) -> &str { "memory_resource" }
+    fn name(&self) -> &str {
+        "memory_resource"
+    }
 }
 
 impl HasResourceUri for MemoryResource {
-    fn uri(&self) -> &str { "file:///memory/data.json" }
+    fn uri(&self) -> &str {
+        "file:///memory/data.json"
+    }
 }
 
 impl HasResourceDescription for MemoryResource {
@@ -172,12 +196,16 @@ impl HasResourceDescription for MemoryResource {
 }
 
 impl HasResourceMimeType for MemoryResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for MemoryResource {}
 impl HasResourceAnnotations for MemoryResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for MemoryResource {}
 
@@ -203,7 +231,7 @@ impl McpResource for MemoryResource {
 
         Ok(vec![ResourceContent::text(
             "file:///memory/data.json",
-            safe_json_serialize(&data)?
+            safe_json_serialize(&data)?,
         )])
     }
 }
@@ -213,11 +241,15 @@ impl McpResource for MemoryResource {
 struct ErrorResource;
 
 impl HasResourceMetadata for ErrorResource {
-    fn name(&self) -> &str { "error_resource" }
+    fn name(&self) -> &str {
+        "error_resource"
+    }
 }
 
 impl HasResourceUri for ErrorResource {
-    fn uri(&self) -> &str { "file:///error/not_found.txt" }
+    fn uri(&self) -> &str {
+        "file:///error/not_found.txt"
+    }
 }
 
 impl HasResourceDescription for ErrorResource {
@@ -227,19 +259,25 @@ impl HasResourceDescription for ErrorResource {
 }
 
 impl HasResourceMimeType for ErrorResource {
-    fn mime_type(&self) -> Option<&str> { Some("text/plain") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("text/plain")
+    }
 }
 
 impl HasResourceSize for ErrorResource {}
 impl HasResourceAnnotations for ErrorResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for ErrorResource {}
 
 #[async_trait]
 impl McpResource for ErrorResource {
     async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
-        Err(McpError::resource_execution("This resource always returns NotFound for testing error paths"))
+        Err(McpError::resource_execution(
+            "This resource always returns NotFound for testing error paths",
+        ))
     }
 }
 
@@ -248,11 +286,15 @@ impl McpResource for ErrorResource {
 struct SlowResource;
 
 impl HasResourceMetadata for SlowResource {
-    fn name(&self) -> &str { "slow_resource" }
+    fn name(&self) -> &str {
+        "slow_resource"
+    }
 }
 
 impl HasResourceUri for SlowResource {
-    fn uri(&self) -> &str { "file:///slow/delayed.txt" }
+    fn uri(&self) -> &str {
+        "file:///slow/delayed.txt"
+    }
 }
 
 impl HasResourceDescription for SlowResource {
@@ -262,12 +304,16 @@ impl HasResourceDescription for SlowResource {
 }
 
 impl HasResourceMimeType for SlowResource {
-    fn mime_type(&self) -> Option<&str> { Some("text/plain") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("text/plain")
+    }
 }
 
 impl HasResourceSize for SlowResource {}
 impl HasResourceAnnotations for SlowResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for SlowResource {}
 
@@ -294,7 +340,10 @@ impl McpResource for SlowResource {
             Utc::now().to_rfc3339()
         );
 
-        Ok(vec![ResourceContent::text("file:///slow/delayed.txt", content)])
+        Ok(vec![ResourceContent::text(
+            "file:///slow/delayed.txt",
+            content,
+        )])
     }
 }
 
@@ -303,11 +352,15 @@ impl McpResource for SlowResource {
 struct TemplateResource;
 
 impl HasResourceMetadata for TemplateResource {
-    fn name(&self) -> &str { "template_resource" }
+    fn name(&self) -> &str {
+        "template_resource"
+    }
 }
 
 impl HasResourceUri for TemplateResource {
-    fn uri(&self) -> &str { "file:///template/items/{id}.json" }
+    fn uri(&self) -> &str {
+        "file:///template/items/{id}.json"
+    }
 }
 
 impl HasResourceDescription for TemplateResource {
@@ -317,12 +370,16 @@ impl HasResourceDescription for TemplateResource {
 }
 
 impl HasResourceMimeType for TemplateResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for TemplateResource {}
 impl HasResourceAnnotations for TemplateResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for TemplateResource {}
 
@@ -356,7 +413,7 @@ impl McpResource for TemplateResource {
 
         Ok(vec![ResourceContent::text(
             format!("file:///template/items/{}.json", id),
-            safe_json_serialize(&item_data)?
+            safe_json_serialize(&item_data)?,
         )])
     }
 }
@@ -366,11 +423,15 @@ impl McpResource for TemplateResource {
 struct EmptyResource;
 
 impl HasResourceMetadata for EmptyResource {
-    fn name(&self) -> &str { "empty_resource" }
+    fn name(&self) -> &str {
+        "empty_resource"
+    }
 }
 
 impl HasResourceUri for EmptyResource {
-    fn uri(&self) -> &str { "file:///empty/content.txt" }
+    fn uri(&self) -> &str {
+        "file:///empty/content.txt"
+    }
 }
 
 impl HasResourceDescription for EmptyResource {
@@ -380,12 +441,16 @@ impl HasResourceDescription for EmptyResource {
 }
 
 impl HasResourceMimeType for EmptyResource {
-    fn mime_type(&self) -> Option<&str> { Some("text/plain") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("text/plain")
+    }
 }
 
 impl HasResourceSize for EmptyResource {}
 impl HasResourceAnnotations for EmptyResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for EmptyResource {}
 
@@ -401,11 +466,15 @@ impl McpResource for EmptyResource {
 struct LargeResource;
 
 impl HasResourceMetadata for LargeResource {
-    fn name(&self) -> &str { "large_resource" }
+    fn name(&self) -> &str {
+        "large_resource"
+    }
 }
 
 impl HasResourceUri for LargeResource {
-    fn uri(&self) -> &str { "file:///large/dataset.json" }
+    fn uri(&self) -> &str {
+        "file:///large/dataset.json"
+    }
 }
 
 impl HasResourceDescription for LargeResource {
@@ -415,17 +484,21 @@ impl HasResourceDescription for LargeResource {
 }
 
 impl HasResourceMimeType for LargeResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for LargeResource {
-    fn size(&self) -> Option<u64> { 
+    fn size(&self) -> Option<u64> {
         Some(1024 * 1024) // Indicate ~1MB size
     }
 }
 
 impl HasResourceAnnotations for LargeResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for LargeResource {}
 
@@ -459,8 +532,9 @@ impl McpResource for LargeResource {
 
         Ok(vec![ResourceContent::text(
             "file:///large/dataset.json",
-            &serde_json::to_string(&large_data)
-                .map_err(|e| McpError::resource_execution(&format!("Large data serialization failed: {}", e)))?
+            &serde_json::to_string(&large_data).map_err(|e| {
+                McpError::resource_execution(&format!("Large data serialization failed: {}", e))
+            })?,
         )])
     }
 }
@@ -470,11 +544,15 @@ impl McpResource for LargeResource {
 struct BinaryResource;
 
 impl HasResourceMetadata for BinaryResource {
-    fn name(&self) -> &str { "binary_resource" }
+    fn name(&self) -> &str {
+        "binary_resource"
+    }
 }
 
 impl HasResourceUri for BinaryResource {
-    fn uri(&self) -> &str { "file:///binary/image.png" }
+    fn uri(&self) -> &str {
+        "file:///binary/image.png"
+    }
 }
 
 impl HasResourceDescription for BinaryResource {
@@ -484,15 +562,21 @@ impl HasResourceDescription for BinaryResource {
 }
 
 impl HasResourceMimeType for BinaryResource {
-    fn mime_type(&self) -> Option<&str> { Some("image/png") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("image/png")
+    }
 }
 
 impl HasResourceSize for BinaryResource {
-    fn size(&self) -> Option<u64> { Some(1024) } // 1KB fake image
+    fn size(&self) -> Option<u64> {
+        Some(1024)
+    } // 1KB fake image
 }
 
 impl HasResourceAnnotations for BinaryResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for BinaryResource {}
 
@@ -502,30 +586,30 @@ impl McpResource for BinaryResource {
         // Create fake PNG header + data (simplified for testing)
         let mut fake_png = Vec::new();
         fake_png.extend_from_slice(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]); // PNG signature
-        
+
         // Add some fake image data to reach ~1KB
         for i in 0..128 {
             fake_png.extend_from_slice(&[
-                (i % 256) as u8, 
-                ((i * 2) % 256) as u8, 
-                ((i * 3) % 256) as u8, 
-                0xFF
+                (i % 256) as u8,
+                ((i * 2) % 256) as u8,
+                ((i * 3) % 256) as u8,
+                0xFF,
             ]); // RGBA pixels
         }
 
         // For MCP, we need to base64 encode binary data
         let encoded = general_purpose::STANDARD.encode(&fake_png);
-        
+
         Ok(vec![ResourceContent::blob(
             "file:///binary/image.png",
             encoded,
-            "image/png"
+            "image/png",
         )])
     }
 }
 
 // =============================================================================
-// Advanced Resources (Features)  
+// Advanced Resources (Features)
 // =============================================================================
 
 /// Session-aware resource that returns session ID and metadata
@@ -533,11 +617,15 @@ impl McpResource for BinaryResource {
 struct SessionResource;
 
 impl HasResourceMetadata for SessionResource {
-    fn name(&self) -> &str { "session_resource" }
+    fn name(&self) -> &str {
+        "session_resource"
+    }
 }
 
 impl HasResourceUri for SessionResource {
-    fn uri(&self) -> &str { "file:///session/info.json" }
+    fn uri(&self) -> &str {
+        "file:///session/info.json"
+    }
 }
 
 impl HasResourceDescription for SessionResource {
@@ -547,12 +635,16 @@ impl HasResourceDescription for SessionResource {
 }
 
 impl HasResourceMimeType for SessionResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for SessionResource {}
 impl HasResourceAnnotations for SessionResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for SessionResource {}
 
@@ -575,7 +667,7 @@ impl McpResource for SessionResource {
 
         Ok(vec![ResourceContent::text(
             "file:///session/info.json",
-            safe_json_serialize(&session_data)?
+            safe_json_serialize(&session_data)?,
         )])
     }
 }
@@ -595,11 +687,15 @@ impl Default for SubscribableResource {
 }
 
 impl HasResourceMetadata for SubscribableResource {
-    fn name(&self) -> &str { "subscribable_resource" }
+    fn name(&self) -> &str {
+        "subscribable_resource"
+    }
 }
 
 impl HasResourceUri for SubscribableResource {
-    fn uri(&self) -> &str { "file:///subscribe/updates.json" }
+    fn uri(&self) -> &str {
+        "file:///subscribe/updates.json"
+    }
 }
 
 impl HasResourceDescription for SubscribableResource {
@@ -609,12 +705,16 @@ impl HasResourceDescription for SubscribableResource {
 }
 
 impl HasResourceMimeType for SubscribableResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for SubscribableResource {}
 impl HasResourceAnnotations for SubscribableResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for SubscribableResource {}
 
@@ -622,7 +722,7 @@ impl HasResourceMeta for SubscribableResource {}
 impl McpResource for SubscribableResource {
     async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
         let count = self.counter.fetch_add(1, Ordering::SeqCst);
-        
+
         let subscription_data = json!({
             "type": "subscribable",
             "access_count": count,
@@ -637,7 +737,7 @@ impl McpResource for SubscribableResource {
 
         Ok(vec![ResourceContent::text(
             "file:///subscribe/updates.json",
-            safe_json_serialize(&subscription_data)?
+            safe_json_serialize(&subscription_data)?,
         )])
     }
 }
@@ -647,11 +747,15 @@ impl McpResource for SubscribableResource {
 struct NotifyingResource;
 
 impl HasResourceMetadata for NotifyingResource {
-    fn name(&self) -> &str { "notifying_resource" }
+    fn name(&self) -> &str {
+        "notifying_resource"
+    }
 }
 
 impl HasResourceUri for NotifyingResource {
-    fn uri(&self) -> &str { "file:///notify/trigger.json" }
+    fn uri(&self) -> &str {
+        "file:///notify/trigger.json"
+    }
 }
 
 impl HasResourceDescription for NotifyingResource {
@@ -661,12 +765,16 @@ impl HasResourceDescription for NotifyingResource {
 }
 
 impl HasResourceMimeType for NotifyingResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for NotifyingResource {}
 impl HasResourceAnnotations for NotifyingResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for NotifyingResource {}
 
@@ -725,7 +833,7 @@ impl McpResource for NotifyingResource {
 
         Ok(vec![ResourceContent::text(
             "file:///notify/trigger.json",
-            safe_json_serialize(&response_data)?
+            safe_json_serialize(&response_data)?,
         )])
     }
 }
@@ -735,11 +843,15 @@ impl McpResource for NotifyingResource {
 struct MultiContentResource;
 
 impl HasResourceMetadata for MultiContentResource {
-    fn name(&self) -> &str { "multi_content_resource" }
+    fn name(&self) -> &str {
+        "multi_content_resource"
+    }
 }
 
 impl HasResourceUri for MultiContentResource {
-    fn uri(&self) -> &str { "file:///multi/contents.txt" }
+    fn uri(&self) -> &str {
+        "file:///multi/contents.txt"
+    }
 }
 
 impl HasResourceDescription for MultiContentResource {
@@ -749,12 +861,16 @@ impl HasResourceDescription for MultiContentResource {
 }
 
 impl HasResourceMimeType for MultiContentResource {
-    fn mime_type(&self) -> Option<&str> { Some("multipart/mixed") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("multipart/mixed")
+    }
 }
 
 impl HasResourceSize for MultiContentResource {}
 impl HasResourceAnnotations for MultiContentResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for MultiContentResource {}
 
@@ -772,7 +888,7 @@ impl McpResource for MultiContentResource {
                 }).to_string()
             ),
             ResourceContent::text(
-                "file:///multi/contents/part2.json", 
+                "file:///multi/contents/part2.json",
                 json!({
                     "part": 2,
                     "type": "data",
@@ -796,11 +912,15 @@ impl McpResource for MultiContentResource {
 struct PaginatedResource;
 
 impl HasResourceMetadata for PaginatedResource {
-    fn name(&self) -> &str { "paginated_resource" }
+    fn name(&self) -> &str {
+        "paginated_resource"
+    }
 }
 
 impl HasResourceUri for PaginatedResource {
-    fn uri(&self) -> &str { "file:///paginated/items.json" }
+    fn uri(&self) -> &str {
+        "file:///paginated/items.json"
+    }
 }
 
 impl HasResourceDescription for PaginatedResource {
@@ -810,12 +930,16 @@ impl HasResourceDescription for PaginatedResource {
 }
 
 impl HasResourceMimeType for PaginatedResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for PaginatedResource {}
 impl HasResourceAnnotations for PaginatedResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for PaginatedResource {}
 
@@ -827,7 +951,7 @@ impl McpResource for PaginatedResource {
             .and_then(|p| p.get("page_size"))
             .and_then(|s| s.as_u64())
             .unwrap_or(10) as usize;
-            
+
         let cursor = params
             .as_ref()
             .and_then(|p| p.get("cursor"))
@@ -838,7 +962,7 @@ impl McpResource for PaginatedResource {
         let total_items = 100; // Simulate 100 total items
         let start = cursor;
         let end = (start + page_size).min(total_items);
-        
+
         let mut items = Vec::new();
         for i in start..end {
             items.push(json!({
@@ -848,9 +972,9 @@ impl McpResource for PaginatedResource {
                 "page_info": format!("Page starting at {}, size {}", cursor, page_size)
             }));
         }
-        
+
         let next_cursor = if end < total_items { Some(end) } else { None };
-        
+
         let paginated_data = json!({
             "type": "paginated",
             "items": items,
@@ -865,7 +989,7 @@ impl McpResource for PaginatedResource {
 
         Ok(vec![ResourceContent::text(
             "file:///paginated/items.json",
-            safe_json_serialize(&paginated_data)?
+            safe_json_serialize(&paginated_data)?,
         )])
     }
 }
@@ -879,11 +1003,15 @@ impl McpResource for PaginatedResource {
 struct InvalidUriResource;
 
 impl HasResourceMetadata for InvalidUriResource {
-    fn name(&self) -> &str { "invalid_uri_resource" }
+    fn name(&self) -> &str {
+        "invalid_uri_resource"
+    }
 }
 
 impl HasResourceUri for InvalidUriResource {
-    fn uri(&self) -> &str { "file:///invalid/bad-chars-and-spaces.txt" }
+    fn uri(&self) -> &str {
+        "file:///invalid/bad-chars-and-spaces.txt"
+    }
 }
 
 impl HasResourceDescription for InvalidUriResource {
@@ -893,12 +1021,16 @@ impl HasResourceDescription for InvalidUriResource {
 }
 
 impl HasResourceMimeType for InvalidUriResource {
-    fn mime_type(&self) -> Option<&str> { Some("text/plain") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("text/plain")
+    }
 }
 
 impl HasResourceSize for InvalidUriResource {}
 impl HasResourceAnnotations for InvalidUriResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for InvalidUriResource {}
 
@@ -928,11 +1060,15 @@ impl Default for LongUriResource {
 }
 
 impl HasResourceMetadata for LongUriResource {
-    fn name(&self) -> &str { "long_uri_resource" }
+    fn name(&self) -> &str {
+        "long_uri_resource"
+    }
 }
 
 impl HasResourceUri for LongUriResource {
-    fn uri(&self) -> &str { &self.long_uri }
+    fn uri(&self) -> &str {
+        &self.long_uri
+    }
 }
 
 impl HasResourceDescription for LongUriResource {
@@ -942,12 +1078,16 @@ impl HasResourceDescription for LongUriResource {
 }
 
 impl HasResourceMimeType for LongUriResource {
-    fn mime_type(&self) -> Option<&str> { Some("text/plain") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("text/plain")
+    }
 }
 
 impl HasResourceSize for LongUriResource {}
 impl HasResourceAnnotations for LongUriResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for LongUriResource {}
 
@@ -956,7 +1096,11 @@ impl McpResource for LongUriResource {
     async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
             &self.long_uri,
-            format!("This resource has a very long URI ({} characters): {}", self.long_uri.len(), self.long_uri)
+            format!(
+                "This resource has a very long URI ({} characters): {}",
+                self.long_uri.len(),
+                self.long_uri
+            ),
         )])
     }
 }
@@ -966,11 +1110,15 @@ impl McpResource for LongUriResource {
 struct MetaDynamicResource;
 
 impl HasResourceMetadata for MetaDynamicResource {
-    fn name(&self) -> &str { "meta_dynamic_resource" }
+    fn name(&self) -> &str {
+        "meta_dynamic_resource"
+    }
 }
 
 impl HasResourceUri for MetaDynamicResource {
-    fn uri(&self) -> &str { "file:///meta/dynamic.json" }
+    fn uri(&self) -> &str {
+        "file:///meta/dynamic.json"
+    }
 }
 
 impl HasResourceDescription for MetaDynamicResource {
@@ -980,12 +1128,16 @@ impl HasResourceDescription for MetaDynamicResource {
 }
 
 impl HasResourceMimeType for MetaDynamicResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for MetaDynamicResource {}
 impl HasResourceAnnotations for MetaDynamicResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for MetaDynamicResource {}
 
@@ -1020,18 +1172,20 @@ impl McpResource for MetaDynamicResource {
                 "meta": meta_fields
             }),
             "error" => {
-                return Err(McpError::resource_execution("Simulated error due to _meta.behavior=error"));
-            },
+                return Err(McpError::resource_execution(
+                    "Simulated error due to _meta.behavior=error",
+                ));
+            }
             _ => json!({
                 "mode": "default",
                 "message": "Default behavior - pass _meta.behavior to change response format",
                 "available_modes": ["verbose", "compact", "error", "default"]
-            })
+            }),
         };
 
         Ok(vec![ResourceContent::text(
             "file:///meta/dynamic.json",
-            safe_json_serialize(&response)?
+            safe_json_serialize(&response)?,
         )])
     }
 }
@@ -1041,11 +1195,15 @@ impl McpResource for MetaDynamicResource {
 struct UserTemplateResource;
 
 impl HasResourceMetadata for UserTemplateResource {
-    fn name(&self) -> &str { "user_template_resource" }
+    fn name(&self) -> &str {
+        "user_template_resource"
+    }
 }
 
 impl HasResourceUri for UserTemplateResource {
-    fn uri(&self) -> &str { "file:///template/users/{user_id}.json" }
+    fn uri(&self) -> &str {
+        "file:///template/users/{user_id}.json"
+    }
 }
 
 impl HasResourceDescription for UserTemplateResource {
@@ -1055,12 +1213,16 @@ impl HasResourceDescription for UserTemplateResource {
 }
 
 impl HasResourceMimeType for UserTemplateResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for UserTemplateResource {}
 impl HasResourceAnnotations for UserTemplateResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for UserTemplateResource {}
 
@@ -1101,7 +1263,7 @@ impl McpResource for UserTemplateResource {
 
         Ok(vec![ResourceContent::text(
             format!("file:///template/users/{}.json", user_id),
-            safe_json_serialize(&user_data)?
+            safe_json_serialize(&user_data)?,
         )])
     }
 }
@@ -1111,11 +1273,15 @@ impl McpResource for UserTemplateResource {
 struct FileTemplateResource;
 
 impl HasResourceMetadata for FileTemplateResource {
-    fn name(&self) -> &str { "file_template_resource" }
+    fn name(&self) -> &str {
+        "file_template_resource"
+    }
 }
 
 impl HasResourceUri for FileTemplateResource {
-    fn uri(&self) -> &str { "file:///template/files/{path}" }
+    fn uri(&self) -> &str {
+        "file:///template/files/{path}"
+    }
 }
 
 impl HasResourceDescription for FileTemplateResource {
@@ -1125,12 +1291,16 @@ impl HasResourceDescription for FileTemplateResource {
 }
 
 impl HasResourceMimeType for FileTemplateResource {
-    fn mime_type(&self) -> Option<&str> { Some("text/plain") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("text/plain")
+    }
 }
 
 impl HasResourceSize for FileTemplateResource {}
 impl HasResourceAnnotations for FileTemplateResource {
-    fn annotations(&self) -> Option<&Annotations> { None }
+    fn annotations(&self) -> Option<&Annotations> {
+        None
+    }
 }
 impl HasResourceMeta for FileTemplateResource {}
 
@@ -1156,9 +1326,18 @@ impl McpResource for FileTemplateResource {
                 "content": {"message": "JSON content for template file"},
                 "size": 42,
                 "modified": Utc::now().to_rfc3339()
-            }).to_string(),
-            p if p.ends_with(".txt") => format!("Text file content for: {}\nGenerated at: {}\nThis is a template-generated file.", p, Utc::now().to_rfc3339()),
-            p => format!("Binary or unknown file type: {}\nGenerated: {}", p, Utc::now().to_rfc3339())
+            })
+            .to_string(),
+            p if p.ends_with(".txt") => format!(
+                "Text file content for: {}\nGenerated at: {}\nThis is a template-generated file.",
+                p,
+                Utc::now().to_rfc3339()
+            ),
+            p => format!(
+                "Binary or unknown file type: {}\nGenerated: {}",
+                p,
+                Utc::now().to_rfc3339()
+            ),
         };
 
         let file_info = format!(
@@ -1177,7 +1356,7 @@ impl McpResource for FileTemplateResource {
 
         Ok(vec![ResourceContent::text(
             format!("file:///template/files/{}", path),
-            file_info
+            file_info,
         )])
     }
 }
@@ -1191,9 +1370,10 @@ struct CompleteResource {
 
 impl Default for CompleteResource {
     fn default() -> Self {
-        let mut annotations = Annotations::default();
-        annotations.title = Some("Complete Test Resource".to_string());
-        
+        let annotations = Annotations {
+            title: Some("Complete Test Resource".to_string()),
+        };
+
         let mut meta = HashMap::new();
         meta.insert("author".to_string(), json!("MCP Framework"));
         meta.insert("version".to_string(), json!("1.0.0"));
@@ -1205,12 +1385,18 @@ impl Default for CompleteResource {
 }
 
 impl HasResourceMetadata for CompleteResource {
-    fn name(&self) -> &str { "complete_resource" }
-    fn title(&self) -> Option<&str> { self.annotations.title.as_deref() }
+    fn name(&self) -> &str {
+        "complete_resource"
+    }
+    fn title(&self) -> Option<&str> {
+        self.annotations.title.as_deref()
+    }
 }
 
 impl HasResourceUri for CompleteResource {
-    fn uri(&self) -> &str { "file:///complete/all-fields.json" }
+    fn uri(&self) -> &str {
+        "file:///complete/all-fields.json"
+    }
 }
 
 impl HasResourceDescription for CompleteResource {
@@ -1220,19 +1406,27 @@ impl HasResourceDescription for CompleteResource {
 }
 
 impl HasResourceMimeType for CompleteResource {
-    fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    fn mime_type(&self) -> Option<&str> {
+        Some("application/json")
+    }
 }
 
 impl HasResourceSize for CompleteResource {
-    fn size(&self) -> Option<u64> { Some(2048) }
+    fn size(&self) -> Option<u64> {
+        Some(2048)
+    }
 }
 
 impl HasResourceAnnotations for CompleteResource {
-    fn annotations(&self) -> Option<&Annotations> { Some(&self.annotations) }
+    fn annotations(&self) -> Option<&Annotations> {
+        Some(&self.annotations)
+    }
 }
 
 impl HasResourceMeta for CompleteResource {
-    fn resource_meta(&self) -> Option<&HashMap<String, Value>> { Some(&self.meta) }
+    fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
+        Some(&self.meta)
+    }
 }
 
 #[async_trait]
@@ -1261,7 +1455,7 @@ impl McpResource for CompleteResource {
 
         Ok(vec![ResourceContent::text(
             "file:///complete/all-fields.json",
-            safe_json_serialize(&complete_data)?
+            safe_json_serialize(&complete_data)?,
         )])
     }
 }
@@ -1277,11 +1471,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let args = Args::parse();
-    
+
     // Use specified port or pick random if 0
     let port = if args.port == 0 {
-        portpicker::pick_unused_port()
-            .ok_or("Failed to find unused port")?
+        portpicker::pick_unused_port().ok_or("Failed to find unused port")?
     } else {
         args.port
     };
@@ -1338,7 +1531,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("");
     info!("🧪 Test Resources Available:");
     info!("   📁 Basic Resources (Coverage):");
-    info!("      • file:///tmp/test.txt - File reading with error handling");  
+    info!("      • file:///tmp/test.txt - File reading with error handling");
     info!("      • file:///memory/data.json - Fast in-memory JSON data");
     info!("      • file:///error/not_found.txt - Always returns NotFound errors");
     info!("      • file:///slow/delayed.txt - Configurable delay simulation");
@@ -1348,7 +1541,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("");
     info!("   🎯 Template Resources (URI Templates with variables):");
     info!("      • file:///template/items/{{id}}.json - Item template with ID validation");
-    info!("      • file:///template/users/{{user_id}}.json - User template with user_id validation");
+    info!(
+        "      • file:///template/users/{{user_id}}.json - User template with user_id validation"
+    );
     info!("      • file:///template/files/{{path}} - File path template with flexible paths");
     info!("      📋 Available via: resources/templates/list endpoint");
     info!("");
@@ -1373,9 +1568,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("     -H 'Content-Type: application/json' \\");
     info!("     -H 'Mcp-Session-Id: SESSION_ID' \\");
-    info!("     -d '{{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"resources/list\",\"params\":{{}}}}'");
+    info!(
+        "     -d '{{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"resources/list\",\"params\":{{}}}}'"
+    );
     info!("");
-    
+
     server.run().await?;
     Ok(())
 }
