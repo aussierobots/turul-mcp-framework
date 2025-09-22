@@ -58,22 +58,25 @@
 //! # }
 //! ```
 //!
-//! ### WebSocket Transport
+//! ### SSE Transport (Real-time)
 //!
-//! ```rust,ignore
-//! // WebSocket transport requires the "websocket" feature
-//! use turul_mcp_client::transport::WebSocketTransport;
+//! ```rust,no_run
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! use turul_mcp_client::transport::SseTransport;
 //!
-//! let transport = WebSocketTransport::new("ws://localhost:8080/mcp")?;
+//! let transport = SseTransport::new("http://localhost:8080/mcp")?;
+//! # Ok(())
+//! # }
 //! ```
 //!
-//! ### Stdio Transport
+//! ### Future Transports
 //!
-//! ```rust,ignore
-//! // Stdio transport requires the "stdio" feature
-//! use turul_mcp_client::transport::StdioTransport;
+//! WebSocket and Stdio transports are planned for future releases:
 //!
-//! let transport = StdioTransport::new("./turul-mcp-server-executable")?;
+//! ```text
+//! // Coming soon:
+//! // WebSocketTransport::new("ws://localhost:8080/mcp")
+//! // StdioTransport::new("./mcp-server-executable")
 //! ```
 
 pub mod client;

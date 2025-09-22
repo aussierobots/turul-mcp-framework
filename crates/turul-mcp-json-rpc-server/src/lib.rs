@@ -13,7 +13,7 @@
 //!
 //! ## Architecture
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! // Handlers return domain errors only
 //! #[async_trait]
 //! impl JsonRpcHandler for MyHandler {

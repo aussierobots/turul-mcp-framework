@@ -238,7 +238,7 @@ impl McpServerBuilder {
     /// as your async function, so you can use the function name directly.
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust,no_run
     /// use turul_mcp_derive::mcp_tool;
     /// use turul_mcp_server::McpServer;
     ///
@@ -277,7 +277,7 @@ impl McpServerBuilder {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
+    /// ```rust,no_run
     /// use turul_mcp_server::McpServer;
     ///
     /// let server = McpServer::builder()
@@ -332,7 +332,7 @@ impl McpServerBuilder {
     /// as your async function, so you can use the function name directly.
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust,no_run
     /// use turul_mcp_derive::mcp_resource;
     /// use turul_mcp_server::McpServer;
     ///
@@ -377,7 +377,7 @@ impl McpServerBuilder {
     /// explicit control over template parsing or want to add custom validators.
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust,no_run
     /// let template = UriTemplate::new("file:///data/{id}.json")?
     ///     .with_validator("id", VariableValidator::user_id());
     ///
@@ -795,7 +795,7 @@ impl McpServerBuilder {
     /// Production servers should NOT use test mode as it bypasses security controls.
     ///
     /// # Example
-    /// ```rust,ignore
+    /// ```rust,no_run
     /// let server = McpServer::builder()
     ///     .name("test-server")
     ///     .version("1.0.0")

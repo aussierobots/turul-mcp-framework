@@ -160,13 +160,11 @@ pub fn mcp_resource(args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::McpResource;
 ///
 /// #[derive(McpResource)]
-/// #[uri = "file://config.json"]
-/// #[name = "Configuration File"]
-/// #[description = "Application configuration file"]
+/// #[resource(name = "config", uri = "file://config.json", description = "Application configuration file")]
 /// struct ConfigResource {
 ///     #[content]
 ///     #[content_type = "application/json"]
@@ -192,7 +190,7 @@ pub fn derive_mcp_resource(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::JsonSchema;
 /// use serde::{Deserialize, Serialize};
 ///
@@ -221,7 +219,7 @@ pub fn derive_json_schema(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::resource;
 ///
 /// let config_resource = resource! {
@@ -234,8 +232,9 @@ pub fn derive_json_schema(input: TokenStream) -> TokenStream {
 ///             "version": "1.0.0"
 ///         });
 ///         Ok(vec![turul_mcp_protocol::resources::ResourceContent::blob(
+///             "file://config.json",
 ///             serde_json::to_string_pretty(&config).unwrap(),
-///             "application/json".to_string()
+///             "application/json"
 ///         )])
 ///     }
 /// };
@@ -255,7 +254,7 @@ pub fn resource(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::schema_for;
 /// use serde::{Serialize, Deserialize};
 ///
@@ -279,7 +278,7 @@ pub fn schema_for(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::McpElicitation;
 ///
 /// #[derive(McpElicitation)]
@@ -301,7 +300,7 @@ pub fn derive_mcp_elicitation(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::McpPrompt;
 ///
 /// #[derive(McpPrompt)]
@@ -323,7 +322,7 @@ pub fn derive_mcp_prompt(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::McpSampling;
 ///
 /// #[derive(McpSampling)]
@@ -345,7 +344,7 @@ pub fn derive_mcp_sampling(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::McpCompletion;
 ///
 /// #[derive(McpCompletion)]
@@ -367,7 +366,7 @@ pub fn derive_mcp_completion(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::McpLogger;
 ///
 /// #[derive(McpLogger)]
@@ -389,7 +388,7 @@ pub fn derive_mcp_logger(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::McpRoot;
 ///
 /// #[derive(McpRoot)]
@@ -418,7 +417,7 @@ pub fn derive_mcp_root(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::McpNotification;
 ///
 /// #[derive(McpNotification, Default)]
@@ -443,7 +442,7 @@ pub fn derive_mcp_notification(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::tool;
 ///
 /// let divide_tool = tool! {
@@ -476,7 +475,7 @@ pub fn tool(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::prompt;
 ///
 /// let code_review_prompt = prompt! {
@@ -513,7 +512,7 @@ pub fn prompt(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::sampling;
 ///
 /// let text_generator = sampling! {
@@ -549,7 +548,7 @@ pub fn sampling(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::notification;
 ///
 /// notification! {
@@ -571,7 +570,7 @@ pub fn notification(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::completion;
 ///
 /// completion! {
@@ -593,7 +592,7 @@ pub fn completion(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::elicitation;
 ///
 /// elicitation! {
@@ -615,7 +614,7 @@ pub fn elicitation(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::roots;
 ///
 /// roots! {
@@ -634,7 +633,7 @@ pub fn roots(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::logging;
 ///
 /// logging! {

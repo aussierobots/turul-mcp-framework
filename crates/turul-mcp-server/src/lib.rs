@@ -15,7 +15,7 @@
 //!
 //! ## Quick Start
 //!
-//! ```rust,ignore
+//! ```rust,no_run
 //! use turul_mcp_server::prelude::*;
 //! use turul_mcp_derive::McpTool;
 //!
