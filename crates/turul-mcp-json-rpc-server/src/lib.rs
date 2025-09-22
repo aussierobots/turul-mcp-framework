@@ -1,14 +1,32 @@
 //! # JSON-RPC 2.0 Server Implementation
-//! 
-//! A pure, transport-agnostic JSON-RPC 2.0 server implementation that follows the specification.
+//!
+//! A pure, transport-agnostic JSON-RPC 2.0 server implementation with clean domain/protocol separation.
 //! This crate provides the core types and dispatch logic for JSON-RPC without any transport-specific code.
 //!
 //! ## Features
-//! - Full JSON-RPC 2.0 specification compliance
-//! - Transport agnostic (works with HTTP, WebSocket, TCP, etc.)
-//! - Async/await support with `async` feature
-//! - Comprehensive error handling
-//! - Support for notifications and requests
+//! - **JSON-RPC 2.0 Compliance**: Full specification support with proper error handling
+//! - **Type-Safe Error Handling**: Domain errors with automatic protocol conversion
+//! - **Clean Architecture**: Handlers return domain errors, dispatcher owns protocol
+//! - **Transport Agnostic**: Works with HTTP, WebSocket, TCP, etc.
+//! - **Async/Await Support**: Full async support with session context
+//! - **Zero Double-Wrapping**: Clean error handling without intermediate wrappers
+//!
+//! ## Architecture
+//!
+//! ```rust,ignore
+//! // Handlers return domain errors only
+//! #[async_trait]
+//! impl JsonRpcHandler for MyHandler {
+//!     type Error = MyDomainError;  // Not JsonRpcError!
+//!
+//!     async fn handle(&self, ...) -> Result<Value, MyDomainError> {
+//!         Err(MyDomainError::InvalidInput("bad data".to_string()))
+//!     }
+//! }
+//!
+//! // Dispatcher converts domain → protocol automatically
+//! let dispatcher: JsonRpcDispatcher<MyDomainError> = JsonRpcDispatcher::new();
+//! ```
 
 pub mod error;
 pub mod request;

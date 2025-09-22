@@ -149,36 +149,19 @@ impl fmt::Display for JsonRpcError {
 
 impl std::error::Error for JsonRpcError {}
 
-/// Errors that can occur during JSON-RPC processing
+/// Transport-level errors for JSON-RPC processing (no domain logic)
 #[derive(Debug, Error)]
-pub enum JsonRpcProcessingError {
+pub enum JsonRpcTransportError {
     #[error("JSON parse error: {0}")]
     JsonParseError(#[from] serde_json::Error),
-    
-    #[error("JSON-RPC error: {0}")]
-    RpcError(#[from] JsonRpcError),
-    
-    #[error("Method handler error: {0}")]
-    HandlerError(String),
-    
-    #[error("Internal error: {0}")]
-    InternalError(String),
+
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("Protocol error: {0}")]
+    ProtocolError(String),
 }
 
-impl JsonRpcProcessingError {
-    pub fn to_rpc_error(&self, id: Option<RequestId>) -> JsonRpcError {
-        match self {
-            JsonRpcProcessingError::JsonParseError(_) => JsonRpcError::parse_error(),
-            JsonRpcProcessingError::RpcError(err) => err.clone(),
-            JsonRpcProcessingError::HandlerError(msg) => {
-                JsonRpcError::internal_error(id, Some(msg.clone()))
-            }
-            JsonRpcProcessingError::InternalError(msg) => {
-                JsonRpcError::internal_error(id, Some(msg.clone()))
-            }
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
