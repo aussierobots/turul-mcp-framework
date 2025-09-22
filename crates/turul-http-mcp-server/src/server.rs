@@ -15,6 +15,7 @@ use tokio::net::TcpListener;
 use tracing::{info, error, debug};
 
 use turul_mcp_json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
+use turul_mcp_protocol::McpError;
 use turul_mcp_session_storage::InMemorySessionStorage;
 
 use crate::{
@@ -58,7 +59,7 @@ impl Default for ServerConfig {
 /// Builder for HTTP MCP server with pluggable storage
 pub struct HttpMcpServerBuilder {
     config: ServerConfig,
-    dispatcher: JsonRpcDispatcher,
+    dispatcher: JsonRpcDispatcher<McpError>,
     session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
     stream_config: StreamConfig,
 }
@@ -68,7 +69,7 @@ impl HttpMcpServerBuilder {
     pub fn new() -> Self {
         Self {
             config: ServerConfig::default(),
-            dispatcher: JsonRpcDispatcher::new(),
+            dispatcher: JsonRpcDispatcher::<McpError>::new(),
             session_storage: Some(Arc::new(InMemorySessionStorage::new())),
             stream_config: StreamConfig::default(),
         }
@@ -80,7 +81,7 @@ impl HttpMcpServerBuilder {
     pub fn with_storage(session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>) -> Self {
         Self {
             config: ServerConfig::default(),
-            dispatcher: JsonRpcDispatcher::new(),
+            dispatcher: JsonRpcDispatcher::<McpError>::new(),
             session_storage: Some(session_storage),
             stream_config: StreamConfig::default(),
         }
@@ -144,7 +145,7 @@ impl HttpMcpServerBuilder {
     /// Register a JSON-RPC handler for specific methods
     pub fn register_handler<H>(mut self, methods: Vec<String>, handler: H) -> Self
     where
-        H: JsonRpcHandler + 'static,
+        H: JsonRpcHandler<Error = McpError> + 'static,
     {
         self.dispatcher.register_methods(methods, handler);
         self
@@ -153,7 +154,7 @@ impl HttpMcpServerBuilder {
     /// Register a default handler for unhandled methods
     pub fn default_handler<H>(mut self, handler: H) -> Self
     where
-        H: JsonRpcHandler + 'static,
+        H: JsonRpcHandler<Error = McpError> + 'static,
     {
         self.dispatcher.set_default_handler(handler);
         self
@@ -189,7 +190,7 @@ impl Default for HttpMcpServerBuilder {
 #[derive(Clone)]
 pub struct HttpMcpServer {
     config: ServerConfig,
-    dispatcher: Arc<JsonRpcDispatcher>,
+    dispatcher: Arc<JsonRpcDispatcher<McpError>>,
     session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     stream_config: StreamConfig,
     // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance

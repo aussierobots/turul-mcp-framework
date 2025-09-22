@@ -1,12 +1,12 @@
 //! # HTTP MCP Server
 //!
 //! This crate provides HTTP transport for Model Context Protocol (MCP) servers.
-//! It supports both modern Streamable HTTP (2025-03-26+) and legacy HTTP+SSE transports
+//! It supports both modern Streamable HTTP and legacy HTTP+SSE transports
 //! for maximum compatibility with all MCP clients.
 //!
 //! ## Supported Transports
-//! - **Streamable HTTP (2025-03-26+)**: Recommended for production deployments
-//! - **HTTP+SSE (2024-11-05)**: Legacy transport for backwards compatibility
+//! - **Streamable HTTP**: Recommended for production deployments
+//! - **HTTP+SSE**: Legacy transport for backwards compatibility
 //!
 //! ## Features
 //! - Automatic protocol version detection and routing

@@ -15,6 +15,7 @@ use http_body::Body;
 
 use crate::{Result, ServerConfig, sse::SseManager};
 use turul_mcp_json_rpc_server::{JsonRpcDispatcher, dispatch::parse_json_rpc_message};
+use turul_mcp_protocol::McpError;
 
 /// SSE stream body that implements hyper's Body trait
 pub struct SseStreamBody {
@@ -57,13 +58,13 @@ impl Body for SseStreamBody {
 /// HTTP handler for MCP requests
 pub struct McpHttpHandler {
     pub(crate) config: ServerConfig,
-    pub(crate) dispatcher: Arc<JsonRpcDispatcher>,
+    pub(crate) dispatcher: Arc<JsonRpcDispatcher<McpError>>,
     pub(crate) sse_manager: Arc<SseManager>,
 }
 
 impl McpHttpHandler {
     /// Create a new handler
-    pub fn new(config: ServerConfig, dispatcher: Arc<JsonRpcDispatcher>) -> Self {
+    pub fn new(config: ServerConfig, dispatcher: Arc<JsonRpcDispatcher<McpError>>) -> Self {
         Self {
             config,
             dispatcher,
@@ -74,7 +75,7 @@ impl McpHttpHandler {
     /// Create a new handler with existing SSE manager
     pub fn with_sse_manager(
         config: ServerConfig,
-        dispatcher: Arc<JsonRpcDispatcher>,
+        dispatcher: Arc<JsonRpcDispatcher<McpError>>,
         sse_manager: Arc<SseManager>
     ) -> Self {
         Self { config, dispatcher, sse_manager }
@@ -290,11 +291,10 @@ impl McpHttpHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use turul_mcp_json_rpc_server::JsonRpcDispatcher;
 
     fn create_test_handler() -> McpHttpHandler {
         let config = ServerConfig::default();
-        let dispatcher = Arc::new(JsonRpcDispatcher::new());
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         McpHttpHandler::new(config, dispatcher)
     }
 

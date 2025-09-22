@@ -27,6 +27,7 @@ use turul_mcp_json_rpc_server::{
     dispatch::{parse_json_rpc_message, JsonRpcMessage, JsonRpcMessageResult},
     error::{JsonRpcError, JsonRpcErrorObject}
 };
+use turul_mcp_protocol::McpError;
 use turul_mcp_session_storage::InMemorySessionStorage;
 use turul_mcp_protocol::ServerCapabilities;
 use chrono;
@@ -145,7 +146,7 @@ fn jsonrpc_error_to_unified_body(error: JsonRpcError) -> Result<Response<Unified
 /// JSON-RPC 2.0 over HTTP handler with shared StreamManager
 pub struct SessionMcpHandler {
     pub(crate) config: ServerConfig,
-    pub(crate) dispatcher: Arc<JsonRpcDispatcher>,
+    pub(crate) dispatcher: Arc<JsonRpcDispatcher<McpError>>,
     pub(crate) session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     pub(crate) stream_config: StreamConfig,
     // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance with internal session management
@@ -168,7 +169,7 @@ impl SessionMcpHandler {
     /// Create a new handler with default in-memory storage (zero-configuration)
     pub fn new(
         config: ServerConfig,
-        dispatcher: Arc<JsonRpcDispatcher>,
+        dispatcher: Arc<JsonRpcDispatcher<McpError>>,
         stream_config: StreamConfig,
     ) -> Self {
         let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> = Arc::new(InMemorySessionStorage::new());
@@ -178,7 +179,7 @@ impl SessionMcpHandler {
     /// Create handler with shared StreamManager instance (corrected architecture)
     pub fn with_shared_stream_manager(
         config: ServerConfig,
-        dispatcher: Arc<JsonRpcDispatcher>,
+        dispatcher: Arc<JsonRpcDispatcher<McpError>>,
         session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
         stream_config: StreamConfig,
         stream_manager: Arc<StreamManager>,
@@ -196,7 +197,7 @@ impl SessionMcpHandler {
     /// Note: Use with_shared_stream_manager for correct architecture
     pub fn with_storage(
         config: ServerConfig,
-        dispatcher: Arc<JsonRpcDispatcher>,
+        dispatcher: Arc<JsonRpcDispatcher<McpError>>,
         session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
         stream_config: StreamConfig,
     ) -> Self {
