@@ -19,7 +19,7 @@ use turul_mcp_json_rpc_server::{
     r#async::SessionContext as JsonRpcSessionContext,
     dispatch::{JsonRpcMessage, JsonRpcMessageResult, parse_json_rpc_message},
 };
-use turul_mcp_protocol::ServerCapabilities;
+use turul_mcp_protocol::{ServerCapabilities, McpError};
 use turul_mcp_session_storage::BoxedSessionStorage;
 
 use crate::adapter::{extract_mcp_headers, inject_mcp_headers};
@@ -39,7 +39,7 @@ use crate::cors::{CorsConfig, create_preflight_response, inject_cors_headers};
 #[derive(Clone)]
 pub struct LambdaMcpHandler {
     /// JSON-RPC dispatcher for method handling
-    dispatcher: Arc<JsonRpcDispatcher>,
+    dispatcher: Arc<JsonRpcDispatcher<McpError>>,
 
     /// Session storage backend
     session_storage: Arc<BoxedSessionStorage>,
@@ -65,7 +65,7 @@ pub struct LambdaMcpHandler {
 impl LambdaMcpHandler {
     /// Create a new Lambda MCP handler with the framework components
     pub fn new(
-        dispatcher: JsonRpcDispatcher,
+        dispatcher: JsonRpcDispatcher<McpError>,
         session_storage: Arc<BoxedSessionStorage>,
         stream_manager: Arc<StreamManager>,
         config: ServerConfig,
@@ -88,7 +88,7 @@ impl LambdaMcpHandler {
     /// Create with shared stream manager (for advanced use cases)
     pub fn with_shared_stream_manager(
         config: ServerConfig,
-        dispatcher: Arc<JsonRpcDispatcher>,
+        dispatcher: Arc<JsonRpcDispatcher<McpError>>,
         session_storage: Arc<BoxedSessionStorage>,
         stream_manager: Arc<StreamManager>,
         implementation: turul_mcp_protocol::Implementation,
@@ -601,7 +601,7 @@ mod tests {
             std::time::Duration::from_secs(30 * 60),
             std::time::Duration::from_secs(60),
         ));
-        let bridge = SessionAwareMcpHandlerBridge::new(ping_handler, session_manager);
+        let bridge = SessionAwareMcpHandlerBridge::new(ping_handler, session_manager, false);
 
         assert_eq!(bridge.supported_methods(), vec!["ping".to_string()]);
     }
