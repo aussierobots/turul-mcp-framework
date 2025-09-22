@@ -278,11 +278,13 @@ impl McpServerBuilder {
     /// # Examples
     ///
     /// ```rust,ignore
-    /// // Static resource
-    /// .resource(ConfigResource::new())  // URI: "file://config.json"
+    /// use turul_mcp_server::McpServer;
     ///
-    /// // Template resource (auto-detected)
-    /// .resource(UserProfileResource::new())  // URI: "user://profile/{user_id}"
+    /// let server = McpServer::builder()
+    ///     .name("resource-server")
+    ///     .resource(ConfigResource::new())  // URI: "file://config.json"
+    ///     .resource(UserProfileResource::new())  // URI: "user://profile/{user_id}"
+    ///     .build()?;
     /// ```
     pub fn resource<R: McpResource + 'static>(mut self, resource: R) -> Self {
         let uri = resource.uri().to_string();

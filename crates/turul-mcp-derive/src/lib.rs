@@ -93,7 +93,7 @@ pub fn derive_mcp_tool(input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::mcp_tool;
 /// use turul_mcp_protocol::McpResult;
 ///
@@ -132,7 +132,7 @@ pub fn param(_args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```rust,no_run
 /// use turul_mcp_derive::mcp_resource;
 /// use turul_mcp_protocol::resources::ResourceContent;
 /// use turul_mcp_server::McpResult;
