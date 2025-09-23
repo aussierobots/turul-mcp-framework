@@ -32,6 +32,7 @@ members = [
     "examples/function-resource-server",
     "examples/lambda-mcp-client",
     "examples/lambda-mcp-server",
+    "examples/lambda-mcp-server-streaming",
     "examples/manual-tools-server",
     "examples/minimal-server",
     "examples/notification-server",

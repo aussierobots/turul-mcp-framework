@@ -1,19 +1,21 @@
-# Turul MCP Framework - Production-Ready Rust Implementation
+# Turul MCP Framework - Beta Rust Implementation
 
-A comprehensive, production-ready Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-06-18 specification**.
+A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-06-18 specification**.
 
-## ✅ **Production Ready** - Comprehensive Test Coverage
-**100+ passing tests across workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
+⚠️ **Beta Status** - Active development with ~21 core TODOs + example placeholders. Suitable for development and testing, not production-ready.
+
+## 🧪 **Active Development** - Comprehensive Test Coverage
+**300+ passing tests across workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
 
 ## ✨ Key Highlights
 
 - **🏗️ 10 Framework Crates**: Complete MCP ecosystem with core framework, client library, and serverless support
 - **📚 68 Comprehensive Examples**: Real-world business applications and framework demonstration examples (42 active, 26 archived)
-- **🧪 100+ Comprehensive Tests**: Production-grade test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
+- **🧪 300+ Development Tests**: Comprehensive test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
-- **🌐 Transport Flexibility**: HTTP/1.1 and production SSE streaming via SessionMcpHandler (WebSocket and stdio planned)
-- **☁️ Serverless Ready**: AWS Lambda integration with streaming responses and SQS event processing
-- **🔧 Production Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
+- **🌐 Transport Flexibility**: HTTP/1.1 and SSE streaming via SessionMcpHandler (WebSocket and stdio planned)
+- **☁️ Serverless Support**: AWS Lambda integration with streaming responses and SQS event processing
+- **🔧 Development Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
 - **⚡ Performance Optimized**: Comprehensive benchmarking suite with >1000 RPS throughput, <100ms response times, and extensive stress testing
 
 ## 🚀 Quick Start
@@ -439,16 +441,16 @@ let server = McpServer::builder()
 
 ### Transport Support
 - **HTTP/1.1 & HTTP/2** - Standard web transport with JSON-RPC
-- **Server-Sent Events (SSE)** - Production streaming via `SessionMcpHandler` (basic handler is example-only)
+- **Server-Sent Events (SSE)** - Development streaming with full real-time capabilities
 - **Stdio** - Command-line integration
 - **AWS Lambda** - Serverless deployment with streaming responses
 
-> **Note**: For production SSE streaming, use `SessionMcpHandler` which provides full real-time event streaming. The basic `McpHttpHandler` includes SSE endpoints for examples but has limited streaming capabilities.
+> **Note**: SSE streaming is in active development with full real-time event broadcasting, session isolation, and correlation ID tracking.
 
 ## 📚 Examples Overview
 
 ### 🏢 Real-World Business Applications
-Production-ready servers solving actual business problems:
+Development servers for actual business problems:
 
 1. **comprehensive-server** → Development Team Integration Platform
 2. **dynamic-resource-server** → Enterprise API Data Gateway
@@ -494,7 +496,7 @@ sam deploy --guided
 
 ## 🧪 Testing & Quality
 
-### 🧪 **Comprehensive Test Coverage - Production Quality**
+### 🧪 **Comprehensive Test Coverage - Development Quality**
 
 **Framework Excellence**: 100+ tests across all components with complete async SessionContext integration:
 
@@ -826,7 +828,7 @@ let content = client.read_resource("config://app.json").await?;
 - **Rust 2024 Edition** - Latest language features and performance improvements
 - **Tokio/Hyper** - High-performance async runtime with HTTP/2 support
 
-### Production Quality
+### Development Quality
 - **Session Management** - Automatic cleanup and state persistence
 - **Real-time Notifications** - SSE-based event streaming
 - **CORS Support** - Browser client compatibility
@@ -913,7 +915,7 @@ The comprehensive test validates all MCP session management requirements:
 
 #### Storage Backend Configuration
 
-**DynamoDB** (Production):
+**DynamoDB** (Development):
 - 5-minute TTL with automatic cleanup
 - GSI indexes for efficient queries
 - AWS credentials required
@@ -942,6 +944,69 @@ let config = DynamoDbConfig {
     event_ttl_minutes: 15,    // 15-minute event TTL
     ..Default::default()
 };
+```
+
+### Server-Sent Events (SSE) Verification
+
+The framework includes comprehensive SSE testing to verify real-time notification streaming:
+
+#### Running SSE Tests
+
+```bash
+# Test SSE functionality in prompts package
+cargo test --package mcp-prompts-tests --test sse_notifications_test
+
+# Test specific SSE scenarios
+cargo test test_sse_prompts_connection_establishment -- --nocapture
+cargo test test_sse_prompts_list_changed_notification -- --nocapture
+cargo test test_sse_prompts_session_isolation -- --nocapture
+
+# Test SSE functionality in resources package
+cargo test --package mcp-resources-tests --test sse_notifications_test
+
+# Test specific resource SSE scenarios
+cargo test test_sse_connection_establishment -- --nocapture
+cargo test test_sse_resource_list_changed_notification -- --nocapture
+cargo test test_sse_session_isolation -- --nocapture
+```
+
+#### Expected SSE Test Output
+
+```
+🚀 Starting MCP Resource Test Server on port 18994
+✅ Session 01997404-d8f4-7b20-b76d-ac1f4be628a3 created and immediately initialized
+✅ SSE connection: session=01997404-d908-7e62-ae74-af87f1523836, connection=01997404-d909-7001-8b95-296e806aa1e1
+✅ Total notifications detected: 1
+✅ Session ID correlation verified
+✅ Valid SSE format compliance verified
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+#### Manual SSE Verification
+
+```bash
+# 1. Start any MCP server with SSE enabled
+cargo run --example prompts-server
+
+# 2. Get session ID via initialization
+curl -X POST http://127.0.0.1:8080/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+
+# 3. Connect to SSE stream (replace SESSION_ID with actual ID)
+curl -N -H "Accept: text/event-stream" \
+  -H "Mcp-Session-Id: SESSION_ID" \
+  http://127.0.0.1:8080/mcp
+
+# Expected SSE output:
+# id: 0
+# event: ping
+# data: {"type":"keepalive"}
+#
+# id: 1
+# event: notification
+# data: {"type":"resource_update","resource":"prompts/list"}
 ```
 
 ## 📊 Business Value Examples
@@ -992,8 +1057,34 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 - **[Serde](https://serde.rs)** - Serialization framework
 - **Rust Community** - For exceptional tooling and ecosystem
 
+## 📋 Current Limitations & Development Status
+
+### Beta Development Status
+- **~21 core framework TODOs** (actual limitations like resource subscriptions)
+- **~150 example/demo placeholders** (intentional demonstration code)
+- **Active development** - APIs may change in breaking ways before 1.0.0
+- **Development and testing use** - Not yet recommended for production systems
+
+### Streaming Limitations
+- **Lambda SSE**: Snapshot-based responses work reliably; real-time streaming requires `run_with_streaming_response`
+- **CI Environment Testing**: SSE tests require port binding capabilities (graceful fallbacks implemented)
+- **Browser Compatibility**: CORS support available but may need tuning for specific client requirements
+
+### Known Areas for Improvement
+- **Resource Subscriptions**: `resources/subscribe` MCP spec feature not yet implemented
+- **WebSocket Transport**: Planned but not yet available (HTTP/1.1 and SSE currently supported)
+- **Authentication Middleware**: OAuth/JWT integration planned for future releases
+- **Performance Monitoring**: Basic benchmarks available, comprehensive monitoring planned
+
+### Test Coverage Gaps
+- **Concurrency Stress Testing**: Some resource tests have 30% failure tolerance under high load
+- **Long-term Session Management**: Extended session persistence testing needed
+- **Cross-platform Compatibility**: Primarily tested on Linux development environments
+
+**Framework Philosophy**: We prioritize honest documentation over inflated claims. This beta status reflects our commitment to transparency about the current development state.
+
 ---
 
-**🚀 Ready to build production-ready MCP servers?** Start with our [comprehensive examples](examples/) or check the [getting started guide](EXAMPLES.md).
+**🚀 Ready to build MCP servers?** Start with our [comprehensive examples](examples/) or check the [getting started guide](EXAMPLES.md).
 
 **💡 Need help?** Open an issue or check our [65+ working examples](examples/) covering everything from simple calculators to enterprise systems.
