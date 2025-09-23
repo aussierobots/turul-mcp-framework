@@ -151,13 +151,20 @@ pub use turul_mcp_protocol::{McpError, McpResult as ProtocolMcpResult};
 /// HTTP transport layer with SSE streaming and session management
 pub use turul_http_mcp_server;
 
-/// Result type for all MCP operations - uses structured MCP errors
+/// Result type for MCP server operations with domain-specific error handling
+///
+/// This alias provides structured error types that automatically convert to JSON-RPC 2.0
+/// error responses when crossing the protocol boundary. Use this for all tool and handler
+/// implementations to ensure consistent error reporting to MCP clients.
 pub type McpResult<T> = turul_mcp_protocol::McpResult<T>;
 
 /// Convenience alias for McpResult
 pub type Result<T> = McpResult<T>;
 
-// Implement McpTool for DynamicTool (Level 3 builder pattern)
+/// Implements McpTool for DynamicTool to enable Level 3 builder pattern tool creation
+///
+/// This implementation bridges DynamicTool's builder pattern with the framework's
+/// session-aware execution model, enabling runtime tool construction with type safety.
 #[async_trait::async_trait]
 impl McpTool for DynamicTool {
     async fn call(

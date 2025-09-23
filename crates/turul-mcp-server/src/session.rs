@@ -64,7 +64,7 @@ pub struct SessionContext {
 
 impl SessionContext {
     /// Create from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration
-    pub fn from_json_rpc_with_broadcaster(
+    pub(crate) fn from_json_rpc_with_broadcaster(
         json_rpc_ctx: turul_mcp_json_rpc_server::SessionContext,
         storage: Arc<dyn SessionStorage<Error = SessionStorageError>>,
     ) -> Self {
@@ -231,7 +231,7 @@ impl SessionContext {
     }
 
     /// Create from JSON-RPC server's SessionContext
-    pub fn from_json_rpc_session(
+    pub(crate) fn from_json_rpc_session(
         json_rpc_ctx: turul_mcp_json_rpc_server::SessionContext,
         session_manager: Arc<SessionManager>,
     ) -> Self {

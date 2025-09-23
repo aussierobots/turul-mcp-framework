@@ -1,6 +1,9 @@
-//! MCP Server Implementation
+//! MCP Server Implementation and Session-Aware Handlers
 //!
-//! This module provides the main MCP server implementation.
+//! This module contains the core MCP server implementation (`McpServer`) and
+//! session-aware handlers that bridge MCP protocol requests with business logic.
+//! Includes handlers for initialization, tool execution, and tool listing with
+//! automatic session management and protocol compliance.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -421,7 +424,10 @@ impl McpServer {
     }
 }
 
-/// Session-aware bridge handler to adapt McpHandler to JsonRpcHandler
+/// Session-aware bridge handler that adapts McpHandler to JsonRpcHandler
+///
+/// Provides session management and lifecycle enforcement for custom MCP handlers,
+/// automatically injecting session context and enforcing initialization requirements.
 pub struct SessionAwareMcpHandlerBridge {
     handler: Arc<dyn McpHandler>,
     session_manager: Arc<SessionManager>,
@@ -429,6 +435,7 @@ pub struct SessionAwareMcpHandlerBridge {
 }
 
 impl SessionAwareMcpHandlerBridge {
+    /// Creates a new session-aware handler bridge
     pub fn new(
         handler: Arc<dyn McpHandler>,
         session_manager: Arc<SessionManager>,
