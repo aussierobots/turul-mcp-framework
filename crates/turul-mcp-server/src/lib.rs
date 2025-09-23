@@ -1,17 +1,33 @@
 //! # MCP Server Framework
 //!
-//! A high-level framework for building Model Context Protocol (MCP) servers in Rust.
-//! This framework provides a zero-configuration, builder-pattern API for creating MCP servers
-//! with HTTP transport, session management, and comprehensive MCP 2025-06-18 specification support.
+//! A production-ready Rust framework for building Model Context Protocol (MCP) servers.
+//! Provides zero-configuration setup, comprehensive MCP 2025-06-18 specification support,
+//! and multiple deployment targets including HTTP, AWS Lambda, and local development.
 //!
-//! ## Features
+//! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-server.svg)](https://crates.io/crates/turul-mcp-server)
+//! [![Documentation](https://docs.rs/turul-mcp-server/badge.svg)](https://docs.rs/turul-mcp-server)
+//! [![License](https://img.shields.io/crates/l/turul-mcp-server.svg)](https://github.com/aussierobots/turul-mcp-framework/blob/main/LICENSE)
 //!
-//! - **Zero Configuration**: Framework auto-determines all method strings from types
-//! - **Unified Error Handling**: Clean domain/protocol separation with thiserror
-//! - **4 Tool Creation Levels**: Function macros, derive macros, builders, manual
-//! - **Session Management**: Async UUID v7 sessions with pluggable storage
-//! - **Real-time Notifications**: SSE streaming for progress and logging
-//! - **Production Ready**: Type-safe, compliant, thoroughly tested
+//! ## ✨ Features
+//!
+//! - **🚀 Zero Configuration**: Framework auto-determines method strings from types
+//! - **🛡️ Type-Safe Error Handling**: Clean domain/protocol separation
+//! - **🔧 4 Tool Creation Levels**: Function macros → derive macros → builders → manual
+//! - **📡 Multiple Transports**: HTTP, Server-Sent Events (SSE), AWS Lambda
+//! - **💾 Pluggable Storage**: InMemory, SQLite, PostgreSQL, DynamoDB
+//! - **🔄 Real-time Streaming**: SSE notifications for progress and logging
+//! - **🏭 Production Ready**: Comprehensive testing, monitoring, and deployment support
+//!
+//! ## 📦 Installation
+//!
+//! Add to your `Cargo.toml`:
+//!
+//! ```toml
+//! [dependencies]
+//! turul-mcp-server = "0.2"
+//! turul-mcp-derive = "0.2"  # For macros
+//! tokio = { version = "1.0", features = ["full"] }
+//! ```
 //!
 //! ## Quick Start
 //!
@@ -55,7 +71,7 @@
 //! }
 //! ```
 //!
-//! ## Architecture
+//! ## 🏗️ Architecture
 //!
 //! The framework uses **clean domain/protocol separation**:
 //!
@@ -63,6 +79,61 @@
 //! - **Protocol Layer**: Framework converts to JSON-RPC 2.0 automatically
 //! - **Transport Layer**: HTTP/SSE with session-aware error handling
 //! - **Storage Layer**: Pluggable backends (InMemory, SQLite, PostgreSQL, DynamoDB)
+//!
+//! ## 📖 Examples
+//!
+//! **Complete working examples available at:**
+//! [github.com/aussierobots/turul-mcp-framework/tree/main/examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
+//!
+//! - 🎯 **Minimal Server** - Basic tool setup
+//! - 🧮 **Calculator** - Math operations with error handling
+//! - 🌐 **HTTP Server** - Production HTTP deployment
+//! - ☁️ **AWS Lambda** - Serverless deployment
+//! - 🔄 **Real-time Streaming** - SSE notifications
+//! - 💾 **Database Integration** - SQLite/PostgreSQL/DynamoDB
+//!
+//! ## 🚀 Deployment Options
+//!
+//! ### Local Development
+//! ```bash
+//! cargo run --example minimal-server
+//! # Server runs on http://localhost:8080/mcp
+//! ```
+//!
+//! ### AWS Lambda
+//! ```bash
+//! cargo lambda build --release
+//! cargo lambda deploy --iam-role arn:aws:iam::...
+//! ```
+//!
+//! ### Docker
+//! ```dockerfile
+//! FROM rust:1.70 as builder
+//! COPY . .
+//! RUN cargo build --release
+//!
+//! FROM debian:bookworm-slim
+//! COPY --from=builder /target/release/my-mcp-server /usr/local/bin/
+//! EXPOSE 8080
+//! CMD ["my-mcp-server"]
+//! ```
+//!
+//! ## 🔧 Configuration
+//!
+//! The framework supports extensive configuration through the builder pattern:
+//!
+//! ```rust,no_run
+//! # use turul_mcp_server::prelude::*;
+//! let server = McpServer::builder()
+//!     .name("production-server")
+//!     .version("1.0.0")
+//!     .description("Production MCP server")
+//!     .session_storage(SqliteSessionStorage::new().await?)
+//!     .cors_allow_all_origins()
+//!     .max_connections(1000)
+//!     .request_timeout(Duration::from_secs(30))
+//!     .build()?;
+//! ```
 
 pub mod builder;
 pub mod completion;

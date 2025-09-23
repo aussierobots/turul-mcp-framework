@@ -1,17 +1,32 @@
 //! # MCP Client Library
 //!
-//! A comprehensive Model Context Protocol (MCP) client library with support for multiple
-//! transport layers and protocol versions. This library provides both high-level and
-//! low-level APIs for interacting with MCP servers.
+//! **Production-ready Rust client for Model Context Protocol (MCP) servers.**
 //!
-//! ## Features
+//! Connect to MCP servers with full protocol compliance, multiple transport options,
+//! and automatic session management. Supports both synchronous and streaming operations
+//! with comprehensive error handling and recovery mechanisms.
 //!
-//! - **Multi-transport support**: HTTP, SSE, WebSocket, and stdio
-//! - **Protocol compliance**: Full MCP 2025-06-18 specification support
-//! - **Async/await**: Built on Tokio for high performance
-//! - **Session management**: Automatic session handling and recovery
-//! - **Streaming support**: Real-time event streaming and progress tracking
-//! - **Error handling**: Comprehensive error types and recovery mechanisms
+//! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-client.svg)](https://crates.io/crates/turul-mcp-client)
+//! [![Documentation](https://docs.rs/turul-mcp-client/badge.svg)](https://docs.rs/turul-mcp-client)
+//! [![License](https://img.shields.io/crates/l/turul-mcp-client.svg)](https://github.com/aussierobots/turul-mcp-framework/blob/main/LICENSE)
+//!
+//! ## ✨ Features
+//!
+//! - **🌐 Multi-transport**: HTTP, Server-Sent Events (SSE), WebSocket (planned), stdio (planned)
+//! - **📋 Full Protocol**: Complete MCP 2025-06-18 specification support
+//! - **⚡ High Performance**: Built on Tokio with async/await throughout
+//! - **🔄 Session Management**: Automatic connection handling and recovery
+//! - **📡 Real-time Streaming**: SSE support for progress and notifications
+//! - **🛡️ Error Handling**: Comprehensive error types with automatic retry
+//! - **🔧 Configurable**: Timeouts, retries, connection pooling
+//!
+//! ## 📦 Installation
+//!
+//! ```toml
+//! [dependencies]
+//! turul-mcp-client = "0.2"
+//! tokio = { version = "1.0", features = ["full"] }
+//! ```
 //!
 //! ## Quick Start
 //!
@@ -78,6 +93,122 @@
 //! // WebSocketTransport::new("ws://localhost:8080/mcp")
 //! // StdioTransport::new("./mcp-server-executable")
 //! ```
+//!
+//! ## 🎯 Common Operations
+//!
+//! ### Tool Execution
+//!
+//! ```rust,no_run
+//! # use turul_mcp_client::prelude::*;
+//! # async fn example(client: &McpClient) -> Result<(), Box<dyn std::error::Error>> {
+//! // List available tools
+//! let tools = client.list_tools().await?;
+//! println!("Available tools: {:?}", tools);
+//!
+//! // Execute a tool
+//! let result = client.call_tool("calculator", serde_json::json!({
+//!     "operation": "add",
+//!     "a": 5,
+//!     "b": 3
+//! })).await?;
+//! println!("Result: {:?}", result);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Resource Access
+//!
+//! ```rust,no_run
+//! # use turul_mcp_client::prelude::*;
+//! # async fn example(client: &McpClient) -> Result<(), Box<dyn std::error::Error>> {
+//! // List available resources
+//! let resources = client.list_resources().await?;
+//!
+//! // Read a specific resource
+//! let content = client.read_resource("file://config.json").await?;
+//! println!("Resource content: {:?}", content);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Prompt Templates
+//!
+//! ```rust,no_run
+//! # use turul_mcp_client::prelude::*;
+//! # async fn example(client: &McpClient) -> Result<(), Box<dyn std::error::Error>> {
+//! // List available prompts
+//! let prompts = client.list_prompts().await?;
+//!
+//! // Get a prompt with arguments
+//! let prompt = client.get_prompt("code_review", serde_json::json!({
+//!     "language": "rust",
+//!     "code": "fn main() { println!(\"Hello!\"); }"
+//! })).await?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## ⚙️ Configuration
+//!
+//! The client supports extensive configuration:
+//!
+//! ```rust,no_run
+//! # use turul_mcp_client::prelude::*;
+//! use std::time::Duration;
+//!
+//! let config = ClientConfig::builder()
+//!     .request_timeout(Duration::from_secs(30))
+//!     .retry_attempts(3)
+//!     .retry_delay(Duration::from_millis(500))
+//!     .max_connections(10)
+//!     .build();
+//!
+//! let client = McpClientBuilder::new()
+//!     .with_config(config)
+//!     .build();
+//! ```
+//!
+//! ## 📡 Real-time Streaming
+//!
+//! For real-time notifications and progress updates:
+//!
+//! ```rust,no_run
+//! # use turul_mcp_client::prelude::*;
+//! # async fn example(client: &McpClient) -> Result<(), Box<dyn std::error::Error>> {
+//! // Subscribe to notifications
+//! let mut stream = client.subscribe_notifications().await?;
+//!
+//! while let Some(notification) = stream.next().await {
+//!     match notification? {
+//!         Notification::Progress(progress) => {
+//!             println!("Progress: {}%", progress.percent);
+//!         }
+//!         Notification::LogMessage(log) => {
+//!             println!("Log: {}", log.message);
+//!         }
+//!         _ => {}
+//!     }
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## 📖 Examples
+//!
+//! **Complete examples available at:**
+//! [github.com/aussierobots/turul-mcp-framework/tree/main/examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
+//!
+//! - 🔧 **Basic Client** - Simple tool execution
+//! - 📡 **Streaming Client** - Real-time notifications
+//! - 🌐 **HTTP Client** - Production HTTP integration
+//! - 🔄 **Retry Logic** - Error handling and recovery
+//! - 📊 **Monitoring** - Connection health and metrics
+//!
+//! ## 🔗 Related Crates
+//!
+//! - [`turul-mcp-server`](https://crates.io/crates/turul-mcp-server) - Build MCP servers
+//! - [`turul-mcp-protocol`](https://crates.io/crates/turul-mcp-protocol) - Protocol types
+//! - [`turul-mcp-derive`](https://crates.io/crates/turul-mcp-derive) - Macros for tools/resources
 
 pub mod client;
 pub mod config;

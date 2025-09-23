@@ -1,30 +1,132 @@
 //! # MCP Derive Macros
 //!
-//! This crate provides procedural macros to simplify creating MCP tools and resources.
+//! **Procedural macros for zero-configuration MCP tool and resource creation.**
 //!
-//! ## Features
+//! Transform regular Rust structs and functions into full-featured MCP tools, resources,
+//! and protocol handlers with automatic schema generation and method dispatch.
 //!
-//! - `#[derive(McpTool)]` - Automatically derive McpTool implementations
-//! - `#[mcp_tool]` - Function-style tools with automatic parameter extraction
-//! - `#[derive(McpResource)]` - Automatically derive resource handlers
-//! - `tool!` - Declarative macro for simple tool creation
-//! - `resource!` - Declarative macro for simple resource creation
-//! - `schema_for!` - Generate JSON schemas from Rust types
+//! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-derive.svg)](https://crates.io/crates/turul-mcp-derive)
+//! [![Documentation](https://docs.rs/turul-mcp-derive/badge.svg)](https://docs.rs/turul-mcp-derive)
+//! [![License](https://img.shields.io/crates/l/turul-mcp-derive.svg)](https://github.com/aussierobots/turul-mcp-framework/blob/main/LICENSE)
 //!
-//! ## Quick Start
+//! ## ✨ Features
 //!
-//! ```rust,no_run
-//! use turul_mcp_derive::{McpTool, McpResource, mcp_tool};
+//! - **🔧 Tool Creation**: `#[derive(McpTool)]`, `#[mcp_tool]`, `tool!` macro
+//! - **📄 Resource Handling**: `#[derive(McpResource)]`, `#[mcp_resource]`, `resource!` macro
+//! - **📝 Schema Generation**: Automatic JSON schema from Rust types
+//! - **🚀 Zero Configuration**: Framework auto-determines method strings
+//! - **🛡️ Type Safety**: Compile-time validation of MCP protocols
+//! - **📡 Full Protocol**: Tools, resources, prompts, notifications, sampling
 //!
-//! // Derive macros and function attributes available
+//! ## 📦 Installation
+//!
+//! ```toml
+//! [dependencies]
+//! turul-mcp-derive = "0.2"
+//! turul-mcp-server = "0.2"  # For server-side usage
 //! ```
 //!
-//! ## Code Organization
+//! ## 🚀 Quick Start
 //!
-//! - **Derive Macros**: Implemented in individual modules (tool_derive, resource_derive, json_schema_derive)
-//! - **Attribute Macros**: Function-style macros in tool_attr module
-//! - **Declarative Macros**: Concise syntax macros in the macros/ module
-//! - **Utilities**: Shared functionality in utils module
+//! ### Function Tool (Level 1 - Simplest)
+//!
+//! ```rust,no_run
+//! use turul_mcp_derive::mcp_tool;
+//! use turul_mcp_server::McpResult;
+//!
+//! #[mcp_tool(name = "add", description = "Add two numbers")]
+//! async fn add(
+//!     #[param(description = "First number")] a: f64,
+//!     #[param(description = "Second number")] b: f64,
+//! ) -> McpResult<f64> {
+//!     Ok(a + b)
+//! }
+//! ```
+//!
+//! ### Derive Tool (Level 2 - Most Common)
+//!
+//! ```rust,no_run
+//! use turul_mcp_derive::McpTool;
+//! use turul_mcp_server::{McpResult, SessionContext};
+//!
+//! #[derive(McpTool, Clone)]
+//! #[tool(name = "calculator", description = "Multi-operation calculator")]
+//! struct Calculator {
+//!     #[param(description = "First operand")]
+//!     a: f64,
+//!     #[param(description = "Second operand")]
+//!     b: f64,
+//!     #[param(description = "Operation to perform")]
+//!     operation: String,
+//! }
+//!
+//! impl Calculator {
+//!     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<f64> {
+//!         match self.operation.as_str() {
+//!             "add" => Ok(self.a + self.b),
+//!             "subtract" => Ok(self.a - self.b),
+//!             "multiply" => Ok(self.a * self.b),
+//!             "divide" => {
+//!                 if self.b != 0.0 {
+//!                     Ok(self.a / self.b)
+//!                 } else {
+//!                     Err("Division by zero".into())
+//!                 }
+//!             }
+//!             _ => Err("Unknown operation".into()),
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! ### Resource Handler
+//!
+//! ```rust,no_run
+//! use turul_mcp_derive::mcp_resource;
+//! use turul_mcp_protocol::resources::ResourceContent;
+//! use turul_mcp_server::McpResult;
+//!
+//! #[mcp_resource(
+//!     uri = "file:///data/{filename}.json",
+//!     description = "Dynamic JSON data files"
+//! )]
+//! async fn data_file(filename: String) -> McpResult<Vec<ResourceContent>> {
+//!     let content = format!(r#"{{"filename": "{}", "data": "example"}}"#, filename);
+//!     Ok(vec![ResourceContent::text(
+//!         format!("file:///data/{}.json", filename),
+//!         content
+//!     )])
+//! }
+//! ```
+//!
+//! ## 📖 Available Macros
+//!
+//! | Macro | Purpose | Usage |
+//! |-------|---------|-------|
+//! | `#[derive(McpTool)]` | Struct-based tools | Most flexible |
+//! | `#[mcp_tool]` | Function-based tools | Quick & simple |
+//! | `#[derive(McpResource)]` | Resource handlers | Static resources |
+//! | `#[mcp_resource]` | Function resources | Dynamic resources |
+//! | `tool!` | Declarative tools | Runtime creation |
+//! | `resource!` | Declarative resources | Runtime creation |
+//! | `#[derive(JsonSchema)]` | Schema generation | Type validation |
+//!
+//! ## 📖 Examples
+//!
+//! **Complete examples available at:**
+//! [github.com/aussierobots/turul-mcp-framework/tree/main/examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
+//!
+//! - 🧮 **Calculator Tools** - Math operations with derive macros
+//! - 📄 **File Resources** - Static and dynamic resource handlers
+//! - 🎯 **Function Tools** - Simple function-based tools
+//! - 🏗️ **Builder Pattern** - Runtime tool creation
+//! - 📝 **Schema Generation** - JSON schema from Rust types
+//!
+//! ## 🔗 Related Crates
+//!
+//! - [`turul-mcp-server`](https://crates.io/crates/turul-mcp-server) - Server framework
+//! - [`turul-mcp-protocol`](https://crates.io/crates/turul-mcp-protocol) - Protocol types
+//! - [`turul-mcp-builders`](https://crates.io/crates/turul-mcp-builders) - Runtime builders
 
 use proc_macro::TokenStream;
 use syn::{DeriveInput, ItemFn, Meta, Token, parse_macro_input, punctuated::Punctuated};
