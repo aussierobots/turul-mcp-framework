@@ -31,6 +31,7 @@
 pub mod dispatch;
 pub mod error;
 pub mod notification;
+pub mod prelude;
 pub mod request;
 pub mod response;
 pub mod types;

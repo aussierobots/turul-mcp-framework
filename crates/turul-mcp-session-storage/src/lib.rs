@@ -1,7 +1,24 @@
-//! Session Storage Abstractions and Implementations
+//! # Session Storage Abstractions and Implementations
 //!
-//! This crate provides the core SessionStorage trait that enables pluggable
-//! session backends for different deployment scenarios.
+//! **Pluggable session storage backends for MCP servers across deployment scenarios.**
+//!
+//! Provides the core SessionStorage trait with implementations for InMemory, SQLite,
+//! PostgreSQL, and DynamoDB, enabling seamless scaling from development to production.
+//!
+//! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-session-storage.svg)](https://crates.io/crates/turul-mcp-session-storage)
+//! [![Documentation](https://docs.rs/turul-mcp-session-storage/badge.svg)](https://docs.rs/turul-mcp-session-storage)
+//!
+//! ## Installation
+//!
+//! ```toml
+//! [dependencies]
+//! turul-mcp-session-storage = "0.2"
+//!
+//! # Optional features for different backends
+//! turul-mcp-session-storage = { version = "0.2", features = ["sqlite"] }
+//! turul-mcp-session-storage = { version = "0.2", features = ["postgres"] }
+//! turul-mcp-session-storage = { version = "0.2", features = ["dynamodb"] }
+//! ```
 
 // Core trait and types
 mod traits;
@@ -10,6 +27,7 @@ pub use traits::*;
 
 // Implementations
 pub mod in_memory;
+pub mod prelude;
 
 #[cfg(feature = "sqlite")]
 pub mod sqlite;

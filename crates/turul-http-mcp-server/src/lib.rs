@@ -1,8 +1,20 @@
 //! # HTTP MCP Server
 //!
-//! This crate provides HTTP transport for Model Context Protocol (MCP) servers.
-//! It supports both modern Streamable HTTP and legacy HTTP+SSE transports
-//! for maximum compatibility with all MCP clients.
+//! **Production HTTP transport layer for Model Context Protocol (MCP) servers.**
+//!
+//! Provides both modern Streamable HTTP and legacy HTTP+SSE transports with automatic
+//! protocol detection, CORS support, and session management for maximum compatibility.
+//!
+//! [![Crates.io](https://img.shields.io/crates/v/turul-http-mcp-server.svg)](https://crates.io/crates/turul-http-mcp-server)
+//! [![Documentation](https://docs.rs/turul-http-mcp-server/badge.svg)](https://docs.rs/turul-http-mcp-server)
+//!
+//! ## Installation
+//!
+//! ```toml
+//! [dependencies]
+//! turul-http-mcp-server = "0.2"
+//! turul-mcp-server = "0.2"
+//! ```
 //!
 //! ## Supported Transports
 //! - **Streamable HTTP**: Recommended for production deployments
@@ -13,12 +25,34 @@
 //! - CORS support for browser-based clients
 //! - Session management with cryptographically secure IDs
 //! - Graceful error handling and JSON-RPC 2.0 compliance
+//!
+//! ## Quick Start
+//!
+//! ```rust,no_run
+//! use turul_mcp_server::prelude::*;
+//! use turul_http_mcp_server::HttpMcpServerBuilder;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let server = HttpMcpServerBuilder::new()
+//!         .name("http-server")
+//!         .bind("127.0.0.1:8080")
+//!         .cors_allow_all_origins()
+//!         .build()
+//!         .await?;
+//!
+//!     println!("Server running on http://127.0.0.1:8080/mcp");
+//!     server.run().await?;
+//!     Ok(())
+//! }
+//! ```
 
 pub mod cors;
 pub mod handler;
 pub mod json_rpc_responses;
 pub mod mcp_session;
 pub mod notification_bridge;
+pub mod prelude;
 pub mod protocol;
 pub mod server;
 pub mod session_handler;

@@ -137,6 +137,7 @@ mod json_schema_derive;
 mod logging_derive;
 mod macros;
 mod notification_derive;
+pub mod prelude;
 mod prompt_derive;
 mod resource_attr;
 mod resource_derive;

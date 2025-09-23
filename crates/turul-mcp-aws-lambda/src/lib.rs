@@ -59,6 +59,7 @@ pub mod adapter;
 pub mod builder;
 pub mod error;
 pub mod handler;
+pub mod prelude;
 pub mod server;
 
 #[cfg(feature = "cors")]
