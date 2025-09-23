@@ -119,13 +119,13 @@ impl LambdaMcpHandler {
     /// This method performs delegation to SessionMcpHandler for all business logic.
     /// It only handles Lambda-specific concerns: CORS and type conversion.
     ///
-    /// Note: If SSE is enabled (.sse(true)), this method provides snapshot-based SSE
-    /// responses rather than real-time streaming. For real-time SSE streaming, use
-    /// handle_streaming() with run_with_streaming_response().
+    /// Note: If SSE is enabled (.sse(true)), SSE responses may not stream properly
+    /// with regular Lambda runtime. For proper SSE streaming, use handle_streaming()
+    /// with run_with_streaming_response().
     pub async fn handle(&self, req: LambdaRequest) -> Result<LambdaResponse<LambdaBody>> {
-
         let method = req.method().clone();
         let uri = req.uri().clone();
+
         let request_origin = req
             .headers()
             .get("origin")

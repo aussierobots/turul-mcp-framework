@@ -747,9 +747,9 @@ impl LambdaMcpServerBuilder {
             ));
         }
 
-        // Note: SSE can be enabled without the 'streaming' feature
-        // When streaming feature is disabled, SSE provides snapshot-based responses
-        // When streaming feature is enabled, SSE can provide real-time streaming
+        // Note: SSE behavior depends on which handler method is used:
+        // - handle(): Works with run(), but SSE responses may not stream properly
+        // - handle_streaming(): Works with run_with_streaming_response() for real SSE streaming
 
         // Create session storage (use in-memory if none provided)
         let session_storage = self

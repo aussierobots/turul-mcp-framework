@@ -51,7 +51,6 @@ members = [
     "examples/stateful-server",
     "examples/tools-test-server",
     "examples/zero-config-getting-started",
-    "examples/lambda-mcp-server",
     
     # Moved from turul-mcp-server/examples
     "examples/client-initialise-server",
@@ -123,7 +122,7 @@ turul-mcp-builders = { path = "crates/turul-mcp-builders" }
 
 # Additional dependencies for examples and tests
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uuid = { version = "1.18", features = ["v4", "v7", "serde"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
 tokio-test = "0.4"
 reqwest = { version = "0.12", features = ["json"] }
 chrono = { version = "0.4", features = ["serde"] }

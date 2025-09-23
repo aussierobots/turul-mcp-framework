@@ -16,37 +16,37 @@ turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http"]
 turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol-2025-06-18", package = "turul-mcp-protocol-2025-06-18" }
 
 # Async runtime
-tokio = { version = "1", features = ["full"] }
+tokio.workspace = true
 
 # HTTP server
-hyper = { version = "1", features = ["server", "http1"] }
-hyper-util = { version = "0.1", features = ["server"] }
+hyper.workspace = true
+hyper-util.workspace = true
 
 # Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+serde.workspace = true
+serde_json.workspace = true
 
 # Error handling
-anyhow = "1.0"
+anyhow.workspace = true
 
 # Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 # Time
-chrono = { version = "0.4", features = ["serde"] }
+chrono.workspace = true
 
 # Random ports for testing
 portpicker = "0.1"
 
 # File handling
-tempfile = "3.0"
+tempfile.workspace = true
 
 # Base64 encoding
-base64 = "0.21"
+base64.workspace = true
 
 # Async trait
-async-trait = "0.1"
+async-trait.workspace = true
 
 # Command line parsing
-clap = { version = "4", features = ["derive"] }
+clap.workspace = true

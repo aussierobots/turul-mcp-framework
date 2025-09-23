@@ -165,6 +165,77 @@ create_dynamodb_table() {
     echo "  Table ARN: $TABLE_ARN"
 }
 
+# Function to create DynamoDB events table
+create_dynamodb_events_table() {
+    local EVENTS_TABLE_NAME="${TABLE_NAME}-events"
+    echo -e "${YELLOW}📝 Creating DynamoDB events table: $EVENTS_TABLE_NAME${NC}"
+
+    # Check if events table already exists
+    if aws dynamodb describe-table --table-name "$EVENTS_TABLE_NAME" --region "$REGION" &> /dev/null; then
+        echo -e "${YELLOW}⚠️  DynamoDB events table $EVENTS_TABLE_NAME already exists${NC}"
+    else
+        # Create events table with MCP event schema
+        aws dynamodb create-table \
+            --table-name "$EVENTS_TABLE_NAME" \
+            --region "$REGION" \
+            --attribute-definitions '[
+                {
+                    "AttributeName": "session_id",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "id",
+                    "AttributeType": "S"
+                }
+            ]' \
+            --key-schema '[
+                {
+                    "AttributeName": "session_id",
+                    "KeyType": "HASH"
+                },
+                {
+                    "AttributeName": "id",
+                    "KeyType": "RANGE"
+                }
+            ]' \
+            --billing-mode PAY_PER_REQUEST \
+            --tags '[
+                {
+                    "Key": "Project",
+                    "Value": "Lambda-MCP-Server"
+                },
+                {
+                    "Key": "Purpose",
+                    "Value": "SSE-Events-Storage"
+                }
+            ]'
+
+        echo -e "${GREEN}✅ DynamoDB events table created: $EVENTS_TABLE_NAME${NC}"
+
+        # Wait for events table to be active
+        echo -e "${YELLOW}⏳ Waiting for events table to become active...${NC}"
+        aws dynamodb wait table-exists --table-name "$EVENTS_TABLE_NAME" --region "$REGION"
+        echo -e "${GREEN}✅ DynamoDB events table is now active${NC}"
+
+        # Enable TTL on events table for automatic cleanup (24 hours)
+        echo -e "${YELLOW}⚙️  Enabling TTL on events table for automatic cleanup...${NC}"
+        aws dynamodb update-time-to-live \
+            --table-name "$EVENTS_TABLE_NAME" \
+            --region "$REGION" \
+            --time-to-live-specification Enabled=true,AttributeName=ttl
+        echo -e "${GREEN}✅ TTL enabled on events table${NC}"
+    fi
+
+    # Get events table ARN for IAM policies
+    EVENTS_TABLE_ARN=$(aws dynamodb describe-table \
+        --table-name "$EVENTS_TABLE_NAME" \
+        --region "$REGION" \
+        --query 'Table.TableArn' \
+        --output text)
+
+    echo "  Events Table ARN: $EVENTS_TABLE_ARN"
+}
+
 # Function to create IAM role for Lambda
 create_lambda_role() {
     echo -e "${YELLOW}📝 Creating Lambda execution role${NC}"
@@ -211,7 +282,10 @@ EOF
         "dynamodb:Query",
         "dynamodb:Scan"
       ],
-      "Resource": "$TABLE_ARN"
+      "Resource": [
+        "$TABLE_ARN",
+        "$EVENTS_TABLE_ARN"
+      ]
     },
     {
       "Effect": "Allow",
@@ -334,6 +408,9 @@ create_sns_topic
 echo ""
 
 create_dynamodb_table
+echo ""
+
+create_dynamodb_events_table
 echo ""
 
 create_lambda_role

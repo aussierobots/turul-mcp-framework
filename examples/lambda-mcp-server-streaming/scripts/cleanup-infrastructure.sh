@@ -58,18 +58,33 @@ delete_sns_topic() {
 
 # Function to delete DynamoDB table
 delete_dynamodb_table() {
-    echo -e "${YELLOW}🗑️  Deleting DynamoDB table: $TABLE_NAME${NC}"
-    
+    echo -e "${YELLOW}🗑️  Deleting DynamoDB tables: $TABLE_NAME and $TABLE_NAME-events${NC}"
+
+    # Delete main sessions table
     if aws dynamodb describe-table --table-name "$TABLE_NAME" --region "$REGION" &> /dev/null; then
         aws dynamodb delete-table --table-name "$TABLE_NAME" --region "$REGION"
-        echo -e "${GREEN}✅ DynamoDB table deletion initiated${NC}"
-        
+        echo -e "${GREEN}✅ DynamoDB sessions table deletion initiated${NC}"
+
         # Wait for table to be deleted
-        echo -e "${YELLOW}⏳ Waiting for table deletion to complete...${NC}"
+        echo -e "${YELLOW}⏳ Waiting for sessions table deletion to complete...${NC}"
         aws dynamodb wait table-not-exists --table-name "$TABLE_NAME" --region "$REGION"
-        echo -e "${GREEN}✅ DynamoDB table deleted${NC}"
+        echo -e "${GREEN}✅ DynamoDB sessions table deleted${NC}"
     else
         echo -e "${YELLOW}⚠️  DynamoDB table $TABLE_NAME not found${NC}"
+    fi
+
+    # Delete events table
+    local EVENTS_TABLE_NAME="${TABLE_NAME}-events"
+    if aws dynamodb describe-table --table-name "$EVENTS_TABLE_NAME" --region "$REGION" &> /dev/null; then
+        aws dynamodb delete-table --table-name "$EVENTS_TABLE_NAME" --region "$REGION"
+        echo -e "${GREEN}✅ DynamoDB events table deletion initiated${NC}"
+
+        # Wait for table to be deleted
+        echo -e "${YELLOW}⏳ Waiting for events table deletion to complete...${NC}"
+        aws dynamodb wait table-not-exists --table-name "$EVENTS_TABLE_NAME" --region "$REGION"
+        echo -e "${GREEN}✅ DynamoDB events table deleted${NC}"
+    else
+        echo -e "${YELLOW}⚠️  DynamoDB events table $EVENTS_TABLE_NAME not found${NC}"
     fi
 }
 

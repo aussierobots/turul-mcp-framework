@@ -14,7 +14,7 @@ use turul_mcp_server::{McpResource, McpResult, McpServer};
 #[derive(McpResource, Serialize, Deserialize, Clone)]
 #[resource(
     name = "config",
-    uri = "file://config.json",
+    uri = "file:///tmp/config.json",
     description = "Main application configuration file"
 )]
 struct ConfigResource {
@@ -136,7 +136,7 @@ impl McpResource for UserProfileResource {
 #[derive(McpResource, Clone)]
 #[resource(
     name = "app_log",
-    uri = "file://app.log",
+    uri = "file:///tmp/app.log",
     description = "Current application log entries"
 )]
 struct LogFileResource(String);

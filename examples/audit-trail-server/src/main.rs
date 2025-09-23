@@ -644,12 +644,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize SQLite database
     let db_url = "sqlite:audit_trail.db";
-    let pool = SqlitePool::connect(db_url).await?;
+    let pool = SqlitePool::connect(db_url).await.map_err(|e| {
+        eprintln!("Failed to connect to SQLite database: {}", e);
+        e
+    })?;
     init_database(&pool).await?;
     let db_pool = Arc::new(pool);
 
     // Create SQLite session storage
-    let _session_storage = Arc::new(SqliteSessionStorage::new().await?);
+    let session_storage = Arc::new(SqliteSessionStorage::new().await?);
+    println!("Session storage initialized successfully");
 
     let server = McpServer::builder()
         .name("audit-trail-server")
@@ -658,10 +662,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .instructions(
             "This server provides compliance-focused audit trail logging with SQLite persistence.",
         )
+        .with_session_storage(session_storage)
         .tool(LogAuditEventTool::new(db_pool.clone()))
         .tool(SearchAuditTrailTool::new(db_pool.clone()))
         .tool(GenerateComplianceReportTool::new(db_pool.clone()))
-        .bind_address("127.0.0.1:8009".parse()?)
         .bind_address("127.0.0.1:8009".parse()?)
         .sse(true)
         .build()?;
