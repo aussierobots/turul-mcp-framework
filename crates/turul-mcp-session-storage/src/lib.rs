@@ -5,6 +5,7 @@
 
 // Core trait and types
 mod traits;
+/// Core session storage traits and types for pluggable backend implementations
 pub use traits::*;
 
 // Implementations
@@ -20,37 +21,41 @@ pub mod postgres;
 pub mod dynamodb;
 
 // Re-export for convenience
+/// In-memory session storage implementation for development and testing
 pub use in_memory::{InMemoryConfig, InMemoryError, InMemorySessionStorage, InMemoryStats};
 
 #[cfg(feature = "sqlite")]
+/// SQLite-backed session storage for file-based persistence
 pub use sqlite::{SqliteConfig, SqliteError, SqliteSessionStorage};
 
 #[cfg(feature = "postgres")]
+/// PostgreSQL-backed session storage for production deployments
 pub use postgres::{PostgresConfig, PostgresError, PostgresSessionStorage};
 
 #[cfg(feature = "dynamodb")]
+/// DynamoDB-backed session storage for AWS serverless deployments
 pub use dynamodb::{DynamoDbConfig, DynamoDbError, DynamoDbSessionStorage};
 
 /// Convenience type alias for session storage results
 pub type StorageResult<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-/// Create a default in-memory session storage instance
+/// Create a default in-memory session storage instance for development and testing
 pub fn create_default_storage() -> InMemorySessionStorage {
     InMemorySessionStorage::new()
 }
 
-/// Create an in-memory session storage with custom configuration
+/// Create an in-memory session storage with custom configuration and cleanup settings
 pub fn create_memory_storage(config: InMemoryConfig) -> InMemorySessionStorage {
     InMemorySessionStorage::with_config(config)
 }
 
-/// Create a SQLite session storage with default configuration
+/// Create a SQLite session storage with default configuration and automatic schema setup
 #[cfg(feature = "sqlite")]
 pub async fn create_sqlite_storage() -> Result<SqliteSessionStorage, SqliteError> {
     SqliteSessionStorage::new().await
 }
 
-/// Create a SQLite session storage with custom configuration
+/// Create a SQLite session storage with custom database path and connection settings
 #[cfg(feature = "sqlite")]
 pub async fn create_sqlite_storage_with_config(
     config: SqliteConfig,
@@ -58,13 +63,13 @@ pub async fn create_sqlite_storage_with_config(
     SqliteSessionStorage::with_config(config).await
 }
 
-/// Create a PostgreSQL session storage with default configuration
+/// Create a PostgreSQL session storage with default connection parameters from environment
 #[cfg(feature = "postgres")]
 pub async fn create_postgres_storage() -> Result<PostgresSessionStorage, PostgresError> {
     PostgresSessionStorage::new().await
 }
 
-/// Create a PostgreSQL session storage with custom configuration
+/// Create a PostgreSQL session storage with custom database URL and connection pool settings
 #[cfg(feature = "postgres")]
 pub async fn create_postgres_storage_with_config(
     config: PostgresConfig,
@@ -72,13 +77,13 @@ pub async fn create_postgres_storage_with_config(
     PostgresSessionStorage::with_config(config).await
 }
 
-/// Create a DynamoDB session storage with default configuration
+/// Create a DynamoDB session storage with default AWS configuration and table names
 #[cfg(feature = "dynamodb")]
 pub async fn create_dynamodb_storage() -> Result<DynamoDbSessionStorage, DynamoDbError> {
     DynamoDbSessionStorage::new().await
 }
 
-/// Create a DynamoDB session storage with custom configuration
+/// Create a DynamoDB session storage with custom AWS region and table configuration
 #[cfg(feature = "dynamodb")]
 pub async fn create_dynamodb_storage_with_config(
     config: DynamoDbConfig,

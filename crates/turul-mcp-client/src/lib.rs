@@ -87,13 +87,19 @@ pub mod streaming;
 pub mod transport;
 
 // Re-export main types
+/// High-level MCP client with session management and automatic reconnection
 pub use client::{McpClient, McpClientBuilder};
+/// Client configuration types for timeouts, retries, and connection parameters
 pub use config::{ClientConfig, RetryConfig, TimeoutConfig};
+/// Client-specific error types and result aliases for error handling
 pub use error::{McpClientError, McpClientResult};
+/// Session management types for tracking connection state and statistics
 pub use session::{SessionInfo, SessionManager, SessionState};
 
 // Re-export transport types
+/// Transport layer abstractions for different MCP connection types
 pub use transport::{Transport, TransportType};
 
 // Re-export protocol types for convenience
+/// Core MCP protocol types and message structures
 pub use turul_mcp_protocol::*;

@@ -117,8 +117,10 @@ pub fn mcp_tool(args: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Helper attribute for parameter metadata in function macros
 ///
-/// This is used within #[mcp_tool] functions to provide parameter descriptions
-/// and constraints.
+/// This attribute is consumed by the #[mcp_tool] macro and has no effect when used alone.
+/// It provides parameter descriptions and constraints for function parameters.
+///
+/// Must be used within functions annotated with #[mcp_tool] to have any effect.
 #[proc_macro_attribute]
 pub fn param(_args: TokenStream, input: TokenStream) -> TokenStream {
     // This attribute is only processed by the #[mcp_tool] macro
