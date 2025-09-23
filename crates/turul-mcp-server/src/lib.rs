@@ -97,38 +97,58 @@ mod uri_template_tests;
 mod security_integration_tests;
 
 // Re-export main types
+/// Builder for creating MCP servers with fluent API
 pub use builder::McpServerBuilder;
+/// Completion provider for text generation requests
 pub use completion::McpCompletion;
+/// Request dispatching and middleware support for MCP operations
 pub use dispatch::{DispatchContext, DispatchMiddleware, McpDispatcher};
+/// Elicitation handler for interactive form-based data collection
 pub use elicitation::McpElicitation;
+/// Collection of built-in MCP request handlers
 pub use handlers::*;
+/// Logging provider for structured application logs
 pub use logging::McpLogger;
+/// Notification system for real-time client updates via SSE
 pub use notifications::McpNotification;
+/// Prompt provider for generating conversation templates
 pub use prompt::McpPrompt;
+/// Resource provider for serving file-like content with URI templates
 pub use resource::McpResource;
+/// Root provider for workspace and project context
 pub use roots::McpRoot;
+/// Sampling configuration for LLM inference parameters
 pub use sampling::McpSampling;
+/// Security middleware and access control components
 pub use security::{
     AccessLevel, InputValidator, RateLimitConfig, ResourceAccessControl, SecurityMiddleware,
 };
+/// Core MCP server and session-aware handlers
 pub use server::{
     ListToolsHandler, McpServer, SessionAwareInitializeHandler, SessionAwareMcpHandlerBridge,
     SessionAwareToolHandler,
 };
+/// Session management and context for stateful operations
 pub use session::{SessionContext, SessionEvent, SessionManager};
+/// Tool trait for executable MCP functions
 pub use tool::McpTool;
 
 // Re-export foundational types
+/// JSON-RPC 2.0 request dispatcher and handler trait for protocol operations
 pub use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
+/// Core MCP protocol types, errors, and specification compliance
 pub use turul_mcp_protocol::*;
 
 // Re-export builder pattern for Level 3 tool creation
+/// Dynamic tool creation with runtime configuration and type-safe builders
 pub use turul_mcp_protocol::tools::builder::{DynamicTool, ToolBuilder};
 
 // Explicitly re-export error types for convenience
+/// Domain error type for MCP operations with protocol conversion support
 pub use turul_mcp_protocol::{McpError, McpResult as ProtocolMcpResult};
 
 #[cfg(feature = "http")]
+/// HTTP transport layer with SSE streaming and session management
 pub use turul_http_mcp_server;
 
 /// Result type for all MCP operations - uses structured MCP errors

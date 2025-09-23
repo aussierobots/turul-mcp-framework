@@ -24,7 +24,7 @@ pub trait McpTool: ToolDefinition {
     -> McpResult<CallToolResult>;
 }
 
-/// Convert an McpTool trait object to a Tool descriptor
+/// Converts an McpTool trait object to a protocol Tool descriptor
 ///
 /// This is now a thin wrapper around the ToolDefinition::to_tool() method
 /// for backward compatibility. New code should use tool.to_tool() directly.

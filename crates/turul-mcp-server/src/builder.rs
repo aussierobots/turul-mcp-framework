@@ -200,31 +200,31 @@ impl McpServerBuilder {
         }
     }
 
-    /// Set the server name
+    /// Sets the server name for identification
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
     }
 
-    /// Set the server version
+    /// Sets the server version string
     pub fn version(mut self, version: impl Into<String>) -> Self {
         self.version = version.into();
         self
     }
 
-    /// Set the server title (display name)
+    /// Sets the human-readable server title
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
-    /// Add instructions for clients
+    /// Sets usage instructions for MCP clients
     pub fn instructions(mut self, instructions: impl Into<String>) -> Self {
         self.instructions = Some(instructions.into());
         self
     }
 
-    /// Register a tool with the server
+    /// Registers a tool that clients can execute
     pub fn tool<T: McpTool + 'static>(mut self, tool: T) -> Self {
         let name = tool.name().to_string();
         self.tools.insert(name, Arc::new(tool));
@@ -261,7 +261,7 @@ impl McpServerBuilder {
         self.tool(func())
     }
 
-    /// Register multiple tools
+    /// Registers multiple tools in a batch
     pub fn tools<T: McpTool + 'static, I: IntoIterator<Item = T>>(mut self, tools: I) -> Self {
         for tool in tools {
             self = self.tool(tool);
@@ -403,7 +403,7 @@ impl McpServerBuilder {
         self
     }
 
-    /// Register a prompt with the server
+    /// Registers a prompt template for conversation generation
     pub fn prompt<P: McpPrompt + 'static>(mut self, prompt: P) -> Self {
         let name = prompt.name().to_string();
         self.prompts.insert(name, Arc::new(prompt));

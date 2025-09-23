@@ -38,7 +38,7 @@ pub trait McpResource: ResourceDefinition + Send + Sync {
     }
 }
 
-/// Convert an McpResource trait object to a Resource descriptor
+/// Converts an McpResource trait object to a protocol Resource descriptor
 ///
 /// This is now a thin wrapper around the ResourceDefinition::to_resource() method
 /// for backward compatibility. New code should use resource.to_resource() directly.
