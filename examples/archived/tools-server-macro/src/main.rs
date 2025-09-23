@@ -61,9 +61,8 @@ impl Calculator {
     }
 }
 
-// TODO: This will be replaced with #[derive(McpTool)] when framework supports it
-// The derive macro will automatically implement the tool traits and register
-// the "tools/call" method without any manual specification
+// NOTE: Framework now supports #[derive(McpTool)] - see examples/derive-macro-server/
+// This archived example shows the manual approach that predated derive macros
 
 // =============================================================================
 // STRING UTILITIES TOOL - Framework auto-uses "tools/call"
@@ -145,7 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("   • Calculator → tools/call (automatic)");
     info!("   • StringUtils → tools/call (automatic)");
 
-    // TODO: This will become much simpler with derive macros:
+    // NOTE: This is now possible with derive macros - see examples/derive-macro-server/
     // let server = McpServer::builder()
     //     .tool(calculator)      // Auto-registers "tools/call" for Calculator
     //     .tool(string_utils)    // Auto-registers "tools/call" for StringUtils
