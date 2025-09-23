@@ -94,12 +94,12 @@ impl CorsConfig {
     }
 }
 
-/// Inject CORS headers into a Lambda response
+/// Inject CORS headers into a Lambda response (generic over body type)
 ///
 /// This function adds the appropriate CORS headers based on the configuration
 /// and the incoming request's Origin header.
-pub fn inject_cors_headers(
-    response: &mut LambdaResponse<LambdaBody>,
+pub fn inject_cors_headers<B>(
+    response: &mut lambda_http::Response<B>,
     config: &CorsConfig,
     request_origin: Option<&str>,
 ) -> Result<()> {

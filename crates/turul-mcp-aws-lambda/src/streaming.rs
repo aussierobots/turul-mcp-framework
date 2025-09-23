@@ -6,52 +6,10 @@
 
 use bytes::Bytes;
 use futures::{Stream, StreamExt};
-use lambda_http::Body as LambdaBody;
 use tracing::debug;
 
 use crate::error::{LambdaError, Result};
 
-/// Adapt a framework SSE stream to Lambda's streaming body format
-///
-/// This function converts the framework's UnifiedMcpBody SSE stream into
-/// a format that Lambda's streaming response can handle properly.
-pub async fn adapt_sse_stream(
-    body: http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>,
-) -> Result<LambdaBody> {
-    debug!("Adapting body for Lambda streaming response");
-
-    // Convert the boxed body to a byte stream
-    use futures::TryStreamExt;
-    use http_body_util::BodyExt;
-
-    let byte_stream = body.into_data_stream().map_err(|e| {
-        debug!("Body stream error: {}", e);
-        std::io::Error::other(e.to_string())
-    });
-
-    // Create Lambda streaming body by collecting all bytes
-    // Note: Lambda doesn't support true streaming like hyper, so we collect everything
-    let mut all_bytes = Vec::new();
-
-    let mut stream = std::pin::pin!(byte_stream);
-    while let Some(chunk_result) = stream.next().await {
-        let chunk = chunk_result
-            .map_err(|e| LambdaError::Sse(format!("Failed to read stream chunk: {}", e)))?;
-        all_bytes.extend_from_slice(&chunk);
-    }
-
-    let lambda_body = if all_bytes.is_empty() {
-        LambdaBody::Empty
-    } else {
-        match String::from_utf8(all_bytes.clone()) {
-            Ok(text) => LambdaBody::Text(text),
-            Err(_) => LambdaBody::Binary(all_bytes),
-        }
-    };
-
-    debug!("Successfully adapted body to Lambda streaming body");
-    Ok(lambda_body)
-}
 
 /// Create an SSE event string from structured data
 ///

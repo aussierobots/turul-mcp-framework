@@ -67,6 +67,7 @@ pub mod cors;
 #[cfg(feature = "sse")]
 pub mod streaming;
 
+
 // Re-exports for convenience
 pub use builder::LambdaMcpServerBuilder;
 pub use error::{LambdaError, Result};
@@ -76,5 +77,3 @@ pub use server::LambdaMcpServer;
 #[cfg(feature = "cors")]
 pub use cors::CorsConfig;
 
-#[cfg(feature = "sse")]
-pub use streaming::adapt_sse_stream;

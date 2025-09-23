@@ -12,11 +12,11 @@ AWS Lambda integration for the turul-mcp-framework, enabling serverless deployme
 ## Features
 
 - ✅ **Zero-Cold-Start Architecture** - Optimized Lambda integration
-- ✅ **MCP 2025-06-18 Compliance** - Full protocol support with SSE streaming
+- ✅ **MCP 2025-06-18 Compliance** - Full protocol support with SSE (snapshots or streaming)
 - ✅ **DynamoDB Session Storage** - Persistent session management across invocations
 - ✅ **CORS Support** - Automatic CORS header injection for browser clients
 - ✅ **Type Conversion Layer** - Clean `lambda_http` ↔ `hyper` conversion
-- ✅ **Streaming Responses** - SSE notifications through Lambda streaming
+- ⚠️ **SSE Support** - Snapshots via `handle()` or real streaming via `handle_streaming()`
 - ✅ **Builder Pattern** - Familiar API matching `McpServer::builder()`
 - ✅ **Truthful Capabilities** - Framework advertises accurate server capabilities
 
@@ -32,10 +32,10 @@ lambda_http = "0.17"
 tokio = { version = "1.0", features = ["macros"] }
 ```
 
-### Minimal Lambda MCP Server
+### Basic Lambda MCP Server (Snapshot-based SSE)
 
 ```rust
-use lambda_http::{run_with_streaming_response, service_fn};
+use lambda_http::{run, service_fn};
 use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
 use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, SessionContext};
@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .name("echo-lambda-server")
         .version("1.0.0")
         .tool(EchoTool::default())  // Add our echo tool
-        .sse(true)                  // Enable SSE streaming
+        .sse(true)                  // Enable SSE (snapshot-based)
         .cors_allow_all_origins()   // Allow CORS for browser clients
         .build()
         .await?;
@@ -75,12 +75,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Create handler for Lambda runtime
     let handler = server.handler().await?;
 
-    // Run with Lambda streaming response support
-    run_with_streaming_response(service_fn(move |req| {
+    // Run with standard Lambda runtime (snapshot-based SSE)
+    run(service_fn(move |req| {
         let handler = handler.clone();
-        async move { 
+        async move {
             handler.handle(req).await
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+        }
+    })).await
+}
+```
+
+### Real-time Streaming Lambda MCP Server
+
+For real-time SSE streaming, enable the `streaming` feature and use `handle_streaming()`:
+
+```toml
+[dependencies]
+turul-mcp-aws-lambda = { version = "0.2.0", features = ["streaming"] }
+```
+
+```rust
+use lambda_http::{run_with_streaming_response, service_fn};
+use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
+// ... same tool definition ...
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // ... same server setup ...
+
+    // Create handler for real-time streaming
+    let handler = server.handler().await?;
+
+    // Run with Lambda streaming response support for real-time SSE
+    run_with_streaming_response(service_fn(move |req| {
+        let handler = handler.clone();
+        async move {
+            handler.handle_streaming(req).await
         }
     })).await
 }

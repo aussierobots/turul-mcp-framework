@@ -596,6 +596,18 @@ impl LambdaMcpServerBuilder {
     /// Enable or disable SSE streaming support
     pub fn sse(mut self, enable: bool) -> Self {
         self.enable_sse = enable;
+
+        // Update SSE endpoints in ServerConfig based on enable flag
+        if enable {
+            self.server_config.enable_get_sse = true;
+            self.server_config.enable_post_sse = true;
+        } else {
+            // When SSE is disabled, also disable SSE endpoints in ServerConfig
+            // This prevents GET /mcp from hanging by returning 405 instead
+            self.server_config.enable_get_sse = false;
+            self.server_config.enable_post_sse = false;
+        }
+
         self
     }
 
@@ -725,15 +737,19 @@ impl LambdaMcpServerBuilder {
 
         // Validate configuration (same as MCP server)
         if self.name.is_empty() {
-            return Err(crate::error::LambdaError::Config(
+            return Err(crate::error::LambdaError::Configuration(
                 "Server name cannot be empty".to_string(),
             ));
         }
         if self.version.is_empty() {
-            return Err(crate::error::LambdaError::Config(
+            return Err(crate::error::LambdaError::Configuration(
                 "Server version cannot be empty".to_string(),
             ));
         }
+
+        // Note: SSE can be enabled without the 'streaming' feature
+        // When streaming feature is disabled, SSE provides snapshot-based responses
+        // When streaming feature is enabled, SSE can provide real-time streaming
 
         // Create session storage (use in-memory if none provided)
         let session_storage = self
@@ -892,7 +908,7 @@ where
         builder = builder.cors_allow_all_origins();
     }
 
-    builder.build().await
+    builder.sse(false).build().await
 }
 
 /// Create a Lambda MCP server configured for production
@@ -981,6 +997,7 @@ mod tests {
             .version("1.0.0")
             .tool(TestTool)
             .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false) // Disable SSE for tests since streaming feature not enabled
             .build()
             .await
             .unwrap();
@@ -989,7 +1006,7 @@ mod tests {
         let handler = server.handler().await.unwrap();
         // Verify handler has stream_manager (critical invariant)
         assert!(
-            handler.stream_manager().as_ref() as *const _ as usize > 0,
+            handler.get_stream_manager().as_ref() as *const _ as usize > 0,
             "Stream manager must be initialized"
         );
     }
@@ -1004,7 +1021,7 @@ mod tests {
         // Verify handler has stream_manager
         // Verify handler has stream_manager (critical invariant)
         assert!(
-            handler.stream_manager().as_ref() as *const _ as usize > 0,
+            handler.get_stream_manager().as_ref() as *const _ as usize > 0,
             "Stream manager must be initialized"
         );
     }
@@ -1016,6 +1033,7 @@ mod tests {
         let server = LambdaMcpServerBuilder::new()
             .tools(tools)
             .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false) // Disable SSE for tests since streaming feature not enabled
             .build()
             .await
             .unwrap();
@@ -1024,7 +1042,7 @@ mod tests {
         // Verify handler has stream_manager
         // Verify handler has stream_manager (critical invariant)
         assert!(
-            handler.stream_manager().as_ref() as *const _ as usize > 0,
+            handler.get_stream_manager().as_ref() as *const _ as usize > 0,
             "Stream manager must be initialized"
         );
     }
@@ -1035,6 +1053,7 @@ mod tests {
         let server = LambdaMcpServerBuilder::new()
             .cors_allow_all_origins()
             .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false) // Disable SSE for tests since streaming feature not enabled
             .build()
             .await
             .unwrap();
@@ -1043,7 +1062,40 @@ mod tests {
         // Verify handler has stream_manager
         // Verify handler has stream_manager (critical invariant)
         assert!(
-            handler.stream_manager().as_ref() as *const _ as usize > 0,
+            handler.get_stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sse_toggle_functionality() {
+        // Test that SSE can be toggled on/off/on correctly
+        let mut builder = LambdaMcpServerBuilder::new()
+            .storage(Arc::new(InMemorySessionStorage::new()));
+
+        // Initially enable SSE
+        builder = builder.sse(true);
+        assert!(builder.enable_sse, "SSE should be enabled");
+        assert!(builder.server_config.enable_get_sse, "GET SSE endpoint should be enabled");
+        assert!(builder.server_config.enable_post_sse, "POST SSE endpoint should be enabled");
+
+        // Disable SSE
+        builder = builder.sse(false);
+        assert!(!builder.enable_sse, "SSE should be disabled");
+        assert!(!builder.server_config.enable_get_sse, "GET SSE endpoint should be disabled");
+        assert!(!builder.server_config.enable_post_sse, "POST SSE endpoint should be disabled");
+
+        // Re-enable SSE (this was broken before the fix)
+        builder = builder.sse(true);
+        assert!(builder.enable_sse, "SSE should be re-enabled");
+        assert!(builder.server_config.enable_get_sse, "GET SSE endpoint should be re-enabled");
+        assert!(builder.server_config.enable_post_sse, "POST SSE endpoint should be re-enabled");
+
+        // Verify the server can be built with SSE enabled
+        let server = builder.build().await.unwrap();
+        let handler = server.handler().await.unwrap();
+        assert!(
+            handler.get_stream_manager().as_ref() as *const _ as usize > 0,
             "Stream manager must be initialized"
         );
     }

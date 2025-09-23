@@ -52,7 +52,7 @@ pub enum LambdaError {
 
     /// Configuration error
     #[error("Configuration error: {0}")]
-    Config(String),
+    Configuration(String),
 
     /// Session management error
     #[error("Session error: {0}")]

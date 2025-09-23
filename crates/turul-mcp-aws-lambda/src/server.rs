@@ -144,6 +144,16 @@ impl LambdaMcpServer {
 
         if self.enable_sse {
             info!("SSE notifications: enabled for Lambda responses");
+
+            // ⚠️ GUARDRAIL: SSE enabled without streaming feature
+            #[cfg(not(feature = "streaming"))]
+            {
+                use tracing::warn;
+                warn!("⚠️  SSE is enabled but 'streaming' feature is not available!");
+                warn!("   For real SSE streaming, use handle_streaming() with run_with_streaming_response");
+                warn!("   Current handle() method will return SSE snapshots, not real-time streams");
+                warn!("   To enable streaming: add 'streaming' feature to turul-mcp-aws-lambda");
+            }
         }
 
         // Start session cleanup task (same as MCP server)
@@ -201,8 +211,10 @@ impl LambdaMcpServer {
             self.session_storage.clone(),
             stream_manager,
             self.server_config.clone(),
+            self.stream_config.clone(),
             self.implementation.clone(),
             self.capabilities.clone(),
+            self.enable_sse,
             #[cfg(feature = "cors")]
             self.cors_config.clone(),
         ))
