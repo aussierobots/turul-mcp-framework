@@ -8,17 +8,17 @@
 //! [![Documentation](https://docs.rs/turul-mcp-server/badge.svg)](https://docs.rs/turul-mcp-server)
 //! [![License](https://img.shields.io/crates/l/turul-mcp-server.svg)](https://github.com/aussierobots/turul-mcp-framework/blob/main/LICENSE)
 //!
-//! ## ✨ Features
+//! ## Features
 //!
-//! - **🚀 Zero Configuration**: Framework auto-determines method strings from types
-//! - **🛡️ Type-Safe Error Handling**: Clean domain/protocol separation
-//! - **🔧 4 Tool Creation Levels**: Function macros → derive macros → builders → manual
-//! - **📡 Multiple Transports**: HTTP, Server-Sent Events (SSE), AWS Lambda
-//! - **💾 Pluggable Storage**: InMemory, SQLite, PostgreSQL, DynamoDB
-//! - **🔄 Real-time Streaming**: SSE notifications for progress and logging
-//! - **🏭 Production Ready**: Comprehensive testing, monitoring, and deployment support
+//! - **Zero Configuration**: Framework auto-determines method strings from types
+//! - **Type-Safe Error Handling**: Clean domain/protocol separation
+//! - **4 Tool Creation Levels**: Function macros → derive macros → builders → manual
+//! - **Multiple Transports**: HTTP, Server-Sent Events (SSE), AWS Lambda
+//! - **Pluggable Storage**: InMemory, SQLite, PostgreSQL, DynamoDB
+//! - **Real-time Streaming**: SSE notifications for progress and logging
+//! - **Production Ready**: Comprehensive testing, monitoring, and deployment support
 //!
-//! ## 📦 Installation
+//! ## Installation
 //!
 //! Add to your `Cargo.toml`:
 //!
@@ -71,7 +71,7 @@
 //! }
 //! ```
 //!
-//! ## 🏗️ Architecture
+//! ## Architecture
 //!
 //! The framework uses **clean domain/protocol separation**:
 //!
@@ -80,19 +80,19 @@
 //! - **Transport Layer**: HTTP/SSE with session-aware error handling
 //! - **Storage Layer**: Pluggable backends (InMemory, SQLite, PostgreSQL, DynamoDB)
 //!
-//! ## 📖 Examples
+//! ## Examples
 //!
 //! **Complete working examples available at:**
 //! [github.com/aussierobots/turul-mcp-framework/tree/main/examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
 //!
-//! - 🎯 **Minimal Server** - Basic tool setup
-//! - 🧮 **Calculator** - Math operations with error handling
-//! - 🌐 **HTTP Server** - Production HTTP deployment
-//! - ☁️ **AWS Lambda** - Serverless deployment
-//! - 🔄 **Real-time Streaming** - SSE notifications
-//! - 💾 **Database Integration** - SQLite/PostgreSQL/DynamoDB
+//! - **Minimal Server** - Basic tool setup
+//! - **Calculator** - Math operations with error handling
+//! - **HTTP Server** - Production HTTP deployment
+//! - **AWS Lambda** - Serverless deployment
+//! - **Real-time Streaming** - SSE notifications
+//! - **Database Integration** - SQLite/PostgreSQL/DynamoDB
 //!
-//! ## 🚀 Deployment Options
+//! ## Deployment Options
 //!
 //! ### Local Development
 //! ```bash
@@ -118,7 +118,7 @@
 //! CMD ["my-mcp-server"]
 //! ```
 //!
-//! ## 🔧 Configuration
+//! ## Configuration
 //!
 //! The framework supports extensive configuration through the builder pattern:
 //!

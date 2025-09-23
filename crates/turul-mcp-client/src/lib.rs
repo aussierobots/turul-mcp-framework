@@ -10,17 +10,17 @@
 //! [![Documentation](https://docs.rs/turul-mcp-client/badge.svg)](https://docs.rs/turul-mcp-client)
 //! [![License](https://img.shields.io/crates/l/turul-mcp-client.svg)](https://github.com/aussierobots/turul-mcp-framework/blob/main/LICENSE)
 //!
-//! ## ✨ Features
+//! ## Features
 //!
-//! - **🌐 Multi-transport**: HTTP, Server-Sent Events (SSE), WebSocket (planned), stdio (planned)
-//! - **📋 Full Protocol**: Complete MCP 2025-06-18 specification support
-//! - **⚡ High Performance**: Built on Tokio with async/await throughout
-//! - **🔄 Session Management**: Automatic connection handling and recovery
-//! - **📡 Real-time Streaming**: SSE support for progress and notifications
-//! - **🛡️ Error Handling**: Comprehensive error types with automatic retry
-//! - **🔧 Configurable**: Timeouts, retries, connection pooling
+//! - **Multi-transport**: HTTP, Server-Sent Events (SSE), WebSocket (planned), stdio (planned)
+//! - **Full Protocol**: Complete MCP 2025-06-18 specification support
+//! - **High Performance**: Built on Tokio with async/await throughout
+//! - **Session Management**: Automatic connection handling and recovery
+//! - **Real-time Streaming**: SSE support for progress and notifications
+//! - **Error Handling**: Comprehensive error types with automatic retry
+//! - **Configurable**: Timeouts, retries, connection pooling
 //!
-//! ## 📦 Installation
+//! ## Installation
 //!
 //! ```toml
 //! [dependencies]
@@ -94,7 +94,7 @@
 //! // StdioTransport::new("./mcp-server-executable")
 //! ```
 //!
-//! ## 🎯 Common Operations
+//! ## Common Operations
 //!
 //! ### Tool Execution
 //!
@@ -148,7 +148,7 @@
 //! # }
 //! ```
 //!
-//! ## ⚙️ Configuration
+//! ## Configuration
 //!
 //! The client supports extensive configuration:
 //!
@@ -168,7 +168,7 @@
 //!     .build();
 //! ```
 //!
-//! ## 📡 Real-time Streaming
+//! ## Real-time Streaming
 //!
 //! For real-time notifications and progress updates:
 //!
@@ -193,18 +193,18 @@
 //! # }
 //! ```
 //!
-//! ## 📖 Examples
+//! ## Examples
 //!
 //! **Complete examples available at:**
 //! [github.com/aussierobots/turul-mcp-framework/tree/main/examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
 //!
-//! - 🔧 **Basic Client** - Simple tool execution
-//! - 📡 **Streaming Client** - Real-time notifications
-//! - 🌐 **HTTP Client** - Production HTTP integration
-//! - 🔄 **Retry Logic** - Error handling and recovery
-//! - 📊 **Monitoring** - Connection health and metrics
+//! - **Basic Client** - Simple tool execution
+//! - **Streaming Client** - Real-time notifications
+//! - **HTTP Client** - Production HTTP integration
+//! - **Retry Logic** - Error handling and recovery
+//! - **Monitoring** - Connection health and metrics
 //!
-//! ## 🔗 Related Crates
+//! ## Related Crates
 //!
 //! - [`turul-mcp-server`](https://crates.io/crates/turul-mcp-server) - Build MCP servers
 //! - [`turul-mcp-protocol`](https://crates.io/crates/turul-mcp-protocol) - Protocol types

@@ -9,16 +9,16 @@
 //! [![Documentation](https://docs.rs/turul-mcp-derive/badge.svg)](https://docs.rs/turul-mcp-derive)
 //! [![License](https://img.shields.io/crates/l/turul-mcp-derive.svg)](https://github.com/aussierobots/turul-mcp-framework/blob/main/LICENSE)
 //!
-//! ## ✨ Features
+//! ## Features
 //!
-//! - **🔧 Tool Creation**: `#[derive(McpTool)]`, `#[mcp_tool]`, `tool!` macro
-//! - **📄 Resource Handling**: `#[derive(McpResource)]`, `#[mcp_resource]`, `resource!` macro
-//! - **📝 Schema Generation**: Automatic JSON schema from Rust types
-//! - **🚀 Zero Configuration**: Framework auto-determines method strings
-//! - **🛡️ Type Safety**: Compile-time validation of MCP protocols
-//! - **📡 Full Protocol**: Tools, resources, prompts, notifications, sampling
+//! - **Tool Creation**: `#[derive(McpTool)]`, `#[mcp_tool]`, `tool!` macro
+//! - **Resource Handling**: `#[derive(McpResource)]`, `#[mcp_resource]`, `resource!` macro
+//! - **Schema Generation**: Automatic JSON schema from Rust types
+//! - **Zero Configuration**: Framework auto-determines method strings
+//! - **Type Safety**: Compile-time validation of MCP protocols
+//! - **Full Protocol**: Tools, resources, prompts, notifications, sampling
 //!
-//! ## 📦 Installation
+//! ## Installation
 //!
 //! ```toml
 //! [dependencies]
@@ -26,7 +26,7 @@
 //! turul-mcp-server = "0.2"  # For server-side usage
 //! ```
 //!
-//! ## 🚀 Quick Start
+//! ## Quick Start
 //!
 //! ### Function Tool (Level 1 - Simplest)
 //!
@@ -99,7 +99,7 @@
 //! }
 //! ```
 //!
-//! ## 📖 Available Macros
+//! ## Available Macros
 //!
 //! | Macro | Purpose | Usage |
 //! |-------|---------|-------|
@@ -111,18 +111,18 @@
 //! | `resource!` | Declarative resources | Runtime creation |
 //! | `#[derive(JsonSchema)]` | Schema generation | Type validation |
 //!
-//! ## 📖 Examples
+//! ## Examples
 //!
 //! **Complete examples available at:**
 //! [github.com/aussierobots/turul-mcp-framework/tree/main/examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
 //!
-//! - 🧮 **Calculator Tools** - Math operations with derive macros
-//! - 📄 **File Resources** - Static and dynamic resource handlers
-//! - 🎯 **Function Tools** - Simple function-based tools
-//! - 🏗️ **Builder Pattern** - Runtime tool creation
-//! - 📝 **Schema Generation** - JSON schema from Rust types
+//! - **Calculator Tools** - Math operations with derive macros
+//! - **File Resources** - Static and dynamic resource handlers
+//! - **Function Tools** - Simple function-based tools
+//! - **Builder Pattern** - Runtime tool creation
+//! - **Schema Generation** - JSON schema from Rust types
 //!
-//! ## 🔗 Related Crates
+//! ## Related Crates
 //!
 //! - [`turul-mcp-server`](https://crates.io/crates/turul-mcp-server) - Server framework
 //! - [`turul-mcp-protocol`](https://crates.io/crates/turul-mcp-protocol) - Protocol types

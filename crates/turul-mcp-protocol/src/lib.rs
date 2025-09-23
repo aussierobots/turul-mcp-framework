@@ -10,14 +10,14 @@
 //! [![Documentation](https://docs.rs/turul-mcp-protocol/badge.svg)](https://docs.rs/turul-mcp-protocol)
 //! [![License](https://img.shields.io/crates/l/turul-mcp-protocol.svg)](https://github.com/aussierobots/turul-mcp-framework/blob/main/LICENSE)
 //!
-//! ## 📦 Installation
+//! ## Installation
 //!
 //! ```toml
 //! [dependencies]
 //! turul-mcp-protocol = "0.2"
 //! ```
 //!
-//! ## 🚀 Quick Start
+//! ## Quick Start
 //!
 //! ```rust
 //! use turul_mcp_protocol::prelude::*;
@@ -34,31 +34,31 @@
 //! );
 //! ```
 //!
-//! ## 🔄 Protocol Types
+//! ## Protocol Types
 //!
 //! This crate provides all core MCP types:
 //!
-//! - **🔧 Tools**: `Tool`, `CallToolRequest`, `CallToolResult`
-//! - **📄 Resources**: `Resource`, `ReadResourceRequest`, `ResourceContent`
-//! - **💬 Prompts**: `Prompt`, `GetPromptRequest`, `PromptMessage`
-//! - **🔔 Notifications**: `ProgressNotification`, `LoggingMessage`
-//! - **⚙️ Protocol**: `InitializeRequest`, `McpVersion`, `ServerCapabilities`
-//! - **❌ Errors**: `McpError`, `JsonRpcError`, error codes
+//! - **Tools**: `Tool`, `CallToolRequest`, `CallToolResult`
+//! - **Resources**: `Resource`, `ReadResourceRequest`, `ResourceContent`
+//! - **Prompts**: `Prompt`, `GetPromptRequest`, `PromptMessage`
+//! - **Notifications**: `ProgressNotification`, `LoggingMessage`
+//! - **Protocol**: `InitializeRequest`, `McpVersion`, `ServerCapabilities`
+//! - **Errors**: `McpError`, `JsonRpcError`, error codes
 //!
-//! ## 🎯 Use Cases
+//! ## Use Cases
 //!
 //! - **MCP Server Development**: Use with [`turul-mcp-server`](https://crates.io/crates/turul-mcp-server)
 //! - **MCP Client Development**: Use with [`turul-mcp-client`](https://crates.io/crates/turul-mcp-client)
 //! - **Protocol Parsing**: Direct protocol message handling
 //! - **Type Definitions**: Reference implementation for MCP types
 //!
-//! ## 📚 Related Crates
+//! ## Related Crates
 //!
 //! - [`turul-mcp-server`](https://crates.io/crates/turul-mcp-server) - High-level server framework
 //! - [`turul-mcp-client`](https://crates.io/crates/turul-mcp-client) - Client library
 //! - [`turul-mcp-derive`](https://crates.io/crates/turul-mcp-derive) - Procedural macros
 //!
-//! ## 🔗 Version Mapping
+//! ## Version Mapping
 //!
 //! | This Crate | MCP Spec | Implementation Crate |
 //! |------------|----------|---------------------|
