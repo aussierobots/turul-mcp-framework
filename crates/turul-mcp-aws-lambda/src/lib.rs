@@ -69,9 +69,13 @@ pub mod streaming;
 
 
 // Re-exports for convenience
+/// Builder for creating Lambda MCP servers with fluent configuration API
 pub use builder::LambdaMcpServerBuilder;
+/// Lambda-specific error types and result aliases
 pub use error::{LambdaError, Result};
+/// Lambda request handler with session management and protocol conversion
 pub use handler::LambdaMcpHandler;
+/// Core Lambda MCP server implementation with DynamoDB integration
 pub use server::LambdaMcpServer;
 
 #[cfg(feature = "cors")]

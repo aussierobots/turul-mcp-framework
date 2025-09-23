@@ -39,13 +39,18 @@ pub use notification_bridge::{
 pub use protocol::{
     McpProtocolVersion, extract_last_event_id, extract_protocol_version, extract_session_id,
 };
+/// HTTP MCP server implementation with builder pattern and configuration
 pub use server::{HttpMcpServer, HttpMcpServerBuilder, ServerConfig, ServerStats};
+/// Session-aware request handler with SSE streaming capabilities
 pub use session_handler::{SessionMcpHandler, SessionSseStream};
+/// SSE stream management with connection tracking and event delivery
 pub use stream_manager::{StreamConfig, StreamError, StreamManager, StreamStats};
 pub use streamable_http::{StreamableHttpContext, StreamableHttpHandler};
 
 // Re-export foundational types
+/// JSON-RPC 2.0 dispatcher and handler trait for protocol operations
 pub use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
+/// Core MCP protocol types and error handling
 pub use turul_mcp_protocol::*;
 
 /// Result type for HTTP MCP operations

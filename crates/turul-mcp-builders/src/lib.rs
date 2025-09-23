@@ -141,19 +141,30 @@ pub mod root;
 pub mod tool;
 
 // Re-export all builders for convenience
+/// Builder for completion provider configuration with sampling parameters
 pub use completion::CompletionBuilder;
+/// Builders for interactive data collection and result formatting
 pub use elicitation::{ElicitResultBuilder, ElicitationBuilder};
+/// Builders for structured logging messages and level configuration
 pub use logging::{LoggingBuilder, SetLevelBuilder};
+/// Builder for constructing prompt messages with role and content
 pub use message::MessageBuilder;
+/// Builders for various MCP notification types (progress, cancellation, resource updates)
 pub use notification::{
     CancelledNotificationBuilder, NotificationBuilder, ProgressNotificationBuilder,
     ResourceUpdatedNotificationBuilder,
 };
+/// Builder for prompt templates with arguments and message composition
 pub use prompt::PromptBuilder;
+/// Builder for resource definitions with content and metadata
 pub use resource::ResourceBuilder;
+/// Builders for root directory listings and workspace notifications
 pub use root::{ListRootsRequestBuilder, RootBuilder, RootsNotificationBuilder};
+/// Builder for executable tool definitions with parameters and handlers
 pub use tool::ToolBuilder;
 
 // Common types used across builders
+/// JSON value type for dynamic content construction
 pub use serde_json::{Value, json};
+/// Hash map type for parameter collections and metadata
 pub use std::collections::HashMap;

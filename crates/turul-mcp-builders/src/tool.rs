@@ -194,6 +194,7 @@ impl DynamicTool {
 }
 
 // Implement all fine-grained traits for DynamicTool
+/// Implements HasBaseMetadata for DynamicTool providing name and title access
 impl HasBaseMetadata for DynamicTool {
     fn name(&self) -> &str {
         &self.name
@@ -204,30 +205,35 @@ impl HasBaseMetadata for DynamicTool {
     }
 }
 
+/// Implements HasDescription for DynamicTool providing description text access
 impl HasDescription for DynamicTool {
     fn description(&self) -> Option<&str> {
         self.description.as_deref()
     }
 }
 
+/// Implements HasInputSchema for DynamicTool providing parameter schema access
 impl HasInputSchema for DynamicTool {
     fn input_schema(&self) -> &ToolSchema {
         &self.input_schema
     }
 }
 
+/// Implements HasOutputSchema for DynamicTool providing result schema access
 impl HasOutputSchema for DynamicTool {
     fn output_schema(&self) -> Option<&ToolSchema> {
         self.output_schema.as_ref()
     }
 }
 
+/// Implements HasAnnotations for DynamicTool providing metadata annotations
 impl HasAnnotations for DynamicTool {
     fn annotations(&self) -> Option<&ToolAnnotations> {
         self.annotations.as_ref()
     }
 }
 
+/// Implements HasToolMeta for DynamicTool providing additional metadata fields
 impl HasToolMeta for DynamicTool {
     fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
         self.meta.as_ref()

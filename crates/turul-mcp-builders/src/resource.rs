@@ -214,6 +214,7 @@ impl DynamicResource {
 }
 
 // Implement all fine-grained traits for DynamicResource
+/// Implements HasResourceMetadata for DynamicResource providing name and title access
 impl HasResourceMetadata for DynamicResource {
     fn name(&self) -> &str {
         &self.name
@@ -224,36 +225,42 @@ impl HasResourceMetadata for DynamicResource {
     }
 }
 
+/// Implements HasResourceDescription for DynamicResource providing description text
 impl HasResourceDescription for DynamicResource {
     fn description(&self) -> Option<&str> {
         self.description.as_deref()
     }
 }
 
+/// Implements HasResourceUri for DynamicResource providing URI access
 impl HasResourceUri for DynamicResource {
     fn uri(&self) -> &str {
         &self.uri
     }
 }
 
+/// Implements HasResourceMimeType for DynamicResource providing MIME type information
 impl HasResourceMimeType for DynamicResource {
     fn mime_type(&self) -> Option<&str> {
         self.mime_type.as_deref()
     }
 }
 
+/// Implements HasResourceSize for DynamicResource providing content size information
 impl HasResourceSize for DynamicResource {
     fn size(&self) -> Option<u64> {
         self.size
     }
 }
 
+/// Implements HasResourceAnnotations for DynamicResource providing metadata annotations
 impl HasResourceAnnotations for DynamicResource {
     fn annotations(&self) -> Option<&Annotations> {
         self.annotations.as_ref()
     }
 }
 
+/// Implements HasResourceMeta for DynamicResource providing additional metadata fields
 impl HasResourceMeta for DynamicResource {
     fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
         self.meta.as_ref()

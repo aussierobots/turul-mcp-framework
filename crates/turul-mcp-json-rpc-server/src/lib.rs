@@ -39,10 +39,15 @@ pub mod types;
 pub mod r#async;
 
 // Re-export main types
+/// JSON-RPC 2.0 error types and standard error codes
 pub use error::{JsonRpcError, JsonRpcErrorCode};
+/// JSON-RPC notification message structure for fire-and-forget communications
 pub use notification::JsonRpcNotification;
+/// JSON-RPC request structure with method and parameters
 pub use request::{JsonRpcRequest, RequestParams};
+/// JSON-RPC response types including success and error variants
 pub use response::{JsonRpcMessage, JsonRpcResponse, ResponseResult};
+/// Core JSON-RPC types for version and request identification
 pub use types::{JsonRpcVersion, RequestId};
 
 #[cfg(feature = "async")]
