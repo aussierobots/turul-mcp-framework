@@ -295,7 +295,8 @@ pub struct TestServerManager {
 impl TestServerManager {
     /// Start a test server by name on random port
     pub async fn start(server_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let port = portpicker::pick_unused_port().expect("Failed to find available port");
+        let port = portpicker::pick_unused_port()
+            .ok_or("Failed to find available port - network binding may be restricted in this environment")?;
 
         info!("Starting {} on port {}", server_name, port);
 

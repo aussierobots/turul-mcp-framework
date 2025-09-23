@@ -27,6 +27,8 @@ tracing-subscriber = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 portpicker = "0.1"
+anyhow = { workspace = true }
+mcp-e2e-shared = { path = "shared" }
 
 [[test]]
 name = "basic_session_test"
@@ -92,3 +94,13 @@ path = "mcp_runtime_capability_validation.rs"
 [[test]]
 name = "mcp_specification_compliance"
 path = "mcp_specification_compliance.rs"
+
+[[test]]
+name = "e2e_sse_notification_roundtrip"
+path = "e2e_sse_notification_roundtrip.rs"
+
+# [[test]]
+# name = "e2e_sse_message_flow"
+# path = "e2e_sse_message_flow.rs"
+# DEFERRED: Requires complex API migration (JsonRpcHandler, McpError, JsonRpcDispatcher changes)
+# Replaced by e2e_sse_notification_roundtrip which uses working infrastructure

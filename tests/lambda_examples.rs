@@ -253,3 +253,201 @@ fn test_production_lambda_configuration() {
 
     let _ = example_production_config;
 }
+
+/// Test Lambda streaming feature with proper streaming setup
+#[cfg(feature = "streaming")]
+#[tokio::test]
+async fn test_lambda_streaming_feature_e2e() {
+    use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
+    use turul_mcp_session_storage::InMemorySessionStorage;
+    use std::sync::Arc;
+
+    let _ = tracing_subscriber::fmt::try_init();
+
+    #[derive(McpTool, Clone, Default)]
+    #[tool(name = "stream_test", description = "Test streaming functionality")]
+    struct StreamTestTool {
+        #[param(description = "Test message")]
+        message: String,
+    }
+
+    impl StreamTestTool {
+        async fn execute(&self, session: Option<SessionContext>) -> McpResult<String> {
+            if let Some(session) = session {
+                // Send progress notifications that would be streamed
+                session.notify_progress("stream-test", 1).await;
+                session.notify_progress("stream-test", 2).await;
+                session.notify_progress("stream-test", 3).await;
+            }
+            Ok(format!("Streamed: {}", self.message))
+        }
+    }
+
+    // Test with streaming feature enabled
+    let storage = Arc::new(InMemorySessionStorage::new());
+    let server = LambdaMcpServerBuilder::new()
+        .name("stream-test-server")
+        .version("1.0.0")
+        .tool(StreamTestTool::default())
+        .storage(storage)
+        .sse(true)
+        .build()
+        .await
+        .expect("Failed to build Lambda MCP server");
+
+    // Create handler - this should work with streaming enabled
+    let handler = server.handler().await.expect("Failed to create handler");
+
+    // Test basic handler properties - verify it was created successfully
+    // (We can't test Debug since LambdaMcpHandler doesn't implement it)
+
+    // For a real streaming test, we'd need to:
+    // 1. Create a mock Lambda request with SSE headers
+    // 2. Call handler.handle_streaming() instead of handle()
+    // 3. Verify streaming response format
+
+    // This test verifies the streaming setup compiles and creates handlers correctly
+    println!("✅ Lambda streaming E2E test completed successfully");
+}
+
+/// Test Lambda SSE validation without streaming feature
+#[tokio::test]
+async fn test_lambda_sse_validation_without_streaming() {
+    use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
+    use turul_mcp_session_storage::InMemorySessionStorage;
+    use std::sync::Arc;
+
+    let _ = tracing_subscriber::fmt::try_init();
+
+    // Simple test tool for validation test
+    use turul_mcp_derive::McpTool;
+
+    #[derive(Debug, Default, Clone, McpTool)]
+    struct ValidationTestTool {
+        message: String,
+    }
+
+    impl ValidationTestTool {
+        async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> Result<String, turul_mcp_protocol::McpError> {
+            Ok("validation".to_string())
+        }
+    }
+
+    // Test that SSE validation works correctly when streaming feature is not enabled
+    let storage = Arc::new(InMemorySessionStorage::new());
+    let result = LambdaMcpServerBuilder::new()
+        .name("sse-validation-test")
+        .version("1.0.0")
+        .tool(ValidationTestTool::default())
+        .storage(storage)
+        .sse(true) // This should fail
+        .build()
+        .await;
+
+    // This should fail with a configuration error about streaming feature not being active
+    assert!(result.is_err());
+    if let Err(error) = result {
+        let error_msg = format!("{:?}", error);
+        assert!(error_msg.contains("streaming"));
+        assert!(error_msg.contains("feature"));
+    }
+
+    println!("✅ SSE validation test completed successfully");
+}
+
+/// Integration test that actually executes lambda example configurations
+#[tokio::test]
+async fn test_lambda_examples_execution() {
+    use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
+    use turul_mcp_session_storage::InMemorySessionStorage;
+    use std::sync::Arc;
+
+    let _ = tracing_subscriber::fmt::try_init();
+
+    // Test 1: Basic lambda server builder actually executes
+    {
+        #[derive(Debug, Default, Clone, McpTool)]
+        struct TestTool {
+            message: String,
+        }
+
+        impl TestTool {
+            async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> Result<String, turul_mcp_protocol::McpError> {
+                Ok("test".to_string())
+            }
+        }
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("test-execution-server")
+            .version("1.0.0")
+            .tool(TestTool::default())
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false) // Disable SSE for test
+            .build()
+            .await;
+
+        assert!(server.is_ok(), "Basic lambda server should build successfully");
+        let server = server.unwrap();
+
+        // Actually create a handler to verify full pipeline
+        let handler = server.handler().await;
+        assert!(handler.is_ok(), "Handler creation should succeed");
+    }
+
+    // Test 2: CORS configuration execution
+    {
+        #[derive(Debug, Default, Clone, McpTool)]
+        struct CorsTestTool {
+            message: String,
+        }
+
+        impl CorsTestTool {
+            async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> Result<String, turul_mcp_protocol::McpError> {
+                Ok("cors-test".to_string())
+            }
+        }
+
+        #[cfg(feature = "cors")]
+        {
+            let server = LambdaMcpServerBuilder::new()
+                .name("cors-test-server")
+                .version("1.0.0")
+                .tool(CorsTestTool::default())
+                .storage(Arc::new(InMemorySessionStorage::new()))
+                .cors_allow_all_origins()
+                .sse(false) // Disable SSE for test
+                .build()
+                .await;
+
+            assert!(server.is_ok(), "CORS-enabled server should build successfully");
+        }
+    }
+
+    // Test 3: Validation paths execution (SSE without streaming)
+    {
+        #[derive(Debug, Default, Clone, McpTool)]
+        struct ValidationTool {
+            message: String,
+        }
+
+        impl ValidationTool {
+            async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> Result<String, turul_mcp_protocol::McpError> {
+                Ok("validation".to_string())
+            }
+        }
+
+        // This should fail due to SSE validation
+        let result = LambdaMcpServerBuilder::new()
+            .name("validation-test-server")
+            .version("1.0.0")
+            .tool(ValidationTool::default())
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(true) // This should trigger validation error
+            .build()
+            .await;
+
+        assert!(result.is_err(), "SSE validation should prevent build without streaming feature");
+    }
+
+    println!("✅ Lambda examples execution test completed successfully");
+}

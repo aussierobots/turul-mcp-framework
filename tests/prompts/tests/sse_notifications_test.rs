@@ -11,7 +11,7 @@ use tracing::{debug, info};
 
 #[tokio::test]
 async fn test_sse_prompts_connection_establishment() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -46,7 +46,7 @@ async fn test_sse_prompts_connection_establishment() {
 
 #[tokio::test]
 async fn test_sse_prompts_list_changed_notification() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -95,7 +95,7 @@ async fn test_sse_prompts_list_changed_notification() {
 
 #[tokio::test]
 async fn test_sse_prompt_operations_notifications() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -144,7 +144,7 @@ async fn test_sse_prompt_operations_notifications() {
 
 #[tokio::test]
 async fn test_sse_prompts_session_isolation() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -201,7 +201,7 @@ async fn test_sse_prompts_session_isolation() {
 
 #[tokio::test]
 async fn test_sse_prompts_notification_format_compliance() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -269,7 +269,7 @@ async fn test_sse_prompts_notification_format_compliance() {
 
 #[tokio::test]
 async fn test_sse_prompts_error_handling_notifications() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -307,7 +307,7 @@ async fn test_sse_prompts_error_handling_notifications() {
 
 #[tokio::test]
 async fn test_sse_prompts_with_session_aware_operations() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -354,7 +354,7 @@ async fn test_sse_prompts_with_session_aware_operations() {
 
 #[tokio::test]
 async fn test_sse_prompts_concurrent_operations() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
