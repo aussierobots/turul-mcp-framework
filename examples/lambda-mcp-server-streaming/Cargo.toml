@@ -1,0 +1,72 @@
+[package]
+name = "lambda-turul-mcp-server-streaming"
+version = "0.2.0"
+edition.workspace = true
+description = "AWS Lambda MCP server with real-time SSE streaming using turul-mcp-framework"
+license = "MIT"
+
+[[bin]]
+name = "lambda-turul-mcp-server-streaming"
+path = "src/main.rs"
+
+[dependencies]
+# Lambda runtime with streaming support
+lambda_http.workspace = true
+lambda_runtime.workspace = true
+
+# AWS SDK for DynamoDB, SNS, SQS integration
+aws-config.workspace = true
+aws-sdk-dynamodb.workspace = true
+aws-sdk-sns.workspace = true
+aws-sdk-sqs.workspace = true
+
+# Our MCP framework
+turul-mcp-server = { workspace = true, features = ["dynamodb"] }
+turul-mcp-protocol.workspace = true
+turul-mcp-derive.workspace = true
+turul-mcp-session-storage = { workspace = true, features = ["dynamodb"] }
+turul-mcp-builders.workspace = true
+turul-http-mcp-server.workspace = true
+turul-mcp-json-rpc-server = { workspace = true }
+turul-mcp-aws-lambda = { path = "../../crates/turul-mcp-aws-lambda", features = ["streaming"] }
+async-trait = { workspace = true }
+
+# Tower middleware for Lambda
+tower = { workspace = true }
+tower-http = { workspace = true }
+
+# HTTP and JSON handling
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+# HTTP and Hyper support for streaming
+http = { workspace = true }
+hyper = { workspace = true }
+http-body-util = { workspace = true }
+bytes = { workspace = true }
+
+# Date/time handling
+chrono = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+futures = { workspace = true }
+
+# Error handling and logging
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# URL encoding for SSE parameters
+urlencoding = { workspace = true }
+
+# Additional dependencies for tools
+md5 = "0.7"
+
+[dev-dependencies]
+tokio-test.workspace = true
+
+[features]
+default = ["lambda"]
+lambda = []
+local = []
