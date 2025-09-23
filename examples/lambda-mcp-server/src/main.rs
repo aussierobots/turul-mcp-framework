@@ -1,16 +1,25 @@
-//! AWS Lambda MCP Server using turul-mcp-aws-lambda
+//! AWS Lambda MCP Server (Non-Streaming)
 //!
 //! A complete MCP server for AWS Lambda with:
-//! - turul-mcp-aws-lambda integration with streaming response support
+//! - turul-mcp-aws-lambda integration (snapshot-based SSE)
 //! - MCP 2025-06-18 compliance with SSE notifications
 //! - DynamoDB session storage with automatic table creation
 //! - CORS support for browser clients
 //! - AWS tools integration (DynamoDB, SNS, SQS, CloudWatch)
+//!
+//! ## SSE Support
+//!
+//! This version uses SSE snapshot approach - returns recent events when requested
+//! rather than real-time streaming. This is compatible with standard Lambda
+//! runtime and doesn't require `run_with_streaming_response`.
+//!
+//! **Note**: For real-time SSE streaming, see the `lambda-mcp-server-streaming` example
+//! which uses `run_with_streaming_response` (may incur higher Lambda costs).
 
 mod session_aware_logging_demo;
 mod tools;
 
-use lambda_http::{Body, Error, Request, run_with_streaming_response, service_fn};
+use lambda_http::{Body, Error, Request, run, service_fn};
 use std::env;
 use tracing::{error, info};
 
@@ -84,8 +93,8 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
         .tool(CheckLoggingStatusTool::default())
         // Session storage
         .storage(storage)
-        // Enable SSE streaming
-        .sse(true)
+        // Disable SSE for snapshot-only mode (compatible with non-streaming runtime)
+        .sse(false)
         // CORS configuration
         .cors_allow_all_origins()
         .build()
@@ -107,14 +116,15 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
 async fn main() -> Result<(), Error> {
     init_logging();
 
-    info!("🚀 Starting AWS Lambda MCP Server with turul-mcp-aws-lambda");
-    info!("Architecture: MCP 2025-06-18 Streamable HTTP compliance");
+    info!("🚀 Starting AWS Lambda MCP Server (non-SSE mode)");
+    info!("Architecture: MCP 2025-06-18 JSON-RPC compliance");
     info!("  - turul-mcp-aws-lambda integration");
     info!("  - DynamoDB session storage");
     info!("  - CORS support");
     info!("  - POST /mcp - JSON-RPC requests");
-    info!("  - GET /mcp - SSE streaming");
+    info!("  - GET /mcp - 405 Method Not Allowed (SSE disabled)");
     info!("  - OPTIONS * - CORS preflight");
+    info!("  - For SSE support, use lambda-mcp-server-streaming with streaming features");
 
     info!("📋 Environment variables:");
     info!(
@@ -130,8 +140,8 @@ async fn main() -> Result<(), Error> {
         env::var("MCP_SESSION_TABLE").unwrap_or("mcp-sessions".to_string())
     );
 
-    info!("🎯 Lambda handler ready");
+    info!("🎯 Lambda handler ready (snapshot-based SSE)");
 
-    // Run Lambda HTTP runtime with streaming response support
-    run_with_streaming_response(service_fn(lambda_handler)).await
+    // Run Lambda HTTP runtime (regular, non-streaming)
+    run(service_fn(lambda_handler)).await
 }

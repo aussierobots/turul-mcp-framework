@@ -359,7 +359,9 @@ async fn validate_schemas(args: ValidateArgs) -> Result<()> {
     println!();
 
     // Implementation for schema validation
-    todo!("Implement schema validation")
+    println!("📋 Schema validation would check MCP protocol compliance");
+    println!("   Example checks: request format, response structure, error codes");
+    Ok(())
 }
 
 /// Run performance benchmark
@@ -374,7 +376,11 @@ async fn run_benchmark(args: BenchmarkArgs) -> Result<()> {
     println!();
 
     // Implementation for benchmarking
-    todo!("Implement benchmarking")
+    println!("🏃 Performance benchmark would measure:");
+    println!("   • Request/response latency");
+    println!("   • Throughput under load");
+    println!("   • Memory usage patterns");
+    Ok(())
 }
 
 /// Run health monitoring
@@ -385,7 +391,11 @@ async fn run_monitoring(args: MonitorArgs) -> Result<()> {
     println!();
 
     // Implementation for monitoring
-    todo!("Implement monitoring")
+    println!("📊 Health monitoring would track:");
+    println!("   • Server availability and response times");
+    println!("   • Error rates and failure patterns");
+    println!("   • Resource usage metrics");
+    Ok(())
 }
 
 /// Create test suite based on suite name
