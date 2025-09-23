@@ -99,9 +99,11 @@ impl LambdaMcpHandler {
 pub fn inject_cors_headers(response: &mut lambda_http::Response, config: &CorsConfig)
 ```
 
-#### 4. SSE Stream Adaptation (`streaming.rs`)
+#### 4. SSE Stream Utilities (`streaming.rs`)
 ```rust
-pub fn adapt_sse_stream(stream: impl Stream<Item = Bytes>) -> lambda_http::Body
+// Note: adapt_sse_stream was removed in 0.2.0 - use handle_streaming() for real streaming
+pub fn format_sse_event(data: &str, event_type: Option<&str>, event_id: Option<&str>) -> String
+pub fn create_sse_stream<T>(...) -> impl Stream<Item = Result<Bytes>>
 ```
 
 #### 5. Builder API (`builder.rs`)
