@@ -31,7 +31,7 @@ mod tests;
 
 // Re-export main types
 pub use cors::CorsLayer;
-pub use handler::McpHttpHandler;
+// McpHttpHandler removed in 0.2.0 - use SessionMcpHandler instead
 pub use notification_bridge::{
     BroadcastError, NotificationBroadcaster, SharedNotificationBroadcaster,
     StreamManagerNotificationBroadcaster,

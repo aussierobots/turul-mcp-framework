@@ -220,10 +220,13 @@ impl SessionMcpHandler {
     }
 
     /// Handle MCP HTTP requests with full MCP 2025-06-18 compliance
-    pub async fn handle_mcp_request(
+    pub async fn handle_mcp_request<B>(
         &self,
-        req: Request<hyper::body::Incoming>,
-    ) -> Result<Response<UnifiedMcpBody>> {
+        req: Request<B>,
+    ) -> Result<Response<UnifiedMcpBody>>
+    where
+        B: http_body::Body<Data = bytes::Bytes, Error = hyper::Error> + Send + 'static,
+    {
         match *req.method() {
             Method::POST => {
                 let response = self.handle_json_rpc_request(req).await?;
@@ -246,10 +249,13 @@ impl SessionMcpHandler {
     }
 
     /// Handle JSON-RPC requests over HTTP POST
-    async fn handle_json_rpc_request(
+    async fn handle_json_rpc_request<B>(
         &self,
-        req: Request<hyper::body::Incoming>,
-    ) -> Result<Response<UnifiedMcpBody>> {
+        req: Request<B>,
+    ) -> Result<Response<UnifiedMcpBody>>
+    where
+        B: http_body::Body<Data = bytes::Bytes, Error = hyper::Error> + Send + 'static,
+    {
         // Extract protocol version and session ID from headers
         let protocol_version = extract_protocol_version(req.headers());
         let session_id = extract_session_id(req.headers());
@@ -572,10 +578,13 @@ impl SessionMcpHandler {
     // SSE for tool calls is temporarily disabled - see WORKING_MEMORY.md for details
 
     /// Handle Server-Sent Events requests (SSE for streaming)
-    async fn handle_sse_request(
+    async fn handle_sse_request<B>(
         &self,
-        req: Request<hyper::body::Incoming>,
-    ) -> Result<Response<UnifiedMcpBody>> {
+        req: Request<B>,
+    ) -> Result<Response<UnifiedMcpBody>>
+    where
+        B: http_body::Body<Data = bytes::Bytes, Error = hyper::Error> + Send + 'static,
+    {
         // Check if client accepts SSE
         let headers = req.headers();
         let accept = headers
@@ -684,10 +693,13 @@ impl SessionMcpHandler {
     }
 
     /// Handle DELETE requests for session cleanup
-    async fn handle_delete_request(
+    async fn handle_delete_request<B>(
         &self,
-        req: Request<hyper::body::Incoming>,
-    ) -> Result<Response<JsonRpcBody>> {
+        req: Request<B>,
+    ) -> Result<Response<JsonRpcBody>>
+    where
+        B: http_body::Body<Data = bytes::Bytes, Error = hyper::Error> + Send + 'static,
+    {
         let session_id = extract_session_id(req.headers());
 
         debug!("DELETE request - Session: {:?}", session_id);

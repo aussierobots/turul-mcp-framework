@@ -817,6 +817,11 @@ impl StreamManager {
         }
     }
 
+    /// Get the stream configuration (for testing and debugging)
+    pub fn get_config(&self) -> &StreamConfig {
+        &self.config
+    }
+
     /// Get statistics about active streams
     pub async fn get_stats(&self) -> StreamStats {
         let connections = self.connections.read().await;
