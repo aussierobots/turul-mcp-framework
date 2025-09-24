@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 turul-mcp-derive = { workspace = true }
-turul-mcp-server = { workspace = true }
+turul-mcp-server = { workspace = true, features = ["test-utils"] }
 turul-mcp-protocol = { workspace = true }
 turul-mcp-protocol-2025-06-18 = { workspace = true }
 turul-mcp-builders = { workspace = true }

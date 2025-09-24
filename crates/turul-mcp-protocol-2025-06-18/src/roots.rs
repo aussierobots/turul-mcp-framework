@@ -335,7 +335,109 @@ pub trait HasRootAnnotations {
     }
 }
 
-/// Composed root definition trait (automatically implemented via blanket impl)
+/// **Complete MCP Root Creation** - Build secure file system access boundaries.
+///
+/// This trait represents a **complete, working MCP root** that defines secure access
+/// boundaries for file system operations with permissions, filtering, and metadata.
+/// When you implement the required metadata traits, you automatically get
+/// `RootDefinition` for free via blanket implementation.
+///
+/// # What You're Building
+///
+/// A root is a secure file system boundary that:
+/// - Defines accessible file system paths for clients
+/// - Enforces security permissions and access control
+/// - Filters files and directories based on rules
+/// - Provides metadata annotations for client context
+///
+/// # How to Create a Root
+///
+/// Implement these four traits on your struct:
+///
+/// ```rust
+/// # use turul_mcp_protocol::prelude::*;
+/// # use serde_json::{Value, json};
+/// # use std::collections::HashMap;
+///
+/// // This struct will automatically implement RootDefinition!
+/// struct ProjectRoot {
+///     base_path: String,
+///     project_name: String,
+/// }
+///
+/// impl HasRootMetadata for ProjectRoot {
+///     fn uri(&self) -> &str {
+///         &self.base_path
+///     }
+///
+///     fn name(&self) -> Option<&str> {
+///         Some(&self.project_name)
+///     }
+/// }
+///
+/// impl HasRootPermissions for ProjectRoot {
+///     fn can_read(&self, _path: &str) -> bool {
+///         true // Allow reading all files in project
+///     }
+///
+///     fn can_write(&self, path: &str) -> bool {
+///         // Only allow writing to src/ and tests/ directories
+///         path.contains("/src/") || path.contains("/tests/")
+///     }
+///
+///     fn can_create(&self, path: &str) -> bool {
+///         // Allow creating files in writable areas
+///         self.can_write(path)
+///     }
+/// }
+///
+/// impl HasRootFiltering for ProjectRoot {
+///     fn should_include_file(&self, path: &str) -> bool {
+///         // Exclude hidden files and build artifacts
+///         !path.contains("/.") && !path.contains("/target/")
+///     }
+///
+///     fn should_include_directory(&self, path: &str) -> bool {
+///         // Include most directories except hidden ones
+///         !path.contains("/.")
+///     }
+/// }
+///
+/// impl HasRootAnnotations for ProjectRoot {
+///     fn annotations(&self) -> Option<&HashMap<String, Value>> {
+///         // Static annotations for this example
+///         None
+///     }
+/// }
+///
+/// // Now you can use it with the server:
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let root = ProjectRoot {
+///     base_path: "file:///workspace/my-project".to_string(),
+///     project_name: "My Rust Project".to_string(),
+/// };
+///
+/// // The root automatically implements RootDefinition
+/// let protocol_root = root.to_root();
+/// let validation_result = root.validate();
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Key Benefits
+///
+/// - **Security**: Fine-grained access control for file operations
+/// - **Filtering**: Automatic exclusion of unwanted files/directories
+/// - **Metadata**: Rich annotations for client context
+/// - **MCP Compliant**: Fully compatible with MCP 2025-06-18 specification
+///
+/// # Common Use Cases
+///
+/// - Project workspace boundaries
+/// - Secure document repositories
+/// - Code review access control
+/// - Filtered file system views
+/// - Multi-tenant file access
 pub trait RootDefinition:
     HasRootMetadata + HasRootPermissions + HasRootFiltering + HasRootAnnotations
 {

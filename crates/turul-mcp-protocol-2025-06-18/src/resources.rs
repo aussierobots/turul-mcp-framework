@@ -62,7 +62,101 @@ pub trait HasResourceMeta {
     }
 }
 
-/// Complete resource definition - composed from fine-grained traits
+/// **Complete MCP Resource Creation** - Build readable resources that clients can access.
+///
+/// This trait represents a **complete, working MCP resource** that can be registered with a server
+/// and accessed by clients. When you implement the required metadata traits, you automatically
+/// get `ResourceDefinition` for free via blanket implementation.
+///
+/// ## What This Enables
+///
+/// Resources implementing `ResourceDefinition` become **full MCP citizens** that are:
+/// - 🔍 **Discoverable** via `resources/list` requests
+/// - 📖 **Readable** via `resources/read` requests
+/// - 🎯 **Template-capable** with URI variable substitution
+/// - 📡 **Protocol-ready** for JSON-RPC communication
+///
+/// ## Complete Working Example
+///
+/// ```rust,ignore
+/// use std::collections::HashMap;
+///
+/// // This struct will automatically implement ResourceDefinition!
+/// struct ApiDataFeed {
+///     endpoint: String,
+///     api_key: String,
+/// }
+///
+/// impl HasResourceMetadata for ApiDataFeed {
+///     fn name(&self) -> &str { "api_data" }
+///     fn title(&self) -> Option<&str> { Some("Live API Data Feed") }
+/// }
+///
+/// impl HasResourceDescription for ApiDataFeed {
+///     fn description(&self) -> Option<&str> {
+///         Some("Real-time data feed from external API with caching")
+///     }
+/// }
+///
+/// impl HasResourceUri for ApiDataFeed {
+///     fn uri(&self) -> &str { "https://api.example.com/data/{dataset}" }
+/// }
+///
+/// impl HasResourceMimeType for ApiDataFeed {
+///     fn mime_type(&self) -> Option<&str> { Some("application/json") }
+/// }
+///
+/// impl HasResourceSize for ApiDataFeed {
+///     fn size(&self) -> Option<u64> { None } // Dynamic size
+/// }
+///
+/// // Implement remaining required traits...
+/// impl HasResourceAnnotations for ApiDataFeed { fn annotations(&self) -> Option<&crate::meta::Annotations> { None } }
+/// impl HasResourceMeta for ApiDataFeed { fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None } }
+///
+/// // 🎉 ApiDataFeed now automatically implements ResourceDefinition!
+/// // Clients can discover it and read data with URI templates like "api_data?dataset=users"
+/// ```
+///
+/// ## Usage Patterns
+///
+/// ### Easy: Use Derive Macros
+/// ```rust,ignore
+/// #[derive(McpResource)]
+/// #[resource(name = "logs", uri = "file:///var/log/{service}.log")]
+/// struct LogFiles { service: String }
+/// ```
+///
+/// ### Advanced: Manual Implementation (shown above)
+/// Perfect when you need dynamic URIs, custom metadata, or complex content handling.
+///
+/// ## Real-World Resource Ideas
+///
+/// - **File Resources**: Config files, logs, documentation, data exports
+/// - **API Resources**: REST endpoints, GraphQL schemas, webhook data
+/// - **Data Resources**: Database views, CSV exports, JSON feeds, report data
+/// - **System Resources**: Process info, system stats, environment configs
+/// - **Template Resources**: Dynamic content with `{variable}` substitution
+///
+/// ## URI Template Power
+///
+/// Resources support powerful URI templating:
+/// ```
+/// Static:   "file:///config.json"              → Single resource
+/// Template: "file:///logs/{service}.log"       → Multiple resources
+/// Complex:  "api://data/{type}/{id}?fmt={fmt}" → Full parameterization
+/// ```
+///
+/// ## How It Works in MCP
+///
+/// 1. **Registration**: Server registers your resource during startup
+/// 2. **Discovery**: Client calls `resources/list` → sees available resources
+/// 3. **Template Resolution**: Client expands URI templates with parameters
+/// 4. **Reading**: Client calls `resources/read` with resolved URI
+/// 5. **Content Delivery**: Your resource returns actual content
+/// 6. **Response**: Framework serializes content back to client
+///
+/// The framework handles URI template parsing, parameter validation, and protocol serialization!
 pub trait ResourceDefinition:
     HasResourceMetadata +       // name, title (from BaseMetadata)
     HasResourceDescription +    // description

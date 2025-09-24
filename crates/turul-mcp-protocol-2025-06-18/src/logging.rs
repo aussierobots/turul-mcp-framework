@@ -279,7 +279,87 @@ pub trait HasLogTransport {
     }
 }
 
-/// Composed logging definition trait (automatically implemented via blanket impl)
+/// **Complete MCP Logger Creation** - Build structured logging systems with level control.
+///
+/// This trait represents a **complete, working MCP logger** that can emit structured
+/// log messages with configurable levels, formats, and transport mechanisms. When you implement
+/// the required metadata traits, you automatically get `LoggerDefinition` for free
+/// via blanket implementation.
+///
+/// # What You're Building
+///
+/// A logger is a sophisticated logging system that:
+/// - Emits structured log messages with configurable levels
+/// - Supports different output formats (JSON, text, etc.)
+/// - Routes messages through various transports (console, files, network)
+/// - Provides runtime level control for debugging
+///
+/// # How to Create a Logger
+///
+/// Implement these four traits on your struct:
+///
+/// ```rust
+/// # use turul_mcp_protocol::prelude::*;
+/// # use serde_json::{Value, json};
+///
+/// // This struct will automatically implement LoggerDefinition!
+/// struct ApplicationLogger {
+///     component: String,
+/// }
+///
+/// impl HasLoggingMetadata for ApplicationLogger {
+///     fn logger_name(&self) -> Option<&str> {
+///         Some(&self.component)
+///     }
+/// }
+///
+/// impl HasLogLevel for ApplicationLogger {
+///     fn level(&self) -> LogLevel {
+///         LogLevel::Info
+///     }
+/// }
+///
+/// impl HasLogFormat for ApplicationLogger {
+///     fn data(&self) -> &Value {
+///         &json!({
+///             "component": self.component,
+///             "timestamp": chrono::Utc::now().to_rfc3339(),
+///             "environment": "production"
+///         })
+///     }
+/// }
+///
+/// impl HasLogTransport for ApplicationLogger {
+///     fn transport(&self) -> LogTransport {
+///         LogTransport::Console
+///     }
+/// }
+///
+/// // Now you can use it with the server:
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let logger = ApplicationLogger { component: "user-service".to_string() };
+///
+/// // The logger automatically implements LoggerDefinition
+/// let notification = logger.to_message_notification();
+/// let level_request = logger.to_set_level_request();
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Key Benefits
+///
+/// - **Structured Logging**: JSON-based log data for easy parsing
+/// - **Level Control**: Runtime adjustment of logging verbosity
+/// - **Transport Flexibility**: Multiple output destinations
+/// - **MCP Compliant**: Fully compatible with MCP 2025-06-18 specification
+///
+/// # Common Use Cases
+///
+/// - Application component logging
+/// - Debug trace collection
+/// - Audit trail generation
+/// - Performance monitoring
+/// - Error tracking and reporting
 pub trait LoggerDefinition:
     HasLoggingMetadata + HasLogLevel + HasLogFormat + HasLogTransport
 {

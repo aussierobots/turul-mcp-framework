@@ -524,7 +524,95 @@ pub trait HasElicitationHandling {
     }
 }
 
-/// Composed elicitation definition trait (automatically implemented via blanket impl)
+/// **Complete MCP Elicitation Creation** - Build schema-validated user input collection systems.
+///
+/// This trait represents a **complete, working MCP elicitation** that can prompt users
+/// for structured input and validate their responses against JSON schemas. When you implement
+/// the required metadata traits, you automatically get `ElicitationDefinition` for free
+/// via blanket implementation.
+///
+/// # What You're Building
+///
+/// An elicitation is a sophisticated user input system that:
+/// - Presents a clear message/prompt to the user
+/// - Defines a JSON schema for expected input structure
+/// - Validates user responses against that schema
+/// - Processes the validated data for your application
+///
+/// # How to Create an Elicitation
+///
+/// Implement these three traits on your struct:
+///
+/// ```rust
+/// # use turul_mcp_protocol::prelude::*;
+/// # use serde_json::Value;
+/// # use std::collections::HashMap;
+///
+/// // This struct will automatically implement ElicitationDefinition!
+/// struct UserPreferencesForm {
+///     context: String,
+/// }
+///
+/// impl HasElicitationMetadata for UserPreferencesForm {
+///     fn message(&self) -> &str {
+///         "Please configure your preferences for this project"
+///     }
+/// }
+///
+/// impl HasElicitationSchema for UserPreferencesForm {
+///     fn requested_schema(&self) -> &JsonSchema {
+///         &JsonSchema::Object {
+///             properties: [
+///                 ("theme".to_string(), JsonSchema::String { enum_values: Some(vec!["dark".to_string(), "light".to_string()]) }),
+///                 ("notifications".to_string(), JsonSchema::Boolean),
+///                 ("max_items".to_string(), JsonSchema::Number { minimum: Some(1.0), maximum: Some(100.0) })
+///             ].into_iter().collect(),
+///             required: vec!["theme".to_string()],
+///             additional_properties: false,
+///         }
+///     }
+/// }
+///
+/// impl HasElicitationHandling for UserPreferencesForm {
+///     async fn handle_response(&self, content: HashMap<String, Value>) -> Result<HashMap<String, Value>, String> {
+///         // Validate that theme is acceptable
+///         if let Some(theme) = content.get("theme") {
+///             if !["dark", "light"].contains(&theme.as_str().unwrap_or("")) {
+///                 return Err("Theme must be 'dark' or 'light'".to_string());
+///             }
+///         }
+///
+///         // Process and potentially transform the data
+///         let mut processed = content.clone();
+///         processed.insert("processed_at".to_string(), Value::String(chrono::Utc::now().to_rfc3339()));
+///         Ok(processed)
+///     }
+/// }
+///
+/// // Now you can use it with the server:
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let form = UserPreferencesForm { context: "project-setup".to_string() };
+///
+/// // The elicitation automatically implements ElicitationDefinition
+/// let create_request = form.to_create_request();
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Key Benefits
+///
+/// - **Type Safety**: Schema validation happens at the protocol level
+/// - **Automatic Implementation**: Just implement the three component traits
+/// - **Flexible Processing**: Handle and transform user input as needed
+/// - **MCP Compliant**: Fully compatible with MCP 2025-06-18 specification
+///
+/// # Common Use Cases
+///
+/// - Configuration forms with validation
+/// - User preference collection
+/// - Survey and feedback systems
+/// - Structured data entry workflows
+/// - Multi-step input wizards
 pub trait ElicitationDefinition:
     HasElicitationMetadata + HasElicitationSchema + HasElicitationHandling
 {

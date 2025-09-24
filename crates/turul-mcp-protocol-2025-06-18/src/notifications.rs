@@ -493,7 +493,93 @@ pub trait HasNotificationRules {
     }
 }
 
-/// Composed notification definition trait (automatically implemented via blanket impl)
+/// **Complete MCP Notification Creation** - Build real-time event broadcasting systems.
+///
+/// This trait represents a **complete, working MCP notification** that can broadcast
+/// real-time events to connected clients with structured payloads and routing rules.
+/// When you implement the required metadata traits, you automatically get
+/// `NotificationDefinition` for free via blanket implementation.
+///
+/// # What You're Building
+///
+/// A notification is a real-time event system that:
+/// - Broadcasts events to connected clients instantly
+/// - Carries structured JSON payloads with event data
+/// - Supports routing rules for targeted delivery
+/// - Provides reliable event ordering and delivery
+///
+/// # How to Create a Notification
+///
+/// Implement these three traits on your struct:
+///
+/// ```rust
+/// # use turul_mcp_protocol::prelude::*;
+/// # use serde_json::{Value, json};
+///
+/// // This struct will automatically implement NotificationDefinition!
+/// struct FileChangeNotification {
+///     file_path: String,
+///     change_type: String,
+/// }
+///
+/// impl HasNotificationMetadata for FileChangeNotification {
+///     fn method(&self) -> &str {
+///         "file/changed"
+///     }
+///
+///     fn description(&self) -> Option<&str> {
+///         Some("File system change notification")
+///     }
+/// }
+///
+/// impl HasNotificationPayload for FileChangeNotification {
+///     fn payload(&self) -> Option<Value> {
+///         Some(json!({
+///             "path": self.file_path,
+///             "type": self.change_type,
+///             "timestamp": chrono::Utc::now().to_rfc3339()
+///         }))
+///     }
+/// }
+///
+/// impl HasNotificationRules for FileChangeNotification {
+///     fn should_send_to_client(&self, _client_id: &str) -> bool {
+///         // Send to all clients by default
+///         true
+///     }
+///
+///     fn priority(&self) -> NotificationPriority {
+///         NotificationPriority::Normal
+///     }
+/// }
+///
+/// // Now you can use it with the server:
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let notification = FileChangeNotification {
+///     file_path: "/workspace/src/main.rs".to_string(),
+///     change_type: "modified".to_string(),
+/// };
+///
+/// // The notification automatically implements NotificationDefinition
+/// let base_notification = notification.to_notification();
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Key Benefits
+///
+/// - **Real-Time**: Instant event delivery to connected clients
+/// - **Structured Data**: JSON payloads for rich event information
+/// - **Targeted Delivery**: Client-specific routing rules
+/// - **MCP Compliant**: Fully compatible with MCP 2025-06-18 specification
+///
+/// # Common Use Cases
+///
+/// - File system watch notifications
+/// - Database change events
+/// - User activity broadcasts
+/// - System status updates
+/// - Real-time collaboration events
 pub trait NotificationDefinition:
     HasNotificationMetadata + HasNotificationPayload + HasNotificationRules
 {

@@ -140,10 +140,10 @@
 //! let prompts = client.list_prompts().await?;
 //!
 //! // Get a prompt with arguments
-//! let prompt = client.get_prompt("code_review", serde_json::json!({
+//! let prompt = client.get_prompt("code_review", Some(serde_json::json!({
 //!     "language": "rust",
 //!     "code": "fn main() { println!(\"Hello!\"); }"
-//! })).await?;
+//! }))).await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -154,17 +154,9 @@
 //!
 //! ```rust,no_run
 //! # use turul_mcp_client::prelude::*;
-//! use std::time::Duration;
 //!
-//! let config = ClientConfig::builder()
-//!     .request_timeout(Duration::from_secs(30))
-//!     .retry_attempts(3)
-//!     .retry_delay(Duration::from_millis(500))
-//!     .max_connections(10)
-//!     .build();
-//!
+//! // Create a client with default configuration
 //! let client = McpClientBuilder::new()
-//!     .with_config(config)
 //!     .build();
 //! ```
 //!
@@ -175,20 +167,9 @@
 //! ```rust,no_run
 //! # use turul_mcp_client::prelude::*;
 //! # async fn example(client: &McpClient) -> Result<(), Box<dyn std::error::Error>> {
-//! // Subscribe to notifications
-//! let mut stream = client.subscribe_notifications().await?;
-//!
-//! while let Some(notification) = stream.next().await {
-//!     match notification? {
-//!         Notification::Progress(progress) => {
-//!             println!("Progress: {}%", progress.percent);
-//!         }
-//!         Notification::LogMessage(log) => {
-//!             println!("Log: {}", log.message);
-//!         }
-//!         _ => {}
-//!     }
-//! }
+//! // Get available tools from server
+//! let tools = client.list_tools().await?;
+//! println!("Available tools: {}", tools.len());
 //! # Ok(())
 //! # }
 //! ```

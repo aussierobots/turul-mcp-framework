@@ -29,17 +29,16 @@
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use turul_mcp_server::prelude::*;
 //! use turul_http_mcp_server::HttpMcpServerBuilder;
+//! use std::net::SocketAddr;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let addr: SocketAddr = "127.0.0.1:8080".parse()?;
 //!     let server = HttpMcpServerBuilder::new()
-//!         .name("http-server")
-//!         .bind("127.0.0.1:8080")
-//!         .cors_allow_all_origins()
-//!         .build()
-//!         .await?;
+//!         .bind_address(addr)
+//!         .cors(true)
+//!         .build();
 //!
 //!     println!("Server running on http://127.0.0.1:8080/mcp");
 //!     server.run().await?;

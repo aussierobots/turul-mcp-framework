@@ -409,7 +409,102 @@ pub trait HasModelPreferences {
     }
 }
 
-/// Composed sampling definition trait (automatically implemented via blanket impl)
+/// **Complete MCP Sampling Creation** - Build AI model interaction and completion systems.
+///
+/// This trait represents a **complete, working MCP sampling configuration** that controls
+/// how AI models generate completions with precise parameter control, context management,
+/// and model preferences. When you implement the required metadata traits, you automatically
+/// get `SamplingDefinition` for free via blanket implementation.
+///
+/// # What You're Building
+///
+/// A sampling configuration is an AI interaction system that:
+/// - Controls model generation parameters (temperature, tokens, etc.)
+/// - Manages conversation context and system prompts
+/// - Specifies model preferences and capabilities
+/// - Handles structured completion requests
+///
+/// # How to Create a Sampling Configuration
+///
+/// Implement these three traits on your struct:
+///
+/// ```rust
+/// # use turul_mcp_protocol::prelude::*;
+/// # use serde_json::{Value, json};
+/// # use std::collections::HashMap;
+///
+/// // This struct will automatically implement SamplingDefinition!
+/// struct CodeReviewSampling {
+///     review_type: String,
+///     language: String,
+/// }
+///
+/// impl HasSamplingConfig for CodeReviewSampling {
+///     fn temperature(&self) -> Option<f64> {
+///         Some(0.3) // Lower temperature for consistent code analysis
+///     }
+///
+///     fn max_tokens(&self) -> Option<u32> {
+///         Some(2000) // Enough for detailed code reviews
+///     }
+///
+///     fn stop_sequences(&self) -> Option<&Vec<String>> {
+///         None // No special stop sequences needed
+///     }
+///
+///     fn metadata(&self) -> Option<&HashMap<String, Value>> {
+///         None
+///     }
+/// }
+///
+/// impl HasSamplingContext for CodeReviewSampling {
+///     fn messages(&self) -> &[SamplingMessage] {
+///         // Static messages for this example
+///         &[]
+///     }
+///
+///     fn system_prompt(&self) -> Option<&str> {
+///         Some("You are an expert code reviewer. Analyze the provided code for bugs, performance issues, and best practices.")
+///     }
+///
+///     fn include_context(&self) -> Option<&str> {
+///         Some(&self.language) // Include programming language context
+///     }
+/// }
+///
+/// impl HasModelPreferences for CodeReviewSampling {
+///     fn model_preferences(&self) -> Option<&ModelPreferences> {
+///         None // Use default model
+///     }
+/// }
+///
+/// // Now you can use it with the server:
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let sampling = CodeReviewSampling {
+///     review_type: "security".to_string(),
+///     language: "rust".to_string(),
+/// };
+///
+/// // The sampling automatically implements SamplingDefinition
+/// let create_params = sampling.to_create_params();
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Key Benefits
+///
+/// - **Precise Control**: Fine-tune model behavior for specific tasks
+/// - **Context Management**: Rich conversation and system prompt support
+/// - **Model Flexibility**: Support for different AI models and capabilities
+/// - **MCP Compliant**: Fully compatible with MCP 2025-06-18 specification
+///
+/// # Common Use Cases
+///
+/// - Code review and analysis systems
+/// - Creative writing assistance
+/// - Technical documentation generation
+/// - Question-answering with domain context
+/// - Conversational AI with specific personalities
 pub trait SamplingDefinition: HasSamplingConfig + HasSamplingContext + HasModelPreferences {
     /// Convert to CreateMessageParams
     fn to_create_params(&self) -> CreateMessageParams {

@@ -57,6 +57,97 @@ pub trait HasToolMeta {
 }
 
 /// Complete tool definition - composed from fine-grained traits
+/// **Complete MCP Tool Creation** - Build executable tools that clients can invoke.
+///
+/// This trait represents a **complete, working MCP tool** that can be registered with a server
+/// and invoked by clients. When you implement the required metadata traits, you automatically
+/// get `ToolDefinition` for free via blanket implementation.
+///
+/// ## What This Enables
+///
+/// Tools implementing `ToolDefinition` become **full MCP citizens** that are:
+/// - 🔍 **Discoverable** via `tools/list` requests
+/// - ⚡ **Callable** via `tools/call` requests
+/// - ✅ **Validated** against their input schemas automatically
+/// - 📡 **Protocol-ready** for JSON-RPC communication
+///
+/// ## Complete Working Example
+///
+/// ```rust,ignore
+/// use std::collections::HashMap;
+/// use turul_mcp_protocol::schema::JsonSchema;
+///
+/// // This struct will automatically implement ToolDefinition!
+/// struct CodeAnalyzer {
+///     language: String,
+/// }
+///
+/// impl HasBaseMetadata for CodeAnalyzer {
+///     fn name(&self) -> &str { "analyze_code" }
+///     fn title(&self) -> Option<&str> { Some("Code Quality Analyzer") }
+/// }
+///
+/// impl HasDescription for CodeAnalyzer {
+///     fn description(&self) -> Option<&str> {
+///         Some("Analyzes code quality, complexity, and suggests improvements")
+///     }
+/// }
+///
+/// impl HasInputSchema for CodeAnalyzer {
+///     fn input_schema(&self) -> &ToolSchema {
+///         static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+///         SCHEMA.get_or_init(|| {
+///             let mut props = HashMap::new();
+///             props.insert("code".to_string(),
+///                 JsonSchema::string().with_description("Source code to analyze"));
+///             props.insert("language".to_string(),
+///                 JsonSchema::string_enum(vec!["rust", "python", "javascript"]));
+///             ToolSchema::object()
+///                 .with_properties(props)
+///                 .with_required(vec!["code".to_string(), "language".to_string()])
+///         })
+///     }
+/// }
+///
+/// // Implement remaining required traits...
+/// impl HasOutputSchema for CodeAnalyzer { fn output_schema(&self) -> Option<&ToolSchema> { None } }
+/// impl HasAnnotations for CodeAnalyzer { fn annotations(&self) -> Option<&ToolAnnotations> { None } }
+/// impl HasToolMeta for CodeAnalyzer { fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None } }
+///
+/// // 🎉 CodeAnalyzer now automatically implements ToolDefinition!
+/// // You can register it with any MCP server and clients can call it
+/// ```
+///
+/// ## Usage Patterns
+///
+/// ### Easy: Use Derive Macros
+/// ```rust,ignore
+/// #[derive(McpTool)]
+/// #[tool(name = "file_processor", description = "Process files")]
+/// struct FileProcessor { path: String }
+/// ```
+///
+/// ### Advanced: Manual Implementation (shown above)
+/// Perfect when you need fine-grained control over schemas and metadata.
+///
+/// ## Real-World Tool Ideas
+///
+/// - **Code Tools**: Formatters, linters, complexity analyzers, documentation generators
+/// - **File Tools**: Processors, converters, validators, backup utilities
+/// - **API Tools**: REST clients, GraphQL queries, webhook handlers, data fetchers
+/// - **Data Tools**: CSV processors, JSON transformers, database queries, analytics
+/// - **System Tools**: Process monitors, log analyzers, config validators, health checkers
+///
+/// ## How It Works in MCP
+///
+/// 1. **Registration**: Server registers your tool during startup
+/// 2. **Discovery**: Client calls `tools/list` → sees your tool with metadata
+/// 3. **Invocation**: Client calls `tools/call` with your tool name and arguments
+/// 4. **Validation**: Framework validates arguments against your input schema
+/// 5. **Execution**: Your tool runs and returns results
+/// 6. **Response**: Framework serializes results back to client
+///
+/// The framework handles all the protocol details - you just implement the business logic!
 pub trait ToolDefinition:
     HasBaseMetadata +           // name, title
     HasDescription +            // description

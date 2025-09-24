@@ -32,43 +32,19 @@
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use turul_mcp_server::prelude::*;
-//! use turul_mcp_derive::McpTool;
+//! # use turul_mcp_server::prelude::*;
+//! #
+//! # async fn example() -> McpResult<()> {
+//! // Create a basic MCP server with detailed configuration
+//! let server = McpServer::builder()
+//!     .name("calculator-server")
+//!     .version("1.0.0")
+//!     .title("Advanced Calculator Server")
+//!     .instructions("A production-grade calculator server supporting basic arithmetic operations including addition, subtraction, multiplication, and division. Use the available tools to perform calculations. The server maintains session state for calculation history, supports real-time notifications for long-running computations, and provides detailed error reporting for invalid operations.")
+//!     .build()?;
 //!
-//! // Level 1: Function Tool (simplest)
-//! #[mcp_tool(name = "add", description = "Add two numbers")]
-//! async fn add(
-//!     #[param(description = "First number")] a: f64,
-//!     #[param(description = "Second number")] b: f64,
-//! ) -> McpResult<f64> {
-//!     Ok(a + b)
-//! }
-//!
-//! // Level 2: Derive Tool (most common)
-//! #[derive(McpTool)]
-//! #[mcp(name = "echo", description = "Echo back the input text")]
-//! struct EchoTool {
-//!     #[param(description = "Text to echo")]
-//!     text: String,
-//! }
-//!
-//! impl EchoTool {
-//!     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-//!         Ok(format!("Echo: {}", self.text))
-//!     }
-//! }
-//!
-//! #[tokio::main]
-//! async fn main() -> McpResult<()> {
-//!     let server = McpServer::builder()
-//!         .name("echo-server")
-//!         .version("1.0.0")
-//!         .tool(add)                    // Function tool
-//!         .tool(EchoTool::default())    // Derive tool
-//!         .build()?;
-//!
-//!     server.run().await
-//! }
+//! server.run().await
+//! # }
 //! ```
 //!
 //! ## Architecture
@@ -124,15 +100,19 @@
 //!
 //! ```rust,no_run
 //! # use turul_mcp_server::prelude::*;
+//! # use turul_mcp_session_storage::SqliteSessionStorage;
+//! # use std::time::Duration;
+//! #
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let server = McpServer::builder()
 //!     .name("production-server")
 //!     .version("1.0.0")
-//!     .description("Production MCP server")
-//!     .session_storage(SqliteSessionStorage::new().await?)
-//!     .cors_allow_all_origins()
-//!     .max_connections(1000)
-//!     .request_timeout(Duration::from_secs(30))
+//!     .title("Production MCP Server")
+//!     .instructions("This production server provides tools for database operations, file management, and API integrations. Use the 'database/query' tool for SQL operations, 'files/read' for file access, and 'api/call' for external service integration. Session management is enabled with SQLite persistence for reliability.")
+//!     .with_session_storage(std::sync::Arc::new(SqliteSessionStorage::new().await?))
 //!     .build()?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod builder;

@@ -51,6 +51,102 @@ pub trait HasPromptMeta {
 }
 
 /// Complete prompt definition - composed from fine-grained traits
+/// **Complete MCP Prompt Creation** - Build reusable prompt templates that generate contextual content.
+///
+/// This trait represents a **complete, working MCP prompt** that can be registered with a server
+/// and invoked by clients. When you implement the required metadata traits, you automatically
+/// get `PromptDefinition` for free via blanket implementation.
+///
+/// ## What This Enables
+///
+/// Prompts implementing `PromptDefinition` become **full MCP citizens** that are:
+/// - 🔍 **Discoverable** via `prompts/list` requests
+/// - 🎯 **Executable** via `prompts/get` requests with arguments
+/// - ✅ **Validated** against their argument specifications
+/// - 📝 **Template-driven** for consistent, reusable content generation
+///
+/// ## Complete Working Example
+///
+/// ```rust,ignore
+/// use std::collections::HashMap;
+///
+/// // This struct will automatically implement PromptDefinition!
+/// struct CodeReviewPrompt {
+///     review_style: String,
+/// }
+///
+/// impl HasPromptMetadata for CodeReviewPrompt {
+///     fn name(&self) -> &str { "code_review" }
+///     fn title(&self) -> Option<&str> { Some("AI Code Review Assistant") }
+/// }
+///
+/// impl HasPromptDescription for CodeReviewPrompt {
+///     fn description(&self) -> Option<&str> {
+///         Some("Generate detailed, actionable code review comments with security and performance insights")
+///     }
+/// }
+///
+/// impl HasPromptArguments for CodeReviewPrompt {
+///     fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+///         static ARGS: std::sync::OnceLock<Vec<PromptArgument>> = std::sync::OnceLock::new();
+///         Some(ARGS.get_or_init(|| vec![
+///             PromptArgument {
+///                 name: "language".to_string(),
+///                 description: Some("Programming language (rust, python, javascript, etc.)".to_string()),
+///                 required: Some(true),
+///             },
+///             PromptArgument {
+///                 name: "code".to_string(),
+///                 description: Some("Source code to review".to_string()),
+///                 required: Some(true),
+///             },
+///             PromptArgument {
+///                 name: "focus".to_string(),
+///                 description: Some("Review focus: security, performance, style, or general".to_string()),
+///                 required: Some(false),
+///             },
+///         ]))
+///     }
+/// }
+///
+/// // Implement remaining required traits...
+/// impl HasPromptAnnotations for CodeReviewPrompt { fn annotations(&self) -> Option<&crate::meta::Annotations> { None } }
+/// impl HasPromptMeta for CodeReviewPrompt { fn prompt_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None } }
+///
+/// // 🎉 CodeReviewPrompt now automatically implements PromptDefinition!
+/// // Clients can discover it and generate code reviews with customizable parameters
+/// ```
+///
+/// ## Usage Patterns
+///
+/// ### Easy: Use Derive Macros
+/// ```rust,ignore
+/// #[derive(McpPrompt)]
+/// #[prompt(name = "doc_generator", description = "Generate API documentation")]
+/// struct DocumentationPrompt { api_spec: String }
+/// ```
+///
+/// ### Advanced: Manual Implementation (shown above)
+/// Perfect when you need complex argument validation or dynamic prompt generation.
+///
+/// ## Real-World Prompt Ideas
+///
+/// - **Code Prompts**: Code reviews, documentation generation, refactoring suggestions, test creation
+/// - **Content Prompts**: Blog post outlines, email templates, meeting summaries, report generation
+/// - **Analysis Prompts**: Data insights, security assessments, performance analysis, bug reports
+/// - **Learning Prompts**: Tutorial creation, concept explanations, example generation, Q&A formatting
+/// - **Workflow Prompts**: Task breakdowns, project planning, requirement analysis, user stories
+///
+/// ## How It Works in MCP
+///
+/// 1. **Registration**: Server registers your prompt during startup
+/// 2. **Discovery**: Client calls `prompts/list` → sees available prompts with arguments
+/// 3. **Parameter Collection**: Client gathers required arguments from user/context
+/// 4. **Generation**: Client calls `prompts/get` with prompt name and arguments
+/// 5. **Template Processing**: Your prompt generates contextual content
+/// 6. **Response**: Framework delivers generated content back to client
+///
+/// The framework handles argument validation, parameter substitution, and content delivery!
 pub trait PromptDefinition:
     HasPromptMetadata +       // name, title (from BaseMetadata)
     HasPromptDescription +    // description

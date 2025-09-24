@@ -15,6 +15,7 @@ sse = ["turul-http-mcp-server/sse"]
 postgres = ["turul-mcp-session-storage/postgres"]
 sqlite = ["turul-mcp-session-storage/sqlite"]
 dynamodb = ["turul-mcp-session-storage/dynamodb"]
+test-utils = []
 
 [dependencies]
 # Framework dependencies

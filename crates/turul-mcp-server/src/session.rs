@@ -230,106 +230,15 @@ impl SessionContext {
         self.broadcaster.clone()
     }
 
-    /// Create from JSON-RPC server's SessionContext
-    pub(crate) fn from_json_rpc_session(
+    /// Create from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration (test helper)
+    #[cfg(feature = "test-utils")]
+    pub fn from_json_rpc_with_broadcaster_for_tests(
         json_rpc_ctx: turul_mcp_json_rpc_server::SessionContext,
-        session_manager: Arc<SessionManager>,
+        storage: Arc<dyn SessionStorage<Error = SessionStorageError>>,
     ) -> Self {
-        let session_id = json_rpc_ctx.session_id.clone();
-        let session_manager_for_get = session_manager.clone();
-        let session_manager_for_set = session_manager.clone();
-        let session_manager_for_remove = session_manager.clone();
-        let session_manager_for_init = session_manager.clone();
-        let session_manager_for_notify = session_manager.clone();
-
-        let get_state = {
-            let session_id = session_id.clone();
-            Arc::new(move |key: &str| -> BoxFuture<Option<Value>> {
-                let session_manager = session_manager_for_get.clone();
-                let session_id = session_id.clone();
-                let key = key.to_string();
-                Box::pin(async move { session_manager.get_session_state(&session_id, &key).await })
-            })
-        };
-
-        let set_state = {
-            let session_id = session_id.clone();
-            Arc::new(move |key: &str, value: Value| -> BoxFuture<()> {
-                let session_manager = session_manager_for_set.clone();
-                let session_id = session_id.clone();
-                let key = key.to_string();
-                Box::pin(async move {
-                    let _ = session_manager
-                        .set_session_state(&session_id, &key, value)
-                        .await;
-                })
-            })
-        };
-
-        let remove_state = {
-            let session_id = session_id.clone();
-            Arc::new(move |key: &str| -> BoxFuture<Option<Value>> {
-                let session_manager = session_manager_for_remove.clone();
-                let session_id = session_id.clone();
-                let key = key.to_string();
-                Box::pin(async move {
-                    session_manager
-                        .remove_session_state(&session_id, &key)
-                        .await
-                })
-            })
-        };
-
-        let is_initialized = {
-            let session_id = session_id.clone();
-            Arc::new(move || -> BoxFuture<bool> {
-                let session_manager = session_manager_for_init.clone();
-                let session_id = session_id.clone();
-                Box::pin(async move { session_manager.is_session_initialized(&session_id).await })
-            })
-        };
-
-        let send_notification = {
-            let session_id = session_id.clone();
-            Arc::new(move |event: SessionEvent| -> BoxFuture<()> {
-                let session_id = session_id.clone();
-                let session_manager = session_manager_for_notify.clone();
-                Box::pin(async move {
-                    debug!(
-                        "📜 send_notification closure called for session {}: {:?}",
-                        session_id, event
-                    );
-                    match session_manager
-                        .send_event_to_session(&session_id, event)
-                        .await
-                    {
-                        Ok(_) => debug!(
-                            "✅ send_event_to_session succeeded for session {}",
-                            session_id
-                        ),
-                        Err(e) => error!(
-                            "❌ send_event_to_session failed for session {}: {}",
-                            session_id, e
-                        ),
-                    }
-                    debug!(
-                        "🚀 send_notification closure completed for session {}",
-                        session_id
-                    );
-                })
-            })
-        };
-
-        SessionContext {
-            session_id,
-            get_state,
-            set_state,
-            remove_state,
-            is_initialized,
-            send_notification,
-            broadcaster: None, // Old SessionManager doesn't have broadcaster
-        }
+        Self::from_json_rpc_with_broadcaster(json_rpc_ctx, storage)
     }
+
     /// Convenience method to get typed session state (async)
     pub async fn get_typed_state<T>(&self, key: &str) -> Option<T>
     where

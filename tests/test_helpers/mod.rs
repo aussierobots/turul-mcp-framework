@@ -302,7 +302,7 @@ impl TestSessionBuilder {
         };
 
         // Convert to MCP SessionContext with storage integration
-        SessionContext::from_json_rpc_with_broadcaster(
+        SessionContext::from_json_rpc_with_broadcaster_for_tests(
             json_rpc_ctx,
             self.storage.clone() as Arc<dyn SessionStorage<Error = SessionStorageError>>,
         )

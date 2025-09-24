@@ -239,18 +239,73 @@ impl McpServerBuilder {
     ///
     /// # Example
     /// ```rust,no_run
-    /// use turul_mcp_derive::mcp_tool;
-    /// use turul_mcp_server::McpServer;
+    /// use turul_mcp_server::prelude::*;
+    /// use std::collections::HashMap;
     ///
-    /// #[mcp_tool(name = "add", description = "Add numbers")]
-    /// async fn add_numbers(a: f64, b: f64) -> Result<f64, String> {
-    ///     Ok(a + b)
+    /// // Manual tool implementation without derive macros
+    /// #[derive(Clone, Default)]
+    /// struct AddTool;
+    ///
+    /// // Implement all required traits for ToolDefinition
+    /// impl turul_mcp_protocol::tools::HasBaseMetadata for AddTool {
+    ///     fn name(&self) -> &str { "add" }
+    ///     fn title(&self) -> Option<&str> { Some("Add Numbers") }
     /// }
     ///
+    /// impl turul_mcp_protocol::tools::HasDescription for AddTool {
+    ///     fn description(&self) -> Option<&str> {
+    ///         Some("Add two numbers together")
+    ///     }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::tools::HasInputSchema for AddTool {
+    ///     fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
+    ///         use turul_mcp_protocol::schema::JsonSchema;
+    ///         static SCHEMA: std::sync::OnceLock<turul_mcp_protocol::ToolSchema> = std::sync::OnceLock::new();
+    ///         SCHEMA.get_or_init(|| {
+    ///             let mut props = HashMap::new();
+    ///             props.insert("a".to_string(), JsonSchema::number().with_description("First number"));
+    ///             props.insert("b".to_string(), JsonSchema::number().with_description("Second number"));
+    ///             turul_mcp_protocol::ToolSchema::object()
+    ///                 .with_properties(props)
+    ///                 .with_required(vec!["a".to_string(), "b".to_string()])
+    ///         })
+    ///     }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::tools::HasOutputSchema for AddTool {
+    ///     fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> { None }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::tools::HasAnnotations for AddTool {
+    ///     fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::tools::HasToolMeta for AddTool {
+    ///     fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+    /// }
+    ///
+    /// #[async_trait]
+    /// impl McpTool for AddTool {
+    ///     async fn call(&self, args: serde_json::Value, _session: Option<SessionContext>)
+    ///         -> McpResult<turul_mcp_protocol::tools::CallToolResult> {
+    ///         let a = args.get("a").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    ///         let b = args.get("b").and_then(|v| v.as_f64()).unwrap_or(0.0);
+    ///         let result = a + b;
+    ///
+    ///         Ok(turul_mcp_protocol::tools::CallToolResult::success(vec![
+    ///             turul_mcp_protocol::ToolResult::text(format!("{} + {} = {}", a, b, result))
+    ///         ]))
+    ///     }
+    /// }
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let server = McpServer::builder()
     ///     .name("math-server")
-    ///     .tool_fn(add_numbers) // Use the function name directly!
+    ///     .tool_fn(|| AddTool::default()) // Function returns working tool instance
     ///     .build()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn tool_fn<F, T>(self, func: F) -> Self
     where
@@ -278,13 +333,69 @@ impl McpServerBuilder {
     /// # Examples
     ///
     /// ```rust,no_run
-    /// use turul_mcp_server::McpServer;
+    /// use turul_mcp_server::prelude::*;
+    /// use std::collections::HashMap;
+    ///
+    /// // Manual resource implementation without derive macros
+    /// #[derive(Clone)]
+    /// struct ConfigResource {
+    ///     data: String,
+    /// }
+    ///
+    /// // Implement all required traits for ResourceDefinition
+    /// impl turul_mcp_protocol::resources::HasResourceMetadata for ConfigResource {
+    ///     fn name(&self) -> &str { "config" }
+    ///     fn title(&self) -> Option<&str> { Some("Configuration") }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceDescription for ConfigResource {
+    ///     fn description(&self) -> Option<&str> {
+    ///         Some("Application configuration file")
+    ///     }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceUri for ConfigResource {
+    ///     fn uri(&self) -> &str { "file:///config.json" }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceMimeType for ConfigResource {
+    ///     fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceSize for ConfigResource {
+    ///     fn size(&self) -> Option<u64> { Some(self.data.len() as u64) }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceAnnotations for ConfigResource {
+    ///     fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceMeta for ConfigResource {
+    ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+    /// }
+    ///
+    /// #[async_trait]
+    /// impl McpResource for ConfigResource {
+    ///     async fn read(&self, _params: Option<serde_json::Value>)
+    ///         -> McpResult<Vec<turul_mcp_protocol::ResourceContent>> {
+    ///         Ok(vec![turul_mcp_protocol::ResourceContent::text(
+    ///             self.uri(),
+    ///             &self.data
+    ///         )])
+    ///     }
+    /// }
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let config = ConfigResource {
+    ///     data: r#"{"debug": true, "port": 8080}"#.to_string(),
+    /// };
     ///
     /// let server = McpServer::builder()
     ///     .name("resource-server")
-    ///     .resource(ConfigResource::new())  // URI: "file://config.json"
-    ///     .resource(UserProfileResource::new())  // URI: "user://profile/{user_id}"
+    ///     .resource(config) // Working resource with actual data
     ///     .build()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn resource<R: McpResource + 'static>(mut self, resource: R) -> Self {
         let uri = resource.uri().to_string();
@@ -333,22 +444,65 @@ impl McpServerBuilder {
     ///
     /// # Example
     /// ```rust,no_run
-    /// use turul_mcp_derive::mcp_resource;
-    /// use turul_mcp_server::McpServer;
+    /// use turul_mcp_server::prelude::*;
+    /// use std::collections::HashMap;
     ///
-    /// #[mcp_resource(uri = "file:///data/{id}.json", description = "Data for ID")]
-    /// async fn get_data(id: String) -> McpResult<Vec<ResourceContent>> {
-    ///     // Implementation
-    ///     Ok(vec![ResourceContent::text(
-    ///         format!("file:///data/{}.json", id),
-    ///         format!("Data for {}", id)
-    ///     )])
+    /// // Manual resource implementation without derive macros
+    /// #[derive(Clone)]
+    /// struct DataResource {
+    ///     content: String,
     /// }
     ///
+    /// // Implement all required traits for ResourceDefinition (same as resource() example)
+    /// impl turul_mcp_protocol::resources::HasResourceMetadata for DataResource {
+    ///     fn name(&self) -> &str { "data" }
+    ///     fn title(&self) -> Option<&str> { Some("Data File") }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceDescription for DataResource {
+    ///     fn description(&self) -> Option<&str> { Some("Sample data file") }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceUri for DataResource {
+    ///     fn uri(&self) -> &str { "file:///data/sample.json" }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceMimeType for DataResource {
+    ///     fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceSize for DataResource {
+    ///     fn size(&self) -> Option<u64> { Some(self.content.len() as u64) }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceAnnotations for DataResource {
+    ///     fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceMeta for DataResource {
+    ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+    /// }
+    ///
+    /// #[async_trait]
+    /// impl McpResource for DataResource {
+    ///     async fn read(&self, _params: Option<serde_json::Value>)
+    ///         -> McpResult<Vec<turul_mcp_protocol::ResourceContent>> {
+    ///         Ok(vec![turul_mcp_protocol::ResourceContent::text(
+    ///             self.uri(),
+    ///             &self.content
+    ///         )])
+    ///     }
+    /// }
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let server = McpServer::builder()
     ///     .name("data-server")
-    ///     .resource_fn(get_data) // Use the function name directly!
+    ///     .resource_fn(|| DataResource {
+    ///         content: r#"{"items": [1, 2, 3]}"#.to_string()
+    ///     }) // Function returns working resource instance
     ///     .build()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn resource_fn<F, R>(self, func: F) -> Self
     where
@@ -378,12 +532,78 @@ impl McpServerBuilder {
     ///
     /// # Example
     /// ```rust,no_run
+    /// use turul_mcp_server::prelude::*;
+    /// use turul_mcp_server::uri_template::{UriTemplate, VariableValidator};
+    /// use std::collections::HashMap;
+    ///
+    /// // Manual template resource implementation
+    /// #[derive(Clone)]
+    /// struct TemplateResource {
+    ///     base_path: String,
+    /// }
+    ///
+    /// // Implement all required traits for ResourceDefinition
+    /// impl turul_mcp_protocol::resources::HasResourceMetadata for TemplateResource {
+    ///     fn name(&self) -> &str { "template-data" }
+    ///     fn title(&self) -> Option<&str> { Some("Template Data") }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceDescription for TemplateResource {
+    ///     fn description(&self) -> Option<&str> { Some("Template-based data resource") }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceUri for TemplateResource {
+    ///     fn uri(&self) -> &str { "file:///data/{id}.json" }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceMimeType for TemplateResource {
+    ///     fn mime_type(&self) -> Option<&str> { Some("application/json") }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceSize for TemplateResource {
+    ///     fn size(&self) -> Option<u64> { None } // Size varies by template
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceAnnotations for TemplateResource {
+    ///     fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+    /// }
+    ///
+    /// impl turul_mcp_protocol::resources::HasResourceMeta for TemplateResource {
+    ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+    /// }
+    ///
+    /// #[async_trait]
+    /// impl McpResource for TemplateResource {
+    ///     async fn read(&self, params: Option<serde_json::Value>)
+    ///         -> McpResult<Vec<turul_mcp_protocol::ResourceContent>> {
+    ///         let id = params
+    ///             .as_ref()
+    ///             .and_then(|p| p.get("id"))
+    ///             .and_then(|v| v.as_str())
+    ///             .unwrap_or("default");
+    ///
+    ///         let content = format!(r#"{{"id": "{}", "data": "sample content for {}"}}"#, id, id);
+    ///         Ok(vec![turul_mcp_protocol::ResourceContent::text(
+    ///             &format!("file:///data/{}.json", id),
+    ///             &content
+    ///         )])
+    ///     }
+    /// }
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let template = UriTemplate::new("file:///data/{id}.json")?
     ///     .with_validator("id", VariableValidator::user_id());
     ///
+    /// let resource = TemplateResource {
+    ///     base_path: "/data".to_string(),
+    /// };
+    ///
     /// let server = McpServer::builder()
-    ///     .template_resource(template, DataResource::new())
+    ///     .name("template-server")
+    ///     .template_resource(template, resource) // Working template resource
     ///     .build()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn template_resource<R: McpResource + 'static>(
         mut self,
@@ -796,12 +1016,17 @@ impl McpServerBuilder {
     ///
     /// # Example
     /// ```rust,no_run
+    /// use turul_mcp_server::McpServer;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let server = McpServer::builder()
     ///     .name("test-server")
     ///     .version("1.0.0")
     ///     .test_mode()  // Disable security for testing
     ///     .with_resources()
     ///     .build()?;
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn test_mode(mut self) -> Self {
         self.test_mode = true;

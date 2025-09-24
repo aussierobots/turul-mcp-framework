@@ -1584,7 +1584,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
+    // Parse command line arguments for port
+    let args: Vec<String> = std::env::args().collect();
+    let mut port = 8053; // Default port
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--port" => {
+                if i + 1 < args.len() {
+                    port = args[i + 1].parse().unwrap_or(8053);
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            _ => {
+                i += 1;
+            }
+        }
+    }
+
     info!("🚀 Starting Customer Onboarding and Data Collection Platform");
+    info!("📡 Server will bind to port: {}", port);
 
     // Initialize the platform with external configuration
     let platform = CustomerOnboardingPlatform::new()?;
@@ -1600,10 +1622,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(CustomerSurveyTool { platform: platform.clone() })
         .tool(DataValidationTool { platform })
         .with_elicitation() // Enable elicitation support
-        .bind_address("127.0.0.1:8053".parse()?)
+        .bind_address(format!("127.0.0.1:{}", port).parse()?)
         .build()?;
 
-    info!("🌐 Customer Onboarding Platform running at: http://127.0.0.1:8053/mcp");
+    info!("🌐 Customer Onboarding Platform running at: http://127.0.0.1:{}/mcp", port);
     info!("");
     info!("🏢 Real-world Use Cases:");
     info!("  👤 Personal account onboarding with KYC verification");
@@ -1634,7 +1656,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("  🎯 Customer segmentation and personalized experiences");
     info!("");
     info!("📖 Example usage:");
-    info!("  curl -X POST http://127.0.0.1:8053/mcp \\");
+    info!("  curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("    -H 'Content-Type: application/json' \\");
     info!(
         "    -d '{{\"method\": \"tools/call\", \"params\": {{\"name\": \"start_onboarding_workflow\", \"arguments\": {{\"workflow_type\": \"personal_account\"}}}}}}'"
