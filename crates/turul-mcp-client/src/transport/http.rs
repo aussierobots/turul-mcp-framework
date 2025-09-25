@@ -31,6 +31,8 @@ pub struct HttpTransport {
     stats: Arc<parking_lot::Mutex<TransportStatistics>>,
     /// Event sender for server events
     event_sender: Option<mpsc::UnboundedSender<ServerEvent>>,
+    /// Session ID from server (set after initialization)
+    session_id: Option<String>,
 }
 
 impl HttpTransport {
@@ -61,6 +63,7 @@ impl HttpTransport {
             request_counter: AtomicU64::new(0),
             stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
             event_sender: None,
+            session_id: None,
         })
     }
 
@@ -76,7 +79,14 @@ impl HttpTransport {
             request_counter: AtomicU64::new(0),
             stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
             event_sender: None,
+            session_id: None,
         })
+    }
+
+    /// Set the session ID to use for subsequent requests
+    pub fn set_session_id(&mut self, session_id: String) {
+        debug!("Setting session ID: {}", session_id);
+        self.session_id = Some(session_id);
     }
 
     /// Generate unique request ID
@@ -95,7 +105,7 @@ impl HttpTransport {
     }
 
     /// Handle HTTP response
-    async fn handle_response(&self, response: Response) -> McpClientResult<Value> {
+    async fn handle_response(&mut self, response: Response) -> McpClientResult<Value> {
         let status = response.status();
 
         if !status.is_success() {
@@ -112,6 +122,14 @@ impl HttpTransport {
             return Err(
                 TransportError::Http(format!("HTTP error {}: {}", status, error_text)).into(),
             );
+        }
+
+        // Capture session ID from response headers if present
+        if let Some(session_header) = response.headers().get("mcp-session-id") {
+            if let Ok(session_str) = session_header.to_str() {
+                debug!("Captured session ID from response: {}", session_str);
+                self.session_id = Some(session_str.to_owned());
+            }
         }
 
         let content_type = response
@@ -142,7 +160,7 @@ impl HttpTransport {
 
     /// Handle HTTP response with headers
     async fn handle_response_with_headers(
-        &self,
+        &mut self,
         response: Response,
     ) -> McpClientResult<crate::transport::TransportResponse> {
         let status = response.status();
@@ -161,6 +179,14 @@ impl HttpTransport {
             return Err(
                 TransportError::Http(format!("HTTP error {}: {}", status, error_text)).into(),
             );
+        }
+
+        // Capture session ID from response headers if present
+        if let Some(session_header) = response.headers().get("mcp-session-id") {
+            if let Ok(session_str) = session_header.to_str() {
+                debug!("Captured session ID from response headers: {}", session_str);
+                self.session_id = Some(session_str.to_owned());
+            }
         }
 
         // Extract headers
@@ -281,12 +307,19 @@ impl Transport for HttpTransport {
 
         self.update_stats(|stats| stats.requests_sent += 1);
 
-        let response = self
+        let mut req_builder = self
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-06-18");
+
+        // Include session ID if we have one
+        if let Some(ref session_id) = self.session_id {
+            req_builder = req_builder.header("Mcp-Session-Id", session_id);
+        }
+
+        let response = req_builder
             .json(&request)
             .send()
             .await
@@ -335,12 +368,19 @@ impl Transport for HttpTransport {
 
         self.update_stats(|stats| stats.requests_sent += 1);
 
-        let response = self
+        let mut req_builder = self
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-06-18");
+
+        // Include session ID if we have one
+        if let Some(ref session_id) = self.session_id {
+            req_builder = req_builder.header("Mcp-Session-Id", session_id);
+        }
+
+        let response = req_builder
             .json(&request)
             .send()
             .await
@@ -380,11 +420,18 @@ impl Transport for HttpTransport {
 
         self.update_stats(|stats| stats.notifications_sent += 1);
 
-        let response = self
+        let mut req_builder = self
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-06-18");
+
+        // Include session ID if we have one
+        if let Some(ref session_id) = self.session_id {
+            req_builder = req_builder.header("Mcp-Session-Id", session_id);
+        }
+
+        let response = req_builder
             .json(&notification)
             .send()
             .await
@@ -513,6 +560,11 @@ impl Transport for HttpTransport {
                 Ok(false)
             }
         }
+    }
+
+    fn set_session_id(&mut self, session_id: String) {
+        debug!("HttpTransport: Setting session ID: {}", session_id);
+        self.session_id = Some(session_id);
     }
 
     fn statistics(&self) -> TransportStatistics {

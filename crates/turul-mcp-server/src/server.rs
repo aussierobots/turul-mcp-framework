@@ -903,27 +903,89 @@ impl JsonRpcHandler for ListToolsHandler {
         // Sort by tool name to ensure stable ordering for pagination
         tools.sort_by(|a, b| a.name.cmp(&b.name));
 
-        let mut base_response = ListToolsResult::new(tools.clone());
+        // Implement cursor-based pagination
+        const DEFAULT_PAGE_SIZE: usize = 50; // MCP suggested default
 
-        // For simplicity, showing all tools in one page
-        // In a real implementation with many tools, implement proper pagination like other handlers
-        let has_more = false;
+        // Validate limit parameter - MCP spec requires positive integer
+        if let Some(limit) = list_params.limit {
+            if limit == 0 {
+                return Err(McpError::InvalidParameters(
+                    "limit must be a positive integer (> 0)".to_string()
+                ));
+            }
+        }
+
+        let page_size = list_params.limit
+            .map(|l| l as usize)
+            .unwrap_or(DEFAULT_PAGE_SIZE);
+
+        // Find starting index based on cursor
+        let start_index = if let Some(cursor) = &cursor {
+            // Cursor contains the last tool name from previous page
+            let cursor_name = cursor.as_str();
+            // Find the position after the cursor name (first tool > cursor)
+            tools
+                .iter()
+                .position(|t| t.name.as_str() > cursor_name)
+                .unwrap_or(tools.len())
+        } else {
+            0 // No cursor = start from beginning
+        };
+
+        // Calculate end index for this page
+        let end_index = std::cmp::min(start_index + page_size, tools.len());
+
+        // Extract page of tools
+        let page_tools: Vec<Tool> = tools[start_index..end_index].to_vec();
+
+        // Determine if there are more tools after this page
+        let has_more = end_index < tools.len();
+
+        // Generate next cursor if there are more tools
+        let next_cursor = if has_more {
+            // Cursor should be the name of the last item in current page
+            page_tools.last().map(|t| Cursor::new(&t.name))
+        } else {
+            None
+        };
+
+        debug!(
+            "Tool pagination: start={}, end={}, page_size={}, has_more={}, next_cursor={:?}",
+            start_index,
+            end_index,
+            page_tools.len(),
+            has_more,
+            next_cursor
+        );
+
+        let mut base_response = ListToolsResult::new(page_tools);
         let total = Some(tools.len() as u64);
-        let next_cursor: Option<Cursor> = None; // No next page in this simple implementation
 
         // Set top-level nextCursor field on the result before wrapping
         if let Some(ref cursor) = next_cursor {
             base_response = base_response.with_next_cursor(cursor.clone());
         }
 
+        let next_cursor_clone = next_cursor.clone();
         let mut paginated_response =
             PaginatedResponse::with_pagination(base_response, next_cursor, total, has_more);
 
         // Propagate optional _meta from request to response (MCP 2025-06-18 compliance)
-        if let Some(meta) = list_params.meta {
-            let mut meta_obj = turul_mcp_protocol::meta::Meta::new();
-            meta_obj.extra = meta;
-            paginated_response = paginated_response.with_meta(meta_obj);
+        if let Some(request_meta) = list_params.meta {
+            // Get existing meta from PaginatedResponse or use pagination defaults
+            let mut response_meta = paginated_response.meta().cloned()
+                .unwrap_or_else(|| turul_mcp_protocol::meta::Meta::with_pagination(
+                    next_cursor_clone,
+                    total,
+                    has_more
+                ));
+
+            // Merge request's _meta fields into extra without clobbering pagination
+            for (key, value) in request_meta {
+                response_meta.extra.insert(key, value);
+            }
+
+            paginated_response = paginated_response.with_meta(response_meta);
         }
 
         serde_json::to_value(paginated_response).map_err(McpError::SerializationError)

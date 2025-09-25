@@ -214,7 +214,13 @@ impl McpClient {
 
         if let Some(session_id) = session_id {
             info!("Server provided session ID: {}", session_id);
+
+            // Store in session manager
             self.session.set_session_id(session_id.clone()).await?;
+
+            // Tell transport to include session ID in all subsequent requests
+            let mut transport = self.transport.lock().await;
+            transport.set_session_id(session_id);
         } else {
             return Err(McpClientError::generic(
                 "Server did not provide Mcp-Session-Id header during initialization",

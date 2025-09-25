@@ -509,6 +509,7 @@ impl StreamableHttpHandler {
     }
 
     /// Handle POST request with streaming response
+    #[allow(dead_code)]
     async fn handle_streaming_post<T>(
         &self,
         req: Request<T>,
@@ -715,6 +716,7 @@ impl StreamableHttpHandler {
     }
 
     /// Handle POST request with JSON response (legacy compatibility)
+    #[allow(dead_code)]
     async fn handle_json_post<T>(
         &self,
         req: Request<T>,
@@ -1051,13 +1053,12 @@ impl StreamableHttpHandler {
     async fn handle_streaming_post_real<T>(
         &self,
         req: Request<T>,
-        context: StreamableHttpContext,
-        session_id: String,
+        mut context: StreamableHttpContext,
     ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>
     where
         T: Body + Send + 'static,
     {
-        info!("🚀🚀🚀 STREAMING HANDLER CALLED - Using TRUE streaming POST for session: {}", session_id);
+        info!("🚀🚀🚀 STREAMING HANDLER CALLED - Using TRUE streaming POST");
 
         // Parse request body (still need to collect for JSON-RPC parsing)
         let body_bytes = match req.into_body().collect().await {
@@ -1099,6 +1100,7 @@ impl StreamableHttpHandler {
 
         // Parse JSON-RPC message
         use turul_mcp_json_rpc_server::dispatch::{parse_json_rpc_message, JsonRpcMessage};
+        use turul_mcp_json_rpc_server::error::JsonRpcErrorObject;
 
         let message = match parse_json_rpc_message(body_str) {
             Ok(msg) => msg,
@@ -1106,16 +1108,98 @@ impl StreamableHttpHandler {
                 error!("JSON-RPC parse error in streaming POST: {}", rpc_err);
                 let error_json = serde_json::to_string(&rpc_err).unwrap_or_else(|_| "{}".to_string());
 
-                // Return error with MCP headers
+                // Return error with MCP headers (no session header for parse errors)
                 return Response::builder()
                     .status(StatusCode::OK) // JSON-RPC parse errors still use 200 OK
                     .header(CONTENT_TYPE, "application/json")
                     .header("MCP-Protocol-Version", context.protocol_version.as_str())
-                    .header("Mcp-Session-Id", &session_id)
                     .body(Full::new(Bytes::from(error_json)).map_err(|never| match never {}).boxed_unsync())
                     .unwrap();
             }
         };
+
+        // Validate session requirements based on method
+        let session_id = match &message {
+            JsonRpcMessage::Request(req) if req.method == "initialize" => {
+                // Initialize can create session if none exists
+                if let Some(existing_id) = &context.session_id {
+                    // Validate existing session for initialize
+                    if let Err(err) = self.validate_session_exists(existing_id).await {
+                        warn!("Invalid session ID {} during initialize: {}", existing_id, err);
+                        return StreamableResponse::Error {
+                            status: StatusCode::UNAUTHORIZED,
+                            message: "Invalid or expired session".to_string(),
+                        }
+                        .into_boxed_response(&context);
+                    }
+                    existing_id.clone()
+                } else {
+                    // Create new session for initialize
+                    match self.session_storage.create_session(turul_mcp_protocol::ServerCapabilities::default()).await {
+                        Ok(session_info) => {
+                            debug!("Created new session for initialize: {}", session_info.session_id);
+                            context.session_id = Some(session_info.session_id.clone());
+                            session_info.session_id
+                        }
+                        Err(err) => {
+                            error!("Failed to create session during initialize: {}", err);
+                            return StreamableResponse::Error {
+                                status: StatusCode::INTERNAL_SERVER_ERROR,
+                                message: "Failed to create session".to_string(),
+                            }
+                            .into_boxed_response(&context);
+                        }
+                    }
+                }
+            }
+            JsonRpcMessage::Request(_) | JsonRpcMessage::Notification(_) => {
+                // All other methods REQUIRE session ID
+                if let Some(existing_id) = &context.session_id {
+                    // Validate existing session
+                    if let Err(err) = self.validate_session_exists(existing_id).await {
+                        warn!("Invalid session ID {}: {}", existing_id, err);
+                        return StreamableResponse::Error {
+                            status: StatusCode::UNAUTHORIZED,
+                            message: "Invalid or expired session".to_string(),
+                        }
+                        .into_boxed_response(&context);
+                    }
+                    existing_id.clone()
+                } else {
+                    // Return 401 JSON-RPC error for missing session
+                    let method_name = match &message {
+                        JsonRpcMessage::Request(req) => &req.method,
+                        JsonRpcMessage::Notification(notif) => &notif.method,
+                    };
+                    let request_id = match &message {
+                        JsonRpcMessage::Request(req) => Some(req.id.clone()),
+                        JsonRpcMessage::Notification(_) => None,
+                    };
+
+                    warn!("Missing session ID for method: {}", method_name);
+
+                    let error_response = turul_mcp_json_rpc_server::JsonRpcError::new(
+                        request_id,
+                        JsonRpcErrorObject::server_error(
+                            -32001,
+                            "Missing Mcp-Session-Id header. Call initialize first.",
+                            None::<serde_json::Value>
+                        )
+                    );
+
+                    let error_json = serde_json::to_string(&error_response).unwrap_or_else(|_| "{}".to_string());
+
+                    return Response::builder()
+                        .status(StatusCode::UNAUTHORIZED)
+                        .header(CONTENT_TYPE, "application/json")
+                        .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                        .body(Full::new(Bytes::from(error_json)).map_err(|never| match never {}).boxed_unsync())
+                        .unwrap();
+                }
+            }
+        };
+
+        info!("Processing streaming request with session: {}", session_id);
 
         // Create streaming response using hyper::Body::channel()
         match message {
@@ -1256,6 +1340,7 @@ impl StreamableHttpHandler {
     }
 
     /// Handle POST with buffered response (fallback for legacy clients)
+    #[allow(dead_code)]
     async fn handle_buffered_post<T>(
         &self,
         _req: Request<T>,
@@ -1320,39 +1405,10 @@ impl StreamableHttpHandler {
 
         // 🚀 DECIDE: Use streaming for ALL POST requests per MCP 2025-06-18
         // MCP spec requires chunked responses for progressive results, even with Accept: application/json
-        let (session_id, updated_context) = if let Some(existing_session_id) = context.session_id.clone() {
-            // Validate existing session
-            if let Err(err) = self.validate_session_exists(&existing_session_id).await {
-                warn!("Invalid session ID {}: {}", existing_session_id, err);
-                return StreamableResponse::Error {
-                    status: StatusCode::UNAUTHORIZED,
-                    message: "Invalid or expired session".to_string(),
-                }
-                .into_boxed_response(&context);
-            }
-            (existing_session_id, context)
-        } else {
-            // Create new session in storage
-            match self.session_storage.create_session(turul_mcp_protocol::ServerCapabilities::default()).await {
-                Ok(session_info) => {
-                    debug!("Created new session for streaming POST: {}", session_info.session_id);
-                    let mut updated_context = context;
-                    updated_context.session_id = Some(session_info.session_id.clone());
-                    (session_info.session_id, updated_context)
-                }
-                Err(err) => {
-                    error!("Failed to create session: {}", err);
-                    return StreamableResponse::Error {
-                        status: StatusCode::INTERNAL_SERVER_ERROR,
-                        message: "Failed to create session".to_string(),
-                    }
-                    .into_boxed_response(&context);
-                }
-            }
-        };
 
-        info!("Using chunked streaming for POST request, session: {}", session_id);
-        return self.handle_streaming_post_real(req, updated_context, session_id).await;
+        // Session validation now happens in handle_streaming_post_real after parsing the method
+        info!("Using chunked streaming for POST request");
+        return self.handle_streaming_post_real(req, context).await;
 
         // DEAD CODE: This buffered logic is unreachable due to early return above
         // TODO: Remove or implement as proper fallback when streaming is not available
@@ -1594,20 +1650,20 @@ mod tests {
         let mut context = StreamableHttpContext {
             protocol_version: McpProtocolVersion::V2025_06_18,
             session_id: Some("test-session".to_string()),
-            wants_streaming: true,
-            accepts_json: true,
+            wants_sse_stream: true,
+            accepts_stream_frames: true,
             headers: HashMap::new(),
         };
 
         assert!(context.validate().is_ok());
 
         // Test invalid cases
-        context.accepts_json = false;
+        context.accepts_stream_frames = false;
         assert!(context.validate().is_err());
 
-        context.accepts_json = true;
+        context.accepts_stream_frames = true;
         context.protocol_version = McpProtocolVersion::V2024_11_05;
-        context.wants_streaming = true;
+        context.wants_sse_stream = true;
         assert!(context.validate().is_err());
 
         context.protocol_version = McpProtocolVersion::V2025_06_18;

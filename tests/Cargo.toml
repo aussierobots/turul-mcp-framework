@@ -107,6 +107,14 @@ path = "e2e_sse_notification_roundtrip.rs"
 name = "streamable_http_e2e"
 path = "streamable_http_e2e.rs"
 
+[[test]]
+name = "session_id_compliance"
+path = "session_id_compliance.rs"
+
+[[test]]
+name = "mcp_behavioral_compliance"
+path = "mcp_behavioral_compliance.rs"
+
 # [[test]]
 # name = "e2e_sse_message_flow"
 # path = "e2e_sse_message_flow.rs"

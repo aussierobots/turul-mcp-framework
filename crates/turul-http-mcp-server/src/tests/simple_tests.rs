@@ -8,6 +8,10 @@ use std::sync::Arc;
 use crate::server::{HttpMcpServerBuilder, ServerConfig};
 use crate::sse::{SseEvent, SseManager};
 use crate::streamable_http::{McpProtocolVersion, StreamableHttpHandler};
+use turul_mcp_session_storage::InMemorySessionStorage;
+use turul_mcp_json_rpc_server::JsonRpcDispatcher;
+use turul_mcp_protocol::McpError;
+use crate::StreamManager;
 
 /// Test basic server configuration
 #[cfg(test)]
@@ -53,7 +57,16 @@ mod basic_tests {
     #[tokio::test]
     async fn test_streamable_handler_creation() {
         let config = ServerConfig::default();
-        let _handler = StreamableHttpHandler::new(Arc::new(config));
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+
+        let _handler = StreamableHttpHandler::new(
+            Arc::new(config),
+            dispatcher,
+            session_storage,
+            stream_manager,
+        );
 
         // Handler should be created successfully
         println!("Streamable HTTP handler created");
@@ -234,7 +247,16 @@ mod concurrency_tests {
                     ..Default::default()
                 };
 
-                let _handler = StreamableHttpHandler::new(Arc::new(config));
+                let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+                let session_storage = Arc::new(InMemorySessionStorage::new());
+                let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+
+                let _handler = StreamableHttpHandler::new(
+                    Arc::new(config),
+                    dispatcher,
+                    session_storage,
+                    stream_manager,
+                );
                 format!("Handler {} created", i)
             });
             handles.push(handle);
@@ -358,7 +380,16 @@ mod performance_tests {
                 ..Default::default()
             };
 
-            let handler = StreamableHttpHandler::new(Arc::new(config));
+            let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+            let session_storage = Arc::new(InMemorySessionStorage::new());
+            let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+
+            let handler = StreamableHttpHandler::new(
+                Arc::new(config),
+                dispatcher,
+                session_storage,
+                stream_manager,
+            );
             handlers.push(handler);
         }
 

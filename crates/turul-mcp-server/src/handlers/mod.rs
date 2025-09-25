@@ -194,14 +194,26 @@ impl McpHandler for PromptsListHandler {
 
         let total = Some(all_prompts.len() as u64);
 
+        let next_cursor_clone = next_cursor.clone();
         let mut paginated_response =
             PaginatedResponse::with_pagination(base_response, next_cursor, total, has_more);
 
         // Propagate optional _meta from request to response (MCP 2025-06-18 compliance)
-        if let Some(meta) = list_params.meta {
-            let mut meta_obj = turul_mcp_protocol::meta::Meta::new();
-            meta_obj.extra = meta;
-            paginated_response = paginated_response.with_meta(meta_obj);
+        if let Some(request_meta) = list_params.meta {
+            // Get existing meta from PaginatedResponse or use pagination defaults
+            let mut response_meta = paginated_response.meta().cloned()
+                .unwrap_or_else(|| turul_mcp_protocol::meta::Meta::with_pagination(
+                    next_cursor_clone,
+                    total,
+                    has_more
+                ));
+
+            // Merge request's _meta fields into extra without clobbering pagination
+            for (key, value) in request_meta {
+                response_meta.extra.insert(key, value);
+            }
+
+            paginated_response = paginated_response.with_meta(response_meta);
         }
 
         serde_json::to_value(paginated_response).map_err(McpError::from)
@@ -431,14 +443,26 @@ impl McpHandler for ResourcesListHandler {
 
         let total = Some(all_resources.len() as u64);
 
+        let next_cursor_clone = next_cursor.clone();
         let mut paginated_response =
             PaginatedResponse::with_pagination(base_response, next_cursor, total, has_more);
 
         // Propagate optional _meta from request to response (MCP 2025-06-18 compliance)
-        if let Some(meta) = list_params.meta {
-            let mut meta_obj = turul_mcp_protocol::meta::Meta::new();
-            meta_obj.extra = meta;
-            paginated_response = paginated_response.with_meta(meta_obj);
+        if let Some(request_meta) = list_params.meta {
+            // Get existing meta from PaginatedResponse or use pagination defaults
+            let mut response_meta = paginated_response.meta().cloned()
+                .unwrap_or_else(|| turul_mcp_protocol::meta::Meta::with_pagination(
+                    next_cursor_clone,
+                    total,
+                    has_more
+                ));
+
+            // Merge request's _meta fields into extra without clobbering pagination
+            for (key, value) in request_meta {
+                response_meta.extra.insert(key, value);
+            }
+
+            paginated_response = paginated_response.with_meta(response_meta);
         }
 
         serde_json::to_value(paginated_response).map_err(McpError::from)
@@ -1049,14 +1073,26 @@ impl McpHandler for ResourceTemplatesHandler {
         }
 
         use turul_mcp_protocol::meta::PaginatedResponse;
+        let next_cursor_clone = next_cursor.clone();
         let mut paginated_response =
             PaginatedResponse::with_pagination(base_response, next_cursor, total, has_more);
 
         // Propagate optional _meta from request to response (MCP 2025-06-18 compliance)
-        if let Some(meta) = list_params.meta {
-            let mut meta_obj = turul_mcp_protocol::meta::Meta::new();
-            meta_obj.extra = meta;
-            paginated_response = paginated_response.with_meta(meta_obj);
+        if let Some(request_meta) = list_params.meta {
+            // Get existing meta from PaginatedResponse or use pagination defaults
+            let mut response_meta = paginated_response.meta().cloned()
+                .unwrap_or_else(|| turul_mcp_protocol::meta::Meta::with_pagination(
+                    next_cursor_clone,
+                    total,
+                    has_more
+                ));
+
+            // Merge request's _meta fields into extra without clobbering pagination
+            for (key, value) in request_meta {
+                response_meta.extra.insert(key, value);
+            }
+
+            paginated_response = paginated_response.with_meta(response_meta);
         }
 
         serde_json::to_value(paginated_response).map_err(McpError::from)

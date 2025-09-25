@@ -191,6 +191,31 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:52935/mcp
 - Streamable HTTP with SSE notifications
 - Pluggable storage (InMemory, SQLite, PostgreSQL, DynamoDB)
 
+### Session ID Requirements (MCP 2025-06-18)
+
+The framework enforces strict session handshake protocol:
+
+1. **`initialize`**: ONLY method allowed without `Mcp-Session-Id` header
+   - Server creates session and returns ID in response headers
+   - Client MUST capture and use this ID for all subsequent requests
+
+2. **All other methods**: MUST include `Mcp-Session-Id` header
+   - This includes discovery methods (tools/list, resources/list, prompts/list)
+   - Missing header returns 401 with JSON-RPC error code -32001
+
+3. **Client behavior**: Transport layer automatically manages session
+   - Captures session ID from initialize response
+   - Includes it in all subsequent requests
+   - Surfaces 401 errors clearly for debugging
+
+```rust
+// Framework handles this automatically:
+client.connect().await?;  // Calls initialize, captures session
+client.list_tools().await?;  // Includes session ID automatically
+```
+
+**Specification compliance**: Only `initialize` opens new sessions. Every other method is per-session to maintain state consistency across the protocol.
+
 ### HTTP Transport Routing
 
 Protocol-based handler routing automatically selects the appropriate transport implementation:

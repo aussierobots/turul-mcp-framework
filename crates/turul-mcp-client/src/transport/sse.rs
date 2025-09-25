@@ -36,6 +36,8 @@ pub struct SseTransport {
     event_sender: Option<mpsc::UnboundedSender<ServerEvent>>,
     /// SSE stream handle
     sse_handle: Option<tokio::task::JoinHandle<()>>,
+    /// Session ID from server (set after initialization)
+    session_id: Option<String>,
 }
 
 impl SseTransport {
@@ -73,6 +75,7 @@ impl SseTransport {
             stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
             event_sender: None,
             sse_handle: None,
+            session_id: None,
         })
     }
 
@@ -99,6 +102,7 @@ impl SseTransport {
             stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
             event_sender: None,
             sse_handle: None,
+            session_id: None,
         })
     }
 
@@ -401,12 +405,19 @@ impl Transport for SseTransport {
 
         self.update_stats(|stats| stats.requests_sent += 1);
 
-        let response = self
+        let mut request_builder = self
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-06-18");
+
+        // Add session ID header if available
+        if let Some(ref session_id) = self.session_id {
+            request_builder = request_builder.header("Mcp-Session-Id", session_id);
+        }
+
+        let response = request_builder
             .json(&request)
             .send()
             .await
@@ -446,12 +457,19 @@ impl Transport for SseTransport {
             "Sending SSE request with header extraction"
         );
 
-        let response = self
+        let mut request_builder = self
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-06-18");
+
+        // Add session ID header if available
+        if let Some(ref session_id) = self.session_id {
+            request_builder = request_builder.header("Mcp-Session-Id", session_id);
+        }
+
+        let response = request_builder
             .json(&request)
             .send()
             .await
@@ -488,11 +506,18 @@ impl Transport for SseTransport {
 
         self.update_stats(|stats| stats.notifications_sent += 1);
 
-        let response = self
+        let mut request_builder = self
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-06-18");
+
+        // Add session ID header if available
+        if let Some(ref session_id) = self.session_id {
+            request_builder = request_builder.header("Mcp-Session-Id", session_id);
+        }
+
+        let response = request_builder
             .json(&notification)
             .send()
             .await
@@ -600,6 +625,11 @@ impl Transport for SseTransport {
                 "port": self.endpoint.port()
             }),
         }
+    }
+
+    fn set_session_id(&mut self, session_id: String) {
+        debug!("SSE transport: Setting session ID: {}", session_id);
+        self.session_id = Some(session_id);
     }
 
     fn statistics(&self) -> TransportStatistics {

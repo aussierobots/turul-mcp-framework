@@ -584,7 +584,7 @@ async fn test_get_stream_has_mcp_headers() {
     // 🚨 NEW TEST: GET stream must include MCP headers
     let protocol_header = get_response.headers().get("MCP-Protocol-Version");
     let session_header = get_response.headers().get("Mcp-Session-Id");
-    let capabilities_header = get_response.headers().get("MCP-Capabilities");
+    let _capabilities_header = get_response.headers().get("MCP-Capabilities");
 
     assert!(
         protocol_header.is_some() && protocol_header.unwrap() == "2025-06-18",

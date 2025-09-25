@@ -439,6 +439,9 @@ pub struct ListToolsParams {
     /// Optional cursor for pagination
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<Cursor>,
+    /// Optional limit for page size
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
     /// Meta information (optional _meta field inside params)
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<HashMap<String, Value>>,
@@ -448,12 +451,18 @@ impl ListToolsParams {
     pub fn new() -> Self {
         Self {
             cursor: None,
+            limit: None,
             meta: None,
         }
     }
 
     pub fn with_cursor(mut self, cursor: Cursor) -> Self {
         self.cursor = Some(cursor);
+        self
+    }
+
+    pub fn with_limit(mut self, limit: u32) -> Self {
+        self.limit = Some(limit);
         self
     }
 
@@ -495,6 +504,11 @@ impl ListToolsRequest {
 
     pub fn with_cursor(mut self, cursor: Cursor) -> Self {
         self.params = self.params.with_cursor(cursor);
+        self
+    }
+
+    pub fn with_limit(mut self, limit: u32) -> Self {
+        self.params = self.params.with_limit(limit);
         self
     }
 

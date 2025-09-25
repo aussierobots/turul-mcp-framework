@@ -136,6 +136,9 @@ pub trait Transport: Send + Sync {
     /// Send a DELETE request for session termination (MCP session management)
     async fn send_delete(&mut self, session_id: &str) -> McpClientResult<()>;
 
+    /// Set the session ID to include in subsequent requests (MCP session management)
+    fn set_session_id(&mut self, session_id: String);
+
     /// Start listening for server events (if supported)
     async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver>;
 
