@@ -19,6 +19,7 @@ use turul_mcp_protocol::McpError;
 use turul_mcp_session_storage::InMemorySessionStorage;
 
 use crate::{CorsLayer, Result, SessionMcpHandler, StreamConfig, StreamManager};
+use crate::streamable_http::{StreamableHttpHandler, McpProtocolVersion};
 
 /// Configuration for the HTTP MCP server
 #[derive(Debug, Clone)]
@@ -171,12 +172,24 @@ impl HttpMcpServerBuilder {
             self.stream_config.clone(),
         ));
 
+        // Create shared dispatcher Arc
+        let dispatcher = Arc::new(self.dispatcher);
+
+        // Create StreamableHttpHandler for MCP 2025-06-18 support
+        let streamable_handler = StreamableHttpHandler::new(
+            Arc::new(self.config.clone()),
+            Arc::clone(&dispatcher),
+            Arc::clone(&session_storage),
+            Arc::clone(&stream_manager),
+        );
+
         HttpMcpServer {
             config: self.config,
-            dispatcher: Arc::new(self.dispatcher),
+            dispatcher,
             session_storage,
             stream_config: self.stream_config,
             stream_manager,
+            streamable_handler,
         }
     }
 }
@@ -196,6 +209,8 @@ pub struct HttpMcpServer {
     stream_config: StreamConfig,
     // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance
     stream_manager: Arc<StreamManager>,
+    // StreamableHttpHandler for MCP 2025-06-18 clients
+    streamable_handler: StreamableHttpHandler,
 }
 
 impl HttpMcpServer {
@@ -230,13 +245,19 @@ impl HttpMcpServer {
         info!("Session storage: {}", self.session_storage.backend_name());
 
         // ✅ CORRECTED ARCHITECTURE: Create single SessionMcpHandler instance outside the loop
-        let handler = SessionMcpHandler::with_shared_stream_manager(
+        let session_handler = SessionMcpHandler::with_shared_stream_manager(
             self.config.clone(),
             Arc::clone(&self.dispatcher),
             Arc::clone(&self.session_storage),
             self.stream_config.clone(),
             Arc::clone(&self.stream_manager),
         );
+
+        // Create combined handler that routes based on protocol version
+        let handler = McpRequestHandler {
+            session_handler,
+            streamable_handler: self.streamable_handler.clone(),
+        };
 
         loop {
             let (stream, peer_addr) = listener.accept().await?;
@@ -302,9 +323,16 @@ impl HttpMcpServer {
 }
 
 /// Handle requests with MCP 2025-06-18 compliance
+/// Combined handler that routes based on MCP protocol version
+#[derive(Clone)]
+struct McpRequestHandler {
+    session_handler: SessionMcpHandler,
+    streamable_handler: StreamableHttpHandler,
+}
+
 async fn handle_request(
     req: Request<hyper::body::Incoming>,
-    handler: SessionMcpHandler,
+    handler: McpRequestHandler,
 ) -> std::result::Result<
     Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>,
     hyper::Error,
@@ -316,40 +344,69 @@ async fn handle_request(
     debug!("Handling {} {}", method, path);
 
     // Route the request
-    let response = if path == handler.config.mcp_path {
-        match handler.handle_mcp_request(req).await {
-            Ok(mcp_response) => mcp_response,
-            Err(err) => {
-                error!("Request handling error: {}", err);
-                Response::builder()
-                    .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(
-                        Full::new(Bytes::from(format!("Internal Server Error: {}", err)))
-                            .map_err(|never| match never {})
-                            .boxed_unsync(),
-                    )
-                    .unwrap()
+    let response = if path == handler.session_handler.config.mcp_path {
+        // Extract MCP protocol version from headers
+        let protocol_version_str = req
+            .headers()
+            .get("MCP-Protocol-Version")
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or("2025-06-18"); // Default to latest version (we only support the latest protocol)
+
+        let protocol_version = McpProtocolVersion::parse_version(protocol_version_str)
+            .unwrap_or(McpProtocolVersion::V2025_06_18);
+
+        debug!(
+            "MCP request: protocol_version={}, method={}",
+            protocol_version.as_str(),
+            method
+        );
+
+        // Route based on protocol version - MCP 2025-06-18 uses Streamable HTTP, older versions use SessionMcpHandler
+        if protocol_version.supports_streamable_http() {
+            debug!("Routing to StreamableHttpHandler for MCP 2025-06-18 client");
+            // Use StreamableHttpHandler for MCP 2025-06-18 clients
+            let streamable_response = handler.streamable_handler.handle_request(req).await;
+            Ok(streamable_response)
+        } else {
+            debug!("Routing to SessionMcpHandler for legacy MCP client");
+            // Use SessionMcpHandler for legacy clients (MCP 2024-11-05 and earlier)
+            match handler.session_handler.handle_mcp_request(req).await {
+                Ok(mcp_response) => Ok(mcp_response),
+                Err(err) => {
+                    error!("Request handling error: {}", err);
+                    Ok(Response::builder()
+                        .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
+                        .body(
+                            Full::new(Bytes::from(format!("Internal Server Error: {}", err)))
+                                .map_err(|never| match never {})
+                                .boxed_unsync(),
+                        )
+                        .unwrap())
+                }
             }
         }
     } else {
         // 404 for other paths
-        Response::builder()
+        Ok(Response::builder()
             .status(hyper::StatusCode::NOT_FOUND)
             .body(
                 Full::new(Bytes::from("Not Found"))
                     .map_err(|never| match never {})
                     .boxed_unsync(),
             )
-            .unwrap()
+            .unwrap())
     };
 
     // Apply CORS if enabled
-    let mut final_response = response;
-    if handler.config.enable_cors {
-        CorsLayer::apply_cors_headers(final_response.headers_mut());
+    match response {
+        Ok(mut final_response) => {
+            if handler.session_handler.config.enable_cors {
+                CorsLayer::apply_cors_headers(final_response.headers_mut());
+            }
+            Ok(final_response)
+        }
+        Err(e) => Err(e),
     }
-
-    Ok(final_response)
 }
 
 /// Server statistics

@@ -1,5 +1,76 @@
 # MCP Framework - Working Memory
 
+## 🚨 CRITICAL: StreamableHttpHandler False Streaming Claims (2025-01-25)
+
+**Status**: 🔴 **BLOCKING ISSUE** - Framework claims MCP 2025-06-18 support but POST doesn't actually stream
+**Impact**: Clients receive buffered responses, not progressive chunks; violates MCP spec
+**Root Cause**: Dispatcher interface is synchronous - returns complete messages, not streams
+**External Validation**: Codex review revealed fundamental architectural gaps
+
+### Critical Issues Discovered (2025-01-25)
+
+**Codex Review Findings**: Despite claims of "MCP 2025-06-18 compliance", comprehensive analysis revealed:
+
+1. **POST Not Streaming**: All handlers call `req.into_body().collect()` at line 548 - buffers entire response
+2. **GET Missing Headers**: StreamManager response lacks MCP-Protocol-Version, Mcp-Session-Id headers
+3. **Wrong Detection Logic**: `is_streamable_compatible()` checks Accept header instead of protocol version
+4. **Session Auto-Creation Missing**: Requires Mcp-Session-Id on first POST (spec allows omission)
+5. **Lambda POST Not Chunked**: Only GET path has streaming support
+6. **Terminology Confusion**: "SSE" everywhere when spec uses "Streamable HTTP"
+
+### Implementation Timeline
+
+- **Initial Discovery**: Found TODO stubs in StreamableHttpHandler despite "production ready" claims
+- **First Fix Attempt**: Implemented methods but broke event replay by collecting bytes
+- **Type System Fix**: Preserved streaming for GET but POST still buffers everything
+- **Architecture Rewrite**: Unified handle_client_message but still no actual chunking
+- **Previous Status**: Tests pass but don't validate actual streaming behavior
+- **Codex Analysis**: Revealed fundamental gaps between implementation and MCP spec
+- **Phase 1 Testing (2025-01-25)**: Created failing tests to prove gaps
+
+### Phase 1 Test Results - Current Implementation Status
+
+**✅ WORKING (1/5 issues already resolved):**
+1. **Session Auto-Creation**: ✅ Already works - server creates UUID v7 sessions for POST without Mcp-Session-Id
+
+**❌ FAILING (4/5 issues confirmed):**
+1. **POST Not Streaming**: ❌ CONFIRMED - No Transfer-Encoding: chunked header, responses buffered
+2. **GET Missing Headers**: ❌ CONFIRMED - StreamManager doesn't add MCP-Protocol-Version, Mcp-Session-Id
+3. **Wrong Accept Logic**: ❌ CONFIRMED - application/json Accept doesn't enable streaming for 2025-06-18
+4. **No Progress Tokens**: ❌ CONFIRMED - Single buffered response, no progressive JSON-RPC frames
+
+### The Core Gap: Dispatcher Interface Cannot Stream
+
+**Current Reality**:
+```rust
+// Line 548 in streamable_http.rs - ALL POST handlers do this:
+let body_bytes = match req.into_body().collect().await {
+    Ok(collected) => collected.to_bytes(), // BUFFERS EVERYTHING!
+
+// Line 662-670 - Returns Full<Bytes>, not streaming:
+Response::builder()
+    .body(Full::new(Bytes::from(response_json))) // ONE BIG CHUNK!
+```
+
+**What MCP Spec Requires**:
+- Progressive chunks as tool execution progresses
+- Transfer-Encoding: chunked
+- Progress tokens in separate frames
+- Immediate availability of partial results
+
+### Hyper Streaming Works For GET, Not POST
+
+**GET Path (WORKING)**:
+```rust
+// stream_manager.rs:415 - Uses actual streaming:
+let body = StreamBody::new(formatted_stream).boxed_unsync();
+```
+
+**POST Path (BROKEN)**:
+```rust
+// All POST handlers return Full<Bytes> - no streaming!
+```
+
 ## ✅ RESOLVED: JSON-RPC Architecture Crisis (2025-09-22)
 
 **Status**: ✅ **ARCHITECTURE ISSUE COMPLETELY RESOLVED** - Codex review findings implemented

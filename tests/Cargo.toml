@@ -28,6 +28,10 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 portpicker = "0.1"
 anyhow = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+http-body-util = { workspace = true }
+bytes = { workspace = true }
 mcp-e2e-shared = { path = "shared" }
 
 [[test]]
@@ -98,6 +102,10 @@ path = "mcp_specification_compliance.rs"
 [[test]]
 name = "e2e_sse_notification_roundtrip"
 path = "e2e_sse_notification_roundtrip.rs"
+
+[[test]]
+name = "streamable_http_e2e"
+path = "streamable_http_e2e.rs"
 
 # [[test]]
 # name = "e2e_sse_message_flow"

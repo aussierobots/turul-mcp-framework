@@ -16,11 +16,11 @@ use std::sync::Arc;
 use bytes::Bytes;
 use futures::Stream;
 use http_body::Body;
-use http_body_util::Full;
+use http_body_util::{BodyExt, Full};
 use hyper::header::{ACCEPT, CONTENT_TYPE};
 use hyper::{HeaderMap, Method, Request, Response, StatusCode};
 use serde_json::Value;
-use tracing::{info, warn};
+use tracing::{debug, error, info, warn};
 
 use crate::ServerConfig;
 
@@ -294,21 +294,43 @@ impl StreamableResponse {
             }
         }
     }
+
+    /// Convert to HTTP response with UnsyncBoxBody for streaming compatibility
+    pub fn into_boxed_response(
+        self,
+        context: &StreamableHttpContext
+    ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>> {
+        self.into_response(context)
+            .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+    }
 }
 
 /// Streamable HTTP transport handler
+#[derive(Clone)]
 pub struct StreamableHttpHandler {
-    #[allow(dead_code)] // TODO: Use config for future HTTP handler configuration
     config: Arc<ServerConfig>,
+    dispatcher: Arc<turul_mcp_json_rpc_server::JsonRpcDispatcher<turul_mcp_protocol::McpError>>,
+    session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
+    stream_manager: Arc<crate::StreamManager>,
 }
 
 impl StreamableHttpHandler {
-    pub fn new(config: Arc<ServerConfig>) -> Self {
-        Self { config }
+    pub fn new(
+        config: Arc<ServerConfig>,
+        dispatcher: Arc<turul_mcp_json_rpc_server::JsonRpcDispatcher<turul_mcp_protocol::McpError>>,
+        session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
+        stream_manager: Arc<crate::StreamManager>,
+    ) -> Self {
+        Self {
+            config,
+            dispatcher,
+            session_storage,
+            stream_manager,
+        }
     }
 
     /// Handle incoming HTTP request with streamable HTTP support
-    pub async fn handle_request<T>(&self, req: Request<T>) -> Response<Full<Bytes>>
+    pub async fn handle_request<T>(&self, req: Request<T>) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>
     where
         T: Body + Send + 'static,
         T::Data: Send,
@@ -332,29 +354,38 @@ impl StreamableHttpHandler {
                 status: StatusCode::BAD_REQUEST,
                 message: error,
             }
-            .into_response(&context);
+            .into_boxed_response(&context);
         }
 
-        // Route based on method and streaming capability
-        match (req.method(), context.is_streamable_compatible()) {
-            (&Method::GET, true) => self.handle_streaming_get(req, context).await,
-            (&Method::POST, true) => self.handle_streaming_post(req, context).await,
-            (&Method::POST, false) => self.handle_json_post(req, context).await,
-            (&Method::DELETE, _) => self.handle_session_delete(req, context).await,
+        // Route based on MCP 2025-06-18 specification
+        match req.method() {
+            &Method::POST => {
+                // ALL client messages (requests, notifications, responses) come via POST
+                // Server decides whether to respond with JSON or SSE stream
+                self.handle_client_message(req, context).await
+            }
+            &Method::GET => {
+                // Optional SSE stream for server-initiated messages
+                self.handle_sse_stream(req, context).await
+            }
+            &Method::DELETE => {
+                // Optional session cleanup
+                self.handle_session_delete(req, context).await
+            }
             _ => StreamableResponse::Error {
                 status: StatusCode::METHOD_NOT_ALLOWED,
                 message: "Method not allowed for this endpoint".to_string(),
             }
-            .into_response(&context),
+            .into_boxed_response(&context),
         }
     }
 
-    /// Handle GET request for streaming connection
-    async fn handle_streaming_get<T>(
+    /// Handle GET request for optional SSE stream (MCP 2025-06-18 compliant)
+    async fn handle_sse_stream<T>(
         &self,
-        _req: Request<T>,
+        req: Request<T>,
         context: StreamableHttpContext,
-    ) -> Response<Full<Bytes>>
+    ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>
     where
         T: Body + Send + 'static,
     {
@@ -363,28 +394,109 @@ impl StreamableHttpHandler {
             context.session_id
         );
 
-        // TODO: Implement actual streaming connection for Streamable HTTP
-        // This would typically:
         // 1. Validate session exists and is authorized
-        // 2. Create bi-directional stream with chunked transfer encoding
-        // 3. Return streaming response supporting progressive message delivery
-        // 4. Handle connection lifecycle and graceful termination
+        let session_id = match context.session_id {
+            Some(ref id) => id.clone(),
+            None => {
+                warn!("Missing session ID for streaming GET request");
+                return StreamableResponse::Error {
+                    status: StatusCode::BAD_REQUEST,
+                    message: "Mcp-Session-Id header required for streaming connection".to_string(),
+                }
+                .into_boxed_response(&context);
+            }
+        };
 
-        StreamableResponse::Json(serde_json::json!({
-            "status": "streaming_connection_opened",
-            "session_id": context.session_id,
-            "protocol_version": context.protocol_version.as_str(),
-            "note": "Streaming implementation pending"
-        }))
-        .into_response(&context)
+        // Validate session exists (do NOT create if missing)
+        match self.validate_session_exists(&session_id).await {
+            Ok(_) => {
+                debug!("Session validation successful for streaming GET: {}", session_id);
+            }
+            Err(err) => {
+                error!("Session validation failed for streaming GET {}: {}", session_id, err);
+                return StreamableResponse::Error {
+                    status: StatusCode::UNAUTHORIZED,
+                    message: format!("Session validation failed: {}", err),
+                }
+                .into_boxed_response(&context);
+            }
+        }
+
+        // 2. Create bi-directional stream with chunked transfer encoding
+        // For MCP 2025-06-18 Streamable HTTP, we create a stream that can handle bidirectional JSON-RPC
+        // Unlike SSE which is unidirectional server->client, this supports client->server and server->client
+
+        // Extract Last-Event-ID for resumability (if client supports it)
+        let last_event_id = req
+            .headers()
+            .get("Last-Event-ID")
+            .and_then(|h| h.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
+
+        // Generate unique connection ID for tracking this stream
+        let connection_id = uuid::Uuid::now_v7().to_string();
+
+        debug!(
+            "Creating streamable HTTP connection: session={}, connection={}, last_event_id={:?}",
+            session_id, connection_id, last_event_id
+        );
+
+        // 3. Return streaming response supporting progressive message delivery
+        // ✅ FIXED: Return the actual streaming response from StreamManager
+        // This preserves event replay, resumability, and live streaming capabilities
+        match self
+            .stream_manager
+            .handle_sse_connection(session_id.clone(), connection_id.clone(), last_event_id)
+            .await
+        {
+            Ok(streaming_response) => {
+                info!(
+                    "✅ Streamable HTTP connection established: session={}, connection={}",
+                    session_id, connection_id
+                );
+
+                // ✅ PRESERVE STREAMING: Return the actual streaming response directly
+                // This maintains event replay from session storage and live streaming
+                streaming_response
+            }
+            Err(err) => {
+                error!("Failed to create streamable HTTP connection: {}", err);
+                StreamableResponse::Error {
+                    status: StatusCode::INTERNAL_SERVER_ERROR,
+                    message: format!("Streaming connection failed: {}", err),
+                }
+                .into_boxed_response(&context)
+            }
+        }
+    }
+
+    /// Validate that a session exists - do NOT create if missing
+    async fn validate_session_exists(&self, session_id: &str) -> std::result::Result<(), String> {
+        match self.session_storage.get_session(session_id).await {
+            Ok(Some(_)) => {
+                debug!("Session validation successful: {}", session_id);
+                Ok(())
+            }
+            Ok(None) => {
+                error!("Session not found: {}", session_id);
+                Err(format!(
+                    "Session '{}' not found. Sessions must be created via initialize request first.",
+                    session_id
+                ))
+            }
+            Err(err) => {
+                error!("Failed to validate session {}: {}", session_id, err);
+                Err(format!("Session validation failed: {}", err))
+            }
+        }
     }
 
     /// Handle POST request with streaming response
     async fn handle_streaming_post<T>(
         &self,
-        _req: Request<T>,
+        req: Request<T>,
         context: StreamableHttpContext,
-    ) -> Response<Full<Bytes>>
+    ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>
     where
         T: Body + Send + 'static,
     {
@@ -393,47 +505,395 @@ impl StreamableHttpHandler {
             context.session_id
         );
 
-        // TODO: Implement streaming POST handling for Streamable HTTP
-        // This would typically:
-        // 1. Parse JSON-RPC request(s) from chunked request body
-        // 2. Process via dispatcher with session context
-        // 3. Stream responses back with progressive message delivery
-        // 4. Support multiple concurrent requests in the same session
+        // 1. Validate session exists and is authorized
+        let session_id = match context.session_id {
+            Some(ref id) => id.clone(),
+            None => {
+                warn!("Missing session ID for streaming POST request");
+                return StreamableResponse::Error {
+                    status: StatusCode::BAD_REQUEST,
+                    message: "Mcp-Session-Id header required for streaming POST".to_string(),
+                }
+                .into_boxed_response(&context);
+            }
+        };
 
-        StreamableResponse::Json(serde_json::json!({
-            "status": "streaming_post_accepted",
-            "session_id": context.session_id,
-            "protocol_version": context.protocol_version.as_str(),
-            "note": "Streaming POST implementation pending"
-        }))
-        .into_response(&context)
+        // Validate session exists (do NOT create if missing)
+        if let Err(err) = self.validate_session_exists(&session_id).await {
+            error!("Session validation failed for streaming POST {}: {}", session_id, err);
+            return StreamableResponse::Error {
+                status: StatusCode::UNAUTHORIZED,
+                message: format!("Session validation failed: {}", err),
+            }
+            .into_boxed_response(&context);
+        }
+
+        // Check content type
+        let content_type = req
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|ct| ct.to_str().ok())
+            .unwrap_or("");
+
+        if !content_type.starts_with("application/json") {
+            warn!("Invalid content type for streaming POST: {}", content_type);
+            return StreamableResponse::Error {
+                status: StatusCode::BAD_REQUEST,
+                message: "Content-Type must be application/json".to_string(),
+            }
+            .into_boxed_response(&context);
+        }
+
+        // 2. Parse JSON-RPC request(s) from chunked request body
+        let body_bytes = match req.into_body().collect().await {
+            Ok(collected) => collected.to_bytes(),
+            Err(_err) => {
+                error!("Failed to read streaming POST request body");
+                return StreamableResponse::Error {
+                    status: StatusCode::BAD_REQUEST,
+                    message: "Failed to read request body".to_string(),
+                }
+                .into_boxed_response(&context);
+            }
+        };
+
+        // Check body size
+        if body_bytes.len() > self.config.max_body_size {
+            warn!("Streaming POST request body too large: {} bytes", body_bytes.len());
+            return StreamableResponse::Error {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                message: "Request body too large".to_string(),
+            }
+            .into_boxed_response(&context);
+        }
+
+        // Parse as UTF-8
+        let body_str = match std::str::from_utf8(&body_bytes) {
+            Ok(s) => s,
+            Err(err) => {
+                error!("Invalid UTF-8 in streaming POST request body: {}", err);
+                return StreamableResponse::Error {
+                    status: StatusCode::BAD_REQUEST,
+                    message: "Request body must be valid UTF-8".to_string(),
+                }
+                .into_boxed_response(&context);
+            }
+        };
+
+        debug!("Received streaming POST JSON-RPC request: {}", body_str);
+
+        // Parse JSON-RPC message
+        use turul_mcp_json_rpc_server::dispatch::{parse_json_rpc_message, JsonRpcMessage, JsonRpcMessageResult};
+        use turul_mcp_json_rpc_server::r#async::SessionContext;
+        use crate::notification_bridge::StreamManagerNotificationBroadcaster;
+
+        let message = match parse_json_rpc_message(body_str) {
+            Ok(msg) => msg,
+            Err(rpc_err) => {
+                error!("JSON-RPC parse error in streaming POST: {}", rpc_err);
+                let error_json = serde_json::to_string(&rpc_err).unwrap_or_else(|_| "{}".to_string());
+                return Response::builder()
+                    .status(StatusCode::OK) // JSON-RPC parse errors still use 200 OK
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .body(Full::new(Bytes::from(error_json)))
+                    .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync());
+            }
+        };
+
+        // 3. Process via dispatcher with session context and streaming capabilities
+        let broadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(Arc::clone(
+            &self.stream_manager,
+        )));
+        let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+
+        let session_context = SessionContext {
+            session_id: session_id.clone(),
+            metadata: std::collections::HashMap::new(),
+            broadcaster: Some(broadcaster_any),
+            timestamp: chrono::Utc::now().timestamp_millis() as u64,
+        };
+
+        let message_result = match message {
+            JsonRpcMessage::Request(request) => {
+                debug!("Processing streaming POST JSON-RPC request: method={}", request.method);
+                let response = self
+                    .dispatcher
+                    .handle_request_with_context(request, session_context)
+                    .await;
+
+                // Convert JsonRpcMessage to JsonRpcMessageResult
+                match response {
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
+                        JsonRpcMessageResult::Response(resp)
+                    }
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
+                        JsonRpcMessageResult::Error(err)
+                    }
+                }
+            }
+            JsonRpcMessage::Notification(notification) => {
+                debug!(
+                    "Processing streaming POST JSON-RPC notification: method={}",
+                    notification.method
+                );
+
+                let result = self
+                    .dispatcher
+                    .handle_notification_with_context(notification, Some(session_context))
+                    .await;
+
+                if let Err(err) = result {
+                    error!("Streaming POST notification handling error: {}", err);
+                }
+                JsonRpcMessageResult::NoResponse
+            }
+        };
+
+        // 4. Stream responses back with progressive message delivery
+        // For now, return the response immediately - TODO: implement actual streaming
+        match message_result {
+            JsonRpcMessageResult::Response(response) => {
+                let response_json = serde_json::to_string(&response)
+                    .unwrap_or_else(|_| r#"{"error": "Failed to serialize response"}"#.to_string());
+
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .header("Mcp-Session-Id", &session_id)
+                    .body(Full::new(Bytes::from(response_json)))
+                    .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+            }
+            JsonRpcMessageResult::Error(error) => {
+                let error_json = serde_json::to_string(&error)
+                    .unwrap_or_else(|_| r#"{"error": "Internal error"}"#.to_string());
+
+                Response::builder()
+                    .status(StatusCode::OK) // JSON-RPC errors still return 200 OK
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .header("Mcp-Session-Id", &session_id)
+                    .body(Full::new(Bytes::from(error_json)))
+                    .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+            }
+            JsonRpcMessageResult::NoResponse => {
+                // Notifications return 202 Accepted per MCP spec
+                Response::builder()
+                    .status(StatusCode::ACCEPTED)
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .header("Mcp-Session-Id", &session_id)
+                    .body(Full::new(Bytes::new()))
+                    .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+            }
+        }
     }
 
-    /// Handle POST request with JSON response
+    /// Handle POST request with JSON response (legacy compatibility)
     async fn handle_json_post<T>(
         &self,
-        _req: Request<T>,
+        req: Request<T>,
         context: StreamableHttpContext,
-    ) -> Response<Full<Bytes>>
+    ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>
     where
         T: Body + Send + 'static,
     {
-        info!("Handling JSON POST (non-streaming)");
+        info!("Handling JSON POST (non-streaming/legacy)");
 
-        // TODO: Implement standard JSON-RPC handling for legacy compatibility
-        // This would typically:
-        // 1. Parse JSON-RPC request(s) from request body
+        // 1. Parse JSON-RPC request(s) from request body (legacy clients don't require sessions)
+
+        // Check content type
+        let content_type = req
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|ct| ct.to_str().ok())
+            .unwrap_or("");
+
+        if !content_type.starts_with("application/json") {
+            warn!("Invalid content type for legacy POST: {}", content_type);
+            return StreamableResponse::Error {
+                status: StatusCode::BAD_REQUEST,
+                message: "Content-Type must be application/json".to_string(),
+            }
+            .into_boxed_response(&context);
+        }
+
+        // Read request body
+        let body_bytes = match req.into_body().collect().await {
+            Ok(collected) => collected.to_bytes(),
+            Err(_err) => {
+                error!("Failed to read legacy POST request body");
+                return StreamableResponse::Error {
+                    status: StatusCode::BAD_REQUEST,
+                    message: "Failed to read request body".to_string(),
+                }
+                .into_boxed_response(&context);
+            }
+        };
+
+        // Check body size
+        if body_bytes.len() > self.config.max_body_size {
+            warn!("Legacy POST request body too large: {} bytes", body_bytes.len());
+            return StreamableResponse::Error {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                message: "Request body too large".to_string(),
+            }
+            .into_boxed_response(&context);
+        }
+
+        // Parse as UTF-8
+        let body_str = match std::str::from_utf8(&body_bytes) {
+            Ok(s) => s,
+            Err(err) => {
+                error!("Invalid UTF-8 in legacy POST request body: {}", err);
+                return StreamableResponse::Error {
+                    status: StatusCode::BAD_REQUEST,
+                    message: "Request body must be valid UTF-8".to_string(),
+                }
+                .into_boxed_response(&context);
+            }
+        };
+
+        debug!("Received legacy POST JSON-RPC request: {}", body_str);
+
+        // Parse JSON-RPC message
+        use turul_mcp_json_rpc_server::dispatch::{parse_json_rpc_message, JsonRpcMessage, JsonRpcMessageResult};
+
+        let message = match parse_json_rpc_message(body_str) {
+            Ok(msg) => msg,
+            Err(rpc_err) => {
+                error!("JSON-RPC parse error in legacy POST: {}", rpc_err);
+                let error_json = serde_json::to_string(&rpc_err).unwrap_or_else(|_| "{}".to_string());
+                return Response::builder()
+                    .status(StatusCode::OK) // JSON-RPC parse errors still use 200 OK
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .body(Full::new(Bytes::from(error_json)))
+                    .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync());
+            }
+        };
+
         // 2. Process via dispatcher (no session context for legacy clients)
-        // 3. Return single JSON response (no streaming)
-        // 4. Maintain backwards compatibility with MCP 2024-11-05 clients
+        // Legacy clients (MCP 2024-11-05) don't use sessions, so no session context
+        let message_result = match message {
+            JsonRpcMessage::Request(request) => {
+                debug!("Processing legacy POST JSON-RPC request: method={}", request.method);
 
-        StreamableResponse::Json(serde_json::json!({
-            "status": "json_post_handled",
-            "protocol_version": context.protocol_version.as_str(),
-            "streaming": false,
-            "note": "JSON POST implementation pending"
-        }))
-        .into_response(&context)
+                // Special handling for initialize requests - legacy clients can create sessions too
+                let response = if request.method == "initialize" {
+                    debug!("Handling legacy initialize request - creating new session");
+
+                    // Let session storage create the session and generate the ID
+                    use turul_mcp_protocol::ServerCapabilities;
+                    match self.session_storage.create_session(ServerCapabilities::default()).await {
+                        Ok(session_info) => {
+                            debug!("Created new session for legacy client: {}", session_info.session_id);
+
+                            // Create session context for initialize response
+                            use turul_mcp_json_rpc_server::r#async::SessionContext;
+                            use crate::notification_bridge::StreamManagerNotificationBroadcaster;
+
+                            let broadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(Arc::clone(&self.stream_manager)));
+                            let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+
+                            let session_context = SessionContext {
+                                session_id: session_info.session_id.clone(),
+                                metadata: std::collections::HashMap::new(),
+                                broadcaster: Some(broadcaster_any),
+                                timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                            };
+
+                            self.dispatcher
+                                .handle_request_with_context(request, session_context)
+                                .await
+                        }
+                        Err(err) => {
+                            error!("Failed to create session during legacy initialize: {}", err);
+                            let error_msg = format!("Session creation failed: {}", err);
+                            turul_mcp_json_rpc_server::JsonRpcMessage::error(
+                                turul_mcp_json_rpc_server::JsonRpcError::internal_error(
+                                    Some(request.id),
+                                    Some(error_msg),
+                                ),
+                            )
+                        }
+                    }
+                } else {
+                    // For non-initialize requests, process without session context (legacy mode)
+                    self.dispatcher.handle_request(request).await
+                };
+
+                // Convert JsonRpcMessage to JsonRpcMessageResult
+                match response {
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
+                        JsonRpcMessageResult::Response(resp)
+                    }
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
+                        JsonRpcMessageResult::Error(err)
+                    }
+                }
+            }
+            JsonRpcMessage::Notification(notification) => {
+                debug!("Processing legacy POST JSON-RPC notification: method={}", notification.method);
+
+                // Process notification without session context (legacy mode)
+                let result = self
+                    .dispatcher
+                    .handle_notification_with_context(notification, None)
+                    .await;
+
+                if let Err(err) = result {
+                    error!("Legacy POST notification handling error: {}", err);
+                }
+                JsonRpcMessageResult::NoResponse
+            }
+        };
+
+        // 3. Return single JSON response (no streaming) - legacy compatibility
+        match message_result {
+            JsonRpcMessageResult::Response(response) => {
+                let response_json = serde_json::to_string(&response)
+                    .unwrap_or_else(|_| r#"{"error": "Failed to serialize response"}"#.to_string());
+
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .body(Full::new(Bytes::from(response_json)))
+                    .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+            }
+            JsonRpcMessageResult::Error(error) => {
+                let error_json = serde_json::to_string(&error)
+                    .unwrap_or_else(|_| r#"{"error": "Internal error"}"#.to_string());
+
+                Response::builder()
+                    .status(StatusCode::OK) // JSON-RPC errors still return 200 OK
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .body(Full::new(Bytes::from(error_json)))
+                    .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+            }
+            JsonRpcMessageResult::NoResponse => {
+                // Notifications return 202 Accepted per MCP spec
+                Response::builder()
+                    .status(StatusCode::ACCEPTED)
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .body(Full::new(Bytes::new()))
+                    .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+            }
+        }
     }
 
     /// Handle DELETE request for session cleanup
@@ -441,29 +901,361 @@ impl StreamableHttpHandler {
         &self,
         _req: Request<T>,
         context: StreamableHttpContext,
-    ) -> Response<Full<Bytes>>
+    ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>
     where
         T: Body + Send + 'static,
     {
         if let Some(session_id) = &context.session_id {
             info!("Deleting session: {}", session_id);
 
-            // TODO: Implement session cleanup for Streamable HTTP
-            // Should clean up session state, close any active streams,
-            // and release resources associated with the session ID
+            // Implement proper session cleanup for Streamable HTTP
+            // 1. Close any active streaming connections for this session
+            let closed_connections = self
+                .stream_manager
+                .close_session_connections(session_id)
+                .await;
+            debug!(
+                "Closed {} streaming connections for session: {}",
+                closed_connections, session_id
+            );
 
-            StreamableResponse::Json(serde_json::json!({
-                "status": "session_deleted",
-                "session_id": session_id,
-                "note": "Session cleanup implementation pending"
-            }))
-            .into_response(&context)
+            // 2. Mark session as terminated instead of immediate deletion (for proper lifecycle management)
+            match self.session_storage.get_session(session_id).await {
+                Ok(Some(mut session_info)) => {
+                    // Mark session as terminated in state
+                    session_info
+                        .state
+                        .insert("terminated".to_string(), serde_json::Value::Bool(true));
+                    session_info.state.insert(
+                        "terminated_at".to_string(),
+                        serde_json::Value::Number(serde_json::Number::from(
+                            chrono::Utc::now().timestamp_millis(),
+                        )),
+                    );
+                    session_info.touch();
+
+                    // 3. Update session with termination markers
+                    match self.session_storage.update_session(session_info).await {
+                        Ok(()) => {
+                            info!(
+                                "Session {} marked as terminated (TTL will handle cleanup)",
+                                session_id
+                            );
+
+                            // Return success response with proper headers
+                            Response::builder()
+                                .status(StatusCode::OK)
+                                .header(CONTENT_TYPE, "application/json")
+                                .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                                .header("Mcp-Session-Id", session_id)
+                                .body(Full::new(Bytes::from(serde_json::to_string(&serde_json::json!({
+                                    "status": "session_terminated",
+                                    "session_id": session_id,
+                                    "closed_connections": closed_connections,
+                                    "message": "Session marked for cleanup"
+                                })).unwrap_or_else(|_| r#"{"status":"session_terminated"}"#.to_string()))))
+                                .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+                        }
+                        Err(err) => {
+                            error!(
+                                "Error marking session {} as terminated: {}",
+                                session_id, err
+                            );
+                            // Fallback to deletion if update fails
+                            match self.session_storage.delete_session(session_id).await {
+                                Ok(_) => {
+                                    info!("Session {} deleted as fallback", session_id);
+                                    Response::builder()
+                                        .status(StatusCode::OK)
+                                        .header(CONTENT_TYPE, "application/json")
+                                        .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                                        .body(Full::new(Bytes::from(serde_json::to_string(&serde_json::json!({
+                                            "status": "session_deleted",
+                                            "session_id": session_id,
+                                            "closed_connections": closed_connections,
+                                            "message": "Session removed"
+                                        })).unwrap_or_else(|_| r#"{"status":"session_deleted"}"#.to_string()))))
+                                        .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+                                }
+                                Err(delete_err) => {
+                                    error!(
+                                        "Error deleting session {} as fallback: {}",
+                                        session_id, delete_err
+                                    );
+                                    StreamableResponse::Error {
+                                        status: StatusCode::INTERNAL_SERVER_ERROR,
+                                        message: "Session termination error".to_string(),
+                                    }
+                                    .into_boxed_response(&context)
+                                }
+                            }
+                        }
+                    }
+                }
+                Ok(None) => {
+                    // Session not found
+                    Response::builder()
+                        .status(StatusCode::NOT_FOUND)
+                        .header(CONTENT_TYPE, "application/json")
+                        .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                        .body(Full::new(Bytes::from(serde_json::to_string(&serde_json::json!({
+                            "status": "session_not_found",
+                            "session_id": session_id,
+                            "message": "Session not found"
+                        })).unwrap_or_else(|_| r#"{"status":"session_not_found"}"#.to_string()))))
+                        .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+                }
+                Err(err) => {
+                    error!(
+                        "Error retrieving session {} for termination: {}",
+                        session_id, err
+                    );
+                    StreamableResponse::Error {
+                        status: StatusCode::INTERNAL_SERVER_ERROR,
+                        message: "Session lookup error".to_string(),
+                    }
+                    .into_boxed_response(&context)
+                }
+            }
         } else {
             StreamableResponse::Error {
                 status: StatusCode::BAD_REQUEST,
                 message: "Mcp-Session-Id header required for session deletion".to_string(),
             }
-            .into_response(&context)
+            .into_boxed_response(&context)
+        }
+    }
+
+    /// Handle POST request - unified handler for all client messages (MCP 2025-06-18 compliant)
+    /// Processes JSON-RPC requests, notifications, and responses
+    /// Server decides whether to respond with JSON or SSE stream based on message type
+    async fn handle_client_message<T>(
+        &self,
+        req: Request<T>,
+        context: StreamableHttpContext,
+    ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>
+    where
+        T: Body + Send + 'static,
+    {
+        info!("Handling client message via POST (MCP 2025-06-18)");
+
+        // Validate Accept header includes both application/json and text/event-stream
+        // Per MCP spec: "Include Accept header with application/json and text/event-stream"
+        if !context.accepts_json {
+            warn!("Client POST missing application/json in Accept header");
+            return StreamableResponse::Error {
+                status: StatusCode::BAD_REQUEST,
+                message: "Accept header must include application/json".to_string(),
+            }
+            .into_boxed_response(&context);
+        }
+
+        // Check content type
+        let content_type = req
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|ct| ct.to_str().ok())
+            .unwrap_or("");
+        if !content_type.starts_with("application/json") {
+            warn!("Invalid content type for POST: {}", content_type);
+            return StreamableResponse::Error {
+                status: StatusCode::BAD_REQUEST,
+                message: "Content-Type must be application/json".to_string(),
+            }
+            .into_boxed_response(&context);
+        }
+
+        // Read and parse request body
+        let body_bytes = match req.into_body().collect().await {
+            Ok(collected) => collected.to_bytes(),
+            Err(_err) => {
+                error!("Failed to read POST request body");
+                return StreamableResponse::Error {
+                    status: StatusCode::BAD_REQUEST,
+                    message: "Failed to read request body".to_string(),
+                }
+                .into_boxed_response(&context);
+            }
+        };
+
+        // Check body size
+        if body_bytes.len() > self.config.max_body_size {
+            warn!("POST request body too large: {} bytes", body_bytes.len());
+            return StreamableResponse::Error {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                message: "Request body too large".to_string(),
+            }
+            .into_boxed_response(&context);
+        }
+
+        // Parse as UTF-8
+        let body_str = match std::str::from_utf8(&body_bytes) {
+            Ok(s) => s,
+            Err(err) => {
+                error!("Invalid UTF-8 in POST request body: {}", err);
+                return StreamableResponse::Error {
+                    status: StatusCode::BAD_REQUEST,
+                    message: "Request body must be valid UTF-8".to_string(),
+                }
+                .into_boxed_response(&context);
+            }
+        };
+
+        debug!("Received client message: {}", body_str);
+
+        // Parse JSON-RPC message
+        use turul_mcp_json_rpc_server::dispatch::{parse_json_rpc_message, JsonRpcMessage, JsonRpcMessageResult};
+        use turul_mcp_json_rpc_server::r#async::SessionContext;
+        use crate::notification_bridge::StreamManagerNotificationBroadcaster;
+
+        let message = match parse_json_rpc_message(body_str) {
+            Ok(msg) => msg,
+            Err(rpc_err) => {
+                error!("JSON-RPC parse error in POST: {}", rpc_err);
+                let error_json = serde_json::to_string(&rpc_err).unwrap_or_else(|_| "{}".to_string());
+                return Response::builder()
+                    .status(StatusCode::OK) // JSON-RPC parse errors still use 200 OK
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .body(Full::new(Bytes::from(error_json)))
+                    .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync());
+            }
+        };
+
+        // Create session context if session ID provided (sessions are optional per MCP spec)
+        let session_context = if let Some(ref session_id) = context.session_id {
+            // Validate session exists (do NOT create if missing)
+            if let Err(err) = self.validate_session_exists(session_id).await {
+                error!("Session validation failed: {}", err);
+                return StreamableResponse::Error {
+                    status: StatusCode::UNAUTHORIZED,
+                    message: format!("Session validation failed: {}", err),
+                }
+                .into_boxed_response(&context);
+            }
+
+            let broadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(Arc::clone(&self.stream_manager)));
+            let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+            Some(SessionContext {
+                session_id: session_id.clone(),
+                metadata: std::collections::HashMap::new(),
+                broadcaster: Some(broadcaster_any),
+                timestamp: chrono::Utc::now().timestamp_millis() as u64,
+            })
+        } else {
+            None
+        };
+
+        // Process message based on type
+        let message_result = match message {
+            JsonRpcMessage::Request(request) => {
+                debug!("Processing JSON-RPC request: method={}", request.method);
+
+                // For requests, server decides: immediate JSON response or SSE stream
+                // For now, always use immediate JSON response (TODO: implement streaming decision logic)
+                let response = match session_context {
+                    Some(ctx) => self.dispatcher.handle_request_with_context(request, ctx).await,
+                    None => {
+                        // Handle requests without session context
+                        // Special case: initialize requests can create sessions
+                        if request.method == "initialize" {
+                            debug!("Handling initialize request - creating new session");
+                            use turul_mcp_protocol::ServerCapabilities;
+                            match self.session_storage.create_session(ServerCapabilities::default()).await {
+                                Ok(session_info) => {
+                                    debug!("Created new session: {}", session_info.session_id);
+                                    let broadcaster = Arc::new(StreamManagerNotificationBroadcaster::new(Arc::clone(&self.stream_manager)));
+                                    let broadcaster_any = Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+                                    let new_session_context = SessionContext {
+                                        session_id: session_info.session_id.clone(),
+                                        metadata: std::collections::HashMap::new(),
+                                        broadcaster: Some(broadcaster_any),
+                                        timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                                    };
+                                    self.dispatcher.handle_request_with_context(request, new_session_context).await
+                                }
+                                Err(err) => {
+                                    error!("Failed to create session during initialize: {}", err);
+                                    let error_msg = format!("Session creation failed: {}", err);
+                                    turul_mcp_json_rpc_server::JsonRpcMessage::error(
+                                        turul_mcp_json_rpc_server::JsonRpcError::internal_error(
+                                            Some(request.id), Some(error_msg)
+                                        )
+                                    )
+                                }
+                            }
+                        } else {
+                            // Other requests without session context
+                            warn!("Request without session context: {}", request.method);
+                            turul_mcp_json_rpc_server::JsonRpcMessage::error(
+                                turul_mcp_json_rpc_server::JsonRpcError::invalid_request(
+                                    Some(request.id)
+                                )
+                            )
+                        }
+                    }
+                };
+
+                match response {
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
+                        JsonRpcMessageResult::Response(resp)
+                    }
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
+                        JsonRpcMessageResult::Error(err)
+                    }
+                }
+            }
+            JsonRpcMessage::Notification(notification) => {
+                debug!("Processing JSON-RPC notification: method={}", notification.method);
+                let result = match session_context {
+                    Some(ctx) => self.dispatcher.handle_notification_with_context(notification, Some(ctx)).await,
+                    None => self.dispatcher.handle_notification_with_context(notification, None).await,
+                };
+                if let Err(err) = result {
+                    error!("Notification handling error: {}", err);
+                }
+                JsonRpcMessageResult::NoResponse
+            }
+        };
+
+        // Return appropriate response based on message result
+        match message_result {
+            JsonRpcMessageResult::Response(response) => {
+                // TODO: Here we could decide to return SSE stream instead of JSON for complex responses
+                let response_json = serde_json::to_string(&response)
+                    .unwrap_or_else(|_| r#"{"error": "Failed to serialize response"}"#.to_string());
+                Response::builder()
+                    .status(StatusCode::OK)
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .body(Full::new(Bytes::from(response_json)))
+                    .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+            }
+            JsonRpcMessageResult::Error(error) => {
+                let error_json = serde_json::to_string(&error)
+                    .unwrap_or_else(|_| r#"{"error": "Internal error"}"#.to_string());
+                Response::builder()
+                    .status(StatusCode::OK) // JSON-RPC errors still return 200 OK
+                    .header(CONTENT_TYPE, "application/json")
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .body(Full::new(Bytes::from(error_json)))
+                    .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+            }
+            JsonRpcMessageResult::NoResponse => {
+                // Notifications return 202 Accepted per MCP spec
+                Response::builder()
+                    .status(StatusCode::ACCEPTED)
+                    .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                    .body(Full::new(Bytes::new()))
+                    .unwrap()
+                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
+            }
         }
     }
 }

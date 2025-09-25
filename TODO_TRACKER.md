@@ -4,10 +4,75 @@
 
 ## Current Status: 0.2.0 BETA DEVELOPMENT 🧪
 
-**Last Updated**: 2025-09-23
-**Framework Status**: 🧪 **BETA DEVELOPMENT** - Critical blockers resolved, ~21 core TODOs + example placeholders
+**Last Updated**: 2025-01-25
+**Framework Status**: 🔴 **CRITICAL STREAMING ISSUES** - MCP 2025-06-18 claims false, POST doesn't stream
 **Current Branch**: **0.2.0** - Suitable for development and testing, not production
 **Documentation**: ✅ **HONEST AND ACCURATE** - False "production ready" claims corrected
+
+---
+
+## 🚨 CRITICAL: MCP 2025-06-18 Streamable HTTP Implementation (2025-01-25)
+
+**Status**: 🔴 **BLOCKING** - POST doesn't stream, GET missing headers, tests inadequate
+**Impact**: Framework falsely claims MCP 2025-06-18 compliance
+**Priority**: P0 - Must fix before any production claims
+**Root Cause**: Dispatcher interface is synchronous, returns complete messages not streams
+
+### Phase 1: Write Failing Tests First (Prove Current Gaps) ✅ COMPLETED
+- ✅ **Test chunked POST responses**: ❌ FAILS - No Transfer-Encoding: chunked, responses buffered
+- ✅ **Test session auto-creation**: ✅ WORKS - Already implemented correctly with UUID v7
+- ✅ **Test Accept header compatibility**: ❌ FAILS - application/json doesn't enable streaming
+- ✅ **Test MCP header presence**: ❌ FAILS - GET missing MCP-Protocol-Version, Mcp-Session-Id
+- [ ] **Test Lambda streaming POST**: Chunked output via run_with_streaming_response
+
+**Phase 1 Result**: 4/5 critical issues confirmed, 1 already working
+
+### Phase 2: Core Streaming Architecture (Breaking Changes Required)
+- [ ] **Create StreamingDispatcher trait**: Returns `Stream<Item = JsonRpcFrame>` instead of single message
+- [ ] **Implement channel-based POST handler**: Use `hyper::Body::channel()` or `StreamBody::new()` for response
+- [ ] **Support progress tokens**: Spawn task for dispatcher, push frames to sender as they arrive
+- [ ] **Add chunked transfer encoding**: Proper HTTP streaming with progressive JSON-RPC frames
+- [ ] **Handle cancellation**: Ensure dropped streams clean up properly
+
+### Phase 3: Fix GET Handler (Header Wrapping)
+- [ ] **Wrap StreamManager response**: Add MCP headers before sending SSE response
+- [ ] **Ensure required headers**: MCP-Protocol-Version, Mcp-Session-Id, MCP-Capabilities on all GET streams
+- [ ] **Test header presence**: Validate GET responses carry all required MCP headers
+
+### Phase 4: Protocol Compliance Fixes
+- [ ] **Fix is_streamable_compatible() logic**: Base on protocol version >= 2025-03-26, not Accept header
+- ✅ **Session auto-creation**: Already implemented correctly with UUID v7
+- ✅ **Session validation logic**: Already works - sessions optional for initial POST
+- ✅ **Session storage persistence**: Already working correctly
+
+### Phase 5: Lambda Adaptation (Platform Integration)
+- [ ] **Mirror POST streaming in Lambda**: Adapt streaming dispatcher output to Lambda streaming API
+- [ ] **Use run_with_streaming_response**: Implement chunked Lambda responses
+- [ ] **Document API Gateway constraints**: Note limitations of different deployment targets
+- [ ] **Test Lambda streaming**: Validate chunked responses work when deployed
+
+### Phase 6: Cleanup & Documentation
+- [ ] **Rename SSE → StreamTransport**: StreamManager → StreamTransportManager, remove post_sse flags
+- [ ] **Update all terminology**: Remove SSE-centric naming throughout codebase
+- [ ] **Update ADRs**: Document actual architecture, explain compatibility fallbacks
+- [ ] **Remove false compliance claims**: Ensure documentation matches implementation
+
+### Success Criteria (Must All Pass)
+- ✅ All new tests pass showing actual chunked POST responses
+- ✅ `cargo test --workspace` passes without regressions
+- ✅ POST responses use Transfer-Encoding: chunked (verified by tests)
+- ✅ Progress tokens appear in separate JSON-RPC frames during tool execution
+- ✅ GET streams include all required MCP headers (MCP-Protocol-Version, Mcp-Session-Id, MCP-Capabilities)
+- ✅ MCP Inspector works perfectly with all methods and notifications
+- ✅ Session auto-creation works for initial POST requests
+- ✅ Lambda deployments support chunked POST responses
+- ✅ Documentation honestly reflects actual capabilities
+
+### Implementation Notes
+- **Breaking Change Alert**: Phase 2 requires new dispatcher interface - major API change
+- **Test-Driven**: Each phase must have failing tests first, then implementation to make them pass
+- **Critical Review Points**: Before dispatcher changes, before Lambda implementation, before terminology rename
+- **Status Updates**: WORKING_MEMORY.md and TODO_TRACKER.md updated after each phase completion
 
 ---
 
@@ -15,7 +80,7 @@
 
 ### Framework Core (September 2025)
 - ✅ **All 4 Tool Creation Levels**: Function/derive/builder/manual approaches
-- ✅ **MCP 2025-06-18 Compliance**: Complete specification support with SSE
+- 🔴 **MCP 2025-06-18 Compliance**: ❌ INCOMPLETE - POST doesn't stream, missing headers, false claims
 - ✅ **Session Management**: UUID v7 sessions with pluggable storage backends
 - ✅ **Storage Backends**: InMemory, SQLite, PostgreSQL, DynamoDB all implemented
 - ✅ **Documentation Verification**: 25+ critical issues identified and fixed (95% accuracy rate)
