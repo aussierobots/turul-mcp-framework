@@ -54,6 +54,9 @@ pub use types::{JsonRpcVersion, RequestId};
 #[cfg(feature = "async")]
 pub use r#async::{JsonRpcDispatcher, JsonRpcHandler, SessionContext};
 
+#[cfg(feature = "streams")]
+pub use r#async::streaming::{JsonRpcFrame, StreamingJsonRpcDispatcher, StreamingJsonRpcHandler};
+
 /// JSON-RPC 2.0 version constant
 pub const JSONRPC_VERSION: &str = "2.0";
 

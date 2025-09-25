@@ -11,6 +11,7 @@ description = "Pure JSON-RPC 2.0 server implementation with type-safe domain/pro
 [features]
 default = ["async"]
 async = ["async-trait", "futures"]
+streams = ["async", "futures"]
 
 [dependencies]
 serde.workspace = true
