@@ -17,6 +17,7 @@ use hyper::header::{CONTENT_TYPE, ACCEPT};
 use serde_json::json;
 use tokio::time::timeout;
 use uuid::Uuid;
+use futures::stream::StreamExt;
 
 use mcp_e2e_shared::TestServerManager;
 
@@ -358,15 +359,15 @@ async fn test_cors_headers() {
 }
 
 // ============================================================================
-// 🚨 PHASE 1: FAILING TESTS - Prove Current Implementation Gaps
+// ✅ STREAMING IMPLEMENTATION TESTS - Verify MCP 2025-06-18 Compliance
 // ============================================================================
-// These tests INTENTIONALLY FAIL with current implementation to prove gaps
-// identified by Codex review. They will pass once true streaming is implemented.
+// These tests verify that true streaming is working correctly with proper
+// chunked responses, progress tokens, and MCP headers.
 
 #[tokio::test]
 async fn test_post_actually_streams_chunked_response() {
     let _ = tracing_subscriber::fmt::try_init();
-    println!("🚨 Testing POST chunked streaming - EXPECTED TO FAIL with current implementation");
+    println!("✅ Testing POST chunked streaming - verifying actual streaming works");
 
     let server = match TestServerManager::start_tools_server().await {
         Ok(server) => server,
@@ -378,14 +379,13 @@ async fn test_post_actually_streams_chunked_response() {
 
     let client = create_client();
     let base_url = format!("http://127.0.0.1:{}", server.port());
-    let session_id = uuid::Uuid::now_v7().to_string();
 
     // Test tools/list with streaming - should return chunked response
+    // Don't provide Mcp-Session-Id to test auto-creation
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
         .header("MCP-Protocol-Version", "2025-06-18")
-        .header("Mcp-Session-Id", &session_id)
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json") // Note: NOT text/event-stream - should still stream per MCP spec
         .body(Full::new(json!({
@@ -400,10 +400,10 @@ async fn test_post_actually_streams_chunked_response() {
         .expect("Request timeout")
         .expect("Request failed");
 
-    // ✅ Current tests check these basic things:
+    // Verify basic response success
     assert_eq!(response.status(), StatusCode::OK);
 
-    // 🚨 NEW TEST: Response must be chunked for streaming
+    // Verify chunked transfer encoding
     let transfer_encoding = response.headers().get("transfer-encoding");
     assert_eq!(
         transfer_encoding,
@@ -411,7 +411,7 @@ async fn test_post_actually_streams_chunked_response() {
         "POST response must use chunked transfer encoding for streaming"
     );
 
-    // 🚨 NEW TEST: Response should contain MCP headers
+    // Verify MCP headers
     let protocol_header = response.headers().get("MCP-Protocol-Version");
     assert!(
         protocol_header.is_some() && protocol_header.unwrap() == "2025-06-18",
@@ -420,11 +420,49 @@ async fn test_post_actually_streams_chunked_response() {
 
     let session_header = response.headers().get("Mcp-Session-Id");
     assert!(
-        session_header.is_some() && session_header.unwrap().to_str().unwrap() == session_id,
-        "Missing or incorrect Mcp-Session-Id header on POST response"
+        session_header.is_some(),
+        "Missing Mcp-Session-Id header on POST response - session auto-creation failed"
     );
 
-    println!("❌ This test should FAIL - proving current implementation doesn't stream");
+    // Extract session ID for verification
+    let session_id = session_header.unwrap().to_str().unwrap();
+    assert!(
+        session_id.len() > 0,
+        "Session ID should not be empty"
+    );
+
+    // Verify actual streaming by counting chunks and checking for progress frames
+    let mut data_stream = response.into_body().into_data_stream();
+    let mut chunks = Vec::new();
+    let mut chunk_count = 0;
+
+    while let Some(chunk_result) = data_stream.next().await {
+        let chunk = chunk_result.expect("Failed to read chunk");
+        chunk_count += 1;
+        chunks.push(chunk);
+    }
+
+    // Should have multiple chunks for streaming
+    assert!(chunk_count >= 2, "Expected multiple chunks for streaming, got {}", chunk_count);
+
+    // Combine chunks to analyze content
+    let full_response = chunks.into_iter().fold(Vec::new(), |mut acc, chunk| {
+        acc.extend_from_slice(&chunk);
+        acc
+    });
+    let response_text = String::from_utf8_lossy(&full_response);
+
+    // Verify progressive frames: should see progress token before final result
+    assert!(
+        response_text.contains("progressToken") || response_text.contains("progress"),
+        "Expected progress frames in streaming response"
+    );
+    assert!(
+        response_text.contains("\"result\":"),
+        "Expected final result frame in response"
+    );
+
+    println!("✅ Streaming verification successful!");
 }
 
 #[tokio::test]
@@ -558,7 +596,7 @@ async fn test_get_stream_has_mcp_headers() {
         "GET response missing MCP headers - StreamManager response not wrapped properly!"
     );
 
-    println!("❌ This test should FAIL - proving GET streams don't have required MCP headers");
+    println!("✅ GET stream MCP headers test completed!");
 }
 
 #[tokio::test]
@@ -609,7 +647,7 @@ async fn test_accept_json_enables_streaming_for_2025_06_18() {
 #[tokio::test]
 async fn test_post_response_contains_progress_tokens() {
     let _ = tracing_subscriber::fmt::try_init();
-    println!("🚨 Testing progress tokens in streaming POST - EXPECTED TO FAIL with current implementation");
+    println!("✅ Testing progress tokens in streaming POST - verifying tokens work");
 
     let server = match TestServerManager::start_tools_server().await {
         Ok(server) => server,
@@ -621,14 +659,13 @@ async fn test_post_response_contains_progress_tokens() {
 
     let client = create_client();
     let base_url = format!("http://127.0.0.1:{}", server.port());
-    let session_id = uuid::Uuid::now_v7().to_string();
 
     // Call a tool that should generate progress updates
+    // Don't provide Mcp-Session-Id to test auto-creation
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
         .header("MCP-Protocol-Version", "2025-06-18")
-        .header("Mcp-Session-Id", &session_id)
         .header(CONTENT_TYPE, "application/json")
         .body(Full::new(json!({
             "jsonrpc": "2.0",
@@ -643,19 +680,35 @@ async fn test_post_response_contains_progress_tokens() {
 
     let response = client.request(request).await.expect("Request failed");
 
-    // If it's actually streaming, we should be able to read chunks
-    let body = response.into_body().collect().await.unwrap().to_bytes();
-    let response_text = String::from_utf8_lossy(&body);
+    // Verify streaming with actual chunk reading
+    let mut data_stream = response.into_body().into_data_stream();
+    let mut chunks = Vec::new();
+    let mut chunk_count = 0;
 
-    // 🚨 NEW TEST: Look for progress tokens in the response
-    // In true streaming, we'd see multiple JSON-RPC frames with progress
+    while let Some(chunk_result) = data_stream.next().await {
+        let chunk = chunk_result.expect("Failed to read chunk");
+        chunk_count += 1;
+        chunks.push(chunk);
+    }
+
+    // Should have multiple chunks for streaming
+    assert!(chunk_count >= 2, "Expected multiple chunks for streaming, got {}", chunk_count);
+
+    // Combine chunks and look for progress tokens
+    let full_response = chunks.into_iter().fold(Vec::new(), |mut acc, chunk| {
+        acc.extend_from_slice(&chunk);
+        acc
+    });
+    let response_text = String::from_utf8_lossy(&full_response);
+
+    // Verify progress tokens in streaming response
     let has_progress_token = response_text.contains("progressToken")
         || response_text.contains("progress")
         || response_text.contains("_meta");
 
     assert!(
         has_progress_token,
-        "No progress tokens in response - current implementation returns single buffered response!"
+        "Expected progress tokens in streaming response, got: {}", response_text
     );
 
     println!("✅ Progress tokens test passed!");
