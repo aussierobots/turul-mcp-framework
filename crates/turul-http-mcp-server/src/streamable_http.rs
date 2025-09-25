@@ -1297,14 +1297,41 @@ impl StreamableHttpHandler {
 
         // 🚀 DECIDE: Use streaming for ALL POST requests per MCP 2025-06-18
         // MCP spec requires chunked responses for progressive results, even with Accept: application/json
-        // Only fall back to buffered if explicitly needed for legacy clients
-        let session_id = context.session_id.clone().unwrap_or_else(|| {
-            // Generate session ID if not provided (as per previous logic)
-            uuid::Uuid::now_v7().to_string()
-        });
-        info!("🚀🚀🚀 ROUTING DECISION: Using chunked streaming for POST request (MCP 2025-06-18 compliant), session: {}", session_id);
+        let session_id = if let Some(existing_session_id) = context.session_id.clone() {
+            // Validate existing session
+            if let Err(err) = self.validate_session_exists(&existing_session_id).await {
+                warn!("Invalid session ID {}: {}", existing_session_id, err);
+                return StreamableResponse::Error {
+                    status: StatusCode::UNAUTHORIZED,
+                    message: "Invalid or expired session".to_string(),
+                }
+                .into_boxed_response(&context);
+            }
+            existing_session_id
+        } else {
+            // Create new session in storage
+            match self.session_storage.create_session(turul_mcp_protocol::ServerCapabilities::default()).await {
+                Ok(session_info) => {
+                    debug!("Created new session for streaming POST: {}", session_info.session_id);
+                    session_info.session_id
+                }
+                Err(err) => {
+                    error!("Failed to create session: {}", err);
+                    return StreamableResponse::Error {
+                        status: StatusCode::INTERNAL_SERVER_ERROR,
+                        message: "Failed to create session".to_string(),
+                    }
+                    .into_boxed_response(&context);
+                }
+            }
+        };
+
+        info!("Using chunked streaming for POST request, session: {}", session_id);
         return self.handle_streaming_post_real(req, context, session_id).await;
 
+        // DEAD CODE: This buffered logic is unreachable due to early return above
+        // TODO: Remove or implement as proper fallback when streaming is not available
+        /*
         // Read and parse request body
         let body_bytes = match req.into_body().collect().await {
             Ok(collected) => collected.to_bytes(),
@@ -1494,6 +1521,7 @@ impl StreamableHttpHandler {
                     .map(|body| body.map_err(|never| match never {}).boxed_unsync())
             }
         }
+        */
     }
 }
 
