@@ -362,13 +362,14 @@ async fn handle_request(
         );
 
         // Route based on protocol version - MCP 2025-06-18 uses Streamable HTTP, older versions use SessionMcpHandler
+        println!("ROUTING DECISION FOR PROTOCOL: {}", protocol_version.as_str());
         if protocol_version.supports_streamable_http() {
-            debug!("Routing to StreamableHttpHandler for MCP 2025-06-18 client");
+            println!("ROUTING TO STREAMABLE HANDLER");
             // Use StreamableHttpHandler for MCP 2025-06-18 clients
             let streamable_response = handler.streamable_handler.handle_request(req).await;
             Ok(streamable_response)
         } else {
-            debug!("Routing to SessionMcpHandler for legacy MCP client");
+            println!("ROUTING TO SESSION HANDLER");
             // Use SessionMcpHandler for legacy clients (MCP 2024-11-05 and earlier)
             match handler.session_handler.handle_mcp_request(req).await {
                 Ok(mcp_response) => Ok(mcp_response),
