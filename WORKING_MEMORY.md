@@ -638,6 +638,16 @@ impl McpTool for UserManager {
 - **Documentation**: 100% verified accuracy between docs and implementation
 - **MCP Compliance**: Full 2025-06-18 specification support
 
+### Streaming Test Troubleshooting
+
+If streaming tests show old behavior (missing Transfer-Encoding: chunked), run:
+```bash
+cargo clean -p tools-test-server && cargo build --bin tools-test-server
+cargo test --test streamable_http_e2e
+```
+
+This resolves binary cache issues that can mask StreamableHttpHandler changes.
+
 ---
 
 ## 🔗 Key Documentation

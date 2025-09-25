@@ -110,10 +110,10 @@ pub struct StreamableHttpContext {
     pub protocol_version: McpProtocolVersion,
     /// Session ID if provided
     pub session_id: Option<String>,
-    /// Whether client wants streaming responses
-    pub wants_streaming: bool,
-    /// Whether client accepts JSON responses
-    pub accepts_json: bool,
+    /// Whether client wants SSE stream (text/event-stream)
+    pub wants_sse_stream: bool,
+    /// Whether client accepts stream frames (application/json or */*)
+    pub accepts_stream_frames: bool,
     /// Additional request headers
     pub headers: HashMap<String, String>,
 }
@@ -143,8 +143,8 @@ impl StreamableHttpContext {
             .unwrap_or_default()
             .to_ascii_lowercase();
 
-        let wants_streaming = accept_header.contains("text/event-stream");
-        let accepts_json =
+        let wants_sse_stream = accept_header.contains("text/event-stream");
+        let accepts_stream_frames =
             accept_header.contains("application/json") || accept_header.contains("*/*");
 
         // Collect additional headers for debugging/logging
@@ -158,33 +158,43 @@ impl StreamableHttpContext {
         Self {
             protocol_version,
             session_id,
-            wants_streaming,
-            accepts_json,
+            wants_sse_stream,
+            accepts_stream_frames,
             headers: header_map,
         }
+    }
+
+    /// Whether client wants SSE stream
+    pub fn wants_sse_stream(&self) -> bool {
+        self.wants_sse_stream
+    }
+
+    /// Whether client wants streaming POST responses
+    pub fn wants_streaming_post(&self) -> bool {
+        self.accepts_stream_frames && self.wants_sse_stream
     }
 
     /// Check if request is compatible with streamable HTTP
     pub fn is_streamable_compatible(&self) -> bool {
         self.protocol_version.supports_streamable_http()
-            && self.wants_streaming
-            && self.session_id.is_some()
+            && self.accepts_stream_frames
     }
 
     /// Validate request for MCP compliance
     pub fn validate(&self) -> std::result::Result<(), String> {
-        if !self.accepts_json {
+        if !self.accepts_stream_frames {
             return Err("Accept header must include application/json".to_string());
         }
 
-        if self.wants_streaming && !self.protocol_version.supports_streamable_http() {
+        if self.wants_sse_stream && !self.protocol_version.supports_streamable_http() {
             return Err(format!(
                 "Protocol version {} does not support streamable HTTP",
                 self.protocol_version.as_str()
             ));
         }
 
-        if self.wants_streaming && self.session_id.is_none() {
+        // Only enforce session_id when SSE stream was explicitly requested
+        if self.wants_sse_stream && self.session_id.is_none() {
             return Err("Mcp-Session-Id header required for streaming requests".to_string());
         }
 
@@ -340,11 +350,12 @@ impl StreamableHttpHandler {
         let context = StreamableHttpContext::from_request(&req);
 
         info!(
-            "STREAMABLE HANDLER ENTRY: method={}, protocol={}, session={:?}, streaming={}",
+            "STREAMABLE HANDLER ENTRY: method={}, protocol={}, session={:?}, accepts_stream_frames={}, wants_sse_stream={}",
             req.method(),
             context.protocol_version.as_str(),
             context.session_id,
-            context.wants_streaming
+            context.accepts_stream_frames,
+            context.wants_sse_stream()
         );
 
         // Validate request
@@ -449,13 +460,19 @@ impl StreamableHttpHandler {
             .handle_sse_connection(session_id.clone(), connection_id.clone(), last_event_id)
             .await
         {
-            Ok(streaming_response) => {
+            Ok(mut streaming_response) => {
                 info!(
                     "✅ Streamable HTTP connection established: session={}, connection={}",
                     session_id, connection_id
                 );
 
-                // ✅ PRESERVE STREAMING: Return the actual streaming response directly
+                // Merge MCP headers from context.response_headers()
+                let mcp_headers = context.response_headers();
+                for (key, value) in mcp_headers.iter() {
+                    streaming_response.headers_mut().insert(key, value.clone());
+                }
+
+                // ✅ PRESERVE STREAMING: Return the streaming response with MCP headers
                 // This maintains event replay from session storage and live streaming
                 streaming_response
             }
@@ -1220,16 +1237,22 @@ impl StreamableHttpHandler {
             debug!("🚀 Streaming task completed for request ID: {:?}", request_id);
         });
 
-        // Return streaming response with proper headers
-        Response::builder()
+        // Build response with MCP headers merged from context
+        let mut response = Response::builder()
             .status(StatusCode::OK)
             .header(CONTENT_TYPE, "application/json")
             .header("Transfer-Encoding", "chunked") // Key: Enable chunked encoding!
-            .header("MCP-Protocol-Version", context.protocol_version.as_str())
-            .header("Mcp-Session-Id", &session_id)
             .header("Cache-Control", "no-cache")
             .body(http_body_util::BodyExt::boxed_unsync(body))
-            .unwrap()
+            .unwrap();
+
+        // Merge MCP headers from context.response_headers()
+        let mcp_headers = context.response_headers();
+        for (key, value) in mcp_headers.iter() {
+            response.headers_mut().insert(key, value.clone());
+        }
+
+        response
     }
 
     /// Handle POST with buffered response (fallback for legacy clients)
@@ -1269,9 +1292,9 @@ impl StreamableHttpHandler {
     {
         info!("Handling client message via POST (MCP 2025-06-18)");
 
-        // Validate Accept header includes both application/json and text/event-stream
+        // Reject POST if accepts_stream_frames is false
         // Per MCP spec: "Include Accept header with application/json and text/event-stream"
-        if !context.accepts_json {
+        if !context.accepts_stream_frames {
             warn!("Client POST missing application/json in Accept header");
             return StreamableResponse::Error {
                 status: StatusCode::BAD_REQUEST,
@@ -1297,7 +1320,7 @@ impl StreamableHttpHandler {
 
         // 🚀 DECIDE: Use streaming for ALL POST requests per MCP 2025-06-18
         // MCP spec requires chunked responses for progressive results, even with Accept: application/json
-        let session_id = if let Some(existing_session_id) = context.session_id.clone() {
+        let (session_id, updated_context) = if let Some(existing_session_id) = context.session_id.clone() {
             // Validate existing session
             if let Err(err) = self.validate_session_exists(&existing_session_id).await {
                 warn!("Invalid session ID {}: {}", existing_session_id, err);
@@ -1307,13 +1330,15 @@ impl StreamableHttpHandler {
                 }
                 .into_boxed_response(&context);
             }
-            existing_session_id
+            (existing_session_id, context)
         } else {
             // Create new session in storage
             match self.session_storage.create_session(turul_mcp_protocol::ServerCapabilities::default()).await {
                 Ok(session_info) => {
                     debug!("Created new session for streaming POST: {}", session_info.session_id);
-                    session_info.session_id
+                    let mut updated_context = context;
+                    updated_context.session_id = Some(session_info.session_id.clone());
+                    (session_info.session_id, updated_context)
                 }
                 Err(err) => {
                     error!("Failed to create session: {}", err);
@@ -1327,7 +1352,7 @@ impl StreamableHttpHandler {
         };
 
         info!("Using chunked streaming for POST request, session: {}", session_id);
-        return self.handle_streaming_post_real(req, context, session_id).await;
+        return self.handle_streaming_post_real(req, updated_context, session_id).await;
 
         // DEAD CODE: This buffered logic is unreachable due to early return above
         // TODO: Remove or implement as proper fallback when streaming is not available

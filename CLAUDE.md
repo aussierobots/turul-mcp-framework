@@ -191,6 +191,39 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:52935/mcp
 - Streamable HTTP with SSE notifications
 - Pluggable storage (InMemory, SQLite, PostgreSQL, DynamoDB)
 
+### HTTP Transport Routing
+
+Protocol-based handler routing automatically selects the appropriate transport implementation:
+
+- **Protocol ≥ 2025-03-26**: Routes to `StreamableHttpHandler` in `crates/turul-http-mcp-server/src/streamable_http.rs`
+  - POST always returns chunked with progress frames and MCP headers
+  - `.post_sse()` configuration doesn't affect this path
+  - Implements MCP 2025-06-18 Streamable HTTP transport
+
+- **Protocol ≤ 2024-11-05**: Routes to `SessionMcpHandler` in `crates/turul-http-mcp-server/src/session_handler.rs`
+  - Buffered JSON response with legacy POST-SSE path
+  - Uses session storage for request/response persistence
+  - Maintains backward compatibility
+
+- **Routing Decision**: Made in `crates/turul-http-mcp-server/src/server.rs` with debug logging
+
+**When to Touch Which Handler:**
+| Task | StreamableHttpHandler | SessionMcpHandler |
+|------|----------------------|-------------------|
+| MCP 2025-06-18 streaming | ✅ | ❌ |
+| Legacy client support | ❌ | ✅ |
+| SSE notifications | Both (shared StreamManager) | ✅ |
+| Session storage | Metadata only | Full persistence |
+
+**Configuration flags** (`.post_sse()`, `.get_sse()`) only affect the legacy SessionMcpHandler path.
+
+**Streaming Test Issues Fix:**
+If streaming tests show old behavior (missing Transfer-Encoding: chunked):
+```bash
+cargo clean -p tools-test-server && cargo build --bin tools-test-server
+cargo test --test streamable_http_e2e
+```
+
 ### Testing Philosophy
 ```rust
 // ✅ Framework-native

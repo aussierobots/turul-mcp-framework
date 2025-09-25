@@ -405,17 +405,11 @@ async fn test_post_actually_streams_chunked_response() {
 
     // 🚨 NEW TEST: Response must be chunked for streaming
     let transfer_encoding = response.headers().get("transfer-encoding");
-    println!("Transfer-Encoding header: {:?}", transfer_encoding);
-    println!("All response headers:");
-    for (name, value) in response.headers().iter() {
-        println!("  {}: {:?}", name, value);
-    }
-
-    if transfer_encoding.is_some() && transfer_encoding.unwrap() == "chunked" {
-        println!("✅ SUCCESS: Response uses chunked transfer encoding!");
-    } else {
-        println!("❌ FAIL: POST response is not chunked - current implementation buffers everything!");
-    }
+    assert_eq!(
+        transfer_encoding,
+        Some(&hyper::header::HeaderValue::from_static("chunked")),
+        "POST response must use chunked transfer encoding for streaming"
+    );
 
     // 🚨 NEW TEST: Response should contain MCP headers
     let protocol_header = response.headers().get("MCP-Protocol-Version");
@@ -495,10 +489,9 @@ async fn test_session_auto_creation_works() {
 }
 
 #[tokio::test]
-#[should_panic(expected = "GET response missing MCP-Protocol-Version header")]
 async fn test_get_stream_has_mcp_headers() {
     let _ = tracing_subscriber::fmt::try_init();
-    println!("🚨 Testing GET stream MCP headers - EXPECTED TO FAIL with current implementation");
+    println!("✅ Testing GET stream MCP headers - checking if it already works");
 
     let server = match TestServerManager::start_tools_server().await {
         Ok(server) => server,
@@ -569,10 +562,9 @@ async fn test_get_stream_has_mcp_headers() {
 }
 
 #[tokio::test]
-#[should_panic(expected = "Accept application/json should enable streaming")]
 async fn test_accept_json_enables_streaming_for_2025_06_18() {
     let _ = tracing_subscriber::fmt::try_init();
-    println!("🚨 Testing Accept header logic - EXPECTED TO FAIL with current implementation");
+    println!("✅ Testing Accept header logic - checking if it already works");
 
     let server = match TestServerManager::start_tools_server().await {
         Ok(server) => server,
@@ -611,11 +603,10 @@ async fn test_accept_json_enables_streaming_for_2025_06_18() {
         "Accept application/json should enable streaming for protocol 2025-06-18 - is_streamable_compatible() logic wrong!"
     );
 
-    println!("❌ This test should FAIL - proving Accept header logic is wrong");
+    println!("✅ Accept header logic test passed!");
 }
 
 #[tokio::test]
-#[should_panic(expected = "No progress tokens in response")]
 async fn test_post_response_contains_progress_tokens() {
     let _ = tracing_subscriber::fmt::try_init();
     println!("🚨 Testing progress tokens in streaming POST - EXPECTED TO FAIL with current implementation");
@@ -667,5 +658,5 @@ async fn test_post_response_contains_progress_tokens() {
         "No progress tokens in response - current implementation returns single buffered response!"
     );
 
-    println!("❌ This test should FAIL - proving no progressive responses with progress tokens");
+    println!("✅ Progress tokens test passed!");
 }
