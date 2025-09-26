@@ -9,7 +9,7 @@ use reqwest;
 use serde_json::{json, Value};
 use std::time::Duration;
 use tokio::time::sleep;
-use turul_http_mcp_server::HttpMcpServer;
+use turul_mcp_server::McpServer;
 use turul_mcp_session_storage::InMemorySessionStorage;
 use std::sync::Arc;
 
@@ -20,10 +20,23 @@ async fn start_test_server() -> String {
     let server_url = format!("http://127.0.0.1:{}/mcp", addr.port());
     drop(listener);
 
+    use turul_mcp_derive::mcp_tool;
+    use turul_mcp_protocol::McpResult;
+
+    // Create a test tool for session compliance testing
+    #[mcp_tool(name = "test_tool", description = "Test tool for session compliance")]
+    async fn test_tool() -> McpResult<String> {
+        Ok("test result".to_string())
+    }
+
     let session_storage = Arc::new(InMemorySessionStorage::new());
-    let server = HttpMcpServer::builder_with_storage(session_storage)
+    let server = McpServer::builder()
+        .name("session-compliance-test-server")
+        .version("1.0.0")
+        .tool_fn(test_tool)
+        .with_session_storage(session_storage)
         .bind_address(addr)
-        .build();
+        .build().unwrap();
 
     // Start server in background
     tokio::spawn(async move {
