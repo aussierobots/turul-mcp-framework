@@ -28,7 +28,7 @@ impl SimpleJsonRpcTestResource {
 
 #[async_trait::async_trait]
 impl McpResource for SimpleJsonRpcTestResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
             &self.uri,
             format!("JSON-RPC test content for {}", self.id),
@@ -142,7 +142,7 @@ async fn test_resources_read_json_rpc_structure() {
     let resource = SimpleJsonRpcTestResource::new("read_test");
 
     // Test direct resource read
-    let contents = resource.read(None).await.unwrap();
+    let contents = resource.read(None, None).await.unwrap();
 
     // Verify read result structure
     assert_eq!(contents.len(), 1);

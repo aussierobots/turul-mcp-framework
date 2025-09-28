@@ -33,6 +33,7 @@ http-body-util = { workspace = true }
 bytes = { workspace = true }
 mcp-e2e-shared = { path = "shared" }
 serial_test = "3.0"
+portpicker = "0.1"
 
 [[test]]
 name = "basic_session_test"

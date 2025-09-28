@@ -105,8 +105,8 @@ async fn test_resource_content_mcp_format_compliance() {
     // === Test ResourceContent Format Compliance ===
 
     // Test via McpResource trait (official framework interface)
-    let config_content = config_resource.read(None).await.unwrap();
-    let log_content = log_resource.read(None).await.unwrap();
+    let config_content = config_resource.read(None, None).await.unwrap();
+    let log_content = log_resource.read(None, None).await.unwrap();
 
     assert!(!config_content.is_empty());
     assert!(!log_content.is_empty());
@@ -331,7 +331,7 @@ async fn test_resource_edge_cases_mcp_robustness() {
     assert!(!minimal_resource.uri().is_empty()); // Should have valid URI template
 
     // Test resource reading with minimal data
-    let content = minimal_resource.read(None).await.unwrap();
+    let content = minimal_resource.read(None, None).await.unwrap();
     assert!(!content.is_empty()); // Should produce content even with empty input
 
     // Test business logic robustness
