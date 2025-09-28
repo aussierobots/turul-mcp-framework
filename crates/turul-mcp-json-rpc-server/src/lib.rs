@@ -14,18 +14,40 @@
 //! ## Architecture
 //!
 //! ```rust,no_run
+//! # use async_trait::async_trait;
+//! # use turul_mcp_json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher, request::RequestParams};
+//! # use serde_json::Value;
+//! # use std::fmt;
+//! #
+//! # #[derive(Debug)]
+//! # enum MyDomainError {
+//! #     InvalidInput(String),
+//! # }
+//! #
+//! # impl fmt::Display for MyDomainError {
+//! #     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//! #         match self {
+//! #             MyDomainError::InvalidInput(msg) => write!(f, "Invalid input: {}", msg),
+//! #         }
+//! #     }
+//! # }
+//! #
+//! # impl std::error::Error for MyDomainError {}
+//! #
+//! #
+//! # struct MyHandler;
 //! // Handlers return domain errors only
 //! #[async_trait]
 //! impl JsonRpcHandler for MyHandler {
 //!     type Error = MyDomainError;  // Not JsonRpcError!
 //!
-//!     async fn handle(&self, ...) -> Result<Value, MyDomainError> {
+//!     async fn handle(&self, _method: &str, _params: Option<RequestParams>, _session: Option<turul_mcp_json_rpc_server::SessionContext>) -> Result<Value, MyDomainError> {
 //!         Err(MyDomainError::InvalidInput("bad data".to_string()))
 //!     }
 //! }
 //!
-//! // Dispatcher converts domain → protocol automatically
-//! let dispatcher: JsonRpcDispatcher<MyDomainError> = JsonRpcDispatcher::new();
+//! // Dispatcher converts domain → protocol automatically (example concept)
+//! // let dispatcher = JsonRpcDispatcher::new(); // Actual usage requires ToJsonRpcError trait
 //! ```
 
 pub mod dispatch;

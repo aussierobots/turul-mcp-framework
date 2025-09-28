@@ -471,7 +471,11 @@ pub mod streaming {
         /// Convert frame to JSON-RPC message format
         pub fn to_json(&self) -> Value {
             match self {
-                JsonRpcFrame::Progress { request_id, progress, progress_token } => {
+                JsonRpcFrame::Progress {
+                    request_id,
+                    progress,
+                    progress_token,
+                } => {
                     let mut obj = serde_json::json!({
                         "jsonrpc": "2.0",
                         "id": request_id,
@@ -485,7 +489,7 @@ pub mod streaming {
                     }
 
                     obj
-                },
+                }
                 JsonRpcFrame::PartialResult { request_id, data } => {
                     serde_json::json!({
                         "jsonrpc": "2.0",
@@ -495,14 +499,14 @@ pub mod streaming {
                         },
                         "result": data
                     })
-                },
+                }
                 JsonRpcFrame::FinalResult { request_id, result } => {
                     serde_json::json!({
                         "jsonrpc": "2.0",
                         "id": request_id,
                         "result": result
                     })
-                },
+                }
                 JsonRpcFrame::Error { request_id, error } => {
                     serde_json::json!({
                         "jsonrpc": "2.0",
@@ -513,7 +517,7 @@ pub mod streaming {
                             "data": &error.data
                         }
                     })
-                },
+                }
                 JsonRpcFrame::Notification { method, params } => {
                     let mut obj = serde_json::json!({
                         "jsonrpc": "2.0",
@@ -525,13 +529,16 @@ pub mod streaming {
                     }
 
                     obj
-                },
+                }
             }
         }
 
         /// Check if this frame ends the stream
         pub fn is_terminal(&self) -> bool {
-            matches!(self, JsonRpcFrame::FinalResult { .. } | JsonRpcFrame::Error { .. })
+            matches!(
+                self,
+                JsonRpcFrame::FinalResult { .. } | JsonRpcFrame::Error { .. }
+            )
         }
     }
 
@@ -625,7 +632,12 @@ pub mod streaming {
             if let Some(streaming_handler) = self.streaming_handlers.get(&request.method) {
                 let request_id_clone = request.id.clone();
                 let stream = streaming_handler
-                    .handle_streaming(&request.method, request.params, Some(session_context), request.id.clone())
+                    .handle_streaming(
+                        &request.method,
+                        request.params,
+                        Some(session_context),
+                        request.id.clone(),
+                    )
                     .await;
 
                 return Box::pin(stream.map(move |result| match result {
@@ -638,7 +650,9 @@ pub mod streaming {
             }
 
             // Fall back to regular handler wrapped in streaming
-            if let Some(fallback_handler) = self.fallback_handlers.get(&request.method)
+            if let Some(fallback_handler) = self
+                .fallback_handlers
+                .get(&request.method)
                 .or(self.default_handler.as_ref())
             {
                 let method = request.method.clone();
@@ -667,13 +681,16 @@ pub mod streaming {
             Box::pin(futures::stream::once(async move {
                 JsonRpcFrame::Error {
                     request_id: request.id,
-                    error
+                    error,
                 }
             }))
         }
 
         /// Process a JSON-RPC notification
-        pub async fn handle_notification(&self, notification: crate::notification::JsonRpcNotification) -> Result<(), E> {
+        pub async fn handle_notification(
+            &self,
+            notification: crate::notification::JsonRpcNotification,
+        ) -> Result<(), E> {
             // Try streaming handler first
             if let Some(streaming_handler) = self.streaming_handlers.get(&notification.method) {
                 return streaming_handler
@@ -682,7 +699,9 @@ pub mod streaming {
             }
 
             // Try fallback handler
-            if let Some(fallback_handler) = self.fallback_handlers.get(&notification.method)
+            if let Some(fallback_handler) = self
+                .fallback_handlers
+                .get(&notification.method)
                 .or(self.default_handler.as_ref())
             {
                 return fallback_handler
