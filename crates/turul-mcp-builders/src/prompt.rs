@@ -259,13 +259,11 @@ fn process_template_messages(
 
     for message in messages {
         let processed_message = match message.content {
-            ContentBlock::Text { text } => {
+            ContentBlock::Text { text, .. } => {
                 let processed_text = process_template_string(&text, args);
                 PromptMessage {
                     role: message.role,
-                    content: ContentBlock::Text {
-                        text: processed_text,
-                    },
+                    content: ContentBlock::text(processed_text),
                 }
             }
             // For other content types, just pass through unchanged
@@ -339,13 +337,13 @@ mod tests {
         assert_eq!(result.messages.len(), 3);
 
         // Check template substitution
-        if let ContentBlock::Text { text } = &result.messages[0].content {
+        if let ContentBlock::Text { text, .. } = &result.messages[0].content {
             assert_eq!(text, "Hi Alice! Nice to meet you.");
         } else {
             panic!("Expected text content");
         }
 
-        if let ContentBlock::Text { text } = &result.messages[2].content {
+        if let ContentBlock::Text { text, .. } = &result.messages[2].content {
             assert_eq!(text, "Let's discuss Rust programming");
         } else {
             panic!("Expected text content");
@@ -387,7 +385,7 @@ mod tests {
             Some("Mood-based conversation".to_string())
         );
 
-        if let ContentBlock::Text { text } = &result.messages[1].content {
+        if let ContentBlock::Text { text, .. } = &result.messages[1].content {
             assert!(text.contains("wonderful"));
         } else {
             panic!("Expected text content");
