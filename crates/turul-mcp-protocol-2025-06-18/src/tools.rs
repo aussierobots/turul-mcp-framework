@@ -641,67 +641,9 @@ impl CallToolRequest {
     }
 }
 
-/// Content item types that tools can return
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum ToolResult {
-    /// Text content
-    Text { text: String },
-    /// Image content
-    Image {
-        data: String,
-        #[serde(rename = "mimeType")]
-        mime_type: String,
-    },
-    /// Audio content
-    Audio {
-        data: String,
-        #[serde(rename = "mimeType")]
-        mime_type: String,
-    },
-    /// Resource reference
-    Resource {
-        resource: Value,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        annotations: Option<Value>,
-    },
-}
-
-impl ToolResult {
-    pub fn text(content: impl Into<String>) -> Self {
-        Self::Text {
-            text: content.into(),
-        }
-    }
-
-    pub fn image(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
-        Self::Image {
-            data: data.into(),
-            mime_type: mime_type.into(),
-        }
-    }
-
-    pub fn audio(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
-        Self::Audio {
-            data: data.into(),
-            mime_type: mime_type.into(),
-        }
-    }
-
-    pub fn resource(resource: Value) -> Self {
-        Self::Resource {
-            resource,
-            annotations: None,
-        }
-    }
-
-    pub fn resource_with_annotations(resource: Value, annotations: Value) -> Self {
-        Self::Resource {
-            resource,
-            annotations: Some(annotations),
-        }
-    }
-}
+/// Tool result type - an alias for ContentBlock to maintain backward compatibility
+/// while ensuring MCP 2025-06-18 specification compliance
+pub type ToolResult = crate::content::ContentBlock;
 
 /// Result for tools/call (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1009,6 +951,7 @@ pub mod builder;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::content::ResourceContents;
     use serde_json::json;
 
     #[test]
@@ -1028,7 +971,10 @@ mod tests {
     fn test_tool_result_creation() {
         let text_result = ToolResult::text("Hello, world!");
         let image_result = ToolResult::image("base64data", "image/png");
-        let resource_result = ToolResult::resource(json!({"key": "value"}));
+        let resource_result = ToolResult::resource(ResourceContents::text(
+            "file:///test/resource.json",
+            serde_json::to_string(&json!({"key": "value"})).unwrap(),
+        ));
 
         assert!(matches!(text_result, ToolResult::Text { .. }));
         assert!(matches!(image_result, ToolResult::Image { .. }));

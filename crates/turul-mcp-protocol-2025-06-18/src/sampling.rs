@@ -2,7 +2,7 @@
 //!
 //! This module defines types for sampling requests in MCP.
 
-use crate::prompts::ContentBlock;
+use crate::content::ContentBlock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -429,7 +429,7 @@ pub trait HasModelPreferences {
 /// Implement these three traits on your struct:
 ///
 /// ```rust
-/// # use turul_mcp_protocol::prelude::*;
+/// # use turul_mcp_protocol_2025_06_18::sampling::*;
 /// # use serde_json::{Value, json};
 /// # use std::collections::HashMap;
 ///
@@ -440,20 +440,16 @@ pub trait HasModelPreferences {
 /// }
 ///
 /// impl HasSamplingConfig for CodeReviewSampling {
+///     fn max_tokens(&self) -> u32 {
+///         2000 // Enough for detailed code reviews
+///     }
+///
 ///     fn temperature(&self) -> Option<f64> {
 ///         Some(0.3) // Lower temperature for consistent code analysis
 ///     }
 ///
-///     fn max_tokens(&self) -> Option<u32> {
-///         Some(2000) // Enough for detailed code reviews
-///     }
-///
 ///     fn stop_sequences(&self) -> Option<&Vec<String>> {
 ///         None // No special stop sequences needed
-///     }
-///
-///     fn metadata(&self) -> Option<&HashMap<String, Value>> {
-///         None
 ///     }
 /// }
 ///
@@ -619,14 +615,14 @@ impl SamplingMessage {
     }
 
     pub fn user_text(text: impl Into<String>) -> Self {
-        Self::new(Role::User, ContentBlock::Text { text: text.into() })
+        Self::new(Role::User, ContentBlock::text(text))
     }
 
     pub fn assistant_text(text: impl Into<String>) -> Self {
-        Self::new(Role::Assistant, ContentBlock::Text { text: text.into() })
+        Self::new(Role::Assistant, ContentBlock::text(text))
     }
 
     pub fn system_text(text: impl Into<String>) -> Self {
-        Self::new(Role::System, ContentBlock::Text { text: text.into() })
+        Self::new(Role::System, ContentBlock::text(text))
     }
 }

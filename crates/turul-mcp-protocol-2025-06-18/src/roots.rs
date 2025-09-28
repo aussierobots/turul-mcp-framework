@@ -355,7 +355,7 @@ pub trait HasRootAnnotations {
 /// Implement these four traits on your struct:
 ///
 /// ```rust
-/// # use turul_mcp_protocol::prelude::*;
+/// # use turul_mcp_protocol_2025_06_18::roots::*;
 /// # use serde_json::{Value, json};
 /// # use std::collections::HashMap;
 ///
@@ -385,21 +385,20 @@ pub trait HasRootAnnotations {
 ///         path.contains("/src/") || path.contains("/tests/")
 ///     }
 ///
-///     fn can_create(&self, path: &str) -> bool {
-///         // Allow creating files in writable areas
-///         self.can_write(path)
+///     fn max_depth(&self) -> Option<usize> {
+///         Some(10) // Limit depth to prevent infinite recursion
 ///     }
 /// }
 ///
 /// impl HasRootFiltering for ProjectRoot {
-///     fn should_include_file(&self, path: &str) -> bool {
-///         // Exclude hidden files and build artifacts
-///         !path.contains("/.") && !path.contains("/target/")
+///     fn excluded_patterns(&self) -> Option<&[String]> {
+///         static PATTERNS: &[String] = &[];
+///         None // Use default filtering
 ///     }
 ///
-///     fn should_include_directory(&self, path: &str) -> bool {
-///         // Include most directories except hidden ones
-///         !path.contains("/.")
+///     fn should_include(&self, path: &str) -> bool {
+///         // Exclude hidden files and build artifacts
+///         !path.contains("/.") && !path.contains("/target/")
 ///     }
 /// }
 ///

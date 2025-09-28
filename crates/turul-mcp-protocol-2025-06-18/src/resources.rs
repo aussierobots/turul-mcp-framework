@@ -141,7 +141,7 @@ pub trait HasResourceMeta {
 /// ## URI Template Power
 ///
 /// Resources support powerful URI templating:
-/// ```
+/// ```text
 /// Static:   "file:///config.json"              → Single resource
 /// Template: "file:///logs/{service}.log"       → Multiple resources
 /// Complex:  "api://data/{type}/{id}?fmt={fmt}" → Full parameterization

@@ -513,52 +513,51 @@ pub trait HasNotificationRules {
 /// Implement these three traits on your struct:
 ///
 /// ```rust
-/// # use turul_mcp_protocol::prelude::*;
+/// # use turul_mcp_protocol_2025_06_18::notifications::*;
 /// # use serde_json::{Value, json};
 ///
 /// // This struct will automatically implement NotificationDefinition!
 /// struct FileChangeNotification {
 ///     file_path: String,
 ///     change_type: String,
+///     payload_data: Value,
+/// }
+///
+/// impl FileChangeNotification {
+///     fn new(file_path: String, change_type: String) -> Self {
+///         let payload_data = json!({
+///             "path": file_path,
+///             "type": change_type,
+///             "timestamp": "2024-01-01T00:00:00Z"
+///         });
+///         Self { file_path, change_type, payload_data }
+///     }
 /// }
 ///
 /// impl HasNotificationMetadata for FileChangeNotification {
 ///     fn method(&self) -> &str {
 ///         "file/changed"
 ///     }
-///
-///     fn description(&self) -> Option<&str> {
-///         Some("File system change notification")
-///     }
 /// }
 ///
 /// impl HasNotificationPayload for FileChangeNotification {
-///     fn payload(&self) -> Option<Value> {
-///         Some(json!({
-///             "path": self.file_path,
-///             "type": self.change_type,
-///             "timestamp": chrono::Utc::now().to_rfc3339()
-///         }))
+///     fn payload(&self) -> Option<&Value> {
+///         Some(&self.payload_data)
 ///     }
 /// }
 ///
 /// impl HasNotificationRules for FileChangeNotification {
-///     fn should_send_to_client(&self, _client_id: &str) -> bool {
-///         // Send to all clients by default
-///         true
-///     }
-///
-///     fn priority(&self) -> NotificationPriority {
-///         NotificationPriority::Normal
+///     fn priority(&self) -> u32 {
+///         1
 ///     }
 /// }
 ///
 /// // Now you can use it with the server:
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let notification = FileChangeNotification {
-///     file_path: "/workspace/src/main.rs".to_string(),
-///     change_type: "modified".to_string(),
-/// };
+/// let notification = FileChangeNotification::new(
+///     "/workspace/src/main.rs".to_string(),
+///     "modified".to_string(),
+/// );
 ///
 /// // The notification automatically implements NotificationDefinition
 /// let base_notification = notification.to_notification();

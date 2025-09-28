@@ -299,8 +299,15 @@ pub trait HasLogTransport {
 /// Implement these four traits on your struct:
 ///
 /// ```rust
-/// # use turul_mcp_protocol::prelude::*;
+/// # use turul_mcp_protocol_2025_06_18::logging::*;
 /// # use serde_json::{Value, json};
+/// #
+/// # // Simple transport enum for the example
+/// # #[derive(Debug, Clone)]
+/// # pub enum LogTransport {
+/// #     Console,
+/// #     File(String),
+/// # }
 ///
 /// // This struct will automatically implement LoggerDefinition!
 /// struct ApplicationLogger {
@@ -308,6 +315,10 @@ pub trait HasLogTransport {
 /// }
 ///
 /// impl HasLoggingMetadata for ApplicationLogger {
+///     fn method(&self) -> &str {
+///         "notifications/message"
+///     }
+///
 ///     fn logger_name(&self) -> Option<&str> {
 ///         Some(&self.component)
 ///     }
@@ -321,17 +332,15 @@ pub trait HasLogTransport {
 ///
 /// impl HasLogFormat for ApplicationLogger {
 ///     fn data(&self) -> &Value {
-///         &json!({
-///             "component": self.component,
-///             "timestamp": chrono::Utc::now().to_rfc3339(),
-///             "environment": "production"
-///         })
+///         use serde_json::{json, Value};
+///         static SAMPLE_DATA: &Value = &Value::Null; // Simplified for docs
+///         SAMPLE_DATA
 ///     }
 /// }
 ///
 /// impl HasLogTransport for ApplicationLogger {
-///     fn transport(&self) -> LogTransport {
-///         LogTransport::Console
+///     fn should_deliver(&self, level: LoggingLevel) -> bool {
+///         level.priority() >= LoggingLevel::Info.priority()
 ///     }
 /// }
 ///

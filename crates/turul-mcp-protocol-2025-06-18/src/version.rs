@@ -10,7 +10,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Supported MCP protocol versions
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum McpVersion {
     /// Original protocol without streamable HTTP (introduced 2024-11-05)
     #[serde(rename = "2024-11-05")]

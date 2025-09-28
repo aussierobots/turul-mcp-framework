@@ -11,8 +11,35 @@
 //! - Support for streamable HTTP and _meta fields
 //! - Progress tokens and cursor support
 //! - Structured user elicitation via JSON Schema
+//! - Meta field merging utilities for request/response round-tripping
+//!
+//! ## Meta Field Usage
+//!
+//! The protocol supports rich `_meta` fields for pagination, progress tracking,
+//! and custom metadata:
+//!
+//! ```rust
+//! use turul_mcp_protocol_2025_06_18::meta::{Meta, Cursor};
+//! use std::collections::HashMap;
+//! use serde_json::{json, Value};
+//!
+//! // Create meta with pagination
+//! let meta = Meta::with_pagination(
+//!     Some(Cursor::new("next-page")),
+//!     Some(100),
+//!     true
+//! );
+//!
+//! // Merge request extras while preserving structured fields
+//! let mut request_extras = HashMap::new();
+//! request_extras.insert("userContext".to_string(), json!("user_123"));
+//! request_extras.insert("customField".to_string(), json!("custom_value"));
+//!
+//! let response_meta = meta.merge_request_extras(Some(&request_extras));
+//! ```
 
 pub mod completion;
+pub mod content;
 pub mod elicitation;
 pub mod initialize;
 pub mod json_rpc;
@@ -30,6 +57,13 @@ pub mod schema;
 pub mod tools;
 pub mod traits;
 pub mod version;
+
+// Re-export key content types for convenience
+pub use content::{
+    BlobResourceContents, ContentBlock, ResourceContents, ResourceReference, TextResourceContents,
+};
+// Re-export key meta types for convenience
+pub use meta::{Annotations, Meta};
 
 #[cfg(test)]
 mod compliance_test;
@@ -62,7 +96,7 @@ pub use json_rpc::{
     RequestParams, ResultWithMeta,
 };
 pub use meta::{
-    Cursor as MetaCursor, Meta, PaginatedResponse, ProgressResponse, ProgressToken, WithMeta,
+    Cursor as MetaCursor, PaginatedResponse, ProgressResponse, ProgressToken, WithMeta,
 };
 pub use notifications::{
     CancelledNotification, InitializedNotification, LoggingMessageNotification,

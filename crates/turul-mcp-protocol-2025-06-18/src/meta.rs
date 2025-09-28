@@ -237,6 +237,32 @@ impl Meta {
             && self.total_steps.is_none()
             && self.extra.is_empty()
     }
+
+    /// Merge request extras from incoming request _meta into this Meta
+    /// This helper preserves pagination context while adding request metadata
+    pub fn merge_request_extras(mut self, request_meta: Option<&HashMap<String, Value>>) -> Self {
+        if let Some(request_extras) = request_meta {
+            for (key, value) in request_extras {
+                // Don't override structured fields - only merge into extra
+                match key.as_str() {
+                    "progressToken"
+                    | "cursor"
+                    | "total"
+                    | "hasMore"
+                    | "estimatedRemainingSeconds"
+                    | "progress"
+                    | "currentStep"
+                    | "totalSteps" => {
+                        // Skip reserved fields - these should be set explicitly
+                    }
+                    _ => {
+                        self.extra.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
+        self
+    }
 }
 
 /// Trait for types that can include _meta fields
@@ -470,5 +496,38 @@ mod tests {
 
         let non_empty_meta = Meta::new().set_progress_token("test");
         assert!(!non_empty_meta.is_empty());
+    }
+
+    #[test]
+    fn test_merge_request_extras() {
+        let mut request_meta = HashMap::new();
+        request_meta.insert("customField".to_string(), json!("custom_value"));
+        request_meta.insert("userContext".to_string(), json!("user_123"));
+        request_meta.insert("progressToken".to_string(), json!("should_be_ignored"));
+        request_meta.insert("cursor".to_string(), json!("should_be_ignored"));
+
+        let meta = Meta::with_pagination(Some("page-1".into()), Some(100), true)
+            .merge_request_extras(Some(&request_meta));
+
+        // Should preserve existing structured fields
+        assert_eq!(meta.cursor.as_ref().unwrap().as_str(), "page-1");
+        assert_eq!(meta.total, Some(100));
+        assert_eq!(meta.has_more, Some(true));
+
+        // Should add custom fields to extra
+        assert_eq!(meta.extra.get("customField"), Some(&json!("custom_value")));
+        assert_eq!(meta.extra.get("userContext"), Some(&json!("user_123")));
+
+        // Should not override structured fields in extra
+        assert!(meta.extra.get("progressToken").is_none());
+        assert!(meta.extra.get("cursor").is_none());
+    }
+
+    #[test]
+    fn test_merge_request_extras_empty() {
+        let meta = Meta::with_cursor("test-cursor").merge_request_extras(None);
+
+        assert_eq!(meta.cursor.as_ref().unwrap().as_str(), "test-cursor");
+        assert!(meta.extra.is_empty());
     }
 }

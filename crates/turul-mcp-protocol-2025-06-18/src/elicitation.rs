@@ -544,13 +544,48 @@ pub trait HasElicitationHandling {
 /// Implement these three traits on your struct:
 ///
 /// ```rust
-/// # use turul_mcp_protocol::prelude::*;
+/// # use turul_mcp_protocol_2025_06_18::elicitation::*;
 /// # use serde_json::Value;
 /// # use std::collections::HashMap;
 ///
 /// // This struct will automatically implement ElicitationDefinition!
 /// struct UserPreferencesForm {
 ///     context: String,
+///     schema: ElicitationSchema,
+/// }
+///
+/// impl UserPreferencesForm {
+///     fn new(context: String) -> Self {
+///         let mut properties = HashMap::new();
+///         properties.insert("theme".to_string(), PrimitiveSchemaDefinition::Enum(EnumSchema {
+///             schema_type: "string".to_string(),
+///             title: None,
+///             description: Some("UI theme preference".to_string()),
+///             enum_values: vec!["dark".to_string(), "light".to_string()],
+///             enum_names: None,
+///         }));
+///         properties.insert("notifications".to_string(), PrimitiveSchemaDefinition::Boolean(BooleanSchema {
+///             schema_type: "boolean".to_string(),
+///             title: None,
+///             description: Some("Enable notifications".to_string()),
+///             default: Some(true),
+///         }));
+///         properties.insert("max_items".to_string(), PrimitiveSchemaDefinition::Number(NumberSchema {
+///             schema_type: "number".to_string(),
+///             title: None,
+///             description: Some("Maximum items to display".to_string()),
+///             minimum: Some(1.0),
+///             maximum: Some(100.0),
+///         }));
+///
+///         let schema = ElicitationSchema {
+///             schema_type: "object".to_string(),
+///             properties,
+///             required: Some(vec!["theme".to_string()]),
+///         };
+///
+///         Self { context, schema }
+///     }
 /// }
 ///
 /// impl HasElicitationMetadata for UserPreferencesForm {
@@ -560,21 +595,13 @@ pub trait HasElicitationHandling {
 /// }
 ///
 /// impl HasElicitationSchema for UserPreferencesForm {
-///     fn requested_schema(&self) -> &JsonSchema {
-///         &JsonSchema::Object {
-///             properties: [
-///                 ("theme".to_string(), JsonSchema::String { enum_values: Some(vec!["dark".to_string(), "light".to_string()]) }),
-///                 ("notifications".to_string(), JsonSchema::Boolean),
-///                 ("max_items".to_string(), JsonSchema::Number { minimum: Some(1.0), maximum: Some(100.0) })
-///             ].into_iter().collect(),
-///             required: vec!["theme".to_string()],
-///             additional_properties: false,
-///         }
+///     fn requested_schema(&self) -> &ElicitationSchema {
+///         &self.schema
 ///     }
 /// }
 ///
 /// impl HasElicitationHandling for UserPreferencesForm {
-///     async fn handle_response(&self, content: HashMap<String, Value>) -> Result<HashMap<String, Value>, String> {
+///     fn process_content(&self, content: HashMap<String, Value>) -> Result<HashMap<String, Value>, String> {
 ///         // Validate that theme is acceptable
 ///         if let Some(theme) = content.get("theme") {
 ///             if !["dark", "light"].contains(&theme.as_str().unwrap_or("")) {
@@ -584,14 +611,14 @@ pub trait HasElicitationHandling {
 ///
 ///         // Process and potentially transform the data
 ///         let mut processed = content.clone();
-///         processed.insert("processed_at".to_string(), Value::String(chrono::Utc::now().to_rfc3339()));
+///         processed.insert("processed_at".to_string(), Value::String("2024-01-01T00:00:00Z".to_string()));
 ///         Ok(processed)
 ///     }
 /// }
 ///
 /// // Now you can use it with the server:
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-/// let form = UserPreferencesForm { context: "project-setup".to_string() };
+/// let form = UserPreferencesForm::new("project-setup".to_string());
 ///
 /// // The elicitation automatically implements ElicitationDefinition
 /// let create_request = form.to_create_request();

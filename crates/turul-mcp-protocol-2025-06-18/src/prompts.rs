@@ -541,95 +541,28 @@ pub struct PromptMessage {
     pub content: ContentBlock,
 }
 
-/// Content block within a prompt message (from MCP ContentBlock type)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ContentBlock {
-    /// Text content
-    Text { text: String },
-    /// Image content
-    Image {
-        data: String,
-        #[serde(rename = "mimeType")]
-        mime_type: String,
-    },
-    /// Resource link (ResourceLink from MCP spec)
-    ResourceLink {
-        #[serde(flatten)]
-        resource: ResourceReference,
-    },
-    /// Embedded resource (EmbeddedResource from MCP spec)
-    Resource {
-        resource: ResourceContents,
-        /// Optional annotations for the client
-        #[serde(skip_serializing_if = "Option::is_none")]
-        annotations: Option<Value>, // Using Value temporarily - proper Annotations type needed
-        /// Meta information
-        #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-        meta: Option<HashMap<String, Value>>,
-    },
-}
-
-/// Resource reference for resource links
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ResourceReference {
-    pub uri: String,
-    pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
-    pub mime_type: Option<String>,
-}
-
-/// Resource contents for embedded resources
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum ResourceContents {
-    /// Text resource contents
-    Text {
-        uri: String,
-        #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
-        mime_type: Option<String>,
-        text: String,
-    },
-    /// Binary resource contents
-    Blob {
-        uri: String,
-        #[serde(rename = "mimeType")]
-        mime_type: String,
-        blob: String, // base64 encoded
-    },
-}
+/// Content block within a prompt message - now imports from content module
+pub use crate::content::{ContentBlock, ResourceContents, ResourceReference};
 
 impl PromptMessage {
     pub fn user_text(content: impl Into<String>) -> Self {
         Self {
             role: Role::User,
-            content: ContentBlock::Text {
-                text: content.into(),
-            },
+            content: ContentBlock::text(content),
         }
     }
 
     pub fn assistant_text(content: impl Into<String>) -> Self {
         Self {
             role: Role::Assistant,
-            content: ContentBlock::Text {
-                text: content.into(),
-            },
+            content: ContentBlock::text(content),
         }
     }
 
     pub fn user_image(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
         Self {
             role: Role::User,
-            content: ContentBlock::Image {
-                data: data.into(),
-                mime_type: mime_type.into(),
-            },
+            content: ContentBlock::image(data, mime_type),
         }
     }
 
