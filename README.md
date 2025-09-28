@@ -34,15 +34,6 @@ async fn add(
     Ok(a + b)  // Framework wraps as {"output": 8.0} in JSON-RPC response
 }
 
-// Optional: Customize the output field name
-#[mcp_tool(name = "multiply", description = "Multiply two numbers", output_field = "product")]
-async fn multiply(
-    #[param(description = "First number")] a: f64,
-    #[param(description = "Second number")] b: f64,
-) -> McpResult<f64> {
-    Ok(a * b)  // Framework wraps as {"product": 12.0} in JSON-RPC response
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = McpServer::builder()
