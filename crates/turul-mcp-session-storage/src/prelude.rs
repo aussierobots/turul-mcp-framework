@@ -9,8 +9,8 @@
 
 // Core trait and types
 pub use crate::traits::{
-    SessionStorage, SessionStorageError, SessionInfo, SseEvent,
-    BoxedSessionStorage, SessionStorageBuilder,
+    BoxedSessionStorage, SessionInfo, SessionStorage, SessionStorageBuilder, SessionStorageError,
+    SseEvent,
 };
 
 // In-memory implementation (always available)
@@ -27,9 +27,7 @@ pub use crate::postgres::{PostgresConfig, PostgresError, PostgresSessionStorage}
 pub use crate::dynamodb::{DynamoDbConfig, DynamoDbError, DynamoDbSessionStorage};
 
 // Convenience functions
-pub use crate::{
-    create_default_storage, create_memory_storage, StorageResult,
-};
+pub use crate::{StorageResult, create_default_storage, create_memory_storage};
 
 #[cfg(feature = "sqlite")]
 pub use crate::{create_sqlite_storage, create_sqlite_storage_with_config};

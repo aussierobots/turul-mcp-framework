@@ -189,11 +189,22 @@ pub trait SessionStorage: Send + Sync {
     ///
     /// # Example
     /// ```rust,no_run
-    /// // ✅ CORRECT - Testing specific session behavior
-    /// let session = storage.create_session_with_id("test-session-123".to_string(), caps).await?;
+    /// use turul_mcp_session_storage::{SessionStorage, SessionStorageError};
+    /// use turul_mcp_protocol::ServerCapabilities;
     ///
-    /// // ❌ WRONG - Should use create_session() instead
-    /// let session = storage.create_session_with_id(Uuid::now_v7().to_string(), caps).await?;
+    /// # async fn example(storage: &dyn SessionStorage<Error = SessionStorageError>) -> Result<(), Box<dyn std::error::Error>> {
+    /// let caps = ServerCapabilities::default();
+    ///
+    /// // ✅ CORRECT - Let the storage assign an ID
+    /// let _session = storage.create_session(caps.clone()).await?;
+    ///
+    /// // ❌ WRONG - Never generate synthetic IDs outside tests
+    /// // storage.create_session_with_id(Uuid::now_v7().to_string(), caps).await?;
+    ///
+    /// // Only use create_session_with_id for testing specific session behavior:
+    /// // let _test_session = storage.create_session_with_id("test-session-123".to_string(), caps).await?;
+    /// # Ok(())
+    /// # }
     /// ```
     async fn create_session_with_id(
         &self,
