@@ -9,9 +9,9 @@
 
 // Core Lambda types
 pub use crate::builder::LambdaMcpServerBuilder;
-pub use crate::server::LambdaMcpServer;
-pub use crate::handler::LambdaMcpHandler;
 pub use crate::error::{LambdaError, Result};
+pub use crate::handler::LambdaMcpHandler;
+pub use crate::server::LambdaMcpServer;
 
 #[cfg(feature = "cors")]
 pub use crate::cors::CorsConfig;
@@ -20,4 +20,6 @@ pub use crate::cors::CorsConfig;
 pub use turul_mcp_protocol::prelude::*;
 
 // Lambda runtime types commonly used
-pub use lambda_http::{Error as LambdaHttpError, Request as LambdaRequest, Response as LambdaResponse};
+pub use lambda_http::{
+    Error as LambdaHttpError, Request as LambdaRequest, Response as LambdaResponse,
+};

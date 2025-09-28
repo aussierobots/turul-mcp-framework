@@ -150,8 +150,12 @@ impl LambdaMcpServer {
             {
                 use tracing::warn;
                 warn!("⚠️  SSE is enabled but 'streaming' feature is not available!");
-                warn!("   For real SSE streaming, use handle_streaming() with run_with_streaming_response");
-                warn!("   Current handle() method will return SSE snapshots, not real-time streams");
+                warn!(
+                    "   For real SSE streaming, use handle_streaming() with run_with_streaming_response"
+                );
+                warn!(
+                    "   Current handle() method will return SSE snapshots, not real-time streams"
+                );
                 warn!("   To enable streaming: add 'streaming' feature to turul-mcp-aws-lambda");
             }
         }

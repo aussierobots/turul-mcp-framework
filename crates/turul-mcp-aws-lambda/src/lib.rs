@@ -68,7 +68,6 @@ pub mod cors;
 #[cfg(feature = "sse")]
 pub mod streaming;
 
-
 // Re-exports for convenience
 /// Builder for creating Lambda MCP servers with fluent configuration API
 pub use builder::LambdaMcpServerBuilder;
@@ -81,4 +80,3 @@ pub use server::LambdaMcpServer;
 
 #[cfg(feature = "cors")]
 pub use cors::CorsConfig;
-

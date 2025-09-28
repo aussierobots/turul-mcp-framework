@@ -1070,26 +1070,44 @@ mod tests {
     #[tokio::test]
     async fn test_sse_toggle_functionality() {
         // Test that SSE can be toggled on/off/on correctly
-        let mut builder = LambdaMcpServerBuilder::new()
-            .storage(Arc::new(InMemorySessionStorage::new()));
+        let mut builder =
+            LambdaMcpServerBuilder::new().storage(Arc::new(InMemorySessionStorage::new()));
 
         // Initially enable SSE
         builder = builder.sse(true);
         assert!(builder.enable_sse, "SSE should be enabled");
-        assert!(builder.server_config.enable_get_sse, "GET SSE endpoint should be enabled");
-        assert!(builder.server_config.enable_post_sse, "POST SSE endpoint should be enabled");
+        assert!(
+            builder.server_config.enable_get_sse,
+            "GET SSE endpoint should be enabled"
+        );
+        assert!(
+            builder.server_config.enable_post_sse,
+            "POST SSE endpoint should be enabled"
+        );
 
         // Disable SSE
         builder = builder.sse(false);
         assert!(!builder.enable_sse, "SSE should be disabled");
-        assert!(!builder.server_config.enable_get_sse, "GET SSE endpoint should be disabled");
-        assert!(!builder.server_config.enable_post_sse, "POST SSE endpoint should be disabled");
+        assert!(
+            !builder.server_config.enable_get_sse,
+            "GET SSE endpoint should be disabled"
+        );
+        assert!(
+            !builder.server_config.enable_post_sse,
+            "POST SSE endpoint should be disabled"
+        );
 
         // Re-enable SSE (this was broken before the fix)
         builder = builder.sse(true);
         assert!(builder.enable_sse, "SSE should be re-enabled");
-        assert!(builder.server_config.enable_get_sse, "GET SSE endpoint should be re-enabled");
-        assert!(builder.server_config.enable_post_sse, "POST SSE endpoint should be re-enabled");
+        assert!(
+            builder.server_config.enable_get_sse,
+            "GET SSE endpoint should be re-enabled"
+        );
+        assert!(
+            builder.server_config.enable_post_sse,
+            "POST SSE endpoint should be re-enabled"
+        );
 
         // Verify the server can be built with SSE enabled
         let server = builder.build().await.unwrap();

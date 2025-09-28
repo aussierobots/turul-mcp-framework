@@ -7,8 +7,8 @@ use std::collections::HashMap;
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
-use lambda_http::{Body as LambdaBody, Request as LambdaRequest, Response as LambdaResponse};
 use hyper::Response as HyperResponse;
+use lambda_http::{Body as LambdaBody, Request as LambdaRequest, Response as LambdaResponse};
 use tracing::{debug, trace};
 
 use crate::error::{LambdaError, Result};
@@ -22,7 +22,8 @@ fn infallible_to_hyper_error(never: std::convert::Infallible) -> hyper::Error {
 }
 
 /// Type alias for Full<Bytes> with mapped error type compatible with SessionMcpHandler
-type MappedFullBody = http_body_util::combinators::MapErr<Full<Bytes>, fn(std::convert::Infallible) -> hyper::Error>;
+type MappedFullBody =
+    http_body_util::combinators::MapErr<Full<Bytes>, fn(std::convert::Infallible) -> hyper::Error>;
 
 /// Convert lambda_http::Request to hyper::Request<MappedFullBody>
 ///
@@ -41,7 +42,8 @@ pub fn lambda_to_hyper_request(
     };
 
     // Create Full<Bytes> body and map error type to hyper::Error
-    let full_body = Full::new(body_bytes).map_err(infallible_to_hyper_error as fn(std::convert::Infallible) -> hyper::Error);
+    let full_body = Full::new(body_bytes)
+        .map_err(infallible_to_hyper_error as fn(std::convert::Infallible) -> hyper::Error);
 
     // Create hyper Request with preserved headers and new body type
     let hyper_req = hyper::Request::from_parts(parts, full_body);
@@ -176,14 +178,22 @@ mod tests {
         let mut lambda_req = Request::builder()
             .method(Method::POST)
             .uri("/mcp")
-            .body(LambdaBody::Text(r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string()))
+            .body(LambdaBody::Text(
+                r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+            ))
             .unwrap();
 
         // Add MCP headers
         let headers = lambda_req.headers_mut();
         headers.insert("content-type", HeaderValue::from_static("application/json"));
-        headers.insert("mcp-session-id", HeaderValue::from_static("test-session-123"));
-        headers.insert("mcp-protocol-version", HeaderValue::from_static("2025-06-18"));
+        headers.insert(
+            "mcp-session-id",
+            HeaderValue::from_static("test-session-123"),
+        );
+        headers.insert(
+            "mcp-protocol-version",
+            HeaderValue::from_static("2025-06-18"),
+        );
 
         // Test the conversion
         let hyper_req = lambda_to_hyper_request(lambda_req).unwrap();

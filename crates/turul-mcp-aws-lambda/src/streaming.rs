@@ -10,7 +10,6 @@ use tracing::debug;
 
 use crate::error::{LambdaError, Result};
 
-
 /// Create an SSE event string from structured data
 ///
 /// This helper function formats data as proper SSE events with optional

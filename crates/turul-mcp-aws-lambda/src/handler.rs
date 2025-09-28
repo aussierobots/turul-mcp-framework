@@ -8,9 +8,7 @@ use std::sync::Arc;
 use lambda_http::{Body as LambdaBody, Request as LambdaRequest, Response as LambdaResponse};
 use tracing::{debug, info};
 
-use turul_http_mcp_server::{
-    ServerConfig, StreamConfig, StreamManager, SessionMcpHandler,
-};
+use turul_http_mcp_server::{ServerConfig, SessionMcpHandler, StreamConfig, StreamManager};
 use turul_mcp_json_rpc_server::JsonRpcDispatcher;
 use turul_mcp_protocol::{McpError, ServerCapabilities};
 use turul_mcp_session_storage::BoxedSessionStorage;
@@ -150,7 +148,10 @@ impl LambdaMcpHandler {
         let hyper_req = crate::adapter::lambda_to_hyper_request(req)?;
 
         // 🚀 DELEGATION: Use SessionMcpHandler for all business logic
-        let hyper_resp = self.session_handler.handle_mcp_request(hyper_req).await
+        let hyper_resp = self
+            .session_handler
+            .handle_mcp_request(hyper_req)
+            .await
             .map_err(|e| crate::error::LambdaError::McpFramework(e.to_string()))?;
 
         // 🚀 DELEGATION: Convert hyper response back to Lambda response
@@ -173,7 +174,9 @@ impl LambdaMcpHandler {
         &self,
         req: LambdaRequest,
     ) -> std::result::Result<
-        lambda_http::Response<http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>>,
+        lambda_http::Response<
+            http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>,
+        >,
         Box<dyn std::error::Error + Send + Sync>,
     > {
         let method = req.method().clone();
@@ -195,8 +198,9 @@ impl LambdaMcpHandler {
             && let Some(ref cors_config) = self.cors_config
         {
             debug!("Handling CORS preflight request (streaming)");
-            let preflight_response = create_preflight_response(cors_config, request_origin.as_deref())
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+            let preflight_response =
+                create_preflight_response(cors_config, request_origin.as_deref())
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
             // Convert LambdaResponse<LambdaBody> to streaming response
             return Ok(self.convert_lambda_response_to_streaming(preflight_response));
@@ -207,8 +211,14 @@ impl LambdaMcpHandler {
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
         // 🚀 DELEGATION: Use SessionMcpHandler for all business logic
-        let hyper_resp = self.session_handler.handle_mcp_request(hyper_req).await
-            .map_err(|e| Box::new(crate::error::LambdaError::McpFramework(e.to_string())) as Box<dyn std::error::Error + Send + Sync>)?;
+        let hyper_resp = self
+            .session_handler
+            .handle_mcp_request(hyper_req)
+            .await
+            .map_err(|e| {
+                Box::new(crate::error::LambdaError::McpFramework(e.to_string()))
+                    as Box<dyn std::error::Error + Send + Sync>
+            })?;
 
         // 🚀 DELEGATION: Convert hyper response to Lambda streaming response (preserves streaming!)
         let mut lambda_resp = crate::adapter::hyper_to_lambda_streaming(hyper_resp);
@@ -227,9 +237,10 @@ impl LambdaMcpHandler {
     fn convert_lambda_response_to_streaming(
         &self,
         lambda_response: LambdaResponse<LambdaBody>,
-    ) -> lambda_http::Response<http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>> {
-        use http_body_util::{Full, BodyExt};
+    ) -> lambda_http::Response<http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>>
+    {
         use bytes::Bytes;
+        use http_body_util::{BodyExt, Full};
 
         let (parts, body) = lambda_response.into_parts();
         let body_bytes = match body {
@@ -250,8 +261,8 @@ impl LambdaMcpHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use turul_mcp_session_storage::InMemorySessionStorage;
     use http::Request;
+    use turul_mcp_session_storage::InMemorySessionStorage;
 
     #[tokio::test]
     async fn test_handler_creation() {
@@ -306,12 +317,17 @@ mod tests {
         let lambda_req = Request::builder()
             .method("POST")
             .uri("/mcp")
-            .body(LambdaBody::Text(r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string()))
+            .body(LambdaBody::Text(
+                r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+            ))
             .unwrap();
 
         // handle() should work (provides snapshot-based SSE rather than real-time streaming)
         let result = handler.handle(lambda_req).await;
-        assert!(result.is_ok(), "handle() should work with SSE enabled for snapshot-based responses");
+        assert!(
+            result.is_ok(),
+            "handle() should work with SSE enabled for snapshot-based responses"
+        );
     }
 
     /// Test that verifies StreamConfig is properly threaded through the delegation
@@ -325,8 +341,8 @@ mod tests {
 
         // Create a custom StreamConfig with non-default values
         let custom_stream_config = StreamConfig {
-            channel_buffer_size: 1024,  // Non-default value (default is 1000)
-            max_replay_events: 200,     // Non-default value (default is 100)
+            channel_buffer_size: 1024,      // Non-default value (default is 1000)
+            max_replay_events: 200,         // Non-default value (default is 100)
             keepalive_interval_seconds: 10, // Non-default value (default is 30)
             cors_origin: "https://custom-test.example.com".to_string(), // Non-default value
         };
@@ -359,14 +375,23 @@ mod tests {
         // Verify the StreamConfig values were propagated correctly
         let actual_config = stream_manager.get_config();
 
-        assert_eq!(actual_config.channel_buffer_size, custom_stream_config.channel_buffer_size,
-                   "Custom channel_buffer_size was not propagated correctly");
-        assert_eq!(actual_config.max_replay_events, custom_stream_config.max_replay_events,
-                   "Custom max_replay_events was not propagated correctly");
-        assert_eq!(actual_config.keepalive_interval_seconds, custom_stream_config.keepalive_interval_seconds,
-                   "Custom keepalive_interval_seconds was not propagated correctly");
-        assert_eq!(actual_config.cors_origin, custom_stream_config.cors_origin,
-                   "Custom cors_origin was not propagated correctly");
+        assert_eq!(
+            actual_config.channel_buffer_size, custom_stream_config.channel_buffer_size,
+            "Custom channel_buffer_size was not propagated correctly"
+        );
+        assert_eq!(
+            actual_config.max_replay_events, custom_stream_config.max_replay_events,
+            "Custom max_replay_events was not propagated correctly"
+        );
+        assert_eq!(
+            actual_config.keepalive_interval_seconds,
+            custom_stream_config.keepalive_interval_seconds,
+            "Custom keepalive_interval_seconds was not propagated correctly"
+        );
+        assert_eq!(
+            actual_config.cors_origin, custom_stream_config.cors_origin,
+            "Custom cors_origin was not propagated correctly"
+        );
 
         // Verify the stream manager is accessible (proves delegation worked)
         assert!(Arc::strong_count(stream_manager) >= 1);
@@ -380,8 +405,8 @@ mod tests {
 
         // Create a custom StreamConfig with non-default values
         let custom_stream_config = turul_http_mcp_server::StreamConfig {
-            channel_buffer_size: 2048,  // Non-default value
-            max_replay_events: 500,     // Non-default value
+            channel_buffer_size: 2048,      // Non-default value
+            max_replay_events: 500,         // Non-default value
             keepalive_interval_seconds: 15, // Non-default value
             cors_origin: "https://full-chain-test.example.com".to_string(),
         };
@@ -411,13 +436,11 @@ mod tests {
         let actual_config = stream_manager.get_config();
 
         assert_eq!(
-            actual_config.channel_buffer_size,
-            custom_stream_config.channel_buffer_size,
+            actual_config.channel_buffer_size, custom_stream_config.channel_buffer_size,
             "Custom channel_buffer_size should be preserved through builder → server → handler chain"
         );
         assert_eq!(
-            actual_config.max_replay_events,
-            custom_stream_config.max_replay_events,
+            actual_config.max_replay_events, custom_stream_config.max_replay_events,
             "Custom max_replay_events should be preserved through builder → server → handler chain"
         );
         assert_eq!(
@@ -426,8 +449,7 @@ mod tests {
             "Custom keepalive_interval_seconds should be preserved through builder → server → handler chain"
         );
         assert_eq!(
-            actual_config.cors_origin,
-            custom_stream_config.cors_origin,
+            actual_config.cors_origin, custom_stream_config.cors_origin,
             "Custom cors_origin should be preserved through builder → server → handler chain"
         );
 
@@ -444,12 +466,16 @@ mod tests {
         // The stream manager should be able to handle session operations with the custom config
         // This verifies the config isn't just preserved but actually used
         let subscriptions = stream_manager.get_subscriptions(&test_session_id).await;
-        assert!(subscriptions.is_empty(), "New session should have no subscriptions initially");
+        assert!(
+            subscriptions.is_empty(),
+            "New session should have no subscriptions initially"
+        );
 
         // Verify the stream manager was constructed with our custom config values
         // This confirms the config propagated through the entire builder → server → handler chain
         assert_eq!(
-            stream_manager.get_config().channel_buffer_size, 2048,
+            stream_manager.get_config().channel_buffer_size,
+            2048,
             "Stream manager should be using the custom buffer size functionally"
         );
     }
@@ -484,12 +510,17 @@ mod tests {
         let lambda_req = Request::builder()
             .method("POST")
             .uri("/mcp")
-            .body(LambdaBody::Text(r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string()))
+            .body(LambdaBody::Text(
+                r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+            ))
             .unwrap();
 
         // This should work without hanging
         let result = handler.handle(lambda_req).await;
-        assert!(result.is_ok(), "POST /mcp should work with non-streaming + sse(false)");
+        assert!(
+            result.is_ok(),
+            "POST /mcp should work with non-streaming + sse(false)"
+        );
     }
 
     /// Test 2: Non-streaming runtime + sse(true) - This should work (snapshot-based SSE)
@@ -519,12 +550,17 @@ mod tests {
         let lambda_req = Request::builder()
             .method("POST")
             .uri("/mcp")
-            .body(LambdaBody::Text(r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string()))
+            .body(LambdaBody::Text(
+                r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+            ))
             .unwrap();
 
         // This should work without hanging (provides snapshot-based SSE)
         let result = handler.handle(lambda_req).await;
-        assert!(result.is_ok(), "POST /mcp should work with non-streaming + sse(true)");
+        assert!(
+            result.is_ok(),
+            "POST /mcp should work with non-streaming + sse(true)"
+        );
 
         // Note: GET /mcp would provide snapshot events, not real-time streaming
         // This is the key difference from handle_streaming()
@@ -557,12 +593,17 @@ mod tests {
         let lambda_req = Request::builder()
             .method("POST")
             .uri("/mcp")
-            .body(LambdaBody::Text(r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string()))
+            .body(LambdaBody::Text(
+                r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+            ))
             .unwrap();
 
         // This should work with streaming runtime even when SSE is disabled
         let result = handler.handle_streaming(lambda_req).await;
-        assert!(result.is_ok(), "Streaming runtime should work with sse(false)");
+        assert!(
+            result.is_ok(),
+            "Streaming runtime should work with sse(false)"
+        );
     }
 
     /// Test 4: Streaming runtime + sse(true) - This should work (real-time SSE streaming)
@@ -592,12 +633,17 @@ mod tests {
         let lambda_req = Request::builder()
             .method("POST")
             .uri("/mcp")
-            .body(LambdaBody::Text(r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string()))
+            .body(LambdaBody::Text(
+                r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+            ))
             .unwrap();
 
         // This should work and provide real-time SSE streaming
         let result = handler.handle_streaming(lambda_req).await;
-        assert!(result.is_ok(), "Streaming runtime should work with sse(true) for real-time streaming");
+        assert!(
+            result.is_ok(),
+            "Streaming runtime should work with sse(true) for real-time streaming"
+        );
 
         // Note: GET /mcp would provide real-time streaming events
         // This is the optimal configuration for real-time notifications
