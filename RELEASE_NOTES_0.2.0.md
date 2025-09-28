@@ -1,7 +1,7 @@
 # Release Notes - Version 0.2.0
 
-**Release Date**: September 20, 2025
-**Status**: ✅ **Production Ready** - Comprehensive MCP 2025-06-18 framework with critical production fixes
+**Release Date**: September 29, 2025
+**Status**: 🔧 **Beta Release** - Comprehensive MCP 2025-06-18 framework with Phase 6 session-aware resources
 
 ## 🎉 Major Achievements
 
@@ -17,6 +17,12 @@
 - ✅ **Resource Function Macro**: New `#[mcp_resource]` procedural macro for async function resources
 - ✅ **Simplified Resource API**: Single `.resource()` method handles both static and template resources
 - ✅ **Comprehensive Documentation**: All README files verified for accuracy with working examples
+
+### **Phase 6: Session-Aware Resources**
+- ✅ **SessionContext Integration**: All resources now receive session context for personalized content
+- ✅ **Breaking Change Implementation**: Updated McpResource trait with session parameter
+- ✅ **Comprehensive Example Updates**: All resource examples updated for session-aware functionality
+- ✅ **Full MCP 2025-06-18 Compliance**: Session-aware resources meet specification requirements
 
 ## 🔧 Critical Production Fixes
 
@@ -90,10 +96,10 @@ All storage backends fully implemented and production-ready:
 - **DynamoDB**: Serverless deployments with auto-table creation
 
 ### **Testing Infrastructure**
-- **100+ Tests**: Comprehensive test coverage across workspace
-- **E2E Integration**: 14/15 E2E tests passing (94% success rate)
+- **300+ Tests**: Comprehensive test coverage across workspace
+- **Example Validation**: 45+ examples validated through systematic testing campaign
 - **Framework-Native Testing**: Proper API usage patterns validated
-- **MCP Compliance**: All 34 MCP compliance tests pass
+- **MCP Compliance**: Full MCP 2025-06-18 specification compliance verified
 
 ## 📦 Framework Components
 
@@ -109,9 +115,10 @@ All storage backends fully implemented and production-ready:
 - `turul-mcp-aws-lambda` - AWS Lambda integration
 - `turul-mcp-protocol-2025-06-18` - Complete specification implementation
 
-### **Examples (25+ working examples)**
-- **Business Applications**: 10 real-world servers solving actual problems
-- **Framework Demonstrations**: 15 educational examples showcasing patterns
+### **Examples (45+ validated examples)**
+- **Comprehensive Testing Campaign**: All examples validated through systematic testing
+- **Business Applications**: Real-world servers solving actual problems
+- **Framework Demonstrations**: Educational examples showcasing patterns
 - **Learning Progression**: Simple → Complex (Function → Derive → Builder → Manual)
 
 ## 🚀 Getting Started
@@ -157,7 +164,7 @@ cargo run -p minimal-server
 # Connect to http://127.0.0.1:8641/mcp
 ```
 
-## 🏆 Production Readiness
+## 🔧 Framework Maturity
 
 ### **Quality Metrics**
 - **Zero-Configuration**: Framework auto-determines ALL methods from types
@@ -170,20 +177,20 @@ cargo run -p minimal-server
 - **Clean Compilation**: Zero warnings across all framework crates
 - **Comprehensive Documentation**: All README examples compile and work
 - **Multiple Patterns**: Choose the right tool for your complexity level
-- **Production Examples**: Real-world business applications included
+- **Real-world Examples**: Business applications included for learning
 
-### **Enterprise Features**
+### **Enterprise-Ready Features**
 - **Pluggable Storage**: Choose the right backend for your deployment
-- **AWS Lambda Ready**: Complete serverless integration
+- **AWS Lambda Integration**: Complete serverless support
 - **Session Management**: UUID v7 with automatic cleanup
 - **Security**: Built-in protection with configurable middleware
 
 ## 📈 What's Next
 
-The turul-mcp-framework 0.2.0 represents a **complete, production-ready implementation** of the MCP 2025-06-18 specification. All core functionality is implemented, tested, and documented.
+The turul-mcp-framework 0.2.0 represents a **comprehensive beta implementation** of the MCP 2025-06-18 specification with Phase 6 session-aware resources complete. All core functionality is implemented, tested, and documented.
 
-**Optional future enhancements** (not required for production use):
-- Performance optimization and load testing
+**Planned enhancements for future releases**:
+- Performance optimization and stress testing
 - Additional storage backends (Redis, S3)
 - Authentication & authorization features
 - WebSocket transport support
