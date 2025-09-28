@@ -49,7 +49,8 @@ use uuid::Uuid;
 
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::schema::{JsonSchema, JsonSchemaGenerator};
-use turul_mcp_protocol::tools::ToolSchema;
+use turul_mcp_protocol::tools::{HasAnnotations, ToolAnnotations, ToolSchema};
+use turul_mcp_protocol::ResourceContents;
 use turul_mcp_server::prelude::*;
 
 // ===== BASIC TOOLS (Core functionality testing) =====
@@ -667,6 +668,102 @@ impl ParameterValidatorTool {
     }
 }
 
+/// Legacy calculator tool (deprecated in favor of the main calculator)
+struct LegacyCalculatorTool;
+
+impl HasBaseMetadata for LegacyCalculatorTool {
+    fn name(&self) -> &str {
+        "legacy_calculator"
+    }
+}
+
+impl HasDescription for LegacyCalculatorTool {
+    fn description(&self) -> Option<&str> {
+        Some("Basic addition only (deprecated - use calculator instead)")
+    }
+}
+
+impl HasInputSchema for LegacyCalculatorTool {
+    fn input_schema(&self) -> &ToolSchema {
+        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+        INPUT_SCHEMA.get_or_init(|| {
+            ToolSchema::object()
+                .with_properties(HashMap::from([
+                    (
+                        "a".to_string(),
+                        JsonSchema::Number {
+                            description: Some("First number".to_string()),
+                            minimum: None,
+                            maximum: None,
+                        },
+                    ),
+                    (
+                        "b".to_string(),
+                        JsonSchema::Number {
+                            description: Some("Second number".to_string()),
+                            minimum: None,
+                            maximum: None,
+                        },
+                    ),
+                ]))
+                .with_required(vec!["a".to_string(), "b".to_string()])
+        })
+    }
+}
+
+impl HasOutputSchema for LegacyCalculatorTool {}
+
+impl HasAnnotations for LegacyCalculatorTool {
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        static ANNOTATIONS: std::sync::OnceLock<ToolAnnotations> = std::sync::OnceLock::new();
+        Some(ANNOTATIONS.get_or_init(|| {
+            ToolAnnotations::new()
+                .with_title("Legacy Calculator (Add Only)")
+                .with_read_only_hint(true)
+        }))
+    }
+}
+
+impl HasToolMeta for LegacyCalculatorTool {}
+
+#[async_trait::async_trait]
+impl McpTool for LegacyCalculatorTool {
+    async fn call(
+        &self,
+        args: serde_json::Value,
+        _session: Option<SessionContext>,
+    ) -> McpResult<CallToolResult> {
+        let a = args
+            .get("a")
+            .and_then(|v| v.as_f64())
+            .ok_or_else(|| McpError::missing_param("a"))?;
+        let b = args
+            .get("b")
+            .and_then(|v| v.as_f64())
+            .ok_or_else(|| McpError::missing_param("b"))?;
+
+        let result = a + b;
+
+        Ok(CallToolResult::success(vec![
+            ToolResult::text(format!("⚠️ DEPRECATED: legacy_calculator is deprecated since v0.1.0. Use 'calculator' instead.")),
+            ToolResult::text(format!("{} + {} = {}", a, b, result)),
+            ToolResult::resource(ResourceContents::text(
+                "file:///calculation/result.json",
+                serde_json::to_string_pretty(&serde_json::json!({
+                "result": result,
+                "operation": "add",
+                "inputs": {"a": a, "b": b},
+                "deprecation_warning": {
+                    "deprecated": true,
+                    "since": "0.1.0",
+                    "replacement": "calculator",
+                    "removal_date": "2025-12-31"
+                }
+            })).unwrap())),
+        ]))
+    }
+}
+
 // ===== SERVER IMPLEMENTATION =====
 
 #[derive(Parser)]
@@ -685,23 +782,28 @@ struct Args {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    // Initialize tracing
+    // Initialize tracing - respect RUST_LOG or use default levels
     let log_level = if args.debug { "debug" } else { "info" };
     tracing_subscriber::fmt()
-        .with_env_filter(format!(
-            "tools_test_server={},turul_mcp_server={}",
-            log_level, log_level
-        ))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+                tracing_subscriber::EnvFilter::new(&format!(
+                    "tools_test_server={},turul_mcp_server={},turul_http_mcp_server={}",
+                    log_level, log_level, log_level
+                ))
+            }),
+        )
         .init();
 
     info!("🔧 MCP Tools Test Server starting...");
 
-    // Create server with comprehensive tool collection
+    // Create server with comprehensive tool collection (with strict lifecycle for testing)
     let server = McpServer::builder()
         .name("tools-test-server")
         .version("0.2.0")
         .title("MCP Tools Test Server")
         .instructions("Comprehensive test tools for E2E validation")
+        .with_strict_lifecycle() // Enable strict lifecycle enforcement for E2E testing
         // Basic tools
         .tool(CalculatorTool {
             operation: "add".to_string(),
@@ -736,11 +838,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             config: serde_json::json!({}),
             tags: None,
         })
+        // Deprecated tool for testing deprecation annotations
+        .tool(LegacyCalculatorTool)
         .bind_address(SocketAddr::from(([127, 0, 0, 1], args.port)))
         .build()?;
 
     info!("🚀 Tools Test Server running on port {}", args.port);
-    info!("📋 Available tools: calculator, string_processor, data_transformer, session_counter, progress_tracker, error_generator, parameter_validator");
+    info!("📋 Available tools: calculator, string_processor, data_transformer, session_counter, progress_tracker, error_generator, parameter_validator, legacy_calculator (deprecated)");
 
     server.run().await?;
     Ok(())

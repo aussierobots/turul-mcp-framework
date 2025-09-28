@@ -39,8 +39,8 @@ impl CreativeWritingSampler {
             temperature: Some(0.8), // Higher temperature for creativity
             messages: vec![SamplingMessage {
                 role: Role::System,
-                content: ContentBlock::Text {
-                    text: r#"You are a creative writing assistant. Help users with:
+                content: ContentBlock::text(
+                    r#"You are a creative writing assistant. Help users with:
 
 - Story generation and plot development
 - Character creation and development
@@ -48,9 +48,8 @@ impl CreativeWritingSampler {
 - Writing style adaptation
 - Narrative structure and pacing
 
-Always provide engaging, imaginative, and well-crafted content that inspires creativity."#
-                        .to_string(),
-                },
+Always provide engaging, imaginative, and well-crafted content that inspires creativity."#,
+                ),
             }],
         }
     }
@@ -107,8 +106,9 @@ impl McpSampling for CreativeWritingSampler {
         let last_user_message = user_messages
             .last()
             .map(|msg| match &msg.content {
-                ContentBlock::Text { text } => text.as_str(),
+                ContentBlock::Text { text, .. } => text.as_str(),
                 ContentBlock::Image { .. } => "[Image content]",
+                ContentBlock::Audio { .. } => "[Audio content]",
                 ContentBlock::ResourceLink { .. } => "[Resource link content]",
                 ContentBlock::Resource { .. } => "[Resource content]",
             })
@@ -205,9 +205,7 @@ I'd love to help you develop this further! What specific aspect would you like t
 
         let response_message = SamplingMessage {
             role: Role::Assistant,
-            content: ContentBlock::Text {
-                text: creative_response,
-            },
+            content: ContentBlock::text(creative_response),
         };
 
         info!("✨ Generated creative writing response");
@@ -266,11 +264,10 @@ impl TechnicalWritingSampler {
         Self {
             max_tokens: 2000,
             temperature: Some(0.3), // Lower temperature for precision
-            messages: vec![
-                SamplingMessage {
-                    role: Role::System,
-                    content: ContentBlock::Text {
-                        text: r#"You are a technical writing assistant specializing in:
+            messages: vec![SamplingMessage {
+                role: Role::System,
+                content: ContentBlock::text(
+                    r#"You are a technical writing assistant specializing in:
 
 - Clear, precise documentation
 - API documentation and guides
@@ -279,10 +276,9 @@ impl TechnicalWritingSampler {
 - User manuals and tutorials
 - Architecture decision records
 
-Focus on clarity, accuracy, and usability. Use appropriate technical terminology while ensuring accessibility for the target audience."#.to_string(),
-                    },
-                },
-            ],
+Focus on clarity, accuracy, and usability. Use appropriate technical terminology while ensuring accessibility for the target audience."#,
+                ),
+            }],
         }
     }
 }
@@ -325,8 +321,9 @@ impl McpSampling for TechnicalWritingSampler {
             .rev()
             .find(|msg| msg.role == Role::User)
             .map(|msg| match &msg.content {
-                ContentBlock::Text { text } => text.as_str(),
+                ContentBlock::Text { text, .. } => text.as_str(),
                 ContentBlock::Image { .. } => "[Image content]",
+                ContentBlock::Audio { .. } => "[Audio content]",
                 ContentBlock::ResourceLink { .. } => "[Resource link content]",
                 ContentBlock::Resource { .. } => "[Resource content]",
             })
@@ -381,9 +378,7 @@ Would you like me to help you develop any specific type of technical documentati
 
         let response_message = SamplingMessage {
             role: Role::Assistant,
-            content: ContentBlock::Text {
-                text: technical_response,
-            },
+            content: ContentBlock::text(technical_response),
         };
 
         info!("📝 Generated technical writing response");
@@ -413,14 +408,12 @@ impl ConversationalSampler {
         Self {
             max_tokens: 1000,
             temperature: Some(0.7), // Balanced temperature for natural conversation
-            messages: vec![
-                SamplingMessage {
-                    role: Role::System,
-                    content: ContentBlock::Text {
-                        text: "You are a helpful, friendly, and knowledgeable conversational assistant. Provide thoughtful, engaging responses while being concise and actionable.".to_string(),
-                    },
-                },
-            ],
+            messages: vec![SamplingMessage {
+                role: Role::System,
+                content: ContentBlock::text(
+                    "You are a helpful, friendly, and knowledgeable conversational assistant. Provide thoughtful, engaging responses while being concise and actionable.",
+                ),
+            }],
         }
     }
 }
@@ -456,9 +449,7 @@ impl McpSampling for ConversationalSampler {
 
         let response_message = SamplingMessage {
             role: Role::Assistant,
-            content: ContentBlock::Text {
-                text: conversation_response,
-            },
+            content: ContentBlock::text(conversation_response),
         };
 
         info!("💭 Generated conversational response");

@@ -40,9 +40,6 @@ uuid = { workspace = true, features = ["v7", "serde"] }
 # Time
 chrono.workspace = true
 
-# Random ports for testing
-portpicker = "0.1"
-
 # File handling
 tempfile.workspace = true
 

@@ -1472,9 +1472,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    // Use specified port or pick random if 0
+    // Use specified port or OS ephemeral allocation if 0
     let port = if args.port == 0 {
-        portpicker::pick_unused_port().ok_or("Failed to find unused port")?
+        // Use OS ephemeral port allocation - more reliable than portpicker
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .map_err(|e| format!("Failed to bind to ephemeral port: {}", e))?;
+        let port = listener.local_addr()?.port();
+        drop(listener); // Release immediately so server can bind to it
+        port
     } else {
         args.port
     };

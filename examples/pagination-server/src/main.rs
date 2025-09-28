@@ -19,7 +19,7 @@ use turul_mcp_protocol::tools::{
     CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
     HasOutputSchema, HasToolMeta,
 };
-use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema};
+use turul_mcp_protocol::{McpError, McpResult, ResourceContents, ToolResult, ToolSchema};
 use turul_mcp_server::{McpServer, McpTool, SessionContext};
 
 /// Database pool wrapper for sharing across tools
@@ -604,7 +604,10 @@ impl McpTool for ListUsersTool {
 
                 Ok(CallToolResult::success(vec![
                     ToolResult::text(result_text),
-                    ToolResult::resource(pagination_info),
+                    ToolResult::resource(ResourceContents::text(
+                        "file:///pagination/results.json",
+                        serde_json::to_string_pretty(&pagination_info).unwrap(),
+                    )),
                 ]))
             }
             Err(e) => {
@@ -756,7 +759,10 @@ impl McpTool for SearchUsersTool {
 
                 Ok(CallToolResult::success(vec![
                     ToolResult::text(result_text),
-                    ToolResult::resource(response_data),
+                    ToolResult::resource(ResourceContents::text(
+                        "file:///search/results.json",
+                        serde_json::to_string_pretty(&response_data).unwrap(),
+                    )),
                 ]))
             }
             Err(e) => {
@@ -839,7 +845,10 @@ impl McpTool for RefreshDataTool {
                             "Data refresh completed: {} users updated",
                             updated_count
                         )),
-                        ToolResult::resource(result),
+                        ToolResult::resource(ResourceContents::text(
+                            "file:///operation/refresh_result.json",
+                            serde_json::to_string_pretty(&result).unwrap(),
+                        )),
                     ]))
                 }
                 Err(e) => {
@@ -865,7 +874,10 @@ impl McpTool for RefreshDataTool {
 
                         Ok(CallToolResult::success(vec![
                             ToolResult::text(result_text),
-                            ToolResult::resource(stats),
+                            ToolResult::resource(ResourceContents::text(
+                                "file:///stats/database_stats.json",
+                                serde_json::to_string_pretty(&stats).unwrap(),
+                            )),
                         ]))
                     }
                     Err(e) => {

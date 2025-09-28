@@ -1625,7 +1625,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .bind_address(format!("127.0.0.1:{}", port).parse()?)
         .build()?;
 
-    info!("🌐 Customer Onboarding Platform running at: http://127.0.0.1:{}/mcp", port);
+    info!(
+        "🌐 Customer Onboarding Platform running at: http://127.0.0.1:{}/mcp",
+        port
+    );
     info!("");
     info!("🏢 Real-world Use Cases:");
     info!("  👤 Personal account onboarding with KYC verification");

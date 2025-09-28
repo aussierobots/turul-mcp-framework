@@ -25,8 +25,8 @@ use std::env;
 use tracing::info;
 
 // HTTP body types for streaming
-use http_body_util;
 use bytes;
+use http_body_util;
 use hyper;
 
 // Framework imports

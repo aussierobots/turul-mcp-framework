@@ -36,9 +36,6 @@ tracing-subscriber.workspace = true
 # Time
 chrono.workspace = true
 
-# Random ports for testing
-portpicker = "0.1"
-
 # File handling
 tempfile.workspace = true
 
