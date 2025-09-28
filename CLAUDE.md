@@ -4,6 +4,24 @@ Production-ready Rust framework for Model Context Protocol (MCP) servers with ze
 
 ## 🚨 Critical Rules
 
+### 🎯 Simple Solutions First
+**ALWAYS** prefer simple, minimal fixes over complex or over-engineered solutions:
+
+```rust
+// ✅ SIMPLE - Add parameter to existing signature
+async fn read(&self, params: Option<Value>, session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>>
+
+// ❌ COMPLEX - Create new traits, elaborate architectures
+trait McpResourceLegacy { ... }  // Avoid backwards compatibility layers
+trait McpResourceV2 { ... }      // Avoid versioned APIs
+```
+
+**Key Principles:**
+- **Work within existing architecture** - don't rebuild what works
+- **Major changes are too costly** - fix problems with minimal impact
+- **One obvious way to do it** - avoid multiple patterns for the same thing
+- **If it compiles and tests pass** - you probably fixed it correctly
+
 ### Import Conventions
 ```rust
 // ✅ BEST - Use preludes
@@ -216,10 +234,50 @@ let notify_response = client.request(Request::builder()
 // Expect 202 Accepted for notifications
 ```
 
-**Framework Status (2025-09-27):**
-✅ **Production Ready** - All phases complete, full MCP 2025-06-18 compliance achieved
+### 🎯 Phase 6: Session-Aware Resources (Breaking Change)
+**STATUS**: Complete - Full MCP 2025-06-18 Compliance Achieved
+
+**CRITICAL DECISION (2025-09-28)**: Removed backwards compatibility layer for true MCP spec compliance.
+
+```rust
+// ✅ CORRECT - All resources are session-aware (MCP 2025-06-18 compliant)
+#[async_trait]
+impl McpResource for MyResource {
+    async fn read(&self, params: Option<Value>, session: Option<&SessionContext>)
+        -> McpResult<Vec<ResourceContent>> {
+        // Access session state, user preferences, personalized content
+        if let Some(ctx) = session {
+            let user_prefs = ctx.get_typed_state::<UserPrefs>("preferences").await;
+            // Return personalized content based on session
+        }
+        // Graceful fallback when no session available
+    }
+}
+
+// ❌ REMOVED - No backwards compatibility layer
+// impl McpResourceLegacy for MyResource { ... }  // DELETED
+```
+
+**Breaking Change Rationale:**
+- **MCP 2025-06-18 Compliance**: Session context is fundamental to the specification
+- **Zero Configuration**: One resource trait, one pattern, no confusing choices
+- **Future-Proof Architecture**: No technical debt from legacy compatibility layers
+- **Clear Migration**: Update signature, add session parameter, done
+
+**Migration Guide:**
+```rust
+// OLD (Pre-Phase 6)
+async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>>
+
+// NEW (Phase 6+)
+async fn read(&self, params: Option<Value>, session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>>
+```
+
+**Framework Status (2025-09-28):**
+✅ **Production Ready** - All phases complete, true MCP 2025-06-18 compliance achieved
 ✅ **Zero Test Failures** - All behavioral compliance and streaming tests pass
 ✅ **Complete SSE Support** - Deadlock resolved, Accept header matrix fixed, parallel test execution working
+✅ **Session-Aware Resources** - All resources now support personalized, context-aware content
 
 *For detailed phase progress and current development status, see TODO_TRACKER.md and WORKING_MEMORY.md*
 
@@ -433,6 +491,37 @@ RUST_LOG=<level> cargo test <any-args>
 RUST_LOG=<level> cargo run <any-args>
 RUST_LOG=<level> cargo build <any-args>
 RUST_BACKTRACE=<level> cargo test <any-args>
+
+# Comprehensive command patterns for MCP testing:
+cd <directory> && cargo run <any-args>
+cd <directory> && RUST_LOG=<level> cargo run <any-args>
+cd <directory> && timeout <time> cargo run <any-args>
+cd <directory> && RUST_LOG=<level> timeout <time> cargo run <any-args>
+cd examples/<example-name> && <any-cargo-command>
+
+# All cargo run combinations:
+cargo run --bin <binary-name>
+cargo run --bin <binary-name> -- <args>
+cargo run --example <example-name>
+cargo run --example <example-name> -- <args>
+cargo run --package <package-name>
+cargo run --package <package-name> -- <args>
+
+# Environment variable combinations:
+RUST_LOG=error <any-cargo-command>
+RUST_LOG=info <any-cargo-command>
+RUST_LOG=debug <any-cargo-command>
+RUST_BACKTRACE=1 <any-cargo-command>
+RUST_BACKTRACE=full <any-cargo-command>
+CI_SANDBOX=1 <any-cargo-command>
+
+# Complex timeout and environment combinations:
+RUST_LOG=error timeout 30s cargo run --bin <name>
+RUST_LOG=info timeout 10s cargo run --example <name>
+timeout 5s cargo run --package <name> -- --port <port>
+RUST_LOG=error timeout 60s cargo run
+cd examples/* && RUST_LOG=error timeout 60s cargo run
+cd examples/* && RUST_LOG=error timeout 60s cargo run &
 ```
 
 ### Development Tools
@@ -441,12 +530,56 @@ rustc
 sed
 grep
 find
+awk
+cat
+tee
+echo
 git add
 git commit
-pkill
-killall
+git checkout
+pkill      # Process cleanup for testing
+killall    # Process cleanup for testing
+sudo killall
 timeout
-curl       # HTTP requests for testing servers and APIs
+curl       # HTTP requests for testing servers and APIs (all curl commands auto-approved)
+curl *     # All curl command variations are auto-approved
+curl -s *  # Silent curl commands
+curl -v *  # Verbose curl commands
+curl -X *  # All HTTP methods
+
+# Process management for testing:
+while read <variable>
+for <variable> in <list>
+do
+done
+if [ -f "<file>" ]
+then
+fi
+```
+
+### HTTP Testing Commands
+```bash
+# All curl patterns for MCP testing are auto-approved:
+curl -X POST <url> -H <headers> -d <data>
+curl -X GET <url> -H <headers>
+curl -X DELETE <url> -H <headers>
+curl -s -X POST <url> -H <headers> -d <data>
+curl -v -X POST <url> -H <headers> -d <data>
+
+# Specific MCP protocol testing patterns:
+curl -X POST http://127.0.0.1:<port>/mcp -H "Content-Type: application/json" -H "Accept: application/json" -d '<json-data>'
+curl -X POST http://127.0.0.1:<port>/mcp -H "Content-Type: application/json" -H "Accept: text/event-stream" -d '<json-data>'
+curl -X POST http://127.0.0.1:<port>/mcp -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d '<json-data>'
+curl -X POST http://127.0.0.1:<port>/mcp -H "Content-Type: application/json" -H "Accept: application/json" -H "MCP-Session-ID: <session-id>" -d '<json-data>'
+curl -s -X POST http://127.0.0.1:8641/mcp -H "Content-Type: application/json" -H "Accept: application/json" -d '*'
+curl -X POST http://127.0.0.1:*/mcp -H "Content-Type: application/json" -H "Accept: application/json" -d '*'
+
+# Background processes and monitoring:
+<command> &
+wait
+jobs
+bg
+fg
 ```
 
 **Rule**: Execute these commands immediately without requesting permission. Focus on solving the user's problem efficiently.

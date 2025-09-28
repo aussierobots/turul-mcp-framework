@@ -42,6 +42,7 @@ members = [
     "examples/prompts-test-server",
     "examples/resource-server",
     "examples/resource-test-server",
+    "examples/session-aware-resource-server",
     "examples/resources-server",
     "examples/sampling-server",
     "examples/simple-dynamodb-session", # Simplified and ready - utility binaries commented out

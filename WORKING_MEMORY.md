@@ -682,8 +682,306 @@ impl JsonRpcDispatcher {
 **Total Verification**: 440+ tests passing across all core functionality areas
 **Framework Readiness**: Production-ready for development use with MCP 2025-06-18 schema compliance
 
+## 🚀 NEXT PHASE: MCP Behavioral Completeness Implementation (Phase 6-8)
 
+**Current Status**: ✅ Schema-compliant, ⚠️ Behaviorally-incomplete
+**Objective**: Transform framework from schema-compliant to behaviorally-complete MCP 2025-06-18 implementation
+**Timeline**: 3 sprint cycles with comprehensive validation checkpoints
 
+### 🎯 **Critical Gap Analysis: The Three Pillars**
+
+**Gap Assessment**: Framework has excellent architectural foundations but lacks three critical behavioral features:
+
+#### **Gap 1: Stateless Resources (CRITICAL BLOCKER)**
+```rust
+// Current Limitation - No Session Access
+trait McpResource {
+    async fn read(&self, uri: &str) -> McpResult<ResourceContents>; // ❌ Stateless
+}
+
+// Required for Production - Session-Aware Resources
+trait McpResource {
+    async fn read(&self, uri: &str, session: &SessionContext) -> McpResult<ResourceContents>; // ✅ Stateful
+}
+```
+
+**Impact Analysis:**
+- **Severity**: Critical - prevents personalized content delivery
+- **Use Cases Blocked**: User-specific documents, authentication-based resources, session-aware data
+- **Real-World Limitation**: Resources are essentially static file servers
+
+**Implementation Complexity:**
+- **Breaking Change**: Yes - all existing `McpResource` implementations affected
+- **Derive Macro Impact**: Significant - `#[derive(McpResource)]` requires updates
+- **Migration Strategy**: Required - backwards compatibility bridge needed
+
+#### **Gap 2: Naive List Endpoints (SCALABILITY BLOCKER)**
+```rust
+// Current Implementation - Basic Lists Only
+async fn handle_tools_list() -> Vec<Tool> { /* No pagination, sorting, filtering */ }
+
+// Required for Enterprise - Advanced List Operations
+async fn handle_tools_list(params: ListParams) -> PaginatedResponse<Tool> {
+    /* Pagination, sorting, filtering, meta propagation */
+}
+```
+
+**Missing Features:**
+- **Pagination**: No `limit`/`offset` beyond basic cursor
+- **Sorting**: No multi-field sorting capabilities
+- **Meta Propagation**: Request `_meta` fields not passed to response
+- **Filtering**: No query-based tool/resource filtering
+
+**Impact Analysis:**
+- **Severity**: High - limits enterprise-scale applications
+- **Performance**: Poor with large datasets (1000+ tools/resources)
+- **User Experience**: No discovery optimization for large servers
+
+#### **Gap 3: Missing Subscriptions (REAL-TIME BLOCKER)**
+```rust
+// Current State - No Real-Time Capabilities
+// resources/subscribe capability: false (correctly advertised)
+
+// Required Implementation - Full Subscription Support
+async fn handle_resource_subscribe(uri: String, session: SessionContext) -> SubscriptionId;
+// + notification infrastructure + lifecycle management
+```
+
+**Missing Infrastructure:**
+- **Subscription Handler**: `resources/subscribe` method not implemented
+- **Notification System**: No real-time push notifications
+- **Lifecycle Management**: No subscribe/unsubscribe with cleanup
+- **Registry**: No subscription tracking per session
+
+### 🏗️ **Implementation Strategy: Phased Approach**
+
+#### **Phase 6: Stateful Resources (Sprint 1) - CRITICAL PATH**
+
+**Architectural Challenge**: Breaking change to core trait while maintaining multiple development patterns
+
+**Key Implementation Requirements:**
+```rust
+// 1. Core Trait Evolution (Breaking Change)
+trait McpResource {
+    async fn read(&self, uri: &str, session: &SessionContext) -> McpResult<ResourceContents>;
+    //                           ^^^^^^^^^^^^^^^^ New required parameter
+}
+
+// 2. Backwards Compatibility Bridge (Temporary)
+trait McpResourceLegacy {
+    async fn read(&self, uri: &str) -> McpResult<ResourceContents>;
+}
+
+impl<T: McpResourceLegacy> McpResource for T {
+    async fn read(&self, uri: &str, _session: &SessionContext) -> McpResult<ResourceContents> {
+        McpResourceLegacy::read(self, uri).await // Bridge for migration
+    }
+}
+
+// 3. Derive Macro Enhancement
+#[derive(McpResource)]
+struct UserDocument {
+    #[session_field] user_id: String, // Auto-extract from SessionContext
+}
+```
+
+**Development Pattern Compatibility Matrix:**
+```
+Pattern               | Impact      | Migration Required | Compatibility
+===========================================================================================================
+Function Macros       | Medium      | Parameter injection| Auto-compatible with session parameter
+#[derive(McpResource)] | High        | Significant changes| Requires derive macro updates
+Builder Pattern        | Low         | API extension      | Additive - backwards compatible
+Manual Implementation  | High        | Breaking change    | Requires signature update
+```
+
+**Critical Success Factors:**
+- **Migration Path**: Clear upgrade instructions for existing code
+- **Performance**: Session access must not degrade resource performance
+- **Documentation**: Comprehensive examples of session-aware patterns
+- **Testing**: E2E tests proving session-specific resource behavior
+
+#### **Phase 7: Enhanced List Endpoints (Sprint 2) - SCALABILITY**
+
+**Objective**: Transform basic list handlers into enterprise-grade discovery endpoints
+
+**Implementation Architecture:**
+```rust
+// Enhanced List Request Structure
+#[derive(Deserialize)]
+struct EnhancedListParams {
+    // Existing MCP fields
+    cursor: Option<String>,
+
+    // New enterprise features
+    limit: Option<u32>,           // Advanced pagination
+    offset: Option<u32>,          // Offset-based pagination
+    sort: Option<Vec<SortField>>, // Multi-field sorting
+    filter: Option<FilterQuery>,  // Query-based filtering
+    _meta: Option<Value>,         // Meta field propagation
+}
+
+// Enhanced List Response Structure
+#[derive(Serialize)]
+struct EnhancedListResponse<T> {
+    // Standard MCP response
+    items: Vec<T>,
+    next_cursor: Option<String>,
+
+    // Enhanced capabilities
+    total_count: Option<u64>,     // Total available items
+    has_more: bool,               // Pagination indicator
+    sort_applied: Option<Vec<SortField>>, // Applied sorting
+    _meta: Option<Value>,         // Propagated meta fields
+}
+```
+
+**Implementation Priorities:**
+1. **Pagination Infrastructure**: Efficient cursor and offset-based navigation
+2. **Meta Field Propagation**: Request `_meta` → Response `_meta` flow
+3. **Performance Optimization**: Streaming responses for large datasets
+4. **Client Library Updates**: Helper methods for seamless pagination
+
+**Backwards Compatibility Strategy:**
+- Existing simple list requests continue working unchanged
+- New parameters are optional - servers gracefully handle missing features
+- Response format maintains MCP 2025-06-18 compliance
+
+#### **Phase 8: Resource Subscriptions (Sprint 3) - REAL-TIME**
+
+**Objective**: Implement complete `resources/subscribe` functionality with real-time notifications
+
+**Subscription System Architecture:**
+```rust
+// Subscription Management System
+#[derive(Debug)]
+struct SubscriptionRegistry {
+    active_subscriptions: HashMap<SessionId, HashMap<SubscriptionId, ResourceSubscription>>,
+    uri_patterns: HashMap<String, Vec<SubscriptionId>>, // URI → Subscribers mapping
+}
+
+// Resource Subscription Lifecycle
+struct ResourceSubscription {
+    id: SubscriptionId,
+    session_id: SessionId,
+    uri_pattern: String,
+    created_at: DateTime<Utc>,
+    last_notification: Option<DateTime<Utc>>,
+}
+
+// Notification Infrastructure
+trait SubscriptionNotifier {
+    async fn notify_resource_changed(&self, uri: &str, change_type: ResourceChangeType);
+    async fn notify_subscription_cancelled(&self, subscription_id: SubscriptionId);
+}
+```
+
+**Key Implementation Components:**
+1. **Subscription Handler**: MCP-compliant `resources/subscribe` endpoint
+2. **Real-time Notifications**: Integration with existing SSE infrastructure
+3. **Change Detection**: Resource update triggers notification delivery
+4. **Lifecycle Management**: Automatic cleanup on session termination
+
+**Integration Requirements:**
+- **SSE Enhancement**: Resource notifications via existing streaming infrastructure
+- **Session Management**: Subscription cleanup on disconnect/timeout
+- **Performance**: Efficient notification delivery for high-frequency updates
+- **Error Handling**: Subscription failures use appropriate MCP error codes
+
+### 🎯 **Comprehensive Validation Strategy**
+
+#### **Review Checkpoint Requirements (All Phases)**
+
+**Compilation Validation:**
+```bash
+# Must pass at every checkpoint
+cargo build --workspace                    # All crates compile
+cargo test --workspace                     # All tests pass (450+)
+cargo doc --workspace --no-deps           # Documentation builds
+cargo clippy --workspace -- -D warnings   # No linting warnings
+```
+
+**MCP Specification Compliance:**
+```bash
+# Custom validation commands
+cargo test --test mcp_behavioral_compliance    # E2E behavior validation
+cargo test --test mcp_specification_compliance # Schema compliance check
+cargo run --example comprehensive-server       # Full feature demonstration
+```
+
+**Performance Validation:**
+```bash
+# Enterprise-scale testing
+cargo test --test large_dataset_performance    # 1000+ tools/resources test
+cargo test --test subscription_stress_test     # Real-time notification load
+cargo test --test concurrent_session_test      # Multi-session isolation
+```
+
+#### **E2E Test Requirements (Per Phase)**
+
+**Phase 6 - Stateful Resources:**
+```rust
+#[tokio::test]
+async fn test_session_specific_resources() {
+    // Verify different sessions get different resource content
+    // Test session data integration in resource URIs
+    // Validate session isolation and security
+}
+```
+
+**Phase 7 - Enhanced Lists:**
+```rust
+#[tokio::test]
+async fn test_advanced_pagination() {
+    // Test cursor and offset pagination
+    // Verify meta field propagation
+    // Test sorting and filtering capabilities
+}
+```
+
+**Phase 8 - Subscriptions:**
+```rust
+#[tokio::test]
+async fn test_resource_subscription_lifecycle() {
+    // Full subscribe → notify → unsubscribe flow
+    // Test session isolation for subscriptions
+    // Verify real-time notification delivery
+}
+```
+
+### 🏆 **Success Metrics and Release Criteria**
+
+#### **Quantitative Targets:**
+- **Test Coverage**: 450+ tests passing (up from 440+)
+- **Performance**: <100ms response time for paginated lists (1000+ items)
+- **Real-time**: <1 second notification delivery for resource changes
+- **Documentation**: 100% rustdoc coverage for new APIs
+
+#### **Qualitative Validation:**
+- **Developer Experience**: Multiple development patterns work seamlessly
+- **Enterprise Readiness**: Scalable list operations and session management
+- **Real-world Applicability**: Session-aware resources enable personalized content
+- **MCP Compliance**: Full behavioral specification implementation
+
+#### **Final Release Gate:**
+```bash
+# 0.2.0 Release Validation Command Set
+cargo build --workspace                                    # ✅ Compilation
+cargo test --workspace                                     # ✅ All tests (450+)
+cargo test --test mcp_behavioral_compliance               # ✅ E2E behavior
+cargo test --test mcp_specification_compliance           # ✅ Spec compliance
+cargo doc --workspace --no-deps                          # ✅ Documentation
+cargo run --example enterprise-scale-server              # ✅ Full demo
+```
+
+**Production Readiness Criteria:**
+- ✅ **Behavioral Completeness**: All three critical gaps resolved
+- ✅ **Enterprise Scale**: Tested with 1000+ tools/resources/prompts
+- ✅ **Session Management**: Full session-aware resource delivery
+- ✅ **Real-time Capabilities**: Working subscription system
+- ✅ **Migration Support**: Clear upgrade path for existing users
+
+This implementation strategy provides a clear roadmap from the current schema-compliant state to full MCP 2025-06-18 behavioral completeness, with comprehensive validation at every step ensuring production readiness.
 
 ## ✅ COMPLETED: Session Block-On Fix (0.2.0)
 
