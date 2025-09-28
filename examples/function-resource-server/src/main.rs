@@ -10,7 +10,7 @@ use turul_mcp_protocol::resources::{
     HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
     HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
 };
-use turul_mcp_server::{McpResource, McpResult, McpServer};
+use turul_mcp_server::{McpResource, McpResult, McpServer, SessionContext};
 
 // Static configuration resource
 struct ConfigResource;
@@ -59,7 +59,7 @@ impl HasResourceMeta for ConfigResource {
 
 #[async_trait]
 impl McpResource for ConfigResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let config = json!({
             "app_name": "Function Resource Server",
             "version": "1.0.0",
@@ -127,7 +127,7 @@ impl HasResourceMeta for UserProfileResource {
 
 #[async_trait]
 impl McpResource for UserProfileResource {
-    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         // Extract user_id from template variables
         let user_id = if let Some(params) = &params {
             if let Some(template_vars) = params.get("template_variables") {
@@ -222,7 +222,7 @@ impl HasResourceMeta for SystemStatusResource {
 
 #[async_trait]
 impl McpResource for SystemStatusResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let status = json!({
             "status": "healthy",
             "uptime": "72h 15m 32s",

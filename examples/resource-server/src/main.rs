@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use turul_mcp_derive::McpResource;
 use turul_mcp_protocol::resources::{HasResourceUri, ResourceContent};
-use turul_mcp_server::{McpResource, McpResult, McpServer};
+use turul_mcp_server::{McpResource, McpResult, McpServer, SessionContext};
 
 /// Simple configuration file resource
 #[derive(McpResource, Serialize, Deserialize, Clone)]
@@ -40,7 +40,7 @@ impl ConfigResource {
 
 #[async_trait]
 impl McpResource for ConfigResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::blob(
             self.uri().to_string(),
             self.config_data.clone(),
@@ -60,7 +60,7 @@ struct SystemStatusResource;
 
 #[async_trait]
 impl McpResource for SystemStatusResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let status = serde_json::json!({
             "status": "healthy",
             "uptime": "72h 15m",
@@ -120,14 +120,14 @@ impl UserProfileResource {
 
 #[async_trait]
 impl McpResource for UserProfileResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![
             ResourceContent::blob(
                 format!("{}/profile", self.uri()),
                 self.profile_data.clone(),
                 "application/json".to_string(),
             ),
-            ResourceContent::text(format!("{}/bio", self.uri()), self.bio.clone()),
+            ResourceContent::text(format!("{}/bio", self.uri()), &self.bio),
         ])
     }
 }
@@ -159,10 +159,10 @@ impl LogFileResource {
 
 #[async_trait]
 impl McpResource for LogFileResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
-            self.uri().to_string(),
-            self.0.clone(),
+            self.uri(),
+            &self.0,
         )])
     }
 }
@@ -217,7 +217,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\nTesting resource read functionality:");
 
     println!("\n1. Config Resource:");
-    match test_config.read(None).await {
+    match test_config.read(None, None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
                 println!("   Content {}: {:?}", i + 1, item);
@@ -227,7 +227,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n2. System Status Resource:");
-    match test_status.read(None).await {
+    match test_status.read(None, None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
                 println!("   Content {}: {:?}", i + 1, item);
@@ -237,7 +237,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n3. User Profile Resource:");
-    match test_user.read(None).await {
+    match test_user.read(None, None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
                 println!("   Content {}: {:?}", i + 1, item);
@@ -247,7 +247,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("\n4. Log File Resource:");
-    match test_log.read(None).await {
+    match test_log.read(None, None).await {
         Ok(content) => {
             for (i, item) in content.iter().enumerate() {
                 println!("   Content {}: {:?}", i + 1, item);

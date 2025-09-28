@@ -67,7 +67,7 @@ use turul_mcp_protocol::resources::{
 };
 use turul_mcp_protocol::{meta::Annotations, McpError};
 use turul_mcp_server::McpResource;
-use turul_mcp_server::{McpResult, McpServer};
+use turul_mcp_server::{McpResult, McpServer, SessionContext};
 
 /// Helper function to serialize JSON with proper error handling
 /// Avoids unwrap() usage as per production code guidelines
@@ -155,7 +155,7 @@ impl HasResourceMeta for FileResource {}
 
 #[async_trait]
 impl McpResource for FileResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         if let Some(temp_file) = &self.temp_file {
             match std::fs::read_to_string(temp_file.path()) {
                 Ok(content) => Ok(vec![ResourceContent::text(
@@ -211,7 +211,7 @@ impl HasResourceMeta for MemoryResource {}
 
 #[async_trait]
 impl McpResource for MemoryResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let data = json!({
             "type": "memory",
             "timestamp": Utc::now().to_rfc3339(),
@@ -274,7 +274,7 @@ impl HasResourceMeta for ErrorResource {}
 
 #[async_trait]
 impl McpResource for ErrorResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         Err(McpError::resource_execution(
             "This resource always returns NotFound for testing error paths",
         ))
@@ -319,7 +319,7 @@ impl HasResourceMeta for SlowResource {}
 
 #[async_trait]
 impl McpResource for SlowResource {
-    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let delay_ms = params
             .as_ref()
             .and_then(|p| p.get("delay_ms"))
@@ -385,7 +385,7 @@ impl HasResourceMeta for TemplateResource {}
 
 #[async_trait]
 impl McpResource for TemplateResource {
-    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         // Extract template variables from params
         let template_vars = params
             .as_ref()
@@ -456,7 +456,7 @@ impl HasResourceMeta for EmptyResource {}
 
 #[async_trait]
 impl McpResource for EmptyResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text("file:///empty/content.txt", "")])
     }
 }
@@ -504,7 +504,7 @@ impl HasResourceMeta for LargeResource {}
 
 #[async_trait]
 impl McpResource for LargeResource {
-    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let size = params
             .as_ref()
             .and_then(|p| p.get("size"))
@@ -582,7 +582,7 @@ impl HasResourceMeta for BinaryResource {}
 
 #[async_trait]
 impl McpResource for BinaryResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         // Create fake PNG header + data (simplified for testing)
         let mut fake_png = Vec::new();
         fake_png.extend_from_slice(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]); // PNG signature
@@ -650,20 +650,31 @@ impl HasResourceMeta for SessionResource {}
 
 #[async_trait]
 impl McpResource for SessionResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         // This resource demonstrates session-aware behavior
-        // In a real implementation, we'd get the session context from the call
-        let session_data = json!({
-            "message": "This resource is session-aware",
-            "note": "In actual E2E tests, this would show the real session ID",
-            "example_session_id": "01234567-89ab-cdef-0123-456789abcdef",
-            "timestamp": Utc::now().to_rfc3339(),
-            "session_features": {
-                "state_storage": true,
-                "notifications": true,
-                "progress_tracking": true
-            }
-        });
+        let session_data = if let Some(ctx) = session {
+            json!({
+                "message": "This resource is session-aware",
+                "session_id": ctx.session_id.to_string(),
+                "timestamp": Utc::now().to_rfc3339(),
+                "session_features": {
+                    "state_storage": true,
+                    "notifications": true,
+                    "progress_tracking": true
+                }
+            })
+        } else {
+            json!({
+                "message": "This resource is session-aware",
+                "note": "No session context provided",
+                "timestamp": Utc::now().to_rfc3339(),
+                "session_features": {
+                    "state_storage": true,
+                    "notifications": true,
+                    "progress_tracking": true
+                }
+            })
+        };
 
         Ok(vec![ResourceContent::text(
             "file:///session/info.json",
@@ -720,7 +731,7 @@ impl HasResourceMeta for SubscribableResource {}
 
 #[async_trait]
 impl McpResource for SubscribableResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let count = self.counter.fetch_add(1, Ordering::SeqCst);
 
         let subscription_data = json!({
@@ -780,7 +791,7 @@ impl HasResourceMeta for NotifyingResource {}
 
 #[async_trait]
 impl McpResource for NotifyingResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         // DEMONSTRATION: This resource simulates notification emission during read operations
         //
         // PRODUCTION LIMITATION: The current McpResource trait doesn't provide access to
@@ -876,7 +887,7 @@ impl HasResourceMeta for MultiContentResource {}
 
 #[async_trait]
 impl McpResource for MultiContentResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![
             ResourceContent::text(
                 "file:///multi/contents/part1.json",
@@ -945,7 +956,7 @@ impl HasResourceMeta for PaginatedResource {}
 
 #[async_trait]
 impl McpResource for PaginatedResource {
-    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let page_size = params
             .as_ref()
             .and_then(|p| p.get("page_size"))
@@ -1036,7 +1047,7 @@ impl HasResourceMeta for InvalidUriResource {}
 
 #[async_trait]
 impl McpResource for InvalidUriResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
             "file:///invalid/bad-chars-and-spaces.txt",
             "This resource has an intentionally invalid URI with hyphens and special characters for testing"
@@ -1093,7 +1104,7 @@ impl HasResourceMeta for LongUriResource {}
 
 #[async_trait]
 impl McpResource for LongUriResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
             &self.long_uri,
             format!(
@@ -1143,7 +1154,7 @@ impl HasResourceMeta for MetaDynamicResource {}
 
 #[async_trait]
 impl McpResource for MetaDynamicResource {
-    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let meta_fields = params
             .as_ref()
             .and_then(|p| p.get("_meta"))
@@ -1228,7 +1239,7 @@ impl HasResourceMeta for UserTemplateResource {}
 
 #[async_trait]
 impl McpResource for UserTemplateResource {
-    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         // Extract template variables from params
         let template_vars = params
             .as_ref()
@@ -1306,7 +1317,7 @@ impl HasResourceMeta for FileTemplateResource {}
 
 #[async_trait]
 impl McpResource for FileTemplateResource {
-    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         // Extract template variables from params
         let template_vars = params
             .as_ref()
@@ -1431,7 +1442,7 @@ impl HasResourceMeta for CompleteResource {
 
 #[async_trait]
 impl McpResource for CompleteResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let complete_data = json!({
             "type": "complete",
             "message": "This resource demonstrates all optional MCP resource fields",

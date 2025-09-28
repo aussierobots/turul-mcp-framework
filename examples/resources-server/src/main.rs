@@ -17,7 +17,7 @@ use turul_mcp_protocol::resources::{
     HasResourceMimeType, HasResourceSize, HasResourceUri,
 };
 use turul_mcp_server::McpResource;
-use turul_mcp_server::{McpResult, McpServer};
+use turul_mcp_server::{McpResult, McpServer, SessionContext};
 
 /// Project documentation resource that loads from actual files
 /// Real-world use case: Central documentation hub for development teams
@@ -60,7 +60,7 @@ impl HasResourceMeta for ProjectDocumentationResource {}
 // Now implement the execution trait
 #[async_trait]
 impl McpResource for ProjectDocumentationResource {
-    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let mut contents = Vec::new();
 
         // Load main project README
@@ -169,7 +169,7 @@ impl HasResourceMeta for ApiDocumentationResource {}
 
 #[async_trait]
 impl McpResource for ApiDocumentationResource {
-    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let api_docs_path = Path::new("data/api_docs.md");
 
         match fs::read_to_string(api_docs_path) {
@@ -237,7 +237,7 @@ impl HasResourceMeta for ConfigurationResource {}
 
 #[async_trait]
 impl McpResource for ConfigurationResource {
-    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let config_path = Path::new("data/app_config.json");
 
         let mut contents = Vec::new();
@@ -354,7 +354,7 @@ impl HasResourceMeta for DatabaseSchemaResource {}
 
 #[async_trait]
 impl McpResource for DatabaseSchemaResource {
-    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let schema_path = Path::new("data/database_schema.sql");
 
         let mut contents = Vec::new();
@@ -464,7 +464,7 @@ impl HasResourceMeta for SystemStatusResource {}
 
 #[async_trait]
 impl McpResource for SystemStatusResource {
-    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let now: DateTime<Utc> = Utc::now();
 
         let status = json!({

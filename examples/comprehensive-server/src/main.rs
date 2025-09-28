@@ -1114,7 +1114,7 @@ impl HasResourceMeta for ProjectResourcesHandler {
 
 #[async_trait]
 impl McpResource for ProjectResourcesHandler {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let mut content = Vec::new();
 
         // Repository information
