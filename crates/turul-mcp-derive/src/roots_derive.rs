@@ -11,24 +11,38 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
 
     // Extract struct-level attributes from #[root(...)]
     let root_meta = extract_root_meta(&input.attrs)?;
-    let uri = &root_meta.uri;
-    let name = &root_meta.name;
-    let description = &root_meta.description;
+
+    // Convert strings to syn::LitStr immediately to avoid move issues
+    let uri_lit = syn::LitStr::new(&root_meta.uri, proc_macro2::Span::call_site());
+    let name_lit = syn::LitStr::new(&root_meta.name, proc_macro2::Span::call_site());
+    let desc_lit = syn::LitStr::new(&root_meta.description, proc_macro2::Span::call_site());
     let read_only = root_meta.read_only;
 
+    // Clone tokens for each use to avoid move issues
+    let uri_for_const = uri_lit.clone();
+    let name_for_const = name_lit.clone();
+    let desc_for_const = desc_lit.clone();
+
     let expanded = quote! {
+        // Create const values to avoid move issues
+        impl #struct_name {
+            const ROOT_URI: &'static str = #uri_for_const;
+            const ROOT_NAME: &'static str = #name_for_const;
+            const ROOT_DESCRIPTION: &'static str = #desc_for_const;
+        }
+
         #[automatically_derived]
         impl turul_mcp_protocol::roots::HasRootMetadata for #struct_name {
             fn uri(&self) -> &str {
-                #uri
+                Self::ROOT_URI
             }
 
             fn name(&self) -> Option<&str> {
-                Some(#name)
+                Some(Self::ROOT_NAME)
             }
 
             fn description(&self) -> Option<&str> {
-                Some(#description)
+                Some(Self::ROOT_DESCRIPTION)
             }
         }
 
@@ -138,9 +152,9 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
                 use std::fs;
                 use std::path::Path;
 
-                let root_path = self.uri().replace("file://", "");
+                let root_path = Self::ROOT_URI.replace("file://", "");
                 let full_path = if path.is_empty() || path == "/" {
-                    root_path
+                    root_path.clone()
                 } else {
                     format!("{}/{}", root_path.trim_end_matches('/'), path.trim_start_matches('/'))
                 };
@@ -170,7 +184,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
                                         let metadata = entry.metadata().ok();
                                         let file_info = turul_mcp_server::roots::FileInfo {
                                             path: relative_path,
-                                            is_directory: metadata.map(|m| m.is_dir()).unwrap_or(false),
+                                            is_directory: metadata.as_ref().map(|m| m.is_dir()).unwrap_or(false),
                                             size: metadata.as_ref().and_then(|m| if m.is_file() { Some(m.len()) } else { None }),
                                             modified: metadata.and_then(|m| {
                                                 m.modified().ok().and_then(|t| {

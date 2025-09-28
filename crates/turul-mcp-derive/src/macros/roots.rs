@@ -23,14 +23,16 @@ pub fn roots_declarative_impl_inner(input: RootsMacroInput) -> proc_macro2::Toke
         proc_macro2::Span::call_site(),
     );
 
-    let uri = &input.uri;
-    let name = input.display_name.as_deref().unwrap_or(&input.name);
-    let description = input.description.as_deref().unwrap_or("Root directory");
+    let uri = input.uri;
+    let name = input.display_name.unwrap_or(input.name);
+    let description = input
+        .description
+        .unwrap_or_else(|| "Root directory".to_string());
     let read_only = input.read_only;
 
     quote! {
         #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-        #[derive(mcp_derive::McpRoot)]
+        #[derive(turul_mcp_derive::McpRoot)]
         #[root(uri = #uri, name = #name, description = #description, read_only = #read_only)]
         pub struct #roots_name_ident;
 

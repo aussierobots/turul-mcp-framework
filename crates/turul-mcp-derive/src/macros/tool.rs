@@ -97,7 +97,7 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         };
 
         schema_properties.push(quote! {
-            (#param_name_str.to_string(), serde_json::to_value(&#base_schema).unwrap_or_else(|_| serde_json::json!({"type": "string"})))
+            (#param_name_str.to_string(), #base_schema)
         });
 
         // Only add to required fields if not optional

@@ -428,6 +428,7 @@ pub fn derive_mcp_prompt(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::McpSampling;
+/// use turul_mcp_protocol::prelude::*;
 ///
 /// #[derive(McpSampling)]
 /// #[sampling(model = "claude-3-haiku", temperature = 0.7)]
@@ -450,6 +451,8 @@ pub fn derive_mcp_sampling(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::McpCompletion;
+/// use turul_mcp_protocol::completion::CompletionDefinition;
+/// use turul_mcp_protocol::prelude::HasCompletionHandling;
 ///
 /// #[derive(McpCompletion)]
 /// #[completion(reference = "prompt://code_assist")]
@@ -472,6 +475,7 @@ pub fn derive_mcp_completion(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::McpLogger;
+/// use turul_mcp_protocol::logging::{HasLoggingMetadata, LoggerDefinition, HasLogLevel};
 ///
 /// #[derive(McpLogger)]
 /// #[logger(name = "app_logger", level = "info")]
@@ -494,13 +498,11 @@ pub fn derive_mcp_logger(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::McpRoot;
+/// use turul_mcp_protocol::roots::{HasRootFiltering, HasRootPermissions, RootDefinition, HasRootMetadata};
 ///
 /// #[derive(McpRoot)]
 /// #[root(uri = "file:///home/user/project", name = "Project Root")]
-/// struct ProjectRoot {
-///     path: String,
-///     read_only: bool,
-/// }
+/// struct ProjectRoot;
 /// ```
 #[proc_macro_derive(McpRoot, attributes(root, permission))]
 pub fn derive_mcp_root(input: TokenStream) -> TokenStream {
@@ -548,17 +550,18 @@ pub fn derive_mcp_notification(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::tool;
+/// use turul_mcp_protocol::prelude::*;
 ///
 /// let divide_tool = tool! {
 ///     name: "divide",
-///     description: "Divide two numbers",
+///     description: "Divide two numbers with validation",
 ///     params: {
-///         a: f64 => "Dividend",
-///         b: f64 => "Divisor",
+///         a: f64 => "Dividend (first number)",
+///         b: f64 => "Divisor (second number)",
 ///     },
-///     execute: |a, b| async move {
+///     execute: |a: f64, b: f64| async move {
 ///         if b == 0.0 {
-///             Err("Division by zero".to_string())
+///             Err("Division by zero")
 ///         } else {
 ///             Ok(format!("{} ÷ {} = {}", a, b, a / b))
 ///         }
@@ -581,6 +584,8 @@ pub fn tool(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::prompt;
+/// use turul_mcp_protocol::prelude::*;
+/// use std::collections::HashMap;
 ///
 /// let code_review_prompt = prompt! {
 ///     name: "code_review",
@@ -589,12 +594,13 @@ pub fn tool(input: TokenStream) -> TokenStream {
 ///         code: String => "Code to review",
 ///         language: String => "Programming language", required,
 ///     },
-///     template: |args| async move {
+///     template: |args: Option<HashMap<String, Value>>| async move {
+///         let args = args.unwrap_or_default();
 ///         let code = args.get("code").and_then(|v| v.as_str()).unwrap_or("");
 ///         let lang = args.get("language").and_then(|v| v.as_str()).unwrap_or("text");
 ///
-///         Ok(vec![
-///             turul_mcp_protocol::prompts::PromptMessage::user(format!(
+///         Ok::<Vec<PromptMessage>, McpError>(vec![
+///             PromptMessage::user_text(format!(
 ///                 "Please review this {} code for quality, security, and best practices:\n\n```{}\n{}\n```",
 ///                 lang, lang, code
 ///             ))
@@ -618,6 +624,7 @@ pub fn prompt(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::sampling;
+/// use turul_mcp_protocol::prelude::*;
 ///
 /// let text_generator = sampling! {
 ///     max_tokens: 1000,
@@ -626,11 +633,13 @@ pub fn prompt(input: TokenStream) -> TokenStream {
 ///     handler: |request| async move {
 ///         // Implementation would call actual model API
 ///         let response_text = "Generated response based on the input";
-///         Ok(turul_mcp_protocol::sampling::CreateMessageResult::new(
-///             turul_mcp_protocol::sampling::SamplingMessage {
-///                 role: "assistant".to_string(),
-///                 content: turul_mcp_protocol::sampling::MessageContent::Text {
-///                     text: response_text.to_string()
+///         Ok(CreateMessageResult::new(
+///             SamplingMessage {
+///                 role: Role::Assistant,
+///                 content: ContentBlock::Text {
+///                     text: response_text.to_string(),
+///                     annotations: None,
+///                     meta: None,
 ///                 }
 ///             },
 ///             "claude-3-haiku"
@@ -676,6 +685,7 @@ pub fn notification(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::completion;
+/// use turul_mcp_protocol::prelude::HasCompletionHandling;
 ///
 /// completion! {
 ///     text_editor {
@@ -720,6 +730,7 @@ pub fn elicitation(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::roots;
+/// use turul_mcp_protocol::prelude::{RootDefinition, HasRootMetadata, HasRootFiltering, HasRootPermissions};
 ///
 /// roots! {
 ///     project, "/path/to/project", name = "Project Files", read_only = false
@@ -739,6 +750,7 @@ pub fn roots(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::logging;
+/// use turul_mcp_protocol::prelude::*;
 ///
 /// logging! {
 ///     file_logger {

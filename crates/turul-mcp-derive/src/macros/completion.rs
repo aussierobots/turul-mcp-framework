@@ -28,7 +28,7 @@ pub fn completion_declarative_impl_inner(input: CompletionMacroInput) -> proc_ma
 
     quote! {
         #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-        #[derive(mcp_derive::McpCompletion)]
+        #[derive(turul_mcp_derive::McpCompletion)]
         pub struct #completion_name_ident {
             #struct_fields
         }

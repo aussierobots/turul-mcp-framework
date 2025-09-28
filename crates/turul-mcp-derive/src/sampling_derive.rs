@@ -17,7 +17,54 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
     let temperature =
         extract_string_attribute(&input.attrs, "temperature").and_then(|s| s.parse::<f64>().ok());
 
+    // Generate temperature tokens
+    let temperature_tokens = if let Some(temp_val) = temperature {
+        quote! { Some(#temp_val) }
+    } else {
+        quote! { None }
+    };
+
     let model = extract_string_attribute(&input.attrs, "model");
+
+    // Generate proper tokens for model preferences
+    let model_prefs_impl = if let Some(ref model_name) = model {
+        quote! {
+            static MODEL_PREFS: std::sync::OnceLock<Option<turul_mcp_protocol::sampling::ModelPreferences>> = std::sync::OnceLock::new();
+            MODEL_PREFS.get_or_init(|| {
+                Some(turul_mcp_protocol::sampling::ModelPreferences {
+                    hints: Some(serde_json::json!({
+                        "preferred_model": #model_name
+                    })),
+                    cost_priority: None,
+                    speed_priority: None,
+                    intelligence_priority: None,
+                })
+            }).as_ref()
+        }
+    } else {
+        quote! { None }
+    };
+
+    let metadata_impl = if let Some(ref model_name) = model {
+        quote! {
+            static METADATA: std::sync::OnceLock<Option<serde_json::Value>> = std::sync::OnceLock::new();
+            METADATA.get_or_init(|| {
+                Some(serde_json::json!({
+                    "configured_model": #model_name,
+                    "max_tokens": #max_tokens,
+                    "temperature": #temperature_tokens
+                }))
+            }).as_ref()
+        }
+    } else {
+        quote! { None }
+    };
+
+    let model_name_impl = if let Some(ref model_name) = model {
+        quote! { #model_name.to_string() }
+    } else {
+        quote! { "unknown-model".to_string() }
+    };
 
     let expanded = quote! {
         #[automatically_derived]
@@ -27,7 +74,7 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
             }
 
             fn temperature(&self) -> Option<f64> {
-                #temperature
+                #temperature_tokens
             }
 
             fn stop_sequences(&self) -> Option<&Vec<String>> {
@@ -53,16 +100,12 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
 
         #[automatically_derived]
         impl turul_mcp_protocol::sampling::HasModelPreferences for #struct_name {
-            fn model_preferences(&self) -> Option<&serde_json::Value> {
-                use std::sync::LazyLock;
-                static MODEL_PREFS: LazyLock<Option<serde_json::Value>> = LazyLock::new(|| {
-                    #model.map(|m| serde_json::json!({"model": m}))
-                });
-                MODEL_PREFS.as_ref()
+            fn model_preferences(&self) -> Option<&turul_mcp_protocol::sampling::ModelPreferences> {
+                #model_prefs_impl
             }
 
             fn metadata(&self) -> Option<&serde_json::Value> {
-                None
+                #metadata_impl
             }
         }
 
@@ -71,7 +114,7 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
         #[automatically_derived]
         #[async_trait::async_trait]
         impl turul_mcp_server::McpSampling for #struct_name {
-            async fn sample(&self, request: turul_mcp_protocol::sampling::CreateMessageRequest) -> turul_mcp_protocol::McpResult<turul_mcp_protocol::sampling::CreateMessageResponse> {
+            async fn sample(&self, request: turul_mcp_protocol::sampling::CreateMessageRequest) -> turul_mcp_protocol::McpResult<turul_mcp_protocol::sampling::CreateMessageResult> {
                 // Default implementation - this should be overridden by implementing sample_impl
                 match self.sample_impl(request).await {
                     Ok(result) => Ok(result),
@@ -82,17 +125,19 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
 
         impl #struct_name {
             /// Override this method to provide custom sampling logic
-            pub async fn sample_impl(&self, _request: turul_mcp_protocol::sampling::CreateMessageRequest) -> Result<turul_mcp_protocol::sampling::CreateMessageResponse, String> {
+            pub async fn sample_impl(&self, _request: turul_mcp_protocol::sampling::CreateMessageRequest) -> Result<turul_mcp_protocol::sampling::CreateMessageResult, String> {
                 // Default: return a simple response
                 let response_message = turul_mcp_protocol::sampling::SamplingMessage {
-                    role: "assistant".to_string(),
-                    content: turul_mcp_protocol::sampling::MessageContent::Text {
+                    role: turul_mcp_protocol::sampling::Role::Assistant,
+                    content: turul_mcp_protocol::prompts::ContentBlock::Text {
                         text: "This is a generated response. Override sample_impl() to customize.".to_string(),
+                        annotations: None,
+                        meta: None,
                     },
                 };
 
-                let model_name = #model.unwrap_or("unknown-model");
-                Ok(turul_mcp_protocol::sampling::CreateMessageResponse::new(response_message, model_name))
+                let model_name = #model_name_impl;
+                Ok(turul_mcp_protocol::sampling::CreateMessageResult::new(response_message, model_name))
             }
         }
     };

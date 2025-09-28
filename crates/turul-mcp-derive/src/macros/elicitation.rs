@@ -31,7 +31,7 @@ pub fn elicitation_declarative_impl_inner(
 
     quote! {
         #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-        #[derive(mcp_derive::McpElicitation)]
+        #[derive(turul_mcp_derive::McpElicitation)]
         #[elicitation(message = #message)]
         pub struct #elicitation_name_ident {
             #struct_fields

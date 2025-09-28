@@ -30,7 +30,7 @@ pub fn notification_declarative_impl_inner(
 
     quote! {
         #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-        #[derive(mcp_derive::McpNotification)]
+        #[derive(turul_mcp_derive::McpNotification)]
         pub struct #notification_name_ident {
             #struct_fields
         }

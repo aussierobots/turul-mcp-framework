@@ -28,7 +28,7 @@ pub fn logging_declarative_impl_inner(input: LoggingMacroInput) -> proc_macro2::
 
     quote! {
         #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-        #[derive(mcp_derive::McpLogging)]
+        #[derive(turul_mcp_derive::McpLogger)]
         pub struct #logging_name_ident {
             #struct_fields
         }
@@ -172,7 +172,7 @@ mod tests {
         let result = logging_declarative_impl_inner(input);
         let code = result.to_string();
         assert!(code.contains("FileLoggerLogger"));
-        assert!(code.contains("McpLogging"));
+        assert!(code.contains("McpLogger"));
     }
 
     #[test]

@@ -162,14 +162,14 @@ pub fn sampling_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             }
 
             impl HasModelPreferences for #struct_name {
-                fn model_preferences(&self) -> Option<&Value> { #model_preferences }
-                fn metadata(&self) -> Option<&Value> { None }
+                fn model_preferences(&self) -> Option<&turul_mcp_protocol::sampling::ModelPreferences> { #model_preferences }
+                fn metadata(&self) -> Option<&serde_json::Value> { None }
             }
 
             #[async_trait::async_trait]
             impl McpSampling for #struct_name {
-                async fn create_message(&self, request: CreateMessageParams)
-                    -> turul_mcp_server::McpResult<CreateMessageResult>
+                async fn sample(&self, request: turul_mcp_protocol::sampling::CreateMessageRequest)
+                    -> turul_mcp_protocol::McpResult<turul_mcp_protocol::sampling::CreateMessageResult>
                 {
                     let handler_fn = #handler;
                     handler_fn(request).await

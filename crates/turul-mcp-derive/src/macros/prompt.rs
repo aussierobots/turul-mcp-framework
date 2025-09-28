@@ -156,6 +156,7 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             quote! {
                 turul_mcp_protocol::prompts::PromptArgument {
                     name: #arg_name.to_string(),
+                    title: None,
                     description: Some(#description.to_string()),
                     required: Some(#required),
                 }
@@ -203,16 +204,13 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 
             #[async_trait::async_trait]
             impl McpPrompt for GeneratedPrompt {
-                async fn get_prompt(&self, arguments: Option<HashMap<String, Value>>)
-                    -> turul_mcp_server::McpResult<turul_mcp_protocol::prompts::GetPromptResponse>
+                async fn render(&self, arguments: Option<HashMap<String, Value>>)
+                    -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::prompts::PromptMessage>>
                 {
                     let template_fn = #template;
                     let messages = template_fn(arguments).await?;
 
-                    Ok(turul_mcp_protocol::prompts::GetPromptResponse::success(
-                        messages,
-                        #description.map(String::from)
-                    ))
+                    Ok(messages)
                 }
             }
 
