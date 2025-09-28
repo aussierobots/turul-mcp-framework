@@ -29,8 +29,9 @@
 //!
 //! // Handle requests and responses
 //! let request = InitializeRequest::new(
-//!     Implementation::new("my-client", "1.0.0"),
-//!     ClientCapabilities::default()
+//!     McpVersion::CURRENT,
+//!     ClientCapabilities::default(),
+//!     Implementation::new("my-client", "1.0.0")
 //! );
 //! ```
 //!
