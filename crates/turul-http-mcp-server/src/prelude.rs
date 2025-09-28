@@ -8,10 +8,10 @@
 //! ```
 
 // Core server types
+pub use crate::cors::CorsLayer;
 pub use crate::server::{HttpMcpServer, HttpMcpServerBuilder, ServerConfig, ServerStats};
 pub use crate::session_handler::{SessionMcpHandler, SessionSseStream};
 pub use crate::stream_manager::{StreamConfig, StreamError, StreamManager, StreamStats};
-pub use crate::cors::CorsLayer;
 
 // Protocol and notification types
 pub use crate::notification_bridge::{

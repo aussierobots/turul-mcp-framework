@@ -220,13 +220,15 @@ impl SessionMcpHandler {
     }
 
     /// Handle MCP HTTP requests with full MCP 2025-06-18 compliance
-    pub async fn handle_mcp_request<B>(
-        &self,
-        req: Request<B>,
-    ) -> Result<Response<UnifiedMcpBody>>
+    pub async fn handle_mcp_request<B>(&self, req: Request<B>) -> Result<Response<UnifiedMcpBody>>
     where
         B: http_body::Body<Data = bytes::Bytes, Error = hyper::Error> + Send + 'static,
     {
+        info!(
+            "🔍 SESSION HANDLER processing {} {}",
+            req.method(),
+            req.uri().path()
+        );
         match *req.method() {
             Method::POST => {
                 let response = self.handle_json_rpc_request(req).await?;
@@ -249,10 +251,7 @@ impl SessionMcpHandler {
     }
 
     /// Handle JSON-RPC requests over HTTP POST
-    async fn handle_json_rpc_request<B>(
-        &self,
-        req: Request<B>,
-    ) -> Result<Response<UnifiedMcpBody>>
+    async fn handle_json_rpc_request<B>(&self, req: Request<B>) -> Result<Response<UnifiedMcpBody>>
     where
         B: http_body::Body<Data = bytes::Bytes, Error = hyper::Error> + Send + 'static,
     {
@@ -578,10 +577,7 @@ impl SessionMcpHandler {
     // SSE for tool calls is temporarily disabled - see WORKING_MEMORY.md for details
 
     /// Handle Server-Sent Events requests (SSE for streaming)
-    async fn handle_sse_request<B>(
-        &self,
-        req: Request<B>,
-    ) -> Result<Response<UnifiedMcpBody>>
+    async fn handle_sse_request<B>(&self, req: Request<B>) -> Result<Response<UnifiedMcpBody>>
     where
         B: http_body::Body<Data = bytes::Bytes, Error = hyper::Error> + Send + 'static,
     {
@@ -693,10 +689,7 @@ impl SessionMcpHandler {
     }
 
     /// Handle DELETE requests for session cleanup
-    async fn handle_delete_request<B>(
-        &self,
-        req: Request<B>,
-    ) -> Result<Response<JsonRpcBody>>
+    async fn handle_delete_request<B>(&self, req: Request<B>) -> Result<Response<JsonRpcBody>>
     where
         B: http_body::Body<Data = bytes::Bytes, Error = hyper::Error> + Send + 'static,
     {

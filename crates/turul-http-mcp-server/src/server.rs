@@ -18,8 +18,8 @@ use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
 use turul_mcp_protocol::McpError;
 use turul_mcp_session_storage::InMemorySessionStorage;
 
+use crate::streamable_http::{McpProtocolVersion, StreamableHttpHandler};
 use crate::{CorsLayer, Result, SessionMcpHandler, StreamConfig, StreamManager};
-use crate::streamable_http::{StreamableHttpHandler, McpProtocolVersion};
 
 /// Configuration for the HTTP MCP server
 #[derive(Debug, Clone)]
@@ -60,6 +60,7 @@ pub struct HttpMcpServerBuilder {
     dispatcher: JsonRpcDispatcher<McpError>,
     session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
     stream_config: StreamConfig,
+    server_capabilities: Option<turul_mcp_protocol::ServerCapabilities>,
 }
 
 impl HttpMcpServerBuilder {
@@ -70,6 +71,7 @@ impl HttpMcpServerBuilder {
             dispatcher: JsonRpcDispatcher::<McpError>::new(),
             session_storage: Some(Arc::new(InMemorySessionStorage::new())),
             stream_config: StreamConfig::default(),
+            server_capabilities: None,
         }
     }
 }
@@ -84,6 +86,7 @@ impl HttpMcpServerBuilder {
             dispatcher: JsonRpcDispatcher::<McpError>::new(),
             session_storage: Some(session_storage),
             stream_config: StreamConfig::default(),
+            server_capabilities: None,
         }
     }
 
@@ -160,6 +163,15 @@ impl HttpMcpServerBuilder {
         self
     }
 
+    /// Set server capabilities
+    pub fn server_capabilities(
+        mut self,
+        capabilities: turul_mcp_protocol::ServerCapabilities,
+    ) -> Self {
+        self.server_capabilities = Some(capabilities);
+        self
+    }
+
     /// Build the HTTP MCP server
     pub fn build(self) -> HttpMcpServer {
         let session_storage = self
@@ -181,6 +193,8 @@ impl HttpMcpServerBuilder {
             Arc::clone(&dispatcher),
             Arc::clone(&session_storage),
             Arc::clone(&stream_manager),
+            self.server_capabilities
+                .unwrap_or_else(|| turul_mcp_protocol::ServerCapabilities::default()),
         );
 
         HttpMcpServer {
@@ -344,13 +358,19 @@ async fn handle_request(
     debug!("Handling {} {}", method, path);
 
     // Route the request
+    info!(
+        "🔍 HTTP SERVER DISPATCH: path={}, expected_mcp_path={}",
+        path, handler.session_handler.config.mcp_path
+    );
     let response = if path == handler.session_handler.config.mcp_path {
+        info!("🔍 PATH MATCH: Request routed to MCP handler");
         // Extract MCP protocol version from headers
         let protocol_version_str = req
             .headers()
             .get("MCP-Protocol-Version")
             .and_then(|h| h.to_str().ok())
             .unwrap_or("2025-06-18"); // Default to latest version (we only support the latest protocol)
+        info!("🔍 PROTOCOL VERSION: header_value={}", protocol_version_str);
 
         let protocol_version = McpProtocolVersion::parse_version(protocol_version_str)
             .unwrap_or(McpProtocolVersion::V2025_06_18);
@@ -362,16 +382,26 @@ async fn handle_request(
         );
 
         // Route based on protocol version - MCP 2025-06-18 uses Streamable HTTP, older versions use SessionMcpHandler
-        debug!(
-            "Routing MCP request: protocol_version={}, method={}, handler={}",
+        info!(
+            "🔍 ROUTING DECISION: protocol_version={}, method={}, supports_streamable={}, handler={}",
             protocol_version.as_str(),
             method,
-            if protocol_version.supports_streamable_http() { "StreamableHttpHandler" } else { "SessionMcpHandler" }
+            protocol_version.supports_streamable_http(),
+            if protocol_version.supports_streamable_http() {
+                "StreamableHttpHandler"
+            } else {
+                "SessionMcpHandler"
+            }
         );
 
         if protocol_version.supports_streamable_http() {
             // Use StreamableHttpHandler for MCP 2025-06-18 clients
+            info!(
+                "🔍 CALLING STREAMABLE HANDLER for protocol {}",
+                protocol_version.as_str()
+            );
             let streamable_response = handler.streamable_handler.handle_request(req).await;
+            info!("🔍 STREAMABLE HANDLER COMPLETED");
             Ok(streamable_response)
         } else {
             // Use SessionMcpHandler for legacy clients (MCP 2024-11-05 and earlier)

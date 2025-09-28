@@ -321,6 +321,29 @@ impl StreamManager {
         }
     }
 
+    /// Register a streaming connection to receive events for a session (public API for POST streaming)
+    pub async fn register_streaming_connection(
+        &self,
+        session_id: &str,
+        connection_id: ConnectionId,
+        sender: mpsc::Sender<SseEvent>,
+    ) -> Result<(), StreamError> {
+        // Verify session exists first
+        if self
+            .storage
+            .get_session(session_id)
+            .await
+            .map_err(|e| StreamError::StorageError(e.to_string()))?
+            .is_none()
+        {
+            return Err(StreamError::SessionNotFound(session_id.to_string()));
+        }
+
+        self.register_connection(session_id, connection_id, sender)
+            .await;
+        Ok(())
+    }
+
     /// Remove a connection when it's closed
     pub async fn unregister_connection(&self, session_id: &str, connection_id: &ConnectionId) {
         debug!(

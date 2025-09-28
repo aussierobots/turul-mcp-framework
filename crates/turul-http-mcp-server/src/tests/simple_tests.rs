@@ -5,13 +5,13 @@
 use serde_json::json;
 use std::sync::Arc;
 
+use crate::StreamManager;
 use crate::server::{HttpMcpServerBuilder, ServerConfig};
 use crate::sse::{SseEvent, SseManager};
 use crate::streamable_http::{McpProtocolVersion, StreamableHttpHandler};
-use turul_mcp_session_storage::InMemorySessionStorage;
 use turul_mcp_json_rpc_server::JsonRpcDispatcher;
 use turul_mcp_protocol::McpError;
-use crate::StreamManager;
+use turul_mcp_session_storage::InMemorySessionStorage;
 
 /// Test basic server configuration
 #[cfg(test)]
@@ -66,6 +66,7 @@ mod basic_tests {
             dispatcher,
             session_storage,
             stream_manager,
+            turul_mcp_protocol::ServerCapabilities::default(),
         );
 
         // Handler should be created successfully
@@ -256,6 +257,7 @@ mod concurrency_tests {
                     dispatcher,
                     session_storage,
                     stream_manager,
+                    turul_mcp_protocol::ServerCapabilities::default(),
                 );
                 format!("Handler {} created", i)
             });
@@ -389,6 +391,7 @@ mod performance_tests {
                 dispatcher,
                 session_storage,
                 stream_manager,
+                turul_mcp_protocol::ServerCapabilities::default(),
             );
             handlers.push(handler);
         }
