@@ -71,7 +71,7 @@ impl UserProfileResource {
 
 #[async_trait]
 impl McpResource for UserProfileResource {
-    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         // Extract user_id from template variables
         let user_id = if let Some(params) = &params {
             if let Some(template_vars) = params.get("template_variables") {
@@ -177,7 +177,7 @@ impl AppConfigResource {
 
 #[async_trait]
 impl McpResource for AppConfigResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         self.fetch_config_data().await
     }
 }
@@ -253,7 +253,7 @@ impl LogFilesResource {
 
 #[async_trait]
 impl McpResource for LogFilesResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         self.fetch_log_data().await
     }
 }
@@ -303,7 +303,7 @@ impl FileUserResource {
 
 #[async_trait]
 impl McpResource for FileUserResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         self.fetch_user_data().await
     }
 }
@@ -343,7 +343,7 @@ impl UserAvatarResource {
 
 #[async_trait]
 impl McpResource for UserAvatarResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         self.fetch_avatar_data().await
     }
 }
@@ -386,7 +386,7 @@ impl BinaryDataResource {
 
 #[async_trait]
 impl McpResource for BinaryDataResource {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         self.fetch_binary_data().await
     }
 }

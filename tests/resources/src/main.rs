@@ -42,19 +42,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test resource content generation
     info!("📄 Testing Resource Content Generation:");
 
-    let user_content = user_resource.read(None).await?;
+    let user_content = user_resource.read(None, None).await?;
     info!(
         "✅ User resource generated {} content items",
         user_content.len()
     );
 
-    let config_content = config_resource.read(None).await?;
+    let config_content = config_resource.read(None, None).await?;
     info!(
         "✅ Config resource generated {} content items",
         config_content.len()
     );
 
-    let log_content = log_resource.read(None).await?;
+    let log_content = log_resource.read(None, None).await?;
     info!(
         "✅ Log resource generated {} content items",
         log_content.len()
