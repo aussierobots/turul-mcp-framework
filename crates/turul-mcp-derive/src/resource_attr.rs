@@ -213,10 +213,10 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
             }
         }
 
-        // Implement McpResource trait
+        // Implement McpResource trait with session-aware signature
         #[async_trait::async_trait]
         impl turul_mcp_server::McpResource for #struct_name {
-            async fn read(&self, params: Option<serde_json::Value>) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+            async fn read(&self, params: Option<serde_json::Value>, _session: Option<&turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
                 // Call the renamed implementation function with extracted parameters
                 #impl_fn_name(#(#fn_call_args),*).await
             }

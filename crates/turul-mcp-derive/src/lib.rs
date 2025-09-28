@@ -93,8 +93,8 @@
 //! async fn data_file(filename: String) -> McpResult<Vec<ResourceContent>> {
 //!     let content = format!(r#"{{"filename": "{}", "data": "example"}}"#, filename);
 //!     Ok(vec![ResourceContent::text(
-//!         format!("file:///data/{}.json", filename),
-//!         content
+//!         &format!("file:///data/{}.json", filename),
+//!         &content
 //!     )])
 //! }
 //! ```
@@ -246,8 +246,8 @@ pub fn param(_args: TokenStream, input: TokenStream) -> TokenStream {
 /// async fn ticker_timeline(ticker: String) -> McpResult<Vec<ResourceContent>> {
 ///     // Implementation
 ///     Ok(vec![ResourceContent::text(
-///         format!("file:///asx/timeline/{}.json", ticker),
-///         format!("Timeline data for {}", ticker)
+///         &format!("file:///asx/timeline/{}.json", ticker),
+///         &format!("Timeline data for {}", ticker)
 ///     )])
 /// }
 /// ```
@@ -262,18 +262,29 @@ pub fn mcp_resource(args: TokenStream, input: TokenStream) -> TokenStream {
 
 /// Derive macro for automatically implementing MCP resource handlers
 ///
+/// This macro generates both the metadata traits and the session-aware McpResource trait implementation.
+/// Fields marked with `#[content]` are automatically used to generate the resource content.
+///
 /// # Example
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::McpResource;
+/// use async_trait::async_trait;
+/// use serde::{Deserialize, Serialize};
+/// use turul_mcp_server::{McpResource, McpResult, SessionContext};
+/// use turul_mcp_protocol::resources::{ResourceContent, HasResourceUri};
+/// use serde_json::Value;
 ///
-/// #[derive(McpResource)]
+/// #[derive(McpResource, Clone)]
 /// #[resource(name = "config", uri = "file://config.json", description = "Application configuration file")]
 /// struct ConfigResource {
 ///     #[content]
 ///     #[content_type = "application/json"]
 ///     data: String,
 /// }
+///
+/// // McpResource trait is automatically implemented with session-aware signature:
+/// // async fn read(&self, params: Option<Value>, session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>>
 /// ```
 #[proc_macro_derive(
     McpResource,
@@ -330,15 +341,15 @@ pub fn derive_json_schema(input: TokenStream) -> TokenStream {
 ///     uri: "file://config.json",
 ///     name: "Configuration",
 ///     description: "Application configuration file",
-///     content: |_| async {
+///     content: |_, _| async {
 ///         let config = serde_json::json!({
 ///             "app_name": "Test App",
 ///             "version": "1.0.0"
 ///         });
 ///         Ok(vec![turul_mcp_protocol::resources::ResourceContent::blob(
-///             "file://config.json",
+///             "file://config.json".to_string(),
 ///             serde_json::to_string_pretty(&config).unwrap(),
-///             "application/json"
+///             "application/json".to_string()
 ///         )])
 ///     }
 /// };

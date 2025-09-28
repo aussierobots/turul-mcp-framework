@@ -85,17 +85,9 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 
             #[async_trait::async_trait]
             impl turul_mcp_server::McpResource for #resource_name_ident {
-                async fn read(&self, _params: Option<serde_json::Value>) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+                async fn read(&self, params: Option<serde_json::Value>, session: Option<&turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
                     let content_fn = #content_closure;
-                    content_fn(self).await
-                }
-
-                async fn subscribe(&self, _params: Option<serde_json::Value>) -> turul_mcp_server::McpResult<()> {
-                    Err(turul_mcp_protocol::McpError::validation("subscribe not supported"))
-                }
-
-                async fn unsubscribe(&self, _params: Option<serde_json::Value>) -> turul_mcp_server::McpResult<()> {
-                    Err(turul_mcp_protocol::McpError::validation("unsubscribe not supported"))
+                    content_fn(params, session).await
                 }
             }
 
