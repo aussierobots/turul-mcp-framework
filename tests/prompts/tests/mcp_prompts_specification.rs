@@ -143,7 +143,7 @@ async fn test_prompt_content_block_mcp_compliance() {
         let PromptMessage { role: _, content } = message;
 
         match content {
-            ContentBlock::Text { text } => {
+            ContentBlock::Text { text, .. } => {
                 // Text content block validation
                 assert!(!text.is_empty());
 
@@ -157,6 +157,10 @@ async fn test_prompt_content_block_mcp_compliance() {
             ContentBlock::Image { .. } => {
                 // Image content blocks are valid per MCP spec but not used in our prompts
                 panic!("Image content not expected in our prompt implementations")
+            }
+            ContentBlock::Audio { .. } => {
+                // Audio content blocks are valid per MCP spec but not used in our prompts
+                panic!("Audio content not expected in our prompt implementations")
             }
             ContentBlock::ResourceLink { .. } | ContentBlock::Resource { .. } => {
                 // Resource content blocks are valid per MCP spec but not used in our prompts
@@ -179,7 +183,7 @@ async fn test_prompt_template_variable_substitution_mcp_compliance() {
 
     // Validate default values are used
     let PromptMessage { role: _, content } = &default_messages[0];
-    if let ContentBlock::Text { text } = content {
+    if let ContentBlock::Text { text, .. } = content {
         assert!(text.contains("python")); // Constructor language
         assert!(text.contains("def hello(): pass")); // Constructor code
         assert!(text.contains("performance")); // with_focus() value
@@ -212,7 +216,7 @@ async fn test_prompt_business_logic_methods_coverage() {
 
     // Test that target level affects output (in real implementation)
     let PromptMessage { role: _, content } = &messages[0];
-    if let ContentBlock::Text { text } = content {
+    if let ContentBlock::Text { text, .. } = content {
         // Should contain the code and language
         assert!(text.contains("typescript"));
         assert!(text.contains("const x = 1;"));

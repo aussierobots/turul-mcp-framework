@@ -237,7 +237,7 @@ async fn test_all_required_arguments_provided() {
 
     // Verify arguments were processed
     match &response.messages[1].content {
-        ContentBlock::Text { text } => {
+        ContentBlock::Text { text, .. } => {
             assert!(text.contains("AI Safety"));
             assert!(text.contains("academic"));
         }

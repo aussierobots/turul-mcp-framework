@@ -23,7 +23,6 @@ http-body-util.workspace = true
 tower = { workspace = true, features = ["util"] }
 futures.workspace = true
 tokio-stream.workspace = true
-portpicker = "0.1"
 tempfile.workspace = true
 mcp-e2e-shared = { path = "../shared" }
 

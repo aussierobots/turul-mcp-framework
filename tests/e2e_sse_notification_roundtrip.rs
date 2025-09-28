@@ -27,7 +27,10 @@ async fn test_sse_notification_round_trip_delivery() {
     let server = match TestServerManager::start_tools_server().await {
         Ok(server) => server,
         Err(e) => {
-            println!("Skipping SSE test - failed to start server (likely sandboxed environment): {}", e);
+            println!(
+                "Skipping SSE test - failed to start server (likely sandboxed environment): {}",
+                e
+            );
             return;
         }
     };
@@ -35,11 +38,14 @@ async fn test_sse_notification_round_trip_delivery() {
     let mut client = McpTestClient::new(server.port());
 
     // Initialize with SSE capabilities
-    client.initialize_with_capabilities(json!({
-        "tools": {
-            "listChanged": false
-        }
-    })).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(json!({
+            "tools": {
+                "listChanged": false
+            }
+        }))
+        .await
+        .expect("Failed to initialize");
 
     let session_id = client.session_id().unwrap();
     info!("✅ Client initialized with session: {}", session_id);
@@ -48,7 +54,9 @@ async fn test_sse_notification_round_trip_delivery() {
     let client_clone = client.clone();
     let sse_handle = tokio::spawn(async move {
         // Connect to SSE and collect events for a reasonable duration
-        let mut response = client_clone.connect_sse().await
+        let mut response = client_clone
+            .connect_sse()
+            .await
             .expect("Failed to connect to SSE");
 
         let mut events = Vec::new();
@@ -75,10 +83,16 @@ async fn test_sse_notification_round_trip_delivery() {
     sleep(Duration::from_millis(200)).await;
 
     // Trigger notification by calling the existing progress_tracker tool
-    let tool_call_result = client.call_tool("progress_tracker", json!({
-        "duration": 1.0,
-        "steps": 3
-    })).await.expect("Failed to call progress_tracker tool");
+    let tool_call_result = client
+        .call_tool(
+            "progress_tracker",
+            json!({
+                "duration": 1.0,
+                "steps": 3
+            }),
+        )
+        .await
+        .expect("Failed to call progress_tracker tool");
 
     info!("✅ Tool call result: {:?}", tool_call_result);
 
@@ -101,10 +115,14 @@ async fn test_sse_notification_round_trip_delivery() {
                             info!("✅ Found progress notification from progress_tracker tool");
 
                             if let Some(params) = parsed.get("params") {
-                                if let Some(token) = params.get("progressToken").and_then(|t| t.as_str()) {
+                                if let Some(token) =
+                                    params.get("progressToken").and_then(|t| t.as_str())
+                                {
                                     info!("✅ Progress token: '{}'", token);
                                 }
-                                if let Some(progress) = params.get("progress").and_then(|p| p.as_u64()) {
+                                if let Some(progress) =
+                                    params.get("progress").and_then(|p| p.as_u64())
+                                {
                                     info!("✅ Progress value: {}%", progress);
                                 }
                             }
@@ -116,7 +134,10 @@ async fn test_sse_notification_round_trip_delivery() {
     }
 
     // Verify we received progress notifications
-    assert!(found_progress, "Progress notification was not received via SSE");
+    assert!(
+        found_progress,
+        "Progress notification was not received via SSE"
+    );
 
     info!("🎉 SSE notification round-trip test passed!");
 }
@@ -133,7 +154,10 @@ async fn test_sse_notification_session_isolation() {
     let server = match TestServerManager::start_tools_server().await {
         Ok(server) => server,
         Err(e) => {
-            println!("Skipping SSE test - failed to start server (likely sandboxed environment): {}", e);
+            println!(
+                "Skipping SSE test - failed to start server (likely sandboxed environment): {}",
+                e
+            );
             return;
         }
     };
@@ -143,26 +167,37 @@ async fn test_sse_notification_session_isolation() {
     let mut client2 = McpTestClient::new(server.port());
 
     // Initialize both clients
-    client1.initialize_with_capabilities(json!({
-        "tools": {"listChanged": false}
-    })).await.expect("Failed to initialize client1");
+    client1
+        .initialize_with_capabilities(json!({
+            "tools": {"listChanged": false}
+        }))
+        .await
+        .expect("Failed to initialize client1");
 
-    client2.initialize_with_capabilities(json!({
-        "tools": {"listChanged": false}
-    })).await.expect("Failed to initialize client2");
+    client2
+        .initialize_with_capabilities(json!({
+            "tools": {"listChanged": false}
+        }))
+        .await
+        .expect("Failed to initialize client2");
 
     let session1_id = client1.session_id().unwrap();
     let session2_id = client2.session_id().unwrap();
 
     assert_ne!(session1_id, session2_id);
-    info!("✅ Created two sessions: {} and {}", session1_id, session2_id);
+    info!(
+        "✅ Created two sessions: {} and {}",
+        session1_id, session2_id
+    );
 
     // Start SSE connections for both clients
     let client1_clone = client1.clone();
     let client2_clone = client2.clone();
 
     let sse1_handle = tokio::spawn(async move {
-        let mut response = client1_clone.connect_sse().await
+        let mut response = client1_clone
+            .connect_sse()
+            .await
             .expect("Failed to connect SSE for client1");
 
         let mut events = Vec::new();
@@ -185,7 +220,9 @@ async fn test_sse_notification_session_isolation() {
     });
 
     let sse2_handle = tokio::spawn(async move {
-        let mut response = client2_clone.connect_sse().await
+        let mut response = client2_clone
+            .connect_sse()
+            .await
             .expect("Failed to connect SSE for client2");
 
         let mut events = Vec::new();
@@ -211,25 +248,44 @@ async fn test_sse_notification_session_isolation() {
     sleep(Duration::from_millis(200)).await;
 
     // Trigger notification only from client1
-    client1.call_tool("progress_tracker", json!({
-        "duration": 0.5,
-        "steps": 2
-    })).await.expect("Failed to call tool from client1");
+    client1
+        .call_tool(
+            "progress_tracker",
+            json!({
+                "duration": 0.5,
+                "steps": 2
+            }),
+        )
+        .await
+        .expect("Failed to call tool from client1");
 
     sleep(Duration::from_millis(100)).await;
 
     // Trigger notification only from client2
-    client2.call_tool("progress_tracker", json!({
-        "duration": 0.5,
-        "steps": 2
-    })).await.expect("Failed to call tool from client2");
+    client2
+        .call_tool(
+            "progress_tracker",
+            json!({
+                "duration": 0.5,
+                "steps": 2
+            }),
+        )
+        .await
+        .expect("Failed to call tool from client2");
 
     // Collect events from both clients
-    let events1 = sse1_handle.await.expect("SSE collection failed for client1");
-    let events2 = sse2_handle.await.expect("SSE collection failed for client2");
+    let events1 = sse1_handle
+        .await
+        .expect("SSE collection failed for client1");
+    let events2 = sse2_handle
+        .await
+        .expect("SSE collection failed for client2");
 
-    info!("📨 Client1 collected {} events, Client2 collected {} events",
-          events1.len(), events2.len());
+    info!(
+        "📨 Client1 collected {} events, Client2 collected {} events",
+        events1.len(),
+        events2.len()
+    );
 
     // Verify session isolation by checking that each client only receives their own progress notifications
     let mut client1_progress_count = 0;
@@ -265,13 +321,25 @@ async fn test_sse_notification_session_isolation() {
         }
     }
 
-    info!("Client1 received {} progress notifications", client1_progress_count);
-    info!("Client2 received {} progress notifications", client2_progress_count);
+    info!(
+        "Client1 received {} progress notifications",
+        client1_progress_count
+    );
+    info!(
+        "Client2 received {} progress notifications",
+        client2_progress_count
+    );
 
     // Each client should receive at least some progress notifications from their own tool calls
     // but the exact count depends on timing and the tool implementation
-    assert!(client1_progress_count > 0, "Client1 should receive progress notifications from its own session");
-    assert!(client2_progress_count > 0, "Client2 should receive progress notifications from its own session");
+    assert!(
+        client1_progress_count > 0,
+        "Client1 should receive progress notifications from its own session"
+    );
+    assert!(
+        client2_progress_count > 0,
+        "Client2 should receive progress notifications from its own session"
+    );
 
     // The key isolation test: each client should get progress notifications only from their session
     // Since we triggered separate tool calls, we validate they each got some notifications

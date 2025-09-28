@@ -125,6 +125,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let content_type = match &message.content {
             ContentBlock::Text { .. } => "Text",
             ContentBlock::Image { .. } => "Image",
+            ContentBlock::Audio { .. } => "Audio",
             ContentBlock::ResourceLink { .. } => "ResourceLink",
             ContentBlock::Resource { .. } => "Resource (embedded)",
         };
@@ -160,7 +161,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("📊 Demonstrating ContentBlock Types:");
 
     // Show Text ContentBlock
-    if let turul_mcp_protocol::prompts::ContentBlock::Text { text } = &multi_messages[0].content {
+    if let turul_mcp_protocol::prompts::ContentBlock::Text { text, .. } = &multi_messages[0].content
+    {
         info!("📄 Text ContentBlock example:");
         info!("   Text length: {} characters", text.len());
         info!("   Sample: {:?}", &text[..text.len().min(50)]);
@@ -168,7 +170,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Show ResourceLink ContentBlock
     if multi_messages.len() > 1 {
-        if let turul_mcp_protocol::prompts::ContentBlock::ResourceLink { resource } =
+        if let turul_mcp_protocol::prompts::ContentBlock::ResourceLink { resource, .. } =
             &multi_messages[1].content
         {
             info!("🔗 ResourceLink ContentBlock example:");
@@ -180,8 +182,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Show Image ContentBlock (if chart is included)
     if multi_messages.len() > 2 {
-        if let turul_mcp_protocol::prompts::ContentBlock::Image { data, mime_type } =
-            &multi_messages[2].content
+        if let turul_mcp_protocol::prompts::ContentBlock::Image {
+            data, mime_type, ..
+        } = &multi_messages[2].content
         {
             info!("🖼️ Image ContentBlock example:");
             info!("   MIME Type: {}", mime_type);
@@ -204,13 +207,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         {
             info!("📦 Embedded Resource ContentBlock example:");
             match resource {
-                turul_mcp_protocol::prompts::ResourceContents::Text { uri, text, .. } => {
-                    info!("   Resource URI: {}", uri);
-                    info!("   Text length: {} characters", text.len());
+                turul_mcp_protocol::prompts::ResourceContents::Text(text_contents) => {
+                    info!("   Resource URI: {}", text_contents.uri);
+                    info!("   Text length: {} characters", text_contents.text.len());
                 }
-                turul_mcp_protocol::prompts::ResourceContents::Blob { uri, blob, .. } => {
-                    info!("   Resource URI: {}", uri);
-                    info!("   Blob length: {} characters", blob.len());
+                turul_mcp_protocol::prompts::ResourceContents::Blob(blob_contents) => {
+                    info!("   Resource URI: {}", blob_contents.uri);
+                    info!("   Blob length: {} characters", blob_contents.blob.len());
                 }
             }
             info!("   Has annotations: {}", annotations.is_some());

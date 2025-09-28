@@ -259,9 +259,9 @@ fn test_production_lambda_configuration() {
 #[tokio::test]
 #[ignore = "streaming feature not available in test package"]
 async fn test_lambda_streaming_feature_e2e() {
+    use std::sync::Arc;
     use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
     use turul_mcp_session_storage::InMemorySessionStorage;
-    use std::sync::Arc;
 
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -314,9 +314,9 @@ async fn test_lambda_streaming_feature_e2e() {
 /// Test Lambda SSE validation without streaming feature
 #[tokio::test]
 async fn test_lambda_sse_validation_without_streaming() {
+    use std::sync::Arc;
     use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
     use turul_mcp_session_storage::InMemorySessionStorage;
-    use std::sync::Arc;
 
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -329,8 +329,14 @@ async fn test_lambda_sse_validation_without_streaming() {
     }
 
     impl ValidationTestTool {
-        async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> Result<String, turul_mcp_protocol::McpError> {
-            println!("ValidationTestTool executing with message: {}", self.message);
+        async fn execute(
+            &self,
+            _session: Option<turul_mcp_server::SessionContext>,
+        ) -> Result<String, turul_mcp_protocol::McpError> {
+            println!(
+                "ValidationTestTool executing with message: {}",
+                self.message
+            );
             Ok("validation".to_string())
         }
     }
@@ -356,9 +362,9 @@ async fn test_lambda_sse_validation_without_streaming() {
 /// Integration test that actually executes lambda example configurations
 #[tokio::test]
 async fn test_lambda_examples_execution() {
+    use std::sync::Arc;
     use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
     use turul_mcp_session_storage::InMemorySessionStorage;
-    use std::sync::Arc;
 
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -370,7 +376,10 @@ async fn test_lambda_examples_execution() {
         }
 
         impl TestTool {
-            async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> Result<String, turul_mcp_protocol::McpError> {
+            async fn execute(
+                &self,
+                _session: Option<turul_mcp_server::SessionContext>,
+            ) -> Result<String, turul_mcp_protocol::McpError> {
                 println!("TestTool executing with message: {}", self.message);
                 Ok("test".to_string())
             }
@@ -385,7 +394,10 @@ async fn test_lambda_examples_execution() {
             .build()
             .await;
 
-        assert!(server.is_ok(), "Basic lambda server should build successfully");
+        assert!(
+            server.is_ok(),
+            "Basic lambda server should build successfully"
+        );
         let server = server.unwrap();
 
         // Actually create a handler to verify full pipeline
@@ -401,7 +413,10 @@ async fn test_lambda_examples_execution() {
         }
 
         impl CorsTestTool {
-            async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> Result<String, turul_mcp_protocol::McpError> {
+            async fn execute(
+                &self,
+                _session: Option<turul_mcp_server::SessionContext>,
+            ) -> Result<String, turul_mcp_protocol::McpError> {
                 println!("CorsTestTool executing with message: {}", self.message);
                 Ok("cors-test".to_string())
             }
@@ -422,7 +437,10 @@ async fn test_lambda_examples_execution() {
         }
 
         impl ValidationTool {
-            async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> Result<String, turul_mcp_protocol::McpError> {
+            async fn execute(
+                &self,
+                _session: Option<turul_mcp_server::SessionContext>,
+            ) -> Result<String, turul_mcp_protocol::McpError> {
                 println!("ValidationTool executing with message: {}", self.message);
                 Ok("validation".to_string())
             }
@@ -439,7 +457,9 @@ async fn test_lambda_examples_execution() {
             .await;
 
         assert!(result.is_ok(), "Build should succeed with SSE enabled");
-        println!("✅ Lambda builder allows SSE - actual streaming behavior depends on runtime method used");
+        println!(
+            "✅ Lambda builder allows SSE - actual streaming behavior depends on runtime method used"
+        );
     }
 
     println!("✅ Lambda examples execution test completed successfully");

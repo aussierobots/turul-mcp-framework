@@ -231,7 +231,7 @@ async fn test_level4_manual_implementation() {
     assert_eq!(result.is_error, Some(false));
 
     // Verify the text contains the correct sum
-    if let ToolResult::Text { text } = &result.content[0] {
+    if let ToolResult::Text { text, .. } = &result.content[0] {
         assert!(text.contains("10"));
     } else {
         panic!("Expected text result");
@@ -310,7 +310,7 @@ async fn test_all_levels_produce_consistent_results() {
     let level4_tool = CalculatorAddManualTool;
     let level4_result = level4_tool.call(args.clone(), None).await.unwrap();
 
-    if let ToolResult::Text { text } = &level4_result.content[0] {
+    if let ToolResult::Text { text, .. } = &level4_result.content[0] {
         // Extract number from "Sum: 20" format
         assert!(text.contains(&expected_sum.to_string()));
     }

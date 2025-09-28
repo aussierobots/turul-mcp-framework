@@ -6,12 +6,12 @@
 //! - Session ID is properly passed through the handshake
 
 use reqwest;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 use turul_mcp_server::McpServer;
 use turul_mcp_session_storage::InMemorySessionStorage;
-use std::sync::Arc;
 
 async fn start_test_server() -> String {
     // Find an available port
@@ -36,7 +36,8 @@ async fn start_test_server() -> String {
         .tool_fn(test_tool)
         .with_session_storage(session_storage)
         .bind_address(addr)
-        .build().unwrap();
+        .build()
+        .unwrap();
 
     // Start server in background
     tokio::spawn(async move {
@@ -74,8 +75,12 @@ async fn test_tools_list_without_session_returns_401() {
 
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["error"]["code"], -32001);
-    assert!(body["error"]["message"].as_str().unwrap()
-        .contains("Missing Mcp-Session-Id header"));
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Missing Mcp-Session-Id header")
+    );
 }
 
 #[tokio::test]
@@ -101,8 +106,12 @@ async fn test_resources_list_without_session_returns_401() {
 
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["error"]["code"], -32001);
-    assert!(body["error"]["message"].as_str().unwrap()
-        .contains("Missing Mcp-Session-Id header"));
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Missing Mcp-Session-Id header")
+    );
 }
 
 #[tokio::test]
@@ -138,9 +147,7 @@ async fn test_initialize_without_session_creates_session() {
     assert_eq!(response.status(), 200);
 
     // Should return session ID in header
-    let session_id = response
-        .headers()
-        .get("Mcp-Session-Id");
+    let session_id = response.headers().get("Mcp-Session-Id");
 
     assert!(session_id.is_some());
     assert!(!session_id.unwrap().to_str().unwrap().is_empty());

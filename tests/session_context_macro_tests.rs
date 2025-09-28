@@ -136,7 +136,7 @@ mod tests {
 
         // Verify the result structure
         let content = match &result.content[0] {
-            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            turul_mcp_protocol::tools::ToolResult::Text { text, .. } => text,
             _ => panic!("Expected text content"),
         };
         let response: Value = serde_json::from_str(content).unwrap();
@@ -158,7 +158,7 @@ mod tests {
         let result = tool.call(args, None).await.unwrap();
 
         let content = match &result.content[0] {
-            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            turul_mcp_protocol::tools::ToolResult::Text { text, .. } => text,
             _ => panic!("Expected text content"),
         };
         let response: Value = serde_json::from_str(content).unwrap();
@@ -196,7 +196,7 @@ mod tests {
         let result = tool.call(args, Some(session.clone())).await.unwrap();
 
         let content = match &result.content[0] {
-            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            turul_mcp_protocol::tools::ToolResult::Text { text, .. } => text,
             _ => panic!("Expected text content"),
         };
         let response: Value = serde_json::from_str(content).unwrap();
@@ -217,7 +217,7 @@ mod tests {
         let result = tool.call(args, None).await.unwrap();
 
         let content = match &result.content[0] {
-            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            turul_mcp_protocol::tools::ToolResult::Text { text, .. } => text,
             _ => panic!("Expected text content"),
         };
         let response: Value = serde_json::from_str(content).unwrap();
@@ -262,7 +262,7 @@ mod tests {
 
         // Verify the derive tool worked
         let content1 = match &result1.content[0] {
-            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            turul_mcp_protocol::tools::ToolResult::Text { text, .. } => text,
             _ => panic!("Expected text content"),
         };
         let response1: Value = serde_json::from_str(content1).unwrap();
@@ -278,7 +278,7 @@ mod tests {
 
         // Verify the function tool worked
         let content2 = match &result2.content[0] {
-            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            turul_mcp_protocol::tools::ToolResult::Text { text, .. } => text,
             _ => panic!("Expected text content"),
         };
         let response2: Value = serde_json::from_str(content2).unwrap();

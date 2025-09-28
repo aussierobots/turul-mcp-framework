@@ -293,10 +293,34 @@ pub struct TestServerManager {
 }
 
 impl TestServerManager {
-    /// Start a test server by name on random port
+    /// Find an available port using OS ephemeral port allocation only
+    /// This eliminates the port thrashing that caused 60s+ delays in sandbox environments
+    fn find_available_port() -> Option<u16> {
+        // Use OS ephemeral port allocation (bind to 0) - this is the most reliable approach
+        // The OS will assign an available port from the ephemeral range
+        for attempt in 1..=5 {
+            if let Ok(listener) = std::net::TcpListener::bind("127.0.0.1:0") {
+                if let Ok(addr) = listener.local_addr() {
+                    let port = addr.port();
+                    drop(listener); // Release the port immediately
+                    debug!("OS assigned ephemeral port {} (attempt {})", port, attempt);
+                    return Some(port);
+                }
+            }
+            // Small delay between attempts to avoid tight loops
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+
+        // No fallback to portpicker - it fails in sandbox environments with "Operation not permitted"
+        // If OS ephemeral port allocation fails, this indicates network binding is restricted
+        debug!("Failed to allocate port via OS ephemeral binding - likely sandboxed environment");
+        None
+    }
+
+    /// Start a test server by name on random port with robust port allocation
     pub async fn start(server_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let port = portpicker::pick_unused_port()
-            .ok_or("Failed to find available port - network binding may be restricted in this environment")?;
+        let port = Self::find_available_port()
+            .ok_or("Failed to find available port after exhaustive search - network binding may be restricted in this environment")?;
 
         info!("Starting {} on port {}", server_name, port);
 
@@ -469,19 +493,28 @@ impl TestFixtures {
         args
     }
 
-    /// Create test number arguments for prompts
+    /// Create test number arguments for prompts - MCP spec requires string arguments
     pub fn create_number_args() -> HashMap<String, Value> {
         let mut args = HashMap::new();
-        args.insert("required_number".to_string(), json!(42));
-        args.insert("optional_number".to_string(), json!(std::f64::consts::PI));
+        args.insert("count".to_string(), json!("42"));  // number_args_prompt expects "count" as string
+        args.insert("multiplier".to_string(), json!("3.14"));  // optional multiplier as string
         args
     }
 
-    /// Create test boolean arguments for prompts
+    /// Create test boolean arguments for prompts - MCP spec requires string arguments
     pub fn create_boolean_args() -> HashMap<String, Value> {
         let mut args = HashMap::new();
-        args.insert("required_boolean".to_string(), json!(true));
-        args.insert("optional_boolean".to_string(), json!(false));
+        args.insert("enable_feature".to_string(), json!("true"));  // boolean_args_prompt expects "enable_feature" as string
+        args.insert("debug_mode".to_string(), json!("false"));  // optional debug_mode as string
+        args
+    }
+
+    /// Create test template arguments for prompts
+    pub fn create_template_args() -> HashMap<String, Value> {
+        let mut args = HashMap::new();
+        args.insert("name".to_string(), json!("Alice"));  // template_prompt expects "name"
+        args.insert("topic".to_string(), json!("machine learning"));  // template_prompt expects "topic"
+        args.insert("style".to_string(), json!("casual"));  // optional style
         args
     }
 

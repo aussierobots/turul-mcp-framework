@@ -61,7 +61,7 @@ mod tests {
 
         // Parse the response to check session handling
         let content = match &result.content[0] {
-            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            turul_mcp_protocol::tools::ToolResult::Text { text, .. } => text,
             _ => panic!("Expected text content"),
         };
         let response: Value = serde_json::from_str(content).unwrap();
@@ -82,7 +82,7 @@ mod tests {
 
         // Parse the response (function macro wraps result in "result" field)
         let content = match &result.content[0] {
-            turul_mcp_protocol::tools::ToolResult::Text { text } => text,
+            turul_mcp_protocol::tools::ToolResult::Text { text, .. } => text,
             _ => panic!("Expected text content"),
         };
         let response: Value = serde_json::from_str(content).unwrap();

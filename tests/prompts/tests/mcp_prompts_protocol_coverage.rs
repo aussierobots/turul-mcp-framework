@@ -7,16 +7,19 @@ use serde_json::json;
 use std::collections::HashMap;
 use turul_mcp_protocol::meta::Cursor;
 use turul_mcp_protocol::prompts::*;
+use turul_mcp_protocol::{Annotations, BlobResourceContents, TextResourceContents};
 
 #[tokio::test]
 async fn test_content_block_text_variant() {
     // Test ContentBlock::Text variant
     let text_block = ContentBlock::Text {
         text: "Hello, this is a text content block.".to_string(),
+        annotations: None,
+        meta: None,
     };
 
     match text_block {
-        ContentBlock::Text { text } => {
+        ContentBlock::Text { text, .. } => {
             assert_eq!(text, "Hello, this is a text content block.");
         }
         _ => panic!("Expected ContentBlock::Text variant"),
@@ -31,10 +34,14 @@ async fn test_content_block_image_variant() {
     let image_block = ContentBlock::Image {
         data: base64_image.to_string(),
         mime_type: "image/png".to_string(),
+        annotations: None,
+        meta: None,
     };
 
     match image_block {
-        ContentBlock::Image { data, mime_type } => {
+        ContentBlock::Image {
+            data, mime_type, ..
+        } => {
             assert_eq!(data, base64_image);
             assert_eq!(mime_type, "image/png");
         }
@@ -51,14 +58,18 @@ async fn test_content_block_resource_link_variant() {
         title: Some("Important Document".to_string()),
         description: Some("A critical document for the project".to_string()),
         mime_type: Some("application/pdf".to_string()),
+        annotations: None,
+        meta: None,
     };
 
     let resource_link_block = ContentBlock::ResourceLink {
         resource: resource_ref.clone(),
+        annotations: None,
+        meta: None,
     };
 
     match resource_link_block {
-        ContentBlock::ResourceLink { resource } => {
+        ContentBlock::ResourceLink { resource, .. } => {
             assert_eq!(resource.uri, "file:///document.pdf");
             assert_eq!(resource.name, "important_document");
             assert_eq!(resource.title, Some("Important Document".to_string()));
@@ -71,18 +82,21 @@ async fn test_content_block_resource_link_variant() {
 #[tokio::test]
 async fn test_content_block_resource_embedded_variant() {
     // Test ContentBlock::Resource variant (embedded resource)
-    let embedded_resource = ResourceContents::Text {
+    let embedded_resource = ResourceContents::Text(TextResourceContents {
         uri: "file:///config.json".to_string(),
         mime_type: Some("application/json".to_string()),
         text: r#"{"version": "1.0", "debug": false}"#.to_string(),
-    };
+        meta: None,
+    });
 
     let mut meta = HashMap::new();
     meta.insert("source".to_string(), json!("configuration"));
 
     let resource_block = ContentBlock::Resource {
         resource: embedded_resource,
-        annotations: Some(json!({"category": "config"})),
+        annotations: Some(Annotations {
+            title: Some("config".to_string()),
+        }),
         meta: Some(meta),
     };
 
@@ -93,11 +107,11 @@ async fn test_content_block_resource_embedded_variant() {
             meta,
         } => {
             match resource {
-                ResourceContents::Text { uri, text, .. } => {
-                    assert_eq!(uri, "file:///config.json");
-                    assert!(text.contains("version"));
+                ResourceContents::Text(text_contents) => {
+                    assert_eq!(text_contents.uri, "file:///config.json");
+                    assert!(text_contents.text.contains("version"));
                 }
-                ResourceContents::Blob { .. } => panic!("Expected Text resource"),
+                ResourceContents::Blob(_) => panic!("Expected Text resource"),
             }
             assert!(annotations.is_some());
             assert!(meta.is_some());
@@ -109,23 +123,20 @@ async fn test_content_block_resource_embedded_variant() {
 #[tokio::test]
 async fn test_resource_contents_text_variant() {
     // Test ResourceContents::Text variant
-    let text_resource = ResourceContents::Text {
+    let text_resource = ResourceContents::Text(TextResourceContents {
         uri: "file:///readme.md".to_string(),
         mime_type: Some("text/markdown".to_string()),
         text: "# Project README\n\nThis is the project documentation.".to_string(),
-    };
+        meta: None,
+    });
 
     match text_resource {
-        ResourceContents::Text {
-            uri,
-            mime_type,
-            text,
-        } => {
-            assert_eq!(uri, "file:///readme.md");
-            assert_eq!(mime_type, Some("text/markdown".to_string()));
-            assert!(text.contains("Project README"));
+        ResourceContents::Text(text_contents) => {
+            assert_eq!(text_contents.uri, "file:///readme.md");
+            assert_eq!(text_contents.mime_type, Some("text/markdown".to_string()));
+            assert!(text_contents.text.contains("Project README"));
         }
-        ResourceContents::Blob { .. } => panic!("Expected Text resource"),
+        ResourceContents::Blob(_) => panic!("Expected Text resource"),
     }
 }
 
@@ -134,23 +145,20 @@ async fn test_resource_contents_blob_variant() {
     // Test ResourceContents::Blob variant
     let base64_data = "UEsDBBQAAAAIAO2N8VICAAAA";
 
-    let blob_resource = ResourceContents::Blob {
+    let blob_resource = ResourceContents::Blob(BlobResourceContents {
         uri: "file:///archive.zip".to_string(),
-        mime_type: "application/zip".to_string(),
+        mime_type: Some("application/zip".to_string()),
         blob: base64_data.to_string(),
-    };
+        meta: None,
+    });
 
     match blob_resource {
-        ResourceContents::Blob {
-            uri,
-            mime_type,
-            blob,
-        } => {
-            assert_eq!(uri, "file:///archive.zip");
-            assert_eq!(mime_type, "application/zip");
-            assert_eq!(blob, base64_data);
+        ResourceContents::Blob(blob_contents) => {
+            assert_eq!(blob_contents.uri, "file:///archive.zip");
+            assert_eq!(blob_contents.mime_type, Some("application/zip".to_string()));
+            assert_eq!(blob_contents.blob, base64_data);
         }
-        ResourceContents::Text { .. } => panic!("Expected Blob resource"),
+        ResourceContents::Text(_) => panic!("Expected Blob resource"),
     }
 }
 
@@ -185,21 +193,23 @@ async fn test_prompt_message_construction() {
     // Test user text message
     assert_eq!(user_text.role, Role::User);
     match user_text.content {
-        ContentBlock::Text { text } => assert_eq!(text, "What is the weather like?"),
+        ContentBlock::Text { text, .. } => assert_eq!(text, "What is the weather like?"),
         _ => panic!("Expected Text content"),
     }
 
     // Test assistant text message
     assert_eq!(assistant_text.role, Role::Assistant);
     match assistant_text.content {
-        ContentBlock::Text { text } => assert!(text.contains("help you")),
+        ContentBlock::Text { text, .. } => assert!(text.contains("help you")),
         _ => panic!("Expected Text content"),
     }
 
     // Test user image message
     assert_eq!(user_image.role, Role::User);
     match user_image.content {
-        ContentBlock::Image { data, mime_type } => {
+        ContentBlock::Image {
+            data, mime_type, ..
+        } => {
             assert_eq!(data, "base64imagedata");
             assert_eq!(mime_type, "image/jpeg");
         }
@@ -393,7 +403,7 @@ async fn test_prompt_template_variable_substitution() {
     );
 
     match template_message.content {
-        ContentBlock::Text { text } => {
+        ContentBlock::Text { text, .. } => {
             assert!(text.contains("{data_type}"));
             assert!(text.contains("{data_content}"));
             assert!(text.contains("{analysis_aspect}"));
@@ -423,6 +433,8 @@ async fn test_resource_reference_complete_fields() {
         title: Some("AI Research Paper".to_string()),
         description: Some("Comprehensive research on neural networks".to_string()),
         mime_type: Some("application/pdf".to_string()),
+        annotations: None,
+        meta: None,
     };
 
     assert_eq!(resource_ref.uri, "file:///research/paper.pdf");
@@ -496,11 +508,13 @@ async fn test_serialization_round_trip_all_structs() {
     // ContentBlock::Text
     let text_block = ContentBlock::Text {
         text: "Test content".to_string(),
+        annotations: None,
+        meta: None,
     };
     let text_json = serde_json::to_string(&text_block).unwrap();
     let text_parsed: ContentBlock = serde_json::from_str(&text_json).unwrap();
     match text_parsed {
-        ContentBlock::Text { text } => assert_eq!(text, "Test content"),
+        ContentBlock::Text { text, .. } => assert_eq!(text, "Test content"),
         _ => panic!("Expected Text block"),
     }
 
@@ -539,7 +553,7 @@ async fn test_edge_cases_and_robustness() {
     // Empty text content
     let empty_text = PromptMessage::user_text("");
     match empty_text.content {
-        ContentBlock::Text { text } => assert_eq!(text, ""),
+        ContentBlock::Text { text, .. } => assert_eq!(text, ""),
         _ => panic!("Expected empty text"),
     }
 
@@ -547,14 +561,16 @@ async fn test_edge_cases_and_robustness() {
     let special_chars =
         PromptMessage::assistant_text("Special chars: áéíóú 中文 🚀 \"quotes\" 'apostrophes'");
     match special_chars.content {
-        ContentBlock::Text { text } => assert!(text.contains("áéíóú")),
+        ContentBlock::Text { text, .. } => assert!(text.contains("áéíóú")),
         _ => panic!("Expected special character text"),
     }
 
     // Minimal base64 image
     let minimal_image = PromptMessage::user_image("AA==", "image/gif");
     match minimal_image.content {
-        ContentBlock::Image { data, mime_type } => {
+        ContentBlock::Image {
+            data, mime_type, ..
+        } => {
             assert_eq!(data, "AA==");
             assert_eq!(mime_type, "image/gif");
         }
@@ -580,19 +596,26 @@ async fn test_complex_content_block_combinations() {
                     title: Some("Analysis Dataset".to_string()),
                     description: Some("Primary dataset for analysis".to_string()),
                     mime_type: Some("text/csv".to_string()),
+                    annotations: None,
+                    meta: None,
                 },
+                annotations: None,
+                meta: None,
             },
         },
         PromptMessage::assistant_text("I'll analyze the dataset. Here's the summary:"),
         PromptMessage {
             role: Role::Assistant,
             content: ContentBlock::Resource {
-                resource: ResourceContents::Text {
+                resource: ResourceContents::Text(TextResourceContents {
                     uri: "memory://analysis_result".to_string(),
                     mime_type: Some("application/json".to_string()),
                     text: r#"{"rows": 1000, "columns": 5, "summary": "comprehensive"}"#.to_string(),
-                },
-                annotations: Some(json!({"type": "analysis_result"})),
+                    meta: None,
+                }),
+                annotations: Some(Annotations {
+                    title: Some("analysis_result".to_string()),
+                }),
                 meta: None,
             },
         },
@@ -601,6 +624,8 @@ async fn test_complex_content_block_combinations() {
             content: ContentBlock::Image {
                 data: "base64chartdata".to_string(),
                 mime_type: "image/svg+xml".to_string(),
+                annotations: None,
+                meta: None,
             },
         },
     ];
@@ -609,7 +634,7 @@ async fn test_complex_content_block_combinations() {
 
     // Verify each message type
     match &complex_messages[1].content {
-        ContentBlock::ResourceLink { resource } => {
+        ContentBlock::ResourceLink { resource, .. } => {
             assert_eq!(resource.name, "dataset");
         }
         _ => panic!("Expected ResourceLink"),
@@ -617,7 +642,7 @@ async fn test_complex_content_block_combinations() {
 
     match &complex_messages[3].content {
         ContentBlock::Resource { resource, .. } => match resource {
-            ResourceContents::Text { text, .. } => assert!(text.contains("rows")),
+            ResourceContents::Text(text_contents) => assert!(text_contents.text.contains("rows")),
             _ => panic!("Expected Text resource"),
         },
         _ => panic!("Expected Resource"),

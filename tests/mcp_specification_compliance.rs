@@ -6,8 +6,8 @@
 //! These tests now actually start servers and make real MCP calls instead of
 //! checking static JSON expectations.
 
+use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 use serde_json::{Value, json};
-use mcp_e2e_shared::{McpTestClient, TestServerManager, TestFixtures};
 
 /// Test runtime capability truthfulness via actual initialize endpoint
 #[tokio::test]
@@ -33,12 +33,18 @@ async fn test_runtime_capability_truthfulness() {
         if let Some(resources) = capabilities.get("resources") {
             // Framework is static, so listChanged MUST be false (if present)
             if let Some(list_changed) = resources.get("listChanged") {
-                assert_eq!(list_changed, false, "Static framework must advertise listChanged=false");
+                assert_eq!(
+                    list_changed, false,
+                    "Static framework must advertise listChanged=false"
+                );
             }
 
             // Framework doesn't support subscriptions, so subscribe MUST be false (if present)
             if let Some(subscribe) = resources.get("subscribe") {
-                assert_eq!(subscribe, false, "Framework doesn't support resource subscriptions");
+                assert_eq!(
+                    subscribe, false,
+                    "Framework doesn't support resource subscriptions"
+                );
             }
         }
 
@@ -46,7 +52,10 @@ async fn test_runtime_capability_truthfulness() {
         if let Some(tools) = capabilities.get("tools") {
             // Framework is static, so listChanged MUST be false (if present)
             if let Some(list_changed) = tools.get("listChanged") {
-                assert_eq!(list_changed, false, "Static framework must advertise listChanged=false");
+                assert_eq!(
+                    list_changed, false,
+                    "Static framework must advertise listChanged=false"
+                );
             }
         }
 
@@ -54,11 +63,17 @@ async fn test_runtime_capability_truthfulness() {
         if let Some(prompts) = capabilities.get("prompts") {
             // Framework is static, so listChanged MUST be false (if present)
             if let Some(list_changed) = prompts.get("listChanged") {
-                assert_eq!(list_changed, false, "Static framework must advertise listChanged=false");
+                assert_eq!(
+                    list_changed, false,
+                    "Static framework must advertise listChanged=false"
+                );
             }
         }
 
-        println!("✅ Server capabilities truthfulness validated: {:?}", capabilities);
+        println!(
+            "✅ Server capabilities truthfulness validated: {:?}",
+            capabilities
+        );
     } else {
         panic!("Server did not return capabilities in initialize response");
     }
@@ -185,10 +200,16 @@ async fn test_mcp_response_structure_compliance() {
                 assert!(name.is_string(), "Resource name must be string if present");
             }
             if let Some(description) = resource.get("description") {
-                assert!(description.is_string(), "Resource description must be string if present");
+                assert!(
+                    description.is_string(),
+                    "Resource description must be string if present"
+                );
             }
             if let Some(mime_type) = resource.get("mimeType") {
-                assert!(mime_type.is_string(), "Resource mimeType must be string if present");
+                assert!(
+                    mime_type.is_string(),
+                    "Resource mimeType must be string if present"
+                );
             }
         }
     }
@@ -200,7 +221,10 @@ async fn test_mcp_response_structure_compliance() {
     }
 
     println!("✅ Real MCP response structure compliance validated");
-    println!("   Found {} resources", resources.as_array().unwrap_or(&vec![]).len());
+    println!(
+        "   Found {} resources",
+        resources.as_array().unwrap_or(&vec![]).len()
+    );
 }
 
 /// Test URI validation compliance

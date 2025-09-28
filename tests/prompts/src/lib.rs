@@ -329,13 +329,13 @@ impl MultiContentPrompt {
             title: Some("Analysis Dataset".to_string()),
             description: Some("CSV dataset for analysis".to_string()),
             mime_type: Some("text/csv".to_string()),
+            annotations: None,
+            meta: None,
         };
 
         let resource_link_message = PromptMessage {
             role: turul_mcp_protocol::prompts::Role::User,
-            content: ContentBlock::ResourceLink {
-                resource: data_resource,
-            },
+            content: ContentBlock::resource_link(data_resource),
         };
         messages.push(resource_link_message);
 
@@ -345,24 +345,21 @@ impl MultiContentPrompt {
 
             let image_message = PromptMessage {
                 role: turul_mcp_protocol::prompts::Role::User,
-                content: ContentBlock::Image {
-                    data: chart_image.to_string(),
-                    mime_type: "image/png".to_string(),
-                },
+                content: ContentBlock::image(chart_image, "image/png"),
             };
             messages.push(image_message);
         }
 
         // 4. Embedded Resource ContentBlock
-        let config_resource = ResourceContents::Text {
-            uri: "memory://analysis_config".to_string(),
-            mime_type: Some("application/json".to_string()),
-            text: json!({
+        let config_resource = ResourceContents::text_with_mime(
+            "file:///analysis/config.json",
+            json!({
                 "analysis_type": self.analysis_type,
                 "parameters": {"confidence_level": 0.95}
             })
             .to_string(),
-        };
+            "application/json",
+        );
 
         let mut meta = HashMap::new();
         meta.insert("config_version".to_string(), json!("2.1"));
@@ -371,7 +368,7 @@ impl MultiContentPrompt {
             role: turul_mcp_protocol::prompts::Role::User,
             content: ContentBlock::Resource {
                 resource: config_resource,
-                annotations: Some(json!({"type": "analysis_configuration"})),
+                annotations: Some(Annotations::new().with_title("analysis_configuration")),
                 meta: Some(meta),
             },
         };

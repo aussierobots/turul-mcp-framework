@@ -53,7 +53,7 @@ mod integration_tests {
         // Verify using framework types
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
-            ToolResult::Text { text } => {
+            ToolResult::Text { text, .. } => {
                 let parsed: Value = serde_json::from_str(text).unwrap();
                 // Derive macro uses "output" as the default field name
                 assert_eq!(parsed["output"], 8.0);
@@ -74,7 +74,7 @@ mod integration_tests {
 
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
-            ToolResult::Text { text } => {
+            ToolResult::Text { text, .. } => {
                 let parsed: Value = serde_json::from_str(text).unwrap();
                 assert_eq!(parsed["result"], 24.0);
             }
@@ -177,7 +177,7 @@ mod integration_tests {
         // Verify result structure
         assert_eq!(result.content.len(), 1);
         match &result.content[0] {
-            ToolResult::Text { text } => {
+            ToolResult::Text { text, .. } => {
                 let parsed: Value = serde_json::from_str(text).unwrap();
                 // Derive macro uses "output" as the default field name
                 assert_eq!(parsed["output"], 9.0);

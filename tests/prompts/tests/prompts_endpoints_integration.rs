@@ -205,12 +205,18 @@ async fn test_prompts_get_endpoint_integration() {
     assert_eq!(get_result.messages.len(), 2); // User + assistant messages
 
     // Verify message roles are MCP-compliant (only user/assistant, no system)
-    assert_eq!(get_result.messages[0].role, Role::User);
-    assert_eq!(get_result.messages[1].role, Role::Assistant);
+    assert_eq!(
+        get_result.messages[0].role,
+        turul_mcp_protocol::prompts::Role::User
+    );
+    assert_eq!(
+        get_result.messages[1].role,
+        turul_mcp_protocol::prompts::Role::Assistant
+    );
 
     // Verify message content uses proper ContentBlock variants
     match &get_result.messages[0].content {
-        ContentBlock::Text { text } => {
+        ContentBlock::Text { text, .. } => {
             assert!(text.contains("integration_test_prompt"));
         }
         _ => panic!("Expected ContentBlock::Text variant"),
