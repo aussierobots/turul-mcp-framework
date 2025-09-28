@@ -1,8 +1,9 @@
 //! HTTP transport implementation for MCP client
 
 use async_trait::async_trait;
+use futures::Stream;
 use reqwest::{Client, Response};
-use serde_json::Value;
+use serde_json::{Deserializer, Value};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -31,8 +32,10 @@ pub struct HttpTransport {
     stats: Arc<parking_lot::Mutex<TransportStatistics>>,
     /// Event sender for server events
     event_sender: Option<mpsc::UnboundedSender<ServerEvent>>,
-    /// Session ID from server (set after initialization)
-    session_id: Option<String>,
+    /// Queue for progress notifications when no listener exists
+    queued_events: Arc<parking_lot::Mutex<Vec<ServerEvent>>>,
+    /// Session ID from server (set after initialization) - shared between transport and SSE task
+    session_id: Arc<parking_lot::Mutex<Option<String>>>,
 }
 
 impl HttpTransport {
@@ -63,7 +66,8 @@ impl HttpTransport {
             request_counter: AtomicU64::new(0),
             stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
             event_sender: None,
-            session_id: None,
+            queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
+            session_id: Arc::new(parking_lot::Mutex::new(None)),
         })
     }
 
@@ -79,14 +83,15 @@ impl HttpTransport {
             request_counter: AtomicU64::new(0),
             stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
             event_sender: None,
-            session_id: None,
+            queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
+            session_id: Arc::new(parking_lot::Mutex::new(None)),
         })
     }
 
     /// Set the session ID to use for subsequent requests
     pub fn set_session_id(&mut self, session_id: String) {
         debug!("Setting session ID: {}", session_id);
-        self.session_id = Some(session_id);
+        *self.session_id.lock() = Some(session_id);
     }
 
     /// Generate unique request ID
@@ -102,6 +107,17 @@ impl HttpTransport {
     {
         let mut stats = self.stats.lock();
         update_fn(&mut stats);
+    }
+
+    /// Test helper: Process an in-memory byte stream (for testing without network)
+    #[doc(hidden)]
+    pub async fn test_handle_byte_stream<S, B, E>(&mut self, stream: S) -> McpClientResult<Value>
+    where
+        S: Stream<Item = Result<B, E>> + Unpin,
+        B: AsRef<[u8]>,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        self.handle_byte_stream(stream).await
     }
 
     /// Handle HTTP response
@@ -128,7 +144,7 @@ impl HttpTransport {
         if let Some(session_header) = response.headers().get("mcp-session-id") {
             if let Ok(session_str) = session_header.to_str() {
                 debug!("Captured session ID from response: {}", session_str);
-                self.session_id = Some(session_str.to_owned());
+                *self.session_id.lock() = Some(session_str.to_owned());
             }
         }
 
@@ -138,24 +154,148 @@ impl HttpTransport {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
 
-        if !content_type.contains("application/json") {
-            warn!(
-                content_type = content_type,
-                "Unexpected content type from server"
-            );
+        // Always use streaming approach for JSON responses (handles both single and chunked)
+        if content_type.contains("application/json") {
+            self.handle_json_stream(response).await
+        } else if content_type.contains("text/event-stream") {
+            // Should not happen in send_request, but handle gracefully
+            Err(TransportError::Http("Unexpected SSE response in send_request".to_string()).into())
+        } else {
+            Err(TransportError::Http(format!("Unsupported content type: {}", content_type)).into())
+        }
+    }
+
+    /// Handle JSON stream (works for both single responses and chunked streaming)
+    async fn handle_json_stream(&mut self, response: Response) -> McpClientResult<Value> {
+        use futures::StreamExt;
+
+        let stream = response.bytes_stream().map(|result| {
+            result.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        });
+
+        self.handle_byte_stream(stream).await
+    }
+
+    /// Handle a generic byte stream (for both HTTP responses and in-memory testing)
+    async fn handle_byte_stream<S, B, E>(&mut self, mut stream: S) -> McpClientResult<Value>
+    where
+        S: Stream<Item = Result<B, E>> + Unpin,
+        B: AsRef<[u8]>,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        use futures::StreamExt;
+
+        // Ensure event channel exists (lazy creation)
+        if self.event_sender.is_none() {
+            let (tx, _rx) = mpsc::unbounded_channel();
+            self.event_sender = Some(tx);
         }
 
-        let response_text = response
-            .text()
-            .await
-            .map_err(|e| TransportError::Http(format!("Failed to read response: {}", e)))?;
+        let mut buffer = Vec::new();
 
-        let response_json: Value = serde_json::from_str(&response_text)
-            .map_err(|e| TransportError::Http(format!("Invalid JSON response: {}", e)))?;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| TransportError::Http(format!("Stream error: {}", e)))?;
+            buffer.extend_from_slice(chunk.as_ref());
 
-        self.update_stats(|stats| stats.responses_received += 1);
+            // Use proper incremental JSON parsing that tracks exact bytes consumed
+            let mut processed_bytes = 0;
+            loop {
+                if processed_bytes >= buffer.len() {
+                    break;
+                }
 
-        Ok(response_json)
+                // Try to parse a single JSON value from the remaining buffer
+                let remaining_buffer = &buffer[processed_bytes..];
+                let mut stream = Deserializer::from_slice(remaining_buffer).into_iter::<Value>();
+
+                match stream.next() {
+                    Some(Ok(json)) => {
+                        // Calculate how many bytes were consumed by this JSON object
+                        let consumed_bytes = stream.byte_offset();
+
+                        debug!(
+                            "Parsed JSON frame ({} bytes): {}",
+                            consumed_bytes,
+                            serde_json::to_string(&json).unwrap_or_default()
+                        );
+
+                        // Check if this is a final frame (has id + result/error)
+                        if let Some(_id) = json.get("id") {
+                            if json.get("result").is_some() {
+                                self.update_stats(|stats| stats.responses_received += 1);
+                                return Ok(json); // Success response
+                            } else if let Some(error) = json.get("error") {
+                                self.update_stats(|stats| {
+                                    stats.errors += 1;
+                                    stats.last_error = Some(format!("JSON-RPC error: {}", error));
+                                });
+                                return Err(TransportError::Http(format!(
+                                    "Server error: {}",
+                                    error
+                                ))
+                                .into());
+                            }
+                        }
+
+                        // Progress notification - send via event channel or queue for later
+                        if json.get("method").is_some() {
+                            let event = ServerEvent::Notification(json.clone());
+                            if let Some(sender) = &self.event_sender {
+                                if sender.send(event.clone()).is_err() {
+                                    // Channel closed, queue the event for future listeners
+                                    debug!("Event channel closed, queuing notification");
+                                    self.queued_events.lock().push(event);
+                                } else {
+                                    debug!(
+                                        "Forwarded progress notification via active event channel"
+                                    );
+                                }
+                            } else {
+                                // No listener yet, queue the event
+                                debug!("No event listener active, queuing progress notification");
+                                self.queued_events.lock().push(event);
+                            }
+                        }
+
+                        // Update processed bytes counter
+                        processed_bytes += consumed_bytes;
+                    }
+                    Some(Err(e)) => {
+                        // If we can't parse a complete JSON object, we have an incomplete frame
+                        // Wait for more data - the byte_offset approach handles partial JSON correctly
+                        debug!(
+                            "Incomplete JSON in buffer, waiting for more data. Parse error: {}",
+                            e
+                        );
+                        break;
+                    }
+                    None => {
+                        // No more complete JSON objects to parse, wait for more data
+                        break;
+                    }
+                }
+            }
+
+            // Remove processed data from buffer
+            if processed_bytes > 0 {
+                buffer.drain(..processed_bytes);
+            }
+        }
+
+        // Stream ended - check if we have a complete response in buffer
+        if !buffer.is_empty() {
+            if let Ok(json) = serde_json::from_slice::<Value>(&buffer) {
+                if json.get("id").is_some()
+                    && (json.get("result").is_some() || json.get("error").is_some())
+                {
+                    self.update_stats(|stats| stats.responses_received += 1);
+                    return Ok(json);
+                }
+            }
+        }
+
+        // If we get here, no final frame was found
+        Err(TransportError::Http("Stream ended without final result".to_string()).into())
     }
 
     /// Handle HTTP response with headers
@@ -185,7 +325,7 @@ impl HttpTransport {
         if let Some(session_header) = response.headers().get("mcp-session-id") {
             if let Ok(session_str) = session_header.to_str() {
                 debug!("Captured session ID from response headers: {}", session_str);
-                self.session_id = Some(session_str.to_owned());
+                *self.session_id.lock() = Some(session_str.to_owned());
             }
         }
 
@@ -203,22 +343,22 @@ impl HttpTransport {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
 
-        if !content_type.contains("application/json") {
-            warn!(
-                content_type = content_type,
-                "Unexpected content type from server"
-            );
-        }
-
-        let response_text = response
-            .text()
-            .await
-            .map_err(|e| TransportError::Http(format!("Failed to read response: {}", e)))?;
-
-        let response_json: Value = serde_json::from_str(&response_text)
-            .map_err(|e| TransportError::Http(format!("Invalid JSON response: {}", e)))?;
-
-        self.update_stats(|stats| stats.responses_received += 1);
+        // Use streaming approach for JSON responses (handles both single and chunked)
+        let response_json = if content_type.contains("application/json") {
+            self.handle_json_stream(response).await?
+        } else if content_type.contains("text/event-stream") {
+            // Should not happen in send_request_with_headers, but handle gracefully
+            return Err(TransportError::Http(
+                "Unexpected SSE response in send_request_with_headers".to_string(),
+            )
+            .into());
+        } else {
+            return Err(TransportError::Http(format!(
+                "Unsupported content type: {}",
+                content_type
+            ))
+            .into());
+        };
 
         Ok(crate::transport::TransportResponse::new(
             response_json,
@@ -315,8 +455,11 @@ impl Transport for HttpTransport {
             .header("MCP-Protocol-Version", "2025-06-18");
 
         // Include session ID if we have one
-        if let Some(ref session_id) = self.session_id {
+        if let Some(ref session_id) = *self.session_id.lock() {
+            debug!("HTTP request using session ID: {}", session_id);
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
+        } else {
+            warn!("HTTP request attempted without session ID - server may reject for non-initialize methods");
         }
 
         let response = req_builder
@@ -376,8 +519,11 @@ impl Transport for HttpTransport {
             .header("MCP-Protocol-Version", "2025-06-18");
 
         // Include session ID if we have one
-        if let Some(ref session_id) = self.session_id {
+        if let Some(ref session_id) = *self.session_id.lock() {
+            debug!("HTTP request with headers using session ID: {}", session_id);
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
+        } else {
+            warn!("HTTP request with headers attempted without session ID - server may reject");
         }
 
         let response = req_builder
@@ -427,8 +573,11 @@ impl Transport for HttpTransport {
             .header("MCP-Protocol-Version", "2025-06-18");
 
         // Include session ID if we have one
-        if let Some(ref session_id) = self.session_id {
+        if let Some(ref session_id) = *self.session_id.lock() {
+            debug!("HTTP notification using session ID: {}", session_id);
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
+        } else {
+            warn!("HTTP notification attempted without session ID - server may reject");
         }
 
         let response = req_builder
@@ -516,13 +665,204 @@ impl Transport for HttpTransport {
     }
 
     async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver> {
-        // HTTP transport doesn't support server-initiated events
-        // Return a channel that will never receive messages
-        let (sender, receiver) = mpsc::unbounded_channel();
-        self.event_sender = Some(sender);
+        use futures::StreamExt;
 
-        warn!("HTTP transport does not support server events - event listener will be inactive");
-        Ok(receiver)
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.event_sender = Some(tx.clone());
+
+        // Replay any queued events to the new listener
+        let queued_events = {
+            let mut queue = self.queued_events.lock();
+            let events = queue.clone();
+            queue.clear(); // Clear the queue after replaying
+            events
+        };
+
+        for event in &queued_events {
+            if tx.send(event.clone()).is_err() {
+                warn!("Failed to replay queued event - channel already closed");
+                break;
+            }
+        }
+
+        if !queued_events.is_empty() {
+            debug!(
+                "Replayed {} queued events to new listener",
+                queued_events.len()
+            );
+        }
+
+        if !self.is_connected() {
+            warn!("Not connected - event listener will be inactive");
+            return Ok(rx);
+        }
+
+        // Start SSE connection task for GET requests
+        let client = self.client.clone();
+        let url = self.endpoint.clone();
+        let session_id = self.session_id.clone();
+
+        info!("Starting SSE event listener for GET requests at: {}", url);
+
+        tokio::spawn(async move {
+            loop {
+                // GET request with SSE accept header
+                let mut request_builder = client
+                    .get(url.as_str())
+                    .header("Accept", "text/event-stream")
+                    .header("MCP-Protocol-Version", "2025-06-18");
+
+                // Include session ID if available (read fresh value each time)
+                if let Some(ref current_session_id) = *session_id.lock() {
+                    debug!("SSE request using session ID: {}", current_session_id);
+                    request_builder = request_builder.header("Mcp-Session-Id", current_session_id);
+                } else {
+                    warn!("SSE request attempted without session ID - server may reject");
+                }
+
+                let response = match request_builder.send().await {
+                    Ok(resp) if resp.status().is_success() => {
+                        debug!("SSE connection established, status: {}", resp.status());
+
+                        let content_type = resp
+                            .headers()
+                            .get("content-type")
+                            .and_then(|v| v.to_str().ok())
+                            .unwrap_or("");
+
+                        if !content_type.contains("text/event-stream") {
+                            warn!(
+                                "Server returned content-type '{}' instead of 'text/event-stream'",
+                                content_type
+                            );
+                        }
+
+                        resp
+                    }
+                    Ok(resp) => {
+                        warn!("SSE connection failed with status: {}", resp.status());
+                        if tx
+                            .send(ServerEvent::Error(format!("HTTP {}", resp.status())))
+                            .is_err()
+                        {
+                            debug!("Event channel closed, stopping SSE listener");
+                            return;
+                        }
+                        // Wait before retrying
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                        continue;
+                    }
+                    Err(e) => {
+                        warn!("SSE connection error: {}", e);
+                        if tx.send(ServerEvent::Error(e.to_string())).is_err() {
+                            debug!("Event channel closed, stopping SSE listener");
+                            return;
+                        }
+                        // Wait before retrying
+                        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                        continue;
+                    }
+                };
+
+                let mut stream = response.bytes_stream();
+                let mut buffer = String::new();
+
+                while let Some(chunk) = stream.next().await {
+                    if tx.is_closed() {
+                        debug!("Event receiver dropped, stopping SSE listener");
+                        return; // Receiver dropped, exit cleanly
+                    }
+
+                    match chunk {
+                        Ok(bytes) => {
+                            buffer.push_str(&String::from_utf8_lossy(&bytes));
+
+                            // Parse SSE events (data: {json}\n\n)
+                            while let Some(end) = buffer.find("\n\n") {
+                                let event_text = buffer[..end].to_string();
+                                buffer.drain(..end + 2);
+
+                                // Parse SSE event fields
+                                let mut event_type = None;
+                                let mut data = String::new();
+                                let mut id = None;
+
+                                for line in event_text.lines() {
+                                    if let Some(event_value) = line.strip_prefix("event: ") {
+                                        event_type = Some(event_value.to_string());
+                                    } else if let Some(data_value) = line.strip_prefix("data: ") {
+                                        if !data.is_empty() {
+                                            data.push('\n');
+                                        }
+                                        data.push_str(data_value);
+                                    } else if let Some(id_value) = line.strip_prefix("id: ") {
+                                        id = Some(id_value.to_string());
+                                    }
+                                }
+
+                                if !data.is_empty() {
+                                    // Try to parse as JSON
+                                    match serde_json::from_str::<Value>(&data) {
+                                        Ok(json) => {
+                                            debug!(
+                                                "Received SSE event: type={:?}, id={:?}, data={}",
+                                                event_type, id, data
+                                            );
+
+                                            // Determine event type based on JSON content
+                                            if json.get("method").is_some() {
+                                                // Notification
+                                                if tx.send(ServerEvent::Notification(json)).is_err()
+                                                {
+                                                    debug!("Event channel closed during send");
+                                                    return;
+                                                }
+                                            } else if json.get("id").is_some() {
+                                                // Request requiring response
+                                                if tx.send(ServerEvent::Request(json)).is_err() {
+                                                    debug!("Event channel closed during send");
+                                                    return;
+                                                }
+                                            } else {
+                                                // Other data
+                                                if tx.send(ServerEvent::Notification(json)).is_err()
+                                                {
+                                                    debug!("Event channel closed during send");
+                                                    return;
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            warn!(
+                                                "Failed to parse SSE data as JSON: {} - data: {}",
+                                                e, data
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("SSE stream error: {}", e);
+                            break;
+                        }
+                    }
+                }
+
+                // Connection lost, send event and retry
+                info!("SSE connection lost, attempting to reconnect...");
+                if tx.send(ServerEvent::ConnectionLost).is_err() {
+                    debug!("Event channel closed, stopping SSE listener");
+                    return;
+                }
+
+                // Wait before retrying
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+        });
+
+        info!("SSE event listener started successfully");
+        Ok(rx)
     }
 
     fn connection_info(&self) -> ConnectionInfo {
@@ -564,7 +904,7 @@ impl Transport for HttpTransport {
 
     fn set_session_id(&mut self, session_id: String) {
         debug!("HttpTransport: Setting session ID: {}", session_id);
-        self.session_id = Some(session_id);
+        *self.session_id.lock() = Some(session_id);
     }
 
     fn statistics(&self) -> TransportStatistics {
@@ -624,5 +964,193 @@ mod tests {
         assert_ne!(id1, id2);
         assert!(id1.starts_with("req_"));
         assert!(id2.starts_with("req_"));
+    }
+
+    /// Test helper to create an in-memory byte stream for testing
+    fn create_test_stream(data: Vec<Vec<u8>>) -> impl Stream<Item = Result<Vec<u8>, std::io::Error>> + Unpin {
+        futures::stream::iter(data.into_iter().map(Ok))
+    }
+
+    #[tokio::test]
+    async fn test_handle_byte_stream_single_response() {
+        let mut transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
+
+        // Create a single JSON response
+        let response_json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {
+                "tools": []
+            }
+        });
+        let response_bytes = serde_json::to_vec(&response_json).unwrap();
+
+        // Create stream with single chunk
+        let stream = create_test_stream(vec![response_bytes]);
+
+        // Process the stream
+        let result = transport.handle_byte_stream(stream).await.unwrap();
+
+        assert_eq!(result["jsonrpc"], "2.0");
+        assert_eq!(result["id"], 1);
+        assert!(result.get("result").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_handle_byte_stream_chunked_response() {
+        let mut transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
+
+        // Create a response that will be split across chunks
+        let response_json = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+                "tools": [
+                    {"name": "calculator", "description": "A calculator tool"}
+                ]
+            }
+        });
+        let response_bytes = serde_json::to_vec(&response_json).unwrap();
+
+        // Split the response into multiple chunks to test streaming
+        let chunk1 = response_bytes[..20].to_vec();
+        let chunk2 = response_bytes[20..40].to_vec();
+        let chunk3 = response_bytes[40..].to_vec();
+
+        let stream = create_test_stream(vec![chunk1, chunk2, chunk3]);
+
+        // Process the stream
+        let result = transport.handle_byte_stream(stream).await.unwrap();
+
+        assert_eq!(result["jsonrpc"], "2.0");
+        assert_eq!(result["id"], 2);
+        assert!(result.get("result").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_handle_byte_stream_with_progress_notifications() {
+        let mut transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
+
+        // Create progress notification followed by final response
+        let progress1 = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/progress",
+            "params": {
+                "progressToken": "test_progress",
+                "progress": 50,
+                "total": 100
+            }
+        });
+
+        let progress2 = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/progress",
+            "params": {
+                "progressToken": "test_progress",
+                "progress": 100,
+                "total": 100
+            }
+        });
+
+        let final_response = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+                "success": true
+            }
+        });
+
+        // Create separate chunks for each frame
+        let progress1_bytes = serde_json::to_vec(&progress1).unwrap();
+        let progress2_bytes = serde_json::to_vec(&progress2).unwrap();
+        let final_bytes = serde_json::to_vec(&final_response).unwrap();
+
+        let stream = create_test_stream(vec![progress1_bytes, progress2_bytes, final_bytes]);
+
+        // Start event listener to capture progress notifications
+        let mut events = transport.start_event_listener().await.unwrap();
+
+        // Process the stream (should return final response)
+        let result = transport.handle_byte_stream(stream).await.unwrap();
+
+        // Verify final response
+        assert_eq!(result["jsonrpc"], "2.0");
+        assert_eq!(result["id"], 3);
+        assert_eq!(result["result"]["success"], true);
+
+        // Verify progress notifications were captured (with timeout to avoid hanging)
+        use tokio::time::{timeout, Duration};
+
+        let event1 = timeout(Duration::from_millis(100), events.recv()).await;
+        assert!(event1.is_ok() && event1.unwrap().is_some());
+
+        let event2 = timeout(Duration::from_millis(100), events.recv()).await;
+        assert!(event2.is_ok() && event2.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn test_progress_event_queue_replay() {
+        let mut transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
+
+        // Create progress notifications that arrive BEFORE starting event listener
+        let progress1 = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/progress",
+            "params": {
+                "progressToken": "early_progress",
+                "progress": 25,
+                "total": 100
+            }
+        });
+
+        let progress2 = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/progress",
+            "params": {
+                "progressToken": "early_progress",
+                "progress": 75,
+                "total": 100
+            }
+        });
+
+        let final_response = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 4,
+            "result": {
+                "queued_events_test": true
+            }
+        });
+
+        // Create separate chunks for each frame
+        let progress1_bytes = serde_json::to_vec(&progress1).unwrap();
+        let progress2_bytes = serde_json::to_vec(&progress2).unwrap();
+        let final_bytes = serde_json::to_vec(&final_response).unwrap();
+
+        let stream = create_test_stream(vec![progress1_bytes, progress2_bytes, final_bytes]);
+
+        // Process stream WITHOUT starting event listener first
+        // This should queue the progress notifications
+        let result = transport.handle_byte_stream(stream).await.unwrap();
+
+        // Verify final response
+        assert_eq!(result["jsonrpc"], "2.0");
+        assert_eq!(result["id"], 4);
+        assert_eq!(result["result"]["queued_events_test"], true);
+
+        // NOW start event listener - should replay queued events
+        let mut events = transport.start_event_listener().await.unwrap();
+
+        // Verify queued events are replayed (with timeout to avoid hanging)
+        use tokio::time::{timeout, Duration};
+
+        let event1 = timeout(Duration::from_millis(100), events.recv()).await;
+        assert!(event1.is_ok() && event1.unwrap().is_some(), "Should replay first queued event");
+
+        let event2 = timeout(Duration::from_millis(100), events.recv()).await;
+        assert!(event2.is_ok() && event2.unwrap().is_some(), "Should replay second queued event");
+
+        // Verify no more events (queue should be empty after replay)
+        let no_more_events = timeout(Duration::from_millis(50), events.recv()).await;
+        assert!(no_more_events.is_err(), "Should not have any more events after replay");
     }
 }

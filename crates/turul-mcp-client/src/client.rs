@@ -12,6 +12,7 @@ use crate::streaming::StreamHandler;
 use crate::transport::{BoxedTransport, TransportFactory};
 
 // Re-export protocol types for convenience
+use turul_mcp_protocol::meta::Cursor;
 use turul_mcp_protocol::{
     CallToolResult, GetPromptResult, InitializeResult, ListPromptsResult, ListResourcesResult,
     ListToolsResult, Prompt, ReadResourceResult, Resource, Tool, ToolResult,
@@ -422,6 +423,38 @@ impl McpClient {
         Ok(tools_response.tools)
     }
 
+    /// List available tools with pagination support
+    pub async fn list_tools_paginated(
+        &self,
+        cursor: Option<Cursor>,
+    ) -> McpClientResult<ListToolsResult> {
+        debug!("Listing tools with pagination");
+
+        let request_params = if let Some(cursor) = cursor {
+            json!({ "cursor": cursor.as_str() })
+        } else {
+            json!({})
+        };
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": self.next_request_id(),
+            "params": request_params
+        });
+
+        let response = self.send_request_internal(request).await?;
+        let tools_response: ListToolsResult =
+            serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
+
+        debug!(
+            count = tools_response.tools.len(),
+            has_cursor = tools_response.next_cursor.is_some(),
+            "Retrieved tools with pagination"
+        );
+        Ok(tools_response)
+    }
+
     /// Call a tool
     pub async fn call_tool(
         &self,
@@ -474,6 +507,38 @@ impl McpClient {
         Ok(resources_response.resources)
     }
 
+    /// List available resources with pagination support
+    pub async fn list_resources_paginated(
+        &self,
+        cursor: Option<Cursor>,
+    ) -> McpClientResult<ListResourcesResult> {
+        debug!("Listing resources with pagination");
+
+        let request_params = if let Some(cursor) = cursor {
+            json!({ "cursor": cursor.as_str() })
+        } else {
+            json!({})
+        };
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "resources/list",
+            "id": self.next_request_id(),
+            "params": request_params
+        });
+
+        let response = self.send_request_internal(request).await?;
+        let resources_response: ListResourcesResult =
+            serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
+
+        debug!(
+            count = resources_response.resources.len(),
+            has_cursor = resources_response.next_cursor.is_some(),
+            "Retrieved resources with pagination"
+        );
+        Ok(resources_response)
+    }
+
     /// Read a resource
     pub async fn read_resource(
         &self,
@@ -519,6 +584,38 @@ impl McpClient {
 
         debug!(count = prompts_response.prompts.len(), "Retrieved prompts");
         Ok(prompts_response.prompts)
+    }
+
+    /// List available prompts with pagination support
+    pub async fn list_prompts_paginated(
+        &self,
+        cursor: Option<Cursor>,
+    ) -> McpClientResult<ListPromptsResult> {
+        debug!("Listing prompts with pagination");
+
+        let request_params = if let Some(cursor) = cursor {
+            json!({ "cursor": cursor.as_str() })
+        } else {
+            json!({})
+        };
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "prompts/list",
+            "id": self.next_request_id(),
+            "params": request_params
+        });
+
+        let response = self.send_request_internal(request).await?;
+        let prompts_response: ListPromptsResult =
+            serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
+
+        debug!(
+            count = prompts_response.prompts.len(),
+            has_cursor = prompts_response.next_cursor.is_some(),
+            "Retrieved prompts with pagination"
+        );
+        Ok(prompts_response)
     }
 
     /// Get a prompt
