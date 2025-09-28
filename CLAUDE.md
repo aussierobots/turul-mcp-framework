@@ -122,6 +122,107 @@ The framework uses **separate response types** for success and error cases:
 
 **Production Rule**: Always use `file://` URIs for maximum compatibility with security middleware.
 
+### 🎯 Phase 4: MCP 2025-06-18 Specification Compliance
+**STATUS**: Complete
+
+The framework now strictly complies with the MCP 2025-06-18 specification by removing non-spec extensions:
+
+```rust
+// Tool annotations with spec-compliant fields only
+impl HasAnnotations for LegacyTool {
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        Some(&ToolAnnotations::new()
+            .with_title("Legacy Calculator (Add Only)")
+            .with_read_only_hint(true)
+            .with_destructive_hint(false)
+            .with_idempotent_hint(true)
+        )
+    }
+}
+```
+
+**Key Features:**
+- Full MCP 2025-06-18 specification compliance
+- Standard `ToolAnnotations` with spec-defined hint fields only
+- Automatic inclusion in `tools/list` responses
+- No custom extensions that could cause client compatibility issues
+- Wire output strictly follows official JSON schema
+
+**Testing**: See `tools-test-server` with `legacy_calculator` tool demonstrating spec-compliant annotations.
+
+### 📄 Client Pagination API Limitations
+**IMPORTANT**: Pagination helper methods only accept cursor parameters, not full request customization:
+
+```rust
+// ✅ AVAILABLE - Cursor-only pagination helpers
+client.list_tools_paginated(cursor).await?;          // Returns ListToolsResult with _meta
+client.list_resources_paginated(cursor).await?;      // Returns ListResourcesResult with _meta
+client.list_prompts_paginated(cursor).await?;        // Returns ListPromptsResult with _meta
+
+// ❌ LIMITED - Cannot pass custom limits, _meta, or other list parameters
+// For advanced pagination control, hand-roll the request:
+client.call("tools/list", Some(RequestParams::List(ListToolsParams {
+    cursor: Some(cursor),
+    limit: Some(50),  // Custom limit
+    // ... other params
+}))).await?
+```
+
+**Design Rationale**: Helper methods provide simple cursor-based navigation while preserving full control through the underlying `call()` method for advanced use cases.
+
+### 🌐 Streamable HTTP Requirements (2025-09-27)
+**UPDATED**: Streamable HTTP handler now accepts full Accept header matrix:
+
+```rust
+// ✅ SUPPORTED - All valid Accept headers work
+.header(ACCEPT, "application/json")                      // JSON responses
+.header(ACCEPT, "text/event-stream")                     // SSE streaming
+.header(ACCEPT, "application/json, text/event-stream")   // Combined (now works)
+.header(ACCEPT, "*/*")                                   // Accept all
+
+// ⚠️  LIMITATION - Progress notifications only work with SSE
+// SSE streaming (.header(ACCEPT, "text/event-stream")) required for progress events
+// JSON-only requests receive final result without intermediate progress updates
+```
+
+**Key Rules for Streamable HTTP Tests:**
+- **ALL requests** (GET, POST, DELETE) need valid Accept header (application/json, text/event-stream, or */*)
+- **SSE streaming** requires `Accept: text/event-stream`
+- **JSON responses** work with `Accept: application/json` or `Accept: */*`
+- **Notifications** return `202 Accepted` (not `200 OK`)
+- **Strict mode** requires proper session initialization flow:
+  1. POST /mcp with `initialize` → gets session ID
+  2. POST /mcp with `notifications/initialized` → enables session
+  3. Then other operations work
+
+**Session Initialization Pattern:**
+```rust
+// 1. Initialize
+let init_response = client.request(Request::builder()
+    .method(Method::POST)
+    .uri("/mcp")
+    .header("Accept", "application/json")  // REQUIRED
+    .body(json!({"method": "initialize", ...}))
+).await?;
+
+// 2. Send notifications/initialized
+let notify_response = client.request(Request::builder()
+    .method(Method::POST)
+    .uri("/mcp")
+    .header("Accept", "application/json")  // REQUIRED
+    .header("MCP-Session-ID", &session_id)
+    .body(json!({"method": "notifications/initialized", ...}))
+).await?;
+// Expect 202 Accepted for notifications
+```
+
+**Framework Status (2025-09-27):**
+✅ **Production Ready** - All phases complete, full MCP 2025-06-18 compliance achieved
+✅ **Zero Test Failures** - All behavioral compliance and streaming tests pass
+✅ **Complete SSE Support** - Deadlock resolved, Accept header matrix fixed, parallel test execution working
+
+*For detailed phase progress and current development status, see TODO_TRACKER.md and WORKING_MEMORY.md*
+
 ## Quick Reference
 
 ### Tool Creation (4 Levels)
@@ -162,6 +263,23 @@ cargo run --example minimal-server
 cargo run --example client-initialise-server -- --port 52935
 cargo run --example client-initialise-report -- --url http://127.0.0.1:52935/mcp
 ```
+
+### Debugging: Stale Build Issues
+**CRITICAL**: When behavior doesn't match code changes (e.g., old error messages persist):
+```bash
+# ❌ INSUFFICIENT - Package-level clean may miss cross-crate dependencies
+cargo clean --package turul-http-mcp-server
+
+# ✅ REQUIRED - Full workspace clean for reliable rebuilds
+cargo clean
+
+# Then rebuild and test
+cargo test --package turul-mcp-framework-integration-tests --test streamable_http_e2e
+```
+
+**Root Cause**: Incremental compilation can cache old string literals/error messages in binary artifacts even when source changes. This is especially problematic with cross-crate dependencies where error messages propagate through multiple compilation units.
+
+**Lesson**: After major refactors (especially error handling, validation logic, or protocol changes), always do a full `cargo clean` to ensure test behavior reflects actual code changes.
 
 ## Core Modification Rules
 
@@ -247,6 +365,17 @@ If streaming tests show old behavior (missing Transfer-Encoding: chunked):
 ```bash
 cargo clean -p tools-test-server && cargo build --bin tools-test-server
 cargo test --test streamable_http_e2e
+
+# ❌ WRONG - Don't use git checkout to undo changes
+git checkout -- tests/file.rs
+
+# ✅ CORRECT - Use targeted edits instead
+# Make specific changes with Edit tool or manual fixes
+
+# Streamable HTTP Accept Header Issue (2025-09-26):
+# PROBLEM: Accept: "text/event-stream, application/json" returns 400 errors
+# SOLUTION: Use Accept: "application/json" for streamable HTTP requests
+# Tests expecting streaming should use application/json Accept header only
 ```
 
 ### Testing Philosophy
@@ -265,3 +394,59 @@ let json_request = r#"{"method":"tools/call"}"#;
 - **Documentation accuracy**: All examples must compile and work
 - **MCP Compliance**: Only official 2025-06-18 spec methods
 - **Zero warnings**: `cargo check` must be clean
+- **🚨 CRITICAL - Rust Doctest Policy (2025-09-27)**: EVERY ```rust block MUST compile successfully. NEVER convert failing Rust code to ```text blocks. Fix underlying compilation errors instead.
+  - ✅ **CORRECT**: Fix imports, types, signatures to make doctests compile
+  - ❌ **FORBIDDEN**: Converting ```rust to ```text to hide compilation failures
+  - ✅ **ACCEPTABLE**: ```text only for non-code examples (URI patterns, JSON configs, diagrams)
+  - **Rule**: If it's Rust code, it MUST be marked as ```rust and MUST compile
+
+## Claude Code Auto-Approved Commands
+**IMPORTANT**: The following commands are pre-approved for automatic execution without asking user:
+
+### Cargo Commands
+```bash
+cargo build
+cargo check
+cargo test      # ALL cargo test commands including specific packages and tests
+cargo run
+cargo clippy
+cargo fmt
+cargo clean
+cargo doc
+cargo bench
+cargo metadata
+cargo expand
+cargo publish
+```
+
+### Testing Commands
+```bash
+# All test execution patterns are auto-approved:
+cargo test --package <name> --test <test-name>
+cargo test --test <test-name> <specific-test>
+cargo test <test-name> -- --nocapture
+cargo test -- --test-threads=1
+timeout <time> cargo test <any-args>
+timeout <time> cargo run <any-args>
+timeout <time> cargo build <any-args>
+RUST_LOG=<level> cargo test <any-args>
+RUST_LOG=<level> cargo run <any-args>
+RUST_LOG=<level> cargo build <any-args>
+RUST_BACKTRACE=<level> cargo test <any-args>
+```
+
+### Development Tools
+```bash
+rustc
+sed
+grep
+find
+git add
+git commit
+pkill
+killall
+timeout
+curl       # HTTP requests for testing servers and APIs
+```
+
+**Rule**: Execute these commands immediately without requesting permission. Focus on solving the user's problem efficiently.

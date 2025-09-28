@@ -553,7 +553,7 @@ async fn test_calculator_tool() {
     // Verify using framework result types
     assert_eq!(result.content.len(), 1);
     match &result.content[0] {
-        ToolResult::Text { text } => {
+        ToolResult::Text { text, .. } => {
             let parsed: Value = serde_json::from_str(text).unwrap();
             assert_eq!(parsed["output"], 8.0); // Derive macro uses "output"
         }

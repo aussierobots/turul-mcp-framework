@@ -15,7 +15,7 @@ members = [
     
     # Test crates
 
-    # Active examples (34 total)
+    # Active examples (33 total)
     "examples/alert-system-server",
     "examples/audit-trail-server",
     "examples/builders-showcase",
@@ -60,6 +60,7 @@ members = [
     "examples/session-aware-logging-demo",
     "examples/session-logging-proof-test",
     "examples/session-management-compliance-test",
+    "examples/streamable-http-client",
 
     # Tests
     "tests",
