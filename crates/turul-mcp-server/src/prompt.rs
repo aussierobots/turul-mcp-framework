@@ -254,7 +254,8 @@ mod tests {
         assert_eq!(messages.len(), 1);
 
         // Check the content of the message
-        let turul_mcp_protocol::prompts::ContentBlock::Text { text } = &messages[0].content else {
+        let turul_mcp_protocol::prompts::ContentBlock::Text { text, .. } = &messages[0].content
+        else {
             panic!("Expected text message, got: {:?}", messages[0].content);
         };
         assert!(text.contains("artificial intelligence"));
@@ -297,7 +298,7 @@ mod tests {
         assert_eq!(response.description, Some("A greeting prompt".to_string()));
 
         // Check the content of the message
-        let turul_mcp_protocol::prompts::ContentBlock::Text { text } =
+        let turul_mcp_protocol::prompts::ContentBlock::Text { text, .. } =
             &response.messages[0].content
         else {
             panic!(

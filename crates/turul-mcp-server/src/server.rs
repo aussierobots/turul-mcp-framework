@@ -211,10 +211,15 @@ impl McpServer {
                 .cors(self.enable_cors)
                 .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
                 // POST SSE remains at default (false) for compatibility
+                .server_capabilities(self.capabilities.clone()) // Pass server capabilities
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(
                     vec!["tools/list".to_string()],
-                    ListToolsHandler::new(self.tools.clone()),
+                    ListToolsHandler::new_with_session_manager(
+                        self.tools.clone(),
+                        self.session_manager.clone(),
+                        self.strict_lifecycle,
+                    ),
                 )
                 .register_handler(vec!["tools/call".to_string()], tool_handler);
 
@@ -368,10 +373,15 @@ impl McpServer {
                 .cors(self.enable_cors)
                 .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
                 // POST SSE remains at default (false) for compatibility
+                .server_capabilities(self.capabilities.clone()) // Pass server capabilities
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(
                     vec!["tools/list".to_string()],
-                    ListToolsHandler::new(self.tools.clone()),
+                    ListToolsHandler::new_with_session_manager(
+                        self.tools.clone(),
+                        self.session_manager.clone(),
+                        self.strict_lifecycle,
+                    ),
                 )
                 .register_handler(vec!["tools/call".to_string()], tool_handler);
 
@@ -520,6 +530,63 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
         }
     }
 
+    async fn handle_notification(
+        &self,
+        method: &str,
+        params: Option<turul_mcp_json_rpc_server::RequestParams>,
+        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+    ) -> std::result::Result<(), McpError> {
+        debug!("Handling {} notification via session-aware bridge", method);
+
+        // Convert JSON-RPC SessionContext to MCP SessionContext
+        let mcp_session_context = if let Some(json_rpc_ctx) = session_context {
+            Some(SessionContext::from_json_rpc_with_broadcaster(
+                json_rpc_ctx,
+                self.session_manager.get_storage(),
+            ))
+        } else {
+            None
+        };
+
+        // MCP Lifecycle Guard for notifications: Allow notifications/initialized to pass through
+        // but enforce lifecycle for other notifications if strict mode is enabled
+        if self.strict_lifecycle
+            && method != "notifications/initialized"
+            && let Some(ref session_ctx) = mcp_session_context
+        {
+            let session_initialized = self
+                .session_manager
+                .is_session_initialized(&session_ctx.session_id)
+                .await;
+            if !session_initialized {
+                tracing::debug!(
+                    "🚫 STRICT MODE: Rejecting notification {} for session {} - session not yet initialized",
+                    method,
+                    session_ctx.session_id
+                );
+                return Err(McpError::SessionError(
+                    "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)".to_string()
+                ));
+            }
+        }
+
+        // Convert JSON-RPC params to Value
+        let mcp_params = params.map(|p| p.to_value());
+
+        // Call the MCP handler's handle_with_session method for notifications
+        match self
+            .handler
+            .handle_with_session(mcp_params, mcp_session_context)
+            .await
+        {
+            Ok(_result) => Ok(()), // Notifications don't return values
+            Err(error) => {
+                tracing::error!("MCP notification handler error: {}", error);
+                Err(error)
+            }
+        }
+    }
+
     fn supported_methods(&self) -> Vec<String> {
         self.handler.supported_methods()
     }
@@ -570,10 +637,36 @@ impl SessionAwareInitializeHandler {
     fn negotiate_version(&self, client_version: &str) -> std::result::Result<McpVersion, String> {
         use turul_mcp_protocol::version::McpVersion;
 
-        // Parse client's requested version
-        let requested_version = client_version
-            .parse::<McpVersion>()
-            .map_err(|_| format!("Unsupported protocol version: {}", client_version))?;
+        // Try to parse client's requested version
+        let requested_version = match client_version.parse::<McpVersion>() {
+            Ok(version) => version,
+            Err(_) => {
+                // Unknown version - check if it's newer than what we support
+                // If it looks like a valid date format but we don't know it,
+                // we need to check if it's likely newer or older than our range
+                if client_version.matches('-').count() == 2 {
+                    // Check if it's likely newer than our latest version (2025-06-18)
+                    if client_version > "2025-06-18" {
+                        // Assume it's newer, use latest as fallback
+                        McpVersion::LATEST
+                    } else if client_version < "2024-11-05" {
+                        // Too old, we don't support versions before our minimum
+                        return Err(format!(
+                            "Cannot negotiate compatible version with client version {} (server requires at least {})",
+                            client_version, "2024-11-05"
+                        ));
+                    } else {
+                        // Unknown version between our supported range - shouldn't happen
+                        return Err(format!("Unknown protocol version: {}", client_version));
+                    }
+                } else {
+                    return Err(format!(
+                        "Invalid protocol version format: {}",
+                        client_version
+                    ));
+                }
+            }
+        };
 
         // Define server's supported versions (all versions from 2024-11-05 to current)
         let supported_versions = [
@@ -587,18 +680,21 @@ impl SessionAwareInitializeHandler {
             return Ok(requested_version);
         }
 
-        // Strategy 2: Use the highest version the server supports that's <= client version
+        // Strategy 2: Find highest supported version ≤ client requested version
         // This allows clients to request newer versions while falling back gracefully
-        let negotiated = requested_version;
+        let compatible_versions: Vec<_> = supported_versions
+            .iter()
+            .filter(|&&v| v <= requested_version)
+            .collect();
 
-        // Verify the negotiated version is in our supported list
-        if supported_versions.contains(&negotiated) {
-            Ok(negotiated)
+        if let Some(&&best_version) = compatible_versions.iter().max() {
+            Ok(best_version)
         } else {
-            // Strategy 3: Fall back to minimum supported version
+            // Strategy 3: No compatible version found - client too old
             Err(format!(
-                "Cannot negotiate compatible version with client version {}",
-                client_version
+                "Cannot negotiate compatible version with client version {} (server requires at least {})",
+                client_version,
+                supported_versions.iter().min().unwrap()
             ))
         }
     }
@@ -851,11 +947,29 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
 /// Handler for tools/list requests
 pub struct ListToolsHandler {
     tools: HashMap<String, Arc<dyn McpTool>>,
+    session_manager: Option<Arc<SessionManager>>,
+    strict_lifecycle: bool,
 }
 
 impl ListToolsHandler {
     pub fn new(tools: HashMap<String, Arc<dyn McpTool>>) -> Self {
-        Self { tools }
+        Self {
+            tools,
+            session_manager: None,
+            strict_lifecycle: false,
+        }
+    }
+
+    pub fn new_with_session_manager(
+        tools: HashMap<String, Arc<dyn McpTool>>,
+        session_manager: Arc<SessionManager>,
+        strict_lifecycle: bool,
+    ) -> Self {
+        Self {
+            tools,
+            session_manager: Some(session_manager),
+            strict_lifecycle,
+        }
     }
 }
 
@@ -867,11 +981,31 @@ impl JsonRpcHandler for ListToolsHandler {
         &self,
         method: &str,
         params: Option<turul_mcp_json_rpc_server::RequestParams>,
-        _session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
+        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>,
     ) -> std::result::Result<serde_json::Value, McpError> {
         use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
 
         debug!("Handling {} request", method);
+
+        // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled)
+        if self.strict_lifecycle {
+            if let (Some(session_manager), Some(session_ctx)) =
+                (&self.session_manager, &session_context)
+            {
+                let session_initialized = session_manager
+                    .is_session_initialized(&session_ctx.session_id)
+                    .await;
+                if !session_initialized {
+                    debug!(
+                        "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
+                        method, session_ctx.session_id
+                    );
+                    return Err(McpError::SessionError(
+                        "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)".to_string()
+                    ));
+                }
+            }
+        }
 
         if method != "tools/list" {
             return Err(McpError::InvalidParameters(format!(
@@ -905,18 +1039,21 @@ impl JsonRpcHandler for ListToolsHandler {
 
         // Implement cursor-based pagination
         const DEFAULT_PAGE_SIZE: usize = 50; // MCP suggested default
+        const MAX_LIMIT: u32 = 100; // Framework-specific DoS protection
 
         // Validate limit parameter - MCP spec requires positive integer
         if let Some(limit) = list_params.limit {
             if limit == 0 {
                 return Err(McpError::InvalidParameters(
-                    "limit must be a positive integer (> 0)".to_string()
+                    "limit must be a positive integer (> 0)".to_string(),
                 ));
             }
         }
 
-        let page_size = list_params.limit
-            .map(|l| l as usize)
+        // Apply limit clamping for DoS protection (framework extension)
+        let page_size = list_params
+            .limit
+            .map(|l| std::cmp::min(l, MAX_LIMIT) as usize)
             .unwrap_or(DEFAULT_PAGE_SIZE);
 
         // Find starting index based on cursor
@@ -973,12 +1110,9 @@ impl JsonRpcHandler for ListToolsHandler {
         // Propagate optional _meta from request to response (MCP 2025-06-18 compliance)
         if let Some(request_meta) = list_params.meta {
             // Get existing meta from PaginatedResponse or use pagination defaults
-            let mut response_meta = paginated_response.meta().cloned()
-                .unwrap_or_else(|| turul_mcp_protocol::meta::Meta::with_pagination(
-                    next_cursor_clone,
-                    total,
-                    has_more
-                ));
+            let mut response_meta = paginated_response.meta().cloned().unwrap_or_else(|| {
+                turul_mcp_protocol::meta::Meta::with_pagination(next_cursor_clone, total, has_more)
+            });
 
             // Merge request's _meta fields into extra without clobbering pagination
             for (key, value) in request_meta {
@@ -1256,7 +1390,7 @@ mod tests {
         let response: CallToolResult = serde_json::from_value(result).unwrap();
 
         assert_eq!(response.content.len(), 1);
-        if let ToolResult::Text { text } = &response.content[0] {
+        if let ToolResult::Text { text, .. } = &response.content[0] {
             assert_eq!(text, "test result");
         }
     }

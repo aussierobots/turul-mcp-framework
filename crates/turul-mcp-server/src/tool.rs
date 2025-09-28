@@ -144,7 +144,7 @@ mod tests {
         let result = tool.call(args, None).await.unwrap();
         assert!(!result.content.is_empty());
 
-        let ToolResult::Text { text } = &result.content[0] else {
+        let ToolResult::Text { text, .. } = &result.content[0] else {
             panic!("Expected text result, got: {:?}", result.content[0]);
         };
         assert_eq!(text, "Test: hello");

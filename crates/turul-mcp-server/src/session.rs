@@ -545,6 +545,11 @@ async fn parse_and_send_notification_with_broadcaster(
     use turul_http_mcp_server::notification_bridge::SharedNotificationBroadcaster;
     use turul_mcp_protocol::notifications::{LoggingMessageNotification, ProgressNotification};
     // Attempt to downcast Arc<dyn Any> back to SharedNotificationBroadcaster
+    debug!(
+        "🔍 Attempting downcast for session {}, broadcaster type: {:?}",
+        session_id,
+        std::any::type_name::<SharedNotificationBroadcaster>()
+    );
     if let Some(broadcaster) = broadcaster_any.downcast_ref::<SharedNotificationBroadcaster>() {
         debug!(
             "✅ Successfully downcast broadcaster for session {}",

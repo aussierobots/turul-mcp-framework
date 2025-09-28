@@ -109,6 +109,8 @@ mod tests {
                 role: turul_mcp_protocol::sampling::Role::Assistant,
                 content: turul_mcp_protocol::prompts::ContentBlock::Text {
                     text: "Generated response".to_string(),
+                    annotations: None,
+                    meta: None,
                 },
             };
 
