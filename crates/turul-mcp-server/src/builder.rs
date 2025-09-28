@@ -376,7 +376,7 @@ impl McpServerBuilder {
     ///
     /// #[async_trait]
     /// impl McpResource for ConfigResource {
-    ///     async fn read(&self, _params: Option<serde_json::Value>)
+    ///     async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>)
     ///         -> McpResult<Vec<turul_mcp_protocol::ResourceContent>> {
     ///         Ok(vec![turul_mcp_protocol::ResourceContent::text(
     ///             self.uri(),
@@ -485,7 +485,7 @@ impl McpServerBuilder {
     ///
     /// #[async_trait]
     /// impl McpResource for DataResource {
-    ///     async fn read(&self, _params: Option<serde_json::Value>)
+    ///     async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>)
     ///         -> McpResult<Vec<turul_mcp_protocol::ResourceContent>> {
     ///         Ok(vec![turul_mcp_protocol::ResourceContent::text(
     ///             self.uri(),
@@ -574,7 +574,7 @@ impl McpServerBuilder {
     ///
     /// #[async_trait]
     /// impl McpResource for TemplateResource {
-    ///     async fn read(&self, params: Option<serde_json::Value>)
+    ///     async fn read(&self, params: Option<serde_json::Value>, _session: Option<&SessionContext>)
     ///         -> McpResult<Vec<turul_mcp_protocol::ResourceContent>> {
     ///         let id = params
     ///             .as_ref()
@@ -1587,8 +1587,8 @@ mod tests {
     }
 
     #[async_trait]
-    impl McpResource for StaticTestResource {
-        async fn read(&self, _params: Option<Value>) -> crate::McpResult<Vec<ResourceContent>> {
+    impl crate::McpResource for StaticTestResource {
+        async fn read(&self, _params: Option<Value>, _session: Option<&crate::SessionContext>) -> crate::McpResult<Vec<ResourceContent>> {
             Ok(vec![ResourceContent::text(
                 "file:///test.txt",
                 "test content",
@@ -1641,8 +1641,8 @@ mod tests {
     }
 
     #[async_trait]
-    impl McpResource for TemplateTestResource {
-        async fn read(&self, _params: Option<Value>) -> crate::McpResult<Vec<ResourceContent>> {
+    impl crate::McpResource for TemplateTestResource {
+        async fn read(&self, _params: Option<Value>, _session: Option<&crate::SessionContext>) -> crate::McpResult<Vec<ResourceContent>> {
             Ok(vec![ResourceContent::text(
                 "template://data/123.json",
                 "test content",
@@ -1780,8 +1780,8 @@ mod tests {
         }
 
         #[async_trait]
-        impl McpResource for InvalidTemplateResource {
-            async fn read(&self, _params: Option<Value>) -> crate::McpResult<Vec<ResourceContent>> {
+        impl crate::McpResource for InvalidTemplateResource {
+            async fn read(&self, _params: Option<Value>, _session: Option<&crate::SessionContext>) -> crate::McpResult<Vec<ResourceContent>> {
                 Ok(vec![])
             }
         }

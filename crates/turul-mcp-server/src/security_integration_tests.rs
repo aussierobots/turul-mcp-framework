@@ -81,8 +81,8 @@ mod tests {
     }
 
     #[async_trait]
-    impl McpResource for SecureTestResource {
-        async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    impl crate::McpResource for SecureTestResource {
+        async fn read(&self, params: Option<Value>, _session: Option<&crate::SessionContext>) -> McpResult<Vec<ResourceContent>> {
             let params = params.unwrap_or(json!({}));
 
             if let Some(template_vars) = params.get("template_variables")
@@ -365,8 +365,8 @@ mod tests {
         }
 
         #[async_trait]
-        impl McpResource for LargeContentResource {
-            async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        impl crate::McpResource for LargeContentResource {
+            async fn read(&self, _params: Option<Value>, _session: Option<&crate::SessionContext>) -> McpResult<Vec<ResourceContent>> {
                 // Return content with disallowed MIME type
                 let mut content =
                     ResourceContent::text("file:///large.bin", "x".repeat(1000).as_str());

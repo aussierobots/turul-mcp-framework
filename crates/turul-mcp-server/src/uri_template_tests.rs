@@ -73,8 +73,8 @@ mod tests {
     // ResourceDefinition automatically implemented via blanket impl
 
     #[async_trait]
-    impl McpResource for UserProfileResource {
-        async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    impl crate::McpResource for UserProfileResource {
+        async fn read(&self, params: Option<Value>, _session: Option<&crate::SessionContext>) -> McpResult<Vec<ResourceContent>> {
             // Extract template variables from params
             let params = params.unwrap_or(json!({}));
 

@@ -27,8 +27,8 @@ impl TestResource {
 }
 
 #[async_trait]
-impl McpResource for TestResource {
-    async fn read(&self, _params: Option<Value>) -> crate::McpResult<Vec<ResourceContent>> {
+impl crate::McpResource for TestResource {
+    async fn read(&self, _params: Option<Value>, _session: Option<&crate::SessionContext>) -> crate::McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
             format!("test://item/{}", self.id),
             format!("Test content for {}", self.id),

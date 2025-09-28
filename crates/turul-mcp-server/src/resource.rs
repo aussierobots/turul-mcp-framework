@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use serde_json::Value;
 use turul_mcp_protocol::resources::ResourceDefinition;
 use turul_mcp_protocol::{McpResult, resources::ResourceContent};
+use crate::SessionContext;
 
 /// High-level trait for implementing MCP resources
 ///
@@ -17,8 +18,9 @@ pub trait McpResource: ResourceDefinition + Send + Sync {
     /// Read the resource content
     ///
     /// The params parameter can contain read-specific parameters like file paths,
-    /// query filters, or other resource-specific options.
-    async fn read(&self, params: Option<Value>) -> McpResult<Vec<ResourceContent>>;
+    /// query filters, or other resource-specific options. The session parameter
+    /// provides access to session-specific data and state for personalized content.
+    async fn read(&self, params: Option<Value>, session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>>;
 
     /// Optional: Subscribe to resource changes
     ///
@@ -110,7 +112,7 @@ mod tests {
 
     #[async_trait]
     impl McpResource for TestResource {
-        async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+        async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
             Ok(vec![ResourceContent::text(&self.uri, &self.content)])
         }
     }
@@ -156,7 +158,7 @@ mod tests {
             content: "Hello, world!".to_string(),
         };
 
-        let result = resource.read(None).await.unwrap();
+        let result = resource.read(None, None).await.unwrap();
         assert_eq!(result.len(), 1);
 
         let ResourceContent::Text(text_content) = &result[0] else {

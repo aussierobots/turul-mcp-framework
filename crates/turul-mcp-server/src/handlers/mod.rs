@@ -613,7 +613,7 @@ impl McpHandler for ResourcesReadHandler {
                 );
             }
 
-            let contents = resource.read(Some(enhanced_params)).await?;
+            let contents = resource.read(Some(enhanced_params), session.as_ref()).await?;
 
             // Validate content before returning
             if let Some(security_middleware) = &self.security_middleware {
@@ -660,7 +660,7 @@ impl McpHandler for ResourcesReadHandler {
 
         // Call the resource's read method with original params
         let params = Some(serde_json::to_value(&read_params)?);
-        let contents = resource.read(params).await?;
+        let contents = resource.read(params, session.as_ref()).await?;
 
         // Validate content before returning
         if let Some(security_middleware) = &self.security_middleware {
