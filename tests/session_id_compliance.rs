@@ -288,3 +288,81 @@ async fn test_complete_session_flow() {
 
     assert_eq!(with_session_response.status(), 200);
 }
+
+#[tokio::test]
+async fn test_mcp_inspector_flow_with_combined_accept_header() {
+    let server_url = start_test_server().await;
+    let client = reqwest::Client::new();
+
+    // Test the exact flow that MCP Inspector uses:
+    // 1. Initialize with combined Accept header (application/json, text/event-stream)
+    // 2. Should succeed even though wants_sse_stream = true but no session ID yet
+    let init_response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream") // MCP Inspector header
+        .header("MCP-Protocol-Version", "2025-06-18")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "id": 1,
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "mcp-inspector",
+                    "version": "1.0.0"
+                }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(init_response.status(), 200, "Initialize should succeed with combined Accept header");
+
+    // Extract session ID from response header
+    let session_id = init_response
+        .headers()
+        .get("Mcp-Session-Id")
+        .expect("Server should return session ID in header")
+        .to_str()
+        .unwrap();
+
+    println!("Session ID created: {}", session_id);
+
+    // 2. Now use that session ID for subsequent requests
+    let tools_response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream") // Test MCP Inspector header
+        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("Mcp-Session-Id", session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": 2
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(tools_response.status(), 200, "tools/list should succeed with session ID");
+
+    // Handle SSE response format (data: prefix)
+    let response_text = tools_response.text().await.unwrap();
+    println!("Response body: {}", response_text);
+
+    // Parse SSE format: "data: {...json...}"
+    let json_content = if response_text.starts_with("data: ") {
+        &response_text[6..] // Remove "data: " prefix
+    } else {
+        &response_text // Plain JSON
+    };
+
+    let tools_body: Value = serde_json::from_str(json_content).unwrap();
+    assert_eq!(tools_body["jsonrpc"], "2.0");
+    assert!(tools_body["result"]["tools"].is_array());
+
+    println!("✅ MCP Inspector flow test passed");
+}

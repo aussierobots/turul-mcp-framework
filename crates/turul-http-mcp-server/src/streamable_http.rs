@@ -181,7 +181,7 @@ impl StreamableHttpContext {
     }
 
     /// Validate request for MCP compliance
-    pub fn validate(&self) -> std::result::Result<(), String> {
+    pub fn validate(&self, method: &Method) -> std::result::Result<(), String> {
         if !self.accepts_stream_frames {
             return Err(
                 "Accept header must include application/json, text/event-stream, or */*"
@@ -196,9 +196,10 @@ impl StreamableHttpContext {
             ));
         }
 
-        // Only enforce session_id when SSE stream was explicitly requested
-        if self.wants_sse_stream && self.session_id.is_none() {
-            return Err("Mcp-Session-Id header required for streaming requests".to_string());
+        // Only enforce session_id for GET requests with SSE streams
+        // POST requests will validate session based on the JSON-RPC method (initialize vs others)
+        if method == &Method::GET && self.wants_sse_stream && self.session_id.is_none() {
+            return Err("Mcp-Session-Id header required for SSE streaming connections".to_string());
         }
 
         Ok(())
@@ -373,7 +374,7 @@ impl StreamableHttpHandler {
         );
 
         // Validate request
-        if let Err(error) = context.validate() {
+        if let Err(error) = context.validate(req.method()) {
             warn!("Invalid streamable HTTP request: {}", error);
             return StreamableResponse::Error {
                 status: StatusCode::BAD_REQUEST,
@@ -1802,19 +1803,25 @@ mod tests {
             headers: HashMap::new(),
         };
 
-        assert!(context.validate().is_ok());
+        // POST with session should be valid
+        assert!(context.validate(&Method::POST).is_ok());
+        // GET with session should be valid
+        assert!(context.validate(&Method::GET).is_ok());
 
         // Test invalid cases
         context.accepts_stream_frames = false;
-        assert!(context.validate().is_err());
+        assert!(context.validate(&Method::POST).is_err());
 
         context.accepts_stream_frames = true;
         context.protocol_version = McpProtocolVersion::V2024_11_05;
         context.wants_sse_stream = true;
-        assert!(context.validate().is_err());
+        assert!(context.validate(&Method::POST).is_err());
 
         context.protocol_version = McpProtocolVersion::V2025_06_18;
         context.session_id = None;
-        assert!(context.validate().is_err());
+        // POST without session should be OK (for initialize)
+        assert!(context.validate(&Method::POST).is_ok());
+        // GET without session should fail
+        assert!(context.validate(&Method::GET).is_err());
     }
 }
