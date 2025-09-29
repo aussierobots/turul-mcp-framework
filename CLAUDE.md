@@ -325,6 +325,8 @@ curl *     # All curl command variations are auto-approved
 curl -s *  # Silent curl commands
 curl -v *  # Verbose curl commands
 curl -X *  # All HTTP methods
+jq         # JSON parsing and manipulation (all jq commands auto-approved)
+jq *       # All jq command variations are auto-approved
 
 # Process management for testing:
 while read <variable>
