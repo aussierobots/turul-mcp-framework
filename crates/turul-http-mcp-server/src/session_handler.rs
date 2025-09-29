@@ -12,7 +12,7 @@ use std::convert::Infallible;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 use bytes::Bytes;
 use futures::Stream;
@@ -58,8 +58,8 @@ impl SessionSseStream {
 
 impl Drop for SessionSseStream {
     fn drop(&mut self) {
-        debug!("🔥 DROP: SessionSseStream - HTTP response body being cleaned up");
-        debug!("🔥 This may indicate early cleanup of SSE response stream");
+        debug!("DROP: SessionSseStream - HTTP response body being cleaned up");
+        debug!("This may indicate early cleanup of SSE response stream");
     }
 }
 
@@ -224,8 +224,8 @@ impl SessionMcpHandler {
     where
         B: http_body::Body<Data = bytes::Bytes, Error = hyper::Error> + Send + 'static,
     {
-        info!(
-            "🔍 SESSION HANDLER processing {} {}",
+        debug!(
+            "SESSION HANDLER processing {} {}",
             req.method(),
             req.uri().path()
         );
@@ -725,7 +725,7 @@ impl SessionMcpHandler {
 
                     match self.session_storage.update_session(session_info).await {
                         Ok(()) => {
-                            info!(
+                            debug!(
                                 "Session {} marked as terminated (TTL will handle cleanup)",
                                 session_id
                             );
@@ -742,7 +742,7 @@ impl SessionMcpHandler {
                             // Fallback to deletion if update fails
                             match self.session_storage.delete_session(&session_id).await {
                                 Ok(_) => {
-                                    info!("Session {} deleted as fallback", session_id);
+                                    debug!("Session {} deleted as fallback", session_id);
                                     Ok(Response::builder()
                                         .status(StatusCode::OK)
                                         .body(Full::new(Bytes::from("Session removed")))

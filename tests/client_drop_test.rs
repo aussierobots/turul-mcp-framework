@@ -12,7 +12,7 @@ use turul_mcp_client::{ClientConfig, McpClient};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server_url = std::env::args()
         .nth(1)

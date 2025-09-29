@@ -764,6 +764,113 @@ impl McpTool for LegacyCalculatorTool {
     }
 }
 
+// ===== CUSTOM OUTPUT FIELD TOOL (MCP Compliance Testing) =====
+
+use turul_mcp_derive::mcp_tool;
+
+/// Word count result for MCP compliance testing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WordCountResult {
+    word_count: u32,
+    character_count: u32,
+    sentence_count: u32,
+}
+
+impl std::fmt::Display for WordCountResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Words: {}, Characters: {}, Sentences: {}",
+               self.word_count, self.character_count, self.sentence_count)
+    }
+}
+
+#[mcp_tool(
+    name = "word_count_analyzer",
+    description = "Analyze text and return word, character, and sentence counts",
+    output_field = "analysisResult"  // Custom field name for testing MCP compliance
+)]
+async fn word_count_analyzer(
+    #[param(description = "Text to analyze")] text: String,
+) -> McpResult<WordCountResult> {
+    let word_count = text.split_whitespace().count() as u32;
+    let character_count = text.chars().count() as u32;
+    let sentence_count = text.split('.').filter(|s| !s.trim().is_empty()).count() as u32;
+
+    Ok(WordCountResult {
+        word_count,
+        character_count,
+        sentence_count,
+    })
+}
+
+/// Simple addition tool with custom output field
+#[mcp_tool(
+    name = "custom_calculator",
+    description = "Add two numbers with custom output field name",
+    output_field = "calculationResult"  // Custom field name instead of default "result"
+)]
+async fn custom_calculator(
+    #[param(description = "First number")] a: f64,
+    #[param(description = "Second number")] b: f64,
+) -> McpResult<f64> {
+    Ok(a + b)
+}
+
+// ===== BUG REPRODUCTION TOOLS =====
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CountAnnouncementsResult {
+    pub count: u32,
+}
+
+/// Test tool that reproduces the output_field schema bug
+#[derive(McpTool, Clone)]
+#[tool(
+    name = "count_announcements_struct",
+    description = "Count announcements using struct macro with custom output field",
+    output = CountAnnouncementsResult,
+    output_field = "countResult"  // This should show up in schema, but doesn't
+)]
+pub struct CountAnnouncementsTool {
+    #[param(description = "Text to analyze")]
+    pub text: String,
+}
+
+impl CountAnnouncementsTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<CountAnnouncementsResult> {
+        let count = self.text.matches("announcement").count() as u32;
+        Ok(CountAnnouncementsResult { count })
+    }
+}
+
+/// Result type for simple counting
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CountResult {
+    pub count: u32,
+}
+
+/// Simple tool like user's example - no #tool attribute, just derive
+#[derive(McpTool, Default)]
+pub struct CountWords {
+    #[param(description = "Optional word to count (e.g. 'hello')")]
+    word: Option<String>,
+}
+
+impl CountWords {
+    pub async fn execute(&self, _session: Option<SessionContext>) -> McpResult<CountResult> {
+        let count = if let Some(word) = &self.word {
+            // Count specific word occurrences
+            format!("The quick brown fox jumps over the lazy dog. The {} was amazing.", word)
+                .matches(word)
+                .count() as u32
+        } else {
+            // Count total words
+            "The quick brown fox jumps over the lazy dog".split_whitespace().count() as u32
+        };
+
+        Ok(CountResult { count })
+    }
+}
+
 // ===== SERVER IMPLEMENTATION =====
 
 #[derive(Parser)]
@@ -840,11 +947,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         // Deprecated tool for testing deprecation annotations
         .tool(LegacyCalculatorTool)
-        .bind_address(SocketAddr::from(([127, 0, 0, 1], args.port)))
+        // Bug reproduction tool - demonstrates output_field schema mismatch
+        .tool(CountAnnouncementsTool {
+            text: "".to_string(),
+        })
+        .tool(CountWords::default())
+        // Custom output field tools for MCP compliance testing
+        .tool_fn(word_count_analyzer)
+        .tool_fn(custom_calculator)
+        .bind_address(SocketAddr::from(([0, 0, 0, 0], args.port)))
         .build()?;
 
     info!("🚀 Tools Test Server running on port {}", args.port);
-    info!("📋 Available tools: calculator, string_processor, data_transformer, session_counter, progress_tracker, error_generator, parameter_validator, legacy_calculator (deprecated)");
+    info!("📋 Available tools: calculator, string_processor, data_transformer, session_counter, progress_tracker, error_generator, parameter_validator, legacy_calculator (deprecated), word_count_analyzer (custom output: analysisResult), custom_calculator (custom output: calculationResult)");
 
     server.run().await?;
     Ok(())

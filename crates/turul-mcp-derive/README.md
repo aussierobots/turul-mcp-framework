@@ -85,7 +85,7 @@ async fn session_counter(
 
 ```rust
 #[mcp_tool(
-    name = "multiply", 
+    name = "multiply",
     description = "Multiply two numbers",
     output_field = "product"  // Custom output field name (also supports: field = "product")
 )]
@@ -95,6 +95,41 @@ async fn multiply(
 ) -> McpResult<f64> {
     Ok(x * y)  // Returns {"product": 15.0} instead of {"result": 15.0} in structured output
 }
+```
+
+### Array Return Types
+
+**Important**: When returning `Vec<T>`, you must use the `output` attribute to ensure correct JSON Schema generation:
+
+```rust
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize)]
+struct SearchResult {
+    id: String,
+    title: String,
+    score: f64,
+}
+
+#[mcp_tool(
+    name = "search",
+    description = "Search for items",
+    output = Vec<SearchResult>  // Required for array returns!
+)]
+async fn search(
+    #[param(description = "Search query")] query: String,
+) -> McpResult<Vec<SearchResult>> {
+    Ok(vec![
+        SearchResult {
+            id: "1".to_string(),
+            title: format!("Result for: {}", query),
+            score: 0.95,
+        }
+    ])
+}
+
+// Without `output = Vec<T>`, the schema would incorrectly show type: "object"
+// With `output = Vec<T>`, the schema correctly shows type: "array"
 ```
 
 ### Progress Notifications
@@ -153,6 +188,47 @@ impl Calculator {
         }
     }
 }
+```
+
+### Array Return Types with Derive
+
+For tools that return `Vec<T>`, use the `output` attribute in the `#[tool(...)]` annotation:
+
+```rust
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Clone)]
+struct Record {
+    id: u32,
+    value: String,
+}
+
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "fetch_records",
+    description = "Fetch multiple records",
+    output = Vec<Record>  // Required for correct array schema generation
+)]
+struct RecordFetcher {
+    #[param(description = "Maximum number of records")]
+    limit: usize,
+}
+
+impl RecordFetcher {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Vec<Record>> {
+        Ok((0..self.limit)
+            .map(|i| Record {
+                id: i as u32,
+                value: format!("record-{}", i),
+            })
+            .collect())
+    }
+}
+
+// This generates correct JSON Schema:
+// {"output": {"type": "array", "items": {...}}}
+// Without `output = Vec<Record>`, it would incorrectly generate:
+// {"output": {"type": "object"}}
 ```
 
 ### Complex Business Logic

@@ -24,6 +24,63 @@
 
 ---
 
+## ✅ RESOLVED: Zero-Config Tool Schema/Runtime Mismatch (2025-09-30)
+
+**Status**: ✅ **RESOLVED** - Schema and runtime now consistently use "output" field for zero-configuration tools
+**Impact**: MCP Inspector validation now passes for all zero-configuration tools
+**Priority**: P0 - Critical for MCP compliance and user experience
+
+### 📋 Issue Description
+Zero-configuration tools (those using `#[derive(McpTool)]` without `#[tool(...)]` attributes) had a critical mismatch:
+- **tools/list response**: `outputSchema: { properties: { output: {...} }, required: ["output"] }`
+- **tools/call response**: `{ countResult: {...} }` (camelCase struct name)
+- **MCP Inspector failure**: "data should have required property 'output'"
+
+### 🔍 Root Cause Analysis
+1. **Schema Generation** (compile-time): Always used "output" as field name for zero-config tools
+2. **Runtime Execution**: Converted struct names to camelCase (CountResult → countResult)
+3. **Result**: Schema advertised "output" but runtime returned different field names
+
+### ✅ Solution Implemented
+**Strategy**: Make runtime match schema for zero-config tools - always use "output" field for consistency.
+
+#### Files Modified
+- **`crates/turul-mcp-derive/src/tool_derive.rs`** (lines 370-380): Simplified field name logic for zero-config tools
+  - Zero-config tools now always use "output" field at runtime
+  - Custom field names still work when explicitly specified via `#[tool(output_field = "...")]`
+- **`tests/mcp_tool_schema_runtime_sync_test.rs`**: Added comprehensive test `test_zero_config_tool_uses_output_field`
+  - Tests both schema generation and runtime behavior for zero-config tools
+  - Verifies "output" field is used consistently
+
+#### Implementation Details
+```rust
+// Before: Complex type detection and camelCase conversion
+if !is_primitive && matches!(result_value, serde_json::Value::Object(_)) {
+    // Convert struct name to camelCase
+    struct_name.to_camelCase()
+} else {
+    "output".to_string()
+}
+
+// After: Simple and consistent
+if let Some(custom_name) = compile_time_custom_field {
+    custom_name.to_string()
+} else {
+    // Zero-config tools ALWAYS use "output" for consistency with schema
+    "output".to_string()
+}
+```
+
+### ✅ Verification Results
+- Zero-config tools consistently use "output" field in both schema and runtime
+- MCP Inspector validation passes for all tool types
+- No breaking changes for tools with explicit `#[tool(output_field = "...")]` attributes
+- Clear, predictable behavior for framework users
+
+**Resolution Sign-off**: ✅ **COMPLETED 2025-09-30** - Zero-config tool consistency achieved
+
+---
+
 ## 🧪 Example Verification Campaign (2025-09-28)
 
 **Purpose**: Systematically test all 45+ examples to ensure framework functionality after Phase 6 session-aware resources implementation

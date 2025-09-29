@@ -108,20 +108,35 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             (#field_name_str.to_string(), #schema)
         });
 
-        if !param_meta.optional {
+        // Check if field type is Option<T>
+        let is_option_type = if let syn::Type::Path(type_path) = field_type {
+            type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Option"
+        } else {
+            false
+        };
+
+        // Only add to required fields if not explicitly optional and not Option<T>
+        if !param_meta.optional && !is_option_type {
             required_fields.push(quote! {
                 #field_name_str.to_string()
             });
         }
 
         // Generate parameter extraction code
-        let extraction = generate_param_extraction(field_name, field_type, param_meta.optional);
+        let extraction = generate_param_extraction(field_name, field_type, param_meta.optional || is_option_type);
         param_extractions.push(extraction);
 
-        // Generate field assignment for struct construction
-        field_assignments.push(quote! {
-            #field_name
-        });
+        if param_meta.optional && !is_option_type {
+            // Field is marked optional but type is T (not Option<T>)
+            // The extraction generates Option<T>, so we need to unwrap with a default
+            field_assignments.push(quote! {
+                #field_name: #field_name.unwrap_or_default()
+            });
+        } else {
+            field_assignments.push(quote! {
+                #field_name
+            });
+        }
     }
 
     let tool_name = &tool_meta.name;
@@ -214,9 +229,9 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                     JsonSchema::string()
                 } else if struct_name.contains("Boolean") || struct_name.contains("Check") || struct_name.contains("Verify") {
                     JsonSchema::boolean()
-                } else if struct_name.contains("List") || struct_name.contains("Array") {
+                } else if struct_name.contains("List") || struct_name.contains("Array") || struct_name.contains("Search") || struct_name.contains("Query") || struct_name.contains("Find") || struct_name.contains("Batch") {
                     JsonSchema::Array {
-                        description: Some("Array output".to_string()),
+                        description: Some("Array output (heuristic: tool name suggests collection)".to_string()),
                         items: None,
                         min_items: None,
                         max_items: None,
@@ -358,38 +373,52 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                             if let Some(custom_name) = compile_time_custom_field {
                                 custom_name.to_string()
                             } else {
-                                // Auto-determine field name based on output type
-                                let type_name = std::any::type_name_of_val(&result);
-                                if let Some(struct_name) = type_name.split("::").last() {
-                                    // Check if this is a struct type (not a primitive)
-                                    let is_primitive = matches!(struct_name,
-                                        "f64" | "f32" | "i64" | "i32" | "i16" | "i8" |
-                                        "u64" | "u32" | "u16" | "u8" | "isize" | "usize" |
-                                        "&str" | "String" | "bool"
-                                    );
-
-                                    if !is_primitive && matches!(result_value, serde_json::Value::Object(_)) {
-                                        // Convert struct name to camelCase
-                                        let mut chars: Vec<char> = struct_name.chars().collect();
-                                        if !chars.is_empty() {
-                                            chars[0] = chars[0].to_lowercase().next().unwrap_or(chars[0]);
-                                        }
-                                        chars.into_iter().collect::<String>()
-                                    } else {
-                                        // Use "output" as default for primitives (as requested by user)
-                                        "output".to_string()
-                                    }
-                                } else {
-                                    "output".to_string()
-                                }
+                                // Zero-config tools ALWAYS use "output" for consistency with schema
+                                // This ensures tools/list and tools/call responses match
+                                "output".to_string()
                             }
                         };
 
                         // Wrap result to match MCP object schema format
-                        let wrapped_result = serde_json::json!({field_name: result});
+                        let wrapped_result = serde_json::json!({&field_name: result_value});
 
-                        // Return structured result (schema already available from output_schema() method)
-                        turul_mcp_protocol::tools::CallToolResult::from_result_auto(&wrapped_result, self.output_schema())
+                        // Correct schema if needed (zero-config type mismatch fix)
+                        let corrected_schema = if let Some(schema) = self.output_schema() {
+                            // Check if the schema needs correction based on actual return value
+                            let needs_correction = if let Some(props) = &schema.properties {
+                                if let Some(output_schema) = props.get(&field_name) {
+                                    // Check if schema says "object" but value is array
+                                    use turul_mcp_protocol::schema::JsonSchema;
+                                    matches!(output_schema, JsonSchema::Object { .. }) && result_value.is_array()
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            };
+
+                            if needs_correction {
+                                // Generate corrected schema with array type
+                                use std::collections::HashMap;
+                                use turul_mcp_protocol::schema::JsonSchema;
+                                let array_schema = JsonSchema::Array {
+                                    description: Some("Array of items".to_string()),
+                                    items: None,
+                                    min_items: None,
+                                    max_items: None,
+                                };
+                                Some(turul_mcp_protocol::tools::ToolSchema::object()
+                                    .with_properties(HashMap::from([(field_name.clone(), array_schema)]))
+                                    .with_required(vec![field_name.clone()]))
+                            } else {
+                                Some(schema.clone())
+                            }
+                        } else {
+                            None
+                        };
+
+                        // Return structured result with corrected schema
+                        turul_mcp_protocol::tools::CallToolResult::from_result_auto(&wrapped_result, corrected_schema.as_ref())
                     }
                     Err(e) => Err(e)
                 }

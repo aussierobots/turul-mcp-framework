@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 use turul_mcp_session_storage::SseEvent;
 
@@ -94,13 +94,13 @@ impl SseStream {
 impl Drop for SseStream {
     fn drop(&mut self) {
         debug!(
-            "🔥 DROP: SseStream - session={}, connection={}",
+            "DROP: SseStream - session={}, connection={}",
             self.session_id, self.connection_id
         );
         if self.stream.is_some() {
-            debug!("🔥 Stream still present during drop - this indicates early cleanup");
+            debug!("Stream still present during drop - this indicates early cleanup");
         } else {
-            debug!("🔥 Stream was properly extracted before drop");
+            debug!("Stream was properly extracted before drop");
         }
     }
 }
@@ -135,7 +135,7 @@ impl StreamManager {
     ) -> Self {
         use uuid::Uuid;
         let instance_id = Uuid::now_v7().to_string();
-        debug!("🔧 Creating StreamManager instance: {}", instance_id);
+        debug!("Creating StreamManager instance: {}", instance_id);
         Self {
             storage,
             connections: Arc::new(RwLock::new(HashMap::new())),
@@ -174,7 +174,7 @@ impl StreamManager {
         // Convert to HTTP response
         let response = self.stream_to_response(sse_stream).await;
 
-        info!(
+        debug!(
             "Created SSE connection: session={}, connection={}, last_event_id={:?}",
             session_id, connection_id, last_event_id
         );
@@ -232,7 +232,7 @@ impl StreamManager {
                     event = receiver.recv() => {
                         match event {
                             Some(event) => {
-                                debug!("📨 Received event for connection {}: {}", connection_id_clone, event.event_type);
+                                debug!("Received event for connection {}: {}", connection_id_clone, event.event_type);
                                 yield event;
                             },
                             None => {
@@ -257,7 +257,7 @@ impl StreamManager {
             }
 
             // Clean up connection when stream ends
-            debug!("🧹 Cleaning up connection: session={}, connection={}", session_id_clone, connection_id_clone);
+            debug!("Cleaning up connection: session={}, connection={}", session_id_clone, connection_id_clone);
         };
 
         Ok(SseStream {
@@ -412,7 +412,7 @@ impl StreamManager {
         let stream_identifier = sse_stream.stream_identifier();
 
         // Log stream creation with session identifier
-        info!(
+        debug!(
             "Converting SSE stream to HTTP response: {}",
             stream_identifier
         );
@@ -543,8 +543,8 @@ impl StreamManager {
 
                     match selected_sender.try_send(stored_event.clone()) {
                         Ok(()) => {
-                            info!(
-                                "✅ Sent notification to ONE connection: session={}, connection={}, event_id={}, method={}",
+                            debug!(
+                                "Sent notification to ONE connection: session={}, connection={}, event_id={}, method={}",
                                 session_id,
                                 selected_connection_id,
                                 stored_event.id,
@@ -656,7 +656,7 @@ impl StreamManager {
         });
 
         if total_cleaned > 0 {
-            info!("Cleaned up {} inactive connections", total_cleaned);
+            debug!("Cleaned up {} inactive connections", total_cleaned);
         }
 
         total_cleaned
@@ -684,7 +684,7 @@ impl StreamManager {
             return Err(StreamError::SessionNotFound(session_id));
         }
 
-        info!("Creating POST SSE stream for session: {}", session_id);
+        debug!("Creating POST SSE stream for session: {}", session_id);
 
         // Create the SSE response body
         let response_json = serde_json::to_string(&response).map_err(|e| {
@@ -782,8 +782,8 @@ impl StreamManager {
             );
         }
 
-        info!(
-            "🔔 Session {} now has {} subscriptions",
+        debug!(
+            "Session {} now has {} subscriptions",
             session_id,
             session_subscriptions.len()
         );
@@ -869,10 +869,10 @@ impl StreamManager {
 impl Drop for StreamManager {
     fn drop(&mut self) {
         debug!(
-            "🔥 DROP: StreamManager instance {} - this may cause connection loss!",
+            "DROP: StreamManager instance {} - this may cause connection loss!",
             self.instance_id
         );
-        debug!("🔥 If this appears during request processing, it indicates architecture problem");
+        debug!("If this appears during request processing, it indicates architecture problem");
     }
 }
 

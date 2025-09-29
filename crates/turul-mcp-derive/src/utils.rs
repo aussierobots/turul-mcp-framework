@@ -100,7 +100,21 @@ pub fn extract_param_meta(attrs: &[Attribute]) -> Result<ParamMeta> {
                     let s: syn::LitStr = value.parse()?;
                     meta.description = Some(s.value());
                 } else if nested_meta.path.is_ident("optional") {
-                    meta.optional = true;
+                    // Handle both #[param(optional)] and #[param(optional = true/false)]
+                    if nested_meta.input.peek(syn::Token![=]) {
+                        // #[param(optional = true/false)]
+                        let value = nested_meta.value()?;
+                        if let Ok(lit_bool) = value.parse::<syn::LitBool>() {
+                            meta.optional = lit_bool.value;
+                        } else if let Ok(lit_str) = value.parse::<syn::LitStr>() {
+                            meta.optional = lit_str.value().parse::<bool>().unwrap_or(false);
+                        } else {
+                            meta.optional = true; // Fallback
+                        }
+                    } else {
+                        // #[param(optional)] - standalone flag defaults to true
+                        meta.optional = true;
+                    }
                 } else if nested_meta.path.is_ident("min") {
                     let value = nested_meta.value()?;
                     let lit: syn::LitFloat = value.parse()?;
@@ -771,6 +785,29 @@ pub fn generate_output_schema_for_type_with_field(ty: &syn::Type, field_name: &s
                 };
             }
 
+            // Check for Vec<T> generic type
+            if type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Vec" {
+                return quote! {
+                    fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
+                        static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
+                        Some(OUTPUT_SCHEMA.get_or_init(|| {
+                            use turul_mcp_protocol::schema::JsonSchema;
+                            use std::collections::HashMap;
+                            turul_mcp_protocol::tools::ToolSchema::object()
+                                .with_properties(HashMap::from([
+                                    (#field_name.to_string(), JsonSchema::Array {
+                                        description: Some("Array of items".to_string()),
+                                        items: None,
+                                        min_items: None,
+                                        max_items: None,
+                                    })
+                                ]))
+                                .with_required(vec![#field_name.to_string()])
+                        }))
+                    }
+                };
+            }
+
             // Then check for simple identifiers
             if let Some(ident) = type_path.path.get_ident() {
                 match ident.to_string().as_str() {
@@ -986,14 +1023,14 @@ pub fn generate_enhanced_output_schema(
 /// Generate schema for struct with all properties introspected
 fn generate_struct_schema_with_properties(
     fields: &syn::FieldsNamed,
-    field_name: &str,
+    output_field_name: &str,
 ) -> TokenStream {
     let mut property_definitions = Vec::new();
     let mut required_fields = Vec::new();
 
     for field in &fields.named {
-        if let Some(field_name) = &field.ident {
-            let field_name_str = field_name.to_string();
+        if let Some(struct_field_name) = &field.ident {
+            let field_name_str = struct_field_name.to_string();
             let field_type = &field.ty;
 
             // Extract parameter metadata for better schema generation
@@ -1030,10 +1067,10 @@ fn generate_struct_schema_with_properties(
                         #(#required_fields),*
                     ]);
 
-                // Wrap in outer object with field name
+                // Wrap in outer object with custom output field name
                 turul_mcp_protocol::tools::ToolSchema::object()
                     .with_properties(HashMap::from([
-                        (#field_name.to_string(), JsonSchema::Object {
+                        (#output_field_name.to_string(), JsonSchema::Object {
                             properties: struct_schema.properties.clone(),
                             required: struct_schema.required.clone(),
                             additional: HashMap::new(),
@@ -1042,7 +1079,7 @@ fn generate_struct_schema_with_properties(
                             description: None,
                         })
                     ]))
-                    .with_required(vec![#field_name.to_string()])
+                    .with_required(vec![#output_field_name.to_string()])
             }))
         }
     }

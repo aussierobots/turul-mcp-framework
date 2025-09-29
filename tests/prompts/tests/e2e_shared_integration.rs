@@ -7,7 +7,7 @@ use tracing::info;
 
 #[tokio::test]
 async fn test_prompts_initialization_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -25,7 +25,7 @@ async fn test_prompts_initialization_with_shared_utils() {
 
 #[tokio::test]
 async fn test_prompts_list_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -58,7 +58,7 @@ async fn test_prompts_list_with_shared_utils() {
 
 #[tokio::test]
 async fn test_simple_prompt_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -77,7 +77,7 @@ async fn test_simple_prompt_with_shared_utils() {
 
 #[tokio::test]
 async fn test_string_args_prompt_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -105,7 +105,7 @@ async fn test_string_args_prompt_with_shared_utils() {
 
 #[tokio::test]
 async fn test_number_args_prompt_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -133,7 +133,7 @@ async fn test_number_args_prompt_with_shared_utils() {
 
 #[tokio::test]
 async fn test_boolean_args_prompt_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -161,7 +161,7 @@ async fn test_boolean_args_prompt_with_shared_utils() {
 
 #[tokio::test]
 async fn test_multi_message_prompt_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -195,7 +195,7 @@ async fn test_multi_message_prompt_with_shared_utils() {
 
 #[tokio::test]
 async fn test_session_consistency_prompts() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -211,7 +211,7 @@ async fn test_session_consistency_prompts() {
 
 #[tokio::test]
 async fn test_session_aware_prompt_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -227,7 +227,7 @@ async fn test_session_aware_prompt_with_shared_utils() {
 
 #[tokio::test]
 async fn test_template_prompt_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -265,7 +265,7 @@ async fn test_template_prompt_with_shared_utils() {
 
 #[tokio::test]
 async fn test_empty_messages_prompt_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -294,7 +294,7 @@ async fn test_empty_messages_prompt_with_shared_utils() {
 
 #[tokio::test]
 async fn test_validation_failure_prompt_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await
@@ -320,7 +320,7 @@ async fn test_validation_failure_prompt_with_shared_utils() {
 
 #[tokio::test]
 async fn test_sse_notifications_prompts_with_shared_utils() {
-    tracing_subscriber::fmt::init();
+    let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
         .await

@@ -20,7 +20,7 @@ use http_body_util::{BodyExt, Full};
 use hyper::header::{ACCEPT, CONTENT_TYPE};
 use hyper::{HeaderMap, Method, Request, Response, StatusCode};
 use serde_json::Value;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 use crate::ServerConfig;
 
@@ -356,16 +356,16 @@ impl StreamableHttpHandler {
         T::Data: Send,
         T::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     {
-        info!(
-            "🔍 STREAMABLE HANDLER REQUEST: method={}, uri={}",
+        debug!(
+            "Streamable handler request: method={}, uri={}",
             req.method(),
             req.uri()
         );
         // Parse streamable HTTP context from request
         let context = StreamableHttpContext::from_request(&req);
 
-        info!(
-            "STREAMABLE HANDLER ENTRY: method={}, protocol={}, session={:?}, accepts_stream_frames={}, wants_sse_stream={}",
+        debug!(
+            "Streamable handler entry: method={}, protocol={}, session={:?}, accepts_stream_frames={}, wants_sse_stream={}",
             req.method(),
             context.protocol_version.as_str(),
             context.session_id,
@@ -415,7 +415,7 @@ impl StreamableHttpHandler {
     where
         T: Body + Send + 'static,
     {
-        info!(
+        debug!(
             "Opening streaming connection for session: {:?}",
             context.session_id
         );
@@ -482,8 +482,8 @@ impl StreamableHttpHandler {
             .await
         {
             Ok(mut streaming_response) => {
-                info!(
-                    "✅ Streamable HTTP connection established: session={}, connection={}",
+                debug!(
+                    "Streamable HTTP connection established: session={}, connection={}",
                     session_id, connection_id
                 );
 
@@ -539,7 +539,7 @@ impl StreamableHttpHandler {
     where
         T: Body + Send + 'static,
     {
-        info!(
+        debug!(
             "Handling streaming POST for session: {:?}",
             context.session_id
         );
@@ -758,7 +758,7 @@ impl StreamableHttpHandler {
     where
         T: Body + Send + 'static,
     {
-        info!("Handling JSON POST (non-streaming/legacy)");
+        debug!("Handling JSON POST (non-streaming/legacy)");
 
         // 1. Parse JSON-RPC request(s) from request body (legacy clients don't require sessions)
 
@@ -979,7 +979,7 @@ impl StreamableHttpHandler {
         T: Body + Send + 'static,
     {
         if let Some(session_id) = &context.session_id {
-            info!("Deleting session: {}", session_id);
+            debug!("Deleting session: {}", session_id);
 
             // Implement proper session cleanup for Streamable HTTP
             // 1. Close any active streaming connections for this session
@@ -1010,7 +1010,7 @@ impl StreamableHttpHandler {
                     // 3. Update session with termination markers
                     match self.session_storage.update_session(session_info).await {
                         Ok(()) => {
-                            info!(
+                            debug!(
                                 "Session {} marked as terminated (TTL will handle cleanup)",
                                 session_id
                             );
@@ -1043,7 +1043,7 @@ impl StreamableHttpHandler {
                             // Fallback to deletion if update fails
                             match self.session_storage.delete_session(session_id).await {
                                 Ok(_) => {
-                                    info!("Session {} deleted as fallback", session_id);
+                                    debug!("Session {} deleted as fallback", session_id);
                                     Response::builder()
                                         .status(StatusCode::OK)
                                         .header(CONTENT_TYPE, "application/json")
@@ -1130,7 +1130,7 @@ impl StreamableHttpHandler {
     where
         T: Body + Send + 'static,
     {
-        info!("Streaming handler called - using true streaming POST");
+        debug!("Streaming handler called - using true streaming POST");
 
         // Parse request body (still need to collect for JSON-RPC parsing)
         let body_bytes = match req.into_body().collect().await {
@@ -1294,7 +1294,7 @@ impl StreamableHttpHandler {
             }
         };
 
-        info!("Processing streaming request with session: {}", session_id);
+        debug!("Processing streaming request with session: {}", session_id);
 
         // Create streaming response using hyper::Body::channel()
         match message {
@@ -1365,8 +1365,8 @@ impl StreamableHttpHandler {
         session_id: String,
         context: StreamableHttpContext,
     ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>> {
-        info!(
-            "🔍 ENTERING create_streaming_response for method: {}, session: {}",
+        debug!(
+            "Creating streaming response for method: {}, session: {}",
             request.method, session_id
         );
         // Create channel for streaming response
@@ -1684,7 +1684,7 @@ impl StreamableHttpHandler {
     where
         T: Body + Send + 'static,
     {
-        info!(
+        debug!(
             "Using buffered POST for legacy client, session: {}",
             session_id
         );
@@ -1718,7 +1718,7 @@ impl StreamableHttpHandler {
     where
         T: Body + Send + 'static,
     {
-        info!("Handling client message via POST (MCP 2025-06-18)");
+        debug!("Handling client message via POST (MCP 2025-06-18)");
 
         // Reject POST if accepts_stream_frames is false
         // Per MCP spec: "Include Accept header with application/json and text/event-stream"
@@ -1749,7 +1749,7 @@ impl StreamableHttpHandler {
 
         // Use streaming for all POST requests, but adapt based on client needs
         // For simple JSON clients, streaming will send only the final result (no progress frames)
-        info!("Using streaming POST handler for all requests");
+        debug!("Using streaming POST handler for all requests");
         return self.handle_streaming_post_real(req, context).await;
     }
 }

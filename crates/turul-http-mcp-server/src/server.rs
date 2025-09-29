@@ -358,19 +358,19 @@ async fn handle_request(
     debug!("Handling {} {}", method, path);
 
     // Route the request
-    info!(
-        "🔍 HTTP SERVER DISPATCH: path={}, expected_mcp_path={}",
+    debug!(
+        "HTTP server dispatch: path={}, expected_mcp_path={}",
         path, handler.session_handler.config.mcp_path
     );
     let response = if path == handler.session_handler.config.mcp_path {
-        info!("🔍 PATH MATCH: Request routed to MCP handler");
+        debug!("Path match: Request routed to MCP handler");
         // Extract MCP protocol version from headers
         let protocol_version_str = req
             .headers()
             .get("MCP-Protocol-Version")
             .and_then(|h| h.to_str().ok())
             .unwrap_or("2025-06-18"); // Default to latest version (we only support the latest protocol)
-        info!("🔍 PROTOCOL VERSION: header_value={}", protocol_version_str);
+        debug!("Protocol version: {}", protocol_version_str);
 
         let protocol_version = McpProtocolVersion::parse_version(protocol_version_str)
             .unwrap_or(McpProtocolVersion::V2025_06_18);
@@ -382,8 +382,8 @@ async fn handle_request(
         );
 
         // Route based on protocol version - MCP 2025-06-18 uses Streamable HTTP, older versions use SessionMcpHandler
-        info!(
-            "🔍 ROUTING DECISION: protocol_version={}, method={}, supports_streamable={}, handler={}",
+        debug!(
+            "Routing decision: protocol_version={}, method={}, supports_streamable={}, handler={}",
             protocol_version.as_str(),
             method,
             protocol_version.supports_streamable_http(),
@@ -396,12 +396,12 @@ async fn handle_request(
 
         if protocol_version.supports_streamable_http() {
             // Use StreamableHttpHandler for MCP 2025-06-18 clients
-            info!(
-                "🔍 CALLING STREAMABLE HANDLER for protocol {}",
+            debug!(
+                "Calling streamable handler for protocol {}",
                 protocol_version.as_str()
             );
             let streamable_response = handler.streamable_handler.handle_request(req).await;
-            info!("🔍 STREAMABLE HANDLER COMPLETED");
+            debug!("Streamable handler completed");
             Ok(streamable_response)
         } else {
             // Use SessionMcpHandler for legacy clients (MCP 2024-11-05 and earlier)

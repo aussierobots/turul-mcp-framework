@@ -128,6 +128,59 @@ path = "streamable_http_client_test.rs"
 name = "client_streaming_test"
 path = "client_streaming_test.rs"
 
+[[test]]
+name = "mcp_tool_schema_runtime_sync_test"
+path = "mcp_tool_schema_runtime_sync_test.rs"
+
+[[test]]
+name = "mcp_vec_result_schema_test"
+path = "mcp_vec_result_schema_test.rs"
+
+[[test]]
+name = "mcp_vec_result_runtime_schema_test"
+path = "mcp_vec_result_runtime_schema_test.rs"
+
+[[test]]
+name = "mcp_explicit_vec_output_test"
+path = "mcp_explicit_vec_output_test.rs"
+
+[[test]]
+name = "mcp_vec_badly_named_tool_test"
+path = "mcp_vec_badly_named_tool_test.rs"
+
+[[test]]
+name = "mcp_derive_macro_bug_detection"
+path = "mcp_derive_macro_bug_detection.rs"
+
+[[test]]
+name = "mcp_tool_compliance"
+path = "mcp_tool_compliance.rs"
+
+# [[test]]
+# name = "client_integration_test"
+# path = "client_integration_test.rs"
+# DEFERRED: Requires client API updates for current turul-mcp-client interface
+
+# [[test]]
+# name = "phase5_regression_tests"
+# path = "phase5_regression_tests.rs"
+# DEFERRED: Import error - TestServerManager not exported from mcp-e2e-shared
+
+[[test]]
+name = "readme_examples"
+path = "readme_examples.rs"
+
+# [[test]]
+# name = "resources_integration_tests"
+# path = "resources_integration_tests.rs"
+# ARCHIVED: Tests unimplemented features (SecurityMiddleware, UriTemplateRegistry, ResourceAccessControl)
+# These are planned Phase 7+ features not yet in framework
+
+# [[test]]
+# name = "mcp_runtime_capabilities_validation"
+# path = "mcp_runtime_capabilities_validation.rs"
+# DEFERRED: Requires McpServerBuilder API updates (.with_tools() → .tools())
+
 # [[test]]
 # name = "e2e_sse_message_flow"
 # path = "e2e_sse_message_flow.rs"
