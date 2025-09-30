@@ -124,12 +124,20 @@ impl McpHandler for PromptsListHandler {
         use turul_mcp_protocol::prompts::{ListPromptsParams, ListPromptsResult, Prompt};
 
         // Extract limit from raw params before parsing to typed params (MCP extension field)
-        // Clamp to 1000 for DoS protection
+        // Clamp to 1000 for DoS protection, reject zero
         const DEFAULT_PAGE_SIZE: usize = 50;
         const MAX_PAGE_SIZE: usize = 1000;
-        let page_size = extract_limit_from_params(&params)
-            .unwrap_or(DEFAULT_PAGE_SIZE)
-            .min(MAX_PAGE_SIZE);
+        const MIN_PAGE_SIZE: usize = 1;
+
+        let page_size = match extract_limit_from_params(&params) {
+            Some(0) => {
+                return Err(McpError::InvalidParameters(
+                    "limit must be at least 1 (zero would return empty pages forever)".to_string()
+                ));
+            }
+            Some(n) => n.min(MAX_PAGE_SIZE).max(MIN_PAGE_SIZE),
+            None => DEFAULT_PAGE_SIZE,
+        };
 
         // Parse typed parameters with proper error handling (MCP compliance)
         let list_params = if let Some(params_value) = params {
@@ -384,12 +392,20 @@ impl McpHandler for ResourcesListHandler {
         use turul_mcp_protocol::resources::{ListResourcesParams, ListResourcesResult, Resource};
 
         // Extract limit from raw params before parsing to typed params (MCP extension field)
-        // Clamp to 1000 for DoS protection
+        // Clamp to 1000 for DoS protection, reject zero
         const DEFAULT_PAGE_SIZE: usize = 50;
         const MAX_PAGE_SIZE: usize = 1000;
-        let page_size = extract_limit_from_params(&params)
-            .unwrap_or(DEFAULT_PAGE_SIZE)
-            .min(MAX_PAGE_SIZE);
+        const MIN_PAGE_SIZE: usize = 1;
+
+        let page_size = match extract_limit_from_params(&params) {
+            Some(0) => {
+                return Err(McpError::InvalidParameters(
+                    "limit must be at least 1 (zero would return empty pages forever)".to_string()
+                ));
+            }
+            Some(n) => n.min(MAX_PAGE_SIZE).max(MIN_PAGE_SIZE),
+            None => DEFAULT_PAGE_SIZE,
+        };
 
         // Parse typed parameters with proper error handling (MCP compliance)
         let list_params = if let Some(params_value) = params {
@@ -998,12 +1014,20 @@ impl McpHandler for ResourceTemplatesHandler {
         use turul_mcp_protocol::meta::Cursor;
 
         // Extract limit from raw params before parsing to typed params (MCP extension field)
-        // Clamp to 1000 for DoS protection
+        // Clamp to 1000 for DoS protection, reject zero
         const DEFAULT_PAGE_SIZE: usize = 50;
         const MAX_PAGE_SIZE: usize = 1000;
-        let page_size = extract_limit_from_params(&params)
-            .unwrap_or(DEFAULT_PAGE_SIZE)
-            .min(MAX_PAGE_SIZE);
+        const MIN_PAGE_SIZE: usize = 1;
+
+        let page_size = match extract_limit_from_params(&params) {
+            Some(0) => {
+                return Err(McpError::InvalidParameters(
+                    "limit must be at least 1 (zero would return empty pages forever)".to_string()
+                ));
+            }
+            Some(n) => n.min(MAX_PAGE_SIZE).max(MIN_PAGE_SIZE),
+            None => DEFAULT_PAGE_SIZE,
+        };
 
         // Parse typed parameters with proper error handling (MCP compliance)
         use turul_mcp_protocol::resources::ListResourceTemplatesParams;
