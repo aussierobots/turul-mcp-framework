@@ -5,6 +5,7 @@
 //! previous fake tool-based approach with proper MCP protocol features.
 
 use async_trait::async_trait;
+use clap::Parser;
 use serde_json::Value;
 use tracing::info;
 use turul_mcp_protocol::{
@@ -461,13 +462,37 @@ impl McpSampling for ConversationalSampler {
     }
 }
 
+#[derive(Parser)]
+#[command(name = "sampling-server")]
+#[command(about = "MCP Sampling Test Server - AI Model Message Generation")]
+struct Args {
+    /// Port to run the server on (0 = random port assigned by OS)
+    #[arg(short, long, default_value = "0")]
+    port: u16,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    info!("🤖 Starting Real MCP Sampling Server");
+    let args = Args::parse();
+
+    // Use specified port or OS ephemeral allocation if 0
+    let port = if args.port == 0 {
+        // Use OS ephemeral port allocation - reliable for parallel testing
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .map_err(|e| format!("Failed to bind to ephemeral port: {}", e))?;
+        let port = listener.local_addr()?.port();
+        drop(listener); // Release immediately so server can bind to it
+        port
+    } else {
+        args.port
+    };
+
+    info!("🤖 Starting Real MCP Sampling Server on port {}", port);
+    info!("📡 Server URL: http://127.0.0.1:{}/mcp", port);
     info!("====================================");
 
     // Create sampling handlers using ACTUAL MCP protocol
@@ -488,11 +513,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .sampling_provider(creative_sampler)
         .sampling_provider(technical_sampler)
         .sampling_provider(conversational_sampler)
-        .bind_address("127.0.0.1:8007".parse()?)
+        .bind_address(format!("127.0.0.1:{}", port).parse()?)
         .sse(true)
         .build()?;
 
-    info!("🚀 Real MCP sampling server running at: http://127.0.0.1:8007/mcp");
+    info!("🚀 Real MCP sampling server running at: http://127.0.0.1:{}/mcp", port);
     info!("🤖 This server implements ACTUAL MCP sampling:");
     info!("   • Creative Writing Sampler - High-temperature creative content generation");
     info!("   • Technical Writing Sampler - Low-temperature precise documentation");
