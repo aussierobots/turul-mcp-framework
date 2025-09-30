@@ -29,6 +29,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use tracing::{info, warn};
 use uuid::Uuid;
+use clap::Parser;
 
 /// Configuration for onboarding workflows loaded from external JSON
 #[derive(Debug, Deserialize, Clone)]
@@ -64,6 +65,7 @@ struct FormField {
     #[serde(rename = "type")]
     field_type: String,
     label: String,
+    #[serde(default)]
     required: bool,
     #[serde(default)]
     choices: Value,
@@ -202,9 +204,25 @@ struct CustomerOnboardingPlatform {
 
 impl CustomerOnboardingPlatform {
     fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        // Try to find data directory in multiple locations for testing compatibility
+        let data_paths = vec![
+            "data",
+            "examples/elicitation-server/data",
+            "../elicitation-server/data",
+        ];
+
+        let data_dir = data_paths
+            .iter()
+            .find(|path| Path::new(path).join("onboarding_workflows.json").exists())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                warn!("Could not find data directory in any expected location, using fallback");
+                "data".to_string()
+            });
+
         // Load onboarding workflows configuration
-        let onboarding_config = if Path::new("data/onboarding_workflows.json").exists() {
-            let content = fs::read_to_string("data/onboarding_workflows.json")?;
+        let onboarding_config = if Path::new(&format!("{}/onboarding_workflows.json", data_dir)).exists() {
+            let content = fs::read_to_string(format!("{}/onboarding_workflows.json", data_dir))?;
             serde_json::from_str(&content)?
         } else {
             warn!("onboarding_workflows.json not found, using minimal fallback configuration");
@@ -217,8 +235,8 @@ impl CustomerOnboardingPlatform {
         };
 
         // Load validation rules configuration
-        let validation_config = if Path::new("data/validation_rules.yaml").exists() {
-            let content = fs::read_to_string("data/validation_rules.yaml")?;
+        let validation_config = if Path::new(&format!("{}/validation_rules.yaml", data_dir)).exists() {
+            let content = fs::read_to_string(format!("{}/validation_rules.yaml", data_dir))?;
             serde_yml::from_str(&content)?
         } else {
             warn!("validation_rules.yaml not found, using minimal fallback configuration");
@@ -1578,35 +1596,37 @@ impl McpTool for DataValidationTool {
     }
 }
 
+#[derive(Parser)]
+#[command(name = "elicitation-server")]
+#[command(about = "MCP Elicitation Test Server - Customer Onboarding Platform")]
+struct Args {
+    /// Port to run the server on (0 = random port assigned by OS)
+    #[arg(short, long, default_value = "0")]
+    port: u16,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    // Parse command line arguments for port
-    let args: Vec<String> = std::env::args().collect();
-    let mut port = 8053; // Default port
+    let args = Args::parse();
 
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--port" => {
-                if i + 1 < args.len() {
-                    port = args[i + 1].parse().unwrap_or(8053);
-                    i += 2;
-                } else {
-                    i += 1;
-                }
-            }
-            _ => {
-                i += 1;
-            }
-        }
-    }
+    // Use specified port or OS ephemeral allocation if 0
+    let port = if args.port == 0 {
+        // Use OS ephemeral port allocation - reliable for parallel testing
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .map_err(|e| format!("Failed to bind to ephemeral port: {}", e))?;
+        let port = listener.local_addr()?.port();
+        drop(listener); // Release immediately so server can bind to it
+        port
+    } else {
+        args.port
+    };
 
-    info!("🚀 Starting Customer Onboarding and Data Collection Platform");
-    info!("📡 Server will bind to port: {}", port);
+    info!("🚀 Starting Customer Onboarding and Data Collection Platform on port {}", port);
+    info!("📡 Server URL: http://127.0.0.1:{}/mcp", port);
 
     // Initialize the platform with external configuration
     let platform = CustomerOnboardingPlatform::new()?;
