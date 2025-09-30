@@ -62,9 +62,7 @@ async fn test_resource_list_with_shared_utils() {
     assert!(resource_uris
         .iter()
         .any(|uri| uri.starts_with("file:///error/")));
-    assert!(resource_uris
-        .iter()
-        .any(|uri| uri.starts_with("file:///template/")));
+    // Note: Template resources are returned by resources/templates/list, not resources/list
 }
 
 #[tokio::test]

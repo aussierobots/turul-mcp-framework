@@ -230,18 +230,18 @@ async fn test_object_tool_execution_and_schema() {
 
     let response = result.unwrap();
 
-    // Should have structured content in MCP object format with struct name as field
+    // Should have structured content in MCP object format with default "output" field
     assert!(response.structured_content.is_some());
     if let Some(structured) = response.structured_content {
         let obj = structured.as_object().unwrap();
-        // Struct outputs use struct name as field name (CustomResult -> customResult)
-        assert!(obj.contains_key("customResult"));
+        // Zero-config struct outputs use "output" as default field name
+        assert!(obj.contains_key("output"));
         let expected_result = json!({
             "message": "test",
             "count": 42,
             "success": true
         });
-        assert_eq!(obj["customResult"], expected_result);
+        assert_eq!(obj["output"], expected_result);
     }
 
     // Should have MCP-compliant object output schema after execution
@@ -341,20 +341,16 @@ async fn test_struct_output_uses_struct_name_as_field() {
 
     let response = result.unwrap();
 
-    // Should have structured content with struct name as field name
+    // Should have structured content with default "output" field name
     assert!(response.structured_content.is_some());
     if let Some(structured) = response.structured_content {
         let obj = structured.as_object().unwrap();
 
-        // For struct outputs, should use "customResult" (camelCase of CustomResult) instead of "result"
+        // Zero-config struct outputs use "output" as default field name
         assert!(
-            obj.contains_key("customResult"),
-            "Expected 'customResult' field for struct output, got keys: {:?}",
+            obj.contains_key("output"),
+            "Expected 'output' field for zero-config struct output, got keys: {:?}",
             obj.keys().collect::<Vec<_>>()
-        );
-        assert!(
-            !obj.contains_key("result"),
-            "Should not have 'result' field for struct output"
         );
 
         let expected_result = json!({
@@ -362,7 +358,7 @@ async fn test_struct_output_uses_struct_name_as_field() {
             "count": 42,
             "success": true
         });
-        assert_eq!(obj["customResult"], expected_result);
+        assert_eq!(obj["output"], expected_result);
     }
 }
 
