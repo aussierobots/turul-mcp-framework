@@ -1182,8 +1182,8 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                         "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
                         method, session_ctx.session_id
                     );
-                    return Err(McpError::configuration(
-                        "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)",
+                    return Err(McpError::SessionError(
+                        "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)".to_string(),
                     ));
                 }
                 debug!(
@@ -1239,9 +1239,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             Ok(response) => serde_json::to_value(response).map_err(McpError::SerializationError),
             Err(error_msg) => {
                 error!("Tool execution error: {}", error_msg);
-                let error_content = vec![ToolResult::text(format!("Error: {}", error_msg))];
-                let response = CallToolResult::error(error_content);
-                serde_json::to_value(response).map_err(McpError::SerializationError)
+                Err(error_msg) // Propagate tool error directly (already proper McpError type)
             }
         }
     }
