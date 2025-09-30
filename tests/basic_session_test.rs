@@ -66,9 +66,10 @@ mod tests {
         };
         let response: Value = serde_json::from_str(content).unwrap();
 
-        assert_eq!(response["value"]["input"], "test");
-        assert_eq!(response["value"]["has_session"], false);
-        assert_eq!(response["value"]["session_id"], "no-session");
+        // Derive macro wraps result in "output" field
+        assert_eq!(response["output"]["input"], "test");
+        assert_eq!(response["output"]["has_session"], false);
+        assert_eq!(response["output"]["session_id"], "no-session");
     }
 
     #[tokio::test]
