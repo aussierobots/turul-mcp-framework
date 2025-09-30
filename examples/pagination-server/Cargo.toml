@@ -16,3 +16,4 @@ chrono = { workspace = true }
 rand = { workspace = true }
 sqlx = { workspace = true }
 tempfile = { workspace = true }
+clap = { workspace = true }

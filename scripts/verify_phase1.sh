@@ -115,7 +115,7 @@ test_server() {
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
             -H "MCP-Session-ID: $SESSION_ID" \
-            -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"$tool_name\",\"arguments\":{\"message\":\"test\"}}}")
+            -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"$tool_name\",\"arguments\":{\"text\":\"test\"}}}")
 
         RESULT=$(echo "$CALL_RESPONSE" | jq -r '.result.content[0].text // empty')
 

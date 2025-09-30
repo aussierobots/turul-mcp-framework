@@ -21,6 +21,16 @@ use turul_mcp_protocol::tools::{
 };
 use turul_mcp_protocol::{McpError, McpResult, ResourceContents, ToolResult, ToolSchema};
 use turul_mcp_server::{McpServer, McpTool, SessionContext};
+use clap::Parser;
+
+#[derive(Parser)]
+#[command(name = "pagination-server")]
+#[command(about = "SQLite Pagination Server - MCP pagination demonstration")]
+struct Args {
+    /// Port to run the server on (0 = random port assigned by OS)
+    #[arg(short, long, default_value = "0")]
+    port: u16,
+}
 
 /// Database pool wrapper for sharing across tools
 #[derive(Clone)]
@@ -38,8 +48,8 @@ impl DatabaseManager {
         let temp_dir = tempfile::tempdir()?;
         let db_path = temp_dir.path().join("pagination_demo.db");
 
-        // Create database connection
-        let database_url = format!("sqlite:{}", db_path.display());
+        // Create database connection with create mode enabled
+        let database_url = format!("sqlite://{}?mode=rwc", db_path.display());
         let pool = SqlitePool::connect(&database_url).await?;
 
         // Create tables
@@ -962,6 +972,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
+    // Parse CLI args
+    let args = Args::parse();
+
     info!("Starting SQLite Pagination Server Example");
 
     // Setup database with lifecycle management
@@ -976,6 +989,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
+    // Dynamic port binding
+    let port = if args.port == 0 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
+        let port = listener.local_addr()?.port();
+        drop(listener);
+        port
+    } else {
+        args.port
+    };
+
     let server = McpServer::builder()
         .name("pagination-server")
         .version("2.0.0")
@@ -984,10 +1007,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(ListUsersTool::new(db.clone()))
         .tool(SearchUsersTool::new(db.clone()))
         .tool(RefreshDataTool::new(db.clone()))
-        .bind_address("127.0.0.1:8044".parse()?)
+        .bind_address(format!("127.0.0.1:{}", port).parse()?)
         .build()?;
 
-    info!("🚀 SQLite Pagination server running at: http://127.0.0.1:8044/mcp");
+    info!("🚀 SQLite Pagination server running at: http://127.0.0.1:{}/mcp", port);
     info!("📊 Database contains 10,000 sample users across 8 departments");
     info!("");
     info!("Available tools:");
