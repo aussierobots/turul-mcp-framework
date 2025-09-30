@@ -49,6 +49,9 @@ async fn test_tool_not_found_error() {
         .await
         .unwrap();
 
+    // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
+    client.send_initialized_notification().await.unwrap();
+
     // Call non-existent tool
     let result = client.call_tool("non_existent_tool", json!({})).await;
 
@@ -101,6 +104,9 @@ async fn test_invalid_parameters_error() {
         .await
         .unwrap();
 
+    // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
+    client.send_initialized_notification().await.unwrap();
+
     // Call calculator with invalid parameters (missing required parameters)
     let result = client
         .call_tool(
@@ -150,6 +156,9 @@ async fn test_invalid_parameter_type_error() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
+    client.send_initialized_notification().await.unwrap();
 
     // Call calculator with wrong parameter types (strings instead of numbers)
     let result = client
@@ -208,6 +217,9 @@ async fn test_tool_execution_error() {
         .await
         .unwrap();
 
+    // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
+    client.send_initialized_notification().await.unwrap();
+
     // Use error_generator tool to trigger execution errors
     let result = client
         .call_tool(
@@ -258,6 +270,9 @@ async fn test_validation_error() {
         .await
         .unwrap();
 
+    // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
+    client.send_initialized_notification().await.unwrap();
+
     // Use error_generator tool to trigger validation errors
     let result = client
         .call_tool(
@@ -305,6 +320,9 @@ async fn test_parameter_out_of_range_error() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
+    client.send_initialized_notification().await.unwrap();
 
     // Use parameter_validator tool with invalid email format
     let result = client
@@ -374,6 +392,9 @@ async fn test_json_rpc_error_structure() {
         .await
         .unwrap();
 
+    // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
+    client.send_initialized_notification().await.unwrap();
+
     // Send malformed JSON-RPC request (missing required fields)
     let malformed_request = json!({
         "jsonrpc": "2.0",
@@ -429,6 +450,9 @@ async fn test_method_not_found_error() {
         .await
         .unwrap();
 
+    // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
+    client.send_initialized_notification().await.unwrap();
+
     // Call non-existent method
     let result = client
         .make_request("non_existent_method", json!({}), 999)
@@ -482,6 +506,9 @@ async fn test_error_recovery_and_session_continuity() {
         .await
         .unwrap();
 
+    // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
+    client.send_initialized_notification().await.unwrap();
+
     // Test that after an error, the session continues to work normally
 
     // Step 1: Trigger an error
@@ -521,6 +548,9 @@ async fn test_multiple_error_scenarios_batch() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
+    client.send_initialized_notification().await.unwrap();
 
     let error_scenarios = vec![
         ("tool_not_found", "non_existent_tool", json!({})),
