@@ -437,17 +437,34 @@ impl TestServerManager {
 impl Drop for TestServerManager {
     fn drop(&mut self) {
         if let Some(mut process) = self.server_process.take() {
-            // Kill the process and wait for it to terminate
-            let _ = process.kill();
+            // Send kill signal
+            let _ = process.start_kill();
 
-            // Spawn background thread to wait for process cleanup
-            // This avoids blocking test completion while still allowing cleanup
-            let _ = std::thread::spawn(move || {
-                let _ = process.wait();
+            // Wait for process termination in blocking manner
+            // We need to block here to ensure cleanup, but do it in a thread
+            // to avoid blocking the async runtime
+            let handle = std::thread::spawn(move || {
+                // Create a runtime just for waiting on this process
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async move {
+                    match tokio::time::timeout(Duration::from_secs(5), process.wait()).await {
+                        Ok(Ok(status)) => {
+                            debug!("Test server exited: {:?}", status);
+                        }
+                        Ok(Err(e)) => {
+                            debug!("Error waiting for test server: {}", e);
+                        }
+                        Err(_) => {
+                            debug!("Timeout waiting for test server to exit");
+                            // Force kill if it's still alive
+                            let _ = process.kill();
+                        }
+                    }
+                })
             });
 
-            // Brief sleep to allow immediate cleanup (most processes exit quickly)
-            std::thread::sleep(std::time::Duration::from_millis(50));
+            // Wait for cleanup to complete (with timeout)
+            let _ = handle.join();
         }
     }
 }
