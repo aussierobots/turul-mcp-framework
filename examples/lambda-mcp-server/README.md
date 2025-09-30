@@ -1,8 +1,9 @@
-# AWS Lambda MCP Server
+# AWS Lambda MCP Server (Snapshot-Based SSE)
 
-A **production-ready** serverless Model Context Protocol (MCP) server built with Rust, demonstrating clean notification architecture in Lambda environments. This implementation showcases:
+A **cost-optimized** serverless Model Context Protocol (MCP) server built with Rust for standard Lambda deployments. This implementation showcases:
 
-- 🚀 **MCP 2025-06-18 Streamable HTTP Compliance**: POST JSON-RPC + SSE streaming, session management
+- 🚀 **MCP 2025-06-18 Compliance**: POST JSON-RPC + SSE snapshots (not real-time streaming), session management
+- ⚠️ **SSE Mode**: Returns recent events when requested, then closes connection (snapshot mode)
 - 🔄 **Clean Notification Architecture**: tokio broadcast channels for internal events, SNS for external events
 - 📡 **True Fan-out**: Multiple SSE connections share events via tokio broadcast - no competition
 - 🔧 **Advanced Session Management**: DynamoDB-backed stateless Lambda with pk/sk schema  

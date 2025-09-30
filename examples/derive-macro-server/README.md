@@ -194,8 +194,8 @@ The macro handles:
 ### 4. Implementation Pattern
 ```rust
 impl MyTool {
-    async fn execute(&self) -> McpResult<String> {
-        // Tool logic here
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+        // Tool logic here with session access
         Ok("result".to_string())
     }
 }
@@ -211,10 +211,11 @@ impl MyTool {
 
 ## 🚨 Current Limitations
 
-1. **Session Context**: Derive macros don't currently support session context (see counter tool)
-2. **Complex Schemas**: Limited support for complex nested schemas
-3. **Custom Validation**: No built-in support for custom parameter validation
-4. **Advanced Features**: Some advanced MCP features require manual implementation
+1. **Complex Schemas**: Limited support for complex nested schemas
+2. **Custom Validation**: No built-in support for custom parameter validation
+3. **Advanced Features**: Some advanced MCP features require manual implementation
+
+**Note**: Session context is fully supported in derive macros as of 0.2.0.
 
 ## 🔄 Comparison with Manual Implementation
 
@@ -223,7 +224,7 @@ impl MyTool {
 | Code Length | Short | Longer |
 | Type Safety | High | High |
 | Schema Generation | Automatic | Manual |
-| Session Support | Limited | Full |
+| Session Support | Full | Full |
 | Customization | Limited | Full |
 | Learning Curve | Easy | Moderate |
 
@@ -248,7 +249,7 @@ struct NewTool {
 }
 
 impl NewTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
         // Your logic here
         Ok(format!("Processed: {}", self.input))
     }
@@ -274,7 +275,7 @@ struct ComplexTool {
 ### Error Handling Patterns
 ```rust
 impl MyTool {
-    async fn execute(&self) -> McpResult<String> {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
         // Validate input
         if self.input.is_empty() {
             return Err("Input cannot be empty".to_string());

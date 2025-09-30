@@ -2,10 +2,10 @@
 //!
 //! This module defines the types used for the MCP initialization handshake.
 
-use std::collections::HashMap;
+use crate::version::McpVersion;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use crate::version::McpVersion;
+use std::collections::HashMap;
 
 /// Describes the name and version of an MCP implementation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ pub struct RootsCapabilities {
 
 /// Capabilities related to sampling support
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]  
+#[serde(rename_all = "camelCase")]
 pub struct SamplingCapabilities {
     /// Whether the client supports sampling
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -185,12 +185,12 @@ impl InitializeRequest {
 
     /// Get the protocol version as a parsed enum
     pub fn protocol_version(&self) -> Result<McpVersion, crate::McpError> {
-        McpVersion::from_str(&self.protocol_version).ok_or_else(|| {
-            crate::McpError::VersionMismatch {
+        self.protocol_version
+            .parse::<McpVersion>()
+            .map_err(|_| crate::McpError::VersionMismatch {
                 expected: McpVersion::CURRENT.as_str().to_string(),
                 actual: self.protocol_version.clone(),
-            }
-        })
+            })
     }
 }
 
@@ -230,12 +230,12 @@ impl InitializeResult {
 
     /// Get the protocol version as a parsed enum
     pub fn protocol_version(&self) -> Result<McpVersion, crate::McpError> {
-        McpVersion::from_str(&self.protocol_version).ok_or_else(|| {
-            crate::McpError::VersionMismatch {
+        self.protocol_version
+            .parse::<McpVersion>()
+            .map_err(|_| crate::McpError::VersionMismatch {
                 expected: McpVersion::CURRENT.as_str().to_string(),
                 actual: self.protocol_version.clone(),
-            }
-        })
+            })
     }
 }
 
@@ -245,8 +245,7 @@ mod tests {
 
     #[test]
     fn test_implementation_creation() {
-        let impl_info = Implementation::new("test-client", "1.0.0")
-            .with_title("Test Client");
+        let impl_info = Implementation::new("test-client", "1.0.0").with_title("Test Client");
 
         assert_eq!(impl_info.name, "test-client");
         assert_eq!(impl_info.version, "1.0.0");
@@ -257,11 +256,7 @@ mod tests {
     fn test_initialize_request_serialization() {
         let client_info = Implementation::new("test-client", "1.0.0");
         let capabilities = ClientCapabilities::default();
-        let request = InitializeRequest::new(
-            McpVersion::V2025_06_18,
-            capabilities,
-            client_info,
-        );
+        let request = InitializeRequest::new(McpVersion::V2025_06_18, capabilities, client_info);
 
         let json = serde_json::to_string(&request).unwrap();
         assert!(json.contains("2025-06-18"));
@@ -272,11 +267,8 @@ mod tests {
     fn test_initialize_response_creation() {
         let server_info = Implementation::new("test-server", "1.0.0");
         let capabilities = ServerCapabilities::default();
-        let response = InitializeResult::new(
-            McpVersion::V2025_06_18,
-            capabilities,
-            server_info,
-        ).with_instructions("Welcome to the test server!");
+        let response = InitializeResult::new(McpVersion::V2025_06_18, capabilities, server_info)
+            .with_instructions("Welcome to the test server!");
 
         assert_eq!(response.protocol_version, "2025-06-18");
         assert!(response.instructions.is_some());

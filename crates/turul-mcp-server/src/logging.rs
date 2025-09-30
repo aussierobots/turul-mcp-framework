@@ -3,31 +3,34 @@
 //! This module defines the high-level trait for implementing MCP logging.
 
 use async_trait::async_trait;
-use turul_mcp_protocol::{McpResult, logging::{SetLevelRequest, LoggingMessageNotification}};
-use turul_mcp_protocol::logging::{LoggerDefinition, LoggingLevel};
 use serde_json::Value;
+use turul_mcp_protocol::logging::{LoggerDefinition, LoggingLevel};
+use turul_mcp_protocol::{
+    McpResult,
+    logging::{LoggingMessageNotification, SetLevelRequest},
+};
 
 /// High-level trait for implementing MCP logging
-/// 
+///
 /// McpLogger extends LoggerDefinition with execution capabilities.
 /// All metadata is provided by the LoggerDefinition trait, ensuring
 /// consistency between concrete Logger structs and dynamic implementations.
 #[async_trait]
 pub trait McpLogger: LoggerDefinition + Send + Sync {
     /// Log a message (per MCP spec)
-    /// 
+    ///
     /// This method processes log messages and sends them via the appropriate
     /// transport mechanism (notifications/message).
     async fn log(&self, level: LoggingLevel, data: Value) -> McpResult<()>;
 
     /// Set the logging level (per MCP spec)
-    /// 
+    ///
     /// This method processes logging/setLevel requests to configure
     /// the minimum level for log message delivery.
     async fn set_level(&self, request: SetLevelRequest) -> McpResult<()>;
 
     /// Optional: Check if this logger can handle the given level
-    /// 
+    ///
     /// This allows for conditional logging based on logger capabilities,
     /// transport availability, or other factors.
     fn can_log(&self, level: LoggingLevel) -> bool {
@@ -35,7 +38,7 @@ pub trait McpLogger: LoggerDefinition + Send + Sync {
     }
 
     /// Optional: Get logger priority for routing
-    /// 
+    ///
     /// Higher priority loggers are used first when multiple loggers
     /// can handle the same message.
     fn priority(&self) -> u32 {
@@ -43,18 +46,20 @@ pub trait McpLogger: LoggerDefinition + Send + Sync {
     }
 
     /// Optional: Validate the log data
-    /// 
+    ///
     /// This method can perform validation of log data before processing.
     async fn validate_data(&self, _data: &Value) -> McpResult<()> {
         // Basic validation - ensure data is not null
         if _data.is_null() {
-            return Err(turul_mcp_protocol::McpError::validation("Log data cannot be null"));
+            return Err(turul_mcp_protocol::McpError::validation(
+                "Log data cannot be null",
+            ));
         }
         Ok(())
     }
 
     /// Optional: Transform log data before sending
-    /// 
+    ///
     /// This allows for data enrichment, filtering, or formatting
     /// before the log message is transmitted.
     async fn transform_data(&self, data: Value) -> McpResult<Value> {
@@ -62,16 +67,19 @@ pub trait McpLogger: LoggerDefinition + Send + Sync {
     }
 
     /// Optional: Handle logging errors
-    /// 
+    ///
     /// This method is called when log delivery fails, allowing
     /// for retry logic, fallback logging, or error notifications.
     async fn handle_error(&self, error: &turul_mcp_protocol::McpError) -> McpResult<()> {
         // Default: just propagate the error by creating a new error with the same message
-        Err(turul_mcp_protocol::McpError::validation(&format!("Logging error: {}", error)))
+        Err(turul_mcp_protocol::McpError::validation(&format!(
+            "Logging error: {}",
+            error
+        )))
     }
 
     /// Optional: Batch multiple log messages
-    /// 
+    ///
     /// This method can be used to optimize log delivery by batching
     /// multiple messages together.
     async fn flush(&self) -> McpResult<()> {
@@ -81,10 +89,14 @@ pub trait McpLogger: LoggerDefinition + Send + Sync {
 }
 
 /// Convert an McpLogger trait object to a LoggingMessageNotification
-/// 
+///
 /// This is a convenience function for converting logger definitions
 /// to protocol notifications.
-pub fn logger_to_notification(logger: &dyn McpLogger, level: LoggingLevel, data: Value) -> LoggingMessageNotification {
+pub fn logger_to_notification(
+    logger: &dyn McpLogger,
+    level: LoggingLevel,
+    data: Value,
+) -> LoggingMessageNotification {
     let mut notification = LoggingMessageNotification::new(level, data);
     if let Some(logger_name) = logger.logger_name() {
         notification = notification.with_logger(logger_name);
@@ -95,10 +107,10 @@ pub fn logger_to_notification(logger: &dyn McpLogger, level: LoggingLevel, data:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use turul_mcp_protocol::logging::{
-        HasLoggingMetadata, HasLogLevel, HasLogFormat, HasLogTransport
-    };
     use serde_json::json;
+    use turul_mcp_protocol::logging::{
+        HasLogFormat, HasLogLevel, HasLogTransport, HasLoggingMetadata,
+    };
 
     struct TestLogger {
         logger_name: String,
@@ -111,7 +123,7 @@ mod tests {
         fn method(&self) -> &str {
             "notifications/message"
         }
-        
+
         fn logger_name(&self) -> Option<&str> {
             Some(&self.logger_name)
         }
@@ -133,7 +145,7 @@ mod tests {
         fn should_deliver(&self, level: LoggingLevel) -> bool {
             level.should_log(self.level)
         }
-        
+
         fn batch_size(&self) -> Option<usize> {
             Some(10) // Test batching
         }
@@ -146,8 +158,9 @@ mod tests {
         async fn log(&self, level: LoggingLevel, _data: Value) -> McpResult<()> {
             // Simulate logging (could send to file, network, etc.)
             if self.can_log(level) {
-                println!("[{}] {}: {}", 
-                    self.logger_name, 
+                println!(
+                    "[{}] {}: {}",
+                    self.logger_name,
                     format!("{:?}", level).to_lowercase(),
                     self.format_message()
                 );
@@ -168,7 +181,7 @@ mod tests {
             level: LoggingLevel::Info,
             test_data: json!({"message": "test log"}),
         };
-        
+
         assert_eq!(logger.method(), "notifications/message");
         assert_eq!(logger.logger_name(), Some("test-logger"));
         assert_eq!(logger.level(), LoggingLevel::Info);

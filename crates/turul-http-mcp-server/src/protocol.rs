@@ -16,7 +16,7 @@ pub enum McpProtocolVersion {
 
 impl McpProtocolVersion {
     /// Parses a version string like "2024-11-05", "2025-03-26", or "2025-06-18".
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_version(s: &str) -> Option<Self> {
         match s {
             "2024-11-05" => Some(McpProtocolVersion::V2024_11_05),
             "2025-03-26" => Some(McpProtocolVersion::V2025_03_26),
@@ -36,7 +36,10 @@ impl McpProtocolVersion {
 
     /// Returns whether this version supports streamable HTTP (SSE).
     pub fn supports_streamable_http(&self) -> bool {
-        matches!(self, McpProtocolVersion::V2025_03_26 | McpProtocolVersion::V2025_06_18)
+        matches!(
+            self,
+            McpProtocolVersion::V2025_03_26 | McpProtocolVersion::V2025_06_18
+        )
     }
 
     /// Returns whether this version supports `_meta` fields in requests, responses, and notifications.
@@ -94,7 +97,7 @@ pub fn extract_protocol_version(headers: &hyper::HeaderMap) -> McpProtocolVersio
     headers
         .get("MCP-Protocol-Version")
         .and_then(|h| h.to_str().ok())
-        .and_then(McpProtocolVersion::from_str)
+        .and_then(McpProtocolVersion::parse_version)
         .unwrap_or(McpProtocolVersion::LATEST)
 }
 
@@ -121,10 +124,19 @@ mod tests {
 
     #[test]
     fn test_version_parsing() {
-        assert_eq!(McpProtocolVersion::from_str("2024-11-05"), Some(McpProtocolVersion::V2024_11_05));
-        assert_eq!(McpProtocolVersion::from_str("2025-03-26"), Some(McpProtocolVersion::V2025_03_26));
-        assert_eq!(McpProtocolVersion::from_str("2025-06-18"), Some(McpProtocolVersion::V2025_06_18));
-        assert_eq!(McpProtocolVersion::from_str("invalid"), None);
+        assert_eq!(
+            McpProtocolVersion::parse_version("2024-11-05"),
+            Some(McpProtocolVersion::V2024_11_05)
+        );
+        assert_eq!(
+            McpProtocolVersion::parse_version("2025-03-26"),
+            Some(McpProtocolVersion::V2025_03_26)
+        );
+        assert_eq!(
+            McpProtocolVersion::parse_version("2025-06-18"),
+            Some(McpProtocolVersion::V2025_06_18)
+        );
+        assert_eq!(McpProtocolVersion::parse_version("invalid"), None);
     }
 
     #[test]

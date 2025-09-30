@@ -1,10 +1,14 @@
+use tracing::info;
 use turul_mcp_derive::mcp_tool;
 use turul_mcp_server::{McpResult, McpServer};
-use tracing::info;
 
 /// Level 1: Function Tool Macro (#[mcp_tool])
 /// Ultra-simple tool definition - just annotate a function
-#[mcp_tool(name = "calculator_add_function", description = "Add two numbers using function macro (Level 1)", output_field = "sum")]
+#[mcp_tool(
+    name = "calculator_add_function",
+    description = "Add two numbers using function macro (Level 1)",
+    output_field = "sum"
+)]
 async fn calculator_add(
     #[param(description = "First number")] a: f64,
     #[param(description = "Second number")] b: f64,
@@ -19,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     info!("Starting calculator_add_function server");
-    
+
     let server = McpServer::builder()
         .name("calculator_add_function")
         .version("0.0.1")

@@ -1,0 +1,35 @@
+[package]
+name = "mcp-prompts-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+turul-mcp-server = { path = "../../crates/turul-mcp-server" }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
+turul-mcp-json-rpc-server = { path = "../../crates/turul-mcp-json-rpc-server" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid = { workspace = true, features = ["v7", "serde"] }
+reqwest = { workspace = true, features = ["json", "stream"] }
+hyper.workspace = true
+hyper-util.workspace = true
+http-body-util.workspace = true
+tower = { workspace = true, features = ["util"] }
+futures.workspace = true
+tokio-stream.workspace = true
+tempfile.workspace = true
+mcp-e2e-shared = { path = "../shared" }
+
+[lib]
+name = "mcp_prompts_tests"
+path = "src/lib.rs"
+
+[[bin]]
+name = "prompts_example"
+path = "src/main.rs"

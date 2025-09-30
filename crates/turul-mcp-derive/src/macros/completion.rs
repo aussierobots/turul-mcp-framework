@@ -5,7 +5,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse::Parse, parse::ParseStream, Result, Token, Ident, LitStr, Type};
+use syn::{Ident, LitStr, Result, Token, Type, parse::Parse, parse::ParseStream};
 
 use crate::macros::shared::capitalize;
 
@@ -20,15 +20,15 @@ pub fn completion_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 pub fn completion_declarative_impl_inner(input: CompletionMacroInput) -> proc_macro2::TokenStream {
     let completion_name_ident = syn::Ident::new(
         &format!("{}Completion", capitalize(&input.name)),
-        proc_macro2::Span::call_site()
+        proc_macro2::Span::call_site(),
     );
-    
+
     let struct_fields = generate_struct_fields(&input.fields);
     let default_impl = generate_default_impl(&completion_name_ident, &input.fields);
 
     quote! {
         #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-        #[derive(mcp_derive::McpCompletion)]
+        #[derive(turul_mcp_derive::McpCompletion)]
         pub struct #completion_name_ident {
             #struct_fields
         }
@@ -47,10 +47,10 @@ impl Parse for CompletionMacroInput {
     fn parse(input: ParseStream) -> Result<Self> {
         let name_ident: Ident = input.parse()?;
         let name = name_ident.to_string();
-        
+
         let content;
         syn::braced!(content in input);
-        
+
         let mut fields = Vec::new();
         while !content.is_empty() {
             fields.push(content.parse()?);
@@ -58,7 +58,7 @@ impl Parse for CompletionMacroInput {
                 content.parse::<Token![,]>()?;
             }
         }
-        
+
         Ok(CompletionMacroInput { name, fields })
     }
 }
@@ -74,18 +74,22 @@ impl Parse for CompletionField {
     fn parse(input: ParseStream) -> Result<Self> {
         let name_ident: Ident = input.parse()?;
         let name = name_ident.to_string();
-        
+
         input.parse::<Token![:]>()?;
         let field_type: Type = input.parse()?;
-        
+
         let mut description = None;
         if input.peek(Token![=]) {
             input.parse::<Token![=]>()?;
             let desc_str: LitStr = input.parse()?;
             description = Some(desc_str.value());
         }
-        
-        Ok(CompletionField { name, field_type, description })
+
+        Ok(CompletionField {
+            name,
+            field_type,
+            description,
+        })
     }
 }
 
@@ -93,11 +97,11 @@ fn generate_struct_fields(fields: &[CompletionField]) -> proc_macro2::TokenStrea
     if fields.is_empty() {
         return quote! {};
     }
-    
+
     let field_definitions = fields.iter().map(|field| {
         let field_name = syn::Ident::new(&field.name, proc_macro2::Span::call_site());
         let field_type = &field.field_type;
-        
+
         if let Some(desc) = &field.description {
             quote! {
                 #[doc = #desc]
@@ -109,13 +113,16 @@ fn generate_struct_fields(fields: &[CompletionField]) -> proc_macro2::TokenStrea
             }
         }
     });
-    
+
     quote! {
         #(#field_definitions)*
     }
 }
 
-fn generate_default_impl(struct_name: &syn::Ident, fields: &[CompletionField]) -> proc_macro2::TokenStream {
+fn generate_default_impl(
+    struct_name: &syn::Ident,
+    fields: &[CompletionField],
+) -> proc_macro2::TokenStream {
     if fields.is_empty() {
         return quote! {
             impl Default for #struct_name {
@@ -125,7 +132,7 @@ fn generate_default_impl(struct_name: &syn::Ident, fields: &[CompletionField]) -
             }
         };
     }
-    
+
     let field_defaults = fields.iter().map(|field| {
         let field_name = syn::Ident::new(&field.name, proc_macro2::Span::call_site());
         let field_type = &field.field_type;
@@ -137,12 +144,12 @@ fn generate_default_impl(struct_name: &syn::Ident, fields: &[CompletionField]) -
             syn::Type::Path(path) if path.path.is_ident("bool") => quote! { false },
             _ => quote! { Default::default() },
         };
-        
+
         quote! {
             #field_name: #default_value,
         }
     });
-    
+
     quote! {
         impl Default for #struct_name {
             fn default() -> Self {
@@ -160,7 +167,10 @@ mod tests {
 
     #[test]
     fn test_completion_macro_parse() {
-        let input = syn::parse_str::<CompletionMacroInput>("text_editor { context: String, cursor_position: u32 }").unwrap();
+        let input = syn::parse_str::<CompletionMacroInput>(
+            "text_editor { context: String, cursor_position: u32 }",
+        )
+        .unwrap();
 
         let result = completion_declarative_impl_inner(input);
         let code = result.to_string();

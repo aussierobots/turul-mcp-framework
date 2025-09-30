@@ -10,33 +10,34 @@ use crate::error::{McpClientResult, TransportError};
 pub mod http;
 pub mod sse;
 
-#[cfg(feature = "websocket")]
-pub mod websocket;
+// WebSocket and Stdio transports are planned for future implementation
+// #[cfg(feature = "websocket")]
+// pub mod websocket;
 
-#[cfg(feature = "stdio")]
-pub mod stdio;
+// #[cfg(feature = "stdio")]
+// pub mod stdio;
 
 // Re-export transport implementations
 pub use http::HttpTransport;
 pub use sse::SseTransport;
 
-#[cfg(feature = "websocket")]
-pub use websocket::WebSocketTransport;
+// Re-exports for future transport implementations
+// #[cfg(feature = "websocket")]
+// pub use websocket::WebSocketTransport;
 
-#[cfg(feature = "stdio")]
-pub use stdio::StdioTransport;
+// #[cfg(feature = "stdio")]
+// pub use stdio::StdioTransport;
 
 /// Transport type enumeration
 #[derive(Debug, Clone, PartialEq)]
 pub enum TransportType {
-    /// HTTP transport (Streamable HTTP 2025-03-26+)
+    /// HTTP transport (Streamable HTTP)
     Http,
-    /// Server-Sent Events transport (HTTP+SSE 2024-11-05)
+    /// Server-Sent Events transport (HTTP+SSE)
     Sse,
-    /// WebSocket transport
-    WebSocket,
-    /// Standard I/O transport (for local processes)
-    Stdio,
+    // Future transport types:
+    // WebSocket,
+    // Stdio,
 }
 
 impl std::fmt::Display for TransportType {
@@ -44,8 +45,6 @@ impl std::fmt::Display for TransportType {
         match self {
             TransportType::Http => write!(f, "HTTP"),
             TransportType::Sse => write!(f, "SSE"),
-            TransportType::WebSocket => write!(f, "WebSocket"),
-            TransportType::Stdio => write!(f, "Stdio"),
         }
     }
 }
@@ -94,7 +93,7 @@ impl TransportResponse {
     pub fn new(body: Value, headers: HashMap<String, String>) -> Self {
         Self { body, headers }
     }
-    
+
     /// Create a simple response with just body (no headers)
     pub fn body_only(body: Value) -> Self {
         Self {
@@ -109,37 +108,43 @@ impl TransportResponse {
 pub trait Transport: Send + Sync {
     /// Get transport type
     fn transport_type(&self) -> TransportType;
-    
+
     /// Get transport capabilities
     fn capabilities(&self) -> TransportCapabilities;
-    
+
     /// Connect to the server
     async fn connect(&mut self) -> McpClientResult<()>;
-    
+
     /// Disconnect from the server
     async fn disconnect(&mut self) -> McpClientResult<()>;
-    
+
     /// Check if connected
     fn is_connected(&self) -> bool;
-    
+
     /// Send a request and wait for response
     async fn send_request(&mut self, request: Value) -> McpClientResult<Value>;
-    
+
     /// Send a request and return response with headers (for initialization)
-    async fn send_request_with_headers(&mut self, request: Value) -> McpClientResult<TransportResponse>;
-    
+    async fn send_request_with_headers(
+        &mut self,
+        request: Value,
+    ) -> McpClientResult<TransportResponse>;
+
     /// Send a notification (no response expected)
     async fn send_notification(&mut self, notification: Value) -> McpClientResult<()>;
-    
+
     /// Send a DELETE request for session termination (MCP session management)
     async fn send_delete(&mut self, session_id: &str) -> McpClientResult<()>;
-    
+
+    /// Set the session ID to include in subsequent requests (MCP session management)
+    fn set_session_id(&mut self, session_id: String);
+
     /// Start listening for server events (if supported)
     async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver>;
-    
+
     /// Get connection information
     fn connection_info(&self) -> ConnectionInfo;
-    
+
     /// Perform health check
     async fn health_check(&mut self) -> McpClientResult<bool> {
         // Default implementation: try to send a ping
@@ -149,13 +154,13 @@ pub trait Transport: Send + Sync {
             "method": "ping",
             "params": {}
         });
-        
+
         match self.send_request(ping_request).await {
             Ok(_) => Ok(true),
             Err(_) => Ok(false),
         }
     }
-    
+
     /// Get transport statistics
     fn statistics(&self) -> TransportStatistics {
         TransportStatistics::default()
@@ -206,7 +211,7 @@ pub struct TransportStatistics {
 pub fn detect_transport_type(url_str: &str) -> McpClientResult<TransportType> {
     let url = Url::parse(url_str)
         .map_err(|e| TransportError::ConnectionFailed(format!("Invalid URL: {}", e)))?;
-    
+
     match url.scheme() {
         "http" | "https" => {
             // Check for SSE hint in path or query
@@ -216,8 +221,14 @@ pub fn detect_transport_type(url_str: &str) -> McpClientResult<TransportType> {
                 Ok(TransportType::Http)
             }
         }
-        "ws" | "wss" => Ok(TransportType::WebSocket),
-        "stdio" | "file" => Ok(TransportType::Stdio),
+        "ws" | "wss" => Err(TransportError::Unsupported(
+            "WebSocket transport not yet implemented".to_string(),
+        )
+        .into()),
+        "stdio" | "file" => Err(TransportError::Unsupported(
+            "Stdio transport not yet implemented".to_string(),
+        )
+        .into()),
         scheme => Err(TransportError::Unsupported(format!("Unknown scheme: {}", scheme)).into()),
     }
 }
@@ -229,88 +240,57 @@ impl TransportFactory {
     /// Create a transport from URL string
     pub fn from_url(url: &str) -> McpClientResult<BoxedTransport> {
         let transport_type = detect_transport_type(url)?;
-        
+
         match transport_type {
             TransportType::Http => Ok(Box::new(HttpTransport::new(url)?)),
             TransportType::Sse => Ok(Box::new(SseTransport::new(url)?)),
-            #[cfg(feature = "websocket")]
-            TransportType::WebSocket => Ok(Box::new(WebSocketTransport::new(url)?)),
-            #[cfg(feature = "stdio")]
-            TransportType::Stdio => Ok(Box::new(StdioTransport::new(url)?)),
-            #[cfg(not(feature = "websocket"))]
-            TransportType::WebSocket => Err(TransportError::Unsupported(
-                "WebSocket support not enabled".to_string()
-            ).into()),
-            #[cfg(not(feature = "stdio"))]
-            TransportType::Stdio => Err(TransportError::Unsupported(
-                "Stdio support not enabled".to_string()
-            ).into()),
         }
     }
-    
+
     /// Create a specific transport type
-    pub fn create(transport_type: TransportType, endpoint: &str) -> McpClientResult<BoxedTransport> {
+    pub fn create(
+        transport_type: TransportType,
+        endpoint: &str,
+    ) -> McpClientResult<BoxedTransport> {
         match transport_type {
             TransportType::Http => Ok(Box::new(HttpTransport::new(endpoint)?)),
             TransportType::Sse => Ok(Box::new(SseTransport::new(endpoint)?)),
-            #[cfg(feature = "websocket")]
-            TransportType::WebSocket => Ok(Box::new(WebSocketTransport::new(endpoint)?)),
-            #[cfg(feature = "stdio")]
-            TransportType::Stdio => Ok(Box::new(StdioTransport::new(endpoint)?)),
-            #[cfg(not(feature = "websocket"))]
-            TransportType::WebSocket => Err(TransportError::Unsupported(
-                "WebSocket support not enabled".to_string()
-            ).into()),
-            #[cfg(not(feature = "stdio"))]
-            TransportType::Stdio => Err(TransportError::Unsupported(
-                "Stdio support not enabled".to_string()
-            ).into()),
         }
     }
-    
+
     /// List available transport types
     pub fn available_transports() -> Vec<TransportType> {
-        let transports = vec![TransportType::Http, TransportType::Sse];
-        
-        #[cfg(feature = "websocket")]
-        transports.push(TransportType::WebSocket);
-        
-        #[cfg(feature = "stdio")]
-        transports.push(TransportType::Stdio);
-        
-        transports
+        vec![TransportType::Http, TransportType::Sse]
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_transport_type_detection() {
         assert_eq!(
             detect_transport_type("http://localhost:8080/mcp").unwrap(),
             TransportType::Http
         );
-        
+
         assert_eq!(
             detect_transport_type("http://localhost:8080/mcp/sse").unwrap(),
             TransportType::Sse
         );
-        
-        assert_eq!(
-            detect_transport_type("ws://localhost:8080/mcp").unwrap(),
-            TransportType::WebSocket
-        );
-        
+
+        // WebSocket transport not yet implemented
+        assert!(detect_transport_type("ws://localhost:8080/mcp").is_err());
+
         assert!(detect_transport_type("invalid://localhost").is_err());
     }
-    
+
     #[test]
     fn test_transport_factory() {
         let transport = TransportFactory::from_url("http://localhost:8080/mcp").unwrap();
         assert_eq!(transport.transport_type(), TransportType::Http);
-        
+
         let transports = TransportFactory::available_transports();
         assert!(transports.contains(&TransportType::Http));
         assert!(transports.contains(&TransportType::Sse));

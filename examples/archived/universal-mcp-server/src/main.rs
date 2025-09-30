@@ -12,7 +12,7 @@ use tracing::info;
 use turul_mcp_server::{McpServer, McpResult};
 
 // =============================================================================
-// TOOLS - Framework auto-uses "tools/call"  
+// TOOLS - Framework auto-uses "tools/call"
 // =============================================================================
 
 #[derive(Debug)]
@@ -28,12 +28,12 @@ impl Calculator {
             description: "Perform mathematical calculations".to_string(),
         }
     }
-    
+
     async fn execute(&self, args: HashMap<String, Value>) -> McpResult<Value> {
         let a = args.get("a").and_then(|v| v.as_f64()).unwrap_or(0.0);
         let b = args.get("b").and_then(|v| v.as_f64()).unwrap_or(0.0);
         let operation = args.get("operation").and_then(|v| v.as_str()).unwrap_or("add");
-        
+
         let result = match operation {
             "add" => a + b,
             "subtract" => a - b,
@@ -42,7 +42,7 @@ impl Calculator {
             "divide" => return Err(turul_mcp_protocol::McpError::tool_execution("Division by zero")),
             _ => return Err(turul_mcp_protocol::McpError::invalid_param_type("operation", "add|subtract|multiply|divide", operation)),
         };
-        
+
         info!("🔢 Calculator: {} {} {} = {}", a, operation, b, result);
         Ok(serde_json::json!({ "result": result, "operation": operation }))
     }
@@ -51,7 +51,7 @@ impl Calculator {
 // Framework should auto-implement McpTool trait with "tools/call" method
 // TODO: This will be replaced with #[derive(McpTool)] when framework supports it
 
-// =============================================================================  
+// =============================================================================
 // NOTIFICATIONS - Framework auto-determines method from type
 // =============================================================================
 
@@ -73,26 +73,26 @@ impl ProgressNotification {
             message: None,
         }
     }
-    
+
     fn with_message(mut self, message: &str) -> Self {
         self.message = Some(message.to_string());
         self
     }
-    
+
     async fn send(&self) -> McpResult<()> {
         let percentage = if self.total > 0 {
             (self.completed * 100) / self.total
         } else {
             0
         };
-        
-        info!("📊 Progress: {} - {}% ({}/{})", 
+
+        info!("📊 Progress: {} - {}% ({}/{})",
             self.stage, percentage, self.completed, self.total);
-            
+
         if let Some(ref msg) = self.message {
             info!("   Message: {}", msg);
         }
-        
+
         // Framework would automatically send via "notifications/progress" method
         Ok(())
     }
@@ -119,23 +119,23 @@ impl MessageNotification {
             level: MessageLevel::Info,
         }
     }
-    
+
     fn warning(content: &str) -> Self {
         Self {
             content: content.to_string(),
             level: MessageLevel::Warning,
         }
     }
-    
+
     async fn send(&self) -> McpResult<()> {
         let icon = match self.level {
             MessageLevel::Info => "ℹ️",
-            MessageLevel::Warning => "⚠️", 
+            MessageLevel::Warning => "⚠️",
             MessageLevel::Error => "❌",
         };
-        
+
         info!("{} Message: {}", icon, self.content);
-        
+
         // Framework would automatically send via "notifications/message" method
         Ok(())
     }
@@ -147,7 +147,7 @@ impl MessageNotification {
 
 #[derive(Debug)]
 struct CreativeWriter {
-    // Framework automatically maps to "sampling/createMessage" 
+    // Framework automatically maps to "sampling/createMessage"
     temperature: f64,
     max_tokens: u32,
     model_type: String,
@@ -161,10 +161,10 @@ impl CreativeWriter {
             model_type: "creative-model".to_string(),
         }
     }
-    
+
     async fn sample(&self, prompt: &str) -> McpResult<String> {
         info!("✨ Creative sampling: {} chars, temp={}", prompt.len(), self.temperature);
-        
+
         // Simulate creative response based on prompt
         let response = if prompt.to_lowercase().contains("story") {
             "Once upon a time, in a world where code came alive...".to_string()
@@ -173,13 +173,13 @@ impl CreativeWriter {
         } else {
             format!("Creative response to: {}", prompt)
         };
-        
+
         Ok(response)
     }
 }
 
 // =============================================================================
-// RESOURCES - Framework auto-uses "resources/read"  
+// RESOURCES - Framework auto-uses "resources/read"
 // =============================================================================
 
 #[derive(Debug)]
@@ -198,10 +198,10 @@ impl ConfigResource {
             mime_type: "application/json".to_string(),
         }
     }
-    
+
     async fn read(&self) -> McpResult<String> {
         info!("📄 Reading resource: {}", self.name);
-        
+
         // Simulate resource reading
         let content = serde_json::json!({
             "resource": self.name,
@@ -213,7 +213,7 @@ impl ConfigResource {
                 "features": ["tools", "notifications", "sampling", "resources"]
             }
         });
-        
+
         Ok(content.to_string())
     }
 }
@@ -222,7 +222,7 @@ impl ConfigResource {
 // MAIN SERVER - Zero Configuration Setup
 // =============================================================================
 
-#[tokio::main] 
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
@@ -243,17 +243,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Demonstrate zero-config usage
     progress.send().await?;
     message.send().await?;
-    
+
     let sample = creative_writer.sample("Write a short story about MCP").await?;
     info!("📖 Creative sample: {}", sample);
-    
+
     let resource_content = config_resource.read().await?;
     info!("📋 Resource content: {}", resource_content);
 
     // TODO: This will become much simpler when framework supports derive macros:
     // let server = McpServer::builder()
     //     .tool(calculator)                    // Auto-uses "tools/call"
-    //     .notification::<ProgressNotification>() // Auto-uses "notifications/progress"  
+    //     .notification::<ProgressNotification>() // Auto-uses "notifications/progress"
     //     .notification::<MessageNotification>()  // Auto-uses "notifications/message"
     //     .sampler(creative_writer)           // Auto-uses "sampling/createMessage"
     //     .resource(config_resource)          // Auto-uses "resources/read"
@@ -262,7 +262,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // For now, create a basic server to demonstrate the concept
     let server = McpServer::builder()
         .name("universal-mcp-server")
-        .version("1.0.0") 
+        .version("1.0.0")
         .title("Universal MCP Server - Zero Configuration")
         .instructions(
             "This server demonstrates the IDEAL MCP framework usage. \
@@ -278,7 +278,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("🔥 ZERO method strings specified - framework auto-determined ALL methods!");
     info!("📊 Supported MCP areas:");
     info!("   • Tools: Calculator → tools/call (automatic)");
-    info!("   • Notifications: Progress/Message → notifications/* (automatic)"); 
+    info!("   • Notifications: Progress/Message → notifications/* (automatic)");
     info!("   • Sampling: CreativeWriter → sampling/createMessage (automatic)");
     info!("   • Resources: ConfigResource → resources/read (automatic)");
     info!("💡 This is how MCP should be - declarative, type-safe, zero-config!");

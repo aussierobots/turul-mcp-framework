@@ -12,12 +12,13 @@ AWS Lambda integration for the turul-mcp-framework, enabling serverless deployme
 ## Features
 
 - ✅ **Zero-Cold-Start Architecture** - Optimized Lambda integration
-- ✅ **MCP 2025-06-18 Compliance** - Full protocol support with SSE streaming
+- ✅ **MCP 2025-06-18 Compliance** - Full protocol support with SSE (snapshots or streaming)
 - ✅ **DynamoDB Session Storage** - Persistent session management across invocations
 - ✅ **CORS Support** - Automatic CORS header injection for browser clients
 - ✅ **Type Conversion Layer** - Clean `lambda_http` ↔ `hyper` conversion
-- ✅ **Streaming Responses** - SSE notifications through Lambda streaming
+- ⚠️ **SSE Support** - Snapshots via `handle()` or real streaming via `handle_streaming()`
 - ✅ **Builder Pattern** - Familiar API matching `McpServer::builder()`
+- ✅ **Truthful Capabilities** - Framework advertises accurate server capabilities
 
 ## Quick Start
 
@@ -25,16 +26,16 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = "0.1.1"
-turul-mcp-derive = "0.1.1"
-lambda_http = "0.13"
+turul-mcp-aws-lambda = "0.2.0"
+turul-mcp-derive = "0.2.0"
+lambda_http = "0.17"
 tokio = { version = "1.0", features = ["macros"] }
 ```
 
-### Minimal Lambda MCP Server
+### Basic Lambda MCP Server (Snapshot-based SSE)
 
 ```rust
-use lambda_http::{run_with_streaming_response, service_fn};
+use lambda_http::{run, service_fn};
 use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
 use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, SessionContext};
@@ -66,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .name("echo-lambda-server")
         .version("1.0.0")
         .tool(EchoTool::default())  // Add our echo tool
-        .sse(true)                  // Enable SSE streaming
+        .sse(true)                  // Enable SSE (snapshot-based)
         .cors_allow_all_origins()   // Allow CORS for browser clients
         .build()
         .await?;
@@ -74,12 +75,43 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Create handler for Lambda runtime
     let handler = server.handler().await?;
 
-    // Run with Lambda streaming response support
-    run_with_streaming_response(service_fn(move |req| {
+    // Run with standard Lambda runtime (snapshot-based SSE)
+    run(service_fn(move |req| {
         let handler = handler.clone();
-        async move { 
+        async move {
             handler.handle(req).await
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
+        }
+    })).await
+}
+```
+
+### Real-time Streaming Lambda MCP Server
+
+For real-time SSE streaming, enable the `streaming` feature and use `handle_streaming()`:
+
+```toml
+[dependencies]
+turul-mcp-aws-lambda = { version = "0.2.0", features = ["streaming"] }
+```
+
+```rust
+use lambda_http::{run_with_streaming_response, service_fn};
+use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
+// ... same tool definition ...
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // ... same server setup ...
+
+    // Create handler for real-time streaming
+    let handler = server.handler().await?;
+
+    // Run with Lambda streaming response support for real-time SSE
+    run_with_streaming_response(service_fn(move |req| {
+        let handler = handler.clone();
+        async move {
+            handler.handle_streaming(req).await
         }
     })).await
 }
@@ -146,9 +178,9 @@ struct CounterTool;
 impl CounterTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<i32> {
         if let Some(session) = session {
-            let count: i32 = session.get_typed_state("count").await?.unwrap_or(0);
+            let count: i32 = session.get_typed_state("count").await.unwrap_or(0);
             let new_count = count + 1;
-            session.set_typed_state("count", &new_count).await?;
+            session.set_typed_state("count", new_count).await?;
             Ok(new_count)
         } else {
             Ok(0)
@@ -173,9 +205,8 @@ let server = LambdaMcpServerBuilder::new()
 ```rust
 use turul_mcp_aws_lambda::{LambdaMcpServerBuilder, CorsConfig};
 
-let cors = CorsConfig::new()
-    .allow_origins(vec!["https://myapp.com".to_string()])
-    .allow_credentials(true);
+let mut cors = CorsConfig::for_origins(vec!["https://myapp.com".to_string()]);
+cors.allow_credentials = true;
 
 let server = LambdaMcpServerBuilder::new()
     .cors(cors)
@@ -199,12 +230,7 @@ impl LongTaskTool {
         if let Some(session) = session {
             for i in 1..=5 {
                 // Send progress notification via SSE
-                session.notify_progress(
-                    "long-task", 
-                    i as f64, 
-                    Some(5.0), 
-                    Some(format!("Step {} of 5", i))
-                ).await?;
+                session.notify_progress("long-task", i).await;
                 
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
@@ -318,7 +344,7 @@ curl -X POST http://localhost:9000/lambda-url/test \
 
 ```rust
 // Cache expensive operations at module level
-static SHARED_STORAGE: std::sync::OnceLock<Arc<DynamoDbSessionStorage>> = std::sync::OnceLock::new();
+static SHARED_STORAGE: tokio::sync::OnceCell<Arc<DynamoDbSessionStorage>> = tokio::sync::OnceCell::const_new();
 
 async fn get_cached_storage() -> Arc<DynamoDbSessionStorage> {
     SHARED_STORAGE.get_or_init(|| async {
@@ -342,7 +368,7 @@ let server = LambdaMcpServerBuilder::new()
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.1.1", features = ["cors", "sse", "dynamodb"] }
+turul-mcp-aws-lambda = { version = "0.2.0", features = ["cors", "sse", "dynamodb"] }
 ```
 
 - `default` - Includes `cors` and `sse`
@@ -377,6 +403,28 @@ handler.handle(req).await
         Box::new(e) as Box<dyn std::error::Error + Send + Sync>
     })
 ```
+
+## Server Capabilities
+
+### Truthful Capability Reporting
+
+The framework automatically sets server capabilities based on registered components:
+
+```rust
+let server = LambdaMcpServerBuilder::new()
+    .tool(calculator)
+    .resource(user_resource)
+    .build()
+    .await?;
+
+// Framework automatically advertises:
+// - tools.listChanged = false (static tool list)
+// - resources.subscribe = false (no subscriptions)
+// - resources.listChanged = false (static resource list)
+// - No prompts capability (none registered)
+```
+
+This ensures clients receive accurate information about server capabilities.
 
 ## License
 

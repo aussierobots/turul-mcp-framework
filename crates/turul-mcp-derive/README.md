@@ -3,16 +3,23 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-mcp-derive.svg)](https://crates.io/crates/turul-mcp-derive)
 [![Documentation](https://docs.rs/turul-mcp-derive/badge.svg)](https://docs.rs/turul-mcp-derive)
 
-Procedural macros for the turul-mcp-framework, providing zero-configuration tool creation with automatic schema generation.
+Procedural macros for the turul-mcp-framework, providing zero-configuration creation of MCP tools, resources, and prompts with automatic schema generation.
 
 ## Overview
 
-`turul-mcp-derive` provides two main macro approaches for creating MCP tools:
+`turul-mcp-derive` provides macro approaches for creating MCP components:
 
+### Tools
 1. **Function Macros** (`#[mcp_tool]`) - Ultra-simple tool creation from functions
 2. **Derive Macros** (`#[derive(McpTool)]`) - Struct-based tools with complex logic
 
-Both approaches generate all required traits automatically and provide compile-time schema validation.
+### Resources
+3. **Function Macros** (`#[mcp_resource]`) - Create resources from async functions with URI templates
+
+### Prompts
+4. **Derive Macros** (`#[derive(McpPrompt)]`) - Structured prompt definitions with arguments
+
+All approaches generate required traits automatically and provide compile-time validation.
 
 ## Features
 
@@ -41,8 +48,13 @@ async fn calculator(
 
 // Usage: Just pass the function to the server
 let server = McpServer::builder()
+    .name("calculator-server")
+    .version("1.0.0")
     .tool_fn(calculator)  // Framework knows the function name!
+    .bind_address("127.0.0.1:8641".parse()?)  // Default port
     .build()?;
+
+server.run().await
 ```
 
 ### SessionContext Integration
@@ -53,29 +65,71 @@ use turul_mcp_server::{McpResult, SessionContext};
 
 #[mcp_tool(name = "counter", description = "Session-persistent counter")]
 async fn session_counter(
-    session: SessionContext  // Automatically detected by macro
+    session: Option<SessionContext>  // Automatically detected by macro
 ) -> McpResult<i32> {
-    let count: i32 = session.get_typed_state("count").await?.unwrap_or(0);
-    let new_count = count + 1;
-    session.set_typed_state("count", &new_count).await?;
-    Ok(new_count)
+    if let Some(session) = session {
+        let count: i32 = session.get_typed_state("count").await.unwrap_or(0);
+        let new_count = count + 1;
+        session.set_typed_state("count", new_count).await
+            .map_err(|e| format!("Failed to save state: {}", e))?;
+        Ok(new_count)
+    } else {
+        Ok(0) // No session available
+    }
 }
 ```
 
 ### Custom Output Fields
 
+**Note**: `output_field` only affects structured output generation - the field name used when the return value is wrapped in a JSON object for structured responses.
+
 ```rust
 #[mcp_tool(
-    name = "multiply", 
+    name = "multiply",
     description = "Multiply two numbers",
-    output_field = "product"  // Custom output field name
+    output_field = "product"  // Custom output field name (also supports: field = "product")
 )]
 async fn multiply(
     #[param(description = "First number")] x: f64,
     #[param(description = "Second number")] y: f64,
 ) -> McpResult<f64> {
-    Ok(x * y)  // Returns {"product": 15.0} instead of {"result": 15.0}
+    Ok(x * y)  // Returns {"product": 15.0} instead of {"result": 15.0} in structured output
 }
+```
+
+### Array Return Types
+
+**Important**: When returning `Vec<T>`, you must use the `output` attribute to ensure correct JSON Schema generation:
+
+```rust
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize)]
+struct SearchResult {
+    id: String,
+    title: String,
+    score: f64,
+}
+
+#[mcp_tool(
+    name = "search",
+    description = "Search for items",
+    output = Vec<SearchResult>  // Required for array returns!
+)]
+async fn search(
+    #[param(description = "Search query")] query: String,
+) -> McpResult<Vec<SearchResult>> {
+    Ok(vec![
+        SearchResult {
+            id: "1".to_string(),
+            title: format!("Result for: {}", query),
+            score: 0.95,
+        }
+    ])
+}
+
+// Without `output = Vec<T>`, the schema would incorrectly show type: "object"
+// With `output = Vec<T>`, the schema correctly shows type: "array"
 ```
 
 ### Progress Notifications
@@ -84,15 +138,12 @@ async fn multiply(
 #[mcp_tool(name = "slow_task", description = "Task with progress updates")]
 async fn slow_task(
     #[param(description = "Number of steps")] steps: u32,
-    session: SessionContext,
+    session: Option<SessionContext>,
 ) -> McpResult<String> {
     for i in 1..=steps {
-        session.notify_progress(
-            "slow-task", 
-            i as f64, 
-            Some(steps as f64), 
-            Some(format!("Processing step {}", i))
-        ).await?;
+        if let Some(ref session) = session {
+            session.notify_progress("slow-task", i as u64).await;
+        }
         
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
@@ -110,11 +161,11 @@ use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, SessionContext};
 
 #[derive(McpTool, Clone, Default)]
-#[tool(name = "calculator", description = "Advanced calculator")]
+#[tool(name = "calculator", description = "Advanced calculator", output_field = "result")]
 struct Calculator {
     #[param(description = "First number")]
     a: f64,
-    #[param(description = "Second number")]  
+    #[param(description = "Second number")]
     b: f64,
     #[param(description = "Operation type")]
     operation: String,
@@ -139,6 +190,47 @@ impl Calculator {
 }
 ```
 
+### Array Return Types with Derive
+
+For tools that return `Vec<T>`, use the `output` attribute in the `#[tool(...)]` annotation:
+
+```rust
+use serde::{Serialize, Deserialize};
+
+#[derive(Serialize, Deserialize, Clone)]
+struct Record {
+    id: u32,
+    value: String,
+}
+
+#[derive(McpTool, Clone, Default)]
+#[tool(
+    name = "fetch_records",
+    description = "Fetch multiple records",
+    output = Vec<Record>  // Required for correct array schema generation
+)]
+struct RecordFetcher {
+    #[param(description = "Maximum number of records")]
+    limit: usize,
+}
+
+impl RecordFetcher {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Vec<Record>> {
+        Ok((0..self.limit)
+            .map(|i| Record {
+                id: i as u32,
+                value: format!("record-{}", i),
+            })
+            .collect())
+    }
+}
+
+// This generates correct JSON Schema:
+// {"output": {"type": "array", "items": {...}}}
+// Without `output = Vec<Record>`, it would incorrectly generate:
+// {"output": {"type": "object"}}
+```
+
 ### Complex Business Logic
 
 ```rust
@@ -157,16 +249,14 @@ impl UserLookupTool {
         let include_details = self.include_details.unwrap_or(false);
         
         if let Some(session) = session {
-            session.notify_progress("lookup", 25.0, Some(100.0), 
-                Some("Querying database...".to_string())).await?;
+            session.notify_progress("lookup", 25).await;
         }
         
         // Simulate database lookup
         let user = self.lookup_user_in_database(&self.user_id).await?;
         
         if let Some(session) = session {
-            session.notify_progress("lookup", 75.0, Some(100.0), 
-                Some("Processing user data...".to_string())).await?;
+            session.notify_progress("lookup", 75).await;
         }
         
         let result = if include_details {
@@ -176,8 +266,7 @@ impl UserLookupTool {
         };
         
         if let Some(session) = session {
-            session.notify_progress("lookup", 100.0, Some(100.0), 
-                Some("Lookup completed".to_string())).await?;
+            session.notify_progress("lookup", 100).await;
         }
         
         Ok(result)
@@ -340,7 +429,7 @@ async fn error_example(
     #[param(description = "Value to validate")] value: i32
 ) -> McpResult<String> {
     if value < 0 {
-        return Err(McpError::InvalidParams("Value must be non-negative".to_string()));
+        return Err(McpError::InvalidParameters("Value must be non-negative".to_string()));
     }
     
     if value > 1000 {
@@ -384,10 +473,10 @@ impl HasDescription for ExampleTool {
 }
 
 impl McpTool for ExampleTool {
-    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResponse> {
+    async fn call(&self, args: Value, session: Option<SessionContext>) -> McpResult<CallToolResult> {
         // Generated parameter extraction and function call
         let result = example(/* extracted params */).await?;
-        Ok(CallToolResponse::success(/* wrapped result */))
+        Ok(CallToolResult::success(/* wrapped result */))
     }
 }
 ```
@@ -410,7 +499,8 @@ mod tests {
             operation: "add".to_string(),
         };
         
-        let result = tool.execute(None).await.unwrap();
+        let result = tool.execute(None).await
+            .expect("Tool execution should succeed");
         assert_eq!(result, 8.0);
     }
 }
@@ -424,7 +514,7 @@ async fn test_tool_in_server() {
     let server = McpServer::builder()
         .tool_fn(calculator)
         .build()
-        .unwrap();
+        .expect("Server should build successfully");
         
     // Test server integration
     // (requires test infrastructure)
@@ -450,6 +540,316 @@ cargo expand your_function_name
 1. **Missing SessionContext**: Function macros auto-detect `SessionContext` parameters by type
 2. **Parameter Names**: Use exactly the same parameter names in function signature and schema
 3. **Return Types**: Must return `McpResult<T>` where `T` implements `Serialize`
+
+## Prompts - Level 3
+
+### Basic Prompt Derive
+
+```rust
+use turul_mcp_derive::McpPrompt;
+use turul_mcp_server::{McpResult, McpPrompt};
+use async_trait::async_trait;
+
+#[derive(McpPrompt, Clone, Serialize, Deserialize, Debug)]
+#[prompt(name = "code_review", description = "Review code for quality and security")]
+struct CodeReviewPrompt {
+    #[argument(description = "Programming language")]
+    language: String,
+
+    #[argument(description = "Code to review")]
+    code: String,
+
+    #[argument(description = "Review focus (optional)")]
+    focus: Option<String>,
+}
+
+// Users must implement McpPrompt manually for custom render logic
+#[async_trait]
+impl McpPrompt for CodeReviewPrompt {
+    async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
+        let focus = self.focus.as_deref().unwrap_or("comprehensive");
+
+        let prompt = format!(
+            "You are an expert {} developer. Provide {} code review for:\n\n{}",
+            self.language, focus, self.code
+        );
+
+        Ok(vec![PromptMessage::user_text(&prompt)])
+    }
+}
+
+// Server usage
+let server = McpServer::builder()
+    .name("prompt-server")
+    .version("1.0.0")
+    .prompt(CodeReviewPrompt::default())
+    .bind_address("127.0.0.1:8641".parse()?)  // Default port
+    .build()?;
+
+server.run().await
+```
+
+### Default vs Custom Render
+
+The `#[derive(McpPrompt)]` macro generates metadata traits only. For custom behavior:
+
+**Option 1: Use Default Render** (for simple prompts)
+```rust
+#[derive(McpPrompt)]
+#[prompt(name = "simple", description = "Simple prompt")]
+struct SimplePrompt;
+
+// No manual implementation needed - uses trait default
+// Returns: "Prompt: simple - Simple prompt"
+```
+
+**Option 2: Custom Render** (for complex prompts)
+```rust
+#[derive(McpPrompt)]
+#[prompt(name = "database_query", description = "Query database and format results")]
+struct DatabasePrompt {
+    #[argument(description = "SQL query")]
+    query: String,
+}
+
+#[async_trait]
+impl McpPrompt for DatabasePrompt {
+    async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
+        // Custom database logic
+        let results = db.execute(&self.query).await?;
+        let formatted = format_results(results);
+        Ok(vec![PromptMessage::user_text(&formatted)])
+    }
+}
+```
+
+### Prompt Patterns
+
+**Template Substitution**
+```rust
+#[async_trait]
+impl McpPrompt for TemplatePrompt {
+    async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
+        let args = args.unwrap_or_default();
+        let user_name = args.get("user_name").and_then(|v| v.as_str()).unwrap_or("User");
+
+        let message = format!("Hello {}! {}", user_name, self.template);
+        Ok(vec![PromptMessage::user_text(&message)])
+    }
+}
+```
+
+**Multi-Modal Content**
+```rust
+#[async_trait]
+impl McpPrompt for MultiModalPrompt {
+    async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
+        Ok(vec![
+            PromptMessage::user_text("Analyze this image:"),
+            PromptMessage {
+                role: Role::User,
+                content: ContentBlock::Image {
+                    data: self.image_data.clone(),
+                    mime_type: "image/png".to_string(),
+                },
+            },
+        ])
+    }
+}
+```
+
+## Resources - Level 3
+
+### Resource Function Macro
+
+The `#[mcp_resource]` function attribute macro allows creating MCP resources from regular async functions with automatic URI template detection and parameter extraction.
+
+```rust
+use turul_mcp_derive::mcp_resource;
+use turul_mcp_server::{McpResult, McpServer};
+use turul_mcp_protocol::resources::ResourceContent;
+
+// Static resource - no template variables
+#[mcp_resource(
+    uri = "file:///config.json",
+    name = "config",
+    description = "Application configuration file"
+)]
+async fn get_config() -> McpResult<Vec<ResourceContent>> {
+    let config = serde_json::json!({
+        "app_name": "My App",
+        "version": "1.0.0",
+        "debug": true
+    });
+
+    Ok(vec![ResourceContent::blob(
+        "file:///config.json",
+        serde_json::to_string_pretty(&config).unwrap(),
+        "application/json".to_string()
+    )])
+}
+
+// Template resource with automatic parameter extraction
+#[mcp_resource(
+    uri = "file:///users/{user_id}.json",
+    name = "user_profile",
+    description = "User profile data for a specific user ID"
+)]
+async fn get_user_profile(user_id: String) -> McpResult<Vec<ResourceContent>> {
+    let profile = serde_json::json!({
+        "user_id": user_id,
+        "username": format!("user_{}", user_id),
+        "email": format!("user_{}@example.com", user_id)
+    });
+
+    Ok(vec![ResourceContent::blob(
+        format!("file:///users/{}.json", user_id),
+        serde_json::to_string_pretty(&profile).unwrap(),
+        "application/json".to_string()
+    )])
+}
+
+// Resource with additional parameters
+#[mcp_resource(
+    uri = "file:///logs/{log_type}.log",
+    name = "log_entries",
+    description = "Log entries filtered by type and level"
+)]
+async fn get_log_entries(log_type: String, params: serde_json::Value) -> McpResult<Vec<ResourceContent>> {
+    let level = params.get("level")
+        .and_then(|v| v.as_str())
+        .unwrap_or("info");
+
+    let entries = format!("2024-01-01 10:00:00 {} [{}] Sample log entry", level.to_uppercase(), log_type);
+
+    Ok(vec![ResourceContent::text(
+        format!("file:///logs/{}.log", log_type),
+        entries
+    )])
+}
+```
+
+### Server Integration with resource_fn
+
+The `#[mcp_resource]` macro generates both the resource implementation and a constructor function for easy registration:
+
+```rust
+let server = McpServer::builder()
+    .name("resource-server")
+    .version("1.0.0")
+    .resource_fn(get_config)       // Static resource
+    .resource_fn(get_user_profile) // Template: file:///users/{user_id}.json
+    .resource_fn(get_log_entries)  // Template with params
+    .bind_address("127.0.0.1:8641".parse()?)  // Default port
+    .build()?;
+
+server.run().await
+```
+
+### Template Variable Extraction
+
+The framework automatically extracts template variables from the URI pattern and maps them to function parameters:
+
+```rust
+// URI: file:///data/{category}/{item_id}.json
+#[mcp_resource(
+    uri = "file:///data/{category}/{item_id}.json",
+    name = "data_item",
+    description = "Data item by category and ID"
+)]
+async fn get_data_item(category: String, item_id: String) -> McpResult<Vec<ResourceContent>> {
+    // category and item_id are automatically extracted from template_variables
+    let data = serde_json::json!({
+        "category": category,
+        "item_id": item_id,
+        "content": format!("Data for {} item {}", category, item_id)
+    });
+
+    Ok(vec![ResourceContent::blob(
+        format!("file:///data/{}/{}.json", category, item_id),
+        serde_json::to_string_pretty(&data).unwrap(),
+        "application/json".to_string()
+    )])
+}
+```
+
+### Resource Macro Features
+
+- ✅ **Automatic McpResource Implementation** - Generates all required traits
+- ✅ **URI Template Detection** - Auto-detects `{variable}` patterns
+- ✅ **Parameter Extraction** - Maps template variables to function parameters
+- ✅ **Static Resource Support** - Handles resources without templates
+- ✅ **Custom MIME Types** - Optional `mime_type` attribute
+- ✅ **Additional Parameters** - Supports `params: serde_json::Value` for extra data
+
+### Resource Attributes
+
+```rust
+#[mcp_resource(
+    uri = "required://absolute/path",           // Required: Absolute URI
+    name = "resource_name",                     // Optional: Defaults to function name
+    description = "Resource description",       // Optional: Defaults to generated text
+    mime_type = "application/json"              // Optional: MIME type hint
+)]
+```
+
+### Alternative: Constructor Function Pattern
+
+For complex resources or when the macro doesn't fit your needs, use the constructor function pattern:
+
+```rust
+use turul_mcp_server::{McpServer, McpResource};
+use turul_mcp_protocol::resources::*;
+
+// Define resource struct
+struct ConfigResource;
+
+impl HasResourceMetadata for ConfigResource {
+    fn name(&self) -> &str { "config" }
+}
+
+impl HasResourceUri for ConfigResource {
+    fn uri(&self) -> &str { "file:///config.json" }
+}
+
+// ... implement other required traits
+
+#[async_trait]
+impl McpResource for ConfigResource {
+    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
+        // Custom implementation
+        Ok(vec![])
+    }
+}
+
+// Constructor function
+fn create_config_resource() -> ConfigResource {
+    ConfigResource
+}
+
+// Register with .resource_fn()
+let server = McpServer::builder()
+    .name("config-server")
+    .version("1.0.0")
+    .resource_fn(create_config_resource)  // Uses constructor function
+    .bind_address("127.0.0.1:8641".parse()?)  // Default port
+    .build()?;
+
+server.run().await
+```
+
+### Comparison: Macro vs Manual Implementation
+
+| Feature | `#[mcp_resource]` Macro | Manual Implementation |
+|---------|------------------------|----------------------|
+| **Setup Time** | Minimal - just attributes | More setup required |
+| **Template Variables** | Automatic extraction | Manual parameter handling |
+| **Type Safety** | Compile-time validation | Manual validation needed |
+| **Flexibility** | Good for common patterns | Full control over behavior |
+| **Generated Code** | Automatic trait impls | Manual trait implementations |
+| **Registration** | `.resource_fn(function_name)` | `.resource_fn(constructor)` |
+
+Choose the macro for rapid development and standard patterns. Use manual implementation for complex business logic or when you need full control over resource behavior.
 
 ## Performance
 

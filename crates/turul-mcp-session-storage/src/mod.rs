@@ -34,33 +34,33 @@ mod integration_tests {
     #[tokio::test]
     async fn test_storage_trait_compliance() {
         let storage = create_default_storage();
-        
+
         // Test that our storage implements all trait methods
         let session = storage.create_session(ServerCapabilities::default()).await.unwrap();
         let session_id = session.session_id.clone();
-        
+
         // Session operations
         assert!(storage.get_session(&session_id).await.unwrap().is_some());
         assert_eq!(storage.session_count().await.unwrap(), 1);
-        
+
         // State operations
         storage.set_session_state(&session_id, "test", serde_json::json!("value")).await.unwrap();
         let value = storage.get_session_state(&session_id, "test").await.unwrap();
         assert_eq!(value, Some(serde_json::json!("value")));
-        
+
         // Stream operations
         let stream = storage.create_stream(&session_id, "stream1".to_string()).await.unwrap();
         assert_eq!(stream.stream_id, "stream1");
-        
+
         // Event operations
         let event = crate::session_storage::SseEvent::new(
             "stream1".to_string(),
-            "test".to_string(), 
+            "test".to_string(),
             serde_json::json!({"data": "test"})
         );
         let stored = storage.store_event(&session_id, "stream1", event).await.unwrap();
         assert!(stored.id > 0);
-        
+
         // Cleanup
         let deleted = storage.delete_session(&session_id).await.unwrap();
         assert!(deleted);

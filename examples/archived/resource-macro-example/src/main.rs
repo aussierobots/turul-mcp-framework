@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Test the resources
     println!("\nTesting resources created with resource! macro:");
-    
+
     println!("\n1. Testing config resource:");
     println!("   URI: {}", config_resource.uri());
     println!("   Name: {}", config_resource.name());

@@ -12,3 +12,11 @@ Cargo.lock
 .DS_Store
 .DS_Store?
 **/.DS_Store
+
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Test outputs
+/tmp/test_output.log

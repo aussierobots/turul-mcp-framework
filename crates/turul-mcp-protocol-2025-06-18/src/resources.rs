@@ -2,10 +2,10 @@
 //!
 //! This module defines the types used for the MCP resources functionality.
 
+use crate::meta::Cursor;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use crate::meta::Cursor;
 
 // ===========================================
 // === Resource Definition Trait Hierarchy ===
@@ -15,14 +15,18 @@ use crate::meta::Cursor;
 pub trait HasResourceMetadata {
     /// Programmatic identifier (fallback display name)
     fn name(&self) -> &str;
-    
+
     /// Human-readable display name (UI contexts)
-    fn title(&self) -> Option<&str> { None }
+    fn title(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Resource description trait
 pub trait HasResourceDescription {
-    fn description(&self) -> Option<&str> { None }
+    fn description(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Resource URI trait
@@ -30,28 +34,130 @@ pub trait HasResourceUri {
     fn uri(&self) -> &str;
 }
 
-/// Resource MIME type trait  
+/// Resource MIME type trait
 pub trait HasResourceMimeType {
-    fn mime_type(&self) -> Option<&str> { None }
+    fn mime_type(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Resource size trait
 pub trait HasResourceSize {
-    fn size(&self) -> Option<u64> { None }
+    fn size(&self) -> Option<u64> {
+        None
+    }
 }
 
 /// Resource annotations trait
 pub trait HasResourceAnnotations {
-    fn annotations(&self) -> Option<&crate::meta::Annotations> { None }
+    fn annotations(&self) -> Option<&crate::meta::Annotations> {
+        None
+    }
 }
 
 /// Resource-specific meta trait (separate from RPC _meta)
 pub trait HasResourceMeta {
-    fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
-/// Complete resource definition - composed from fine-grained traits
-pub trait ResourceDefinition: 
+/// **Complete MCP Resource Creation** - Build readable resources that clients can access.
+///
+/// This trait represents a **complete, working MCP resource** that can be registered with a server
+/// and accessed by clients. When you implement the required metadata traits, you automatically
+/// get `ResourceDefinition` for free via blanket implementation.
+///
+/// ## What This Enables
+///
+/// Resources implementing `ResourceDefinition` become **full MCP citizens** that are:
+/// - 🔍 **Discoverable** via `resources/list` requests
+/// - 📖 **Readable** via `resources/read` requests
+/// - 🎯 **Template-capable** with URI variable substitution
+/// - 📡 **Protocol-ready** for JSON-RPC communication
+///
+/// ## Complete Working Example
+///
+/// ```rust,ignore
+/// use std::collections::HashMap;
+///
+/// // This struct will automatically implement ResourceDefinition!
+/// struct ApiDataFeed {
+///     endpoint: String,
+///     api_key: String,
+/// }
+///
+/// impl HasResourceMetadata for ApiDataFeed {
+///     fn name(&self) -> &str { "api_data" }
+///     fn title(&self) -> Option<&str> { Some("Live API Data Feed") }
+/// }
+///
+/// impl HasResourceDescription for ApiDataFeed {
+///     fn description(&self) -> Option<&str> {
+///         Some("Real-time data feed from external API with caching")
+///     }
+/// }
+///
+/// impl HasResourceUri for ApiDataFeed {
+///     fn uri(&self) -> &str { "https://api.example.com/data/{dataset}" }
+/// }
+///
+/// impl HasResourceMimeType for ApiDataFeed {
+///     fn mime_type(&self) -> Option<&str> { Some("application/json") }
+/// }
+///
+/// impl HasResourceSize for ApiDataFeed {
+///     fn size(&self) -> Option<u64> { None } // Dynamic size
+/// }
+///
+/// // Implement remaining required traits...
+/// impl HasResourceAnnotations for ApiDataFeed { fn annotations(&self) -> Option<&crate::meta::Annotations> { None } }
+/// impl HasResourceMeta for ApiDataFeed { fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None } }
+///
+/// // 🎉 ApiDataFeed now automatically implements ResourceDefinition!
+/// // Clients can discover it and read data with URI templates like "api_data?dataset=users"
+/// ```
+///
+/// ## Usage Patterns
+///
+/// ### Easy: Use Derive Macros
+/// ```rust,ignore
+/// #[derive(McpResource)]
+/// #[resource(name = "logs", uri = "file:///var/log/{service}.log")]
+/// struct LogFiles { service: String }
+/// ```
+///
+/// ### Advanced: Manual Implementation (shown above)
+/// Perfect when you need dynamic URIs, custom metadata, or complex content handling.
+///
+/// ## Real-World Resource Ideas
+///
+/// - **File Resources**: Config files, logs, documentation, data exports
+/// - **API Resources**: REST endpoints, GraphQL schemas, webhook data
+/// - **Data Resources**: Database views, CSV exports, JSON feeds, report data
+/// - **System Resources**: Process info, system stats, environment configs
+/// - **Template Resources**: Dynamic content with `{variable}` substitution
+///
+/// ## URI Template Power
+///
+/// Resources support powerful URI templating:
+/// ```text
+/// Static:   "file:///config.json"              → Single resource
+/// Template: "file:///logs/{service}.log"       → Multiple resources
+/// Complex:  "api://data/{type}/{id}?fmt={fmt}" → Full parameterization
+/// ```
+///
+/// ## How It Works in MCP
+///
+/// 1. **Registration**: Server registers your resource during startup
+/// 2. **Discovery**: Client calls `resources/list` → sees available resources
+/// 3. **Template Resolution**: Client expands URI templates with parameters
+/// 4. **Reading**: Client calls `resources/read` with resolved URI
+/// 5. **Content Delivery**: Your resource returns actual content
+/// 6. **Response**: Framework serializes content back to client
+///
+/// The framework handles URI template parsing, parameter validation, and protocol serialization!
+pub trait ResourceDefinition:
     HasResourceMetadata +       // name, title (from BaseMetadata)
     HasResourceDescription +    // description
     HasResourceUri +           // uri
@@ -59,14 +165,14 @@ pub trait ResourceDefinition:
     HasResourceSize +          // size
     HasResourceAnnotations +   // annotations
     HasResourceMeta +          // _meta (resource-specific)
-    Send + 
-    Sync 
+    Send +
+    Sync
 {
     /// Display name precedence: title > name (matches TypeScript spec)
     fn display_name(&self) -> &str {
         self.title().unwrap_or_else(|| self.name())
     }
-    
+
     /// Convert to concrete Resource struct for protocol serialization
     fn to_resource(&self) -> Resource {
         Resource {
@@ -121,27 +227,27 @@ impl ResourceTemplate {
             meta: None,
         }
     }
-    
+
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
-    
+
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self
     }
-    
+
     pub fn with_mime_type(mut self, mime_type: impl Into<String>) -> Self {
         self.mime_type = Some(mime_type.into());
         self
     }
-    
+
     pub fn with_annotations(mut self, annotations: crate::meta::Annotations) -> Self {
         self.annotations = Some(annotations);
         self
     }
-    
+
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
@@ -226,40 +332,63 @@ impl Resource {
 // Implement fine-grained traits for the concrete Resource struct
 
 impl HasResourceMetadata for Resource {
-    fn name(&self) -> &str { &self.name }
-    fn title(&self) -> Option<&str> { self.title.as_deref() }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn title(&self) -> Option<&str> {
+        self.title.as_deref()
+    }
 }
 
 impl HasResourceDescription for Resource {
-    fn description(&self) -> Option<&str> { self.description.as_deref() }
+    fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
 }
 
 impl HasResourceUri for Resource {
-    fn uri(&self) -> &str { &self.uri }
+    fn uri(&self) -> &str {
+        &self.uri
+    }
 }
 
 impl HasResourceMimeType for Resource {
-    fn mime_type(&self) -> Option<&str> { self.mime_type.as_deref() }
+    fn mime_type(&self) -> Option<&str> {
+        self.mime_type.as_deref()
+    }
 }
 
 impl HasResourceSize for Resource {
-    fn size(&self) -> Option<u64> { self.size }
+    fn size(&self) -> Option<u64> {
+        self.size
+    }
 }
 
 impl HasResourceAnnotations for Resource {
-    fn annotations(&self) -> Option<&crate::meta::Annotations> { self.annotations.as_ref() }
+    fn annotations(&self) -> Option<&crate::meta::Annotations> {
+        self.annotations.as_ref()
+    }
 }
 
 impl HasResourceMeta for Resource {
-    fn resource_meta(&self) -> Option<&HashMap<String, Value>> { self.meta.as_ref() }
+    fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
 }
 
 // Blanket implementation: any type implementing all fine-grained traits automatically implements ResourceDefinition
-impl<T> ResourceDefinition for T 
-where 
-    T: HasResourceMetadata + HasResourceDescription + HasResourceUri + HasResourceMimeType + 
-       HasResourceSize + HasResourceAnnotations + HasResourceMeta + Send + Sync 
-{}
+impl<T> ResourceDefinition for T where
+    T: HasResourceMetadata
+        + HasResourceDescription
+        + HasResourceUri
+        + HasResourceMimeType
+        + HasResourceSize
+        + HasResourceAnnotations
+        + HasResourceMeta
+        + Send
+        + Sync
+{
+}
 
 /// Parameters for resources/list request
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -275,7 +404,7 @@ pub struct ListResourcesParams {
 
 impl ListResourcesParams {
     pub fn new() -> Self {
-        Self { 
+        Self {
             cursor: None,
             meta: None,
         }
@@ -306,6 +435,12 @@ pub struct ListResourcesRequest {
     pub method: String,
     /// Request parameters
     pub params: ListResourcesParams,
+}
+
+impl Default for ListResourcesRequest {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ListResourcesRequest {
@@ -379,7 +514,7 @@ pub struct ReadResourceParams {
 
 impl ReadResourceParams {
     pub fn new(uri: impl Into<String>) -> Self {
-        Self { 
+        Self {
             uri: uri.into(),
             meta: None,
         }
@@ -479,7 +614,11 @@ impl ResourceContent {
         })
     }
 
-    pub fn blob(uri: impl Into<String>, blob: impl Into<String>, mime_type: impl Into<String>) -> Self {
+    pub fn blob(
+        uri: impl Into<String>,
+        blob: impl Into<String>,
+        mime_type: impl Into<String>,
+    ) -> Self {
         Self::Blob(BlobResourceContents {
             uri: uri.into(),
             mime_type: Some(mime_type.into()),
@@ -501,9 +640,15 @@ pub struct ListResourceTemplatesParams {
     pub meta: Option<HashMap<String, Value>>,
 }
 
+impl Default for ListResourceTemplatesParams {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ListResourceTemplatesParams {
     pub fn new() -> Self {
-        Self { 
+        Self {
             cursor: None,
             meta: None,
         }
@@ -528,6 +673,12 @@ pub struct ListResourceTemplatesRequest {
     pub method: String,
     /// Request parameters
     pub params: ListResourceTemplatesParams,
+}
+
+impl Default for ListResourceTemplatesRequest {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ListResourceTemplatesRequest {
@@ -663,7 +814,7 @@ pub struct ReadResourceResult {
 
 impl ReadResourceResult {
     pub fn new(contents: Vec<ResourceContent>) -> Self {
-        Self { 
+        Self {
             contents,
             meta: None,
         }
@@ -683,7 +834,10 @@ impl ReadResourceResult {
 impl HasData for ReadResourceResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("contents".to_string(), serde_json::to_value(&self.contents).unwrap_or(Value::Null));
+        data.insert(
+            "contents".to_string(),
+            serde_json::to_value(&self.contents).unwrap_or(Value::Null),
+        );
         data
     }
 }
@@ -750,9 +904,15 @@ impl HasParams for ListResourcesRequest {
 impl HasData for ListResourceTemplatesResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("resourceTemplates".to_string(), serde_json::to_value(&self.resource_templates).unwrap_or(Value::Null));
+        data.insert(
+            "resourceTemplates".to_string(),
+            serde_json::to_value(&self.resource_templates).unwrap_or(Value::Null),
+        );
         if let Some(ref next_cursor) = self.next_cursor {
-            data.insert("nextCursor".to_string(), Value::String(next_cursor.as_str().to_string()));
+            data.insert(
+                "nextCursor".to_string(),
+                Value::String(next_cursor.as_str().to_string()),
+            );
         }
         data
     }
@@ -770,7 +930,7 @@ impl crate::traits::ListResourceTemplatesResult for ListResourceTemplatesResult 
     fn resource_templates(&self) -> &Vec<ResourceTemplate> {
         &self.resource_templates
     }
-    
+
     fn next_cursor(&self) -> Option<&Cursor> {
         self.next_cursor.as_ref()
     }
@@ -780,9 +940,15 @@ impl crate::traits::ListResourceTemplatesResult for ListResourceTemplatesResult 
 impl HasData for ListResourcesResult {
     fn data(&self) -> HashMap<String, Value> {
         let mut data = HashMap::new();
-        data.insert("resources".to_string(), serde_json::to_value(&self.resources).unwrap_or(Value::Null));
+        data.insert(
+            "resources".to_string(),
+            serde_json::to_value(&self.resources).unwrap_or(Value::Null),
+        );
         if let Some(ref next_cursor) = self.next_cursor {
-            data.insert("nextCursor".to_string(), Value::String(next_cursor.as_str().to_string()));
+            data.insert(
+                "nextCursor".to_string(),
+                Value::String(next_cursor.as_str().to_string()),
+            );
         }
         data
     }
@@ -801,7 +967,7 @@ impl crate::traits::ListResourcesResult for ListResourcesResult {
     fn resources(&self) -> &Vec<Resource> {
         &self.resources
     }
-    
+
     fn next_cursor(&self) -> Option<&Cursor> {
         self.next_cursor.as_ref()
     }
@@ -868,12 +1034,12 @@ mod tests {
     fn test_trait_implementations() {
         let request = ListResourcesRequest::new();
         assert!(request.params.cursor.is_none());
-        
+
         let resources = vec![Resource::new("test://resource", "Test Resource")];
         let response = super::ListResourcesResult::new(resources);
         assert_eq!(response.resources().len(), 1);
         assert!(response.next_cursor().is_none());
-        
+
         let data = response.data();
         assert!(data.contains_key("resources"));
     }

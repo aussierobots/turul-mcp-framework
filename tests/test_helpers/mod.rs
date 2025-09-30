@@ -6,23 +6,23 @@
 //! The primary goal is to enable proper SessionContext testing while maintaining
 //! simplicity and avoiding the complexity of full server setup.
 
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
-use async_trait::async_trait;
 use uuid::Uuid;
 
+use turul_http_mcp_server::notification_bridge::{BroadcastError, NotificationBroadcaster};
+use turul_mcp_json_rpc_server::{JsonRpcNotification, JsonRpcVersion, RequestParams};
+use turul_mcp_protocol::ServerCapabilities;
+use turul_mcp_protocol::notifications::{
+    CancelledNotification, LoggingMessageNotification, ProgressNotification,
+    PromptListChangedNotification, ResourceListChangedNotification, ResourceUpdatedNotification,
+    ToolListChangedNotification,
+};
 use turul_mcp_server::SessionContext;
 use turul_mcp_session_storage::SessionStorageError;
 use turul_mcp_session_storage::{InMemorySessionStorage, SessionStorage};
-use turul_mcp_protocol::ServerCapabilities;
-use turul_mcp_json_rpc_server::{JsonRpcNotification, JsonRpcVersion, RequestParams};
-use turul_http_mcp_server::notification_bridge::{NotificationBroadcaster, BroadcastError};
-use turul_mcp_protocol::notifications::{
-    ProgressNotification, LoggingMessageNotification, ResourceUpdatedNotification,
-    ResourceListChangedNotification, ToolListChangedNotification,
-    PromptListChangedNotification, CancelledNotification
-};
 
 /// Test notification broadcaster that collects notifications for verification
 /// instead of sending them over SSE streams
@@ -31,6 +31,7 @@ pub struct TestNotificationBroadcaster {
     notifications: Arc<Mutex<Vec<(String, JsonRpcNotification)>>>,
 }
 
+#[allow(dead_code)]
 impl TestNotificationBroadcaster {
     pub fn new() -> Self {
         Self {
@@ -39,6 +40,7 @@ impl TestNotificationBroadcaster {
     }
 
     /// Get all notifications for a specific session
+    #[allow(dead_code)]
     pub fn get_notifications(&self, session_id: &str) -> Vec<JsonRpcNotification> {
         self.notifications
             .lock()
@@ -230,8 +232,14 @@ impl NotificationBroadcaster for TestNotificationBroadcaster {
     }
 
     /// Broadcast to all sessions - for tests, just collect without specific targeting
-    async fn broadcast_to_all_sessions(&self, notification: JsonRpcNotification) -> Result<Vec<String>, BroadcastError> {
-        self.notifications.lock().unwrap().push(("*".to_string(), notification));
+    async fn broadcast_to_all_sessions(
+        &self,
+        notification: JsonRpcNotification,
+    ) -> Result<Vec<String>, BroadcastError> {
+        self.notifications
+            .lock()
+            .unwrap()
+            .push(("*".to_string(), notification));
         Ok(vec!["*".to_string()])
     }
 
@@ -252,6 +260,7 @@ pub struct TestSessionBuilder {
     broadcaster: Arc<TestNotificationBroadcaster>,
 }
 
+#[allow(dead_code)]
 impl TestSessionBuilder {
     /// Create a new TestSessionBuilder with default components
     pub fn new() -> Self {
@@ -270,11 +279,12 @@ impl TestSessionBuilder {
     /// Build a SessionContext with a specific session ID
     pub async fn build_session_context_with_id(&self, session_id: String) -> SessionContext {
         // Create the session in storage first
-        match self.storage.create_session_with_id(
-            session_id.clone(),
-            ServerCapabilities::default()
-        ).await {
-            Ok(_) => {},
+        match self
+            .storage
+            .create_session_with_id(session_id.clone(), ServerCapabilities::default())
+            .await
+        {
+            Ok(_) => {}
             Err(e) => panic!("Failed to create session in storage: {}", e),
         }
 
@@ -282,7 +292,9 @@ impl TestSessionBuilder {
         let json_rpc_ctx = turul_mcp_json_rpc_server::SessionContext {
             session_id: session_id.clone(),
             metadata: HashMap::new(),
-            broadcaster: Some(Arc::new(self.broadcaster.clone()) as Arc<dyn std::any::Any + Send + Sync>),
+            broadcaster: Some(
+                Arc::new(self.broadcaster.clone()) as Arc<dyn std::any::Any + Send + Sync>
+            ),
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -290,7 +302,7 @@ impl TestSessionBuilder {
         };
 
         // Convert to MCP SessionContext with storage integration
-        SessionContext::from_json_rpc_with_broadcaster(
+        SessionContext::from_json_rpc_with_broadcaster_for_tests(
             json_rpc_ctx,
             self.storage.clone() as Arc<dyn SessionStorage<Error = SessionStorageError>>,
         )
@@ -326,24 +338,37 @@ pub async fn create_test_session() -> SessionContext {
 }
 
 /// Convenience function to create two SessionContext instances
+#[allow(dead_code)]
 pub async fn create_test_session_pair() -> (SessionContext, SessionContext) {
     TestSessionBuilder::new().build_session_pair().await
 }
 
 /// Helper function to verify session state contains expected value
-pub async fn assert_session_state<T>(session: &SessionContext, key: &str, expected: T) 
-where 
+#[allow(dead_code)]
+pub async fn assert_session_state<T>(session: &SessionContext, key: &str, expected: T)
+where
     T: serde::de::DeserializeOwned + PartialEq + std::fmt::Debug,
 {
-    let actual: Option<T> = session.get_typed_state(key);
-    assert_eq!(actual, Some(expected), "Session state mismatch for key '{}'", key);
+    let actual: Option<T> = session.get_typed_state(key).await;
+    assert_eq!(
+        actual,
+        Some(expected),
+        "Session state mismatch for key '{}'",
+        key
+    );
 }
 
 /// Helper function to verify a notification was sent to a session
-pub fn assert_notification_sent(broadcaster: &TestNotificationBroadcaster, session_id: &str, method: &str) {
+#[allow(dead_code)]
+pub fn assert_notification_sent(
+    broadcaster: &TestNotificationBroadcaster,
+    session_id: &str,
+    method: &str,
+) {
     assert!(
         broadcaster.has_notification(session_id, method),
-        "Expected notification '{}' not found for session '{}'", 
-        method, session_id
+        "Expected notification '{}' not found for session '{}'",
+        method,
+        session_id
     );
 }

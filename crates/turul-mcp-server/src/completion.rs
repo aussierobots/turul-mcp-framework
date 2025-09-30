@@ -3,24 +3,27 @@
 //! This module defines the high-level trait for implementing MCP completion.
 
 use async_trait::async_trait;
-use turul_mcp_protocol::{McpResult, completion::{CompleteRequest, CompleteResult}};
 use turul_mcp_protocol::completion::CompletionDefinition;
+use turul_mcp_protocol::{
+    McpResult,
+    completion::{CompleteRequest, CompleteResult},
+};
 
 /// High-level trait for implementing MCP completion
-/// 
+///
 /// McpCompletion extends CompletionDefinition with execution capabilities.
 /// All metadata is provided by the CompletionDefinition trait, ensuring
 /// consistency between concrete Completion structs and dynamic implementations.
 #[async_trait]
 pub trait McpCompletion: CompletionDefinition + Send + Sync {
     /// Provide completion suggestions (per MCP spec)
-    /// 
+    ///
     /// This method processes the completion/complete request and returns
     /// completion values that match the current input.
     async fn complete(&self, request: CompleteRequest) -> McpResult<CompleteResult>;
 
     /// Optional: Check if this completion handler can handle the given request
-    /// 
+    ///
     /// This allows for conditional completion based on reference type,
     /// argument name, or other factors.
     fn can_handle(&self, _request: &CompleteRequest) -> bool {
@@ -28,7 +31,7 @@ pub trait McpCompletion: CompletionDefinition + Send + Sync {
     }
 
     /// Optional: Get completion priority for request routing
-    /// 
+    ///
     /// Higher priority handlers are tried first when multiple handlers
     /// can handle the same request.
     fn priority(&self) -> u32 {
@@ -36,34 +39,40 @@ pub trait McpCompletion: CompletionDefinition + Send + Sync {
     }
 
     /// Optional: Validate the completion request
-    /// 
+    ///
     /// This method can perform additional validation beyond basic parameter checks.
     async fn validate_request(&self, request: &CompleteRequest) -> McpResult<()> {
         use turul_mcp_protocol::completion::CompletionReference;
-        
+
         // Basic validation - ensure reference and argument are present
         match &request.params.reference {
             CompletionReference::ResourceTemplate(template_ref) => {
                 if template_ref.uri.is_empty() {
-                    return Err(turul_mcp_protocol::McpError::validation("Resource template URI cannot be empty"));
+                    return Err(turul_mcp_protocol::McpError::validation(
+                        "Resource template URI cannot be empty",
+                    ));
                 }
             }
             CompletionReference::Prompt(prompt_ref) => {
                 if prompt_ref.name.is_empty() {
-                    return Err(turul_mcp_protocol::McpError::validation("Prompt name cannot be empty"));
+                    return Err(turul_mcp_protocol::McpError::validation(
+                        "Prompt name cannot be empty",
+                    ));
                 }
             }
         }
-        
+
         if request.params.argument.name.is_empty() {
-            return Err(turul_mcp_protocol::McpError::validation("Argument name cannot be empty"));
+            return Err(turul_mcp_protocol::McpError::validation(
+                "Argument name cannot be empty",
+            ));
         }
-        
+
         Ok(())
     }
 
     /// Optional: Get maximum number of completions to return
-    /// 
+    ///
     /// This helps limit response size for large completion sets.
     fn max_completions(&self) -> Option<usize> {
         Some(100) // Default reasonable limit
@@ -71,7 +80,7 @@ pub trait McpCompletion: CompletionDefinition + Send + Sync {
 }
 
 /// Convert an McpCompletion trait object to a CompleteRequest
-/// 
+///
 /// This is a convenience function for converting completion definitions
 /// to protocol requests.
 pub fn completion_to_request(completion: &dyn McpCompletion) -> CompleteRequest {
@@ -82,8 +91,8 @@ pub fn completion_to_request(completion: &dyn McpCompletion) -> CompleteRequest 
 mod tests {
     use super::*;
     use turul_mcp_protocol::completion::{
-        HasCompletionMetadata, HasCompletionContext, HasCompletionHandling,
-        CompletionReference, CompleteArgument, CompletionResult
+        CompleteArgument, CompletionReference, CompletionResult, HasCompletionContext,
+        HasCompletionHandling, HasCompletionMetadata,
     };
 
     struct TestCompletion {
@@ -96,7 +105,7 @@ mod tests {
         fn method(&self) -> &str {
             "completion/complete"
         }
-        
+
         fn reference(&self) -> &CompletionReference {
             &self.reference
         }
@@ -121,7 +130,7 @@ mod tests {
                 "suggestion2".to_string(),
                 "suggestion3".to_string(),
             ]);
-            
+
             Ok(CompleteResult::new(completion_result))
         }
     }
@@ -132,7 +141,7 @@ mod tests {
             reference: CompletionReference::prompt("test-prompt"),
             argument: CompleteArgument::new("param", "test"),
         };
-        
+
         assert_eq!(completion.method(), "completion/complete");
         assert_eq!(completion.argument().name, "param");
         assert_eq!(completion.argument().value, "test");
@@ -141,7 +150,7 @@ mod tests {
     #[tokio::test]
     async fn test_completion_validation() {
         let completion = TestCompletion {
-            reference: CompletionReference::resource("file://test.txt"),
+            reference: CompletionReference::resource("file:///tmp/test.txt"),
             argument: CompleteArgument::new("filename", ""),
         };
 

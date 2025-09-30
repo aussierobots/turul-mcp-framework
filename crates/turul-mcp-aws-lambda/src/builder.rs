@@ -16,6 +16,9 @@ use turul_mcp_server::{
 use turul_mcp_session_storage::BoxedSessionStorage;
 
 use crate::error::Result;
+
+#[cfg(feature = "dynamodb")]
+use crate::error::LambdaError;
 use crate::server::LambdaMcpServer;
 
 #[cfg(feature = "cors")]
@@ -132,16 +135,9 @@ pub struct LambdaMcpServerBuilder {
 impl LambdaMcpServerBuilder {
     /// Create a new Lambda MCP server builder
     pub fn new() -> Self {
-        use turul_mcp_protocol::initialize::{LoggingCapabilities, ToolsCapabilities};
-
-        // Initialize with same default capabilities as McpServer
-        let capabilities = ServerCapabilities {
-            tools: Some(ToolsCapabilities {
-                list_changed: Some(false),
-            }),
-            logging: Some(LoggingCapabilities::default()),
-            ..Default::default()
-        };
+        // Initialize with default capabilities (same as McpServer)
+        // Capabilities will be set truthfully in build() based on registered components
+        let capabilities = ServerCapabilities::default();
 
         // Initialize handlers with defaults (same as McpServerBuilder)
         let mut handlers: HashMap<String, Arc<dyn McpHandler>> = HashMap::new();
@@ -154,8 +150,14 @@ impl LambdaMcpServerBuilder {
             "resources/list".to_string(),
             Arc::new(ResourcesHandler::new()),
         );
-        handlers.insert("prompts/list".to_string(), Arc::new(PromptsHandler::new()));
-        handlers.insert("prompts/get".to_string(), Arc::new(PromptsHandler::new()));
+        handlers.insert(
+            "prompts/list".to_string(),
+            Arc::new(PromptsListHandler::new()),
+        );
+        handlers.insert(
+            "prompts/get".to_string(),
+            Arc::new(PromptsGetHandler::new()),
+        );
         handlers.insert("logging/setLevel".to_string(), Arc::new(LoggingHandler));
         handlers.insert("roots/list".to_string(), Arc::new(RootsHandler::new()));
         handlers.insert(
@@ -164,7 +166,7 @@ impl LambdaMcpServerBuilder {
         );
         handlers.insert(
             "resources/templates/list".to_string(),
-            Arc::new(ResourceTemplatesHandler),
+            Arc::new(ResourceTemplatesHandler::new()),
         );
         handlers.insert(
             "elicitation/create".to_string(),
@@ -272,7 +274,7 @@ impl LambdaMcpServerBuilder {
         self
     }
 
-    /// Register a function tool created with #[mcp_tool] macro
+    /// Register a function tool created with `#[mcp_tool]` macro
     pub fn tool_fn<F, T>(self, func: F) -> Self
     where
         F: Fn() -> T,
@@ -499,15 +501,9 @@ impl LambdaMcpServerBuilder {
             list_changed: Some(false),
         });
 
-        // Create PromptsHandler and add all registered prompts
-        let handler = PromptsHandler::new();
-        for (_, _prompt) in &self.prompts {
-            // Note: Different trait types between McpPrompt and handlers::McpPrompt
-            // For now, skip adding to handlers until we resolve trait alignment
-            // handler = handler.add_prompt_arc(prompt.clone());
-        }
-
-        self.handler(handler)
+        // Prompts handlers are automatically registered when prompts are added via .prompt()
+        // This method now just enables the capability
+        self
     }
 
     /// Add resources support
@@ -520,7 +516,7 @@ impl LambdaMcpServerBuilder {
 
         // Create ResourcesHandler and add all registered resources
         let mut handler = ResourcesHandler::new();
-        for (_, resource) in &self.resources {
+        for resource in self.resources.values() {
             handler = handler.add_resource_arc(resource.clone());
         }
 
@@ -565,11 +561,6 @@ impl LambdaMcpServerBuilder {
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
 
-    /// Add templates support
-    pub fn with_templates(self) -> Self {
-        self.handler(TemplatesHandler::new())
-    }
-
     /// Add notifications support
     pub fn with_notifications(self) -> Self {
         self.handler(NotificationsHandler)
@@ -605,6 +596,18 @@ impl LambdaMcpServerBuilder {
     /// Enable or disable SSE streaming support
     pub fn sse(mut self, enable: bool) -> Self {
         self.enable_sse = enable;
+
+        // Update SSE endpoints in ServerConfig based on enable flag
+        if enable {
+            self.server_config.enable_get_sse = true;
+            self.server_config.enable_post_sse = true;
+        } else {
+            // When SSE is disabled, also disable SSE endpoints in ServerConfig
+            // This prevents GET /mcp from hanging by returning 405 instead
+            self.server_config.enable_get_sse = false;
+            self.server_config.enable_post_sse = false;
+        }
+
         self
     }
 
@@ -712,7 +715,7 @@ impl LambdaMcpServerBuilder {
     /// This is the recommended configuration for production Lambda deployments.
     #[cfg(all(feature = "dynamodb", feature = "cors"))]
     pub async fn production_config(self) -> Result<Self> {
-        self.dynamodb_storage().await?.cors_from_env().Ok()
+        Ok(self.dynamodb_storage().await?.cors_from_env())
     }
 
     /// Create with in-memory storage and permissive CORS
@@ -734,11 +737,19 @@ impl LambdaMcpServerBuilder {
 
         // Validate configuration (same as MCP server)
         if self.name.is_empty() {
-            return Err(crate::error::LambdaError::Config("Server name cannot be empty".to_string()));
+            return Err(crate::error::LambdaError::Configuration(
+                "Server name cannot be empty".to_string(),
+            ));
         }
         if self.version.is_empty() {
-            return Err(crate::error::LambdaError::Config("Server version cannot be empty".to_string()));
+            return Err(crate::error::LambdaError::Configuration(
+                "Server version cannot be empty".to_string(),
+            ));
         }
+
+        // Note: SSE behavior depends on which handler method is used:
+        // - handle(): Works with run(), but SSE responses may not stream properly
+        // - handle_streaming(): Works with run_with_streaming_response() for real SSE streaming
 
         // Create session storage (use in-memory if none provided)
         let session_storage = self
@@ -752,11 +763,65 @@ impl LambdaMcpServerBuilder {
             Implementation::new(&self.name, &self.version)
         };
 
-        // Create server capabilities with registered tools count
+        // Auto-detect and configure server capabilities based on registered components (same as McpServer)
         let mut capabilities = self.capabilities.clone();
-        if self.tools.is_empty() {
-            capabilities.tools = None;
+        let has_tools = !self.tools.is_empty();
+        let has_resources = !self.resources.is_empty();
+        let has_prompts = !self.prompts.is_empty();
+        let has_elicitations = !self.elicitations.is_empty();
+        let has_completions = !self.completions.is_empty();
+        let has_logging = !self.loggers.is_empty();
+        tracing::debug!("🔧 Has logging configured: {}", has_logging);
+
+        // Tools capabilities - truthful reporting (only set if tools are registered)
+        if has_tools {
+            capabilities.tools = Some(turul_mcp_protocol::initialize::ToolsCapabilities {
+                list_changed: Some(false), // Static framework: no dynamic change sources
+            });
         }
+
+        // Resources capabilities - truthful reporting (only set if resources are registered)
+        if has_resources {
+            capabilities.resources = Some(turul_mcp_protocol::initialize::ResourcesCapabilities {
+                subscribe: Some(false),    // TODO: Implement resource subscriptions
+                list_changed: Some(false), // Static framework: no dynamic change sources
+            });
+        }
+
+        // Prompts capabilities - truthful reporting (only set if prompts are registered)
+        if has_prompts {
+            capabilities.prompts = Some(turul_mcp_protocol::initialize::PromptsCapabilities {
+                list_changed: Some(false), // Static framework: no dynamic change sources
+            });
+        }
+
+        // Elicitation capabilities - truthful reporting (only set if elicitations are registered)
+        if has_elicitations {
+            capabilities.elicitation =
+                Some(turul_mcp_protocol::initialize::ElicitationCapabilities {
+                    enabled: Some(true),
+                });
+        }
+
+        // Completion capabilities - truthful reporting (only set if completions are registered)
+        if has_completions {
+            capabilities.completions =
+                Some(turul_mcp_protocol::initialize::CompletionsCapabilities {
+                    enabled: Some(true),
+                });
+        }
+
+        // Logging capabilities - always enabled for debugging/monitoring (same as McpServer)
+        // Always enable logging for debugging/monitoring
+        capabilities.logging = Some(turul_mcp_protocol::initialize::LoggingCapabilities {
+            enabled: Some(true),
+            levels: Some(vec![
+                "debug".to_string(),
+                "info".to_string(),
+                "warning".to_string(),
+                "error".to_string(),
+            ]),
+        });
 
         // Add RootsHandler if roots were configured (same pattern as MCP server)
         let mut handlers = self.handlers;
@@ -843,7 +908,7 @@ where
         builder = builder.cors_allow_all_origins();
     }
 
-    builder.build().await
+    builder.sse(false).build().await
 }
 
 /// Create a Lambda MCP server configured for production
@@ -889,7 +954,7 @@ mod tests {
         fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
             use turul_mcp_protocol::ToolSchema;
             static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-            SCHEMA.get_or_init(|| ToolSchema::object())
+            SCHEMA.get_or_init(ToolSchema::object)
         }
     }
 
@@ -930,40 +995,56 @@ mod tests {
         let server = LambdaMcpServerBuilder::new()
             .name("test-server")
             .version("1.0.0")
-            .tool(TestTool::default())
+            .tool(TestTool)
             .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false) // Disable SSE for tests since streaming feature not enabled
             .build()
             .await
             .unwrap();
 
         // Create handler from server and verify it has stream_manager
         let handler = server.handler().await.unwrap();
-        assert!(handler.stream_manager().as_ref() as *const _ != std::ptr::null());
+        // Verify handler has stream_manager (critical invariant)
+        assert!(
+            handler.get_stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
     }
 
     #[tokio::test]
     async fn test_simple_lambda_server() {
-        let tools = vec![TestTool::default()];
+        let tools = vec![TestTool];
         let server = simple_lambda_server(tools).await.unwrap();
 
         // Create handler and verify it was created with default configuration
         let handler = server.handler().await.unwrap();
-        assert!(handler.stream_manager().as_ref() as *const _ != std::ptr::null());
+        // Verify handler has stream_manager
+        // Verify handler has stream_manager (critical invariant)
+        assert!(
+            handler.get_stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
     }
 
     #[tokio::test]
     async fn test_builder_extension_trait() {
-        let tools = vec![TestTool::default(), TestTool::default()];
+        let tools = vec![TestTool, TestTool];
 
         let server = LambdaMcpServerBuilder::new()
             .tools(tools)
             .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false) // Disable SSE for tests since streaming feature not enabled
             .build()
             .await
             .unwrap();
 
         let handler = server.handler().await.unwrap();
-        assert!(handler.stream_manager().as_ref() as *const _ != std::ptr::null());
+        // Verify handler has stream_manager
+        // Verify handler has stream_manager (critical invariant)
+        assert!(
+            handler.get_stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
     }
 
     #[cfg(feature = "cors")]
@@ -972,11 +1053,68 @@ mod tests {
         let server = LambdaMcpServerBuilder::new()
             .cors_allow_all_origins()
             .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false) // Disable SSE for tests since streaming feature not enabled
             .build()
             .await
             .unwrap();
 
         let handler = server.handler().await.unwrap();
-        assert!(handler.stream_manager().as_ref() as *const _ != std::ptr::null());
+        // Verify handler has stream_manager
+        // Verify handler has stream_manager (critical invariant)
+        assert!(
+            handler.get_stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sse_toggle_functionality() {
+        // Test that SSE can be toggled on/off/on correctly
+        let mut builder =
+            LambdaMcpServerBuilder::new().storage(Arc::new(InMemorySessionStorage::new()));
+
+        // Initially enable SSE
+        builder = builder.sse(true);
+        assert!(builder.enable_sse, "SSE should be enabled");
+        assert!(
+            builder.server_config.enable_get_sse,
+            "GET SSE endpoint should be enabled"
+        );
+        assert!(
+            builder.server_config.enable_post_sse,
+            "POST SSE endpoint should be enabled"
+        );
+
+        // Disable SSE
+        builder = builder.sse(false);
+        assert!(!builder.enable_sse, "SSE should be disabled");
+        assert!(
+            !builder.server_config.enable_get_sse,
+            "GET SSE endpoint should be disabled"
+        );
+        assert!(
+            !builder.server_config.enable_post_sse,
+            "POST SSE endpoint should be disabled"
+        );
+
+        // Re-enable SSE (this was broken before the fix)
+        builder = builder.sse(true);
+        assert!(builder.enable_sse, "SSE should be re-enabled");
+        assert!(
+            builder.server_config.enable_get_sse,
+            "GET SSE endpoint should be re-enabled"
+        );
+        assert!(
+            builder.server_config.enable_post_sse,
+            "POST SSE endpoint should be re-enabled"
+        );
+
+        // Verify the server can be built with SSE enabled
+        let server = builder.build().await.unwrap();
+        let handler = server.handler().await.unwrap();
+        assert!(
+            handler.get_stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
     }
 }

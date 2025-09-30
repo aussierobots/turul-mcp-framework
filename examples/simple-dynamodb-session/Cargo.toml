@@ -1,10 +1,12 @@
 [package]
 name = "simple-dynamodb-session"
-version = "0.1.1"
-edition = "2021"
+version = "0.2.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
 
 [[bin]]
-name = "server"
+name = "simple-dynamodb-session"
 path = "src/main.rs"
 
 [[bin]]
@@ -15,23 +17,24 @@ path = "src/bin/dynamodb-setup.rs"
 name = "dynamodb-teardown"
 path = "src/bin/dynamodb-teardown.rs"
 
+
 [dependencies]
-turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http", "sse"] }
-turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage", features = ["dynamodb"] }
-turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
+turul-mcp-server = { workspace = true, features = ["http", "sse", "dynamodb"] }
+turul-mcp-session-storage = { workspace = true, features = ["dynamodb"] }
+turul-mcp-derive.workspace = true
+turul-mcp-protocol.workspace = true
 
-tokio = { version = "1.0", features = ["full"] }
-tracing = "0.1"
-tracing-subscriber = "0.3"
-serde_json = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.0", features = ["v4"] }
-async-trait = "0.1"
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+async-trait.workspace = true
 
-# Dependencies for AWS DynamoDB management binaries
-aws-sdk-dynamodb = "1.0"
-aws-config = "1.0"
+# Use workspace AWS dependencies
+aws-sdk-dynamodb.workspace = true
+aws-config.workspace = true
 
 [features]
 default = []

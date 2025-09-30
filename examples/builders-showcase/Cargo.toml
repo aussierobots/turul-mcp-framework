@@ -16,6 +16,6 @@ serde.workspace = true
 serde_json.workspace = true
 
 # For the example
-tracing = "0.1"
-tracing-subscriber = "0.3"
-uuid = { version = "1.0", features = ["v7", "serde"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid = { workspace = true, features = ["v7", "serde"] }

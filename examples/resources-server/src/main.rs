@@ -1,23 +1,23 @@
 //! # Development Team Resource Server
 //!
-//! This example demonstrates a real-world MCP resources server that provides access to 
-//! development team resources including project documentation, database schemas, 
-//! configuration files, and system status. This simulates a central resource hub 
+//! This example demonstrates a real-world MCP resources server that provides access to
+//! development team resources including project documentation, database schemas,
+//! configuration files, and system status. This simulates a central resource hub
 //! that development teams use to access project artifacts and documentation.
 
 use async_trait::async_trait;
-use turul_mcp_server::{McpServer, McpResult};
-use turul_mcp_server::McpResource;
-use turul_mcp_protocol::resources::ResourceContent;
-use turul_mcp_protocol::resources::{
-    HasResourceMetadata, HasResourceDescription, HasResourceUri, 
-    HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta
-};
+use chrono::{DateTime, Utc};
 use serde_json::json;
 use std::fs;
 use std::path::Path;
 use tracing::info;
-use chrono::{DateTime, Utc};
+use turul_mcp_protocol::resources::ResourceContent;
+use turul_mcp_protocol::resources::{
+    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
+    HasResourceMimeType, HasResourceSize, HasResourceUri,
+};
+use turul_mcp_server::McpResource;
+use turul_mcp_server::{McpResult, McpServer, SessionContext};
 
 /// Project documentation resource that loads from actual files
 /// Real-world use case: Central documentation hub for development teams
@@ -32,7 +32,7 @@ impl HasResourceMetadata for ProjectDocumentationResource {
 
 impl HasResourceUri for ProjectDocumentationResource {
     fn uri(&self) -> &str {
-        "docs://project"
+        "file:///docs/project.md"
     }
 }
 
@@ -60,29 +60,31 @@ impl HasResourceMeta for ProjectDocumentationResource {}
 // Now implement the execution trait
 #[async_trait]
 impl McpResource for ProjectDocumentationResource {
-
-    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let mut contents = Vec::new();
-        
+
         // Load main project README
         let readme_path = Path::new("../../README.md");
         if readme_path.exists() {
             match fs::read_to_string(readme_path) {
                 Ok(content) => {
-                    contents.push(ResourceContent::text("docs://project", format!(
-                        "# Main Project Documentation\n\n{}", content
-                    )));
-                },
+                    contents.push(ResourceContent::text(
+                        "file:///docs/project.md",
+                        format!("# Main Project Documentation\n\n{}", content),
+                    ));
+                }
                 Err(_) => {
                     contents.push(ResourceContent::text(
-                        "docs://project", "# Project Documentation\n\nMain README file not accessible".to_string()
+                        "file:///docs/project.md",
+                        "# Project Documentation\n\nMain README file not accessible".to_string(),
                     ));
                 }
             }
         }
-        
+
         // Add project structure overview
-        contents.push(ResourceContent::text("docs://project",
+        contents.push(ResourceContent::text(
+            "file:///docs/project.md",
             "# MCP Framework Project Structure\n\n\
              ## Core Crates\n\
              - `mcp-server/` - Main MCP server framework\n\
@@ -99,11 +101,12 @@ impl McpResource for ProjectDocumentationResource {
              2. Update examples to demonstrate new features\n\
              3. Run comprehensive test suite\n\
              4. Update documentation and examples\n\
-             5. Performance testing and validation".to_string()
+             5. Performance testing and validation"
+                .to_string(),
         ));
-        
+
         // Add architectural overview
-        contents.push(ResourceContent::text("docs://project",
+        contents.push(ResourceContent::text("file:///docs/project.md",
             "# Architecture Overview\n\n\
              ## MCP Protocol Implementation\n\
              The framework implements the Model Context Protocol (MCP) 2025-06-18 specification:\n\n\
@@ -122,7 +125,7 @@ impl McpResource for ProjectDocumentationResource {
              3. **Function Macros**: Natural function-based tool definitions\n\
              4. **Declarative Macros**: Ultra-concise tool creation".to_string()
         ));
-        
+
         Ok(contents)
     }
 }
@@ -140,7 +143,7 @@ impl HasResourceMetadata for ApiDocumentationResource {
 
 impl HasResourceUri for ApiDocumentationResource {
     fn uri(&self) -> &str {
-        "docs://api"
+        "file:///docs/api.md"
     }
 }
 
@@ -166,19 +169,16 @@ impl HasResourceMeta for ApiDocumentationResource {}
 
 #[async_trait]
 impl McpResource for ApiDocumentationResource {
-
-    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let api_docs_path = Path::new("data/api_docs.md");
-        
+
         match fs::read_to_string(api_docs_path) {
-            Ok(content) => {
-                Ok(vec![ResourceContent::text("docs://api", content)])
-            },
+            Ok(content) => Ok(vec![ResourceContent::text("file:///docs/api.md", content)]),
             Err(_) => {
                 // Fallback content if file is not accessible
-                Ok(vec![
-                    ResourceContent::text("docs://api",
-                        "# API Documentation\n\n\
+                Ok(vec![ResourceContent::text(
+                    "file:///docs/api.md",
+                    "# API Documentation\n\n\
                          Documentation file not found at data/api_docs.md\n\n\
                          This resource loads API documentation from external markdown files,\n\
                          demonstrating how production systems maintain documentation\n\
@@ -190,9 +190,9 @@ impl McpResource for ApiDocumentationResource {
                          - Endpoint documentation\n\
                          - Request/response examples\n\
                          - SDK and client library information\n\
-                         - Error handling guidelines".to_string()
-                    )
-                ])
+                         - Error handling guidelines"
+                        .to_string(),
+                )])
             }
         }
     }
@@ -211,7 +211,7 @@ impl HasResourceMetadata for ConfigurationResource {
 
 impl HasResourceUri for ConfigurationResource {
     fn uri(&self) -> &str {
-        "config://app"
+        "file:///config/app.json"
     }
 }
 
@@ -237,28 +237,32 @@ impl HasResourceMeta for ConfigurationResource {}
 
 #[async_trait]
 impl McpResource for ConfigurationResource {
-
-    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let config_path = Path::new("data/app_config.json");
-        
+
         let mut contents = Vec::new();
-        
+
         match fs::read_to_string(config_path) {
             Ok(config_content) => {
                 // Parse and pretty-print the JSON for better readability
                 match serde_json::from_str::<serde_json::Value>(&config_content) {
                     Ok(config_json) => {
-                        contents.push(ResourceContent::text("config://app",
-                            serde_json::to_string_pretty(&config_json).unwrap()
+                        contents.push(ResourceContent::text(
+                            "file:///config/app.json",
+                            serde_json::to_string_pretty(&config_json).unwrap(),
                         ));
-                    },
+                    }
                     Err(_) => {
-                        contents.push(ResourceContent::text("config://app", config_content));
+                        contents.push(ResourceContent::text(
+                            "file:///config/app.json",
+                            config_content,
+                        ));
                     }
                 }
-            },
+            }
             Err(_) => {
-                contents.push(ResourceContent::text("config://app",
+                contents.push(ResourceContent::text(
+                    "file:///config/app.json",
                     "# Application Configuration\n\n\
                      Configuration file not found at data/app_config.json\n\n\
                      This resource demonstrates production configuration management\n\
@@ -274,13 +278,15 @@ impl McpResource for ConfigurationResource {
                      - Authentication and security\n\
                      - Feature flags\n\
                      - Monitoring and observability\n\
-                     - External service integrations".to_string()
+                     - External service integrations"
+                        .to_string(),
                 ));
             }
         }
-        
+
         // Add environment variables documentation
-        contents.push(ResourceContent::text("config://app",
+        contents.push(ResourceContent::text(
+            "file:///config/app.json",
             "# Environment Variables Guide\n\n\
              ## Security Best Practices\n\
              Never commit sensitive values to configuration files. Use environment variables:\n\n\
@@ -301,9 +307,10 @@ impl McpResource for ConfigurationResource {
              2. **Staging**: Environment-specific configs\n\
              3. **Production**: Secure secret management systems\n\
              4. **Docker**: Environment variables in compose files\n\
-             5. **Kubernetes**: ConfigMaps and Secrets".to_string()
+             5. **Kubernetes**: ConfigMaps and Secrets"
+                .to_string(),
         ));
-        
+
         Ok(contents)
     }
 }
@@ -321,7 +328,7 @@ impl HasResourceMetadata for DatabaseSchemaResource {
 
 impl HasResourceUri for DatabaseSchemaResource {
     fn uri(&self) -> &str {
-        "schema://database"
+        "file:///schema/database.json"
     }
 }
 
@@ -347,18 +354,21 @@ impl HasResourceMeta for DatabaseSchemaResource {}
 
 #[async_trait]
 impl McpResource for DatabaseSchemaResource {
-
-    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let schema_path = Path::new("data/database_schema.sql");
-        
+
         let mut contents = Vec::new();
-        
+
         match fs::read_to_string(schema_path) {
             Ok(schema_content) => {
-                contents.push(ResourceContent::text("schema://database", schema_content));
-            },
+                contents.push(ResourceContent::text(
+                    "file:///schema/database.json",
+                    schema_content,
+                ));
+            }
             Err(_) => {
-                contents.push(ResourceContent::text("schema://database",
+                contents.push(ResourceContent::text(
+                    "file:///schema/database.json",
                     "-- Database Schema\n\
                      -- Schema file not found at data/database_schema.sql\n\n\
                      /*\n\
@@ -378,13 +388,15 @@ impl McpResource for DatabaseSchemaResource {
                      -- ✓ Authentication and sessions\n\
                      -- ✓ Audit logs and tracking\n\
                      -- ✓ Proper indexes and constraints\n\
-                     -- ✓ Views for common queries".to_string()
+                     -- ✓ Views for common queries"
+                        .to_string(),
                 ));
             }
         }
-        
+
         // Add database documentation
-        contents.push(ResourceContent::text("schema://database",
+        contents.push(ResourceContent::text(
+            "file:///schema/database.json",
             "# Database Architecture Guide\n\n\
              ## Schema Management Best Practices\n\n\
              ### 1. Migration Strategy\n\
@@ -406,9 +418,10 @@ impl McpResource for DatabaseSchemaResource {
              - **Automated Backups**: Daily production backups\n\
              - **Point-in-time Recovery**: Transaction log backups\n\
              - **Disaster Recovery**: Cross-region replication\n\
-             - **Testing**: Regular restore testing".to_string()
+             - **Testing**: Regular restore testing"
+                .to_string(),
         ));
-        
+
         Ok(contents)
     }
 }
@@ -425,7 +438,7 @@ impl HasResourceMetadata for SystemStatusResource {
 
 impl HasResourceUri for SystemStatusResource {
     fn uri(&self) -> &str {
-        "status://system"
+        "file:///status/system.json"
     }
 }
 
@@ -451,10 +464,9 @@ impl HasResourceMeta for SystemStatusResource {}
 
 #[async_trait]
 impl McpResource for SystemStatusResource {
-
-    async fn read(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let now: DateTime<Utc> = Utc::now();
-        
+
         let status = json!({
             "timestamp": now.to_rfc3339(),
             "uptime": "2d 14h 32m 18s",
@@ -498,8 +510,12 @@ impl McpResource for SystemStatusResource {
         });
 
         Ok(vec![
-            ResourceContent::text("status://system", serde_json::to_string_pretty(&status).unwrap()),
-            ResourceContent::text("status://system",
+            ResourceContent::text(
+                "file:///status/system.json",
+                serde_json::to_string_pretty(&status).unwrap(),
+            ),
+            ResourceContent::text(
+                "file:///status/system.json",
                 "# System Health Report\n\n\
                  ## Overall Status: ✅ HEALTHY\n\n\
                  ### Services\n\
@@ -516,7 +532,8 @@ impl McpResource for SystemStatusResource {
                  - **Memory**: 68.7% (normal)\n\
                  - **Disk**: 23.4% (plenty of space)\n\n\
                  ### Alerts\n\
-                 No active alerts or warnings.".to_string()
+                 No active alerts or warnings."
+                    .to_string(),
             ),
         ])
     }
@@ -543,7 +560,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_resources()
         .bind_address("127.0.0.1:8041".parse()?)
         .build()?;
-    
+
     info!("Development resource server running at: http://127.0.0.1:8041/mcp");
     info!("Real-world team resources available:");
     info!("  - docs://project: Comprehensive project documentation and architecture");

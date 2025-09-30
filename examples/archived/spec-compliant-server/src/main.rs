@@ -31,11 +31,11 @@ impl ProcessDataTool {
     async fn execute(&self) -> turul_mcp_server::McpResult<String> {
         // Simulate processing with progress updates
         let total_steps = self.steps as u64;
-        
+
         for step in 0..total_steps {
             // In a real implementation, you would send progress notifications here
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            
+
             tracing::info!(
                 "Processing step {}/{} for data: {}",
                 step + 1,
@@ -43,10 +43,10 @@ impl ProcessDataTool {
                 self.data
             );
         }
-        
+
         Ok(format!(
-            "Successfully processed '{}' in {} steps", 
-            self.data, 
+            "Successfully processed '{}' in {} steps",
+            self.data,
             total_steps
         ))
     }
@@ -107,15 +107,15 @@ impl HasToolMeta for SessionAwareTool {
 
 #[async_trait]
 impl McpTool for SessionAwareTool {
-    
+
     async fn call(&self, args: Value, session: Option<SessionContext>) -> turul_mcp_server::McpResult<CallToolResult> {
         let message = args["message"].as_str().unwrap_or("default");
         let include_session = args["include_session_info"].as_bool().unwrap_or(false);
-        
+
         let mut response_data = HashMap::new();
         response_data.insert("processed_message".to_string(), json!(format!("Processed: {}", message)));
         response_data.insert("timestamp".to_string(), json!(chrono::Utc::now().to_rfc3339()));
-        
+
         if include_session {
             if let Some(session) = session {
                 response_data.insert("session_id".to_string(), json!(session.session_id.to_string()));
@@ -124,17 +124,17 @@ impl McpTool for SessionAwareTool {
                 response_data.insert("session_info".to_string(), json!("No session available"));
             }
         }
-        
+
         // Create a proper MCP 2025-06-18 compliant result with _meta
         let mut meta_data = HashMap::new();
         meta_data.insert("processing_time_ms".to_string(), json!(50));
         meta_data.insert("api_version".to_string(), json!("2025-06-18"));
-        
+
         let result_with_meta = ResultWithMeta::new(response_data).with_meta(meta_data);
-        
+
         // Convert to ToolResult
         let result_json = serde_json::to_value(result_with_meta).map_err(|e| e.to_string())?;
-        
+
         let results = vec![ToolResult::text(format!("Result: {}", result_json))];
         Ok(CallToolResult::success(results))
     }
@@ -154,18 +154,18 @@ async fn create_status_resource() -> impl McpResource {
                 "memory_usage_mb": 128,
                 "mcp_version": "2025-06-18"
             });
-            
+
             // Create proper content with _meta
             let mut meta_info = HashMap::new();
             meta_info.insert("generated_at".to_string(), json!(chrono::Utc::now().to_rfc3339()));
             meta_info.insert("cache_expires_in_seconds".to_string(), json!(60));
             meta_info.insert("data_freshness".to_string(), json!("real-time"));
-            
+
             let content_with_meta = json!({
                 "data": status_data,
                 "_meta": meta_info
             });
-            
+
             Ok(vec![turul_mcp_protocol::resources::ResourceContent::blob(
                 serde_json::to_string_pretty(&content_with_meta).unwrap(),
                 "application/json".to_string()
@@ -177,7 +177,7 @@ async fn create_status_resource() -> impl McpResource {
 /// Demonstrate JSON-RPC 2.0 message creation per spec
 fn demonstrate_json_rpc_compliance() {
     println!("\n=== JSON-RPC 2.0 Specification Compliance Demo ===");
-    
+
     // Create a proper MCP 2025-06-18 request with _meta
     let mut request_data = HashMap::new();
     request_data.insert("name".to_string(), json!("process_data"));
@@ -185,7 +185,7 @@ fn demonstrate_json_rpc_compliance() {
         "data": "test data",
         "steps": 5
     }));
-    
+
     let request_params = RequestParams {
         meta: Some(Meta {
             progress_token: Some(ProgressToken::new("req-12345")),
@@ -200,39 +200,39 @@ fn demonstrate_json_rpc_compliance() {
         }),
         other: request_data,
     };
-    
+
     let request = JsonRpcRequest::new(json!("req-001"), "tools/call".to_string())
         .with_params(request_params);
-    
+
     println!("Request JSON:");
     println!("{}", serde_json::to_string_pretty(&request).unwrap());
-    
+
     // Create a proper response with _meta
     let mut response_data = HashMap::new();
     response_data.insert("content".to_string(), json!([{
         "type": "text",
         "text": "Processing completed successfully"
     }]));
-    
+
     let mut meta_data = HashMap::new();
     meta_data.insert("progress".to_string(), json!(1.0));
     meta_data.insert("total_steps".to_string(), json!(100));
     meta_data.insert("current_step".to_string(), json!(100));
     meta_data.insert("completed_at".to_string(), json!(chrono::Utc::now().to_rfc3339()));
-    
+
     let result = ResultWithMeta::new(response_data).with_meta(meta_data);
     let response = JsonRpcResponse::success(json!("req-001"), result);
-    
+
     println!("\nResponse JSON:");
     println!("{}", serde_json::to_string_pretty(&response).unwrap());
-    
+
     // Demonstrate trait compliance
     println!("\n=== Trait Compliance Verification ===");
     println!("Response implements RpcResult: {}", std::any::type_name::<ResultWithMeta>());
-    
+
     if let Some(result) = &response.result {
         println!("HasData implementation: {} keys in data", result.data().len());
-        println!("HasMeta implementation: {} meta fields", 
+        println!("HasMeta implementation: {} meta fields",
                  result.meta().map_or(0, |m| m.len()));
     }
 }
@@ -244,7 +244,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     println!("Starting MCP 2025-06-18 Specification Compliant Server");
-    
+
     // Demonstrate JSON-RPC compliance
     demonstrate_json_rpc_compliance();
 
@@ -254,7 +254,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         steps: 3,
     };
     let session_tool = SessionAwareTool::new();
-    
+
     // Create resources
     let status_resource = create_status_resource().await;
 
@@ -283,7 +283,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  ✓ Resources with metadata and content type handling");
     println!("  ✓ Full trait compliance (RpcResult, HasData, HasMeta)");
     println!("  ✓ MCP protocol version negotiation");
-    
+
     println!("\nEndpoints available:");
     println!("  - tools/list: List available tools with proper schemas");
     println!("  - tools/call: Execute tools with progress tracking");

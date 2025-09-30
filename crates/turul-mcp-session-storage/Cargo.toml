@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-session-storage"
-version = "0.1.1"
+version = "0.2.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -20,7 +20,7 @@ uuid = { workspace = true, features = ["v4", "v7"] }
 chrono = { workspace = true, features = ["serde"] }
 
 # Protocol types
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.1.1" }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.2.0" }
 
 # Optional database support
 sqlx = { workspace = true, optional = true }

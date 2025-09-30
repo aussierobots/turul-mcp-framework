@@ -5,18 +5,22 @@
 //! It demonstrates real-world patterns for API orchestration, data transformation,
 //! and enterprise system integration.
 
+use async_trait::async_trait;
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use async_trait::async_trait;
-use turul_mcp_server::{McpServer, McpTool, SessionContext};
-use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult, CallToolResult};
-use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations};
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use serde_yaml;
 use tracing::{info, warn};
-use chrono::Utc;
+use turul_mcp_protocol::tools::{
+    HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasToolMeta,
+    ToolAnnotations,
+};
+use turul_mcp_protocol::{
+    CallToolResult, McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema,
+};
+use turul_mcp_server::{McpServer, McpTool, SessionContext};
 
 /// Configuration for enterprise API endpoints loaded from external files
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -307,10 +311,11 @@ impl EnterpriseApiGateway {
     fn new() -> McpResult<Self> {
         let api_config = load_api_config()
             .map_err(|e| McpError::tool_execution(&format!("Failed to load API config: {}", e)))?;
-        
-        let data_sources = load_data_sources()
-            .map_err(|e| McpError::tool_execution(&format!("Failed to load data sources: {}", e)))?;
-        
+
+        let data_sources = load_data_sources().map_err(|e| {
+            McpError::tool_execution(&format!("Failed to load data sources: {}", e))
+        })?;
+
         Ok(Self {
             api_config,
             data_sources,
@@ -319,25 +324,39 @@ impl EnterpriseApiGateway {
     }
 
     /// Simulate API call to enterprise service
-    fn call_enterprise_api(&self, service: &str, endpoint_id: &str, params: &Value) -> McpResult<Value> {
-        let api_service = self.api_config.enterprise_apis
+    fn call_enterprise_api(
+        &self,
+        service: &str,
+        endpoint_id: &str,
+        params: &Value,
+    ) -> McpResult<Value> {
+        let api_service = self
+            .api_config
+            .enterprise_apis
             .get(service)
             .ok_or_else(|| McpError::tool_execution(&format!("Service '{}' not found", service)))?;
-        
-        let endpoint = api_service.endpoints
+
+        let endpoint = api_service
+            .endpoints
             .iter()
             .find(|e| e.id == endpoint_id)
-            .ok_or_else(|| McpError::tool_execution(&format!("Endpoint '{}' not found", endpoint_id)))?;
-        
-        info!("Calling {} API: {} {}", api_service.name, endpoint.method, endpoint.path);
-        
+            .ok_or_else(|| {
+                McpError::tool_execution(&format!("Endpoint '{}' not found", endpoint_id))
+            })?;
+
+        info!(
+            "Calling {} API: {} {}",
+            api_service.name, endpoint.method, endpoint.path
+        );
+
         // Simulate API response based on endpoint
         match (service, endpoint_id) {
             ("customer_management", "get_customer") => {
-                let customer_id = params.get("customer_id")
+                let customer_id = params
+                    .get("customer_id")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| McpError::missing_param("customer_id"))?;
-                
+
                 Ok(json!({
                     "customer_id": customer_id,
                     "company_name": format!("Enterprise Corp {}", &customer_id[5..]),
@@ -352,10 +371,11 @@ impl EnterpriseApiGateway {
                 }))
             }
             ("inventory_management", "get_product") => {
-                let sku = params.get("sku")
+                let sku = params
+                    .get("sku")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| McpError::missing_param("sku"))?;
-                
+
                 Ok(json!({
                     "sku": sku,
                     "name": format!("Product {}", &sku[4..]),
@@ -383,10 +403,11 @@ impl EnterpriseApiGateway {
                 }))
             }
             ("financial_reporting", "get_financial_report") => {
-                let report_type = params.get("report_type")
+                let report_type = params
+                    .get("report_type")
                     .and_then(|v| v.as_str())
                     .unwrap_or("income_statement");
-                
+
                 Ok(json!({
                     "report_type": report_type,
                     "period": {
@@ -404,10 +425,11 @@ impl EnterpriseApiGateway {
                 }))
             }
             ("human_resources", "get_employee") => {
-                let employee_id = params.get("employee_id")
+                let employee_id = params
+                    .get("employee_id")
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| McpError::missing_param("employee_id"))?;
-                
+
                 Ok(json!({
                     "employee_id": employee_id,
                     "name": format!("Employee {}", &employee_id[4..]),
@@ -422,49 +444,55 @@ impl EnterpriseApiGateway {
                     }
                 }))
             }
-            _ => Err(McpError::tool_execution(&format!("Unsupported endpoint: {}.{}", service, endpoint_id)))
+            _ => Err(McpError::tool_execution(&format!(
+                "Unsupported endpoint: {}.{}",
+                service, endpoint_id
+            ))),
         }
     }
 
     /// Apply data transformation rules
     fn apply_transformation(&self, transformation_name: &str, data: &Value) -> McpResult<Value> {
-        let transformation = self.api_config.data_transformations
+        let transformation = self
+            .api_config
+            .data_transformations
             .get(transformation_name)
-            .ok_or_else(|| McpError::tool_execution(&format!("Transformation '{}' not found", transformation_name)))?;
-        
+            .ok_or_else(|| {
+                McpError::tool_execution(&format!(
+                    "Transformation '{}' not found",
+                    transformation_name
+                ))
+            })?;
+
         info!("Applying transformation: {}", transformation.name);
-        
+
         // Simplified transformation logic
         match transformation_name {
-            "customer_360" => {
-                Ok(json!({
-                    "customer_360_view": {
-                        "unified_customer_id": data.get("customer_id"),
-                        "profile_data": data,
-                        "aggregated_metrics": {
-                            "total_orders": 45,
-                            "lifetime_value": 125000.00,
-                            "last_interaction": "2025-01-15T14:30:00Z",
-                            "satisfaction_score": 4.2
-                        },
-                        "data_sources": ["customer_management", "salesforce", "stripe"],
-                        "last_updated": Utc::now().to_rfc3339()
-                    }
-                }))
-            }
-            "financial_consolidation" => {
-                Ok(json!({
-                    "consolidated_financials": {
-                        "revenue_total": data.get("data").and_then(|d| d.get("revenue")).unwrap_or(&json!(0)),
-                        "consolidation_adjustments": {
-                            "currency_conversion": 15000.00,
-                            "intercompany_elimination": -25000.00
-                        },
-                        "data_sources": ["financial_reporting", "stripe", "salesforce"],
-                        "consolidation_date": Utc::now().to_rfc3339()
-                    }
-                }))
-            }
+            "customer_360" => Ok(json!({
+                "customer_360_view": {
+                    "unified_customer_id": data.get("customer_id"),
+                    "profile_data": data,
+                    "aggregated_metrics": {
+                        "total_orders": 45,
+                        "lifetime_value": 125000.00,
+                        "last_interaction": "2025-01-15T14:30:00Z",
+                        "satisfaction_score": 4.2
+                    },
+                    "data_sources": ["customer_management", "salesforce", "stripe"],
+                    "last_updated": Utc::now().to_rfc3339()
+                }
+            })),
+            "financial_consolidation" => Ok(json!({
+                "consolidated_financials": {
+                    "revenue_total": data.get("data").and_then(|d| d.get("revenue")).unwrap_or(&json!(0)),
+                    "consolidation_adjustments": {
+                        "currency_conversion": 15000.00,
+                        "intercompany_elimination": -25000.00
+                    },
+                    "data_sources": ["financial_reporting", "stripe", "salesforce"],
+                    "consolidation_date": Utc::now().to_rfc3339()
+                }
+            })),
             _ => {
                 warn!("Unknown transformation: {}", transformation_name);
                 Ok(data.clone())
@@ -476,7 +504,10 @@ impl EnterpriseApiGateway {
     fn get_data_source_info(&self, source_type: &str) -> McpResult<Value> {
         match source_type {
             "databases" => {
-                let db_info = self.data_sources.data_sources.databases
+                let db_info = self
+                    .data_sources
+                    .data_sources
+                    .databases
                     .iter()
                     .map(|(name, config)| {
                         json!({
@@ -491,7 +522,7 @@ impl EnterpriseApiGateway {
                         })
                     })
                     .collect::<Vec<_>>();
-                
+
                 Ok(json!({
                     "source_type": "databases",
                     "count": db_info.len(),
@@ -499,7 +530,10 @@ impl EnterpriseApiGateway {
                 }))
             }
             "data_warehouses" => {
-                let dwh_info = self.data_sources.data_sources.data_warehouses
+                let dwh_info = self
+                    .data_sources
+                    .data_sources
+                    .data_warehouses
                     .iter()
                     .map(|(name, config)| {
                         json!({
@@ -510,7 +544,7 @@ impl EnterpriseApiGateway {
                         })
                     })
                     .collect::<Vec<_>>();
-                
+
                 Ok(json!({
                     "source_type": "data_warehouses",
                     "count": dwh_info.len(),
@@ -518,7 +552,10 @@ impl EnterpriseApiGateway {
                 }))
             }
             "streaming" => {
-                let stream_info = self.data_sources.data_sources.streaming_sources
+                let stream_info = self
+                    .data_sources
+                    .data_sources
+                    .streaming_sources
                     .iter()
                     .map(|(name, config)| {
                         json!({
@@ -527,14 +564,18 @@ impl EnterpriseApiGateway {
                         })
                     })
                     .collect::<Vec<_>>();
-                
+
                 Ok(json!({
                     "source_type": "streaming_sources",
                     "count": stream_info.len(),
                     "streaming_sources": stream_info
                 }))
             }
-            _ => Err(McpError::invalid_param_type("source_type", "databases|data_warehouses|streaming", source_type))
+            _ => Err(McpError::invalid_param_type(
+                "source_type",
+                "databases|data_warehouses|streaming",
+                source_type,
+            )),
         }
     }
 }
@@ -574,15 +615,21 @@ impl HasInputSchema for EnterpriseApiTool {
 }
 
 impl HasOutputSchema for EnterpriseApiTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 impl HasAnnotations for EnterpriseApiTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
 }
 
 impl HasToolMeta for EnterpriseApiTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
@@ -592,36 +639,45 @@ impl McpTool for EnterpriseApiTool {
         args: Value,
         _session: Option<SessionContext>,
     ) -> McpResult<CallToolResult> {
-        let service = args.get("service")
+        let service = args
+            .get("service")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("service"))?;
-        
-        let endpoint_id = args.get("endpoint_id")
+
+        let endpoint_id = args
+            .get("endpoint_id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("endpoint_id"))?;
-        
+
         let default_params = json!({});
         let parameters = args.get("parameters").unwrap_or(&default_params);
-        let apply_transformation = args.get("apply_transformation")
+        let apply_transformation = args
+            .get("apply_transformation")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        
+
         // Call the enterprise API
-        let mut response = self.gateway.call_enterprise_api(service, endpoint_id, parameters)?;
-        
+        let mut response = self
+            .gateway
+            .call_enterprise_api(service, endpoint_id, parameters)?;
+
         // Apply transformation if requested
         if apply_transformation {
             match service {
                 "customer_management" => {
-                    response = self.gateway.apply_transformation("customer_360", &response)?;
+                    response = self
+                        .gateway
+                        .apply_transformation("customer_360", &response)?;
                 }
                 "financial_reporting" => {
-                    response = self.gateway.apply_transformation("financial_consolidation", &response)?;
+                    response = self
+                        .gateway
+                        .apply_transformation("financial_consolidation", &response)?;
                 }
                 _ => {}
             }
         }
-        
+
         let result = json!({
             "service": service,
             "endpoint": endpoint_id,
@@ -629,10 +685,10 @@ impl McpTool for EnterpriseApiTool {
             "transformation_applied": apply_transformation,
             "timestamp": Utc::now().to_rfc3339()
         });
-        
-        Ok(CallToolResult::success(vec![
-            ToolResult::text(serde_json::to_string_pretty(&result)?)
-        ]))
+
+        Ok(CallToolResult::success(vec![ToolResult::text(
+            serde_json::to_string_pretty(&result)?,
+        )]))
     }
 }
 
@@ -670,15 +726,21 @@ impl HasInputSchema for DataSourceQueryTool {
 }
 
 impl HasOutputSchema for DataSourceQueryTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 impl HasAnnotations for DataSourceQueryTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
 }
 
 impl HasToolMeta for DataSourceQueryTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
@@ -688,16 +750,18 @@ impl McpTool for DataSourceQueryTool {
         args: Value,
         _session: Option<SessionContext>,
     ) -> McpResult<CallToolResult> {
-        let source_type = args.get("source_type")
+        let source_type = args
+            .get("source_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("source_type"))?;
-        
-        let include_details = args.get("include_schema_details")
+
+        let include_details = args
+            .get("include_schema_details")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        
+
         let mut response = self.gateway.get_data_source_info(source_type)?;
-        
+
         // Add governance and security information
         if include_details {
             let governance_info = json!({
@@ -715,15 +779,15 @@ impl McpTool for DataSourceQueryTool {
                     "auditing": self.gateway.data_sources.access_patterns.security_controls.auditing
                 }
             });
-            
+
             if let Some(obj) = response.as_object_mut() {
                 obj.insert("governance".to_string(), governance_info);
             }
         }
-        
-        Ok(CallToolResult::success(vec![
-            ToolResult::text(serde_json::to_string_pretty(&response)?)
-        ]))
+
+        Ok(CallToolResult::success(vec![ToolResult::text(
+            serde_json::to_string_pretty(&response)?,
+        )]))
     }
 }
 
@@ -741,7 +805,9 @@ impl HasBaseMetadata for ApiDiscoveryTool {
 
 impl HasDescription for ApiDiscoveryTool {
     fn description(&self) -> Option<&str> {
-        Some("Discover available enterprise APIs and third-party integrations with their capabilities")
+        Some(
+            "Discover available enterprise APIs and third-party integrations with their capabilities",
+        )
     }
 }
 
@@ -749,26 +815,31 @@ impl HasInputSchema for ApiDiscoveryTool {
     fn input_schema(&self) -> &ToolSchema {
         static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
         INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object()
-                .with_properties(HashMap::from([
-                    ("category".to_string(), JsonSchema::string()),
-                    ("include_endpoints".to_string(), JsonSchema::boolean()),
-                    ("include_auth_info".to_string(), JsonSchema::boolean()),
-                ]))
+            ToolSchema::object().with_properties(HashMap::from([
+                ("category".to_string(), JsonSchema::string()),
+                ("include_endpoints".to_string(), JsonSchema::boolean()),
+                ("include_auth_info".to_string(), JsonSchema::boolean()),
+            ]))
         })
     }
 }
 
 impl HasOutputSchema for ApiDiscoveryTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 impl HasAnnotations for ApiDiscoveryTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
 }
 
 impl HasToolMeta for ApiDiscoveryTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
@@ -778,26 +849,32 @@ impl McpTool for ApiDiscoveryTool {
         args: Value,
         _session: Option<SessionContext>,
     ) -> McpResult<CallToolResult> {
-        let category = args.get("category")
+        let category = args
+            .get("category")
             .and_then(|v| v.as_str())
             .unwrap_or("all");
-        
-        let include_endpoints = args.get("include_endpoints")
+
+        let include_endpoints = args
+            .get("include_endpoints")
             .and_then(|v| v.as_bool())
             .unwrap_or(true);
-        
-        let include_auth = args.get("include_auth_info")
+
+        let include_auth = args
+            .get("include_auth_info")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        
+
         let mut result = json!({
             "discovery_timestamp": Utc::now().to_rfc3339(),
             "category": category
         });
-        
+
         match category {
             "all" | "enterprise" => {
-                let enterprise_apis = self.gateway.api_config.enterprise_apis
+                let enterprise_apis = self
+                    .gateway
+                    .api_config
+                    .enterprise_apis
                     .iter()
                     .map(|(key, api)| {
                         let mut api_info = json!({
@@ -806,34 +883,39 @@ impl McpTool for ApiDiscoveryTool {
                             "base_url": api.base_url,
                             "rate_limits": api.rate_limits
                         });
-                        
+
                         if include_endpoints {
-                            api_info["endpoints"] = json!(api.endpoints
-                                .iter()
-                                .map(|ep| json!({
-                                    "id": ep.id,
-                                    "method": ep.method,
-                                    "path": ep.path,
-                                    "description": ep.description
-                                }))
-                                .collect::<Vec<_>>());
+                            api_info["endpoints"] = json!(
+                                api.endpoints
+                                    .iter()
+                                    .map(|ep| json!({
+                                        "id": ep.id,
+                                        "method": ep.method,
+                                        "path": ep.path,
+                                        "description": ep.description
+                                    }))
+                                    .collect::<Vec<_>>()
+                            );
                         }
-                        
+
                         if include_auth {
                             api_info["authentication"] = json!(api.authentication);
                         }
-                        
+
                         api_info
                     })
                     .collect::<Vec<_>>();
-                
+
                 result["enterprise_apis"] = json!(enterprise_apis);
             }
             _ => {}
         }
-        
+
         if category == "all" || category == "third_party" {
-            let third_party_apis = self.gateway.api_config.third_party_integrations
+            let third_party_apis = self
+                .gateway
+                .api_config
+                .third_party_integrations
                 .iter()
                 .map(|(key, service)| {
                     json!({
@@ -845,12 +927,15 @@ impl McpTool for ApiDiscoveryTool {
                     })
                 })
                 .collect::<Vec<_>>();
-            
+
             result["third_party_integrations"] = json!(third_party_apis);
         }
-        
+
         if category == "all" || category == "transformations" {
-            let transformations = self.gateway.api_config.data_transformations
+            let transformations = self
+                .gateway
+                .api_config
+                .data_transformations
                 .iter()
                 .map(|(key, transform)| {
                     json!({
@@ -862,13 +947,13 @@ impl McpTool for ApiDiscoveryTool {
                     })
                 })
                 .collect::<Vec<_>>();
-            
+
             result["data_transformations"] = json!(transformations);
         }
-        
-        Ok(CallToolResult::success(vec![
-            ToolResult::text(serde_json::to_string_pretty(&result)?)
-        ]))
+
+        Ok(CallToolResult::success(vec![ToolResult::text(
+            serde_json::to_string_pretty(&result)?,
+        )]))
     }
 }
 
@@ -894,26 +979,37 @@ impl HasInputSchema for ApiHealthCheckTool {
     fn input_schema(&self) -> &ToolSchema {
         static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
         INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object()
-                .with_properties(HashMap::from([
-                    ("services".to_string(), JsonSchema::array(JsonSchema::string())),
-                    ("include_performance_metrics".to_string(), JsonSchema::boolean()),
-                    ("detailed_diagnostics".to_string(), JsonSchema::boolean()),
-                ]))
+            ToolSchema::object().with_properties(HashMap::from([
+                (
+                    "services".to_string(),
+                    JsonSchema::array(JsonSchema::string()),
+                ),
+                (
+                    "include_performance_metrics".to_string(),
+                    JsonSchema::boolean(),
+                ),
+                ("detailed_diagnostics".to_string(), JsonSchema::boolean()),
+            ]))
         })
     }
 }
 
 impl HasOutputSchema for ApiHealthCheckTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 impl HasAnnotations for ApiHealthCheckTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
 }
 
 impl HasToolMeta for ApiHealthCheckTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
@@ -923,21 +1019,31 @@ impl McpTool for ApiHealthCheckTool {
         args: Value,
         _session: Option<SessionContext>,
     ) -> McpResult<CallToolResult> {
-        let services = args.get("services")
+        let services = args
+            .get("services")
             .and_then(|v| v.as_array())
             .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
-            .unwrap_or_else(|| self.gateway.api_config.enterprise_apis.keys().map(|k| k.as_str()).collect());
-        
-        let include_metrics = args.get("include_performance_metrics")
+            .unwrap_or_else(|| {
+                self.gateway
+                    .api_config
+                    .enterprise_apis
+                    .keys()
+                    .map(|k| k.as_str())
+                    .collect()
+            });
+
+        let include_metrics = args
+            .get("include_performance_metrics")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        
-        let detailed = args.get("detailed_diagnostics")
+
+        let detailed = args
+            .get("detailed_diagnostics")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
-        
+
         let mut health_results = Vec::new();
-        
+
         for service_name in services {
             if let Some(_service) = self.gateway.api_config.enterprise_apis.get(service_name) {
                 // Simulate health check
@@ -980,41 +1086,47 @@ impl McpTool for ApiHealthCheckTool {
                         })
                     }
                 };
-                
+
                 if include_metrics {
                     let mut metrics = health_status.as_object().unwrap().clone();
-                    metrics.insert("performance_metrics".to_string(), json!({
-                        "requests_per_second": 125.5,
-                        "error_rate": 0.02,
-                        "p95_response_time_ms": 89,
-                        "p99_response_time_ms": 156,
-                        "throughput_mb_per_sec": 2.3
-                    }));
+                    metrics.insert(
+                        "performance_metrics".to_string(),
+                        json!({
+                            "requests_per_second": 125.5,
+                            "error_rate": 0.02,
+                            "p95_response_time_ms": 89,
+                            "p99_response_time_ms": 156,
+                            "throughput_mb_per_sec": 2.3
+                        }),
+                    );
                     health_results.push(Value::Object(metrics));
                 } else {
                     health_results.push(health_status);
                 }
-                
+
                 if detailed {
                     let last_result = health_results.last_mut().unwrap();
                     if let Some(obj) = last_result.as_object_mut() {
-                        obj.insert("detailed_diagnostics".to_string(), json!({
-                            "connection_pool": {
-                                "active_connections": 8,
-                                "max_connections": 50,
-                                "idle_connections": 12
-                            },
-                            "circuit_breaker": {
-                                "state": "closed",
-                                "failure_rate": 0.01,
-                                "last_failure": "2025-01-18T10:45:00Z"
-                            },
-                            "cache_performance": {
-                                "hit_rate": 0.85,
-                                "miss_rate": 0.15,
-                                "eviction_rate": 0.02
-                            }
-                        }));
+                        obj.insert(
+                            "detailed_diagnostics".to_string(),
+                            json!({
+                                "connection_pool": {
+                                    "active_connections": 8,
+                                    "max_connections": 50,
+                                    "idle_connections": 12
+                                },
+                                "circuit_breaker": {
+                                    "state": "closed",
+                                    "failure_rate": 0.01,
+                                    "last_failure": "2025-01-18T10:45:00Z"
+                                },
+                                "cache_performance": {
+                                    "hit_rate": 0.85,
+                                    "miss_rate": 0.15,
+                                    "eviction_rate": 0.02
+                                }
+                            }),
+                        );
                     }
                 }
             } else {
@@ -1025,7 +1137,7 @@ impl McpTool for ApiHealthCheckTool {
                 }));
             }
         }
-        
+
         let summary = json!({
             "health_check_summary": {
                 "total_services": health_results.len(),
@@ -1037,10 +1149,10 @@ impl McpTool for ApiHealthCheckTool {
             },
             "service_health_details": health_results
         });
-        
-        Ok(CallToolResult::success(vec![
-            ToolResult::text(serde_json::to_string_pretty(&summary)?)
-        ]))
+
+        Ok(CallToolResult::success(vec![ToolResult::text(
+            serde_json::to_string_pretty(&summary)?,
+        )]))
     }
 }
 
@@ -1129,15 +1241,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create the enterprise gateway
     let gateway = EnterpriseApiGateway::new()?;
-    
+
     info!("📊 Gateway configuration loaded:");
-    info!("  🔧 {} enterprise APIs", gateway.api_config.enterprise_apis.len());
-    info!("  🔗 {} third-party integrations", gateway.api_config.third_party_integrations.len());
-    info!("  🔄 {} data transformations", gateway.api_config.data_transformations.len());
-    info!("  💾 {} data sources configured", 
-          gateway.data_sources.data_sources.databases.len() + 
-          gateway.data_sources.data_sources.data_warehouses.len() +
-          gateway.data_sources.data_sources.streaming_sources.len());
+    info!(
+        "  🔧 {} enterprise APIs",
+        gateway.api_config.enterprise_apis.len()
+    );
+    info!(
+        "  🔗 {} third-party integrations",
+        gateway.api_config.third_party_integrations.len()
+    );
+    info!(
+        "  🔄 {} data transformations",
+        gateway.api_config.data_transformations.len()
+    );
+    info!(
+        "  💾 {} data sources configured",
+        gateway.data_sources.data_sources.databases.len()
+            + gateway.data_sources.data_sources.data_warehouses.len()
+            + gateway.data_sources.data_sources.streaming_sources.len()
+    );
 
     let server = McpServer::builder()
         .name("enterprise-api-gateway")
@@ -1150,7 +1273,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(ApiHealthCheckTool { gateway })
         .bind_address("127.0.0.1:8048".parse()?)
         .build()?;
-    
+
     info!("🚀 Enterprise API Gateway running at: http://127.0.0.1:8048/mcp");
     info!("");
     info!("🛠️  Available tools:");
@@ -1165,7 +1288,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("  📄 data/integration_mappings.md - Integration documentation");
     info!("");
     info!("💡 Example usage:");
-    info!("  Call customer API: {{\"method\": \"tools/call\", \"params\": {{\"name\": \"call_enterprise_api\", \"arguments\": {{\"service\": \"customer_management\", \"endpoint_id\": \"get_customer\", \"parameters\": {{\"customer_id\": \"CUST-123456\"}}}}}}}}");
+    info!(
+        "  Call customer API: {{\"method\": \"tools/call\", \"params\": {{\"name\": \"call_enterprise_api\", \"arguments\": {{\"service\": \"customer_management\", \"endpoint_id\": \"get_customer\", \"parameters\": {{\"customer_id\": \"CUST-123456\"}}}}}}}}"
+    );
 
     server.run().await?;
     Ok(())

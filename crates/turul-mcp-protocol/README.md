@@ -25,7 +25,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-protocol = "0.1.1"
+turul-mcp-protocol = "0.2.0"
 ```
 
 ### Import Pattern
@@ -94,7 +94,7 @@ All types and functionality from the current MCP specification are available:
 use turul_mcp_protocol::{
     // Version and capabilities
     McpVersion, ClientCapabilities, ServerCapabilities,
-    Implementation, ClientInfo, ServerInfo,
+    Implementation,
     
     // Initialization
     InitializeRequest, InitializeResult,
@@ -115,25 +115,23 @@ use turul_mcp_protocol::{
     CreateMessageRequest, CreateMessageResult,
     
     // Notifications
-    ProgressNotification, LoggingNotification,
-    ResourceUpdatedNotification, PromptUpdatedNotification,
+    ProgressNotification, LoggingMessageNotification,
+    ResourceUpdatedNotification, ResourceListChangedNotification,
 };
 ```
 
 ### Error Types
 
 ```rust
-use turul_mcp_protocol::{
-    McpError, JsonRpcError, ProtocolError,
-    ValidationError, SerializationError
-};
+use turul_mcp_protocol::McpError;
 
 fn handle_mcp_error(error: McpError) {
     match error {
-        McpError::Protocol(e) => println!("Protocol error: {}", e),
-        McpError::JsonRpc(e) => println!("JSON-RPC error: {}", e),
-        McpError::Validation(e) => println!("Validation error: {}", e),
-        McpError::Serialization(e) => println!("Serialization error: {}", e),
+        McpError::ToolNotFound(name) => println!("Tool not found: {}", name),
+        McpError::ResourceNotFound(uri) => println!("Resource not found: {}", uri),
+        McpError::InvalidParameters(msg) => println!("Invalid parameters: {}", msg),
+        McpError::ToolExecutionError(msg) => println!("Tool execution failed: {}", msg),
+        _ => println!("MCP error: {}", error),
     }
 }
 ```
@@ -144,14 +142,14 @@ fn handle_mcp_error(error: McpError) {
 use turul_mcp_protocol::{
     // Tool traits
     HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema,
-    ToolDefinition, McpTool,
+    ToolDefinition,
     
     // Resource traits
     HasResourceMetadata, ResourceDefinition, McpResource,
     
     // Request/Response traits
-    HasMethod, HasParams, JsonRpcRequestTrait,
-    HasData, HasMeta, JsonRpcResponseTrait,
+    HasMethod, HasParams,
+    HasData, HasMeta,
 };
 
 // Example implementation
@@ -173,26 +171,53 @@ impl HasDescription for MyTool {
 
 ### Server Integration
 
-```rust
-use turul_mcp_protocol::{Tool, CallToolRequest, CallToolResult};
-use turul_mcp_server::McpServer;
+The protocol types integrate seamlessly with `turul-mcp-server` to build a complete server. The following is a complete, runnable example.
 
-// Works seamlessly with the framework
-let server = McpServer::builder()
-    .name("My MCP Server")
-    .version("1.0.0")
-    .tool(MyTool { /* ... */ })
-    .build()?;
+**Dependencies:**
+
+```toml
+[dependencies]
+turul-mcp-protocol = "0.2.0"
+turul-mcp-server = "0.2.0"
+turul-mcp-derive = "0.2.0"
+tokio = { version = "1.0", features = ["full"] }
+```
+
+**Example:**
+
+```rust
+use turul_mcp_server::prelude::*;
+use turul_mcp_derive::mcp_tool;
+
+#[mcp_tool(name = "my_tool", description = "An example tool")]
+async fn my_tool(#[param(description = "A message to echo")] message: String) -> McpResult<String> {
+    Ok(format!("You said: {}", message))
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let server = McpServer::builder()
+        .name("My MCP Server")
+        .version("1.0.0")
+        .tool_fn(my_tool)
+        .bind_address("127.0.0.1:8080".parse()?)
+        .build()?;
+
+    println!("Server listening on http://127.0.0.1:8080");
+    server.run().await?;
+    Ok(())
+}
 ```
 
 ### Client Integration
 
 ```rust
 use turul_mcp_protocol::{InitializeRequest, CallToolRequest};
-use turul_mcp_client::{McpClient, transport::HttpTransport};
+use turul_mcp_client::{McpClient, McpClientBuilder, transport::HttpTransport};
 
-let client = McpClient::builder()
-    .transport(HttpTransport::new("http://localhost:8080/mcp")?)
+let transport = HttpTransport::new("http://localhost:8080/mcp")?;
+let client = McpClientBuilder::new()
+    .with_transport(Box::new(transport))
     .build();
 
 // Protocol types work directly with client methods
@@ -276,8 +301,8 @@ mod tests {
     fn test_all_major_types_available() {
         // Ensure all major protocol types are accessible
         let _tool = Tool::new("test", ToolSchema::object());
-        let _resource = Resource::new("file:///test", Some("Test resource"));
-        let _prompt = Prompt::new("test", None);
+        let _resource = Resource::new("file:///test", "Test resource");
+        let _prompt = Prompt::new("test");
         
         // If this compiles, re-exports are working
         assert!(true);
@@ -307,7 +332,7 @@ mod tests {
 
 ```toml
 [dependencies]
-turul-mcp-protocol = { version = "0.1.1", features = ["server"] }
+turul-mcp-protocol = { version = "0.2.0", features = ["server"] }
 ```
 
 Available features:

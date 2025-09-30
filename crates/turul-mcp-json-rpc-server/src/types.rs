@@ -1,5 +1,5 @@
-use std::fmt;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// A uniquely identifying ID for a JSON-RPC request.
 /// Can be a string or a number, but never null.
@@ -68,7 +68,6 @@ impl JsonRpcVersion {
     }
 }
 
-
 impl fmt::Display for JsonRpcVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.as_str())
@@ -92,7 +91,10 @@ impl<'de> Deserialize<'de> for JsonRpcVersion {
         let s = String::deserialize(deserializer)?;
         match s.as_str() {
             "2.0" => Ok(JsonRpcVersion::V2_0),
-            _ => Err(serde::de::Error::custom(format!("Invalid JSON-RPC version: {}", s))),
+            _ => Err(serde::de::Error::custom(format!(
+                "Invalid JSON-RPC version: {}",
+                s
+            ))),
         }
     }
 }
@@ -106,7 +108,7 @@ mod tests {
     fn test_request_id_serialization() {
         let id_str = RequestId::String("test".to_string());
         let id_num = RequestId::Number(42);
-        
+
         assert_eq!(serde_json::to_string(&id_str).unwrap(), r#""test""#);
         assert_eq!(serde_json::to_string(&id_num).unwrap(), "42");
     }

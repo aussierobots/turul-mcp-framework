@@ -1,16 +1,17 @@
 [package]
 name = "turul-mcp-json-rpc-server"
-version = "0.1.1"
+version = "0.2.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "MCP-aware JSON-RPC 2.0 server implementation with session management"
+description = "Pure JSON-RPC 2.0 server implementation with type-safe domain/protocol separation"
 
 [features]
 default = ["async"]
 async = ["async-trait", "futures"]
+streams = ["async", "futures"]
 
 [dependencies]
 serde.workspace = true

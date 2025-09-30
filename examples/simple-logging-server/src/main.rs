@@ -2,20 +2,20 @@
 //!
 //! This example demonstrates basic MCP logging protocol features with session-based log storage.
 //! It shows how to create log messages, manage log levels, and query logs using derive macros.
-//! 
+//!
 //! **Key Features Demonstrated:**
 //! - SessionContext for persistent state across tool calls
-//! - Derive macros for 90% code reduction vs manual implementation  
+//! - Derive macros for 90% code reduction vs manual implementation
 //! - Session-based progress notifications
 //! - Type-safe parameter extraction and validation
 
-use std::collections::HashMap;
-use turul_mcp_server::{McpServer, McpResult, SessionContext};
-use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::McpError;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use chrono::{DateTime, Utc};
+use std::collections::HashMap;
+use turul_mcp_derive::McpTool;
+use turul_mcp_protocol::McpError;
+use turul_mcp_server::{McpResult, McpServer, SessionContext};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LogEntry {
@@ -43,7 +43,10 @@ impl Default for LogLevelConfig {
 
 /// Log a message with specified level and category
 #[derive(McpTool, Default)]
-#[tool(name = "log_message", description = "Log a message with specified level and optional category")]
+#[tool(
+    name = "log_message",
+    description = "Log a message with specified level and optional category"
+)]
 struct LogMessageTool {
     #[param(description = "Log level (DEBUG, INFO, WARN, ERROR)")]
     level: String,
@@ -55,20 +58,30 @@ struct LogMessageTool {
 
 impl LogMessageTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
-        let session = session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
+        let session =
+            session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
 
         // Get current log level config to check if we should log
-        let log_config: LogLevelConfig = session.get_typed_state("log_config").unwrap_or_default();
-        
+        let log_config: LogLevelConfig = session
+            .get_typed_state("log_config")
+            .await
+            .unwrap_or_default();
+
         // Simple level checking (DEBUG=0, INFO=1, WARN=2, ERROR=3)
         let level_priority = match self.level.as_str() {
             "DEBUG" => 0,
             "INFO" => 1,
             "WARN" => 2,
             "ERROR" => 3,
-            _ => return Err(McpError::invalid_param_type("level", "DEBUG|INFO|WARN|ERROR", &self.level))
+            _ => {
+                return Err(McpError::invalid_param_type(
+                    "level",
+                    "DEBUG|INFO|WARN|ERROR",
+                    &self.level,
+                ));
+            }
         };
-        
+
         let min_priority = match log_config.global_level.as_str() {
             "DEBUG" => 0,
             "INFO" => 1,
@@ -76,7 +89,7 @@ impl LogMessageTool {
             "ERROR" => 3,
             _ => 1, // Default to INFO
         };
-        
+
         if level_priority < min_priority {
             return Ok(json!({
                 "logged": false,
@@ -94,12 +107,14 @@ impl LogMessageTool {
         };
 
         // Store in session logs
-        let mut logs: Vec<LogEntry> = session.get_typed_state("logs").unwrap_or_default();
+        let mut logs: Vec<LogEntry> = session.get_typed_state("logs").await.unwrap_or_default();
         logs.push(entry.clone());
-        session.set_typed_state("logs", &logs).unwrap();
+        session.set_typed_state("logs", &logs).await.unwrap();
 
         // Send progress notification
-        session.notify_progress(format!("log_{}", self.level.to_lowercase()), 1);
+        session
+            .notify_progress(format!("log_{}", self.level.to_lowercase()), 1)
+            .await;
 
         Ok(json!({
             "logged": true,
@@ -114,29 +129,45 @@ impl LogMessageTool {
 
 /// Set the global log level or category-specific log level
 #[derive(McpTool, Default)]
-#[tool(name = "set_log_level", description = "Set global log level or category-specific log level")]
+#[tool(
+    name = "set_log_level",
+    description = "Set global log level or category-specific log level"
+)]
 struct SetLogLevelTool {
     #[param(description = "Log level to set (DEBUG, INFO, WARN, ERROR)")]
     level: String,
-    #[param(description = "Optional category (if not provided, sets global level)", optional)]
+    #[param(
+        description = "Optional category (if not provided, sets global level)",
+        optional
+    )]
     category: Option<String>,
 }
 
 impl SetLogLevelTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
-        let session = session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
+        let session =
+            session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
 
         // Validate level
         if !matches!(self.level.as_str(), "DEBUG" | "INFO" | "WARN" | "ERROR") {
-            return Err(McpError::invalid_param_type("level", "DEBUG|INFO|WARN|ERROR", &self.level));
+            return Err(McpError::invalid_param_type(
+                "level",
+                "DEBUG|INFO|WARN|ERROR",
+                &self.level,
+            ));
         }
 
         // Get or create log config
-        let mut log_config: LogLevelConfig = session.get_typed_state("log_config").unwrap_or_default();
+        let mut log_config: LogLevelConfig = session
+            .get_typed_state("log_config")
+            .await
+            .unwrap_or_default();
 
         let result = if let Some(cat) = &self.category {
             // Set category-specific level
-            log_config.category_levels.insert(cat.to_string(), self.level.to_string());
+            log_config
+                .category_levels
+                .insert(cat.to_string(), self.level.to_string());
             json!({
                 "action": "set_category_level",
                 "category": cat,
@@ -154,7 +185,10 @@ impl SetLogLevelTool {
         };
 
         // Save config
-        session.set_typed_state("log_config", &log_config).unwrap();
+        session
+            .set_typed_state("log_config", &log_config)
+            .await
+            .unwrap();
 
         Ok(result)
     }
@@ -162,9 +196,15 @@ impl SetLogLevelTool {
 
 /// Get current log level configuration and recent logs
 #[derive(McpTool, Default)]
-#[tool(name = "get_logs_status", description = "Get current log level configuration and recent logs")]
+#[tool(
+    name = "get_logs_status",
+    description = "Get current log level configuration and recent logs"
+)]
 struct GetLogsStatusTool {
-    #[param(description = "Maximum number of recent logs to return (default: 10)", optional)]
+    #[param(
+        description = "Maximum number of recent logs to return (default: 10)",
+        optional
+    )]
     limit: Option<i64>,
     #[param(description = "Filter logs by level (DEBUG|INFO|WARN|ERROR)", optional)]
     level_filter: Option<String>,
@@ -172,21 +212,25 @@ struct GetLogsStatusTool {
 
 impl GetLogsStatusTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
-        let session = session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
-        
+        let session =
+            session.ok_or_else(|| McpError::SessionError("Session required".to_string()))?;
+
         let limit = self.limit.unwrap_or(10) as usize;
-        let level_filter = self.level_filter.as_ref().map(|s| s.as_str());
+        let level_filter = self.level_filter.as_deref();
 
         // Get current config and logs
-        let log_config: LogLevelConfig = session.get_typed_state("log_config").unwrap_or_default();
-        let logs: Vec<LogEntry> = session.get_typed_state("logs").unwrap_or_default();
+        let log_config: LogLevelConfig = session
+            .get_typed_state("log_config")
+            .await
+            .unwrap_or_default();
+        let logs: Vec<LogEntry> = session.get_typed_state("logs").await.unwrap_or_default();
 
         // Filter and limit logs
         let mut filtered_logs: Vec<&LogEntry> = logs.iter().collect();
         if let Some(filter) = level_filter {
             filtered_logs.retain(|log| log.level == filter);
         }
-        
+
         // Get most recent logs
         filtered_logs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         filtered_logs.truncate(limit);

@@ -66,10 +66,10 @@ All MCP notifications must use their proper method name as the SSE event type:
 | `notifications/cancelled` | `event: notifications/cancelled` |
 | `notifications/initialized` | `event: notifications/initialized` |
 | `notifications/resources/updated` | `event: notifications/resources/updated` |
-| `notifications/resources/list_changed` | `event: notifications/resources/list_changed` |
-| `notifications/tools/list_changed` | `event: notifications/tools/list_changed` |
-| `notifications/prompts/list_changed` | `event: notifications/prompts/list_changed` |
-| `notifications/roots/list_changed` | `event: notifications/roots/list_changed` |
+| `notifications/resources/listChanged` | `event: notifications/resources/listChanged` |
+| `notifications/tools/listChanged` | `event: notifications/tools/listChanged` |
+| `notifications/prompts/listChanged` | `event: notifications/prompts/listChanged` |
+| `notifications/roots/listChanged` | `event: notifications/roots/listChanged` |
 
 ### Message Notification Architecture
 
@@ -83,7 +83,7 @@ session.notify_log(
     serde_json::json!("Log message"),     // Message content
     Some("component".to_string()),        // Logger name (optional)
     Some(correlation_map)                 // Meta with correlation_id (optional)
-);
+).await;
 ```
 
 #### NotificationBroadcaster Processing

@@ -1,6 +1,6 @@
 [package]
 name = "elicitation-server"
-version = "0.1.1"
+version = "0.2.0"
 edition.workspace = true
 
 [dependencies]
@@ -16,3 +16,4 @@ async-trait = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
 rand = { workspace = true }
+clap = { workspace = true }

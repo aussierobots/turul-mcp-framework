@@ -28,16 +28,16 @@ impl CodeCompleter {
             context_window: 100,
         }
     }
-    
+
     pub async fn complete(&self, text: &str, position: usize) -> McpResult<Vec<String>> {
         info!("💭 Code completion requested for {} at position {}", self.language, position);
-        
+
         // Extract context around position
         let start = position.saturating_sub(self.context_window);
         let context = &text[start..position.min(text.len())];
-        
+
         info!("📝 Context: '{}'", context.trim());
-        
+
         // Generate completions based on language and context
         let completions = match self.language.as_str() {
             "rust" => self.rust_completions(context),
@@ -46,16 +46,16 @@ impl CodeCompleter {
             "sql" => self.sql_completions(context),
             _ => self.generic_completions(context),
         };
-        
+
         let limited_completions: Vec<String> = completions
             .into_iter()
             .take(self.max_completions)
             .collect();
-            
+
         info!("✨ Generated {} completions for {}", limited_completions.len(), self.language);
         Ok(limited_completions)
     }
-    
+
     fn rust_completions(&self, context: &str) -> Vec<String> {
         if context.contains("fn ") {
             vec![
@@ -85,7 +85,7 @@ impl CodeCompleter {
             ]
         }
     }
-    
+
     fn js_completions(&self, context: &str) -> Vec<String> {
         if context.contains("function ") {
             vec![
@@ -110,7 +110,7 @@ impl CodeCompleter {
             ]
         }
     }
-    
+
     fn python_completions(&self, context: &str) -> Vec<String> {
         if context.contains("def ") {
             vec![
@@ -134,7 +134,7 @@ impl CodeCompleter {
             ]
         }
     }
-    
+
     fn sql_completions(&self, context: &str) -> Vec<String> {
         let upper_context = context.to_uppercase();
         if upper_context.contains("SELECT") {
@@ -159,7 +159,7 @@ impl CodeCompleter {
             ]
         }
     }
-    
+
     fn generic_completions(&self, _context: &str) -> Vec<String> {
         vec![
             "function".to_string(),
@@ -198,7 +198,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _js_completer = CodeCompleter::new("javascript");
     let _python_completer = CodeCompleter::new("python");
     let _sql_completer = CodeCompleter::new("sql");
-    
+
     info!("🔮 Available Completers:");
     info!("   • CodeCompleter (Rust) → completion/complete (automatic)");
     info!("   • CodeCompleter (JavaScript) → completion/complete (automatic)");

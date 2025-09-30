@@ -3,10 +3,11 @@
 //! Benchmarks for measuring notification system performance including SSE,
 //! broadcast patterns, and concurrent notification delivery.
 
-use criterion::{BenchmarkId, Criterion, black_box, criterion_group, criterion_main};
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
 use tokio::runtime::Runtime;
 
-use serde_json::{Value, json};
+use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -37,11 +38,11 @@ fn sse_manager_benchmarks(c: &mut Criterion) {
 
     group.bench_function("create_connection", |b| {
         let manager = SseManager::new();
-        let mut counter = 0;
+        let counter = std::sync::atomic::AtomicUsize::new(0);
 
         b.to_async(&rt).iter(|| async {
-            counter += 1;
-            let id = format!("conn_{}", counter);
+            let count = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let id = format!("conn_{}", count);
             let connection = manager.create_connection(id).await;
             black_box(connection)
         });
@@ -49,11 +50,11 @@ fn sse_manager_benchmarks(c: &mut Criterion) {
 
     group.bench_function("remove_connection", |b| {
         let manager = SseManager::new();
-        let mut counter = 0;
+        let counter = std::sync::atomic::AtomicUsize::new(0);
 
         b.to_async(&rt).iter(|| async {
-            counter += 1;
-            let id = format!("conn_{}", counter);
+            let count = counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let id = format!("conn_{}", count);
             manager.create_connection(id.clone()).await;
             manager.remove_connection(&id).await;
         });

@@ -198,17 +198,17 @@ let b = args
 
 ```rust
 if let Some(ref session) = session {
-    session.notify_progress("add-operation", 25);
-    session.notify_log("info", "Starting addition calculation");
+    session.notify_progress("add-operation", 25).await;
+    session.notify_log("info", "Starting addition calculation").await;
     
     // Simulate work
     tokio::time::sleep(Duration::from_millis(100)).await;
     
-    session.notify_progress("add-operation", 75);
+    session.notify_progress("add-operation", 75).await;
     
     // Complete operation
-    session.notify_progress_with_total("add-operation", 100, 100);
-    session.notify_log("info", format!("Addition completed: {}", result));
+    session.notify_progress_with_total("add-operation", 100, 100).await;
+    session.notify_log("info", format!("Addition completed: {}", result)).await;
 }
 ```
 
@@ -266,8 +266,8 @@ The calculator demonstrates optional session management:
 ```rust
 // Session-aware operation
 if let Some(ref session) = session {
-    session.notify_progress("operation", 50);
-    session.notify_log("info", "Processing calculation");
+    session.notify_progress("operation", 50).await;
+    session.notify_log("info", "Processing calculation").await;
 }
 
 // Core calculation (works with or without session)

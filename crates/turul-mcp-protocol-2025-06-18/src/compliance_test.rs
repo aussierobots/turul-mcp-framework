@@ -4,8 +4,8 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::tools::*;
     use crate::notifications::*;
+    use crate::tools::*;
     use serde_json::json;
     use std::collections::HashMap;
 
@@ -57,8 +57,7 @@ mod tests {
         let mut meta = HashMap::new();
         meta.insert("executionTime".to_string(), json!(42));
 
-        let response = CallToolResult::success(vec![ToolResult::text("Success!")])
-            .with_meta(meta);
+        let response = CallToolResult::success(vec![ToolResult::text("Success!")]).with_meta(meta);
 
         let json_value = serde_json::to_value(&response).unwrap();
 
@@ -74,14 +73,16 @@ mod tests {
         let mut meta = HashMap::new();
         meta.insert("timestamp".to_string(), json!("2025-01-01T00:00:00Z"));
 
-        let notification = ResourceListChangedNotification::new()
-            .with_meta(meta);
+        let notification = ResourceListChangedNotification::new().with_meta(meta);
 
         let json_value = serde_json::to_value(&notification).unwrap();
 
-        assert_eq!(json_value["method"], "notifications/resources/list_changed");
+        assert_eq!(json_value["method"], "notifications/resources/listChanged");
         assert!(json_value["params"].is_object());
-        assert_eq!(json_value["params"]["_meta"]["timestamp"], "2025-01-01T00:00:00Z");
+        assert_eq!(
+            json_value["params"]["_meta"]["timestamp"],
+            "2025-01-01T00:00:00Z"
+        );
     }
 
     #[test]
@@ -111,8 +112,7 @@ mod tests {
         let mut meta = HashMap::new();
         meta.insert("changeType".to_string(), json!("modified"));
 
-        let notification = ResourceUpdatedNotification::new("file:///config.json")
-            .with_meta(meta);
+        let notification = ResourceUpdatedNotification::new("file:///config.json").with_meta(meta);
 
         let json_value = serde_json::to_value(&notification).unwrap();
 
@@ -127,9 +127,12 @@ mod tests {
         let notification = ResourceListChangedNotification::new();
         let json_value = serde_json::to_value(&notification).unwrap();
 
-        assert_eq!(json_value["method"], "notifications/resources/list_changed");
+        assert_eq!(json_value["method"], "notifications/resources/listChanged");
         // params should be null/absent since it's None
-        assert!(json_value["params"].is_null() || !json_value.as_object().unwrap().contains_key("params"));
+        assert!(
+            json_value["params"].is_null()
+                || !json_value.as_object().unwrap().contains_key("params")
+        );
     }
 
     #[test]
@@ -141,6 +144,11 @@ mod tests {
         assert_eq!(json_value["method"], "tools/call");
         assert_eq!(json_value["params"]["name"], "test");
         // _meta should be absent since it's None
-        assert!(!json_value["params"].as_object().unwrap().contains_key("_meta"));
+        assert!(
+            !json_value["params"]
+                .as_object()
+                .unwrap()
+                .contains_key("_meta")
+        );
     }
 }

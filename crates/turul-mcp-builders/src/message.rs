@@ -7,10 +7,10 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 // Import from protocol via alias
+use turul_mcp_protocol::prompts::ContentBlock;
 use turul_mcp_protocol::sampling::{
     CreateMessageParams, CreateMessageRequest, ModelHint, ModelPreferences, Role, SamplingMessage,
 };
-use turul_mcp_protocol::prompts::ContentBlock;
 
 /// Builder for creating sampling messages and requests at runtime
 pub struct MessageBuilder {
@@ -57,9 +57,7 @@ impl MessageBuilder {
     pub fn system(mut self, content: impl Into<String>) -> Self {
         self.messages.push(SamplingMessage {
             role: Role::System,
-            content: ContentBlock::Text {
-                text: content.into(),
-            },
+            content: ContentBlock::text(content),
         });
         self
     }
@@ -68,9 +66,7 @@ impl MessageBuilder {
     pub fn user_text(mut self, content: impl Into<String>) -> Self {
         self.messages.push(SamplingMessage {
             role: Role::User,
-            content: ContentBlock::Text {
-                text: content.into(),
-            },
+            content: ContentBlock::text(content),
         });
         self
     }
@@ -79,10 +75,7 @@ impl MessageBuilder {
     pub fn user_image(mut self, data: impl Into<String>, mime_type: impl Into<String>) -> Self {
         self.messages.push(SamplingMessage {
             role: Role::User,
-            content: ContentBlock::Image {
-                data: data.into(),
-                mime_type: mime_type.into(),
-            },
+            content: ContentBlock::image(data, mime_type),
         });
         self
     }
@@ -91,9 +84,7 @@ impl MessageBuilder {
     pub fn assistant_text(mut self, content: impl Into<String>) -> Self {
         self.messages.push(SamplingMessage {
             role: Role::Assistant,
-            content: ContentBlock::Text {
-                text: content.into(),
-            },
+            content: ContentBlock::text(content),
         });
         self
     }
@@ -314,37 +305,28 @@ impl SamplingMessageExt for SamplingMessage {
     fn system(content: impl Into<String>) -> Self {
         Self {
             role: Role::System,
-            content: ContentBlock::Text {
-                text: content.into(),
-            },
+            content: ContentBlock::text(content),
         }
     }
 
     fn user_text(content: impl Into<String>) -> Self {
         Self {
             role: Role::User,
-            content: ContentBlock::Text {
-                text: content.into(),
-            },
+            content: ContentBlock::text(content),
         }
     }
 
     fn user_image(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
         Self {
             role: Role::User,
-            content: ContentBlock::Image {
-                data: data.into(),
-                mime_type: mime_type.into(),
-            },
+            content: ContentBlock::image(data, mime_type),
         }
     }
 
     fn assistant_text(content: impl Into<String>) -> Self {
         Self {
             role: Role::Assistant,
-            content: ContentBlock::Text {
-                text: content.into(),
-            },
+            content: ContentBlock::text(content),
         }
     }
 }
@@ -370,7 +352,7 @@ mod tests {
 
         // Check first message (system)
         assert_eq!(params.messages[0].role, Role::System);
-        if let ContentBlock::Text { text } = &params.messages[0].content {
+        if let ContentBlock::Text { text, .. } = &params.messages[0].content {
             assert_eq!(text, "You are a helpful assistant.");
         } else {
             panic!("Expected text content");
@@ -466,7 +448,10 @@ mod tests {
 
         let image_msg = SamplingMessage::user_image("base64data", "image/png");
         assert_eq!(image_msg.role, Role::User);
-        if let ContentBlock::Image { data, mime_type } = &image_msg.content {
+        if let ContentBlock::Image {
+            data, mime_type, ..
+        } = &image_msg.content
+        {
             assert_eq!(data, "base64data");
             assert_eq!(mime_type, "image/png");
         } else {

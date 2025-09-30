@@ -3,8 +3,8 @@
 //! This module defines types for the ping functionality in MCP.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// Request for ping (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,9 +48,7 @@ pub struct EmptyResult {
 
 impl EmptyResult {
     pub fn new() -> Self {
-        Self {
-            meta: None,
-        }
+        Self { meta: None }
     }
 
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
@@ -103,19 +101,17 @@ mod tests {
         let ping = PingRequest::new();
         assert_eq!(ping.method, "ping");
         assert!(ping.params.is_none());
-        
+
         let json = serde_json::to_value(&ping).unwrap();
         assert_eq!(json["method"], "ping");
     }
 
-    #[test] 
+    #[test]
     fn test_empty_result() {
         let result = EmptyResult::new();
         assert!(result.meta.is_none());
-        
-        let meta = HashMap::from([
-            ("test".to_string(), json!("value"))
-        ]);
+
+        let meta = HashMap::from([("test".to_string(), json!("value"))]);
         let result_with_meta = EmptyResult::new().with_meta(meta.clone());
         assert_eq!(result_with_meta.meta, Some(meta));
     }
@@ -124,13 +120,11 @@ mod tests {
     fn test_empty_result_serialization() {
         let result = EmptyResult::new();
         let json = serde_json::to_value(&result).unwrap();
-        
+
         // Should serialize to empty object (no _meta field when None)
         assert_eq!(json, json!({}));
-        
-        let meta = HashMap::from([
-            ("progressToken".to_string(), json!("test-123"))
-        ]);
+
+        let meta = HashMap::from([("progressToken".to_string(), json!("test-123"))]);
         let result_with_meta = EmptyResult::new().with_meta(meta);
         let json_with_meta = serde_json::to_value(&result_with_meta).unwrap();
         assert!(json_with_meta["_meta"].is_object());

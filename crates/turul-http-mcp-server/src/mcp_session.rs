@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{Mutex, broadcast};
 use tracing::{info, warn};
 use uuid::Uuid;
 
@@ -13,7 +13,7 @@ use crate::protocol::McpProtocolVersion;
 
 /// Per-session state
 pub struct Session {
-    /// Broadcast sender for SSE notifications  
+    /// Broadcast sender for SSE notifications
     pub sender: broadcast::Sender<String>,
     /// When the session was created (touched on access)
     pub created: Instant,
@@ -164,19 +164,19 @@ mod tests {
     async fn test_session_lifecycle() {
         let handle = new_session(McpProtocolVersion::V2025_06_18).await;
         let session_id = handle.session_id.clone();
-        
+
         // Session should exist
         assert!(session_exists(&session_id).await);
-        
+
         // Should be able to get sender
         assert!(get_sender(&session_id).await.is_some());
-        
-        // Should be able to get receiver  
+
+        // Should be able to get receiver
         assert!(get_receiver(&session_id).await.is_some());
-        
+
         // Remove session
         assert!(remove_session(&session_id).await);
-        
+
         // Should no longer exist
         assert!(!session_exists(&session_id).await);
     }
@@ -185,18 +185,15 @@ mod tests {
     async fn test_session_messaging() {
         let handle = new_session(McpProtocolVersion::V2025_06_18).await;
         let session_id = handle.session_id.clone();
-        
+
         // Send message to session
         let message = r#"{"method":"test","params":{}}"#.to_string();
         assert!(send_to_session(&session_id, message.clone()).await);
-        
+
         // Receive message
         let mut receiver = handle.receiver;
-        let received = tokio::time::timeout(
-            Duration::from_millis(100), 
-            receiver.recv()
-        ).await;
-        
+        let received = tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await;
+
         assert!(received.is_ok());
         assert_eq!(received.unwrap().unwrap(), message);
     }

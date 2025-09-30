@@ -37,7 +37,7 @@ struct CalculatorStructTool {
 impl CalculatorStructTool {
     async fn execute(&self) -> McpResult<CalculationResult> {
         let start_time = std::time::Instant::now();
-        
+
         let result = match self.operation.as_str() {
             "add" => self.a + self.b,
             "subtract" => self.a - self.b,
@@ -50,9 +50,9 @@ impl CalculatorStructTool {
             }
             _ => return Err(turul_mcp_protocol::McpError::invalid_param_type("operation", "add|subtract|multiply|divide", &self.operation)),
         };
-        
+
         let calculation_time = start_time.elapsed().as_micros() as f64 / 1000.0;
-        
+
         // Determine if the result is "exact" (no precision loss)
         let is_exact = match self.operation.as_str() {
             "add" | "subtract" => true,
@@ -60,7 +60,7 @@ impl CalculatorStructTool {
             "divide" => self.b != 0.0 && (self.a % self.b) == 0.0,
             _ => false,
         };
-        
+
         Ok(CalculationResult {
             operation: self.operation.clone(),
             operand1: self.a,
@@ -102,21 +102,21 @@ impl StatisticsCalculatorTool {
         if self.numbers.is_empty() {
             return Err(turul_mcp_protocol::McpError::invalid_param_type("numbers", "non-empty array", "empty array"));
         }
-        
+
         let count = self.numbers.len();
         let sum: f64 = self.numbers.iter().sum();
         let mean = sum / count as f64;
-        
+
         let min = self.numbers.iter().fold(f64::INFINITY, |a, &b| a.min(b));
         let max = self.numbers.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b));
         let range = max - min;
-        
+
         // Calculate standard deviation
         let variance: f64 = self.numbers.iter()
             .map(|&x| (x - mean).powi(2))
             .sum::<f64>() / count as f64;
         let std_dev = variance.sqrt();
-        
+
         Ok(StatisticsResult {
             values: self.numbers.clone(),
             count,
@@ -179,9 +179,9 @@ impl QuadraticSolverTool {
         if self.a == 0.0 {
             return Err(turul_mcp_protocol::McpError::invalid_param_type("a", "non-zero", "zero"));
         }
-        
+
         let discriminant = self.b * self.b - 4.0 * self.a * self.c;
-        
+
         let solutions = if discriminant > 0.0 {
             let sqrt_discriminant = discriminant.sqrt();
             let x1 = (-self.b + sqrt_discriminant) / (2.0 * self.a);
@@ -210,19 +210,19 @@ impl QuadraticSolverTool {
                 complex_part: Some(imaginary_part),
             }
         };
-        
+
         // Calculate vertex (h, k) where h = -b/(2a)
         let vertex_x = -self.b / (2.0 * self.a);
         let vertex_y = self.a * vertex_x * vertex_x + self.b * vertex_x + self.c;
         let vertex = Point2D { x: vertex_x, y: vertex_y };
-        
+
         let y_intercept = self.c;
         let opens_upward = self.a > 0.0;
         let has_real_roots = discriminant >= 0.0;
         let axis_of_symmetry = vertex_x;
-        
+
         let equation = format!("{}x² + {}x + {} = 0", self.a, self.b, self.c);
-        
+
         Ok(QuadraticResult {
             equation,
             discriminant,
@@ -268,7 +268,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("🧮 Calculator Struct Output Examples:");
     println!("  📊 calculator_struct - Basic arithmetic with detailed results");
-    println!("  📈 statistics_calculator - Statistical analysis of number arrays");  
+    println!("  📈 statistics_calculator - Statistical analysis of number arrays");
     println!("  🔢 quadratic_solver - Comprehensive quadratic equation analysis");
     println!();
     println!("🌟 Features demonstrated:");

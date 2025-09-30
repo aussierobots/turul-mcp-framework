@@ -29,10 +29,7 @@ impl JsonRpcNotification {
     }
 
     /// Create a new notification with object parameters
-    pub fn new_with_object_params(
-        method: String,
-        params: HashMap<String, Value>,
-    ) -> Self {
+    pub fn new_with_object_params(method: String, params: HashMap<String, Value>) -> Self {
         Self::new(method, Some(RequestParams::Object(params)))
     }
 
@@ -55,7 +52,7 @@ impl JsonRpcNotification {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, from_str, to_string};
+    use serde_json::{from_str, json, to_string};
 
     #[test]
     fn test_notification_serialization() {
@@ -74,10 +71,7 @@ mod tests {
         params.insert("message".to_string(), json!("Hello"));
         params.insert("level".to_string(), json!("info"));
 
-        let notification = JsonRpcNotification::new_with_object_params(
-            "log".to_string(),
-            params,
-        );
+        let notification = JsonRpcNotification::new_with_object_params("log".to_string(), params);
 
         assert_eq!(notification.get_param("message"), Some(&json!("Hello")));
         assert_eq!(notification.get_param("level"), Some(&json!("info")));
@@ -87,7 +81,7 @@ mod tests {
     fn test_notification_json_format() {
         let notification = JsonRpcNotification::new_no_params("ping".to_string());
         let json_str = to_string(&notification).unwrap();
-        
+
         // Should not contain an "id" field
         assert!(!json_str.contains("\"id\""));
         assert!(json_str.contains("\"jsonrpc\":\"2.0\""));

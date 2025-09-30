@@ -568,38 +568,48 @@ mod tests {
             .build()
             .expect("Failed to build source root");
         assert_eq!(src_root.name(), Some("Source Code"));
-        assert!(src_root
-            .allowed_extensions()
-            .unwrap()
-            .contains(&"rs".to_string()));
-        assert!(src_root
-            .excluded_patterns()
-            .unwrap()
-            .contains(&"node_modules".to_string()));
-        assert!(src_root
-            .tags()
-            .unwrap()
-            .contains(&"source-code".to_string()));
+        assert!(
+            src_root
+                .allowed_extensions()
+                .unwrap()
+                .contains(&"rs".to_string())
+        );
+        assert!(
+            src_root
+                .excluded_patterns()
+                .unwrap()
+                .contains(&"node_modules".to_string())
+        );
+        assert!(
+            src_root
+                .tags()
+                .unwrap()
+                .contains(&"source-code".to_string())
+        );
 
         // Docs root
         let docs_root = RootBuilder::docs_root("/home/user/docs")
             .build()
             .expect("Failed to build docs root");
         assert_eq!(docs_root.name(), Some("Documentation"));
-        assert!(docs_root
-            .allowed_extensions()
-            .unwrap()
-            .contains(&"md".to_string()));
+        assert!(
+            docs_root
+                .allowed_extensions()
+                .unwrap()
+                .contains(&"md".to_string())
+        );
 
         // Config root
         let config_root = RootBuilder::config_root("/etc/myapp")
             .build()
             .expect("Failed to build config root");
         assert_eq!(config_root.name(), Some("Configuration"));
-        assert!(config_root
-            .allowed_extensions()
-            .unwrap()
-            .contains(&"json".to_string()));
+        assert!(
+            config_root
+                .allowed_extensions()
+                .unwrap()
+                .contains(&"json".to_string())
+        );
 
         // Workspace root
         let workspace_root = RootBuilder::workspace_root("/tmp/workspace")
@@ -627,7 +637,7 @@ mod tests {
             .meta_value("timestamp", json!("2025-01-01T00:00:00Z"))
             .build();
 
-        assert_eq!(notification.method, "notifications/roots/list_changed");
+        assert_eq!(notification.method, "notifications/roots/listChanged");
         let params = notification.params.expect("Expected params");
         let meta = params.meta.expect("Expected meta");
         assert_eq!(meta.get("timestamp"), Some(&json!("2025-01-01T00:00:00Z")));

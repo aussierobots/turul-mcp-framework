@@ -1,17 +1,20 @@
 [package]
 name = "turul-mcp-framework-integration-tests"
-version = "0.1.1"
+version = "0.2.0"
 edition.workspace = true
 
 [dependencies]
 turul-mcp-derive = { workspace = true }
-turul-mcp-server = { workspace = true }
+turul-mcp-server = { workspace = true, features = ["test-utils"] }
 turul-mcp-protocol = { workspace = true }
 turul-mcp-protocol-2025-06-18 = { workspace = true }
 turul-mcp-builders = { workspace = true }
 turul-mcp-json-rpc-server = { workspace = true }
 turul-mcp-session-storage = { workspace = true }
 turul-http-mcp-server = { workspace = true }
+turul-mcp-client = { workspace = true }
+turul-mcp-aws-lambda = { path = "../crates/turul-mcp-aws-lambda" }
+lambda_http = { workspace = true }
 tokio = { workspace = true }
 tokio-test = { workspace = true }
 serde_json = { workspace = true }
@@ -23,6 +26,14 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
+anyhow = { workspace = true }
+hyper = { workspace = true }
+hyper-util = { workspace = true }
+http-body-util = { workspace = true }
+bytes = { workspace = true }
+mcp-e2e-shared = { path = "shared" }
+serial_test = "3.0"
+portpicker = "0.1"
 
 [[test]]
 name = "basic_session_test"
@@ -51,3 +62,127 @@ path = "working_examples_validation.rs"
 [[test]]
 name = "framework_integration_tests"
 path = "framework_integration_tests.rs"
+
+# README example tests
+[[test]]
+name = "server_examples"
+path = "server_examples.rs"
+
+[[test]]
+name = "derive_examples"
+path = "derive_examples.rs"
+
+[[test]]
+name = "builders_examples"
+path = "builders_examples.rs"
+
+[[test]]
+name = "client_examples"
+path = "client_examples.rs"
+
+[[test]]
+name = "http_server_examples"
+path = "http_server_examples.rs"
+
+[[test]]
+name = "lambda_examples"
+path = "lambda_examples.rs"
+
+[[test]]
+name = "client_drop_test"
+path = "client_drop_test.rs"
+
+[[test]]
+name = "mcp_runtime_capability_validation"
+path = "mcp_runtime_capability_validation.rs"
+
+[[test]]
+name = "mcp_specification_compliance"
+path = "mcp_specification_compliance.rs"
+
+[[test]]
+name = "e2e_sse_notification_roundtrip"
+path = "e2e_sse_notification_roundtrip.rs"
+
+[[test]]
+name = "streamable_http_e2e"
+path = "streamable_http_e2e.rs"
+
+[[test]]
+name = "session_id_compliance"
+path = "session_id_compliance.rs"
+
+[[test]]
+name = "mcp_behavioral_compliance"
+path = "mcp_behavioral_compliance.rs"
+
+[[test]]
+name = "sse_progress_delivery"
+path = "sse_progress_delivery.rs"
+
+[[test]]
+name = "streamable_http_client_test"
+path = "streamable_http_client_test.rs"
+
+[[test]]
+name = "client_streaming_test"
+path = "client_streaming_test.rs"
+
+[[test]]
+name = "mcp_tool_schema_runtime_sync_test"
+path = "mcp_tool_schema_runtime_sync_test.rs"
+
+[[test]]
+name = "mcp_vec_result_schema_test"
+path = "mcp_vec_result_schema_test.rs"
+
+[[test]]
+name = "mcp_vec_result_runtime_schema_test"
+path = "mcp_vec_result_runtime_schema_test.rs"
+
+[[test]]
+name = "mcp_explicit_vec_output_test"
+path = "mcp_explicit_vec_output_test.rs"
+
+[[test]]
+name = "mcp_vec_badly_named_tool_test"
+path = "mcp_vec_badly_named_tool_test.rs"
+
+[[test]]
+name = "mcp_derive_macro_bug_detection"
+path = "mcp_derive_macro_bug_detection.rs"
+
+[[test]]
+name = "mcp_tool_compliance"
+path = "mcp_tool_compliance.rs"
+
+# [[test]]
+# name = "client_integration_test"
+# path = "client_integration_test.rs"
+# DEFERRED: Requires client API updates for current turul-mcp-client interface
+
+# [[test]]
+# name = "phase5_regression_tests"
+# path = "phase5_regression_tests.rs"
+# DEFERRED: Import error - TestServerManager not exported from mcp-e2e-shared
+
+[[test]]
+name = "readme_examples"
+path = "readme_examples.rs"
+
+# [[test]]
+# name = "resources_integration_tests"
+# path = "resources_integration_tests.rs"
+# ARCHIVED: Tests unimplemented features (SecurityMiddleware, UriTemplateRegistry, ResourceAccessControl)
+# These are planned Phase 7+ features not yet in framework
+
+# [[test]]
+# name = "mcp_runtime_capabilities_validation"
+# path = "mcp_runtime_capabilities_validation.rs"
+# DEFERRED: Requires McpServerBuilder API updates (.with_tools() → .tools())
+
+# [[test]]
+# name = "e2e_sse_message_flow"
+# path = "e2e_sse_message_flow.rs"
+# DEFERRED: Requires complex API migration (JsonRpcHandler, McpError, JsonRpcDispatcher changes)
+# Replaced by e2e_sse_notification_roundtrip which uses working infrastructure

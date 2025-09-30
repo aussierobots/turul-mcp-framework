@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::types::{RequestId, JsonRpcVersion};
+use crate::error::JsonRpcError;
+use crate::types::{JsonRpcVersion, RequestId};
 
 /// Result data for a JSON-RPC response
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -86,17 +87,62 @@ where
     }
 }
 
+/// Union type that represents either a successful response or an error response
+/// This ensures JSON-RPC 2.0 compliance by keeping success and error responses separate
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum JsonRpcMessage {
+    /// Successful response with result field
+    Response(JsonRpcResponse),
+    /// Error response with error field
+    Error(JsonRpcError),
+}
+
+impl JsonRpcMessage {
+    /// Create a success message
+    pub fn success(id: RequestId, result: ResponseResult) -> Self {
+        Self::Response(JsonRpcResponse::new(id, result))
+    }
+
+    /// Create an error message
+    pub fn error(error: JsonRpcError) -> Self {
+        Self::Error(error)
+    }
+
+    /// Check if this is an error response
+    pub fn is_error(&self) -> bool {
+        matches!(self, JsonRpcMessage::Error(_))
+    }
+
+    /// Get the request ID from either response or error
+    pub fn id(&self) -> Option<&RequestId> {
+        match self {
+            JsonRpcMessage::Response(resp) => Some(&resp.id),
+            JsonRpcMessage::Error(err) => err.id.as_ref(),
+        }
+    }
+}
+
+impl From<JsonRpcResponse> for JsonRpcMessage {
+    fn from(response: JsonRpcResponse) -> Self {
+        Self::Response(response)
+    }
+}
+
+impl From<JsonRpcError> for JsonRpcMessage {
+    fn from(error: JsonRpcError) -> Self {
+        Self::Error(error)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::{json, from_str, to_string};
+    use serde_json::{from_str, json, to_string};
 
     #[test]
     fn test_response_serialization() {
-        let response = JsonRpcResponse::success(
-            RequestId::Number(1),
-            json!({"result": "success"}),
-        );
+        let response = JsonRpcResponse::success(RequestId::Number(1), json!({"result": "success"}));
 
         let json_str = to_string(&response).unwrap();
         let parsed: JsonRpcResponse = from_str(&json_str).unwrap();
@@ -115,12 +161,12 @@ mod tests {
         println!("Parsed result: {:?}", parsed.result); // Debug output
 
         assert_eq!(parsed.id, RequestId::String("test".to_string()));
-        // The issue is that serde(untagged) causes null to deserialize as Success(null) 
+        // The issue is that serde(untagged) causes null to deserialize as Success(null)
         // instead of Null variant. This is expected behavior.
         match parsed.result {
-            ResponseResult::Success(ref val) if val.is_null() => {}, // This is what actually happens
-            ResponseResult::Null => {}, // This is what we expected
-            _ => panic!("Expected null result")
+            ResponseResult::Success(ref val) if val.is_null() => {} // This is what actually happens
+            ResponseResult::Null => {}                              // This is what we expected
+            _ => panic!("Expected null result, got: {:?}", parsed.result),
         }
     }
 

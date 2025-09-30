@@ -43,12 +43,12 @@
 //!         .cors_allow_all_origins()
 //!         .build()
 //!         .await?;
-//!     
+//!
 //!     let handler = server.handler().await?;
-//!     
+//!
 //!     run_with_streaming_response(service_fn(move |req| {
 //!         let handler = handler.clone();
-//!         async move { 
+//!         async move {
 //!             handler.handle(req).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
 //!         }
 //!     })).await
@@ -56,10 +56,11 @@
 //! ```
 
 pub mod adapter;
-pub mod handler;
 pub mod builder;
-pub mod server;
 pub mod error;
+pub mod handler;
+pub mod prelude;
+pub mod server;
 
 #[cfg(feature = "cors")]
 pub mod cors;
@@ -68,13 +69,14 @@ pub mod cors;
 pub mod streaming;
 
 // Re-exports for convenience
+/// Builder for creating Lambda MCP servers with fluent configuration API
 pub use builder::LambdaMcpServerBuilder;
-pub use handler::LambdaMcpHandler;
-pub use server::LambdaMcpServer;
+/// Lambda-specific error types and result aliases
 pub use error::{LambdaError, Result};
+/// Lambda request handler with session management and protocol conversion
+pub use handler::LambdaMcpHandler;
+/// Core Lambda MCP server implementation with DynamoDB integration
+pub use server::LambdaMcpServer;
 
 #[cfg(feature = "cors")]
 pub use cors::CorsConfig;
-
-#[cfg(feature = "sse")]
-pub use streaming::adapt_sse_stream;

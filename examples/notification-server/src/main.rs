@@ -8,15 +8,15 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
-use turul_mcp_server::{McpServer, McpResult};
+use serde_json::{Value, json};
+use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
 use turul_mcp_protocol::{
     McpError,
     notifications::{HasNotificationMetadata, HasNotificationPayload, HasNotificationRules},
 };
-use turul_mcp_server::notifications::{McpNotification, DeliveryResult, DeliveryStatus};
-use serde_json::{Value, json};
-use tokio::sync::RwLock;
-use tracing::{info, debug, warn};
+use turul_mcp_server::notifications::{DeliveryResult, DeliveryStatus, McpNotification};
+use turul_mcp_server::{McpResult, McpServer};
 
 /// Development team alert notification handler
 /// Implements actual MCP notification protocol for real-time alerts
@@ -34,6 +34,12 @@ struct AlertMessage {
     priority: String,
     timestamp: u64,
     delivered: bool,
+}
+
+impl Default for DevAlertNotification {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DevAlertNotification {
@@ -60,7 +66,7 @@ impl HasNotificationMetadata for DevAlertNotification {
     fn method(&self) -> &str {
         &self.method
     }
-    
+
     fn requires_ack(&self) -> bool {
         true // Development alerts should be acknowledged
     }
@@ -76,11 +82,11 @@ impl HasNotificationRules for DevAlertNotification {
     fn priority(&self) -> u32 {
         100 // High priority for dev alerts
     }
-    
+
     fn can_batch(&self) -> bool {
         false // Send alerts immediately, don't batch
     }
-    
+
     fn max_retries(&self) -> u32 {
         3 // Retry failed deliveries up to 3 times
     }
@@ -91,15 +97,18 @@ impl HasNotificationRules for DevAlertNotification {
 #[async_trait]
 impl McpNotification for DevAlertNotification {
     async fn send(&self, payload: Value) -> McpResult<DeliveryResult> {
-        let alert_type = payload.get("type")
+        let alert_type = payload
+            .get("type")
             .and_then(|v| v.as_str())
             .unwrap_or("general");
-        
-        let message = payload.get("message")
+
+        let message = payload
+            .get("message")
             .and_then(|v| v.as_str())
             .unwrap_or("No message provided");
-            
-        let priority = payload.get("priority")
+
+        let priority = payload
+            .get("priority")
             .and_then(|v| v.as_str())
             .unwrap_or("info");
 
@@ -109,7 +118,7 @@ impl McpNotification for DevAlertNotification {
             .as_secs();
 
         let alert_id = format!("alert_{}", timestamp);
-        
+
         // Store the alert
         let alert = AlertMessage {
             id: alert_id.clone(),
@@ -119,17 +128,22 @@ impl McpNotification for DevAlertNotification {
             timestamp,
             delivered: false,
         };
-        
+
         self.store_alert(alert).await;
-        
+
         // In a real implementation, this would:
         // 1. Send via SSE to all connected clients
         // 2. Send to configured channels (Slack, Email, etc.)
         // 3. Track delivery status
         // 4. Handle retries on failure
-        
-        info!("🔔 MCP Notification sent: [{}] {} - {}", priority.to_uppercase(), alert_type, message);
-        
+
+        info!(
+            "🔔 MCP Notification sent: [{}] {} - {}",
+            priority.to_uppercase(),
+            alert_type,
+            message
+        );
+
         // Simulate successful delivery
         Ok(DeliveryResult {
             status: DeliveryStatus::Sent,
@@ -144,20 +158,20 @@ impl McpNotification for DevAlertNotification {
         if !payload.is_object() {
             return Err(McpError::validation("Payload must be an object"));
         }
-        
+
         let obj = payload.as_object().unwrap();
-        
+
         if !obj.contains_key("message") {
             return Err(McpError::validation("Payload must contain 'message' field"));
         }
-        
+
         if let Some(priority) = obj.get("priority").and_then(|v| v.as_str()) {
             match priority {
-                "critical" | "error" | "warning" | "info" | "debug" => {},
-                _ => return Err(McpError::validation("Invalid priority level"))
+                "critical" | "error" | "warning" | "info" | "debug" => {}
+                _ => return Err(McpError::validation("Invalid priority level")),
             }
         }
-        
+
         Ok(())
     }
 
@@ -165,26 +179,32 @@ impl McpNotification for DevAlertNotification {
         // Add timestamp if not present
         if let Some(obj) = payload.as_object_mut() {
             if !obj.contains_key("timestamp") {
-                obj.insert("timestamp".to_string(), json!(
-                    SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs()
-                ));
+                obj.insert(
+                    "timestamp".to_string(),
+                    json!(
+                        SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs()
+                    ),
+                );
             }
-            
+
             // Add notification ID
             if !obj.contains_key("id") {
                 obj.insert("id".to_string(), json!(uuid::Uuid::new_v4().to_string()));
             }
         }
-        
+
         Ok(payload)
     }
 
     async fn handle_error(&self, error: &McpError, attempt: u32) -> McpResult<bool> {
-        warn!("Notification delivery failed (attempt {}): {}", attempt, error);
-        
+        warn!(
+            "Notification delivery failed (attempt {}): {}",
+            attempt, error
+        );
+
         // Retry based on priority and attempt count
         if attempt < self.max_retries() {
             debug!("Will retry notification delivery");
@@ -201,6 +221,12 @@ pub struct CiCdNotification {
     method: String,
 }
 
+impl Default for CiCdNotification {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CiCdNotification {
     pub fn new() -> Self {
         Self {
@@ -213,7 +239,7 @@ impl HasNotificationMetadata for CiCdNotification {
     fn method(&self) -> &str {
         &self.method
     }
-    
+
     fn requires_ack(&self) -> bool {
         false // CI/CD notifications are fire-and-forget
     }
@@ -229,11 +255,11 @@ impl HasNotificationRules for CiCdNotification {
     fn priority(&self) -> u32 {
         50 // Medium priority
     }
-    
+
     fn can_batch(&self) -> bool {
         true // Can batch CI/CD notifications
     }
-    
+
     fn max_retries(&self) -> u32 {
         2
     }
@@ -242,15 +268,18 @@ impl HasNotificationRules for CiCdNotification {
 #[async_trait]
 impl McpNotification for CiCdNotification {
     async fn send(&self, payload: Value) -> McpResult<DeliveryResult> {
-        let build_status = payload.get("status")
+        let build_status = payload
+            .get("status")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
-        
-        let service = payload.get("service")
+
+        let service = payload
+            .get("service")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown-service");
-            
-        let branch = payload.get("branch")
+
+        let branch = payload
+            .get("branch")
             .and_then(|v| v.as_str())
             .unwrap_or("main");
 
@@ -261,13 +290,16 @@ impl McpNotification for CiCdNotification {
 
         let icon = match build_status {
             "success" => "✅",
-            "failed" => "❌", 
+            "failed" => "❌",
             "started" => "🚀",
             _ => "ℹ️",
         };
-        
-        info!("{} CI/CD Notification: {} build {} on {}", icon, service, build_status, branch);
-        
+
+        info!(
+            "{} CI/CD Notification: {} build {} on {}",
+            icon, service, build_status, branch
+        );
+
         Ok(DeliveryResult {
             status: DeliveryStatus::Sent,
             attempts: 1,
@@ -282,6 +314,12 @@ pub struct MonitoringNotification {
     method: String,
 }
 
+impl Default for MonitoringNotification {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MonitoringNotification {
     pub fn new() -> Self {
         Self {
@@ -294,7 +332,7 @@ impl HasNotificationMetadata for MonitoringNotification {
     fn method(&self) -> &str {
         &self.method
     }
-    
+
     fn requires_ack(&self) -> bool {
         true // Monitoring alerts should be acknowledged
     }
@@ -310,11 +348,11 @@ impl HasNotificationRules for MonitoringNotification {
     fn priority(&self) -> u32 {
         200 // High priority for system alerts
     }
-    
+
     fn can_batch(&self) -> bool {
         false // Don't batch critical system alerts
     }
-    
+
     fn max_retries(&self) -> u32 {
         5 // More retries for critical system alerts
     }
@@ -323,15 +361,18 @@ impl HasNotificationRules for MonitoringNotification {
 #[async_trait]
 impl McpNotification for MonitoringNotification {
     async fn send(&self, payload: Value) -> McpResult<DeliveryResult> {
-        let alert_type = payload.get("alert_type")
+        let alert_type = payload
+            .get("alert_type")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
-        
-        let server = payload.get("server")
+
+        let server = payload
+            .get("server")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown-server");
-            
-        let metric_value = payload.get("metric_value")
+
+        let metric_value = payload
+            .get("metric_value")
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0);
 
@@ -347,9 +388,12 @@ impl McpNotification for MonitoringNotification {
             "disk_space_low" => "💽",
             _ => "⚠️",
         };
-        
-        info!("{} Monitoring Alert: {} on {} (value: {:.1})", icon, alert_type, server, metric_value);
-        
+
+        info!(
+            "{} Monitoring Alert: {} on {} (value: {:.1})",
+            icon, alert_type, server, metric_value
+        );
+
         Ok(DeliveryResult {
             status: DeliveryStatus::Sent,
             attempts: 1,
@@ -357,21 +401,24 @@ impl McpNotification for MonitoringNotification {
             delivered_at: Some(timestamp),
         })
     }
-    
+
     async fn validate_payload(&self, payload: &Value) -> McpResult<()> {
         if !payload.is_object() {
             return Err(McpError::validation("Monitoring payload must be an object"));
         }
-        
+
         let obj = payload.as_object().unwrap();
-        
+
         // Ensure critical monitoring fields are present
         for required_field in &["alert_type", "server"] {
             if !obj.contains_key(*required_field) {
-                return Err(McpError::validation(&format!("Missing required field: {}", required_field)));
+                return Err(McpError::validation(&format!(
+                    "Missing required field: {}",
+                    required_field
+                )));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -387,7 +434,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create notification handlers using ACTUAL MCP protocol
     let dev_alerts = DevAlertNotification::new();
-    let cicd_notifications = CiCdNotification::new();  
+    let cicd_notifications = CiCdNotification::new();
     let monitoring_notifications = MonitoringNotification::new();
 
     let server = McpServer::builder()
@@ -398,7 +445,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "This server demonstrates ACTUAL MCP notification protocol implementation. \
              It uses McpNotification traits to send real notifications via SSE to clients, \
              not fake tools that pretend to send notifications. This is how MCP protocol \
-             features should be implemented."
+             features should be implemented.",
         )
         .notification_provider(dev_alerts)
         .notification_provider(cicd_notifications)

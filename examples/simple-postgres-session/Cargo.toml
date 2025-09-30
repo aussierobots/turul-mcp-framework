@@ -1,10 +1,12 @@
 [package]
 name = "simple-postgres-session"
-version = "0.1.1"
-edition = "2021"
+version = "0.2.0"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
 
 [[bin]]
-name = "server"
+name = "simple-postgres-session"
 path = "src/main.rs"
 
 [[bin]]
@@ -15,18 +17,21 @@ path = "src/bin/postgres-setup.rs"
 name = "postgres-teardown"
 path = "src/bin/postgres-teardown.rs"
 
-[dependencies]
-turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http", "sse"] }
-turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage", features = ["postgres"] }
-turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
 
-tokio = { version = "1.0", features = ["full"] }
-tracing = "0.1"
-tracing-subscriber = "0.3"
-serde_json = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-async-trait = "0.1"
+[dependencies]
+turul-mcp-server = { workspace = true, features = ["http", "sse", "postgres"] }
+turul-mcp-session-storage = { workspace = true, features = ["postgres"] }
+turul-mcp-derive.workspace = true
+turul-mcp-protocol.workspace = true
+
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+async-trait.workspace = true
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls"] }
+url = "2.4"
 
 [features]
 default = []

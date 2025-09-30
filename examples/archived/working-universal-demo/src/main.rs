@@ -28,7 +28,7 @@ async fn calculator(
         "divide" => return Err("Division by zero".into()),
         _ => return Err("Unknown operation".into()),
     };
-    
+
     info!("🔢 Calculator: {} {} {} = {}", a, operation, b, result);
     Ok(json!({ "result": result, "operation": operation }))
 }
@@ -54,13 +54,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .execute(|args| async move {
             let prompt = args.get("prompt").and_then(|v| v.as_str()).unwrap_or("");
             let style = args.get("style").and_then(|v| v.as_str()).unwrap_or("story");
-            
+
             let response = match style {
                 "story" => format!("Once upon a time, {}...", prompt),
                 "poem" => format!("In verses of {}, I sing...", prompt),
                 _ => format!("Creative response: {}", prompt),
             };
-            
+
             Ok(json!({ "content": response, "style": style }))
         })
         .build()?;

@@ -1,11 +1,11 @@
 //! Server-Sent Events (SSE) support for MCP
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
-use tokio_stream::Stream;
 use futures::stream;
 use serde_json::Value;
+use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::{RwLock, broadcast};
+use tokio_stream::Stream;
 use tracing::{debug, error};
 
 /// SSE event types
@@ -79,14 +79,17 @@ impl SseManager {
         // Register the connection
         {
             let mut connections = self.connections.write().await;
-            connections.insert(connection_id, SseConnection {
-                id: connection.id.clone(),
-                receiver: self.sender.subscribe(),
-            });
+            connections.insert(
+                connection_id,
+                SseConnection {
+                    id: connection.id.clone(),
+                    receiver: self.sender.subscribe(),
+                },
+            );
         }
 
         debug!("SSE connection created: {}", connection.id);
-        
+
         // Send connected event
         let _ = self.sender.send(SseEvent::Connected);
 

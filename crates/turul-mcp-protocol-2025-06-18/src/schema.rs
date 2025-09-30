@@ -2,8 +2,8 @@
 //!
 //! This module provides JSON Schema types used throughout the MCP protocol.
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 /// Trait for generating JSON schemas from Rust types
 pub trait JsonSchemaGenerator {
@@ -147,9 +147,7 @@ impl JsonSchema {
 
     /// Create a boolean schema
     pub fn boolean() -> Self {
-        Self::Boolean {
-            description: None,
-        }
+        Self::Boolean { description: None }
     }
 
     /// Create a boolean schema with description
@@ -230,7 +228,7 @@ impl JsonSchema {
         match &mut self {
             JsonSchema::Number { minimum: m, .. } => *m = Some(minimum),
             JsonSchema::Integer { minimum: m, .. } => *m = Some(minimum as i64),
-            _ => {}, // Ignore for non-numeric types
+            _ => {} // Ignore for non-numeric types
         }
         self
     }
@@ -240,25 +238,23 @@ impl JsonSchema {
         match &mut self {
             JsonSchema::Number { maximum: m, .. } => *m = Some(maximum),
             JsonSchema::Integer { maximum: m, .. } => *m = Some(maximum as i64),
-            _ => {}, // Ignore for non-numeric types
+            _ => {} // Ignore for non-numeric types
         }
         self
     }
 
     /// Add properties to object schema
     pub fn with_properties(mut self, properties: HashMap<String, JsonSchema>) -> Self {
-        match &mut self {
-            JsonSchema::Object { properties: p, .. } => *p = Some(properties),
-            _ => {}, // Ignore for non-object types
+        if let JsonSchema::Object { properties: p, .. } = &mut self {
+            *p = Some(properties);
         }
         self
     }
 
     /// Add required fields to object schema
     pub fn with_required(mut self, required: Vec<String>) -> Self {
-        match &mut self {
-            JsonSchema::Object { required: r, .. } => *r = Some(required),
-            _ => {}, // Ignore for non-object types
+        if let JsonSchema::Object { required: r, .. } = &mut self {
+            *r = Some(required);
         }
         self
     }
@@ -341,10 +337,7 @@ mod tests {
         properties.insert("name".to_string(), JsonSchema::string());
         properties.insert("age".to_string(), JsonSchema::integer());
 
-        let schema = JsonSchema::object_with_required(
-            properties,
-            vec!["name".to_string()],
-        );
+        let schema = JsonSchema::object_with_required(properties, vec!["name".to_string()]);
 
         let json = serde_json::to_string(&schema).unwrap();
         assert!(json.contains("object"));
@@ -361,10 +354,7 @@ mod tests {
 
     #[test]
     fn test_enum_schema() {
-        let schema = JsonSchema::string_enum(vec![
-            "option1".to_string(),
-            "option2".to_string(),
-        ]);
+        let schema = JsonSchema::string_enum(vec!["option1".to_string(), "option2".to_string()]);
         let json = serde_json::to_string(&schema).unwrap();
         assert!(json.contains("option1"));
         assert!(json.contains("option2"));
@@ -372,7 +362,10 @@ mod tests {
 
     #[test]
     fn test_to_json_schema_trait() {
-        assert!(matches!(String::to_json_schema(), JsonSchema::String { .. }));
+        assert!(matches!(
+            String::to_json_schema(),
+            JsonSchema::String { .. }
+        ));
         assert!(matches!(i32::to_json_schema(), JsonSchema::Integer { .. }));
         assert!(matches!(f64::to_json_schema(), JsonSchema::Number { .. }));
         assert!(matches!(bool::to_json_schema(), JsonSchema::Boolean { .. }));

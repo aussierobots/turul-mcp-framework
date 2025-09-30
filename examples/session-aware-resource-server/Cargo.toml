@@ -1,0 +1,21 @@
+[package]
+name = "session-aware-resource-server"
+version = "0.2.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+turul-mcp-server = { path = "../../crates/turul-mcp-server" }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+chrono = { workspace = true, features = ["serde"] }
+
+[[bin]]
+name = "session-aware-resource-server"
+path = "src/main.rs"

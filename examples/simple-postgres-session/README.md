@@ -1,34 +1,17 @@
 # Simple PostgreSQL Session Storage Example
 
-This example demonstrates how to use PostgreSQL as the session storage backend for MCP servers, enabling persistent session state across server restarts and multi-instance deployments.
+This example demonstrates PostgreSQL-backed session storage for MCP servers. It shows how session state persists across server restarts and can be shared across multiple server instances.
 
 ## Features
 
-- **Persistent Session State**: User preferences survive server restarts
-- **Multi-Instance Sharing**: Multiple server instances share the same session data
-- **PostgreSQL Integration**: Production-ready relational database backend
-- **SSE Notifications**: Real-time progress updates stored in PostgreSQL
+- **Session-scoped storage**: Each MCP session gets isolated key-value storage in PostgreSQL
+- **Multi-instance sharing**: Multiple server instances can share the same PostgreSQL database
+- **Automatic table creation**: Tables are created automatically when `create_tables_if_missing: true`
+- **ACID transactions**: PostgreSQL provides reliable data consistency
 
-## Quick Start
+## Setup
 
-### Automated Setup (Recommended)
-
-Use the built-in database management utilities:
-
-```bash
-# Set up PostgreSQL database and schema
-cargo run --bin postgres-setup
-
-# Run the MCP server
-cargo run --bin server
-
-# When done, clean up (optional)
-cargo run --bin postgres-teardown
-```
-
-### Manual Setup
-
-#### 1. Start PostgreSQL
+### 1. Start PostgreSQL
 
 Using Docker:
 ```bash
@@ -40,27 +23,37 @@ docker run -d --name postgres-session \
   postgres:15
 ```
 
-#### 2. Run the Server
+### 2. Create PostgreSQL Tables
 
+**Option A: Using Setup Utility (Recommended)**
 ```bash
-cargo run --bin server
+# Create PostgreSQL tables
+DATABASE_URL="postgres://mcp:mcp_pass@localhost:5432/mcp_sessions" cargo run --bin postgres-setup
+
+# Then run the server
+DATABASE_URL="postgres://mcp:mcp_pass@localhost:5432/mcp_sessions" cargo run --bin simple-postgres-session
 ```
 
-Or with custom database URL:
+**Option B: Automatic Creation**
 ```bash
-DATABASE_URL="postgres://user:pass@localhost:5432/mydb" cargo run --bin server
+# Server will create tables automatically if they don't exist
+cargo run --bin simple-postgres-session
 ```
+
+The setup utility creates the required PostgreSQL tables with proper schema and indexes.
 
 ## Usage
 
-### Store a Preference
+The server runs at `http://127.0.0.1:8060/mcp` and provides these tools:
+
+### Store Value in Session
 ```json
 {
   "jsonrpc": "2.0",
   "id": 1,
   "method": "tools/call",
   "params": {
-    "name": "store_preference",
+    "name": "store_value",
     "arguments": {
       "key": "theme",
       "value": "dark"
@@ -69,14 +62,14 @@ DATABASE_URL="postgres://user:pass@localhost:5432/mydb" cargo run --bin server
 }
 ```
 
-### Retrieve a Preference
+### Get Value from Session
 ```json
 {
-  "jsonrpc": "2.0", 
+  "jsonrpc": "2.0",
   "id": 2,
   "method": "tools/call",
   "params": {
-    "name": "get_preference",
+    "name": "get_value",
     "arguments": {
       "key": "theme"
     }
@@ -84,119 +77,81 @@ DATABASE_URL="postgres://user:pass@localhost:5432/mydb" cargo run --bin server
 }
 ```
 
-### Test Persistence
-
-1. Store a preference: `store_preference(key="language", value="en")`
-2. **Restart the server**
-3. Retrieve the preference: `get_preference(key="language")`
-4. ✅ Returns `"en"` - the data persisted in PostgreSQL!
-
-## Multi-Instance Testing
-
-1. Start first server instance: `cargo run --bin server` (port 8060)
-2. Store preference in first instance
-3. Start second server instance on different port:
-   ```bash
-   # Modify bind_address in main.rs to use port 8061
-   cargo run --bin server
-   ```
-4. Retrieve preference from second instance - it works! 🎉
-
-## Tools
-
-- **`store_preference`** - Store user preference in PostgreSQL
-- **`get_preference`** - Retrieve user preference from PostgreSQL
-- **`list_preferences`** - List all stored preferences  
-- **`session_info`** - View session storage backend information
-
-## Architecture
-
+### Session Information
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "tools/call",
+  "params": {
+    "name": "session_info",
+    "arguments": {}
+  }
+}
 ```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   MCP Server    │    │  SessionStorage │    │   PostgreSQL    │
-│                 │    │      Trait      │    │    Database     │
-│ ┌─────────────┐ │    │                 │    │                 │
-│ │SessionManager│◄────┤PostgresStorage │────┤   Sessions      │
-│ │             │ │    │                 │    │   Events        │
-│ └─────────────┘ │    │                 │    │   State         │
-│                 │    └─────────────────┘    └─────────────────┘
-└─────────────────┘
-```
+
+## Available Tools
+
+- **`store_value`** - Store a value in this session's PostgreSQL storage (session-scoped)
+- **`get_value`** - Retrieve a value from this session's PostgreSQL storage (session-scoped)
+- **`session_info`** - Get information about the PostgreSQL session
+
+## Session Storage Behavior
+
+- **Session-scoped**: Data is isolated per session ID
+- **Persistent**: Data survives server restarts
+- **Multi-instance**: Multiple servers can share the same database
+- **ACID compliance**: PostgreSQL ensures data consistency
 
 ## Configuration
 
-The example uses these PostgreSQL settings:
-- **Connection Pool**: 2-10 connections
-- **Session Timeout**: 60 minutes
-- **Cleanup Interval**: 10 minutes
-- **Max Events**: 1000 per session
-
-## Production Considerations
-
-- Use connection pooling for better performance
-- Set up regular maintenance for cleanup
-- Consider read replicas for high-load scenarios
-- Enable PostgreSQL logging for debugging
-- Use SSL connections in production
-
-## Database Management
-
-### Setup Binary
-
-The `postgres-setup` binary automates PostgreSQL setup:
+The server uses this environment variable:
 
 ```bash
-# Uses default settings
-cargo run --bin postgres-setup
-
-# With custom environment variables
-POSTGRES_HOST=myhost POSTGRES_PORT=5433 cargo run --bin postgres-setup
+DATABASE_URL=postgres://mcp:mcp_pass@localhost:5432/mcp_sessions
 ```
 
-**What it does:**
-- Starts PostgreSQL Docker container (if Docker available)
-- Creates database schema with tables and indexes
-- Configures session storage structure
-- Provides connection verification
+## Multi-Instance Setup
 
-### Teardown Binary
+To share sessions across multiple server instances:
 
-The `postgres-teardown` binary provides flexible cleanup:
+1. **Start PostgreSQL** (shared database)
+2. **Start multiple servers** with the same `DATABASE_URL`
+3. **Sessions are shared** between all server instances
 
 ```bash
-# Interactive mode - choose what to clean up
-cargo run --bin postgres-teardown
+# Terminal 1
+DATABASE_URL="postgres://mcp:pass@db.example.com:5432/shared_sessions" cargo run --bin simple-postgres-session
 
-# Command line options
-cargo run --bin postgres-teardown -- --drop-tables
-cargo run --bin postgres-teardown -- --drop-database  
-cargo run --bin postgres-teardown -- --stop-container
-cargo run --bin postgres-teardown -- --remove-container
-cargo run --bin postgres-teardown -- --all
+# Terminal 2 (different port, same database)
+DATABASE_URL="postgres://mcp:pass@db.example.com:5432/shared_sessions" cargo run --bin simple-postgres-session -- --port 8061
 ```
 
-**Cleanup Options:**
-1. **Clear session data** - Remove sessions but keep schema (safe for development)
-2. **Drop tables** - Remove all MCP session tables and data
-3. **Drop database** - Remove entire database
-4. **Stop container** - Stop Docker container but keep it for restart
-5. **Remove container** - Completely remove Docker container and data
-6. **Full cleanup** - Drop tables and remove container
+## Example Session
 
-### Environment Variables
+1. **Create tables**: `DATABASE_URL="postgres://..." cargo run --bin postgres-setup`
+2. **Start server**: `DATABASE_URL="postgres://..." cargo run --bin simple-postgres-session`
+3. **Store data**: `store_value(key='user_id', value=123)`
+4. **Restart server**: Server restarts, session persists in PostgreSQL
+5. **Retrieve data**: `get_value(key='user_id')` returns `123`
 
-Both binaries support these environment variables:
+Each session maintains its own isolated storage space in the PostgreSQL database.
+
+## Cleanup
+
+To delete all PostgreSQL tables and data (permanent deletion):
 
 ```bash
-export POSTGRES_HOST=localhost      # Default: localhost
-export POSTGRES_PORT=5432          # Default: 5432
-export POSTGRES_DB=mcp_sessions    # Default: mcp_sessions
-export POSTGRES_USER=mcp           # Default: mcp
-export POSTGRES_PASSWORD=mcp_pass  # Default: mcp_pass
+# WARNING: This will permanently delete ALL session data!
+CONFIRM_DELETE=yes DATABASE_URL="postgres://..." cargo run --bin postgres-teardown
 ```
 
-## Troubleshooting
+This drops both tables:
+- `mcp_sessions` (main session table)
+- `mcp_session_events` (events table)
 
-**Connection Failed**: Make sure PostgreSQL is running and accessible
-**Table Errors**: The storage backend auto-creates required tables
-**Permission Issues**: Ensure the database user has CREATE/INSERT/UPDATE/DELETE permissions
+## Available Commands
+
+- **`cargo run --bin postgres-setup`** - Create PostgreSQL tables
+- **`cargo run --bin simple-postgres-session`** - Run the MCP server
+- **`cargo run --bin postgres-teardown`** - Drop PostgreSQL tables (requires `CONFIRM_DELETE=yes`)

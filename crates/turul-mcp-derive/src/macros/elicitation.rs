@@ -5,7 +5,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse::Parse, parse::ParseStream, Result, Token, Ident, LitStr, Type};
+use syn::{Ident, LitStr, Result, Token, Type, parse::Parse, parse::ParseStream};
 
 use crate::macros::shared::capitalize;
 
@@ -17,19 +17,21 @@ pub fn elicitation_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 }
 
 /// Internal implementation that works with proc_macro2::TokenStream for testing
-pub fn elicitation_declarative_impl_inner(input: ElicitationMacroInput) -> proc_macro2::TokenStream {
+pub fn elicitation_declarative_impl_inner(
+    input: ElicitationMacroInput,
+) -> proc_macro2::TokenStream {
     let elicitation_name_ident = syn::Ident::new(
         &format!("{}Elicitation", capitalize(&input.name)),
-        proc_macro2::Span::call_site()
+        proc_macro2::Span::call_site(),
     );
-    
+
     let message = &input.message;
     let struct_fields = generate_struct_fields(&input.fields);
     let default_impl = generate_default_impl(&elicitation_name_ident, &input.fields);
 
     quote! {
         #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-        #[derive(mcp_derive::McpElicitation)]
+        #[derive(turul_mcp_derive::McpElicitation)]
         #[elicitation(message = #message)]
         pub struct #elicitation_name_ident {
             #struct_fields
@@ -50,15 +52,15 @@ impl Parse for ElicitationMacroInput {
     fn parse(input: ParseStream) -> Result<Self> {
         let name_ident: Ident = input.parse()?;
         let name = name_ident.to_string();
-        
+
         // Parse message string
         input.parse::<Token![,]>()?;
         let message_str: LitStr = input.parse()?;
         let message = message_str.value();
-        
+
         let content;
         syn::braced!(content in input);
-        
+
         let mut fields = Vec::new();
         while !content.is_empty() {
             fields.push(content.parse()?);
@@ -66,8 +68,12 @@ impl Parse for ElicitationMacroInput {
                 content.parse::<Token![,]>()?;
             }
         }
-        
-        Ok(ElicitationMacroInput { name, message, fields })
+
+        Ok(ElicitationMacroInput {
+            name,
+            message,
+            fields,
+        })
     }
 }
 
@@ -82,18 +88,22 @@ impl Parse for ElicitationField {
     fn parse(input: ParseStream) -> Result<Self> {
         let name_ident: Ident = input.parse()?;
         let name = name_ident.to_string();
-        
+
         input.parse::<Token![:]>()?;
         let field_type: Type = input.parse()?;
-        
+
         let mut description = None;
         if input.peek(Token![=]) {
             input.parse::<Token![=]>()?;
             let desc_str: LitStr = input.parse()?;
             description = Some(desc_str.value());
         }
-        
-        Ok(ElicitationField { name, field_type, description })
+
+        Ok(ElicitationField {
+            name,
+            field_type,
+            description,
+        })
     }
 }
 
@@ -101,11 +111,11 @@ fn generate_struct_fields(fields: &[ElicitationField]) -> proc_macro2::TokenStre
     if fields.is_empty() {
         return quote! {};
     }
-    
+
     let field_definitions = fields.iter().map(|field| {
         let field_name = syn::Ident::new(&field.name, proc_macro2::Span::call_site());
         let field_type = &field.field_type;
-        
+
         if let Some(desc) = &field.description {
             quote! {
                 #[doc = #desc]
@@ -117,13 +127,16 @@ fn generate_struct_fields(fields: &[ElicitationField]) -> proc_macro2::TokenStre
             }
         }
     });
-    
+
     quote! {
         #(#field_definitions)*
     }
 }
 
-fn generate_default_impl(struct_name: &syn::Ident, fields: &[ElicitationField]) -> proc_macro2::TokenStream {
+fn generate_default_impl(
+    struct_name: &syn::Ident,
+    fields: &[ElicitationField],
+) -> proc_macro2::TokenStream {
     if fields.is_empty() {
         return quote! {
             impl Default for #struct_name {
@@ -133,7 +146,7 @@ fn generate_default_impl(struct_name: &syn::Ident, fields: &[ElicitationField]) 
             }
         };
     }
-    
+
     let field_defaults = fields.iter().map(|field| {
         let field_name = syn::Ident::new(&field.name, proc_macro2::Span::call_site());
         let field_type = &field.field_type;
@@ -145,12 +158,12 @@ fn generate_default_impl(struct_name: &syn::Ident, fields: &[ElicitationField]) 
             syn::Type::Path(path) if path.path.is_ident("bool") => quote! { false },
             _ => quote! { Default::default() },
         };
-        
+
         quote! {
             #field_name: #default_value,
         }
     });
-    
+
     quote! {
         impl Default for #struct_name {
             fn default() -> Self {
@@ -168,7 +181,10 @@ mod tests {
 
     #[test]
     fn test_elicitation_macro_parse() {
-        let input = syn::parse_str::<ElicitationMacroInput>(r#"user_details, "Please provide your information" { name: String, email: String }"#).unwrap();
+        let input = syn::parse_str::<ElicitationMacroInput>(
+            r#"user_details, "Please provide your information" { name: String, email: String }"#,
+        )
+        .unwrap();
 
         let result = elicitation_declarative_impl_inner(input);
         let code = result.to_string();
@@ -179,7 +195,8 @@ mod tests {
 
     #[test]
     fn test_elicitation_macro_unit_struct() {
-        let input = syn::parse_str::<ElicitationMacroInput>(r#"simple, "Simple elicitation" {}"#).unwrap();
+        let input =
+            syn::parse_str::<ElicitationMacroInput>(r#"simple, "Simple elicitation" {}"#).unwrap();
 
         let result = elicitation_declarative_impl_inner(input);
         let code = result.to_string();

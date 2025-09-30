@@ -15,15 +15,15 @@ use async_trait::async_trait;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
+use crate::{SessionInfo, SessionStorage, SessionStorageError, SseEvent};
 use turul_mcp_protocol::ServerCapabilities;
-use crate::{SessionStorage, SessionInfo, SseEvent, SessionStorageError};
 
 /// In-memory storage for sessions and events (SSE compliant)
 #[derive(Debug, Clone)]
 pub struct InMemorySessionStorage {
     /// All sessions by session ID
     sessions: Arc<RwLock<HashMap<String, SessionInfo>>>,
-    /// All events by session_id -> Vec<SseEvent>
+    /// All events by session_id -> Vec\<SseEvent\>
     events: Arc<RwLock<HashMap<String, Vec<SseEvent>>>>,
     /// Global event ID counter for ordering
     event_counter: Arc<AtomicU64>,
@@ -43,8 +43,8 @@ pub struct InMemoryConfig {
 impl Default for InMemoryConfig {
     fn default() -> Self {
         Self {
-            max_events_per_session: 10_000,  // 10k events per session
-            max_sessions: 100_000,           // 100k concurrent sessions
+            max_events_per_session: 10_000, // 10k events per session
+            max_sessions: 100_000,          // 100k concurrent sessions
         }
     }
 }
@@ -60,6 +60,12 @@ pub enum InMemoryError {
     MaxEventsReached(usize),
     #[error("Serialization error: {0}")]
     SerializationError(#[from] serde_json::Error),
+}
+
+impl Default for InMemorySessionStorage {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl InMemorySessionStorage {
@@ -103,12 +109,18 @@ impl InMemorySessionStorage {
                 let excess = event_list.len() - self.config.max_events_per_session;
                 event_list.drain(0..excess); // Remove oldest events
                 total_removed += excess as u64;
-                debug!("Cleaned up {} old events for session {}", excess, session_id);
+                debug!(
+                    "Cleaned up {} old events for session {}",
+                    excess, session_id
+                );
             }
         }
 
         if total_removed > 0 {
-            info!("Cleaned up {} old events across all sessions", total_removed);
+            info!(
+                "Cleaned up {} old events across all sessions",
+                total_removed
+            );
         }
 
         Ok(total_removed)
@@ -128,39 +140,54 @@ pub struct InMemoryStats {
 impl SessionStorage for InMemorySessionStorage {
     type Error = SessionStorageError;
 
+    fn backend_name(&self) -> &'static str {
+        "InMemory"
+    }
+
     // ============================================================================
     // Session Management
     // ============================================================================
 
-    async fn create_session(&self, capabilities: ServerCapabilities) -> Result<SessionInfo, Self::Error> {
+    async fn create_session(
+        &self,
+        capabilities: ServerCapabilities,
+    ) -> Result<SessionInfo, Self::Error> {
         let mut sessions = self.sessions.write().await;
-        
+
         if sessions.len() >= self.config.max_sessions {
-            return Err(SessionStorageError::MaxSessionsReached(self.config.max_sessions));
+            return Err(SessionStorageError::MaxSessionsReached(
+                self.config.max_sessions,
+            ));
         }
 
         let mut session = SessionInfo::new();
         session.server_capabilities = Some(capabilities);
-        
+
         let session_id = session.session_id.clone();
         sessions.insert(session_id.clone(), session.clone());
-        
+
         debug!("Created session: {}", session_id);
         Ok(session)
     }
 
-    async fn create_session_with_id(&self, session_id: String, capabilities: ServerCapabilities) -> Result<SessionInfo, Self::Error> {
+    async fn create_session_with_id(
+        &self,
+        session_id: String,
+        capabilities: ServerCapabilities,
+    ) -> Result<SessionInfo, Self::Error> {
         let mut sessions = self.sessions.write().await;
-        
+
         if sessions.len() >= self.config.max_sessions {
-            return Err(SessionStorageError::MaxSessionsReached(self.config.max_sessions));
+            return Err(SessionStorageError::MaxSessionsReached(
+                self.config.max_sessions,
+            ));
         }
 
         let mut session = SessionInfo::with_id(session_id.clone());
         session.server_capabilities = Some(capabilities);
-        
+
         sessions.insert(session_id.clone(), session.clone());
-        
+
         debug!("Created session with ID: {}", session_id);
         Ok(session)
     }
@@ -176,9 +203,14 @@ impl SessionStorage for InMemorySessionStorage {
         Ok(())
     }
 
-    async fn set_session_state(&self, session_id: &str, key: &str, value: serde_json::Value) -> Result<(), Self::Error> {
+    async fn set_session_state(
+        &self,
+        session_id: &str,
+        key: &str,
+        value: serde_json::Value,
+    ) -> Result<(), Self::Error> {
         let mut sessions = self.sessions.write().await;
-        
+
         if let Some(session) = sessions.get_mut(session_id) {
             session.state.insert(key.to_string(), value);
             session.touch(); // Update last activity
@@ -188,9 +220,13 @@ impl SessionStorage for InMemorySessionStorage {
         }
     }
 
-    async fn get_session_state(&self, session_id: &str, key: &str) -> Result<Option<serde_json::Value>, Self::Error> {
+    async fn get_session_state(
+        &self,
+        session_id: &str,
+        key: &str,
+    ) -> Result<Option<serde_json::Value>, Self::Error> {
         let sessions = self.sessions.read().await;
-        
+
         if let Some(session) = sessions.get(session_id) {
             Ok(session.state.get(key).cloned())
         } else {
@@ -198,9 +234,13 @@ impl SessionStorage for InMemorySessionStorage {
         }
     }
 
-    async fn remove_session_state(&self, session_id: &str, key: &str) -> Result<Option<serde_json::Value>, Self::Error> {
+    async fn remove_session_state(
+        &self,
+        session_id: &str,
+        key: &str,
+    ) -> Result<Option<serde_json::Value>, Self::Error> {
         let mut sessions = self.sessions.write().await;
-        
+
         if let Some(session) = sessions.get_mut(session_id) {
             let removed = session.state.remove(key);
             session.touch(); // Update last activity
@@ -213,17 +253,17 @@ impl SessionStorage for InMemorySessionStorage {
     async fn delete_session(&self, session_id: &str) -> Result<bool, Self::Error> {
         let mut sessions = self.sessions.write().await;
         let mut events = self.events.write().await;
-        
+
         // Remove the session
         let removed = sessions.remove(session_id).is_some();
-        
+
         if removed {
             // Remove all events for this session
             events.remove(session_id);
-            
+
             debug!("Deleted session and all associated data: {}", session_id);
         }
-        
+
         Ok(removed)
     }
 
@@ -232,33 +272,47 @@ impl SessionStorage for InMemorySessionStorage {
         Ok(sessions.keys().cloned().collect())
     }
 
-
     // ============================================================================
     // Event Management
     // ============================================================================
 
-    async fn store_event(&self, session_id: &str, mut event: SseEvent) -> Result<SseEvent, Self::Error> {
+    async fn store_event(
+        &self,
+        session_id: &str,
+        mut event: SseEvent,
+    ) -> Result<SseEvent, Self::Error> {
         let mut events = self.events.write().await;
-        
+
         // Assign unique event ID
         event.id = self.event_counter.fetch_add(1, Ordering::SeqCst);
-        
-        let event_list = events.entry(session_id.to_string()).or_insert_with(Vec::new);
-        
+
+        let event_list = events
+            .entry(session_id.to_string())
+            .or_insert_with(Vec::new);
+
         // Check event limit
         if event_list.len() >= self.config.max_events_per_session {
-            return Err(SessionStorageError::MaxEventsReached(self.config.max_events_per_session));
+            return Err(SessionStorageError::MaxEventsReached(
+                self.config.max_events_per_session,
+            ));
         }
-        
+
         event_list.push(event.clone());
-        
-        debug!("Stored event: session={}, event_id={}", session_id, event.id);
+
+        debug!(
+            "Stored event: session={}, event_id={}",
+            session_id, event.id
+        );
         Ok(event)
     }
 
-    async fn get_events_after(&self, session_id: &str, after_event_id: u64) -> Result<Vec<SseEvent>, Self::Error> {
+    async fn get_events_after(
+        &self,
+        session_id: &str,
+        after_event_id: u64,
+    ) -> Result<Vec<SseEvent>, Self::Error> {
         let events = self.events.read().await;
-        
+
         if let Some(event_list) = events.get(session_id) {
             let filtered: Vec<SseEvent> = event_list
                 .iter()
@@ -271,26 +325,29 @@ impl SessionStorage for InMemorySessionStorage {
         }
     }
 
-    async fn get_recent_events(&self, session_id: &str, limit: usize) -> Result<Vec<SseEvent>, Self::Error> {
+    async fn get_recent_events(
+        &self,
+        session_id: &str,
+        limit: usize,
+    ) -> Result<Vec<SseEvent>, Self::Error> {
         let events = self.events.read().await;
-        
+
         if let Some(event_list) = events.get(session_id) {
-            let recent: Vec<SseEvent> = event_list
-                .iter()
-                .rev()
-                .take(limit)
-                .rev()
-                .cloned()
-                .collect();
+            let recent: Vec<SseEvent> =
+                event_list.iter().rev().take(limit).rev().cloned().collect();
             Ok(recent)
         } else {
             Ok(Vec::new())
         }
     }
 
-    async fn delete_events_before(&self, session_id: &str, before_event_id: u64) -> Result<u64, Self::Error> {
+    async fn delete_events_before(
+        &self,
+        session_id: &str,
+        before_event_id: u64,
+    ) -> Result<u64, Self::Error> {
         let mut events = self.events.write().await;
-        
+
         if let Some(event_list) = events.get_mut(session_id) {
             let original_len = event_list.len();
             event_list.retain(|event| event.id >= before_event_id);
@@ -308,14 +365,14 @@ impl SessionStorage for InMemorySessionStorage {
     async fn expire_sessions(&self, older_than: SystemTime) -> Result<Vec<String>, Self::Error> {
         let mut sessions = self.sessions.write().await;
         let mut events = self.events.write().await;
-        
+
         let cutoff_millis = older_than
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap_or_default()
             .as_millis() as u64;
-        
+
         let mut expired_sessions = Vec::new();
-        
+
         // Find expired sessions
         sessions.retain(|session_id, session_info| {
             if session_info.last_activity < cutoff_millis {
@@ -325,16 +382,16 @@ impl SessionStorage for InMemorySessionStorage {
                 true
             }
         });
-        
+
         // Remove events for expired sessions
         for session_id in &expired_sessions {
             events.remove(session_id);
         }
-        
+
         if !expired_sessions.is_empty() {
             info!("Expired {} sessions", expired_sessions.len());
         }
-        
+
         Ok(expired_sessions)
     }
 
@@ -363,20 +420,23 @@ mod tests {
     #[tokio::test]
     async fn test_session_lifecycle() {
         let storage = InMemorySessionStorage::new();
-        
+
         // Create session
-        let session = storage.create_session(ServerCapabilities::default()).await.unwrap();
+        let session = storage
+            .create_session(ServerCapabilities::default())
+            .await
+            .unwrap();
         let session_id = session.session_id.clone();
-        
+
         // Get session
         let retrieved = storage.get_session(&session_id).await.unwrap();
         assert!(retrieved.is_some());
         assert_eq!(retrieved.unwrap().session_id, session_id);
-        
+
         // Delete session
         let deleted = storage.delete_session(&session_id).await.unwrap();
         assert!(deleted);
-        
+
         // Verify deletion
         let not_found = storage.get_session(&session_id).await.unwrap();
         assert!(not_found.is_none());
@@ -385,46 +445,67 @@ mod tests {
     #[tokio::test]
     async fn test_session_state() {
         let storage = InMemorySessionStorage::new();
-        let session = storage.create_session(ServerCapabilities::default()).await.unwrap();
+        let session = storage
+            .create_session(ServerCapabilities::default())
+            .await
+            .unwrap();
         let session_id = session.session_id.clone();
-        
+
         // Set state
         let value = serde_json::json!({"test": "value"});
-        storage.set_session_state(&session_id, "test_key", value.clone()).await.unwrap();
-        
+        storage
+            .set_session_state(&session_id, "test_key", value.clone())
+            .await
+            .unwrap();
+
         // Get state
-        let retrieved = storage.get_session_state(&session_id, "test_key").await.unwrap();
+        let retrieved = storage
+            .get_session_state(&session_id, "test_key")
+            .await
+            .unwrap();
         assert_eq!(retrieved, Some(value));
-        
+
         // Remove state
-        let removed = storage.remove_session_state(&session_id, "test_key").await.unwrap();
+        let removed = storage
+            .remove_session_state(&session_id, "test_key")
+            .await
+            .unwrap();
         assert_eq!(removed, Some(serde_json::json!({"test": "value"})));
-        
+
         // Verify removal
-        let not_found = storage.get_session_state(&session_id, "test_key").await.unwrap();
+        let not_found = storage
+            .get_session_state(&session_id, "test_key")
+            .await
+            .unwrap();
         assert_eq!(not_found, None);
     }
 
     #[tokio::test]
     async fn test_event_storage_and_retrieval() {
         let storage = InMemorySessionStorage::new();
-        let session = storage.create_session(ServerCapabilities::default()).await.unwrap();
+        let session = storage
+            .create_session(ServerCapabilities::default())
+            .await
+            .unwrap();
         let session_id = session.session_id.clone();
-        
+
         // Store events (no stream_id needed)
         let event1 = SseEvent::new("data".to_string(), serde_json::json!({"message": "test1"}));
         let event2 = SseEvent::new("data".to_string(), serde_json::json!({"message": "test2"}));
-        
+
         let stored1 = storage.store_event(&session_id, event1).await.unwrap();
         let stored2 = storage.store_event(&session_id, event2).await.unwrap();
-        
+
         assert!(stored1.id < stored2.id); // Event IDs should be ordered
-        
+
         // Get events after first event
-        let events_after = storage.get_events_after(&session_id, stored1.id).await.unwrap();
+        let events_after = storage
+            .get_events_after(&session_id, stored1.id)
+            .await
+            .unwrap();
         assert_eq!(events_after.len(), 1);
         assert_eq!(events_after[0].id, stored2.id);
-        
+
         // Get recent events
         let recent = storage.get_recent_events(&session_id, 10).await.unwrap();
         assert_eq!(recent.len(), 2);

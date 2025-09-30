@@ -4,6 +4,14 @@
 //! of tools, resources, prompts, and other protocol components. This is "Level 3" of the
 //! MCP creation spectrum - runtime flexibility for dynamic/configuration-driven systems.
 //!
+//! # Quick Start
+//!
+//! ```rust
+//! use turul_mcp_builders::prelude::*;
+//!
+//! // All builders and common types available
+//! ```
+//!
 //! # Features
 //! - Runtime tool construction with `ToolBuilder`
 //! - Dynamic resource creation with `ResourceBuilder`
@@ -120,6 +128,8 @@
 //! # }
 //! ```
 
+pub mod prelude;
+
 pub mod completion;
 pub mod elicitation;
 pub mod logging;
@@ -131,19 +141,30 @@ pub mod root;
 pub mod tool;
 
 // Re-export all builders for convenience
+/// Builder for completion provider configuration with sampling parameters
 pub use completion::CompletionBuilder;
+/// Builders for interactive data collection and result formatting
 pub use elicitation::{ElicitResultBuilder, ElicitationBuilder};
+/// Builders for structured logging messages and level configuration
 pub use logging::{LoggingBuilder, SetLevelBuilder};
+/// Builder for constructing prompt messages with role and content
 pub use message::MessageBuilder;
+/// Builders for various MCP notification types (progress, cancellation, resource updates)
 pub use notification::{
     CancelledNotificationBuilder, NotificationBuilder, ProgressNotificationBuilder,
     ResourceUpdatedNotificationBuilder,
 };
+/// Builder for prompt templates with arguments and message composition
 pub use prompt::PromptBuilder;
+/// Builder for resource definitions with content and metadata
 pub use resource::ResourceBuilder;
+/// Builders for root directory listings and workspace notifications
 pub use root::{ListRootsRequestBuilder, RootBuilder, RootsNotificationBuilder};
+/// Builder for executable tool definitions with parameters and handlers
 pub use tool::ToolBuilder;
 
 // Common types used across builders
-pub use serde_json::{json, Value};
+/// JSON value type for dynamic content construction
+pub use serde_json::{Value, json};
+/// Hash map type for parameter collections and metadata
 pub use std::collections::HashMap;

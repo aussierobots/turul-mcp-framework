@@ -16,14 +16,18 @@ use std::collections::HashMap;
 pub trait HasBaseMetadata {
     /// Programmatic identifier (fallback display name)
     fn name(&self) -> &str;
-    
+
     /// Human-readable display name (UI contexts)
-    fn title(&self) -> Option<&str> { None }
+    fn title(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Tool description trait
 pub trait HasDescription {
-    fn description(&self) -> Option<&str> { None }
+    fn description(&self) -> Option<&str> {
+        None
+    }
 }
 
 /// Input schema trait
@@ -31,31 +35,128 @@ pub trait HasInputSchema {
     fn input_schema(&self) -> &ToolSchema;
 }
 
-/// Output schema trait  
+/// Output schema trait
 pub trait HasOutputSchema {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 /// Annotations trait
 pub trait HasAnnotations {
-    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
 }
 
 /// Tool-specific meta trait (separate from RPC _meta)
 pub trait HasToolMeta {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 /// Complete tool definition - composed from fine-grained traits
-pub trait ToolDefinition: 
+/// **Complete MCP Tool Creation** - Build executable tools that clients can invoke.
+///
+/// This trait represents a **complete, working MCP tool** that can be registered with a server
+/// and invoked by clients. When you implement the required metadata traits, you automatically
+/// get `ToolDefinition` for free via blanket implementation.
+///
+/// ## What This Enables
+///
+/// Tools implementing `ToolDefinition` become **full MCP citizens** that are:
+/// - 🔍 **Discoverable** via `tools/list` requests
+/// - ⚡ **Callable** via `tools/call` requests
+/// - ✅ **Validated** against their input schemas automatically
+/// - 📡 **Protocol-ready** for JSON-RPC communication
+///
+/// ## Complete Working Example
+///
+/// ```rust,ignore
+/// use std::collections::HashMap;
+/// use turul_mcp_protocol::schema::JsonSchema;
+///
+/// // This struct will automatically implement ToolDefinition!
+/// struct CodeAnalyzer {
+///     language: String,
+/// }
+///
+/// impl HasBaseMetadata for CodeAnalyzer {
+///     fn name(&self) -> &str { "analyze_code" }
+///     fn title(&self) -> Option<&str> { Some("Code Quality Analyzer") }
+/// }
+///
+/// impl HasDescription for CodeAnalyzer {
+///     fn description(&self) -> Option<&str> {
+///         Some("Analyzes code quality, complexity, and suggests improvements")
+///     }
+/// }
+///
+/// impl HasInputSchema for CodeAnalyzer {
+///     fn input_schema(&self) -> &ToolSchema {
+///         static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+///         SCHEMA.get_or_init(|| {
+///             let mut props = HashMap::new();
+///             props.insert("code".to_string(),
+///                 JsonSchema::string().with_description("Source code to analyze"));
+///             props.insert("language".to_string(),
+///                 JsonSchema::string_enum(vec!["rust", "python", "javascript"]));
+///             ToolSchema::object()
+///                 .with_properties(props)
+///                 .with_required(vec!["code".to_string(), "language".to_string()])
+///         })
+///     }
+/// }
+///
+/// // Implement remaining required traits...
+/// impl HasOutputSchema for CodeAnalyzer { fn output_schema(&self) -> Option<&ToolSchema> { None } }
+/// impl HasAnnotations for CodeAnalyzer { fn annotations(&self) -> Option<&ToolAnnotations> { None } }
+/// impl HasToolMeta for CodeAnalyzer { fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None } }
+///
+/// // 🎉 CodeAnalyzer now automatically implements ToolDefinition!
+/// // You can register it with any MCP server and clients can call it
+/// ```
+///
+/// ## Usage Patterns
+///
+/// ### Easy: Use Derive Macros
+/// ```rust,ignore
+/// #[derive(McpTool)]
+/// #[tool(name = "file_processor", description = "Process files")]
+/// struct FileProcessor { path: String }
+/// ```
+///
+/// ### Advanced: Manual Implementation (shown above)
+/// Perfect when you need fine-grained control over schemas and metadata.
+///
+/// ## Real-World Tool Ideas
+///
+/// - **Code Tools**: Formatters, linters, complexity analyzers, documentation generators
+/// - **File Tools**: Processors, converters, validators, backup utilities
+/// - **API Tools**: REST clients, GraphQL queries, webhook handlers, data fetchers
+/// - **Data Tools**: CSV processors, JSON transformers, database queries, analytics
+/// - **System Tools**: Process monitors, log analyzers, config validators, health checkers
+///
+/// ## How It Works in MCP
+///
+/// 1. **Registration**: Server registers your tool during startup
+/// 2. **Discovery**: Client calls `tools/list` → sees your tool with metadata
+/// 3. **Invocation**: Client calls `tools/call` with your tool name and arguments
+/// 4. **Validation**: Framework validates arguments against your input schema
+/// 5. **Execution**: Your tool runs and returns results
+/// 6. **Response**: Framework serializes results back to client
+///
+/// The framework handles all the protocol details - you just implement the business logic!
+pub trait ToolDefinition:
     HasBaseMetadata +           // name, title
-    HasDescription +            // description  
+    HasDescription +            // description
     HasInputSchema +            // inputSchema
     HasOutputSchema +           // outputSchema
     HasAnnotations +            // annotations
     HasToolMeta +               // _meta (tool-specific)
-    Send + 
-    Sync 
+    Send +
+    Sync
 {
     /// Display name precedence: title > annotations.title > name (matches TypeScript spec)
     fn display_name(&self) -> &str {
@@ -71,7 +172,7 @@ pub trait ToolDefinition:
             self.name()
         }
     }
-    
+
     /// Convert to concrete Tool struct for protocol serialization
     fn to_tool(&self) -> Tool {
         Tool {
@@ -117,9 +218,15 @@ pub struct ToolAnnotations {
     pub open_world_hint: Option<bool>,
 }
 
+impl Default for ToolAnnotations {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ToolAnnotations {
     pub fn new() -> Self {
-        Self { 
+        Self {
             title: None,
             read_only_hint: None,
             destructive_hint: None,
@@ -127,27 +234,27 @@ impl ToolAnnotations {
             open_world_hint: None,
         }
     }
-    
+
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
-    
+
     pub fn with_read_only_hint(mut self, read_only: bool) -> Self {
         self.read_only_hint = Some(read_only);
         self
     }
-    
+
     pub fn with_destructive_hint(mut self, destructive: bool) -> Self {
         self.destructive_hint = Some(destructive);
         self
     }
-    
+
     pub fn with_idempotent_hint(mut self, idempotent: bool) -> Self {
         self.idempotent_hint = Some(idempotent);
         self
     }
-    
+
     pub fn with_open_world_hint(mut self, open_world: bool) -> Self {
         self.open_world_hint = Some(open_world);
         self
@@ -272,34 +379,55 @@ impl Tool {
 // ===========================================
 
 impl HasBaseMetadata for Tool {
-    fn name(&self) -> &str { &self.name }
-    fn title(&self) -> Option<&str> { self.title.as_deref() }
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn title(&self) -> Option<&str> {
+        self.title.as_deref()
+    }
 }
 
 impl HasDescription for Tool {
-    fn description(&self) -> Option<&str> { self.description.as_deref() }
+    fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
 }
 
 impl HasInputSchema for Tool {
-    fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+    fn input_schema(&self) -> &ToolSchema {
+        &self.input_schema
+    }
 }
 
 impl HasOutputSchema for Tool {
-    fn output_schema(&self) -> Option<&ToolSchema> { self.output_schema.as_ref() }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        self.output_schema.as_ref()
+    }
 }
 
 impl HasAnnotations for Tool {
-    fn annotations(&self) -> Option<&ToolAnnotations> { self.annotations.as_ref() }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        self.annotations.as_ref()
+    }
 }
 
 impl HasToolMeta for Tool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { self.meta.as_ref() }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
 }
 
 // Blanket implementation: any type that implements all component traits automatically implements ToolDefinition
-impl<T> ToolDefinition for T 
-where 
-    T: HasBaseMetadata + HasDescription + HasInputSchema + HasOutputSchema + HasAnnotations + HasToolMeta + Send + Sync,
+impl<T> ToolDefinition for T
+where
+    T: HasBaseMetadata
+        + HasDescription
+        + HasInputSchema
+        + HasOutputSchema
+        + HasAnnotations
+        + HasToolMeta
+        + Send
+        + Sync,
 {
     // Default implementations are provided by the trait definition
 }
@@ -311,6 +439,9 @@ pub struct ListToolsParams {
     /// Optional cursor for pagination
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cursor: Option<Cursor>,
+    /// Optional limit for page size
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limit: Option<u32>,
     /// Meta information (optional _meta field inside params)
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<HashMap<String, Value>>,
@@ -320,12 +451,18 @@ impl ListToolsParams {
     pub fn new() -> Self {
         Self {
             cursor: None,
+            limit: None,
             meta: None,
         }
     }
 
     pub fn with_cursor(mut self, cursor: Cursor) -> Self {
         self.cursor = Some(cursor);
+        self
+    }
+
+    pub fn with_limit(mut self, limit: u32) -> Self {
+        self.limit = Some(limit);
         self
     }
 
@@ -351,6 +488,12 @@ pub struct ListToolsRequest {
     pub params: ListToolsParams,
 }
 
+impl Default for ListToolsRequest {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ListToolsRequest {
     pub fn new() -> Self {
         Self {
@@ -361,6 +504,11 @@ impl ListToolsRequest {
 
     pub fn with_cursor(mut self, cursor: Cursor) -> Self {
         self.params = self.params.with_cursor(cursor);
+        self
+    }
+
+    pub fn with_limit(mut self, limit: u32) -> Self {
+        self.params = self.params.with_limit(limit);
         self
     }
 
@@ -397,7 +545,7 @@ impl ListToolsResult {
         self.next_cursor = Some(cursor);
         self
     }
-    
+
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
@@ -427,11 +575,24 @@ impl CallToolParams {
         }
     }
 
+    /// Get arguments as HashMap - CRITICAL: Use this instead of the trait method
+    /// The trait method has limitations due to lifetime issues with HashMap->Value conversion
+    pub fn get_arguments(&self) -> Option<&HashMap<String, Value>> {
+        self.arguments.as_ref()
+    }
+
+    /// Get arguments as Value (converted from HashMap)
+    pub fn get_arguments_as_value(&self) -> Option<Value> {
+        self.arguments
+            .as_ref()
+            .map(|map| Value::Object(map.clone().into_iter().collect()))
+    }
+
     pub fn with_arguments(mut self, arguments: HashMap<String, Value>) -> Self {
         self.arguments = Some(arguments);
         self
     }
-    
+
     pub fn with_arguments_value(mut self, arguments: Value) -> Self {
         // Helper for backward compatibility - convert Value to HashMap if it's an object
         if let Value::Object(map) = arguments {
@@ -468,7 +629,7 @@ impl CallToolRequest {
         self.params = self.params.with_arguments(arguments);
         self
     }
-    
+
     pub fn with_arguments_value(mut self, arguments: Value) -> Self {
         self.params = self.params.with_arguments_value(arguments);
         self
@@ -480,67 +641,9 @@ impl CallToolRequest {
     }
 }
 
-/// Content item types that tools can return
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "lowercase")]
-pub enum ToolResult {
-    /// Text content
-    Text { text: String },
-    /// Image content
-    Image {
-        data: String,
-        #[serde(rename = "mimeType")]
-        mime_type: String,
-    },
-    /// Audio content
-    Audio {
-        data: String,
-        #[serde(rename = "mimeType")]
-        mime_type: String,
-    },
-    /// Resource reference
-    Resource {
-        resource: Value,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        annotations: Option<Value>,
-    },
-}
-
-impl ToolResult {
-    pub fn text(content: impl Into<String>) -> Self {
-        Self::Text {
-            text: content.into(),
-        }
-    }
-
-    pub fn image(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
-        Self::Image {
-            data: data.into(),
-            mime_type: mime_type.into(),
-        }
-    }
-
-    pub fn audio(data: impl Into<String>, mime_type: impl Into<String>) -> Self {
-        Self::Audio {
-            data: data.into(),
-            mime_type: mime_type.into(),
-        }
-    }
-
-    pub fn resource(resource: Value) -> Self {
-        Self::Resource {
-            resource,
-            annotations: None,
-        }
-    }
-
-    pub fn resource_with_annotations(resource: Value, annotations: Value) -> Self {
-        Self::Resource {
-            resource,
-            annotations: Some(annotations),
-        }
-    }
-}
+/// Tool result type - an alias for ContentBlock to maintain backward compatibility
+/// while ensuring MCP 2025-06-18 specification compliance
+pub type ToolResult = crate::content::ContentBlock;
 
 /// Result for tools/call (per MCP spec)
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -606,75 +709,79 @@ impl CallToolResult {
         self.meta = Some(meta);
         self
     }
-    
+
     // ===========================================
     // === Smart Response Builders ===
     // ===========================================
-    
+
     /// Create response from serializable result with automatic structured content based on ToolDefinition
     pub fn from_result_with_tool<T: serde::Serialize>(
         result: &T,
-        tool: &dyn ToolDefinition
+        tool: &dyn ToolDefinition,
     ) -> Result<Self, crate::McpError> {
         let text_content = serde_json::to_string(result)
             .map_err(|e| crate::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
-        
+
         let response = Self::success(vec![ToolResult::text(text_content)]);
-        
+
         // Auto-add structured content if tool has output schema
-        if let Some(_) = tool.output_schema() {
-            let structured = serde_json::to_value(result)
-                .map_err(|e| crate::McpError::tool_execution(&format!("Structured content error: {}", e)))?;
+        if tool.output_schema().is_some() {
+            let structured = serde_json::to_value(result).map_err(|e| {
+                crate::McpError::tool_execution(&format!("Structured content error: {}", e))
+            })?;
             Ok(response.with_structured_content(structured))
         } else {
             Ok(response)
         }
     }
-    
+
     /// Create response from serializable result with automatic structured content based on schema
     pub fn from_result_with_schema<T: serde::Serialize>(
         result: &T,
-        schema: Option<&ToolSchema>
+        schema: Option<&ToolSchema>,
     ) -> Result<Self, crate::McpError> {
         let text_content = serde_json::to_string(result)
             .map_err(|e| crate::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
-        
+
         let response = Self::success(vec![ToolResult::text(text_content)]);
-        
+
         // Auto-add structured content if schema exists
         if schema.is_some() {
-            let structured = serde_json::to_value(result)
-                .map_err(|e| crate::McpError::tool_execution(&format!("Structured content error: {}", e)))?;
+            let structured = serde_json::to_value(result).map_err(|e| {
+                crate::McpError::tool_execution(&format!("Structured content error: {}", e))
+            })?;
             Ok(response.with_structured_content(structured))
         } else {
             Ok(response)
         }
     }
-    
+
     /// Create response with automatic structured content for primitives (zero-config)
     pub fn from_result_auto<T: serde::Serialize>(
         result: &T,
-        schema: Option<&ToolSchema>
+        schema: Option<&ToolSchema>,
     ) -> Result<Self, crate::McpError> {
         let text_content = serde_json::to_string(result)
             .map_err(|e| crate::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
-        
+
         let response = Self::success(vec![ToolResult::text(text_content)]);
-        
+
         // Auto-detect structured content for common types
-        let structured = serde_json::to_value(result)
-            .map_err(|e| crate::McpError::tool_execution(&format!("Structured content error: {}", e)))?;
-        
-        let should_add_structured = schema.is_some() || match &structured {
-            // Auto-add structured content for primitive types (zero-config)
-            Value::Number(_) | Value::Bool(_) => true,
-            // Auto-add for arrays and objects (structured data)
-            Value::Array(_) | Value::Object(_) => true,
-            // Skip for plain strings (text is sufficient)
-            Value::String(_) => false,
-            Value::Null => false,
-        };
-        
+        let structured = serde_json::to_value(result).map_err(|e| {
+            crate::McpError::tool_execution(&format!("Structured content error: {}", e))
+        })?;
+
+        let should_add_structured = schema.is_some()
+            || match &structured {
+                // Auto-add structured content for primitive types (zero-config)
+                Value::Number(_) | Value::Bool(_) => true,
+                // Auto-add for arrays and objects (structured data)
+                Value::Array(_) | Value::Object(_) => true,
+                // Skip for plain strings (text is sufficient)
+                Value::String(_) => false,
+                Value::Null => false,
+            };
+
         if should_add_structured {
             Ok(response.with_structured_content(structured))
         } else {
@@ -683,13 +790,10 @@ impl CallToolResult {
     }
 
     /// Create response from JSON value with automatic structured content
-    pub fn from_json_with_schema(
-        json_result: Value,
-        schema: Option<&ToolSchema>
-    ) -> Self {
+    pub fn from_json_with_schema(json_result: Value, schema: Option<&ToolSchema>) -> Self {
         let text_content = json_result.to_string();
         let response = Self::success(vec![ToolResult::text(text_content)]);
-        
+
         if schema.is_some() {
             response.with_structured_content(json_result)
         } else {
@@ -814,10 +918,14 @@ impl HasCallToolParams for CallToolParams {
     }
 
     fn arguments(&self) -> Option<&Value> {
-        // This is a temporary workaround for trait compatibility
-        // The trait expects &Value but we store HashMap<String, Value>
-        // TODO: Fix trait definition to use proper HashMap type
-        self.arguments.as_ref().and_then(|_| None) // Return None for now
+        // Note: This trait method has limitations due to HashMap<String, Value> -> Value conversion
+        // The conversion creates a temporary Value that can't be borrowed for the required lifetime.
+        //
+        // For now, use CallToolParams::get_arguments() for HashMap access or
+        // get_arguments_as_value() for owned Value access in downstream code.
+        //
+        // The direct .arguments field access works fine and is used by the framework.
+        None
     }
 
     fn meta(&self) -> Option<&HashMap<String, Value>> {
@@ -843,6 +951,7 @@ pub mod builder;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::content::ResourceContents;
     use serde_json::json;
 
     #[test]
@@ -862,7 +971,10 @@ mod tests {
     fn test_tool_result_creation() {
         let text_result = ToolResult::text("Hello, world!");
         let image_result = ToolResult::image("base64data", "image/png");
-        let resource_result = ToolResult::resource(json!({"key": "value"}));
+        let resource_result = ToolResult::resource(ResourceContents::text(
+            "file:///test/resource.json",
+            serde_json::to_string(&json!({"key": "value"})).unwrap(),
+        ));
 
         assert!(matches!(text_result, ToolResult::Text { .. }));
         assert!(matches!(image_result, ToolResult::Image { .. }));

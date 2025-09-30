@@ -93,7 +93,10 @@ impl JsonRpcErrorObject {
     }
 
     pub fn server_error(code: i64, message: &str, data: Option<Value>) -> Self {
-        assert!((-32099..=-32000).contains(&code), "Server error code must be in range -32099 to -32000");
+        assert!(
+            (-32099..=-32000).contains(&code),
+            "Server error code must be in range -32099 to -32000"
+        );
         Self::new(
             JsonRpcErrorCode::ServerError(code),
             Some(message.to_string()),
@@ -143,41 +146,27 @@ impl JsonRpcError {
 
 impl fmt::Display for JsonRpcError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "JSON-RPC Error {}: {}", self.error.code, self.error.message)
+        write!(
+            f,
+            "JSON-RPC Error {}: {}",
+            self.error.code, self.error.message
+        )
     }
 }
 
 impl std::error::Error for JsonRpcError {}
 
-/// Errors that can occur during JSON-RPC processing
+/// Transport-level errors for JSON-RPC processing (no domain logic)
 #[derive(Debug, Error)]
-pub enum JsonRpcProcessingError {
+pub enum JsonRpcTransportError {
     #[error("JSON parse error: {0}")]
     JsonParseError(#[from] serde_json::Error),
-    
-    #[error("JSON-RPC error: {0}")]
-    RpcError(#[from] JsonRpcError),
-    
-    #[error("Method handler error: {0}")]
-    HandlerError(String),
-    
-    #[error("Internal error: {0}")]
-    InternalError(String),
-}
 
-impl JsonRpcProcessingError {
-    pub fn to_rpc_error(&self, id: Option<RequestId>) -> JsonRpcError {
-        match self {
-            JsonRpcProcessingError::JsonParseError(_) => JsonRpcError::parse_error(),
-            JsonRpcProcessingError::RpcError(err) => err.clone(),
-            JsonRpcProcessingError::HandlerError(msg) => {
-                JsonRpcError::internal_error(id, Some(msg.clone()))
-            }
-            JsonRpcProcessingError::InternalError(msg) => {
-                JsonRpcError::internal_error(id, Some(msg.clone()))
-            }
-        }
-    }
+    #[error("IO error: {0}")]
+    IoError(#[from] std::io::Error),
+
+    #[error("Protocol error: {0}")]
+    ProtocolError(String),
 }
 
 #[cfg(test)]

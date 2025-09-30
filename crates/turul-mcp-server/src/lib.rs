@@ -1,100 +1,139 @@
 //! # MCP Server Framework
 //!
-//! A high-level framework for building Model Context Protocol (MCP) servers in Rust.
-//! This framework provides a simple, builder-pattern API for creating MCP servers
-//! with HTTP transport and comprehensive tool support.
+//! A production-ready Rust framework for building Model Context Protocol (MCP) servers.
+//! Provides zero-configuration setup, comprehensive MCP 2025-06-18 specification support,
+//! and multiple deployment targets including HTTP, AWS Lambda, and local development.
+//!
+//! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-server.svg)](https://crates.io/crates/turul-mcp-server)
+//! [![Documentation](https://docs.rs/turul-mcp-server/badge.svg)](https://docs.rs/turul-mcp-server)
+//! [![License](https://img.shields.io/crates/l/turul-mcp-server.svg)](https://github.com/aussierobots/turul-mcp-framework/blob/main/LICENSE)
+//!
+//! ## Features
+//!
+//! - **Zero Configuration**: Framework auto-determines method strings from types
+//! - **Type-Safe Error Handling**: Clean domain/protocol separation
+//! - **4 Tool Creation Levels**: Function macros → derive macros → builders → manual
+//! - **Multiple Transports**: HTTP, Server-Sent Events (SSE), AWS Lambda
+//! - **Pluggable Storage**: InMemory, SQLite, PostgreSQL, DynamoDB
+//! - **Real-time Streaming**: SSE notifications for progress and logging
+//! - **Production Ready**: Comprehensive testing, monitoring, and deployment support
+//!
+//! ## Installation
+//!
+//! Add to your `Cargo.toml`:
+//!
+//! ```toml
+//! [dependencies]
+//! turul-mcp-server = "0.2"
+//! turul-mcp-derive = "0.2"  # For macros
+//! tokio = { version = "1.0", features = ["full"] }
+//! ```
 //!
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use turul_mcp_server::{McpServer, McpTool, SessionContext};
-//! use turul_mcp_protocol::{CallToolResult, tools::*};
-//! use serde_json::json;
-//! use async_trait::async_trait;
-//! use std::collections::HashMap;
+//! # use turul_mcp_server::prelude::*;
+//! #
+//! # async fn example() -> McpResult<()> {
+//! // Create a basic MCP server with detailed configuration
+//! let server = McpServer::builder()
+//!     .name("calculator-server")
+//!     .version("1.0.0")
+//!     .title("Advanced Calculator Server")
+//!     .instructions("A production-grade calculator server supporting basic arithmetic operations including addition, subtraction, multiplication, and division. Use the available tools to perform calculations. The server maintains session state for calculation history, supports real-time notifications for long-running computations, and provides detailed error reporting for invalid operations.")
+//!     .build()?;
 //!
-//! struct EchoTool {
-//!     input_schema: ToolSchema,
-//! }
+//! server.run().await
+//! # }
+//! ```
 //!
-//! impl EchoTool {
-//!     fn new() -> Self {
-//!         let input_schema = ToolSchema::object()
-//!             .with_properties(HashMap::from([
-//!                 ("text".to_string(), turul_mcp_protocol::schema::JsonSchema::string())
-//!             ]))
-//!             .with_required(vec!["text".to_string()]);
-//!         Self { input_schema }
-//!     }
-//! }
+//! ## Architecture
 //!
-//! // Implement fine-grained traits for complete ToolDefinition
-//! impl HasBaseMetadata for EchoTool {
-//!     fn name(&self) -> &str { "echo" }
-//! }
+//! The framework uses **clean domain/protocol separation**:
 //!
-//! impl HasDescription for EchoTool {
-//!     fn description(&self) -> Option<&str> { Some("Echo back the input text") }
-//! }
+//! - **Domain Layer**: Tools return `McpResult<T>` with domain errors
+//! - **Protocol Layer**: Framework converts to JSON-RPC 2.0 automatically
+//! - **Transport Layer**: HTTP/SSE with session-aware error handling
+//! - **Storage Layer**: Pluggable backends (InMemory, SQLite, PostgreSQL, DynamoDB)
 //!
-//! impl HasInputSchema for EchoTool {
-//!     fn input_schema(&self) -> &ToolSchema { &self.input_schema }
-//! }
+//! ## Examples
 //!
-//! impl HasOutputSchema for EchoTool {
-//!     fn output_schema(&self) -> Option<&ToolSchema> { None }
-//! }
+//! **Complete working examples available at:**
+//! [github.com/aussierobots/turul-mcp-framework/tree/main/examples](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples)
 //!
-//! impl HasAnnotations for EchoTool {
-//!     fn annotations(&self) -> Option<&ToolAnnotations> { None }
-//! }
+//! - **Minimal Server** - Basic tool setup
+//! - **Calculator** - Math operations with error handling
+//! - **HTTP Server** - Production HTTP deployment
+//! - **AWS Lambda** - Serverless deployment
+//! - **Real-time Streaming** - SSE notifications
+//! - **Database Integration** - SQLite/PostgreSQL/DynamoDB
 //!
-//! impl HasToolMeta for EchoTool {
-//!     fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
-//! }
+//! ## Deployment Options
 //!
-//! // ToolDefinition automatically implemented via trait composition!
+//! ### Local Development
+//! ```bash
+//! cargo run --example minimal-server
+//! # Server runs on http://localhost:8080/mcp
+//! ```
 //!
-//! #[async_trait]
-//! impl McpTool for EchoTool {
-//!     async fn call(&self, args: serde_json::Value, _session: Option<SessionContext>) -> crate::McpResult<CallToolResult> {
-//!         let text = args.get("text")
-//!             .and_then(|v| v.as_str())
-//!             .unwrap_or("No text provided");
-//!         
-//!         Ok(CallToolResult::from_text(format!("Echo: {}", text)))
-//!     }
-//! }
+//! ### AWS Lambda
+//! ```bash
+//! cargo lambda build --release
+//! cargo lambda deploy --iam-role arn:aws:iam::...
+//! ```
 //!
-//! #[tokio::main]
-//! async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-//!     let server = McpServer::builder()
-//!         .name("echo-server")
-//!         .version("1.0.0")
-//!         .tool(EchoTool::new())
-//!         .build()?;
-//!     
-//!     server.run().await?;
-//!     Ok(())
-//! }
+//! ### Docker
+//! ```dockerfile
+//! FROM rust:1.70 as builder
+//! COPY . .
+//! RUN cargo build --release
+//!
+//! FROM debian:bookworm-slim
+//! COPY --from=builder /target/release/my-mcp-server /usr/local/bin/
+//! EXPOSE 8080
+//! CMD ["my-mcp-server"]
+//! ```
+//!
+//! ## Configuration
+//!
+//! The framework supports extensive configuration through the builder pattern:
+//!
+//! ```rust,no_run
+//! # use turul_mcp_server::prelude::*;
+//! # use turul_mcp_session_storage::SqliteSessionStorage;
+//! # use std::time::Duration;
+//! #
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let server = McpServer::builder()
+//!     .name("production-server")
+//!     .version("1.0.0")
+//!     .title("Production MCP Server")
+//!     .instructions("This production server provides tools for database operations, file management, and API integrations. Use the 'database/query' tool for SQL operations, 'files/read' for file access, and 'api/call' for external service integration. Session management is enabled with SQLite persistence for reliability.")
+//!     .with_session_storage(std::sync::Arc::new(SqliteSessionStorage::new().await?))
+//!     .build()?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod builder;
-pub mod tool;
-pub mod resource;
-pub mod elicitation;
-pub mod prompt;
-pub mod sampling;
 pub mod completion;
-pub mod logging;
-pub mod roots;
-pub mod notifications;
-pub mod server;
+pub mod elicitation;
 pub mod handlers;
+pub mod logging;
+pub mod notifications;
+pub mod prompt;
+pub mod resource;
+pub mod roots;
+pub mod sampling;
+pub mod server;
 pub mod session;
+pub mod tool;
 // Re-export session storage from separate crate (breaks circular dependency)
 pub use turul_mcp_session_storage as session_storage;
 pub mod dispatch;
+pub mod prelude;
+pub mod security;
+pub mod uri_template;
 
 #[cfg(feature = "http")]
 pub mod http;
@@ -102,76 +141,96 @@ pub mod http;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod uri_template_tests;
+
+#[cfg(test)]
+mod security_integration_tests;
+
 // Re-export main types
+/// Builder for creating MCP servers with fluent API
 pub use builder::McpServerBuilder;
-pub use tool::McpTool;
-pub use resource::McpResource;
-pub use elicitation::McpElicitation;
-pub use prompt::McpPrompt;
-pub use sampling::McpSampling;
+/// Completion provider for text generation requests
 pub use completion::McpCompletion;
-pub use logging::McpLogger;
-pub use roots::McpRoot;
-pub use notifications::McpNotification;
-pub use server::{McpServer, SessionAwareInitializeHandler, SessionAwareToolHandler, ListToolsHandler, SessionAwareMcpHandlerBridge};
+/// Request dispatching and middleware support for MCP operations
+pub use dispatch::{DispatchContext, DispatchMiddleware, McpDispatcher};
+/// Elicitation handler for interactive form-based data collection
+pub use elicitation::McpElicitation;
+/// Collection of built-in MCP request handlers
 pub use handlers::*;
-pub use session::{SessionContext, SessionManager, SessionEvent};
-pub use dispatch::{McpDispatcher, DispatchMiddleware, DispatchContext};
+/// Logging provider for structured application logs
+pub use logging::McpLogger;
+/// Notification system for real-time client updates via SSE
+pub use notifications::McpNotification;
+/// Prompt provider for generating conversation templates
+pub use prompt::McpPrompt;
+/// Resource provider for serving file-like content with URI templates
+pub use resource::McpResource;
+/// Root provider for workspace and project context
+pub use roots::McpRoot;
+/// Sampling configuration for LLM inference parameters
+pub use sampling::McpSampling;
+/// Security middleware and access control components
+pub use security::{
+    AccessLevel, InputValidator, RateLimitConfig, ResourceAccessControl, SecurityMiddleware,
+};
+/// Core MCP server and session-aware handlers
+pub use server::{
+    ListToolsHandler, McpServer, SessionAwareInitializeHandler, SessionAwareMcpHandlerBridge,
+    SessionAwareToolHandler,
+};
+/// Session management and context for stateful operations
+pub use session::{SessionContext, SessionEvent, SessionManager};
+/// Tool trait for executable MCP functions
+pub use tool::McpTool;
 
 // Re-export foundational types
-pub use turul_mcp_json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
+/// JSON-RPC 2.0 request dispatcher and handler trait for protocol operations
+pub use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
+/// Core MCP protocol types, errors, and specification compliance
 pub use turul_mcp_protocol::*;
 
 // Re-export builder pattern for Level 3 tool creation
-pub use turul_mcp_protocol::tools::builder::{ToolBuilder, DynamicTool};
+/// Dynamic tool creation with runtime configuration and type-safe builders
+pub use turul_mcp_protocol::tools::builder::{DynamicTool, ToolBuilder};
 
 // Explicitly re-export error types for convenience
+/// Domain error type for MCP operations with protocol conversion support
 pub use turul_mcp_protocol::{McpError, McpResult as ProtocolMcpResult};
 
 #[cfg(feature = "http")]
+/// HTTP transport layer with SSE streaming and session management
 pub use turul_http_mcp_server;
 
-/// Result type for framework operations
-pub type Result<T> = std::result::Result<T, McpFrameworkError>;
-
-/// Result type for tool operations - uses structured MCP errors
+/// Result type for MCP server operations with domain-specific error handling
+///
+/// This alias provides structured error types that automatically convert to JSON-RPC 2.0
+/// error responses when crossing the protocol boundary. Use this for all tool and handler
+/// implementations to ensure consistent error reporting to MCP clients.
 pub type McpResult<T> = turul_mcp_protocol::McpResult<T>;
 
-/// Framework-level errors
-#[derive(Debug, thiserror::Error)]
-pub enum McpFrameworkError {
-    #[error("JSON-RPC error: {0}")]
-    JsonRpc(#[from] turul_mcp_json_rpc_server::JsonRpcError),
-    
-    #[error("MCP protocol error: {0}")]
-    Mcp(#[from] turul_mcp_protocol::McpError),
-    
-    #[cfg(feature = "http")]
-    #[error("HTTP transport error: {0}")]
-    Http(#[from] turul_http_mcp_server::HttpMcpError),
-    
-    #[error("Tool error: {0}")]
-    Tool(String),
-    
-    #[error("Configuration error: {0}")]
-    Config(String),
-    
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-}
+/// Convenience alias for McpResult
+pub type Result<T> = McpResult<T>;
 
-// Implement McpTool for DynamicTool (Level 3 builder pattern)
+/// Implements McpTool for DynamicTool to enable Level 3 builder pattern tool creation
+///
+/// This implementation bridges DynamicTool's builder pattern with the framework's
+/// session-aware execution model, enabling runtime tool construction with type safety.
 #[async_trait::async_trait]
 impl McpTool for DynamicTool {
-    async fn call(&self, args: serde_json::Value, _session: Option<SessionContext>) -> McpResult<turul_mcp_protocol::tools::CallToolResult> {
-        use turul_mcp_protocol::tools::{HasOutputSchema, CallToolResult};
+    async fn call(
+        &self,
+        args: serde_json::Value,
+        _session: Option<SessionContext>,
+    ) -> McpResult<turul_mcp_protocol::tools::CallToolResult> {
+        use turul_mcp_protocol::tools::{CallToolResult, HasOutputSchema};
 
         match self.execute(args).await {
             Ok(result) => {
                 // Use smart response builder with automatic structured content
                 CallToolResult::from_result_with_schema(&result, self.output_schema())
             }
-            Err(e) => Err(McpError::tool_execution(&e))
+            Err(e) => Err(McpError::tool_execution(&e)),
         }
     }
 }

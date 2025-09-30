@@ -5,7 +5,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse::Parse, parse::ParseStream, Result, Token, Ident, LitStr, LitBool};
+use syn::{Ident, LitBool, LitStr, Result, Token, parse::Parse, parse::ParseStream};
 
 use crate::macros::shared::capitalize;
 
@@ -20,17 +20,19 @@ pub fn roots_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 pub fn roots_declarative_impl_inner(input: RootsMacroInput) -> proc_macro2::TokenStream {
     let roots_name_ident = syn::Ident::new(
         &format!("{}Root", capitalize(&input.name)),
-        proc_macro2::Span::call_site()
+        proc_macro2::Span::call_site(),
     );
-    
-    let uri = &input.uri;
-    let name = input.display_name.as_deref().unwrap_or(&input.name);
-    let description = input.description.as_deref().unwrap_or("Root directory");
+
+    let uri = input.uri;
+    let name = input.display_name.unwrap_or(input.name);
+    let description = input
+        .description
+        .unwrap_or_else(|| "Root directory".to_string());
     let read_only = input.read_only;
 
     quote! {
         #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-        #[derive(mcp_derive::McpRoot)]
+        #[derive(turul_mcp_derive::McpRoot)]
         #[root(uri = #uri, name = #name, description = #description, read_only = #read_only)]
         pub struct #roots_name_ident;
 
@@ -55,26 +57,26 @@ impl Parse for RootsMacroInput {
     fn parse(input: ParseStream) -> Result<Self> {
         let name_ident: Ident = input.parse()?;
         let name = name_ident.to_string();
-        
+
         input.parse::<Token![,]>()?;
         let uri_str: LitStr = input.parse()?;
         let uri = uri_str.value();
-        
+
         let mut display_name = None;
         let mut description = None;
         let mut read_only = false;
-        
+
         // Parse optional parameters
         while input.peek(Token![,]) {
             input.parse::<Token![,]>()?;
-            
+
             if input.is_empty() {
                 break;
             }
-            
+
             let param_name: Ident = input.parse()?;
             input.parse::<Token![=]>()?;
-            
+
             match param_name.to_string().as_str() {
                 "name" => {
                     let name_str: LitStr = input.parse()?;
@@ -97,12 +99,12 @@ impl Parse for RootsMacroInput {
                 _ => {
                     return Err(syn::Error::new_spanned(
                         param_name,
-                        "Unknown parameter. Valid parameters are: name, description, read_only"
+                        "Unknown parameter. Valid parameters are: name, description, read_only",
                     ));
                 }
             }
         }
-        
+
         Ok(RootsMacroInput {
             name,
             uri,
@@ -142,7 +144,9 @@ mod tests {
 
     #[test]
     fn test_roots_macro_read_only_string() {
-        let input = syn::parse_str::<RootsMacroInput>(r#"readonly, "/readonly", read_only = "true""#).unwrap();
+        let input =
+            syn::parse_str::<RootsMacroInput>(r#"readonly, "/readonly", read_only = "true""#)
+                .unwrap();
 
         let result = roots_declarative_impl_inner(input);
         let code = result.to_string();

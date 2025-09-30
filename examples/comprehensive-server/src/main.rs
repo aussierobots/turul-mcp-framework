@@ -6,21 +6,30 @@
 //! project management, and knowledge sharing using external configuration files.
 
 use std::collections::HashMap;
-use std::net::SocketAddr;
-use std::sync::Arc;
 use std::fs;
+use std::net::SocketAddr;
 use std::path::Path;
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use turul_mcp_protocol::{schema::JsonSchema, ToolResult, ToolSchema, McpError, McpResult};
-use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations, CallToolResult};
-use turul_mcp_protocol::resources::{HasResourceMetadata, HasResourceDescription, HasResourceUri, HasResourceMimeType, HasResourceSize, HasResourceAnnotations, HasResourceMeta, ResourceContent};
-use turul_mcp_protocol::prompts::{PromptMessage, HasPromptMetadata, HasPromptDescription, HasPromptArguments, HasPromptAnnotations, HasPromptMeta, PromptAnnotations, PromptArgument};
-use turul_mcp_server::handlers::{McpPrompt, McpTemplate};
-use turul_mcp_server::{McpServer, McpTool, McpResource, SessionContext};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value, from_str};
+use serde_json::{Value, from_str, json};
 use tracing::info;
+use turul_mcp_protocol::prompts::{
+    HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
+    HasPromptMetadata, PromptAnnotations, PromptArgument, PromptMessage,
+};
+use turul_mcp_protocol::resources::{
+    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
+    HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
+};
+use turul_mcp_protocol::tools::{
+    CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
+    HasOutputSchema, HasToolMeta, ToolAnnotations,
+};
+use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema};
+use turul_mcp_server::handlers::McpPrompt;
+use turul_mcp_server::{McpResource, McpServer, McpTool, SessionContext};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct PlatformConfig {
@@ -177,12 +186,11 @@ impl PlatformState {
         let workflows_path = Path::new("data/workflow_templates.yaml");
         let resources_path = Path::new("data/project_resources.json");
         let templates_path = Path::new("data/code_templates.md");
-        
+
         let config = match fs::read_to_string(config_path) {
-            Ok(content) => {
-                from_str::<PlatformConfig>(&content)
-                    .map_err(|e| McpError::tool_execution(&format!("Failed to parse platform config: {}", e)))?
-            },
+            Ok(content) => from_str::<PlatformConfig>(&content).map_err(|e| {
+                McpError::tool_execution(&format!("Failed to parse platform config: {}", e))
+            })?,
             Err(_) => {
                 // Fallback configuration
                 PlatformConfig {
@@ -209,46 +217,41 @@ impl PlatformState {
                 }
             }
         };
-        
+
         let workflows = match fs::read_to_string(workflows_path) {
-            Ok(content) => {
-                serde_yml::from_str::<WorkflowTemplates>(&content)
-                    .map_err(|e| McpError::tool_execution(&format!("Failed to parse workflow templates: {}", e)))?
+            Ok(content) => serde_yml::from_str::<WorkflowTemplates>(&content).map_err(|e| {
+                McpError::tool_execution(&format!("Failed to parse workflow templates: {}", e))
+            })?,
+            Err(_) => WorkflowTemplates {
+                workflow_templates: HashMap::new(),
+                team_collaboration: HashMap::new(),
+                quality_assurance: HashMap::new(),
+                documentation_standards: HashMap::new(),
+                innovation_and_learning: HashMap::new(),
             },
-            Err(_) => {
-                WorkflowTemplates {
-                    workflow_templates: HashMap::new(),
-                    team_collaboration: HashMap::new(),
-                    quality_assurance: HashMap::new(),
-                    documentation_standards: HashMap::new(),
-                    innovation_and_learning: HashMap::new(),
-                }
-            }
         };
-        
+
         let resources = match fs::read_to_string(resources_path) {
-            Ok(content) => {
-                from_str::<ProjectResources>(&content)
-                    .map_err(|e| McpError::tool_execution(&format!("Failed to parse project resources: {}", e)))?
+            Ok(content) => from_str::<ProjectResources>(&content).map_err(|e| {
+                McpError::tool_execution(&format!("Failed to parse project resources: {}", e))
+            })?,
+            Err(_) => ProjectResources {
+                development_resources: DevelopmentResources {
+                    code_repositories: Vec::new(),
+                    api_documentation: Vec::new(),
+                    database_schemas: Vec::new(),
+                },
+                documentation_library: HashMap::new(),
+                monitoring_and_observability: HashMap::new(),
+                team_tools_and_integrations: HashMap::new(),
+                learning_resources: HashMap::new(),
             },
-            Err(_) => {
-                ProjectResources {
-                    development_resources: DevelopmentResources {
-                        code_repositories: Vec::new(),
-                        api_documentation: Vec::new(),
-                        database_schemas: Vec::new(),
-                    },
-                    documentation_library: HashMap::new(),
-                    monitoring_and_observability: HashMap::new(),
-                    team_tools_and_integrations: HashMap::new(),
-                    learning_resources: HashMap::new(),
-                }
-            }
         };
-        
-        let code_templates = fs::read_to_string(templates_path)
-            .unwrap_or_else(|_| "# Development Team Code Templates\n\nNo templates loaded.".to_string());
-        
+
+        let code_templates = fs::read_to_string(templates_path).unwrap_or_else(|_| {
+            "# Development Team Code Templates\n\nNo templates loaded.".to_string()
+        });
+
         Ok(Self {
             config,
             workflows,
@@ -278,7 +281,9 @@ impl HasBaseMetadata for TeamManagementTool {
 
 impl HasDescription for TeamManagementTool {
     fn description(&self) -> Option<&str> {
-        Some("Manage development teams, members, and team information including skills, projects, and on-call rotations")
+        Some(
+            "Manage development teams, members, and team information including skills, projects, and on-call rotations",
+        )
     }
 }
 
@@ -288,15 +293,27 @@ impl HasInputSchema for TeamManagementTool {
         INPUT_SCHEMA.get_or_init(|| {
             ToolSchema::object()
                 .with_properties(HashMap::from([
-                    ("action".to_string(), JsonSchema::string_enum(vec![
-                        "list_teams".to_string(), "get_team_details".to_string(), 
-                        "get_team_members".to_string(), "get_on_call_rotation".to_string(),
-                        "team_workload".to_string()
-                    ]).with_description("Team management action to perform")),
-                    ("team_id".to_string(), JsonSchema::string()
-                        .with_description("Team ID for team-specific operations")),
-                    ("include_projects".to_string(), JsonSchema::boolean()
-                        .with_description("Include project assignments in team details")),
+                    (
+                        "action".to_string(),
+                        JsonSchema::string_enum(vec![
+                            "list_teams".to_string(),
+                            "get_team_details".to_string(),
+                            "get_team_members".to_string(),
+                            "get_on_call_rotation".to_string(),
+                            "team_workload".to_string(),
+                        ])
+                        .with_description("Team management action to perform"),
+                    ),
+                    (
+                        "team_id".to_string(),
+                        JsonSchema::string()
+                            .with_description("Team ID for team-specific operations"),
+                    ),
+                    (
+                        "include_projects".to_string(),
+                        JsonSchema::boolean()
+                            .with_description("Include project assignments in team details"),
+                    ),
                 ]))
                 .with_required(vec!["action".to_string()])
         })
@@ -304,42 +321,61 @@ impl HasInputSchema for TeamManagementTool {
 }
 
 impl HasOutputSchema for TeamManagementTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 impl HasAnnotations for TeamManagementTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
 }
 
 impl HasToolMeta for TeamManagementTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
 impl McpTool for TeamManagementTool {
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
-        let action = args.get("action")
+    async fn call(
+        &self,
+        args: Value,
+        _session: Option<SessionContext>,
+    ) -> McpResult<CallToolResult> {
+        let action = args
+            .get("action")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("action"))?;
-        
+
         let team_id = args.get("team_id").and_then(|v| v.as_str());
-        let include_projects = args.get("include_projects")
+        let include_projects = args
+            .get("include_projects")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
         let result = match action {
             "list_teams" => {
-                let teams_summary = self.state.config.team_configuration.organization.teams
+                let teams_summary = self
+                    .state
+                    .config
+                    .team_configuration
+                    .organization
+                    .teams
                     .iter()
-                    .map(|team| json!({
-                        "id": team.id,
-                        "name": team.name,
-                        "lead": team.lead,
-                        "member_count": team.members.len(),
-                        "focus_areas": team.focus_areas,
-                        "on_call_enabled": team.on_call_rotation,
-                        "repository_count": team.repositories.len()
-                    }))
+                    .map(|team| {
+                        json!({
+                            "id": team.id,
+                            "name": team.name,
+                            "lead": team.lead,
+                            "member_count": team.members.len(),
+                            "focus_areas": team.focus_areas,
+                            "on_call_enabled": team.on_call_rotation,
+                            "repository_count": team.repositories.len()
+                        })
+                    })
                     .collect::<Vec<_>>();
 
                 json!({
@@ -352,13 +388,18 @@ impl McpTool for TeamManagementTool {
                         "last_updated": self.state.config.platform_info.last_updated
                     }
                 })
-            },
+            }
             "get_team_details" => {
                 let team_id = team_id.ok_or_else(|| McpError::missing_param("team_id"))?;
-                
-                if let Some(team) = self.state.config.team_configuration.organization.teams
+
+                if let Some(team) = self
+                    .state
+                    .config
+                    .team_configuration
+                    .organization
+                    .teams
                     .iter()
-                    .find(|t| t.id == team_id) 
+                    .find(|t| t.id == team_id)
                 {
                     let mut team_details = json!({
                         "team_info": {
@@ -394,51 +435,67 @@ impl McpTool for TeamManagementTool {
                     });
 
                     if include_projects {
-                        let team_projects = self.state.config.team_configuration.projects
+                        let team_projects = self
+                            .state
+                            .config
+                            .team_configuration
+                            .projects
                             .iter()
                             .filter(|project| project.teams.contains(&team.id))
-                            .map(|project| json!({
-                                "name": project.name,
-                                "id": project.id,
-                                "status": project.status,
-                                "priority": project.priority,
-                                "target_date": project.target_date,
-                                "budget": project.budget,
-                                "milestone_progress": {
-                                    "total": project.milestones.len(),
-                                    "completed": project.milestones.iter()
-                                        .filter(|m| m.status == "completed")
-                                        .count(),
-                                    "in_progress": project.milestones.iter()
-                                        .filter(|m| m.status == "in_progress")
-                                        .count()
-                                }
-                            }))
+                            .map(|project| {
+                                json!({
+                                    "name": project.name,
+                                    "id": project.id,
+                                    "status": project.status,
+                                    "priority": project.priority,
+                                    "target_date": project.target_date,
+                                    "budget": project.budget,
+                                    "milestone_progress": {
+                                        "total": project.milestones.len(),
+                                        "completed": project.milestones.iter()
+                                            .filter(|m| m.status == "completed")
+                                            .count(),
+                                        "in_progress": project.milestones.iter()
+                                            .filter(|m| m.status == "in_progress")
+                                            .count()
+                                    }
+                                })
+                            })
                             .collect::<Vec<_>>();
-                        
+
                         team_details["assigned_projects"] = json!(team_projects);
                     }
 
                     team_details
                 } else {
-                    return Err(McpError::tool_execution(&format!("Team '{}' not found", team_id)));
+                    return Err(McpError::tool_execution(&format!(
+                        "Team '{}' not found",
+                        team_id
+                    )));
                 }
-            },
+            }
             "get_on_call_rotation" => {
-                let on_call_teams = self.state.config.team_configuration.organization.teams
+                let on_call_teams = self
+                    .state
+                    .config
+                    .team_configuration
+                    .organization
+                    .teams
                     .iter()
                     .filter(|team| team.on_call_rotation)
-                    .map(|team| json!({
-                        "team": {
-                            "id": team.id,
-                            "name": team.name,
-                            "lead": team.lead
-                        },
-                        "members": team.members,
-                        "escalation_contacts": [team.lead.clone()],
-                        "response_time": "15 minutes",
-                        "coverage": "24/7"
-                    }))
+                    .map(|team| {
+                        json!({
+                            "team": {
+                                "id": team.id,
+                                "name": team.name,
+                                "lead": team.lead
+                            },
+                            "members": team.members,
+                            "escalation_contacts": [team.lead.clone()],
+                            "response_time": "15 minutes",
+                            "coverage": "24/7"
+                        })
+                    })
                     .collect::<Vec<_>>();
 
                 json!({
@@ -455,21 +512,29 @@ impl McpTool for TeamManagementTool {
                         "runbooks": "https://docs.company.com/runbooks"
                     }
                 })
-            },
+            }
             "team_workload" => {
-                let workload_analysis = self.state.config.team_configuration.organization.teams
+                let workload_analysis = self
+                    .state
+                    .config
+                    .team_configuration
+                    .organization
+                    .teams
                     .iter()
                     .map(|team| {
-                        let assigned_projects = self.state.config.team_configuration.projects
+                        let assigned_projects = self
+                            .state
+                            .config
+                            .team_configuration
+                            .projects
                             .iter()
                             .filter(|project| project.teams.contains(&team.id))
                             .collect::<Vec<_>>();
-                        
-                        let total_budget = assigned_projects.iter()
-                            .map(|p| p.budget)
-                            .sum::<u64>();
-                        
-                        let active_projects = assigned_projects.iter()
+
+                        let total_budget = assigned_projects.iter().map(|p| p.budget).sum::<u64>();
+
+                        let active_projects = assigned_projects
+                            .iter()
                             .filter(|p| p.status == "in_progress" || p.status == "planning")
                             .count();
 
@@ -483,11 +548,11 @@ impl McpTool for TeamManagementTool {
                                 "total_projects": assigned_projects.len(),
                                 "active_projects": active_projects,
                                 "total_budget": total_budget,
-                                "avg_budget_per_member": if team.members.len() > 0 { 
-                                    total_budget / team.members.len() as u64 
+                                "avg_budget_per_member": if !team.members.is_empty() {
+                                    total_budget / team.members.len() as u64
                                 } else { 0 },
-                                "utilization": if active_projects > 2 { "high" } 
-                                              else if active_projects > 0 { "medium" } 
+                                "utilization": if active_projects > 2 { "high" }
+                                              else if active_projects > 0 { "medium" }
                                               else { "low" }
                             },
                             "repositories": team.repositories.len(),
@@ -514,13 +579,19 @@ impl McpTool for TeamManagementTool {
                         "Optimize on-call rotation schedules"
                     ]
                 })
-            },
+            }
             _ => {
-                return Err(McpError::invalid_param_type("action", "supported team management action", action));
+                return Err(McpError::invalid_param_type(
+                    "action",
+                    "supported team management action",
+                    action,
+                ));
             }
         };
 
-        Ok(CallToolResult::success(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)]))
+        Ok(CallToolResult::success(vec![ToolResult::text(
+            serde_json::to_string_pretty(&result)?,
+        )]))
     }
 }
 
@@ -544,7 +615,9 @@ impl HasBaseMetadata for ProjectManagementTool {
 
 impl HasDescription for ProjectManagementTool {
     fn description(&self) -> Option<&str> {
-        Some("Manage development projects including status tracking, milestone management, and resource allocation")
+        Some(
+            "Manage development projects including status tracking, milestone management, and resource allocation",
+        )
     }
 }
 
@@ -554,17 +627,35 @@ impl HasInputSchema for ProjectManagementTool {
         INPUT_SCHEMA.get_or_init(|| {
             ToolSchema::object()
                 .with_properties(HashMap::from([
-                    ("action".to_string(), JsonSchema::string_enum(vec![
-                        "list_projects".to_string(), "get_project_details".to_string(),
-                        "project_status_summary".to_string(), "milestone_tracking".to_string(),
-                        "resource_allocation".to_string(), "project_timeline".to_string()
-                    ]).with_description("Project management action to perform")),
-                    ("project_id".to_string(), JsonSchema::string()
-                        .with_description("Project ID for project-specific operations")),
-                    ("status_filter".to_string(), JsonSchema::string()
-                        .with_description("Filter projects by status (in_progress, planning, completed, etc.)")),
-                    ("priority_filter".to_string(), JsonSchema::string()
-                        .with_description("Filter projects by priority (critical, high, medium, low)")),
+                    (
+                        "action".to_string(),
+                        JsonSchema::string_enum(vec![
+                            "list_projects".to_string(),
+                            "get_project_details".to_string(),
+                            "project_status_summary".to_string(),
+                            "milestone_tracking".to_string(),
+                            "resource_allocation".to_string(),
+                            "project_timeline".to_string(),
+                        ])
+                        .with_description("Project management action to perform"),
+                    ),
+                    (
+                        "project_id".to_string(),
+                        JsonSchema::string()
+                            .with_description("Project ID for project-specific operations"),
+                    ),
+                    (
+                        "status_filter".to_string(),
+                        JsonSchema::string().with_description(
+                            "Filter projects by status (in_progress, planning, completed, etc.)",
+                        ),
+                    ),
+                    (
+                        "priority_filter".to_string(),
+                        JsonSchema::string().with_description(
+                            "Filter projects by priority (critical, high, medium, low)",
+                        ),
+                    ),
                 ]))
                 .with_required(vec!["action".to_string()])
         })
@@ -572,24 +663,35 @@ impl HasInputSchema for ProjectManagementTool {
 }
 
 impl HasOutputSchema for ProjectManagementTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 impl HasAnnotations for ProjectManagementTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
 }
 
 impl HasToolMeta for ProjectManagementTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
 impl McpTool for ProjectManagementTool {
-    async fn call(&self, args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
-        let action = args.get("action")
+    async fn call(
+        &self,
+        args: Value,
+        _session: Option<SessionContext>,
+    ) -> McpResult<CallToolResult> {
+        let action = args
+            .get("action")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("action"))?;
-        
+
         let project_id = args.get("project_id").and_then(|v| v.as_str());
         let status_filter = args.get("status_filter").and_then(|v| v.as_str());
         let priority_filter = args.get("priority_filter").and_then(|v| v.as_str());
@@ -597,35 +699,37 @@ impl McpTool for ProjectManagementTool {
         let result = match action {
             "list_projects" => {
                 let mut projects = self.state.config.team_configuration.projects.clone();
-                
+
                 if let Some(status) = status_filter {
                     projects.retain(|p| p.status == status);
                 }
-                
+
                 if let Some(priority) = priority_filter {
                     projects.retain(|p| p.priority == priority);
                 }
 
                 let project_summaries = projects
                     .iter()
-                    .map(|project| json!({
-                        "id": project.id,
-                        "name": project.name,
-                        "status": project.status,
-                        "priority": project.priority,
-                        "target_date": project.target_date,
-                        "teams": project.teams,
-                        "budget": project.budget,
-                        "milestone_progress": {
-                            "total": project.milestones.len(),
-                            "completed": project.milestones.iter()
-                                .filter(|m| m.status == "completed")
-                                .count(),
-                            "overdue": project.milestones.iter()
-                                .filter(|m| m.status != "completed" && m.date.as_str() < "2025-01-19") // Simplified date comparison
-                                .count()
-                        }
-                    }))
+                    .map(|project| {
+                        json!({
+                            "id": project.id,
+                            "name": project.name,
+                            "status": project.status,
+                            "priority": project.priority,
+                            "target_date": project.target_date,
+                            "teams": project.teams,
+                            "budget": project.budget,
+                            "milestone_progress": {
+                                "total": project.milestones.len(),
+                                "completed": project.milestones.iter()
+                                    .filter(|m| m.status == "completed")
+                                    .count(),
+                                "overdue": project.milestones.iter()
+                                    .filter(|m| m.status != "completed" && m.date.as_str() < "2025-01-19") // Simplified date comparison
+                                    .count()
+                            }
+                        })
+                    })
                     .collect::<Vec<_>>();
 
                 json!({
@@ -650,27 +754,38 @@ impl McpTool for ProjectManagementTool {
                         "priority": priority_filter
                     }
                 })
-            },
+            }
             "get_project_details" => {
                 let project_id = project_id.ok_or_else(|| McpError::missing_param("project_id"))?;
-                
-                if let Some(project) = self.state.config.team_configuration.projects
+
+                if let Some(project) = self
+                    .state
+                    .config
+                    .team_configuration
+                    .projects
                     .iter()
-                    .find(|p| p.id == project_id) 
+                    .find(|p| p.id == project_id)
                 {
-                    let assigned_teams_details = project.teams
+                    let assigned_teams_details = project
+                        .teams
                         .iter()
                         .filter_map(|team_id| {
-                            self.state.config.team_configuration.organization.teams
+                            self.state
+                                .config
+                                .team_configuration
+                                .organization
+                                .teams
                                 .iter()
                                 .find(|t| &t.id == team_id)
-                                .map(|t| json!({
-                                    "id": t.id,
-                                    "name": t.name,
-                                    "lead": t.lead,
-                                    "member_count": t.members.len(),
-                                    "focus_areas": t.focus_areas
-                                }))
+                                .map(|t| {
+                                    json!({
+                                        "id": t.id,
+                                        "name": t.name,
+                                        "lead": t.lead,
+                                        "member_count": t.members.len(),
+                                        "focus_areas": t.focus_areas
+                                    })
+                                })
                         })
                         .collect::<Vec<_>>();
 
@@ -679,10 +794,14 @@ impl McpTool for ProjectManagementTool {
                     if project.priority == "critical" {
                         risk_factors.push("High priority project requires close monitoring");
                     }
-                    if project.milestones.iter().any(|m| m.status != "completed" && m.date.as_str() < "2025-01-19") {
+                    if project
+                        .milestones
+                        .iter()
+                        .any(|m| m.status != "completed" && m.date.as_str() < "2025-01-19")
+                    {
                         risk_factors.push("Overdue milestones detected");
                     }
-                    
+
                     json!({
                         "project_info": {
                             "id": project.id,
@@ -714,18 +833,25 @@ impl McpTool for ProjectManagementTool {
                         })).collect::<Vec<_>>(),
                         "project_health": {
                             "overall_status": project.status,
-                            "milestone_completion_rate": format!("{:.1}%", 
-                                (project.milestones.iter().filter(|m| m.status == "completed").count() as f64 
+                            "milestone_completion_rate": format!("{:.1}%",
+                                (project.milestones.iter().filter(|m| m.status == "completed").count() as f64
                                 / project.milestones.len().max(1) as f64) * 100.0),
                             "risk_factors": risk_factors
                         }
                     })
                 } else {
-                    return Err(McpError::tool_execution(&format!("Project '{}' not found", project_id)));
+                    return Err(McpError::tool_execution(&format!(
+                        "Project '{}' not found",
+                        project_id
+                    )));
                 }
-            },
+            }
             "milestone_tracking" => {
-                let all_milestones = self.state.config.team_configuration.projects
+                let all_milestones = self
+                    .state
+                    .config
+                    .team_configuration
+                    .projects
                     .iter()
                     .flat_map(|project| {
                         project.milestones.iter().map(move |milestone| {
@@ -742,14 +868,22 @@ impl McpTool for ProjectManagementTool {
                     })
                     .collect::<Vec<_>>();
 
-                let upcoming_milestones = all_milestones.iter()
-                    .filter(|m| m["status"] != "completed" && m["target_date"].as_str().unwrap_or("") >= "2025-01-19")
+                let upcoming_milestones = all_milestones
+                    .iter()
+                    .filter(|m| {
+                        m["status"] != "completed"
+                            && m["target_date"].as_str().unwrap_or("") >= "2025-01-19"
+                    })
                     .take(10)
                     .cloned()
                     .collect::<Vec<_>>();
 
-                let overdue_milestones = all_milestones.iter()
-                    .filter(|m| m["status"] != "completed" && m["target_date"].as_str().unwrap_or("") < "2025-01-19")
+                let overdue_milestones = all_milestones
+                    .iter()
+                    .filter(|m| {
+                        m["status"] != "completed"
+                            && m["target_date"].as_str().unwrap_or("") < "2025-01-19"
+                    })
                     .cloned()
                     .collect::<Vec<_>>();
 
@@ -759,9 +893,11 @@ impl McpTool for ProjectManagementTool {
                     recommendations.push("Review overdue milestones and adjust project timelines");
                 }
                 if upcoming_milestones.len() > 5 {
-                    recommendations.push("High number of upcoming milestones - ensure adequate resource allocation");
+                    recommendations.push(
+                        "High number of upcoming milestones - ensure adequate resource allocation",
+                    );
                 }
-                
+
                 json!({
                     "milestone_overview": {
                         "total_milestones": all_milestones.len(),
@@ -776,18 +912,24 @@ impl McpTool for ProjectManagementTool {
                     },
                     "upcoming_milestones": upcoming_milestones,
                     "overdue_milestones": overdue_milestones,
-                    "completion_rate": format!("{:.1}%", 
-                        (all_milestones.iter().filter(|m| m["status"] == "completed").count() as f64 
+                    "completion_rate": format!("{:.1}%",
+                        (all_milestones.iter().filter(|m| m["status"] == "completed").count() as f64
                         / all_milestones.len().max(1) as f64) * 100.0),
                     "recommendations": recommendations
                 })
-            },
+            }
             _ => {
-                return Err(McpError::invalid_param_type("action", "supported project management action", action));
+                return Err(McpError::invalid_param_type(
+                    "action",
+                    "supported project management action",
+                    action,
+                ));
             }
         };
 
-        Ok(CallToolResult::success(vec![ToolResult::text(serde_json::to_string_pretty(&result)?)]))
+        Ok(CallToolResult::success(vec![ToolResult::text(
+            serde_json::to_string_pretty(&result)?,
+        )]))
     }
 }
 
@@ -813,36 +955,34 @@ impl HasPromptMetadata for WorkflowGeneratorPrompt {
 
 impl HasPromptDescription for WorkflowGeneratorPrompt {
     fn description(&self) -> Option<&str> {
-        Some("Generate standardized development workflows based on team practices and project requirements")
+        Some(
+            "Generate standardized development workflows based on team practices and project requirements",
+        )
     }
 }
 
 impl HasPromptArguments for WorkflowGeneratorPrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> { None }
+    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+        None
+    }
 }
 
 impl HasPromptAnnotations for WorkflowGeneratorPrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> { None }
+    fn annotations(&self) -> Option<&PromptAnnotations> {
+        None
+    }
 }
 
 impl HasPromptMeta for WorkflowGeneratorPrompt {
-    fn prompt_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn prompt_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
 impl McpPrompt for WorkflowGeneratorPrompt {
-    fn name(&self) -> &str {
-        "generate_workflow"
-    }
-    
-    fn description(&self) -> &str {
-        "Generate standardized development workflows based on team practices and project requirements"
-    }
-
-    async fn generate(
-        &self,
-        args: HashMap<String, Value>,
-    ) -> McpResult<Vec<PromptMessage>> {
+    async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
+        let args = args.unwrap_or_default();
         let workflow_type = args
             .get("workflow_type")
             .and_then(|v| v.as_str())
@@ -851,15 +991,21 @@ impl McpPrompt for WorkflowGeneratorPrompt {
             .get("project_type")
             .and_then(|v| v.as_str())
             .unwrap_or("web_application");
-        let team_size = args
-            .get("team_size")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(5);
+        let team_size = args.get("team_size").and_then(|v| v.as_u64()).unwrap_or(5);
 
         // Get workflow template from external data
-        let workflow_details = if let Some(dev_workflows) = self.state.workflows.workflow_templates.get("development_workflows") {
+        let workflow_details = if let Some(dev_workflows) = self
+            .state
+            .workflows
+            .workflow_templates
+            .get("development_workflows")
+        {
             if let Some(workflow) = dev_workflows.get(workflow_type) {
-                format!("Based on our standard {} workflow:\n{}", workflow_type, serde_json::to_string_pretty(workflow).unwrap_or_default())
+                format!(
+                    "Based on our standard {} workflow:\n{}",
+                    workflow_type,
+                    serde_json::to_string_pretty(workflow).unwrap_or_default()
+                )
             } else {
                 format!("Standard development workflow for {}", workflow_type)
             }
@@ -930,7 +1076,9 @@ impl HasResourceMetadata for ProjectResourcesHandler {
 
 impl HasResourceDescription for ProjectResourcesHandler {
     fn description(&self) -> Option<&str> {
-        Some("Access to development team resources including repositories, APIs, documentation, and tools")
+        Some(
+            "Access to development team resources including repositories, APIs, documentation, and tools",
+        )
     }
 }
 
@@ -947,40 +1095,52 @@ impl HasResourceMimeType for ProjectResourcesHandler {
 }
 
 impl HasResourceSize for ProjectResourcesHandler {
-    fn size(&self) -> Option<u64> { None }
+    fn size(&self) -> Option<u64> {
+        None
+    }
 }
 
 impl HasResourceAnnotations for ProjectResourcesHandler {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+        None
+    }
 }
 
 impl HasResourceMeta for ProjectResourcesHandler {
-    fn resource_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
 impl McpResource for ProjectResourcesHandler {
-    async fn read(&self, _params: Option<Value>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
         let mut content = Vec::new();
 
         // Repository information
         let repos_content = format!(
             "# Code Repositories\n\n{}\n",
-            serde_json::to_string_pretty(&self.state.resources.development_resources.code_repositories)?
+            serde_json::to_string_pretty(
+                &self.state.resources.development_resources.code_repositories
+            )?
         );
         content.push(ResourceContent::text("repos", repos_content));
 
         // API documentation
         let api_content = format!(
             "# API Documentation\n\n{}\n",
-            serde_json::to_string_pretty(&self.state.resources.development_resources.api_documentation)?
+            serde_json::to_string_pretty(
+                &self.state.resources.development_resources.api_documentation
+            )?
         );
         content.push(ResourceContent::text("api", api_content));
 
         // Database schemas
         let db_content = format!(
             "# Database Schemas\n\n{}\n",
-            serde_json::to_string_pretty(&self.state.resources.development_resources.database_schemas)?
+            serde_json::to_string_pretty(
+                &self.state.resources.development_resources.database_schemas
+            )?
         );
         content.push(ResourceContent::text("database", db_content));
 
@@ -1015,12 +1175,14 @@ impl CodeTemplateGenerator {
     }
 }
 
-#[async_trait]
-impl McpTemplate for CodeTemplateGenerator {
+// NOTE: CodeTemplateGenerator McpTemplate implementation removed
+// as McpTemplate trait was removed for MCP spec compliance
+/*
+impl CodeTemplateGenerator {
     fn name(&self) -> &str {
         "code_template"
     }
-    
+
     fn description(&self) -> &str {
         "Generate code templates based on team standards and best practices"
     }
@@ -1064,11 +1226,11 @@ export class {}Controller {{
     private setupRoutes(): void {{
         // Health check endpoint
         this.router.get('/health', this.healthCheck.bind(this));
-        
+
         // Protected endpoints with authentication and rate limiting
         this.router.use(authenticate);
         this.router.use(rateLimit({{ windowMs: 15 * 60 * 1000, max: 100 }}));
-        
+
         // CRUD operations
         this.router.get('/', this.list.bind(this));
         this.router.get('/:id', validateRequest('get{}'), this.getById.bind(this));
@@ -1090,7 +1252,7 @@ export class {}Controller {{
         try {{
             // TODO: Implement list functionality
             logger.info('Listing {} items', {{ requestId: req.id }});
-            
+
             res.status(200).json({{
                 success: true,
                 data: [],
@@ -1110,9 +1272,9 @@ export class {}Controller {{
         try {{
             const {{ id }} = req.params;
             logger.info('Getting {} by ID: {{}}', id, {{ requestId: req.id }});
-            
+
             // TODO: Implement get by ID functionality
-            
+
             res.status(200).json({{
                 success: true,
                 data: {{ id }},
@@ -1132,9 +1294,9 @@ export class {}Controller {{
         try {{
             const data = req.body;
             logger.info('Creating new {}', {{ data, requestId: req.id }});
-            
+
             // TODO: Implement create functionality
-            
+
             res.status(201).json({{
                 success: true,
                 data: {{ id: 'generated-id', ...data }},
@@ -1155,9 +1317,9 @@ export class {}Controller {{
             const {{ id }} = req.params;
             const updateData = req.body;
             logger.info('Updating {} with ID: {{}}', id, {{ updateData, requestId: req.id }});
-            
+
             // TODO: Implement update functionality
-            
+
             res.status(200).json({{
                 success: true,
                 data: {{ id, ...updateData }},
@@ -1177,9 +1339,9 @@ export class {}Controller {{
         try {{
             const {{ id }} = req.params;
             logger.info('Deleting {} with ID: {{}}', id, {{ requestId: req.id }});
-            
+
             // TODO: Implement delete functionality
-            
+
             res.status(200).json({{
                 success: true,
                 message: 'Item deleted successfully'
@@ -1201,7 +1363,7 @@ export class {}Controller {{
 
 // Export for use in main application
 export default new {}Controller().getRouter();"#,
-                    name, language, 
+                    name, language,
                     name.replace("_", "").replace("-", ""), // PascalCase for class name
                     name, name, name, name, name,
                     name, name, name, name, name, name, name, name, name, name,
@@ -1244,9 +1406,9 @@ export const {}: React.FC<{}Props> = ({{
 
     const fetchData = useCallback(async () => {{
         if (!id) return;
-        
+
         setState(prev => ({{ ...prev, loading: true, error: null }}));
-        
+
         try {{
             const response = await api.get(`/{}/${{id}}`);
             setState(prev => ({{ ...prev, data: response.data, loading: false }}));
@@ -1260,9 +1422,9 @@ export const {}: React.FC<{}Props> = ({{
 
     const handleUpdate = async (updateData: Partial<any>) => {{
         if (!id) return;
-        
+
         setState(prev => ({{ ...prev, loading: true, error: null }}));
-        
+
         try {{
             const response = await api.put(`/{}/${{id}}`, updateData);
             setState(prev => ({{ ...prev, data: response.data, loading: false }}));
@@ -1320,11 +1482,12 @@ export const {}: React.FC<{}Props> = ({{
                     </button>
                 </div>
             </div>
-            
+
             <div className={{styles.content}}>
                 {{state.data ? (
                     <div className={{styles.dataDisplay}}>
-                        {{/* TODO: Implement data display */}}
+                        {{/* TODO: Implement data display */
+}}
                         <pre>{{JSON.stringify(state.data, null, 2)}}</pre>
                     </div>
                 ) : (
@@ -1351,9 +1514,9 @@ export default {};"#,
             },
             "database_model" => {
                 Ok(format!(
-                    r#"// {} - Generated Database Model Template
-// Generated by Development Team Integration Platform
-// Language: {}
+r#" // {} - Generated Database Model Template
+    // Generated by Development Team Integration Platform
+    // Language: {}
 
 import {{ DataTypes, Model, Optional }} from 'sequelize';
 import {{ sequelize }} from '../config/database';
@@ -1363,7 +1526,7 @@ interface {}Attributes {{
     id: string;
     createdAt: Date;
     updatedAt: Date;
-    // TODO: Add specific model attributes
+// TODO: Add specific model attributes
 }}
 
 // Optional attributes for model creation
@@ -1374,22 +1537,22 @@ class {} extends Model<{}Attributes, {}CreationAttributes> implements {}Attribut
     public id!: string;
     public createdAt!: Date;
     public updatedAt!: Date;
-    
-    // TODO: Add specific model properties
-    
-    // Static methods
+
+// TODO: Add specific model properties
+
+// Static methods
     public static findByCustomField(value: string): Promise<{} | null> {{
         return this.findOne({{
             where: {{
-                // TODO: Implement custom field search
+// TODO: Implement custom field search
             }}
         }});
     }}
-    
-    // Instance methods
+
+// Instance methods
     public toJSON(): object {{
         const values = super.toJSON() as any;
-        // TODO: Add any custom JSON transformation
+// TODO: Add any custom JSON transformation
         return values;
     }}
 }}
@@ -1402,39 +1565,39 @@ class {} extends Model<{}Attributes, {}CreationAttributes> implements {}Attribut
             defaultValue: DataTypes.UUIDV4,
             primaryKey: true,
         }},
-        // TODO: Add specific model fields
-        // Example:
-        // name: {{
-        //     type: DataTypes.STRING,
-        //     allowNull: false,
-        //     validate: {{
-        //         len: [2, 100]
-        //     }}
-        // }},
+// TODO: Add specific model fields
+// Example:
+// name: {{
+//     type: DataTypes.STRING,
+//     allowNull: false,
+//     validate: {{
+//         len: [2, 100]
+//     }}
+// }},
     }},
     {{
         sequelize,
         tableName: '{}',
         timestamps: true,
-        paranoid: true, // Soft deletes
+paranoid: true, // Soft deletes
         indexes: [
-            // TODO: Add database indexes
-            // {{
-            //     fields: ['name']
-            // }},
+// TODO: Add database indexes
+// {{
+//     fields: ['name']
+// }},
         ],
         hooks: {{
             beforeCreate: async (instance: {}) => {{
-                // TODO: Add pre-creation hooks
+// TODO: Add pre-creation hooks
             }},
             afterCreate: async (instance: {}) => {{
-                // TODO: Add post-creation hooks
+// TODO: Add post-creation hooks
             }},
             beforeUpdate: async (instance: {}) => {{
-                // TODO: Add pre-update hooks
+// TODO: Add pre-update hooks
             }},
             afterUpdate: async (instance: {}) => {{
-                // TODO: Add post-update hooks
+// TODO: Add post-update hooks
             }}
         }}
     }}
@@ -1442,10 +1605,10 @@ class {} extends Model<{}Attributes, {}CreationAttributes> implements {}Attribut
 
 // Model associations (to be defined after all models are loaded)
 export const associate = () => {{
-    // TODO: Define model associations
-    // Example:
-    // {}.belongsTo(OtherModel, {{ foreignKey: 'otherId', as: 'other' }});
-    // {}.hasMany(RelatedModel, {{ foreignKey: '{}Id', as: 'relatedItems' }});
+// TODO: Define model associations
+// Example:
+// {}.belongsTo(OtherModel, {{ foreignKey: 'otherId', as: 'other' }});
+// {}.hasMany(RelatedModel, {{ foreignKey: '{}Id', as: 'relatedItems' }});
 }};
 
 export default {};
@@ -1475,13 +1638,14 @@ export {{ {}Attributes, {}CreationAttributes }};"#,
             },
             _ => {
                 Ok(format!(
-                    "// {} Template\n// Generated by Development Team Integration Platform\n// Language: {}\n\n// TODO: Implement {} template\n// Template type '{}' is not yet implemented\n// Available templates: api_service, react_component, database_model",
+" // {} Template\n// Generated by Development Team Integration Platform\n// Language: {}\n\n// TODO: Implement {} template\n// Template type '{}' is not yet implemented\n// Available templates: api_service, react_component, database_model",
                     name, language, name, template_type
                 ))
             }
         }
     }
 }
+*/
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -1522,17 +1686,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_notifications()
         .with_roots()
         .with_sampling()
-        .with_templates()
 
         .build()?;
 
     info!("Development Team Integration Platform configured:");
     info!("  Platform: {}", platform_state.config.platform_info.name);
     info!("  Version: {}", platform_state.config.platform_info.version);
-    info!("  Environment: {}", platform_state.config.platform_info.environment);
-    info!("  Organization: {}", platform_state.config.team_configuration.organization.name);
-    info!("  Teams: {}", platform_state.config.team_configuration.organization.teams.len());
-    info!("  Active Projects: {}", platform_state.config.team_configuration.projects.len());
+    info!(
+        "  Environment: {}",
+        platform_state.config.platform_info.environment
+    );
+    info!(
+        "  Organization: {}",
+        platform_state.config.team_configuration.organization.name
+    );
+    info!(
+        "  Teams: {}",
+        platform_state
+            .config
+            .team_configuration
+            .organization
+            .teams
+            .len()
+    );
+    info!(
+        "  Active Projects: {}",
+        platform_state.config.team_configuration.projects.len()
+    );
 
     info!("Available Tools:");
     info!("  - manage_teams: Team management, member info, on-call rotations, workload analysis");
@@ -1545,10 +1725,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("  - Completion: Context-aware development assistance");
     info!("  - Logging: Development activity and audit logging");
     info!("  - Notifications: Team collaboration and project updates");
-    
+
     info!("External Data Sources:");
     info!("  - Platform Config: data/platform_config.json");
-    info!("  - Workflow Templates: data/workflow_templates.yaml");  
+    info!("  - Workflow Templates: data/workflow_templates.yaml");
     info!("  - Project Resources: data/project_resources.json");
     info!("  - Code Templates: data/code_templates.md");
 

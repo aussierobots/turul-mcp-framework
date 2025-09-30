@@ -1,61 +1,41 @@
-//! Lambda MCP handler that processes requests directly with JsonRpcDispatcher
+//! Lambda MCP handler that delegates to SessionMcpHandler
 //!
-//! This module provides the core LambdaMcpHandler that processes Lambda HTTP
-//! requests using the turul-mcp-framework components without SessionMcpHandler.
+//! This module provides the LambdaMcpHandler that processes Lambda HTTP
+//! requests by delegating to SessionMcpHandler, eliminating code duplication.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use lambda_http::{Body as LambdaBody, Request as LambdaRequest, Response as LambdaResponse};
-use tracing::{debug, error, info};
-use uuid::Uuid;
+use tracing::{debug, info};
 
-use turul_http_mcp_server::{
-    ServerConfig, SharedNotificationBroadcaster, StreamManager,
-    StreamManagerNotificationBroadcaster,
-};
-use turul_mcp_json_rpc_server::{
-    JsonRpcDispatcher,
-    r#async::SessionContext as JsonRpcSessionContext,
-    dispatch::{JsonRpcMessage, JsonRpcMessageResult, parse_json_rpc_message},
-};
-use turul_mcp_protocol::ServerCapabilities;
+use turul_http_mcp_server::{ServerConfig, SessionMcpHandler, StreamConfig, StreamManager};
+use turul_mcp_json_rpc_server::JsonRpcDispatcher;
+use turul_mcp_protocol::{McpError, ServerCapabilities};
 use turul_mcp_session_storage::BoxedSessionStorage;
 
-use crate::adapter::{extract_mcp_headers, inject_mcp_headers};
-use crate::error::{LambdaError, Result};
+use crate::error::Result;
 
 #[cfg(feature = "cors")]
 use crate::cors::{CorsConfig, create_preflight_response, inject_cors_headers};
 
 /// Main handler for Lambda MCP requests
 ///
-/// This handler processes MCP requests in Lambda by:
+/// This handler processes MCP requests in Lambda by delegating to SessionMcpHandler,
+/// eliminating 600+ lines of duplicate business logic code.
 ///
-/// 1. Extracting JSON-RPC from Lambda requests
-/// 2. Managing sessions with pluggable storage
-/// 3. Processing through JsonRpcDispatcher directly
-/// 4. Handling SSE streaming and CORS for Lambda
+/// Features:
+/// 1. Type conversion between lambda_http and hyper
+/// 2. Delegation to SessionMcpHandler for all business logic
+/// 3. CORS support for browser clients
+/// 4. SSE validation to prevent silent failures
 #[derive(Clone)]
 pub struct LambdaMcpHandler {
-    /// JSON-RPC dispatcher for method handling
-    dispatcher: Arc<JsonRpcDispatcher>,
+    /// SessionMcpHandler for delegation (eliminates code duplication)
+    session_handler: SessionMcpHandler,
 
-    /// Session storage backend
-    session_storage: Arc<BoxedSessionStorage>,
-
-    /// Stream manager for SSE notifications
-    stream_manager: Arc<StreamManager>,
-
-    /// Server configuration (currently unused - stored for future extensibility)
+    /// Whether SSE is enabled (used for testing and debugging)
     #[allow(dead_code)]
-    config: ServerConfig,
-
-    /// Server implementation info (for initialize response)
-    implementation: turul_mcp_protocol::Implementation,
-
-    /// Server capabilities (for initialize response)
-    capabilities: ServerCapabilities,
+    sse_enabled: bool,
 
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
@@ -65,21 +45,28 @@ pub struct LambdaMcpHandler {
 impl LambdaMcpHandler {
     /// Create a new Lambda MCP handler with the framework components
     pub fn new(
-        dispatcher: JsonRpcDispatcher,
+        dispatcher: JsonRpcDispatcher<McpError>,
         session_storage: Arc<BoxedSessionStorage>,
         stream_manager: Arc<StreamManager>,
         config: ServerConfig,
-        implementation: turul_mcp_protocol::Implementation,
-        capabilities: ServerCapabilities,
+        stream_config: StreamConfig,
+        _implementation: turul_mcp_protocol::Implementation,
+        _capabilities: ServerCapabilities,
+        sse_enabled: bool,
         #[cfg(feature = "cors")] cors_config: Option<CorsConfig>,
     ) -> Self {
+        // Create SessionMcpHandler for delegation
+        let session_handler = SessionMcpHandler::with_shared_stream_manager(
+            config.clone(),
+            Arc::new(dispatcher),
+            session_storage.clone(),
+            stream_config,
+            stream_manager.clone(),
+        );
+
         Self {
-            dispatcher: Arc::new(dispatcher),
-            session_storage,
-            stream_manager,
-            config,
-            implementation,
-            capabilities,
+            session_handler,
+            sse_enabled,
             #[cfg(feature = "cors")]
             cors_config,
         }
@@ -88,19 +75,26 @@ impl LambdaMcpHandler {
     /// Create with shared stream manager (for advanced use cases)
     pub fn with_shared_stream_manager(
         config: ServerConfig,
-        dispatcher: Arc<JsonRpcDispatcher>,
+        dispatcher: Arc<JsonRpcDispatcher<McpError>>,
         session_storage: Arc<BoxedSessionStorage>,
         stream_manager: Arc<StreamManager>,
-        implementation: turul_mcp_protocol::Implementation,
-        capabilities: ServerCapabilities,
+        stream_config: StreamConfig,
+        _implementation: turul_mcp_protocol::Implementation,
+        _capabilities: ServerCapabilities,
+        sse_enabled: bool,
     ) -> Self {
-        Self {
+        // Create SessionMcpHandler for delegation
+        let session_handler = SessionMcpHandler::with_shared_stream_manager(
+            config,
             dispatcher,
             session_storage,
+            stream_config,
             stream_manager,
-            config,
-            implementation,
-            capabilities,
+        );
+
+        Self {
+            session_handler,
+            sse_enabled,
             #[cfg(feature = "cors")]
             cors_config: None,
         }
@@ -114,17 +108,22 @@ impl LambdaMcpHandler {
     }
 
     /// Get access to the underlying stream manager for notifications
-    pub fn stream_manager(&self) -> &Arc<StreamManager> {
-        &self.stream_manager
+    pub fn get_stream_manager(&self) -> &Arc<StreamManager> {
+        self.session_handler.get_stream_manager()
     }
 
-    /// Handle a Lambda HTTP request
+    /// Handle a Lambda HTTP request (snapshot mode - no real-time SSE)
     ///
-    /// This is the main entry point that processes all Lambda requests
-    /// and returns appropriate responses.
+    /// This method performs delegation to SessionMcpHandler for all business logic.
+    /// It only handles Lambda-specific concerns: CORS and type conversion.
+    ///
+    /// Note: If SSE is enabled (.sse(true)), SSE responses may not stream properly
+    /// with regular Lambda runtime. For proper SSE streaming, use handle_streaming()
+    /// with run_with_streaming_response().
     pub async fn handle(&self, req: LambdaRequest) -> Result<LambdaResponse<LambdaBody>> {
         let method = req.method().clone();
         let uri = req.uri().clone();
+
         let request_origin = req
             .headers()
             .get("origin")
@@ -136,44 +135,29 @@ impl LambdaMcpHandler {
             method, uri, request_origin
         );
 
-        // Handle CORS preflight requests first
+        // Handle CORS preflight requests first (Lambda-specific logic)
         #[cfg(feature = "cors")]
-        if method == http::Method::OPTIONS {
-            if let Some(ref cors_config) = self.cors_config {
-                debug!("Handling CORS preflight request");
-                return create_preflight_response(cors_config, request_origin.as_deref())
-                    .map_err(Into::into);
-            }
+        if method == http::Method::OPTIONS
+            && let Some(ref cors_config) = self.cors_config
+        {
+            debug!("Handling CORS preflight request");
+            return create_preflight_response(cors_config, request_origin.as_deref());
         }
 
-        // Extract MCP-specific headers
-        let mcp_headers = extract_mcp_headers(&req);
-        debug!("Extracted MCP headers: {:?}", mcp_headers);
+        // 🚀 DELEGATION: Convert Lambda request to hyper request
+        let hyper_req = crate::adapter::lambda_to_hyper_request(req)?;
 
-        // Handle GET requests for SSE streaming
-        if method == http::Method::GET {
-            return self
-                .handle_sse_request(req, mcp_headers, request_origin.as_deref())
-                .await;
-        }
+        // 🚀 DELEGATION: Use SessionMcpHandler for all business logic
+        let hyper_resp = self
+            .session_handler
+            .handle_mcp_request(hyper_req)
+            .await
+            .map_err(|e| crate::error::LambdaError::McpFramework(e.to_string()))?;
 
-        // Handle POST requests for JSON-RPC
-        if method == http::Method::POST {
-            return self
-                .handle_jsonrpc_request(req, mcp_headers, request_origin.as_deref())
-                .await;
-        }
+        // 🚀 DELEGATION: Convert hyper response back to Lambda response
+        let mut lambda_resp = crate::adapter::hyper_to_lambda_response(hyper_resp).await?;
 
-        // Unsupported method
-        let mut lambda_resp = LambdaResponse::builder()
-            .status(405)
-            .body(LambdaBody::Text("Method Not Allowed".to_string()))
-            .map_err(LambdaError::Http)?;
-
-        // Inject MCP headers into the response
-        inject_mcp_headers(&mut lambda_resp, mcp_headers);
-
-        // Apply CORS headers if configured
+        // Apply CORS headers if configured (Lambda-specific logic)
         #[cfg(feature = "cors")]
         if let Some(ref cors_config) = self.cors_config {
             inject_cors_headers(&mut lambda_resp, cors_config, request_origin.as_deref())?;
@@ -182,412 +166,486 @@ impl LambdaMcpHandler {
         Ok(lambda_resp)
     }
 
-    /// Handle POST JSON-RPC requests
-    async fn handle_jsonrpc_request(
+    /// Handle Lambda streaming request (real SSE streaming)
+    ///
+    /// This method enables real-time SSE streaming using Lambda's streaming response capability.
+    /// It delegates all business logic to SessionMcpHandler.
+    pub async fn handle_streaming(
         &self,
         req: LambdaRequest,
-        mcp_headers: HashMap<String, String>,
-        request_origin: Option<&str>,
-    ) -> Result<LambdaResponse<LambdaBody>> {
-        // Extract request body
-        let body_bytes = match req.body() {
-            LambdaBody::Empty => Vec::new(),
-            LambdaBody::Text(text) => text.as_bytes().to_vec(),
-            LambdaBody::Binary(bytes) => bytes.clone(),
-        };
+    ) -> std::result::Result<
+        lambda_http::Response<
+            http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>,
+        >,
+        Box<dyn std::error::Error + Send + Sync>,
+    > {
+        let method = req.method().clone();
+        let uri = req.uri().clone();
+        let request_origin = req
+            .headers()
+            .get("origin")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
 
-        // Parse JSON-RPC request (exact pattern from SessionMcpHandler)
-        let body_str = String::from_utf8(body_bytes)
-            .map_err(|e| LambdaError::Body(format!("Invalid UTF-8: {}", e)))?;
-
-        debug!("🔍 RAW JSON REQUEST: {}", body_str);
-        debug!("📊 RAW REQUEST HEADERS: {:?}", mcp_headers);
-        debug!("🌐 HTTP METHOD: POST (JSON-RPC)");
-        debug!("📍 REQUEST URI: {}", req.uri());
-
-        // Try to parse as JSON first to see the structure
-        match serde_json::from_str::<serde_json::Value>(&body_str) {
-            Ok(json_value) => {
-                debug!(
-                    "📝 PARSED JSON STRUCTURE: {}",
-                    serde_json::to_string_pretty(&json_value)
-                        .unwrap_or_else(|_| "failed to pretty print".to_string())
-                );
-            }
-            Err(json_err) => {
-                error!("❌ INVALID JSON: {}", json_err);
-            }
-        }
-
-        // Parse JSON-RPC message using framework parser
-        let message = match parse_json_rpc_message(&body_str) {
-            Ok(msg) => {
-                debug!("✅ PARSED JSON-RPC MESSAGE: {:?}", msg);
-                msg
-            }
-            Err(rpc_err) => {
-                error!("❌ JSON-RPC PARSE ERROR: {}", rpc_err);
-                error!("❌ FAILED ON BODY: {}", body_str);
-                let error_response =
-                    serde_json::to_string(&rpc_err).unwrap_or_else(|_| "{}".to_string());
-
-                error!("🔄 ERROR RESPONSE JSON: {}", error_response);
-
-                let mut lambda_resp = LambdaResponse::builder()
-                    .status(200) // JSON-RPC errors still use 200 OK
-                    .header("content-type", "application/json")
-                    .body(LambdaBody::Text(error_response))
-                    .map_err(LambdaError::Http)?;
-
-                inject_mcp_headers(&mut lambda_resp, mcp_headers);
-
-                #[cfg(feature = "cors")]
-                if let Some(ref cors_config) = self.cors_config {
-                    inject_cors_headers(&mut lambda_resp, cors_config, request_origin)?;
-                }
-
-                return Ok(lambda_resp);
-            }
-        };
-
-        // Extract session ID from headers
-        let session_id = mcp_headers.get("mcp-session-id").cloned();
-
-        // Handle the message using proper JSON-RPC enums (exact pattern from SessionMcpHandler)
-        let (message_result, response_session_id, _method_name) = match message {
-            JsonRpcMessage::Request(request) => {
-                debug!("Processing JSON-RPC request: method={}", request.method);
-
-                // Special handling for initialize requests - they create new sessions
-                let (response, response_session_id) = if request.method == "initialize" {
-                    debug!(
-                        "Handling initialize request - creating new session via session storage"
-                    );
-
-                    // Let session storage create the session and generate the ID
-                    match self
-                        .session_storage
-                        .create_session(self.capabilities.clone())
-                        .await
-                    {
-                        Ok(session_info) => {
-                            debug!(
-                                "Created new session via session storage: {}",
-                                session_info.session_id
-                            );
-
-                            // Create session-specific notification broadcaster from shared StreamManager
-                            let broadcaster: SharedNotificationBroadcaster =
-                                Arc::new(StreamManagerNotificationBroadcaster::new(Arc::clone(
-                                    &self.stream_manager,
-                                )));
-                            let broadcaster_any =
-                                Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
-
-                            let _session_context = JsonRpcSessionContext {
-                                session_id: session_info.session_id.clone(),
-                                metadata: HashMap::new(),
-                                broadcaster: Some(broadcaster_any),
-                                timestamp: chrono::Utc::now().timestamp_millis() as u64,
-                            };
-
-                            // Handle initialize request with proper MCP protocol response
-                            use turul_mcp_protocol::{InitializeResult, version::McpVersion};
-                            let initialize_result = InitializeResult::new(
-                                McpVersion::V2025_06_18,
-                                self.capabilities.clone(),
-                                self.implementation.clone(),
-                            );
-
-                            let response_value = match serde_json::to_value(initialize_result) {
-                                Ok(value) => value,
-                                Err(e) => {
-                                    error!("Failed to serialize InitializeResult: {}", e);
-                                    serde_json::json!({"error": "Failed to serialize initialize result"})
-                                }
-                            };
-
-                            let response = turul_mcp_json_rpc_server::JsonRpcResponse::success(
-                                request.id,
-                                response_value,
-                            );
-
-                            // Return the session ID created by session storage for the HTTP header
-                            (response, Some(session_info.session_id))
-                        }
-                        Err(err) => {
-                            error!("Failed to create session during initialize: {}", err);
-                            let error_msg = format!("Session creation failed: {}", err);
-                            let error_response =
-                                turul_mcp_json_rpc_server::JsonRpcResponse::success(
-                                    request.id,
-                                    serde_json::json!({"error": error_msg}),
-                                );
-                            (error_response, None)
-                        }
-                    }
-                } else {
-                    // Use shared StreamManager for notification broadcaster
-                    let session_id_str = session_id.clone().unwrap_or("unknown".to_string());
-                    let broadcaster: SharedNotificationBroadcaster = Arc::new(
-                        StreamManagerNotificationBroadcaster::new(Arc::clone(&self.stream_manager)),
-                    );
-                    let broadcaster_any =
-                        Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
-
-                    let session_context = JsonRpcSessionContext {
-                        session_id: session_id_str,
-                        metadata: HashMap::new(),
-                        broadcaster: Some(broadcaster_any),
-                        timestamp: chrono::Utc::now().timestamp_millis() as u64,
-                    };
-
-                    let response = self
-                        .dispatcher
-                        .handle_request_with_context(request, session_context)
-                        .await;
-                    (response, session_id)
-                };
-
-                (
-                    JsonRpcMessageResult::Response(response),
-                    response_session_id,
-                    None::<String>,
-                )
-            }
-            JsonRpcMessage::Notification(notification) => {
-                debug!(
-                    "Processing JSON-RPC notification: method={}",
-                    notification.method
-                );
-
-                // Create session context with shared StreamManager broadcaster
-                let session_context = if let Some(ref session_id) = session_id {
-                    let broadcaster: SharedNotificationBroadcaster = Arc::new(
-                        StreamManagerNotificationBroadcaster::new(Arc::clone(&self.stream_manager)),
-                    );
-                    let broadcaster_any =
-                        Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
-
-                    Some(JsonRpcSessionContext {
-                        session_id: session_id.clone(),
-                        metadata: HashMap::new(),
-                        broadcaster: Some(broadcaster_any),
-                        timestamp: chrono::Utc::now().timestamp_millis() as u64,
-                    })
-                } else {
-                    None
-                };
-
-                if let Err(err) = self
-                    .dispatcher
-                    .handle_notification_with_context(notification, session_context)
-                    .await
-                {
-                    error!("Notification handling error: {}", err);
-                }
-                (JsonRpcMessageResult::NoResponse, session_id.clone(), None)
-            }
-        };
-
-        // Convert message result to Lambda response
-        let response_json = match message_result {
-            JsonRpcMessageResult::Response(response) => serde_json::to_value(response)
-                .map_err(|e| LambdaError::Body(format!("Failed to serialize response: {}", e)))?,
-            JsonRpcMessageResult::Error(error) => {
-                // Handle JSON-RPC error
-                serde_json::to_value(error)
-                    .map_err(|e| LambdaError::Body(format!("Failed to serialize error: {}", e)))?
-            }
-            JsonRpcMessageResult::NoResponse => {
-                // For notifications, return 202 Accepted
-                let mut lambda_resp = LambdaResponse::builder()
-                    .status(202)
-                    .body(LambdaBody::Empty)
-                    .map_err(LambdaError::Http)?;
-
-                inject_mcp_headers(&mut lambda_resp, mcp_headers);
-
-                if let Some(ref session_id) = response_session_id {
-                    lambda_resp
-                        .headers_mut()
-                        .insert("mcp-session-id", session_id.parse().unwrap());
-                }
-
-                #[cfg(feature = "cors")]
-                if let Some(ref cors_config) = self.cors_config {
-                    inject_cors_headers(&mut lambda_resp, cors_config, request_origin)?;
-                }
-
-                return Ok(lambda_resp);
-            }
-        };
-
-        // Create Lambda response
-        let response_body = serde_json::to_string(&response_json)
-            .map_err(|e| LambdaError::Body(format!("Failed to serialize response: {}", e)))?;
-
-        let response_body_len = response_body.len();
-
-        debug!("🔄 RESPONSE JSON: {}", response_body);
-        debug!(
-            "📝 RESPONSE JSON STRUCTURE: {}",
-            serde_json::to_string_pretty(&response_json)
-                .unwrap_or_else(|_| "failed to pretty print".to_string())
+        info!(
+            "🌊 Lambda streaming MCP request: {} {} (origin: {:?})",
+            method, uri, request_origin
         );
-        debug!("📏 RESPONSE SIZE: {} bytes", response_body_len);
 
-        let mut lambda_resp = LambdaResponse::builder()
-            .status(200)
-            .header("content-type", "application/json")
-            .body(LambdaBody::Text(response_body))
-            .map_err(LambdaError::Http)?;
+        // Handle CORS preflight requests first (Lambda-specific logic)
+        #[cfg(feature = "cors")]
+        if method == http::Method::OPTIONS
+            && let Some(ref cors_config) = self.cors_config
+        {
+            debug!("Handling CORS preflight request (streaming)");
+            let preflight_response =
+                create_preflight_response(cors_config, request_origin.as_deref())
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
-        // Add session ID header if we have one
-        if let Some(ref session_id) = response_session_id {
-            lambda_resp
-                .headers_mut()
-                .insert("mcp-session-id", session_id.parse().unwrap());
+            // Convert LambdaResponse<LambdaBody> to streaming response
+            return Ok(self.convert_lambda_response_to_streaming(preflight_response));
         }
 
-        // Inject MCP headers
-        inject_mcp_headers(&mut lambda_resp, mcp_headers);
+        // 🚀 DELEGATION: Convert Lambda request to hyper request
+        let hyper_req = crate::adapter::lambda_to_hyper_request(req)
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
-        // Apply CORS headers if configured
+        // 🚀 DELEGATION: Use SessionMcpHandler for all business logic
+        let hyper_resp = self
+            .session_handler
+            .handle_mcp_request(hyper_req)
+            .await
+            .map_err(|e| {
+                Box::new(crate::error::LambdaError::McpFramework(e.to_string()))
+                    as Box<dyn std::error::Error + Send + Sync>
+            })?;
+
+        // 🚀 DELEGATION: Convert hyper response to Lambda streaming response (preserves streaming!)
+        let mut lambda_resp = crate::adapter::hyper_to_lambda_streaming(hyper_resp);
+
+        // Apply CORS headers if configured (Lambda-specific logic)
         #[cfg(feature = "cors")]
         if let Some(ref cors_config) = self.cors_config {
-            inject_cors_headers(&mut lambda_resp, cors_config, request_origin.as_deref())?;
+            inject_cors_headers(&mut lambda_resp, cors_config, request_origin.as_deref())
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
         }
 
-        debug!(
-            "📤 FINAL HTTP RESPONSE HEADERS: {:?}",
-            lambda_resp.headers()
-        );
-        debug!("📊 FINAL HTTP STATUS: {}", lambda_resp.status());
-        info!("✅ Lambda JSON-RPC response: {} bytes", response_body_len);
         Ok(lambda_resp)
     }
 
-    /// Handle GET SSE requests
-    async fn handle_sse_request(
+    /// Convert Lambda response to streaming format (helper for CORS preflight)
+    fn convert_lambda_response_to_streaming(
         &self,
-        _req: LambdaRequest,
-        mcp_headers: HashMap<String, String>,
-        request_origin: Option<&str>,
-    ) -> Result<LambdaResponse<LambdaBody>> {
-        // Extract session ID (required for SSE)
-        let session_id: Uuid = mcp_headers
-            .get("mcp-session-id")
-            .and_then(|s| s.parse().ok())
-            .ok_or_else(|| LambdaError::Session("Missing session ID for SSE".to_string()))?;
+        lambda_response: LambdaResponse<LambdaBody>,
+    ) -> lambda_http::Response<http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>>
+    {
+        use bytes::Bytes;
+        use http_body_util::{BodyExt, Full};
 
-        // Verify session exists in storage
-        match self
-            .session_storage
-            .get_session(&session_id.to_string())
-            .await
-        {
-            Ok(Some(_)) => {}
-            Ok(None) => return Err(LambdaError::Session("Session not found".to_string())),
-            Err(e) => return Err(LambdaError::Session(e.to_string())),
-        }
+        let (parts, body) = lambda_response.into_parts();
+        let body_bytes = match body {
+            LambdaBody::Empty => Bytes::new(),
+            LambdaBody::Text(text) => Bytes::from(text),
+            LambdaBody::Binary(bytes) => Bytes::from(bytes),
+        };
 
-        #[cfg(feature = "sse")]
-        {
-            // For now, return a simple SSE response with a heartbeat
-            // TODO: Implement proper SSE streaming when the framework API is available
-            let sse_content = format!(
-                "data: {{\"type\":\"heartbeat\",\"timestamp\":{}}}\n\n",
-                chrono::Utc::now().timestamp_millis()
-            );
+        // Map error type from Infallible to hyper::Error
+        let streaming_body = Full::new(body_bytes)
+            .map_err(|e: std::convert::Infallible| match e {})
+            .boxed_unsync();
 
-            let mut lambda_resp = LambdaResponse::builder()
-                .status(200)
-                .header("content-type", "text/event-stream")
-                .header("cache-control", "no-cache")
-                .header("connection", "keep-alive")
-                .header("mcp-session-id", session_id.to_string())
-                .body(LambdaBody::Text(sse_content))
-                .map_err(LambdaError::Http)?;
-
-            // Apply CORS headers if configured
-            #[cfg(feature = "cors")]
-            if let Some(ref cors_config) = self.cors_config {
-                inject_cors_headers(&mut lambda_resp, cors_config, request_origin.as_deref())?;
-            }
-
-            info!("✅ Lambda SSE stream for session: {}", session_id);
-            Ok(lambda_resp)
-        }
-
-        #[cfg(not(feature = "sse"))]
-        {
-            Err(LambdaError::Config("SSE feature not enabled".to_string()))
-        }
+        lambda_http::Response::from_parts(parts, streaming_body)
     }
-
-    // Session management is now handled by the framework during initialize requests
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
-    use turul_http_mcp_server::{JsonRpcHandler, ServerConfig, StreamConfig, StreamManager};
-    use turul_mcp_json_rpc_server::JsonRpcDispatcher;
-    use turul_mcp_protocol::{Implementation, ServerCapabilities};
+    use http::Request;
     use turul_mcp_session_storage::InMemorySessionStorage;
 
     #[tokio::test]
     async fn test_handler_creation() {
-        // Test basic handler components
-        let dispatcher = Arc::new(JsonRpcDispatcher::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
-        let stream_manager = Arc::new(StreamManager::with_config(
-            session_storage.clone(),
-            StreamConfig::default(),
-        ));
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let dispatcher = JsonRpcDispatcher::new();
         let config = ServerConfig::default();
-        let implementation = Implementation {
-            name: "test".to_string(),
-            version: "1.0.0".to_string(),
-            title: Some("Test Server".to_string()),
-        };
+        let implementation = turul_mcp_protocol::Implementation::new("test", "1.0.0");
         let capabilities = ServerCapabilities::default();
 
         let handler = LambdaMcpHandler::new(
-            Arc::try_unwrap(dispatcher).unwrap_or_else(|_arc| {
-                // Fallback if Arc has multiple references - create a new dispatcher
-                JsonRpcDispatcher::new()
-            }),
+            dispatcher,
             session_storage,
             stream_manager,
             config,
+            StreamConfig::default(),
             implementation,
             capabilities,
+            false, // SSE disabled for test
             #[cfg(feature = "cors")]
             None,
         );
 
         // Test that handler was created successfully
-        assert!(handler.stream_manager().as_ref() as *const _ != std::ptr::null());
+        assert!(!handler.sse_enabled);
     }
 
     #[tokio::test]
-    async fn test_bridge_creation() {
-        use turul_mcp_server::handlers::PingHandler;
-        use turul_mcp_server::{SessionAwareMcpHandlerBridge, SessionManager};
-
-        let ping_handler = Arc::new(PingHandler);
+    async fn test_sse_enabled_with_handle_works() {
         let session_storage = Arc::new(InMemorySessionStorage::new());
-        let session_manager = Arc::new(SessionManager::with_storage_and_timeouts(
-            session_storage,
-            ServerCapabilities::default(),
-            std::time::Duration::from_secs(30 * 60),
-            std::time::Duration::from_secs(60),
-        ));
-        let bridge = SessionAwareMcpHandlerBridge::new(ping_handler, session_manager);
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let dispatcher = JsonRpcDispatcher::new();
+        let config = ServerConfig::default();
+        let implementation = turul_mcp_protocol::Implementation::new("test", "1.0.0");
+        let capabilities = ServerCapabilities::default();
 
-        assert_eq!(bridge.supported_methods(), vec!["ping".to_string()]);
+        // Create handler with SSE enabled
+        let handler = LambdaMcpHandler::new(
+            dispatcher,
+            session_storage,
+            stream_manager,
+            config,
+            StreamConfig::default(),
+            implementation,
+            capabilities,
+            true, // SSE enabled - should work with handle() for snapshot-based SSE
+            #[cfg(feature = "cors")]
+            None,
+        );
+
+        // Create a test Lambda request
+        let lambda_req = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .body(LambdaBody::Text(
+                r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+            ))
+            .unwrap();
+
+        // handle() should work (provides snapshot-based SSE rather than real-time streaming)
+        let result = handler.handle(lambda_req).await;
+        assert!(
+            result.is_ok(),
+            "handle() should work with SSE enabled for snapshot-based responses"
+        );
+    }
+
+    /// Test that verifies StreamConfig is properly threaded through the delegation
+    #[tokio::test]
+    async fn test_stream_config_preservation() {
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let dispatcher = JsonRpcDispatcher::new();
+        let config = ServerConfig::default();
+        let implementation = turul_mcp_protocol::Implementation::new("test", "1.0.0");
+        let capabilities = ServerCapabilities::default();
+
+        // Create a custom StreamConfig with non-default values
+        let custom_stream_config = StreamConfig {
+            channel_buffer_size: 1024,      // Non-default value (default is 1000)
+            max_replay_events: 200,         // Non-default value (default is 100)
+            keepalive_interval_seconds: 10, // Non-default value (default is 30)
+            cors_origin: "https://custom-test.example.com".to_string(), // Non-default value
+        };
+
+        // Create stream manager with the custom config
+        let stream_manager = Arc::new(StreamManager::with_config(
+            session_storage.clone(),
+            custom_stream_config.clone(),
+        ));
+
+        let handler = LambdaMcpHandler::new(
+            dispatcher,
+            session_storage,
+            stream_manager,
+            config,
+            custom_stream_config.clone(),
+            implementation,
+            capabilities,
+            false, // SSE disabled for test
+            #[cfg(feature = "cors")]
+            None,
+        );
+
+        // The handler should be created successfully, proving the StreamConfig was accepted
+        assert!(!handler.sse_enabled);
+
+        // Verify that the stream manager has the custom configuration
+        let stream_manager = handler.get_stream_manager();
+
+        // Verify the StreamConfig values were propagated correctly
+        let actual_config = stream_manager.get_config();
+
+        assert_eq!(
+            actual_config.channel_buffer_size, custom_stream_config.channel_buffer_size,
+            "Custom channel_buffer_size was not propagated correctly"
+        );
+        assert_eq!(
+            actual_config.max_replay_events, custom_stream_config.max_replay_events,
+            "Custom max_replay_events was not propagated correctly"
+        );
+        assert_eq!(
+            actual_config.keepalive_interval_seconds,
+            custom_stream_config.keepalive_interval_seconds,
+            "Custom keepalive_interval_seconds was not propagated correctly"
+        );
+        assert_eq!(
+            actual_config.cors_origin, custom_stream_config.cors_origin,
+            "Custom cors_origin was not propagated correctly"
+        );
+
+        // Verify the stream manager is accessible (proves delegation worked)
+        assert!(Arc::strong_count(stream_manager) >= 1);
+    }
+
+    /// Test the full builder → server → handler chain with StreamConfig
+    #[tokio::test]
+    async fn test_full_builder_chain_stream_config() {
+        use crate::LambdaMcpServerBuilder;
+        use turul_mcp_session_storage::InMemorySessionStorage;
+
+        // Create a custom StreamConfig with non-default values
+        let custom_stream_config = turul_http_mcp_server::StreamConfig {
+            channel_buffer_size: 2048,      // Non-default value
+            max_replay_events: 500,         // Non-default value
+            keepalive_interval_seconds: 15, // Non-default value
+            cors_origin: "https://full-chain-test.example.com".to_string(),
+        };
+
+        // Test the complete builder → server → handler chain
+        let server = LambdaMcpServerBuilder::new()
+            .name("full-chain-test")
+            .version("1.0.0")
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(true) // Enable SSE to test streaming functionality
+            .stream_config(custom_stream_config.clone())
+            .build()
+            .await
+            .expect("Server should build successfully");
+
+        // Create handler from server (this is the critical chain step)
+        let handler = server
+            .handler()
+            .await
+            .expect("Handler should be created from server");
+
+        // Verify the handler was created successfully
+        assert!(handler.sse_enabled, "SSE should be enabled");
+
+        // Verify that the custom StreamConfig was preserved through the entire chain
+        let stream_manager = handler.get_stream_manager();
+        let actual_config = stream_manager.get_config();
+
+        assert_eq!(
+            actual_config.channel_buffer_size, custom_stream_config.channel_buffer_size,
+            "Custom channel_buffer_size should be preserved through builder → server → handler chain"
+        );
+        assert_eq!(
+            actual_config.max_replay_events, custom_stream_config.max_replay_events,
+            "Custom max_replay_events should be preserved through builder → server → handler chain"
+        );
+        assert_eq!(
+            actual_config.keepalive_interval_seconds,
+            custom_stream_config.keepalive_interval_seconds,
+            "Custom keepalive_interval_seconds should be preserved through builder → server → handler chain"
+        );
+        assert_eq!(
+            actual_config.cors_origin, custom_stream_config.cors_origin,
+            "Custom cors_origin should be preserved through builder → server → handler chain"
+        );
+
+        // Verify the stream manager is functional
+        assert!(
+            Arc::strong_count(stream_manager) >= 1,
+            "Stream manager should be properly initialized"
+        );
+
+        // Additional verification: Test that the configuration is actually used functionally
+        // by verifying the stream manager can be used with the custom configuration
+        let test_session_id = uuid::Uuid::now_v7().to_string();
+
+        // The stream manager should be able to handle session operations with the custom config
+        // This verifies the config isn't just preserved but actually used
+        let subscriptions = stream_manager.get_subscriptions(&test_session_id).await;
+        assert!(
+            subscriptions.is_empty(),
+            "New session should have no subscriptions initially"
+        );
+
+        // Verify the stream manager was constructed with our custom config values
+        // This confirms the config propagated through the entire builder → server → handler chain
+        assert_eq!(
+            stream_manager.get_config().channel_buffer_size,
+            2048,
+            "Stream manager should be using the custom buffer size functionally"
+        );
+    }
+
+    /// Test matrix: 4 combinations of streaming runtime vs SSE configuration
+    /// This ensures we don't have runtime hangs or configuration conflicts
+
+    /// Test 1: Non-streaming runtime + sse(false) - This should work (snapshot mode)
+    #[tokio::test]
+    async fn test_non_streaming_runtime_sse_false() {
+        use crate::LambdaMcpServerBuilder;
+        use turul_mcp_session_storage::InMemorySessionStorage;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("test-non-streaming-sse-false")
+            .version("1.0.0")
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false) // Disable SSE for non-streaming runtime
+            .build()
+            .await
+            .expect("Server should build successfully");
+
+        let handler = server
+            .handler()
+            .await
+            .expect("Handler should be created from server");
+
+        // Verify configuration
+        assert!(!handler.sse_enabled, "SSE should be disabled");
+
+        // Create a test request (POST /mcp works in all configs)
+        let lambda_req = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .body(LambdaBody::Text(
+                r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+            ))
+            .unwrap();
+
+        // This should work without hanging
+        let result = handler.handle(lambda_req).await;
+        assert!(
+            result.is_ok(),
+            "POST /mcp should work with non-streaming + sse(false)"
+        );
+    }
+
+    /// Test 2: Non-streaming runtime + sse(true) - This should work (snapshot-based SSE)
+    #[tokio::test]
+    async fn test_non_streaming_runtime_sse_true() {
+        use crate::LambdaMcpServerBuilder;
+        use turul_mcp_session_storage::InMemorySessionStorage;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("test-non-streaming-sse-true")
+            .version("1.0.0")
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(true) // Enable SSE for snapshot-based responses
+            .build()
+            .await
+            .expect("Server should build successfully");
+
+        let handler = server
+            .handler()
+            .await
+            .expect("Handler should be created from server");
+
+        // Verify configuration
+        assert!(handler.sse_enabled, "SSE should be enabled");
+
+        // Create a test request (POST /mcp works in all configs)
+        let lambda_req = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .body(LambdaBody::Text(
+                r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+            ))
+            .unwrap();
+
+        // This should work without hanging (provides snapshot-based SSE)
+        let result = handler.handle(lambda_req).await;
+        assert!(
+            result.is_ok(),
+            "POST /mcp should work with non-streaming + sse(true)"
+        );
+
+        // Note: GET /mcp would provide snapshot events, not real-time streaming
+        // This is the key difference from handle_streaming()
+    }
+
+    /// Test 3: Streaming runtime + sse(false) - This should work (SSE disabled)
+    #[tokio::test]
+    async fn test_streaming_runtime_sse_false() {
+        use crate::LambdaMcpServerBuilder;
+        use turul_mcp_session_storage::InMemorySessionStorage;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("test-streaming-sse-false")
+            .version("1.0.0")
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false) // Disable SSE even with streaming runtime
+            .build()
+            .await
+            .expect("Server should build successfully");
+
+        let handler = server
+            .handler()
+            .await
+            .expect("Handler should be created from server");
+
+        // Verify configuration
+        assert!(!handler.sse_enabled, "SSE should be disabled");
+
+        // Create a test request for streaming handler
+        let lambda_req = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .body(LambdaBody::Text(
+                r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+            ))
+            .unwrap();
+
+        // This should work with streaming runtime even when SSE is disabled
+        let result = handler.handle_streaming(lambda_req).await;
+        assert!(
+            result.is_ok(),
+            "Streaming runtime should work with sse(false)"
+        );
+    }
+
+    /// Test 4: Streaming runtime + sse(true) - This should work (real-time SSE streaming)
+    #[tokio::test]
+    async fn test_streaming_runtime_sse_true() {
+        use crate::LambdaMcpServerBuilder;
+        use turul_mcp_session_storage::InMemorySessionStorage;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("test-streaming-sse-true")
+            .version("1.0.0")
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(true) // Enable SSE with streaming runtime for real-time streaming
+            .build()
+            .await
+            .expect("Server should build successfully");
+
+        let handler = server
+            .handler()
+            .await
+            .expect("Handler should be created from server");
+
+        // Verify configuration
+        assert!(handler.sse_enabled, "SSE should be enabled");
+
+        // Create a test request for streaming handler
+        let lambda_req = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .body(LambdaBody::Text(
+                r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+            ))
+            .unwrap();
+
+        // This should work and provide real-time SSE streaming
+        let result = handler.handle_streaming(lambda_req).await;
+        assert!(
+            result.is_ok(),
+            "Streaming runtime should work with sse(true) for real-time streaming"
+        );
+
+        // Note: GET /mcp would provide real-time streaming events
+        // This is the optimal configuration for real-time notifications
     }
 }

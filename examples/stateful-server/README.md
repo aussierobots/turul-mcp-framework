@@ -233,17 +233,17 @@ async fn call(&self, args: Value, session: Option<SessionContext>) -> Result<Vec
     let session = session.ok_or("This tool requires session context")?;
     
     // Get typed state
-    let mut cart_items: HashMap<String, (i64, f64)> = session.get_typed_state("cart_items")
+let mut cart_items: HashMap<String, (i64, f64)> = session.get_typed_state("cart_items").await
         .unwrap_or_default();
     
     // Modify state
     cart_items.insert("new_item".to_string(), (1, 9.99));
     
     // Save state back to session
-    session.set_typed_state("cart_items", &cart_items).unwrap();
+    session.set_typed_state("cart_items", &cart_items).await.unwrap();
     
     // Send progress notifications
-    session.notify_progress("cart_update", 1);
+    session.notify_progress("cart_update", 1).await;
     
     Ok(vec![ToolResult::text("Updated".to_string())])
 }
@@ -255,19 +255,19 @@ async fn call(&self, args: Value, session: Option<SessionContext>) -> Result<Vec
 ```rust
 // Store complex data structures
 let cart_items: HashMap<String, (i64, f64)> = HashMap::new();
-session.set_typed_state("cart_items", &cart_items).unwrap();
+session.set_typed_state("cart_items", &cart_items).await.unwrap();
 
 // Retrieve with default fallback
-let cart_items: HashMap<String, (i64, f64)> = session.get_typed_state("cart_items")
+let cart_items: HashMap<String, (i64, f64)> = session.get_typed_state("cart_items").await
     .unwrap_or_default();
 ```
 
 #### Progress Notifications
 ```rust
 // Notify about cart operations
-session.notify_progress(format!("cart_item_{}", item), 1);
-session.notify_progress("cart_clear", 1);
-session.notify_progress(format!("cart_remove_{}", item), 1);
+session.notify_progress(format!("cart_item_{}", item), 1).await;
+session.notify_progress("cart_clear", 1).await;
+session.notify_progress(format!("cart_remove_{}", item), 1).await;
 ```
 
 ### 3. Session Lifecycle
@@ -413,10 +413,10 @@ struct CustomState {
 
 // Store custom types
 let state = CustomState { /* ... */ };
-session.set_typed_state("custom", &state).unwrap();
+session.set_typed_state("custom", &state).await.unwrap();
 
 // Retrieve custom types
-let state: CustomState = session.get_typed_state("custom")
+let state: CustomState = session.get_typed_state("custom").await
     .unwrap_or_default();
 ```
 
@@ -437,7 +437,7 @@ if quantity <= 0 {
 // Save state only if operation succeeds
 let mut cart_backup = cart_items.clone();
 match perform_operation(&mut cart_items) {
-    Ok(_) => session.set_typed_state("cart_items", &cart_items).unwrap(),
+    Ok(_) => session.set_typed_state("cart_items", &cart_items).await.unwrap(),
     Err(e) => {
         cart_items = cart_backup; // Rollback
         return Err(e);

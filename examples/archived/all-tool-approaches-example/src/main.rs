@@ -144,18 +144,18 @@ impl McpTool for DivideTool {
         let dividend = args.get("dividend")
             .and_then(|v| v.as_f64())
             .ok_or_else(|| turul_mcp_protocol::McpError::missing_param("dividend"))?;
-            
+
         let divisor = args.get("divisor")
             .and_then(|v| v.as_f64())
             .ok_or_else(|| turul_mcp_protocol::McpError::missing_param("divisor"))?;
-        
+
         // Custom validation logic
         if divisor == 0.0 {
             return Err(turul_mcp_protocol::McpError::InvalidParameters("Division by zero".to_string()));
         }
-        
+
         let result = dividend / divisor;
-        
+
         Ok(CallToolResult {
             content: vec![ToolResult::text(format!("{} ÷ {} = {}", dividend, divisor, result))],
             is_error: None,
@@ -186,19 +186,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .version("1.0.0")
         .title("All Tool Creation Approaches Demo")
         .instructions("Compare different ways to create MCP tools. Each approach has different trade-offs.")
-        
+
         // Approach 1: Derive macro (requires instantiation)
         .tool(MultiplyTool { a: 0.0, b: 0.0 }) // Values will be replaced at runtime
-        
+
         // Approach 2: Function macro
         .tool_fn(calculate_power)
-        
+
         // Approach 3: Declarative macro
         .tool(create_sqrt_tool())
-        
+
         // Approach 4: Manual implementation
         .tool(DivideTool::new())
-        
+
         .bind_address("127.0.0.1:8650".parse()?)
         .build()?;
 

@@ -6,9 +6,9 @@ use proc_macro::TokenStream;
 // use proc_macro2::TokenStream as TokenStream2; // Currently unused
 use quote::quote;
 use syn::{
+    Expr, Ident, LitStr, Result, Token,
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
-    Expr, Ident, LitStr, Result, Token,
 };
 
 /// Parsed content of a prompt! macro
@@ -64,7 +64,7 @@ impl Parse for PromptMacro {
                     return Err(syn::Error::new(
                         field_name.span(),
                         format!("Unknown field: {}", field_name),
-                    ))
+                    ));
                 }
             }
 
@@ -126,7 +126,7 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         .as_ref()
         .map(|d| quote! { Some(#d) })
         .unwrap_or_else(|| quote! { None });
-    
+
     let title = prompt_def
         .title
         .as_ref()
@@ -143,7 +143,9 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             let arg_name = &arg.name.to_string();
             let _arg_type = match arg.arg_type.to_string().as_str() {
                 "String" | "string" => quote! { "string" },
-                "i32" | "i64" | "u32" | "u64" | "isize" | "usize" | "int" | "integer" => quote! { "integer" },
+                "i32" | "i64" | "u32" | "u64" | "isize" | "usize" | "int" | "integer" => {
+                    quote! { "integer" }
+                }
                 "f32" | "f64" | "float" | "number" => quote! { "number" },
                 "bool" | "boolean" => quote! { "boolean" },
                 _ => quote! { "string" }, // Default to string for unknown types
@@ -154,6 +156,7 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             quote! {
                 turul_mcp_protocol::prompts::PromptArgument {
                     name: #arg_name.to_string(),
+                    title: None,
                     description: Some(#description.to_string()),
                     required: Some(#required),
                 }
@@ -171,7 +174,7 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             use turul_mcp_server::McpPrompt;
             use std::collections::HashMap;
             use serde_json::Value;
-            
+
             #[derive(Clone)]
             struct GeneratedPrompt;
 
@@ -185,7 +188,7 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             }
 
             impl HasPromptArguments for GeneratedPrompt {
-                fn arguments(&self) -> Option<&Vec<PromptArgument>> { 
+                fn arguments(&self) -> Option<&Vec<PromptArgument>> {
                     static ARGS: std::sync::OnceLock<Option<Vec<PromptArgument>>> = std::sync::OnceLock::new();
                     ARGS.get_or_init(|| #prompt_args).as_ref()
                 }
@@ -201,16 +204,13 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 
             #[async_trait::async_trait]
             impl McpPrompt for GeneratedPrompt {
-                async fn get_prompt(&self, arguments: Option<HashMap<String, Value>>) 
-                    -> turul_mcp_server::McpResult<turul_mcp_protocol::prompts::GetPromptResponse> 
+                async fn render(&self, arguments: Option<HashMap<String, Value>>)
+                    -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::prompts::PromptMessage>>
                 {
                     let template_fn = #template;
                     let messages = template_fn(arguments).await?;
-                    
-                    Ok(turul_mcp_protocol::prompts::GetPromptResponse::success(
-                        messages,
-                        #description.map(String::from)
-                    ))
+
+                    Ok(messages)
                 }
             }
 

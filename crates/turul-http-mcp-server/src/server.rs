@@ -3,24 +3,23 @@
 //! This server provides MCP 2025-06-18 compliant HTTP transport with
 //! pluggable session storage backends and proper SSE resumability.
 
-use std::net::SocketAddr;
-use std::sync::Arc;
+use bytes::Bytes;
+use http_body_util::{BodyExt, Full};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response};
-use http_body_util::{Full, BodyExt};
-use bytes::Bytes;
 use hyper_util::rt::TokioIo;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::{info, error, debug};
+use tracing::{debug, error, info};
 
-use turul_mcp_json_rpc_server::{JsonRpcHandler, JsonRpcDispatcher};
+use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
+use turul_mcp_protocol::McpError;
 use turul_mcp_session_storage::InMemorySessionStorage;
 
-use crate::{
-    Result, SessionMcpHandler, StreamConfig, StreamManager,
-    CorsLayer
-};
+use crate::streamable_http::{McpProtocolVersion, StreamableHttpHandler};
+use crate::{CorsLayer, Result, SessionMcpHandler, StreamConfig, StreamManager};
 
 /// Configuration for the HTTP MCP server
 #[derive(Debug, Clone)]
@@ -37,6 +36,8 @@ pub struct ServerConfig {
     pub enable_get_sse: bool,
     /// Enable POST SSE support (streaming tool call responses) - disabled by default for compatibility
     pub enable_post_sse: bool,
+    /// Session expiry time in minutes (default: 30 minutes)
+    pub session_expiry_minutes: u64,
 }
 
 impl Default for ServerConfig {
@@ -45,9 +46,10 @@ impl Default for ServerConfig {
             bind_address: "127.0.0.1:8000".parse().unwrap(),
             mcp_path: "/mcp".to_string(),
             enable_cors: true,
-            max_body_size: 1024 * 1024, // 1MB
+            max_body_size: 1024 * 1024,            // 1MB
             enable_get_sse: cfg!(feature = "sse"), // GET SSE enabled if "sse" feature is compiled
             enable_post_sse: false, // Disabled by default for better client compatibility (e.g., MCP Inspector)
+            session_expiry_minutes: 30, // 30 minutes default
         }
     }
 }
@@ -55,9 +57,10 @@ impl Default for ServerConfig {
 /// Builder for HTTP MCP server with pluggable storage
 pub struct HttpMcpServerBuilder {
     config: ServerConfig,
-    dispatcher: JsonRpcDispatcher,
+    dispatcher: JsonRpcDispatcher<McpError>,
     session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
     stream_config: StreamConfig,
+    server_capabilities: Option<turul_mcp_protocol::ServerCapabilities>,
 }
 
 impl HttpMcpServerBuilder {
@@ -65,21 +68,25 @@ impl HttpMcpServerBuilder {
     pub fn new() -> Self {
         Self {
             config: ServerConfig::default(),
-            dispatcher: JsonRpcDispatcher::new(),
+            dispatcher: JsonRpcDispatcher::<McpError>::new(),
             session_storage: Some(Arc::new(InMemorySessionStorage::new())),
             stream_config: StreamConfig::default(),
+            server_capabilities: None,
         }
     }
 }
 
 impl HttpMcpServerBuilder {
     /// Create a new builder with specific session storage
-    pub fn with_storage(session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>) -> Self {
+    pub fn with_storage(
+        session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
+    ) -> Self {
         Self {
             config: ServerConfig::default(),
-            dispatcher: JsonRpcDispatcher::new(),
+            dispatcher: JsonRpcDispatcher::<McpError>::new(),
             session_storage: Some(session_storage),
             stream_config: StreamConfig::default(),
+            server_capabilities: None,
         }
     }
 
@@ -126,6 +133,12 @@ impl HttpMcpServerBuilder {
         self
     }
 
+    /// Set session expiry time in minutes
+    pub fn session_expiry_minutes(mut self, minutes: u64) -> Self {
+        self.config.session_expiry_minutes = minutes;
+        self
+    }
+
     /// Configure SSE streaming settings
     pub fn stream_config(mut self, config: StreamConfig) -> Self {
         self.stream_config = config;
@@ -135,7 +148,7 @@ impl HttpMcpServerBuilder {
     /// Register a JSON-RPC handler for specific methods
     pub fn register_handler<H>(mut self, methods: Vec<String>, handler: H) -> Self
     where
-        H: JsonRpcHandler + 'static,
+        H: JsonRpcHandler<Error = McpError> + 'static,
     {
         self.dispatcher.register_methods(methods, handler);
         self
@@ -144,28 +157,53 @@ impl HttpMcpServerBuilder {
     /// Register a default handler for unhandled methods
     pub fn default_handler<H>(mut self, handler: H) -> Self
     where
-        H: JsonRpcHandler + 'static,
+        H: JsonRpcHandler<Error = McpError> + 'static,
     {
         self.dispatcher.set_default_handler(handler);
         self
     }
 
+    /// Set server capabilities
+    pub fn server_capabilities(
+        mut self,
+        capabilities: turul_mcp_protocol::ServerCapabilities,
+    ) -> Self {
+        self.server_capabilities = Some(capabilities);
+        self
+    }
+
     /// Build the HTTP MCP server
     pub fn build(self) -> HttpMcpServer {
-        let session_storage = self.session_storage.expect("Session storage must be provided");
+        let session_storage = self
+            .session_storage
+            .expect("Session storage must be provided");
 
         // ✅ CORRECTED ARCHITECTURE: Create single shared StreamManager instance
         let stream_manager = Arc::new(StreamManager::with_config(
             Arc::clone(&session_storage),
-            self.stream_config.clone()
+            self.stream_config.clone(),
         ));
+
+        // Create shared dispatcher Arc
+        let dispatcher = Arc::new(self.dispatcher);
+
+        // Create StreamableHttpHandler for MCP 2025-06-18 support
+        let streamable_handler = StreamableHttpHandler::new(
+            Arc::new(self.config.clone()),
+            Arc::clone(&dispatcher),
+            Arc::clone(&session_storage),
+            Arc::clone(&stream_manager),
+            self.server_capabilities
+                .unwrap_or_else(|| turul_mcp_protocol::ServerCapabilities::default()),
+        );
 
         HttpMcpServer {
             config: self.config,
-            dispatcher: Arc::new(self.dispatcher),
+            dispatcher,
             session_storage,
             stream_config: self.stream_config,
             stream_manager,
+            streamable_handler,
         }
     }
 }
@@ -180,11 +218,13 @@ impl Default for HttpMcpServerBuilder {
 #[derive(Clone)]
 pub struct HttpMcpServer {
     config: ServerConfig,
-    dispatcher: Arc<JsonRpcDispatcher>,
+    dispatcher: Arc<JsonRpcDispatcher<McpError>>,
     session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     stream_config: StreamConfig,
     // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance
     stream_manager: Arc<StreamManager>,
+    // StreamableHttpHandler for MCP 2025-06-18 clients
+    streamable_handler: StreamableHttpHandler,
 }
 
 impl HttpMcpServer {
@@ -196,7 +236,9 @@ impl HttpMcpServer {
 
 impl HttpMcpServer {
     /// Create a new builder with specific session storage
-    pub fn builder_with_storage(session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>) -> HttpMcpServerBuilder {
+    pub fn builder_with_storage(
+        session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
+    ) -> HttpMcpServerBuilder {
         HttpMcpServerBuilder::with_storage(session_storage)
     }
 
@@ -214,16 +256,22 @@ impl HttpMcpServer {
         let listener = TcpListener::bind(&self.config.bind_address).await?;
         info!("HTTP MCP server listening on {}", self.config.bind_address);
         info!("MCP endpoint available at: {}", self.config.mcp_path);
-        info!("Session storage: turul_mcp_session_storage::BoxedSessionStorage");
+        info!("Session storage: {}", self.session_storage.backend_name());
 
         // ✅ CORRECTED ARCHITECTURE: Create single SessionMcpHandler instance outside the loop
-        let handler = SessionMcpHandler::with_shared_stream_manager(
+        let session_handler = SessionMcpHandler::with_shared_stream_manager(
             self.config.clone(),
             Arc::clone(&self.dispatcher),
             Arc::clone(&self.session_storage),
             self.stream_config.clone(),
             Arc::clone(&self.stream_manager),
         );
+
+        // Create combined handler that routes based on protocol version
+        let handler = McpRequestHandler {
+            session_handler,
+            streamable_handler: self.streamable_handler.clone(),
+        };
 
         loop {
             let (stream, peer_addr) = listener.accept().await?;
@@ -232,9 +280,7 @@ impl HttpMcpServer {
             let handler_clone = handler.clone();
             tokio::spawn(async move {
                 let io = TokioIo::new(stream);
-                let service = service_fn(move |req| {
-                    handle_request(req, handler_clone.clone())
-                });
+                let service = service_fn(move |req| handle_request(req, handler_clone.clone()));
 
                 if let Err(err) = http1::Builder::new().serve_connection(io, service).await {
                     // Filter out common client disconnection errors that aren't actual problems
@@ -252,12 +298,14 @@ impl HttpMcpServer {
     /// Start background session cleanup task
     async fn start_session_cleanup(&self) {
         let storage = Arc::clone(&self.session_storage);
+        let session_expiry_minutes = self.config.session_expiry_minutes;
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
             loop {
                 interval.tick().await;
 
-                let expire_time = std::time::SystemTime::now() - std::time::Duration::from_secs(30 * 60); // 30 minutes
+                let expire_time = std::time::SystemTime::now()
+                    - std::time::Duration::from_secs(session_expiry_minutes * 60);
                 match storage.expire_sessions(expire_time).await {
                     Ok(expired) => {
                         if !expired.is_empty() {
@@ -283,16 +331,26 @@ impl HttpMcpServer {
         ServerStats {
             sessions: session_count,
             events: event_count,
-            storage_type: "turul_mcp_session_storage::BoxedSessionStorage".to_string(),
+            storage_type: self.session_storage.backend_name().to_string(),
         }
     }
 }
 
 /// Handle requests with MCP 2025-06-18 compliance
+/// Combined handler that routes based on MCP protocol version
+#[derive(Clone)]
+struct McpRequestHandler {
+    session_handler: SessionMcpHandler,
+    streamable_handler: StreamableHttpHandler,
+}
+
 async fn handle_request(
     req: Request<hyper::body::Incoming>,
-    handler: SessionMcpHandler,
-) -> std::result::Result<Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>, hyper::Error> {
+    handler: McpRequestHandler,
+) -> std::result::Result<
+    Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>,
+    hyper::Error,
+> {
     let method = req.method().clone();
     let uri = req.uri().clone();
     let path = uri.path();
@@ -300,32 +358,90 @@ async fn handle_request(
     debug!("Handling {} {}", method, path);
 
     // Route the request
-    let response = if path == &handler.config.mcp_path {
-        match handler.handle_mcp_request(req).await {
-            Ok(mcp_response) => mcp_response,
-            Err(err) => {
-                error!("Request handling error: {}", err);
-                Response::builder()
-                    .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(Full::new(Bytes::from(format!("Internal Server Error: {}", err))).map_err(|never| match never {}).boxed_unsync())
-                    .unwrap()
+    debug!(
+        "HTTP server dispatch: path={}, expected_mcp_path={}",
+        path, handler.session_handler.config.mcp_path
+    );
+    let response = if path == handler.session_handler.config.mcp_path {
+        debug!("Path match: Request routed to MCP handler");
+        // Extract MCP protocol version from headers
+        let protocol_version_str = req
+            .headers()
+            .get("MCP-Protocol-Version")
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or("2025-06-18"); // Default to latest version (we only support the latest protocol)
+        debug!("Protocol version: {}", protocol_version_str);
+
+        let protocol_version = McpProtocolVersion::parse_version(protocol_version_str)
+            .unwrap_or(McpProtocolVersion::V2025_06_18);
+
+        debug!(
+            "MCP request: protocol_version={}, method={}",
+            protocol_version.as_str(),
+            method
+        );
+
+        // Route based on protocol version - MCP 2025-06-18 uses Streamable HTTP, older versions use SessionMcpHandler
+        debug!(
+            "Routing decision: protocol_version={}, method={}, supports_streamable={}, handler={}",
+            protocol_version.as_str(),
+            method,
+            protocol_version.supports_streamable_http(),
+            if protocol_version.supports_streamable_http() {
+                "StreamableHttpHandler"
+            } else {
+                "SessionMcpHandler"
+            }
+        );
+
+        if protocol_version.supports_streamable_http() {
+            // Use StreamableHttpHandler for MCP 2025-06-18 clients
+            debug!(
+                "Calling streamable handler for protocol {}",
+                protocol_version.as_str()
+            );
+            let streamable_response = handler.streamable_handler.handle_request(req).await;
+            debug!("Streamable handler completed");
+            Ok(streamable_response)
+        } else {
+            // Use SessionMcpHandler for legacy clients (MCP 2024-11-05 and earlier)
+            match handler.session_handler.handle_mcp_request(req).await {
+                Ok(mcp_response) => Ok(mcp_response),
+                Err(err) => {
+                    error!("Request handling error: {}", err);
+                    Ok(Response::builder()
+                        .status(hyper::StatusCode::INTERNAL_SERVER_ERROR)
+                        .body(
+                            Full::new(Bytes::from(format!("Internal Server Error: {}", err)))
+                                .map_err(|never| match never {})
+                                .boxed_unsync(),
+                        )
+                        .unwrap())
+                }
             }
         }
     } else {
         // 404 for other paths
-        Response::builder()
+        Ok(Response::builder()
             .status(hyper::StatusCode::NOT_FOUND)
-            .body(Full::new(Bytes::from("Not Found")).map_err(|never| match never {}).boxed_unsync())
-            .unwrap()
+            .body(
+                Full::new(Bytes::from("Not Found"))
+                    .map_err(|never| match never {})
+                    .boxed_unsync(),
+            )
+            .unwrap())
     };
 
     // Apply CORS if enabled
-    let mut final_response = response;
-    if handler.config.enable_cors {
-        CorsLayer::apply_cors_headers(final_response.headers_mut());
+    match response {
+        Ok(mut final_response) => {
+            if handler.session_handler.config.enable_cors {
+                CorsLayer::apply_cors_headers(final_response.headers_mut());
+            }
+            Ok(final_response)
+        }
+        Err(e) => Err(e),
     }
-
-    Ok(final_response)
 }
 
 /// Server statistics
@@ -376,6 +492,6 @@ mod tests {
         let stats = server.get_stats().await;
         assert_eq!(stats.sessions, 0);
         assert_eq!(stats.events, 0);
-        assert!(stats.storage_type.contains("InMemorySessionStorage"));
+        assert_eq!(stats.storage_type, "InMemory");
     }
 }

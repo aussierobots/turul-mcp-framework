@@ -31,11 +31,11 @@ impl CreativeSampler {
             creativity_bias: 0.7,
         }
     }
-    
+
     pub async fn sample(&self, prompt: &str) -> McpResult<String> {
-        info!("✨ Creative sampling: {} chars, temp={}, bias={}", 
+        info!("✨ Creative sampling: {} chars, temp={}, bias={}",
             prompt.len(), self.temperature, self.creativity_bias);
-        
+
         let response = if prompt.to_lowercase().contains("story") {
             self.generate_story(prompt).await
         } else if prompt.to_lowercase().contains("poem") {
@@ -47,11 +47,11 @@ impl CreativeSampler {
         } else {
             self.generate_creative_response(prompt).await
         };
-        
+
         info!("📝 Generated {} chars of creative content", response.len());
         Ok(response)
     }
-    
+
     async fn generate_story(&self, prompt: &str) -> String {
         format!(
             "Once upon a time, in a world where {} had never been imagined before...\n\n\
@@ -71,7 +71,7 @@ impl CreativeSampler {
             self.creativity_bias
         )
     }
-    
+
     async fn generate_poem(&self, prompt: &str) -> String {
         let theme = self.extract_key_concept(prompt);
         format!(
@@ -93,7 +93,7 @@ impl CreativeSampler {
             self.creativity_bias
         )
     }
-    
+
     async fn generate_character(&self, prompt: &str) -> String {
         let concept = self.extract_key_concept(prompt);
         format!(
@@ -119,7 +119,7 @@ impl CreativeSampler {
             self.creativity_bias
         )
     }
-    
+
     async fn generate_dialogue(&self, prompt: &str) -> String {
         format!(
             "**Dialogue Scene**\n\n\
@@ -141,7 +141,7 @@ impl CreativeSampler {
             self.creativity_bias
         )
     }
-    
+
     async fn generate_creative_response(&self, prompt: &str) -> String {
         format!(
             "**Creative Response**\n\n\
@@ -165,7 +165,7 @@ impl CreativeSampler {
             self.creativity_bias
         )
     }
-    
+
     fn extract_key_concept(&self, prompt: &str) -> String {
         // Simple keyword extraction for demo purposes
         let words: Vec<&str> = prompt.split_whitespace().collect();
@@ -174,23 +174,23 @@ impl CreativeSampler {
             .take(3)
             .cloned()
             .collect();
-        
+
         if key_words.is_empty() {
             "imagination".to_string()
         } else {
             key_words.join(" and ")
         }
     }
-    
+
     fn generate_plot_element(&self, _prompt: &str) -> String {
         let elements = [
             "the ancient laws of creativity no longer applied",
-            "every thought could reshape reality itself", 
+            "every thought could reshape reality itself",
             "the boundary between dreams and waking dissolved",
             "inspiration flowed like a river of liquid light",
             "each word spoken created new worlds",
         ];
-        
+
         elements[fastrand::usize(..elements.len())].to_string()
     }
 }
@@ -218,11 +218,11 @@ impl TechnicalSampler {
             precision_bias: 0.9,
         }
     }
-    
+
     pub async fn sample(&self, prompt: &str) -> McpResult<String> {
-        info!("🔧 Technical sampling: {} chars, temp={}, precision={}", 
+        info!("🔧 Technical sampling: {} chars, temp={}, precision={}",
             prompt.len(), self.temperature, self.precision_bias);
-        
+
         let response = if prompt.to_lowercase().contains("code") || prompt.to_lowercase().contains("implement") {
             self.generate_code_solution(prompt).await
         } else if prompt.to_lowercase().contains("algorithm") || prompt.to_lowercase().contains("optimize") {
@@ -232,11 +232,11 @@ impl TechnicalSampler {
         } else {
             self.generate_technical_analysis(prompt).await
         };
-        
+
         info!("⚙️ Generated {} chars of technical content", response.len());
         Ok(response)
     }
-    
+
     async fn generate_code_solution(&self, prompt: &str) -> String {
         format!(
             "**Technical Implementation**\n\n\
@@ -277,7 +277,7 @@ impl TechnicalSampler {
             self.precision_bias
         )
     }
-    
+
     async fn generate_algorithm_explanation(&self, prompt: &str) -> String {
         format!(
             "**Algorithm Analysis**\n\n\
@@ -307,7 +307,7 @@ impl TechnicalSampler {
             self.max_tokens
         )
     }
-    
+
     async fn generate_system_design(&self, _prompt: &str) -> String {
         format!(
             "**System Architecture Design**\n\n\
@@ -336,7 +336,7 @@ impl TechnicalSampler {
             self.temperature
         )
     }
-    
+
     async fn generate_technical_analysis(&self, prompt: &str) -> String {
         format!(
             "**Technical Analysis**\n\n\
@@ -365,7 +365,7 @@ impl TechnicalSampler {
             self.max_tokens
         )
     }
-    
+
     fn extract_problem_domain(&self, prompt: &str) -> String {
         if prompt.to_lowercase().contains("sort") {
             "Sorting algorithm optimization".to_string()
@@ -377,9 +377,9 @@ impl TechnicalSampler {
             "General algorithmic problem solving".to_string()
         }
     }
-    
+
     fn count_technical_concepts(&self, prompt: &str) -> usize {
-        let technical_words = ["system", "algorithm", "data", "process", "implement", 
+        let technical_words = ["system", "algorithm", "data", "process", "implement",
                               "design", "optimize", "performance", "scale", "architecture"];
         prompt.to_lowercase()
             .split_whitespace()
@@ -411,7 +411,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create sampler instances (framework will auto-determine methods)
     let _creative_sampler = CreativeSampler::new();
     let _technical_sampler = TechnicalSampler::new();
-    
+
     info!("🎨 Available Samplers:");
     info!("   • CreativeSampler → sampling/createMessage (automatic)");
     info!("     - Stories, poems, characters, dialogue");

@@ -11,10 +11,7 @@ use std::net::SocketAddr;
 use std::path::Path;
 
 use turul_mcp_derive::McpTool;
-use turul_mcp_server::{McpResult, McpServer};
-use turul_mcp_protocol::McpError;
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use turul_mcp_server::prelude::*;
 
 #[derive(Debug, Deserialize, Serialize)]
 struct CodeTemplates {
@@ -150,43 +147,60 @@ struct CodeGeneratorTool {
 }
 
 impl CodeGeneratorTool {
-    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
+    async fn execute(
+        &self,
+        _session: Option<turul_mcp_server::SessionContext>,
+    ) -> McpResult<String> {
         let templates = load_code_templates()
             .map_err(|e| McpError::tool_execution(&format!("Failed to load templates: {}", e)))?;
-        
+
         let language = self.language.as_deref().unwrap_or("rust");
         let validate = self.validate.unwrap_or(true);
-        
+
         // Parse template parameters
-        let params: Value = serde_json::from_str(&self.parameters)
-            .map_err(|e| McpError::invalid_param_type("parameters", "valid JSON string", &format!("Parse error: {}", e)))?;
-        
+        let params: Value = serde_json::from_str(&self.parameters).map_err(|e| {
+            McpError::invalid_param_type(
+                "parameters",
+                "valid JSON string",
+                &format!("Parse error: {}", e),
+            )
+        })?;
+
         // Get template
-        let _template = templates.code_generation_templates
+        let _template = templates
+            .code_generation_templates
             .get(&self.template_type)
-            .ok_or_else(|| McpError::tool_execution(&format!("Template '{}' not found", self.template_type)))?;
-        
+            .ok_or_else(|| {
+                McpError::tool_execution(&format!("Template '{}' not found", self.template_type))
+            })?;
+
         // Generate code (simplified template processing)
         let generated_code = match self.template_type.as_str() {
             "rust_struct" => generate_rust_struct(&params)?,
             "rust_enum" => generate_rust_enum(&params)?,
             "api_endpoint" => generate_api_endpoint(&params)?,
             "database_model" => generate_database_model(&params)?,
-            _ => return Err(McpError::tool_execution(&format!("Unsupported template type: {}", self.template_type))),
+            _ => {
+                return Err(McpError::tool_execution(&format!(
+                    "Unsupported template type: {}",
+                    self.template_type
+                )));
+            }
         };
-        
+
         let mut result = json!({
             "template_type": self.template_type,
             "language": language,
             "generated_code": generated_code,
             "validation_applied": validate
         });
-        
+
         if validate {
-            let validation_result = validate_generated_code(&generated_code, &templates.validation_rules)?;
+            let validation_result =
+                validate_generated_code(&generated_code, &templates.validation_rules)?;
             result["validation"] = json!(validation_result);
         }
-        
+
         Ok(serde_json::to_string_pretty(&result)?)
     }
 }
@@ -204,7 +218,10 @@ struct ProjectValidatorTool {
     #[param(description = "Project root directory path")]
     project_path: String,
 
-    #[param(description = "Validation categories: structure, config, dependencies, security", optional)]
+    #[param(
+        description = "Validation categories: structure, config, dependencies, security",
+        optional
+    )]
     validation_scope: Option<String>,
 
     #[param(description = "Generate detailed validation report", optional)]
@@ -212,23 +229,31 @@ struct ProjectValidatorTool {
 }
 
 impl ProjectValidatorTool {
-    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
-        let _schemas = load_validation_schemas()
-            .map_err(|e| McpError::tool_execution(&format!("Failed to load validation schemas: {}", e)))?;
-        
+    async fn execute(
+        &self,
+        _session: Option<turul_mcp_server::SessionContext>,
+    ) -> McpResult<String> {
+        let _schemas = load_validation_schemas().map_err(|e| {
+            McpError::tool_execution(&format!("Failed to load validation schemas: {}", e))
+        })?;
+
         let detailed = self.detailed_report.unwrap_or(false);
         let scope = self.validation_scope.as_deref().unwrap_or("all");
-        
+
         // Check if project path exists
         if !Path::new(&self.project_path).exists() {
-            return Err(McpError::tool_execution(&format!("Project path does not exist: {}", self.project_path)));
+            return Err(McpError::tool_execution(&format!(
+                "Project path does not exist: {}",
+                self.project_path
+            )));
         }
-        
+
         let mut validation_results = Vec::new();
-        
+
         // Validate project structure
         if scope == "all" || scope.contains("structure") {
-            let structure_validation = validate_project_structure(&self.project_type, &self.project_path)?;
+            let structure_validation =
+                validate_project_structure(&self.project_type, &self.project_path)?;
             validation_results.push(json!({
                 "category": "Project Structure",
                 "status": structure_validation.status,
@@ -236,7 +261,7 @@ impl ProjectValidatorTool {
                 "recommendations": structure_validation.recommendations
             }));
         }
-        
+
         // Validate configuration files
         if scope == "all" || scope.contains("config") {
             let config_validation = validate_configuration_files(&self.project_path)?;
@@ -247,7 +272,7 @@ impl ProjectValidatorTool {
                 "suggestions": config_validation.suggestions
             }));
         }
-        
+
         // Security validation
         if scope == "all" || scope.contains("security") {
             let security_validation = validate_security_practices(&self.project_path)?;
@@ -258,7 +283,7 @@ impl ProjectValidatorTool {
                 "recommendations": security_validation.recommendations
             }));
         }
-        
+
         let overall_status = if validation_results.iter().all(|r| r["status"] == "passed") {
             "passed"
         } else if validation_results.iter().any(|r| r["status"] == "failed") {
@@ -266,7 +291,7 @@ impl ProjectValidatorTool {
         } else {
             "warning"
         };
-        
+
         Ok(serde_json::to_string_pretty(&json!({
             "project_type": self.project_type,
             "project_path": self.project_path,
@@ -294,7 +319,9 @@ struct CodeTransformationTool {
     #[param(description = "Code to transform")]
     source_code: String,
 
-    #[param(description = "Transformation type: naming_convention, add_documentation, add_derives, error_handling")]
+    #[param(
+        description = "Transformation type: naming_convention, add_documentation, add_derives, error_handling"
+    )]
     transformation: String,
 
     #[param(description = "Programming language", optional)]
@@ -305,18 +332,22 @@ struct CodeTransformationTool {
 }
 
 impl CodeTransformationTool {
-    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
+    async fn execute(
+        &self,
+        _session: Option<turul_mcp_server::SessionContext>,
+    ) -> McpResult<String> {
         let _templates = load_code_templates()
             .map_err(|e| McpError::tool_execution(&format!("Failed to load templates: {}", e)))?;
-        
+
         let language = self.language.as_deref().unwrap_or("rust");
         let options: Value = if let Some(opt) = &self.options {
-            serde_json::from_str(opt)
-                .map_err(|e| McpError::invalid_param_type("options", "valid JSON", &e.to_string()))?
+            serde_json::from_str(opt).map_err(|e| {
+                McpError::invalid_param_type("options", "valid JSON", &e.to_string())
+            })?
         } else {
             json!({})
         };
-        
+
         let transformed_code = match self.transformation.as_str() {
             "naming_convention" => apply_naming_conventions(&self.source_code, language)?,
             "add_documentation" => add_documentation_comments(&self.source_code)?,
@@ -324,12 +355,17 @@ impl CodeTransformationTool {
             "error_handling" => improve_error_handling(&self.source_code)?,
             "camelcase_to_snake" => apply_case_transformation(&self.source_code, "snake_case")?,
             "snake_to_camel" => apply_case_transformation(&self.source_code, "camelCase")?,
-            _ => return Err(McpError::tool_execution(&format!("Unknown transformation: {}", self.transformation))),
+            _ => {
+                return Err(McpError::tool_execution(&format!(
+                    "Unknown transformation: {}",
+                    self.transformation
+                )));
+            }
         };
-        
+
         // Analyze the transformation
         let analysis = analyze_transformation(&self.source_code, &transformed_code)?;
-        
+
         Ok(serde_json::to_string_pretty(&json!({
             "transformation": self.transformation,
             "language": language,
@@ -366,21 +402,25 @@ struct ConfigValidatorTool {
 }
 
 impl ConfigValidatorTool {
-    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
+    async fn execute(
+        &self,
+        _session: Option<turul_mcp_server::SessionContext>,
+    ) -> McpResult<String> {
         let schemas = load_validation_schemas()
             .map_err(|e| McpError::tool_execution(&format!("Failed to load schemas: {}", e)))?;
-        
+
         let format = self.format.as_deref().unwrap_or("json");
         let suggest = self.suggest_improvements.unwrap_or(true);
-        
+
         // Determine if input is file path or content
         let config_content = if Path::new(&self.config_input).exists() {
-            fs::read_to_string(&self.config_input)
-                .map_err(|e| McpError::tool_execution(&format!("Failed to read config file: {}", e)))?
+            fs::read_to_string(&self.config_input).map_err(|e| {
+                McpError::tool_execution(&format!("Failed to read config file: {}", e))
+            })?
         } else {
             self.config_input.clone()
         };
-        
+
         // Parse configuration based on format
         let parsed_config: Value = match format {
             "json" => serde_json::from_str(&config_content)
@@ -389,12 +429,19 @@ impl ConfigValidatorTool {
                 .map_err(|e| McpError::tool_execution(&format!("Invalid YAML: {}", e)))?,
             "toml" => toml::from_str(&config_content)
                 .map_err(|e| McpError::tool_execution(&format!("Invalid TOML: {}", e)))?,
-            _ => return Err(McpError::invalid_param_type("format", "json, yaml, or toml", format)),
+            _ => {
+                return Err(McpError::invalid_param_type(
+                    "format",
+                    "json, yaml, or toml",
+                    format,
+                ));
+            }
         };
-        
+
         // Validate against schema
-        let validation_result = validate_config_against_schema(&parsed_config, &self.config_type, &schemas)?;
-        
+        let validation_result =
+            validate_config_against_schema(&parsed_config, &self.config_type, &schemas)?;
+
         let mut result = json!({
             "config_type": self.config_type,
             "format": format,
@@ -402,12 +449,12 @@ impl ConfigValidatorTool {
             "errors": validation_result.errors,
             "warnings": validation_result.warnings
         });
-        
+
         if suggest {
             let suggestions = generate_config_suggestions(&parsed_config, &self.config_type)?;
             result["suggestions"] = json!(suggestions);
         }
-        
+
         Ok(serde_json::to_string_pretty(&result)?)
     }
 }
@@ -436,29 +483,40 @@ struct TestGeneratorTool {
 }
 
 impl TestGeneratorTool {
-    async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<String> {
+    async fn execute(
+        &self,
+        _session: Option<turul_mcp_server::SessionContext>,
+    ) -> McpResult<String> {
         let language = self.language.as_deref().unwrap_or("rust");
         let framework = self.framework.as_deref().unwrap_or("default");
         let edge_cases = self.include_edge_cases.unwrap_or(true);
-        
+
         // Analyze source code to extract functions and structures
         let code_analysis = analyze_source_code(&self.source_code, language)?;
-        
+
         // Generate tests based on analysis
         let generated_tests = match self.test_type.as_str() {
             "unit_tests" => generate_unit_tests(&code_analysis, framework, edge_cases)?,
             "integration_tests" => generate_integration_tests(&code_analysis, framework)?,
             "property_tests" => generate_property_tests(&code_analysis, framework)?,
-            _ => return Err(McpError::tool_execution(&format!("Unknown test type: {}", self.test_type))),
+            _ => {
+                return Err(McpError::tool_execution(&format!(
+                    "Unknown test type: {}",
+                    self.test_type
+                )));
+            }
         };
-        
+
         // Generate test fixtures if needed
-        let fixtures = if matches!(self.test_type.as_str(), "integration_tests" | "property_tests") {
+        let fixtures = if matches!(
+            self.test_type.as_str(),
+            "integration_tests" | "property_tests"
+        ) {
             Some(generate_test_fixtures(&code_analysis)?)
         } else {
             None
         };
-        
+
         Ok(serde_json::to_string_pretty(&json!({
             "test_type": self.test_type,
             "language": language,
@@ -532,77 +590,98 @@ fn load_validation_schemas() -> Result<ValidationSchemas, Box<dyn std::error::Er
 // Simplified code generation functions (in a real implementation, these would use a proper template engine)
 
 fn generate_rust_struct(params: &Value) -> McpResult<String> {
-    let name = params["name"].as_str().ok_or_else(|| McpError::missing_param("name"))?;
+    let name = params["name"]
+        .as_str()
+        .ok_or_else(|| McpError::missing_param("name"))?;
     let visibility = params["visibility"].as_str().unwrap_or("");
     let empty_vec = vec![];
     let attributes = params["attributes"].as_array().unwrap_or(&empty_vec);
-    let fields = params["fields"].as_array().ok_or_else(|| McpError::missing_param("fields"))?;
-    
+    let fields = params["fields"]
+        .as_array()
+        .ok_or_else(|| McpError::missing_param("fields"))?;
+
     let mut result = String::new();
-    
+
     // Add attributes
     for attr in attributes {
         if let Some(attr_str) = attr.as_str() {
             result.push_str(&format!("#[{}]\n", attr_str));
         }
     }
-    
+
     // Add struct definition
     if !visibility.is_empty() {
         result.push_str(&format!("{} ", visibility));
     }
     result.push_str(&format!("struct {} {{\n", name));
-    
+
     // Add fields
     for field in fields {
-        let field_name = field["name"].as_str().ok_or_else(|| McpError::missing_param("field name"))?;
-        let field_type = field["type"].as_str().ok_or_else(|| McpError::missing_param("field type"))?;
+        let field_name = field["name"]
+            .as_str()
+            .ok_or_else(|| McpError::missing_param("field name"))?;
+        let field_type = field["type"]
+            .as_str()
+            .ok_or_else(|| McpError::missing_param("field type"))?;
         let field_vis = field["visibility"].as_str().unwrap_or("");
-        
+
         if !field_vis.is_empty() {
-            result.push_str(&format!("    {} {}: {},\n", field_vis, field_name, field_type));
+            result.push_str(&format!(
+                "    {} {}: {},\n",
+                field_vis, field_name, field_type
+            ));
         } else {
             result.push_str(&format!("    {}: {},\n", field_name, field_type));
         }
     }
-    
-    result.push_str("}");
+
+    result.push('}');
     Ok(result)
 }
 
 fn generate_rust_enum(params: &Value) -> McpResult<String> {
-    let name = params["name"].as_str().ok_or_else(|| McpError::missing_param("name"))?;
+    let name = params["name"]
+        .as_str()
+        .ok_or_else(|| McpError::missing_param("name"))?;
     let visibility = params["visibility"].as_str().unwrap_or("");
     let empty_vec = vec![];
     let attributes = params["attributes"].as_array().unwrap_or(&empty_vec);
-    let variants = params["variants"].as_array().ok_or_else(|| McpError::missing_param("variants"))?;
-    
+    let variants = params["variants"]
+        .as_array()
+        .ok_or_else(|| McpError::missing_param("variants"))?;
+
     let mut result = String::new();
-    
+
     // Add attributes
     for attr in attributes {
         if let Some(attr_str) = attr.as_str() {
             result.push_str(&format!("#[{}]\n", attr_str));
         }
     }
-    
+
     // Add enum definition
     if !visibility.is_empty() {
         result.push_str(&format!("{} ", visibility));
     }
     result.push_str(&format!("enum {} {{\n", name));
-    
+
     // Add variants
     for variant in variants {
-        let variant_name = variant["name"].as_str().ok_or_else(|| McpError::missing_param("variant name"))?;
-        
+        let variant_name = variant["name"]
+            .as_str()
+            .ok_or_else(|| McpError::missing_param("variant name"))?;
+
         if let Some(data) = variant["data"].as_str() {
             result.push_str(&format!("    {}({}),\n", variant_name, data));
         } else if let Some(fields) = variant["fields"].as_array() {
             result.push_str(&format!("    {} {{\n", variant_name));
             for field in fields {
-                let field_name = field["name"].as_str().ok_or_else(|| McpError::missing_param("field name"))?;
-                let field_type = field["type"].as_str().ok_or_else(|| McpError::missing_param("field type"))?;
+                let field_name = field["name"]
+                    .as_str()
+                    .ok_or_else(|| McpError::missing_param("field name"))?;
+                let field_type = field["type"]
+                    .as_str()
+                    .ok_or_else(|| McpError::missing_param("field type"))?;
                 result.push_str(&format!("        {}: {},\n", field_name, field_type));
             }
             result.push_str("    },\n");
@@ -610,13 +689,15 @@ fn generate_rust_enum(params: &Value) -> McpResult<String> {
             result.push_str(&format!("    {},\n", variant_name));
         }
     }
-    
-    result.push_str("}");
+
+    result.push('}');
     Ok(result)
 }
 
 fn generate_api_endpoint(params: &Value) -> McpResult<String> {
-    let function_name = params["function_name"].as_str().ok_or_else(|| McpError::missing_param("function_name"))?;
+    let function_name = params["function_name"]
+        .as_str()
+        .ok_or_else(|| McpError::missing_param("function_name"))?;
     let description = params["description"].as_str().unwrap_or("");
     let is_async = params["async"].as_bool().unwrap_or(true);
     let empty_vec = vec![];
@@ -626,73 +707,81 @@ fn generate_api_endpoint(params: &Value) -> McpResult<String> {
     let return_type = params["return_type"].as_str().unwrap_or("()");
     let empty_vec3 = vec![];
     let implementation = params["implementation"].as_array().unwrap_or(&empty_vec3);
-    
+
     let mut result = String::new();
-    
+
     // Add function documentation
     if !description.is_empty() {
         result.push_str(&format!("/// {}\n", description));
     }
-    
+
     // Add attributes
     for attr in attributes {
         if let Some(attr_str) = attr.as_str() {
             result.push_str(&format!("#[{}]\n", attr_str));
         }
     }
-    
+
     // Add function signature
     if is_async {
         result.push_str("async ");
     }
     result.push_str(&format!("fn {}(\n", function_name));
-    
+
     // Add parameters
     for param in parameters {
-        let param_name = param["name"].as_str().ok_or_else(|| McpError::missing_param("parameter name"))?;
-        let param_type = param["type"].as_str().ok_or_else(|| McpError::missing_param("parameter type"))?;
+        let param_name = param["name"]
+            .as_str()
+            .ok_or_else(|| McpError::missing_param("parameter name"))?;
+        let param_type = param["type"]
+            .as_str()
+            .ok_or_else(|| McpError::missing_param("parameter type"))?;
         result.push_str(&format!("    {}: {},\n", param_name, param_type));
     }
-    
+
     result.push_str(&format!(") -> {} {{\n", return_type));
-    
+
     // Add implementation
     if !description.is_empty() {
         result.push_str(&format!("    // {}\n", description));
     }
-    
+
     for line in implementation {
         if let Some(line_str) = line.as_str() {
             result.push_str(&format!("    {}\n", line_str));
         }
     }
-    
+
     if implementation.is_empty() {
         result.push_str("    // TODO: Implement function logic\n");
         result.push_str("    unimplemented!()\n");
     }
-    
-    result.push_str("}");
+
+    result.push('}');
     Ok(result)
 }
 
 fn generate_database_model(params: &Value) -> McpResult<String> {
-    let table_name = params["table_name"].as_str().ok_or_else(|| McpError::missing_param("table_name"))?;
+    let table_name = params["table_name"]
+        .as_str()
+        .ok_or_else(|| McpError::missing_param("table_name"))?;
     let empty_vec = vec![];
     let table_attributes = params["table_attributes"].as_array().unwrap_or(&empty_vec);
     let empty_vec2 = vec![];
     let derives = params["derives"].as_array().unwrap_or(&empty_vec2);
-    let fields = params["fields"].as_array().ok_or_else(|| McpError::missing_param("fields"))?;
-    
+    let fields = params["fields"]
+        .as_array()
+        .ok_or_else(|| McpError::missing_param("fields"))?;
+
     let mut result = String::new();
-    
+
     // Add table attributes
     for attr in table_attributes {
         if let Some(attr_str) = attr.as_str() {
             result.push_str(&format!("#[{}]\n", attr_str));
         }
     }
-    
+
     // Add derives
     if !derives.is_empty() {
         result.push_str("#[derive(");
@@ -706,27 +795,31 @@ fn generate_database_model(params: &Value) -> McpResult<String> {
         }
         result.push_str(")]\n");
     }
-    
+
     result.push_str(&format!("pub struct {} {{\n", table_name));
-    
+
     // Add fields with attributes
     for field in fields {
-        let field_name = field["name"].as_str().ok_or_else(|| McpError::missing_param("field name"))?;
-        let field_type = field["type"].as_str().ok_or_else(|| McpError::missing_param("field type"))?;
+        let field_name = field["name"]
+            .as_str()
+            .ok_or_else(|| McpError::missing_param("field name"))?;
+        let field_type = field["type"]
+            .as_str()
+            .ok_or_else(|| McpError::missing_param("field type"))?;
         let empty_attrs = vec![];
         let field_attrs = field["attributes"].as_array().unwrap_or(&empty_attrs);
-        
+
         // Add field attributes
         for attr in field_attrs {
             if let Some(attr_str) = attr.as_str() {
                 result.push_str(&format!("    #[{}]\n", attr_str));
             }
         }
-        
+
         result.push_str(&format!("    pub {}: {},\n", field_name, field_type));
     }
-    
-    result.push_str("}");
+
+    result.push('}');
     Ok(result)
 }
 
@@ -759,28 +852,35 @@ struct ConfigValidationResult {
 fn validate_generated_code(code: &str, rules: &ValidationRules) -> McpResult<Value> {
     let mut issues = Vec::new();
     let mut suggestions = Vec::new();
-    
+
     // Check for required derives
     if !rules.code_quality.required_derives.is_empty() && !code.contains("#[derive(") {
         issues.push("Missing derive attributes".to_string());
         suggestions.push("Add #[derive(Debug)] at minimum".to_string());
     }
-    
+
     // Check function length
     let lines = code.lines().count();
     if lines > rules.code_quality.max_function_length as usize {
-        issues.push(format!("Code is {} lines, exceeds maximum of {}", lines, rules.code_quality.max_function_length));
+        issues.push(format!(
+            "Code is {} lines, exceeds maximum of {}",
+            lines, rules.code_quality.max_function_length
+        ));
         suggestions.push("Consider breaking into smaller functions".to_string());
     }
-    
+
     // Check documentation
     if rules.code_quality.documentation_required && !code.contains("///") && !code.contains("//!") {
         issues.push("Missing documentation comments".to_string());
         suggestions.push("Add /// comments for public items".to_string());
     }
-    
-    let status = if issues.is_empty() { "passed" } else { "warning" };
-    
+
+    let status = if issues.is_empty() {
+        "passed"
+    } else {
+        "warning"
+    };
+
     Ok(json!({
         "status": status,
         "issues": issues,
@@ -788,24 +888,27 @@ fn validate_generated_code(code: &str, rules: &ValidationRules) -> McpResult<Val
     }))
 }
 
-fn validate_project_structure(project_type: &str, project_path: &str) -> McpResult<ValidationResult> {
+fn validate_project_structure(
+    project_type: &str,
+    project_path: &str,
+) -> McpResult<ValidationResult> {
     let mut issues = Vec::new();
     let mut recommendations = Vec::new();
-    
+
     let path = Path::new(project_path);
-    
+
     match project_type {
         "rust_project" => {
             if !path.join("Cargo.toml").exists() {
                 issues.push("Missing Cargo.toml file".to_string());
             }
-            
+
             let src_main = path.join("src/main.rs");
             let src_lib = path.join("src/lib.rs");
             if !src_main.exists() && !src_lib.exists() {
                 issues.push("Missing src/main.rs or src/lib.rs".to_string());
             }
-            
+
             if !path.join("README.md").exists() {
                 recommendations.push("Add README.md file".to_string());
             }
@@ -814,18 +917,25 @@ fn validate_project_structure(project_type: &str, project_path: &str) -> McpResu
             if !path.join("package.json").exists() {
                 issues.push("Missing package.json file".to_string());
             }
-            
+
             if !path.join("tsconfig.json").exists() {
                 issues.push("Missing tsconfig.json file".to_string());
             }
         }
         _ => {
-            return Err(McpError::tool_execution(&format!("Unsupported project type: {}", project_type)));
+            return Err(McpError::tool_execution(&format!(
+                "Unsupported project type: {}",
+                project_type
+            )));
         }
     }
-    
-    let status = if issues.is_empty() { "passed" } else { "failed" };
-    
+
+    let status = if issues.is_empty() {
+        "passed"
+    } else {
+        "failed"
+    };
+
     Ok(ValidationResult {
         status: status.to_string(),
         issues,
@@ -838,12 +948,12 @@ fn validate_project_structure(project_type: &str, project_path: &str) -> McpResu
 fn validate_configuration_files(project_path: &str) -> McpResult<ValidationResult> {
     let mut issues = Vec::new();
     let mut suggestions = Vec::new();
-    
+
     let path = Path::new(project_path);
-    
+
     // Check for common configuration files
     let config_files = ["Cargo.toml", "package.json", "tsconfig.json", ".gitignore"];
-    
+
     for config_file in &config_files {
         let config_path = path.join(config_file);
         if config_path.exists() {
@@ -857,13 +967,17 @@ fn validate_configuration_files(project_path: &str) -> McpResult<ValidationResul
             }
         }
     }
-    
+
     if !path.join(".gitignore").exists() {
         suggestions.push("Add .gitignore file to exclude build artifacts".to_string());
     }
-    
-    let status = if issues.is_empty() { "passed" } else { "warning" };
-    
+
+    let status = if issues.is_empty() {
+        "passed"
+    } else {
+        "warning"
+    };
+
     Ok(ValidationResult {
         status: status.to_string(),
         issues,
@@ -876,31 +990,38 @@ fn validate_configuration_files(project_path: &str) -> McpResult<ValidationResul
 fn validate_security_practices(project_path: &str) -> McpResult<ValidationResult> {
     let mut vulnerabilities = Vec::new();
     let mut recommendations = Vec::new();
-    
+
     // This is a simplified security check - real implementation would be much more comprehensive
     let path = Path::new(project_path);
-    
+
     // Check for common security issues in source files
     if let Ok(entries) = fs::read_dir(path.join("src")) {
         for entry in entries.flatten() {
-            if let Some(extension) = entry.path().extension() {
-                if extension == "rs" || extension == "ts" || extension == "js" {
-                    if let Ok(content) = fs::read_to_string(entry.path()) {
-                        if content.contains("unsafe {") {
-                            vulnerabilities.push(format!("Unsafe block found in {}", entry.path().display()));
-                        }
-                        
-                        if content.contains("unwrap()") {
-                            recommendations.push(format!("Consider using proper error handling instead of unwrap() in {}", entry.path().display()));
-                        }
-                    }
+            if let Some(extension) = entry.path().extension()
+                && (extension == "rs" || extension == "ts" || extension == "js")
+                && let Ok(content) = fs::read_to_string(entry.path())
+            {
+                if content.contains("unsafe {") {
+                    vulnerabilities
+                        .push(format!("Unsafe block found in {}", entry.path().display()));
+                }
+
+                if content.contains("unwrap()") {
+                    recommendations.push(format!(
+                        "Consider using proper error handling instead of unwrap() in {}",
+                        entry.path().display()
+                    ));
                 }
             }
         }
     }
-    
-    let status = if vulnerabilities.is_empty() { "passed" } else { "warning" };
-    
+
+    let status = if vulnerabilities.is_empty() {
+        "passed"
+    } else {
+        "warning"
+    };
+
     Ok(ValidationResult {
         status: status.to_string(),
         issues: Vec::new(),
@@ -912,7 +1033,7 @@ fn validate_security_practices(project_path: &str) -> McpResult<ValidationResult
 
 fn apply_naming_conventions(code: &str, language: &str) -> McpResult<String> {
     let mut result = code.to_string();
-    
+
     match language {
         "rust" => {
             // Simple transformation examples
@@ -924,13 +1045,13 @@ fn apply_naming_conventions(code: &str, language: &str) -> McpResult<String> {
         }
         _ => {}
     }
-    
+
     Ok(result)
 }
 
 fn add_documentation_comments(code: &str) -> McpResult<String> {
     let mut result = String::new();
-    
+
     for line in code.lines() {
         if line.trim().starts_with("struct ") || line.trim().starts_with("pub struct ") {
             result.push_str("/// Documentation for this struct\n");
@@ -940,41 +1061,44 @@ fn add_documentation_comments(code: &str) -> McpResult<String> {
         result.push_str(line);
         result.push('\n');
     }
-    
+
     Ok(result)
 }
 
 fn add_derive_macros(code: &str, options: &Value) -> McpResult<String> {
-    let derives = options["derives"].as_array()
+    let derives = options["derives"]
+        .as_array()
         .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
         .unwrap_or_else(|| vec!["Debug", "Clone"]);
-    
+
     let mut result = String::new();
-    
+
     for line in code.lines() {
-        if (line.trim().starts_with("struct ") || line.trim().starts_with("pub struct ")) && !result.contains("#[derive(") {
+        if (line.trim().starts_with("struct ") || line.trim().starts_with("pub struct "))
+            && !result.contains("#[derive(")
+        {
             result.push_str(&format!("#[derive({})]\n", derives.join(", ")));
         }
         result.push_str(line);
         result.push('\n');
     }
-    
+
     Ok(result)
 }
 
 fn improve_error_handling(code: &str) -> McpResult<String> {
     let mut result = code.to_string();
-    
+
     // Simple transformations
     result = result.replace(".unwrap()", ".expect(\"Descriptive error message\")");
     result = result.replace("panic!(", "return Err(Error::new(");
-    
+
     Ok(result)
 }
 
 fn apply_case_transformation(code: &str, target_case: &str) -> McpResult<String> {
     let mut result = code.to_string();
-    
+
     match target_case {
         "snake_case" => {
             // Convert camelCase to snake_case
@@ -986,13 +1110,18 @@ fn apply_case_transformation(code: &str, target_case: &str) -> McpResult<String>
             // Convert snake_case to camelCase
             use regex::Regex;
             let re = Regex::new(r"_([a-z])").unwrap();
-            result = re.replace_all(&result, |caps: &regex::Captures| {
-                caps[1].to_uppercase()
-            }).to_string();
+            result = re
+                .replace_all(&result, |caps: &regex::Captures| caps[1].to_uppercase())
+                .to_string();
         }
-        _ => return Err(McpError::tool_execution(&format!("Unsupported case transformation: {}", target_case))),
+        _ => {
+            return Err(McpError::tool_execution(&format!(
+                "Unsupported case transformation: {}",
+                target_case
+            )));
+        }
     }
-    
+
     Ok(result)
 }
 
@@ -1000,25 +1129,33 @@ fn analyze_transformation(original: &str, transformed: &str) -> McpResult<CodeAn
     let original_lines = original.lines().count();
     let transformed_lines = transformed.lines().count();
     let changes_count = if original_lines != transformed_lines {
-        ((original_lines as i32 - transformed_lines as i32).abs()) as u32
+        (original_lines as i32 - transformed_lines as i32).unsigned_abs()
     } else {
         // Count character differences as a simple heuristic
-        let diff = original.chars().zip(transformed.chars()).filter(|(a, b)| a != b).count();
+        let diff = original
+            .chars()
+            .zip(transformed.chars())
+            .filter(|(a, b)| a != b)
+            .count();
         diff as u32
     };
-    
+
     Ok(CodeAnalysis {
         functions: vec!["analyze_functions".to_string()], // Simplified
-        structs: vec!["analyze_structs".to_string()], // Simplified
+        structs: vec!["analyze_structs".to_string()],     // Simplified
         complexity_score: 1,
         changes_count,
     })
 }
 
-fn validate_config_against_schema(config: &Value, config_type: &str, _schemas: &ValidationSchemas) -> McpResult<ConfigValidationResult> {
+fn validate_config_against_schema(
+    config: &Value,
+    config_type: &str,
+    _schemas: &ValidationSchemas,
+) -> McpResult<ConfigValidationResult> {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
-    
+
     match config_type {
         "database_config" => {
             if !config["host"].is_string() {
@@ -1027,7 +1164,11 @@ fn validate_config_against_schema(config: &Value, config_type: &str, _schemas: &
             if !config["port"].is_number() {
                 errors.push("Missing or invalid 'port' field".to_string());
             }
-            if config["password"].as_str().map(|s| s.len() < 8).unwrap_or(true) {
+            if config["password"]
+                .as_str()
+                .map(|s| s.len() < 8)
+                .unwrap_or(true)
+            {
                 warnings.push("Password should be at least 8 characters".to_string());
             }
         }
@@ -1041,9 +1182,15 @@ fn validate_config_against_schema(config: &Value, config_type: &str, _schemas: &
         }
         _ => {}
     }
-    
-    let status = if !errors.is_empty() { "failed" } else if !warnings.is_empty() { "warning" } else { "passed" };
-    
+
+    let status = if !errors.is_empty() {
+        "failed"
+    } else if !warnings.is_empty() {
+        "warning"
+    } else {
+        "passed"
+    };
+
     Ok(ConfigValidationResult {
         status: status.to_string(),
         errors,
@@ -1053,13 +1200,13 @@ fn validate_config_against_schema(config: &Value, config_type: &str, _schemas: &
 
 fn generate_config_suggestions(config: &Value, config_type: &str) -> McpResult<Vec<String>> {
     let mut suggestions = Vec::new();
-    
+
     match config_type {
         "database_config" => {
-            if !config.get("ssl_mode").is_some() {
+            if config.get("ssl_mode").is_none() {
                 suggestions.push("Consider enabling SSL mode for secure connections".to_string());
             }
-            if !config.get("connection_pool").is_some() {
+            if config.get("connection_pool").is_none() {
                 suggestions.push("Add connection pooling for better performance".to_string());
             }
         }
@@ -1070,27 +1217,27 @@ fn generate_config_suggestions(config: &Value, config_type: &str) -> McpResult<V
         }
         _ => {}
     }
-    
+
     Ok(suggestions)
 }
 
 fn analyze_source_code(code: &str, language: &str) -> McpResult<CodeAnalysis> {
     let mut functions = Vec::new();
     let mut structs = Vec::new();
-    
+
     match language {
         "rust" => {
             for line in code.lines() {
                 let trimmed = line.trim();
-                if trimmed.starts_with("fn ") || trimmed.starts_with("pub fn ") {
-                    if let Some(name) = trimmed.split_whitespace().nth(1) {
-                        functions.push(name.split('(').next().unwrap_or(name).to_string());
-                    }
+                if (trimmed.starts_with("fn ") || trimmed.starts_with("pub fn "))
+                    && let Some(name) = trimmed.split_whitespace().nth(1)
+                {
+                    functions.push(name.split('(').next().unwrap_or(name).to_string());
                 }
-                if trimmed.starts_with("struct ") || trimmed.starts_with("pub struct ") {
-                    if let Some(name) = trimmed.split_whitespace().nth(1) {
-                        structs.push(name.split('{').next().unwrap_or(name).trim().to_string());
-                    }
+                if (trimmed.starts_with("struct ") || trimmed.starts_with("pub struct "))
+                    && let Some(name) = trimmed.split_whitespace().nth(1)
+                {
+                    structs.push(name.split('{').next().unwrap_or(name).trim().to_string());
                 }
             }
         }
@@ -1099,7 +1246,7 @@ fn analyze_source_code(code: &str, language: &str) -> McpResult<CodeAnalysis> {
             functions.push("generic_function".to_string());
         }
     }
-    
+
     Ok(CodeAnalysis {
         functions,
         structs,
@@ -1108,75 +1255,100 @@ fn analyze_source_code(code: &str, language: &str) -> McpResult<CodeAnalysis> {
     })
 }
 
-fn generate_unit_tests(analysis: &CodeAnalysis, _framework: &str, include_edge_cases: bool) -> McpResult<String> {
+fn generate_unit_tests(
+    analysis: &CodeAnalysis,
+    _framework: &str,
+    include_edge_cases: bool,
+) -> McpResult<String> {
     let mut tests = String::new();
-    
+
     tests.push_str("#[cfg(test)]\nmod tests {\n    use super::*;\n\n");
-    
+
     for function in &analysis.functions {
         tests.push_str(&format!("    #[test]\n    fn test_{}() {{\n", function));
-        tests.push_str(&format!("        // TODO: Implement test for {}\n", function));
+        tests.push_str(&format!(
+            "        // TODO: Implement test for {}\n",
+            function
+        ));
         tests.push_str("        assert!(true); // Placeholder\n");
         tests.push_str("    }\n\n");
-        
+
         if include_edge_cases {
-            tests.push_str(&format!("    #[test]\n    fn test_{}_edge_cases() {{\n", function));
-            tests.push_str(&format!("        // TODO: Test edge cases for {}\n", function));
+            tests.push_str(&format!(
+                "    #[test]\n    fn test_{}_edge_cases() {{\n",
+                function
+            ));
+            tests.push_str(&format!(
+                "        // TODO: Test edge cases for {}\n",
+                function
+            ));
             tests.push_str("        assert!(true); // Placeholder\n");
             tests.push_str("    }\n\n");
         }
     }
-    
+
     tests.push_str("}\n");
     Ok(tests)
 }
 
 fn generate_integration_tests(analysis: &CodeAnalysis, _framework: &str) -> McpResult<String> {
     let mut tests = String::new();
-    
+
     tests.push_str("// Integration tests\n");
     tests.push_str("#[cfg(test)]\nmod integration_tests {\n    use super::*;\n\n");
-    
+
     for struct_name in &analysis.structs {
-        tests.push_str(&format!("    #[test]\n    fn test_{}_integration() {{\n", struct_name.to_lowercase()));
-        tests.push_str(&format!("        // TODO: Integration test for {}\n", struct_name));
+        tests.push_str(&format!(
+            "    #[test]\n    fn test_{}_integration() {{\n",
+            struct_name.to_lowercase()
+        ));
+        tests.push_str(&format!(
+            "        // TODO: Integration test for {}\n",
+            struct_name
+        ));
         tests.push_str("        assert!(true); // Placeholder\n");
         tests.push_str("    }\n\n");
     }
-    
+
     tests.push_str("}\n");
     Ok(tests)
 }
 
 fn generate_property_tests(analysis: &CodeAnalysis, _framework: &str) -> McpResult<String> {
     let mut tests = String::new();
-    
+
     tests.push_str("// Property-based tests\n");
     tests.push_str("#[cfg(test)]\nmod property_tests {\n");
     tests.push_str("    use super::*;\n");
     tests.push_str("    use proptest::prelude::*;\n\n");
-    
+
     for function in &analysis.functions {
         tests.push_str("    proptest! {\n");
-        tests.push_str(&format!("        #[test]\n        fn test_{}_property(input in any::<i32>()) {{\n", function));
-        tests.push_str(&format!("            // TODO: Property test for {}\n", function));
+        tests.push_str(&format!(
+            "        #[test]\n        fn test_{}_property(input in any::<i32>()) {{\n",
+            function
+        ));
+        tests.push_str(&format!(
+            "            // TODO: Property test for {}\n",
+            function
+        ));
         tests.push_str("            prop_assert!(true); // Placeholder\n");
         tests.push_str("        }\n");
         tests.push_str("    }\n\n");
     }
-    
+
     tests.push_str("}\n");
     Ok(tests)
 }
 
 fn generate_test_fixtures(analysis: &CodeAnalysis) -> McpResult<String> {
     let mut fixtures = String::new();
-    
+
     fixtures.push_str("// Test fixtures and helpers\n\n");
-    
+
     for struct_name in &analysis.structs {
         fixtures.push_str(&format!("impl {} {{\n", struct_name));
-        fixtures.push_str(&format!("    pub fn test_fixture() -> Self {{\n"));
+        fixtures.push_str("    pub fn test_fixture() -> Self {\n");
         fixtures.push_str("        // TODO: Create test fixture\n");
         fixtures.push_str(&format!("        {} {{\n", struct_name));
         fixtures.push_str("            // Initialize with test data\n");
@@ -1184,28 +1356,32 @@ fn generate_test_fixtures(analysis: &CodeAnalysis) -> McpResult<String> {
         fixtures.push_str("    }\n");
         fixtures.push_str("}\n\n");
     }
-    
+
     Ok(fixtures)
 }
 
 fn generate_test_recommendations(analysis: &CodeAnalysis) -> Vec<String> {
     let mut recommendations = Vec::new();
-    
+
     if analysis.complexity_score > 10 {
-        recommendations.push("High complexity detected - consider more granular unit tests".to_string());
+        recommendations
+            .push("High complexity detected - consider more granular unit tests".to_string());
     }
-    
+
     if analysis.functions.len() > 10 {
         recommendations.push("Many functions detected - organize tests into modules".to_string());
     }
-    
+
     if analysis.structs.len() > 5 {
-        recommendations.push("Multiple structs found - create integration tests for struct interactions".to_string());
+        recommendations.push(
+            "Multiple structs found - create integration tests for struct interactions".to_string(),
+        );
     }
-    
-    recommendations.push("Consider using property-based testing for mathematical functions".to_string());
+
+    recommendations
+        .push("Consider using property-based testing for mathematical functions".to_string());
     recommendations.push("Add performance benchmarks for critical paths".to_string());
-    
+
     recommendations
 }
 

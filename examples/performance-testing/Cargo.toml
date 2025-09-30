@@ -1,6 +1,6 @@
 [package]
 name = "performance-testing"
-version = "0.1.1"
+version = "0.2.0"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -44,6 +44,7 @@ uuid = { workspace = true }
 futures = { workspace = true }
 async-trait = { workspace = true }
 criterion = { workspace = true }
+chrono = { workspace = true }
 
 [[bench]]
 name = "tool_execution"

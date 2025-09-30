@@ -4,74 +4,105 @@
 //! calculator operations (add, subtract) with proper error handling
 //! and session context support.
 
-use turul_mcp_json_rpc_server::{
-    JsonRpcHandler, JsonRpcDispatcher, RequestParams, SessionContext,
-    r#async::JsonRpcResult, dispatch::parse_json_rpc_message,
-};
 use async_trait::async_trait;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
+use turul_mcp_json_rpc_server::{
+    JsonRpcDispatcher, JsonRpcHandler, RequestParams,
+    r#async::{SessionContext, ToJsonRpcError},
+    dispatch::parse_json_rpc_message,
+    error::JsonRpcErrorObject,
+};
+
+/// Calculator error type
+#[derive(thiserror::Error, Debug)]
+enum CalculatorError {
+    #[error("Missing parameters: {0}")]
+    MissingParameters(String),
+    #[error("Invalid parameter: {0}")]
+    InvalidParameter(String),
+    #[error("Unknown method: {0}")]
+    UnknownMethod(String),
+}
+
+impl ToJsonRpcError for CalculatorError {
+    fn to_error_object(&self) -> JsonRpcErrorObject {
+        match self {
+            CalculatorError::MissingParameters(msg) => JsonRpcErrorObject::invalid_params(msg),
+            CalculatorError::InvalidParameter(msg) => JsonRpcErrorObject::invalid_params(msg),
+            CalculatorError::UnknownMethod(method) => JsonRpcErrorObject::method_not_found(method),
+        }
+    }
+}
 
 /// Calculator handler that implements basic arithmetic operations
 struct CalculatorHandler;
 
 #[async_trait]
 impl JsonRpcHandler for CalculatorHandler {
-    async fn handle(&self, method: &str, params: Option<RequestParams>, session_context: Option<SessionContext>) -> JsonRpcResult<Value> {
+    type Error = CalculatorError;
+
+    async fn handle(
+        &self,
+        method: &str,
+        params: Option<RequestParams>,
+        session_context: Option<SessionContext>,
+    ) -> Result<Value, Self::Error> {
         // Log session info if available
         if let Some(session) = session_context {
             println!("Processing {} with session: {}", method, session.session_id);
         }
-        
+
         match method {
             "add" => {
                 let params = params.ok_or_else(|| {
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                        "Missing parameters for add operation".to_string()
+                    CalculatorError::MissingParameters(
+                        "Missing parameters for add operation".to_string(),
                     )
                 })?;
-                
+
                 let map = params.to_map();
                 let a = map.get("a").and_then(|v| v.as_f64()).ok_or_else(|| {
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                        "Parameter 'a' is required and must be a number".to_string()
+                    CalculatorError::InvalidParameter(
+                        "Parameter 'a' is required and must be a number".to_string(),
                     )
                 })?;
                 let b = map.get("b").and_then(|v| v.as_f64()).ok_or_else(|| {
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                        "Parameter 'b' is required and must be a number".to_string()
+                    CalculatorError::InvalidParameter(
+                        "Parameter 'b' is required and must be a number".to_string(),
                     )
                 })?;
-                
+
                 let result = a + b;
                 println!("Addition: {} + {} = {}", a, b, result);
                 Ok(json!({"result": result}))
             }
             "subtract" => {
                 let params = params.ok_or_else(|| {
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                        "Missing parameters for subtract operation".to_string()
+                    CalculatorError::MissingParameters(
+                        "Missing parameters for subtract operation".to_string(),
                     )
                 })?;
-                
+
                 let map = params.to_map();
                 let a = map.get("a").and_then(|v| v.as_f64()).ok_or_else(|| {
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                        "Parameter 'a' is required and must be a number".to_string()
+                    CalculatorError::InvalidParameter(
+                        "Parameter 'a' is required and must be a number".to_string(),
                     )
                 })?;
                 let b = map.get("b").and_then(|v| v.as_f64()).ok_or_else(|| {
-                    turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                        "Parameter 'b' is required and must be a number".to_string()
+                    CalculatorError::InvalidParameter(
+                        "Parameter 'b' is required and must be a number".to_string(),
                     )
                 })?;
-                
+
                 let result = a - b;
                 println!("Subtraction: {} - {} = {}", a, b, result);
                 Ok(json!({"result": result}))
             }
-            _ => Err(turul_mcp_json_rpc_server::error::JsonRpcProcessingError::HandlerError(
-                format!("Unknown method: {}. Supported methods: add, subtract", method)
-            ))
+            _ => Err(CalculatorError::UnknownMethod(format!(
+                "{}. Supported methods: add, subtract",
+                method
+            ))),
         }
     }
 
@@ -84,34 +115,34 @@ impl JsonRpcHandler for CalculatorHandler {
 async fn main() {
     println!("🧮 Simple Calculator JSON-RPC Server Example");
     println!("=============================================");
-    
+
     // Create dispatcher and register handler
-    let mut dispatcher = JsonRpcDispatcher::new();
+    let mut dispatcher: JsonRpcDispatcher<CalculatorError> = JsonRpcDispatcher::new();
     dispatcher.register_methods(
         vec!["add".to_string(), "subtract".to_string()],
         CalculatorHandler,
     );
 
     // Test multiple requests
-    let test_requests = vec![
+    let test_requests = [
         r#"{"jsonrpc": "2.0", "method": "add", "params": {"a": 5, "b": 3}, "id": 1}"#,
         r#"{"jsonrpc": "2.0", "method": "subtract", "params": {"a": 10, "b": 4}, "id": 2}"#,
         r#"{"jsonrpc": "2.0", "method": "multiply", "params": {"a": 2, "b": 3}, "id": 3}"#, // Will fail
         r#"{"jsonrpc": "2.0", "method": "add", "params": {"a": "invalid", "b": 5}, "id": 4}"#, // Will fail
     ];
-    
+
     for (i, request_json) in test_requests.iter().enumerate() {
         println!("\n--- Test {} ---", i + 1);
         println!("Request: {}", request_json);
-        
+
         // Parse and handle message
         match parse_json_rpc_message(request_json) {
             Ok(turul_mcp_json_rpc_server::dispatch::JsonRpcMessage::Request(request)) => {
                 println!("✓ Parsed: method='{}', id={:?}", request.method, request.id);
-                
+
                 // Handle request
                 let response = dispatcher.handle_request(request).await;
-                
+
                 // Serialize and display response
                 match serde_json::to_string_pretty(&response) {
                     Ok(response_json) => {
@@ -128,7 +159,7 @@ async fn main() {
             }
         }
     }
-    
+
     println!("\n🎉 Calculator example completed!");
     println!("This demonstrates:");
     println!("  • JSON-RPC 2.0 request/response handling");

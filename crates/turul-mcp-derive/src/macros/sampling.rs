@@ -6,9 +6,15 @@ use proc_macro::TokenStream;
 // use proc_macro2::TokenStream as TokenStream2; // Currently unused
 use quote::quote;
 use syn::{
-    parse::{Parse, ParseStream},
     // punctuated::Punctuated, // Currently unused
-    Expr, Ident, /* Lit, */ LitFloat, LitInt, LitStr, Result, Token,
+    Expr,
+    Ident,
+    /* Lit, */ LitFloat,
+    LitInt,
+    LitStr,
+    Result,
+    Token,
+    parse::{Parse, ParseStream},
 };
 
 /// Parsed content of a sampling! macro
@@ -62,7 +68,7 @@ impl Parse for SamplingMacro {
                     return Err(syn::Error::new(
                         field_name.span(),
                         format!("Unknown field: {}", field_name),
-                    ))
+                    ));
                 }
             }
 
@@ -73,7 +79,8 @@ impl Parse for SamplingMacro {
 
         Ok(SamplingMacro {
             name,
-            max_tokens: max_tokens.ok_or_else(|| input.error("Missing required 'max_tokens' field"))?,
+            max_tokens: max_tokens
+                .ok_or_else(|| input.error("Missing required 'max_tokens' field"))?,
             temperature,
             model_preferences,
             system_prompt,
@@ -93,7 +100,7 @@ pub fn sampling_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         .as_ref()
         .map(|t| quote! { Some(#t) })
         .unwrap_or_else(|| quote! { None });
-    
+
     let system_prompt = sampling_def
         .system_prompt
         .as_ref()
@@ -113,7 +120,7 @@ pub fn sampling_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         .unwrap_or_else(|| quote! { None });
 
     let handler = &sampling_def.handler;
-    
+
     // Use the provided name or default to "GeneratedSampling"
     let struct_name = sampling_def
         .name
@@ -130,7 +137,7 @@ pub fn sampling_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             use turul_mcp_server::McpSampling;
             use std::collections::HashMap;
             use serde_json::Value;
-            
+
             #[derive(Clone)]
             struct #struct_name {
                 messages: Vec<SamplingMessage>,
@@ -155,14 +162,14 @@ pub fn sampling_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             }
 
             impl HasModelPreferences for #struct_name {
-                fn model_preferences(&self) -> Option<&Value> { #model_preferences }
-                fn metadata(&self) -> Option<&Value> { None }
+                fn model_preferences(&self) -> Option<&turul_mcp_protocol::sampling::ModelPreferences> { #model_preferences }
+                fn metadata(&self) -> Option<&serde_json::Value> { None }
             }
 
             #[async_trait::async_trait]
             impl McpSampling for #struct_name {
-                async fn create_message(&self, request: CreateMessageParams) 
-                    -> turul_mcp_server::McpResult<CreateMessageResult> 
+                async fn sample(&self, request: turul_mcp_protocol::sampling::CreateMessageRequest)
+                    -> turul_mcp_protocol::McpResult<turul_mcp_protocol::sampling::CreateMessageResult>
                 {
                     let handler_fn = #handler;
                     handler_fn(request).await

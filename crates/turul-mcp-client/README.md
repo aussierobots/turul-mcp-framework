@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-mcp-client.svg)](https://crates.io/crates/turul-mcp-client)
 [![Documentation](https://docs.rs/turul-mcp-client/badge.svg)](https://docs.rs/turul-mcp-client)
 
-Comprehensive MCP client library with multi-transport support and full MCP 2025-06-18 protocol compliance.
+MCP client library with multi-transport support and full MCP 2025-06-18 protocol compliance.
 
 ## Overview
 
@@ -11,13 +11,12 @@ Comprehensive MCP client library with multi-transport support and full MCP 2025-
 
 ## Features
 
-- ✅ **Multi-Transport Support** - HTTP, SSE, WebSocket, and stdio transports
+- ✅ **Multi-Transport Support** - HTTP and SSE transports
 - ✅ **MCP 2025-06-18 Compliance** - Full protocol specification support
 - ✅ **Session Management** - Automatic session handling with recovery
 - ✅ **Streaming Support** - Real-time event streaming and progress tracking
 - ✅ **Async/Await** - Built on Tokio for high performance
 - ✅ **Error Recovery** - Comprehensive error types and retry mechanisms
-- ✅ **Connection Pooling** - Efficient resource management
 
 ## Quick Start
 
@@ -25,7 +24,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-client = "0.1.1"
+turul-mcp-client = "0.2.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -42,8 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Build client
     let client = McpClientBuilder::new()
-        .with_transport(transport)
-        .with_client_info("My MCP Client", "1.0.0")
+        .with_transport(Box::new(transport))
         .build();
 
     // Connect and initialize
@@ -74,12 +72,10 @@ For modern MCP servers supporting MCP 2025-06-18:
 ```rust
 use turul_mcp_client::transport::HttpTransport;
 
-let transport = HttpTransport::new("http://localhost:8080/mcp")?
-    .with_timeout(std::time::Duration::from_secs(30))
-    .with_retry_config(RetryConfig::default());
+let transport = HttpTransport::new("http://localhost:8080/mcp")?;
 
 let client = McpClientBuilder::new()
-    .with_transport(transport)
+    .with_transport(Box::new(transport))
     .build();
 ```
 
@@ -90,117 +86,134 @@ For servers supporting server-sent events:
 ```rust
 use turul_mcp_client::transport::SseTransport;
 
-let transport = SseTransport::new("http://localhost:8080/mcp")?
-    .with_heartbeat_interval(std::time::Duration::from_secs(30));
+let transport = SseTransport::new("http://localhost:8080/mcp")?;
 
 let client = McpClientBuilder::new()
-    .with_transport(transport)
-    .enable_streaming()  // Enable real-time notifications
+    .with_transport(Box::new(transport))
     .build();
 ```
 
-### WebSocket Transport
+### Future Transport Support
 
-For WebSocket-based MCP servers:
+Additional transport implementations (WebSocket, stdio) are planned for future releases.
 
-```rust
-use turul_mcp_client::transport::WebSocketTransport;
+## Client Configuration
 
-let transport = WebSocketTransport::new("ws://localhost:8080/mcp")?
-    .with_ping_interval(std::time::Duration::from_secs(30));
-
-let client = McpClientBuilder::new()
-    .with_transport(transport)
-    .build();
-```
-
-### Stdio Transport
-
-For command-line MCP server executables:
-
-```rust
-use turul_mcp_client::transport::StdioTransport;
-
-let transport = StdioTransport::new("./my-mcp-server")?
-    .with_args(vec!["--config", "config.json"])
-    .with_working_dir("/path/to/server");
-
-let client = McpClientBuilder::new()
-    .with_transport(transport)
-    .build();
-```
-
-## Advanced Usage
-
-### Client Configuration
+### Using ClientConfig
 
 ```rust
 use turul_mcp_client::{McpClientBuilder, ClientConfig, RetryConfig, TimeoutConfig};
+use std::time::Duration;
 
 let config = ClientConfig {
-    connect_timeout: std::time::Duration::from_secs(10),
-    request_timeout: std::time::Duration::from_secs(30),
-    retry_config: RetryConfig {
-        max_retries: 3,
-        initial_delay: std::time::Duration::from_millis(100),
-        max_delay: std::time::Duration::from_secs(5),
-        exponential_base: 2.0,
+    client_info: ClientInfo {
+        name: "My MCP Client".to_string(),
+        version: "1.0.0".to_string(),
+        description: Some("Custom MCP client".to_string()),
+        vendor: None,
+        metadata: None,
     },
-    enable_streaming: true,
-    buffer_size: 8192,
+    timeouts: TimeoutConfig {
+        connect: Duration::from_secs(10),
+        request: Duration::from_secs(30),
+        long_operation: Duration::from_secs(120),
+        initialization: Duration::from_secs(15),
+        heartbeat: Duration::from_secs(30),
+    },
+    retry: RetryConfig {
+        max_attempts: 3,
+        initial_delay: Duration::from_millis(100),
+        max_delay: Duration::from_secs(5),
+        backoff_multiplier: 2.0,
+        jitter: 0.1,
+        exponential_backoff: true,
+    },
+    connection: ConnectionConfig::default(),
+    logging: LoggingConfig::default(),
+        request_timeout: Duration::from_secs(30),
+    },
 };
 
 let client = McpClientBuilder::new()
     .with_config(config)
-    .with_transport(transport)
+    .with_url("http://localhost:8080/mcp")?
     .build();
 ```
 
-### Session Management
+### Using URL Builder
 
 ```rust
-use turul_mcp_client::{McpClient, SessionState};
-
-// Check session status
-match client.session_state().await {
-    SessionState::Connected { session_id } => {
-        println!("Connected with session: {}", session_id);
-    }
-    SessionState::Disconnected => {
-        println!("Not connected");
-        client.connect().await?;
-    }
-    SessionState::Error { error } => {
-        println!("Session error: {}", error);
-        client.reconnect().await?;
-    }
-}
-
-// Manual session management
-let session_info = client.session_info().await?;
-println!("Session ID: {}", session_info.session_id);
-println!("Created: {}", session_info.created_at);
-println!("Last activity: {}", session_info.last_activity);
+let client = McpClientBuilder::new()
+    .with_url("http://localhost:8080/mcp")?  // Automatically detects transport type
+    .build();
 ```
 
-### Error Handling
+## Session Management
+
+### Connection Status
+
+```rust
+use turul_mcp_client::session::SessionState;
+
+// Check connection and session status
+let status = client.connection_status().await;
+println!("Transport connected: {}", status.transport_connected);
+println!("Session state: {:?}", status.session_state);
+println!("Transport type: {}", status.transport_type);
+
+if let Some(session_id) = status.session_id {
+    println!("Session ID: {}", session_id);
+}
+```
+
+### Session Information
+
+```rust
+// Get detailed session information
+let session_info = client.session_info().await;
+println!("Session ID: {:?}", session_info.session_id);
+println!("Created: {:?}", session_info.created_at);
+println!("State: {:?}", session_info.state);
+```
+
+### Connection Management
+
+```rust
+// Check if client is ready
+if !client.is_ready().await {
+    client.connect().await?;
+}
+
+// Disconnect and cleanup
+client.disconnect().await?;
+```
+
+## Error Handling
+
+### Error Types
 
 ```rust
 use turul_mcp_client::{McpClientError, McpClientResult};
 
-async fn robust_tool_call(client: &McpClient) -> McpClientResult<serde_json::Value> {
+async fn robust_operation(client: &McpClient) -> McpClientResult<()> {
     match client.call_tool("my_tool", serde_json::json!({"param": "value"})).await {
-        Ok(result) => Ok(result),
+        Ok(result) => {
+            println!("Success: {:?}", result);
+            Ok(())
+        }
         Err(McpClientError::Transport(e)) => {
-            tracing::warn!("Transport error, retrying: {}", e);
-            client.reconnect().await?;
-            client.call_tool("my_tool", serde_json::json!({"param": "value"})).await
+            tracing::warn!("Transport error, attempting reconnect: {}", e);
+            client.disconnect().await?;
+            client.connect().await?;
+            Err(e.into())
         }
         Err(McpClientError::Session(e)) => {
             tracing::error!("Session error: {}", e);
-            client.disconnect().await?;
-            client.connect().await?;
-            client.call_tool("my_tool", serde_json::json!({"param": "value"})).await
+            Err(e.into())
+        }
+        Err(McpClientError::Protocol(e)) => {
+            tracing::error!("Protocol error: {}", e);
+            Err(e.into())
         }
         Err(e) => Err(e),
     }
@@ -214,8 +227,11 @@ async fn robust_tool_call(client: &McpClient) -> McpClientResult<serde_json::Val
 ```rust
 // List available tools
 let tools = client.list_tools().await?;
-for tool in tools {
-    println!("Tool: {} - {}", tool.name, tool.description.unwrap_or_default());
+for tool in &tools {
+    println!("Tool: {}", tool.name);
+    if let Some(description) = &tool.description {
+        println!("  Description: {}", description);
+    }
 }
 
 // Call a tool
@@ -225,18 +241,7 @@ let result = client.call_tool("calculator", serde_json::json!({
     "b": 6
 })).await?;
 
-println!("Result: {:?}", result.content);
-
-// Call tool with progress tracking
-let result = client.call_tool_with_progress("long_task", 
-    serde_json::json!({"duration": 10}),
-    |progress| {
-        println!("Progress: {}%", progress.progress);
-        if let Some(message) = &progress.message {
-            println!("Status: {}", message);
-        }
-    }
-).await?;
+println!("Tool result: {:?}", result.content);
 ```
 
 ### Resources
@@ -244,19 +249,16 @@ let result = client.call_tool_with_progress("long_task",
 ```rust
 // List available resources
 let resources = client.list_resources().await?;
-for resource in resources {
-    println!("Resource: {} - {}", resource.uri, 
-             resource.description.unwrap_or_default());
+for resource in &resources {
+    println!("Resource: {}", resource.uri);
+    if let Some(description) = &resource.description {
+        println!("  Description: {}", description);
+    }
 }
 
 // Read a resource
 let content = client.read_resource("file:///path/to/file.txt").await?;
 println!("Resource content: {:?}", content);
-
-// Subscribe to resource updates
-client.subscribe_to_resource_updates(|notification| {
-    println!("Resource updated: {}", notification.uri);
-}).await?;
 ```
 
 ### Prompts
@@ -264,213 +266,184 @@ client.subscribe_to_resource_updates(|notification| {
 ```rust
 // List available prompts
 let prompts = client.list_prompts().await?;
-for prompt in prompts {
-    println!("Prompt: {} - {}", prompt.name, 
-             prompt.description.unwrap_or_default());
+for prompt in &prompts {
+    println!("Prompt: {}", prompt.name);
+    if let Some(description) = &prompt.description {
+        println!("  Description: {}", description);
+    }
 }
 
-// Get a prompt
-let prompt = client.get_prompt("greeting", Some(serde_json::json!({
+// Get a prompt with arguments
+let prompt_result = client.get_prompt("greeting", Some(serde_json::json!({
     "name": "Alice"
 }))).await?;
 
-println!("Prompt messages:");
-for message in prompt.messages {
-    println!("  {}: {}", message.role, message.content);
-}
-```
-
-### Sampling
-
-```rust
-// Create sampling request
-let messages = vec![
-    Message {
-        role: Role::User,
-        content: MessageContent::Text {
-            text: "Hello, can you help me?".to_string(),
-        },
-    }
-];
-
-let sampling_result = client.create_message(messages, None, None).await?;
-println!("Generated message: {:?}", sampling_result);
+println!("Prompt messages: {:?}", prompt_result.messages);
 ```
 
 ## Streaming and Events
 
-### Real-time Notifications
+### Stream Handler
 
 ```rust
-use turul_mcp_client::streaming::EventHandler;
+// Access the stream handler for server events
+let stream_handler = client.stream_handler().await;
 
-struct MyEventHandler;
-
-impl EventHandler for MyEventHandler {
-    async fn handle_progress(&self, progress: ProgressNotification) {
-        println!("Progress: {}% - {}", 
-                 progress.progress, 
-                 progress.message.unwrap_or_default());
-    }
-    
-    async fn handle_log(&self, log: LoggingNotification) {
-        println!("Log [{}]: {:?}", log.level, log.data);
-    }
-    
-    async fn handle_resource_updated(&self, notification: ResourceUpdatedNotification) {
-        println!("Resource updated: {}", notification.uri);
-    }
-}
-
-// Enable streaming with custom handler
-let client = McpClientBuilder::new()
-    .with_transport(transport)
-    .with_event_handler(Box::new(MyEventHandler))
-    .enable_streaming()
-    .build();
+// The stream handler processes server-sent events automatically
+// This is primarily for internal use and advanced scenarios
 ```
 
-### Progress Tracking
+## Protocol Headers
+
+### MCP Protocol Version
+
+The client automatically sends the appropriate protocol version header:
 
 ```rust
-// Track progress for long-running operations
-let progress_receiver = client.call_tool_with_progress_stream(
-    "data_processing", 
-    serde_json::json!({"file_path": "/large/dataset.csv"})
-).await?;
+// Client automatically sends: MCP-Protocol-Version: 2025-06-18
+// Server responds with: mcp-session-id: <session-uuid>
 
-// Handle progress updates
-tokio::spawn(async move {
-    while let Some(progress) = progress_receiver.recv().await {
-        match progress {
-            ProgressUpdate::Progress { progress, total, message } => {
-                let percentage = progress / total.unwrap_or(1.0) * 100.0;
-                println!("Processing: {:.1}% - {}", 
-                         percentage, 
-                         message.unwrap_or_default());
+// Access session ID from connection status
+let status = client.connection_status().await;
+if let Some(session_id) = status.session_id {
+    println!("Session ID from server: {}", session_id);
+}
+```
+
+## Testing and Development
+
+### Health Check
+
+```rust
+// Ping the server to check connectivity
+match client.ping().await {
+    Ok(_) => println!("Server is responsive"),
+    Err(e) => println!("Server ping failed: {}", e),
+}
+```
+
+### Transport Statistics
+
+```rust
+// Get transport layer statistics
+let stats = client.transport_stats().await;
+println!("Requests sent: {}", stats.requests_sent);
+println!("Responses received: {}", stats.responses_received);
+println!("Average response time: {:.2}ms", stats.avg_response_time_ms);
+```
+
+## Transport Detection
+
+### Automatic Transport Selection
+
+```rust
+use turul_mcp_client::transport::{TransportFactory, detect_transport_type};
+
+// Detect transport type from URL
+let transport_type = detect_transport_type("http://localhost:8080/mcp")?;
+println!("Detected transport: {}", transport_type);
+
+// Create transport automatically
+let transport = TransportFactory::from_url("http://localhost:8080/mcp")?;
+
+// List available transports
+let available = TransportFactory::available_transports();
+println!("Available transports: {:?}", available);
+```
+
+## Examples
+
+### Complete Application
+
+```rust
+use turul_mcp_client::{McpClient, McpClientBuilder, ClientConfig};
+use turul_mcp_client::transport::HttpTransport;
+use tracing::{info, error};
+use std::time::Duration;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Initialize logging
+    tracing_subscriber::fmt::init();
+    
+    // Create client with configuration
+    let mut config = ClientConfig::default();
+    config.timeouts.connect = Duration::from_secs(10);
+    config.timeouts.request = Duration::from_secs(30);
+    
+    let transport = HttpTransport::new("http://localhost:8080/mcp")?;
+    let client = McpClientBuilder::new()
+        .with_transport(Box::new(transport))
+        .with_config(config)
+        .build();
+    
+    // Connect
+    info!("Connecting to MCP server...");
+    client.connect().await?;
+    info!("Connected successfully!");
+    
+    // Check if ready
+    if !client.is_ready().await {
+        error!("Client not ready after connect");
+        return Ok(());
+    }
+    
+    // Discover capabilities
+    let tools = client.list_tools().await?;
+    info!("Server provides {} tools", tools.len());
+    
+    for tool in &tools {
+        info!("  - {}: {}", tool.name, 
+              tool.description.as_deref().unwrap_or("No description"));
+    }
+    
+    // Use first available tool
+    if !tools.is_empty() {
+        let tool_name = &tools[0].name;
+        info!("Calling tool: {}", tool_name);
+        
+        match client.call_tool(tool_name, serde_json::json!({})).await {
+            Ok(result) => {
+                info!("Tool result: {:?}", result.content);
             }
-            ProgressUpdate::Completed { result } => {
-                println!("Processing completed: {:?}", result);
-                break;
-            }
-            ProgressUpdate::Failed { error } => {
-                println!("Processing failed: {}", error);
-                break;
+            Err(e) => {
+                error!("Tool call failed: {}", e);
             }
         }
     }
-});
-```
-
-## Testing Support
-
-### Mock Transport
-
-```rust
-use turul_mcp_client::transport::MockTransport;
-
-#[tokio::test]
-async fn test_tool_calling() {
-    let mut mock_transport = MockTransport::new();
     
-    // Set up expected responses
-    mock_transport.expect_initialize_response(InitializeResult {
-        protocol_version: "2025-06-18".to_string(),
-        capabilities: Default::default(),
-        server_info: ServerInfo {
-            name: "Test Server".to_string(),
-            version: "1.0.0".to_string(),
-        },
-    });
+    // Get connection status
+    let status = client.connection_status().await;
+    info!("Connection status: transport_connected={}, session_state={:?}", 
+          status.transport_connected, status.session_state);
     
-    mock_transport.expect_call_tool_response("calculator", CallToolResult {
-        content: vec![ToolResult::text("42")],
-        is_error: false,
-        _meta: None,
-    });
+    // Graceful cleanup
+    info!("Disconnecting...");
+    client.disconnect().await?;
     
-    let client = McpClientBuilder::new()
-        .with_transport(mock_transport)
-        .build();
-        
-    client.connect().await.unwrap();
-    
-    let result = client.call_tool("calculator", 
-        serde_json::json!({"operation": "add", "a": 20, "b": 22})).await.unwrap();
-        
-    assert_eq!(result.content[0].text.as_ref().unwrap(), "42");
+    Ok(())
 }
 ```
 
-### Integration Testing
+### Transport Comparison
 
 ```rust
-use turul_mcp_client::testing::{TestServer, TestTransport};
+use turul_mcp_client::transport::{HttpTransport, SseTransport, TransportCapabilities};
 
-#[tokio::test]
-async fn integration_test() {
-    // Start a test server
-    let test_server = TestServer::new()
-        .with_tool("echo", |args| async move {
-            Ok(serde_json::json!({"echo": args}))
-        })
-        .start()
-        .await?;
+// Compare transport capabilities
+fn compare_transports() -> Result<(), Box<dyn std::error::Error>> {
+    let http_transport = HttpTransport::new("http://localhost:8080/mcp")?;
+    let sse_transport = SseTransport::new("http://localhost:8080/mcp")?;
     
-    // Connect client to test server
-    let transport = HttpTransport::new(&test_server.url())?;
-    let client = McpClientBuilder::new()
-        .with_transport(transport)
-        .build();
+    let http_caps = http_transport.capabilities();
+    let sse_caps = sse_transport.capabilities();
     
-    client.connect().await?;
-    
-    // Test the interaction
-    let result = client.call_tool("echo", 
-        serde_json::json!({"message": "hello"})).await?;
-        
-    assert_eq!(result.content[0].text.as_ref().unwrap(), 
-               r#"{"echo": {"message": "hello"}}"#);
-}
-```
-
-## Performance Optimization
-
-### Connection Pooling
-
-```rust
-use turul_mcp_client::{McpClientPool, PoolConfig};
-
-let pool_config = PoolConfig {
-    max_connections: 10,
-    min_connections: 2,
-    connection_timeout: std::time::Duration::from_secs(30),
-    idle_timeout: std::time::Duration::from_secs(300),
-};
-
-let pool = McpClientPool::new(transport_factory, pool_config).await?;
-
-// Get a client from the pool
-let client = pool.get_client().await?;
-let result = client.call_tool("my_tool", args).await?;
-
-// Client automatically returns to pool when dropped
-drop(client);
-```
-
-### Batch Operations
-
-```rust
-// Batch multiple tool calls
-let batch_requests = vec![
-    ("tool_1", serde_json::json!({"param": "value1"})),
-    ("tool_2", serde_json::json!({"param": "value2"})),
-    ("tool_3", serde_json::json!({"param": "value3"})),
-];
-
-let results = client.batch_call_tools(batch_requests).await?;
-for (i, result) in results.into_iter().enumerate() {
-    println!("Tool {} result: {:?}", i + 1, result);
+    println!("HTTP - Streaming: {}, Server Events: {}", 
+             http_caps.streaming, http_caps.server_events);
+    println!("SSE - Streaming: {}, Server Events: {}", 
+             sse_caps.streaming, sse_caps.server_events);
+             
+    Ok(())
 }
 ```
 
@@ -478,20 +451,19 @@ for (i, result) in results.into_iter().enumerate() {
 
 ```toml
 [dependencies]
-turul-mcp-client = { version = "0.1.1", features = ["all-transports"] }
+turul-mcp-client = { version = "0.2.0", features = ["sse"] }
 ```
 
 Available features:
 - `default` = `["http", "sse"]` - HTTP and SSE transport
-- `http` - HTTP transport support
-- `sse` - Server-Sent Events transport
-- `websocket` - WebSocket transport support
-- `stdio` - Standard I/O transport for executable servers
-- `all-transports` - Enable all transport types
+- `http` - HTTP transport support (included by default)
+- `sse` - Server-Sent Events transport (included by default)
+- `websocket` - *(Planned)* WebSocket transport support
+- `stdio` - *(Planned)* Standard I/O transport for executable servers
 
-## Error Types
+## Error Reference
 
-The client provides comprehensive error handling:
+### McpClientError Types
 
 ```rust
 use turul_mcp_client::McpClientError;
@@ -513,73 +485,46 @@ match error {
         // Request timeout
         eprintln!("Request timed out");
     }
-    McpClientError::ServerError { code, message } => {
-        // Server returned an error
-        eprintln!("Server error {}: {}", code, message);
+    McpClientError::NotConnected => {
+        // Client not connected
+        eprintln!("Client not connected");
+    }
+    McpClientError::InvalidResponse(msg) => {
+        // Invalid response from server
+        eprintln!("Invalid response: {}", msg);
     }
 }
 ```
 
-## Examples
+## Performance Notes
 
-### Complete Application
+- **Connection Reuse**: Transport connections are reused across requests
+- **Async/Await**: All operations are non-blocking and async
+- **Memory Efficient**: Streaming responses avoid large memory allocations
+- **Session Cleanup**: Automatic session cleanup on client drop
 
-```rust
-use turul_mcp_client::{McpClient, McpClientBuilder};
-use turul_mcp_client::transport::HttpTransport;
-use tracing::{info, error};
+## Compatibility
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize logging
-    tracing_subscriber::fmt::init();
-    
-    // Create transport
-    let transport = HttpTransport::new("http://localhost:8080/mcp")?;
-    
-    // Build client with retry configuration
-    let client = McpClientBuilder::new()
-        .with_transport(transport)
-        .with_client_info("MCP Demo Client", "1.0.0")
-        .with_retry_attempts(3)
-        .enable_streaming()
-        .build();
-    
-    // Connect
-    info!("Connecting to MCP server...");
-    client.connect().await?;
-    info!("Connected successfully!");
-    
-    // Discover capabilities
-    let tools = client.list_tools().await?;
-    info!("Server provides {} tools", tools.len());
-    
-    for tool in &tools {
-        info!("  - {}: {}", tool.name, tool.description.as_deref().unwrap_or("No description"));
-    }
-    
-    // Interactive tool usage
-    if !tools.is_empty() {
-        let tool_name = &tools[0].name;
-        info!("Calling tool: {}", tool_name);
-        
-        match client.call_tool(tool_name, serde_json::json!({})).await {
-            Ok(result) => {
-                info!("Tool result: {:?}", result.content);
-            }
-            Err(e) => {
-                error!("Tool call failed: {}", e);
-            }
-        }
-    }
-    
-    // Graceful cleanup
-    info!("Disconnecting...");
-    client.disconnect().await?;
-    
-    Ok(())
-}
-```
+### MCP Protocol Versions
+
+The client automatically adapts to server capabilities:
+
+- **2024-11-05**: Basic MCP without streamable HTTP
+- **2025-03-26**: Streamable HTTP with SSE support  
+- **2025-06-18**: Full feature set with meta fields and enhanced capabilities
+
+### Transport Compatibility
+
+- **HTTP**: Works with all MCP servers
+- **SSE**: Requires server-sent events support
+- **WebSocket**: *(Planned)* WebSocket endpoint support
+- **Stdio**: *(Planned)* Executable MCP server support
+
+## Related Crates
+
+- **[turul-mcp-server](../turul-mcp-server)**: Complete MCP server framework
+- **[turul-mcp-protocol](../turul-mcp-protocol)**: MCP protocol types and traits
+- **[turul-http-mcp-server](../turul-http-mcp-server)**: HTTP transport layer for servers
 
 ## License
 

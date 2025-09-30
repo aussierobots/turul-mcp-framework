@@ -3,9 +3,9 @@
 //! This module provides comprehensive support for the structured _meta fields
 //! introduced in MCP 2025-06-18 specification.
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 
 /// Generic annotations structure (matches TypeScript Annotations)
 /// Used across all MCP types that support client annotations
@@ -21,7 +21,7 @@ impl Annotations {
     pub fn new() -> Self {
         Self { title: None }
     }
-    
+
     pub fn with_title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
@@ -162,7 +162,11 @@ impl Meta {
     }
 
     /// Create Meta with progress information
-    pub fn with_progress(progress: f64, current_step: Option<u64>, total_steps: Option<u64>) -> Self {
+    pub fn with_progress(
+        progress: f64,
+        current_step: Option<u64>,
+        total_steps: Option<u64>,
+    ) -> Self {
         Self {
             progress: Some(progress.clamp(0.0, 1.0)),
             current_step,
@@ -184,7 +188,12 @@ impl Meta {
     }
 
     /// Set pagination info
-    pub fn set_pagination(mut self, cursor: Option<Cursor>, total: Option<u64>, has_more: bool) -> Self {
+    pub fn set_pagination(
+        mut self,
+        cursor: Option<Cursor>,
+        total: Option<u64>,
+        has_more: bool,
+    ) -> Self {
         self.cursor = cursor;
         self.total = total;
         self.has_more = Some(has_more);
@@ -192,7 +201,12 @@ impl Meta {
     }
 
     /// Set progress info
-    pub fn set_progress(mut self, progress: f64, current_step: Option<u64>, total_steps: Option<u64>) -> Self {
+    pub fn set_progress(
+        mut self,
+        progress: f64,
+        current_step: Option<u64>,
+        total_steps: Option<u64>,
+    ) -> Self {
         self.progress = Some(progress.clamp(0.0, 1.0));
         self.current_step = current_step;
         self.total_steps = total_steps;
@@ -213,15 +227,41 @@ impl Meta {
 
     /// Check if meta has any content
     pub fn is_empty(&self) -> bool {
-        self.progress_token.is_none() &&
-        self.cursor.is_none() &&
-        self.total.is_none() &&
-        self.has_more.is_none() &&
-        self.estimated_remaining_seconds.is_none() &&
-        self.progress.is_none() &&
-        self.current_step.is_none() &&
-        self.total_steps.is_none() &&
-        self.extra.is_empty()
+        self.progress_token.is_none()
+            && self.cursor.is_none()
+            && self.total.is_none()
+            && self.has_more.is_none()
+            && self.estimated_remaining_seconds.is_none()
+            && self.progress.is_none()
+            && self.current_step.is_none()
+            && self.total_steps.is_none()
+            && self.extra.is_empty()
+    }
+
+    /// Merge request extras from incoming request _meta into this Meta
+    /// This helper preserves pagination context while adding request metadata
+    pub fn merge_request_extras(mut self, request_meta: Option<&HashMap<String, Value>>) -> Self {
+        if let Some(request_extras) = request_meta {
+            for (key, value) in request_extras {
+                // Don't override structured fields - only merge into extra
+                match key.as_str() {
+                    "progressToken"
+                    | "cursor"
+                    | "total"
+                    | "hasMore"
+                    | "estimatedRemainingSeconds"
+                    | "progress"
+                    | "currentStep"
+                    | "totalSteps" => {
+                        // Skip reserved fields - these should be set explicitly
+                    }
+                    _ => {
+                        self.extra.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+        }
+        self
     }
 }
 
@@ -229,13 +269,13 @@ impl Meta {
 pub trait WithMeta {
     /// Get the _meta field
     fn meta(&self) -> Option<&Meta>;
-    
+
     /// Set the _meta field
     fn set_meta(&mut self, meta: Option<Meta>);
-    
+
     /// Add or update _meta field with builder pattern
-    fn with_meta(mut self, meta: Meta) -> Self 
-    where 
+    fn with_meta(mut self, meta: Meta) -> Self
+    where
         Self: Sized,
     {
         self.set_meta(Some(meta));
@@ -249,7 +289,7 @@ pub struct PaginatedResponse<T> {
     /// The actual response data
     #[serde(flatten)]
     pub data: T,
-    
+
     /// Pagination metadata
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<Meta>,
@@ -257,13 +297,15 @@ pub struct PaginatedResponse<T> {
 
 impl<T> PaginatedResponse<T> {
     pub fn new(data: T) -> Self {
-        Self {
-            data,
-            meta: None,
-        }
+        Self { data, meta: None }
     }
 
-    pub fn with_pagination(data: T, cursor: Option<Cursor>, total: Option<u64>, has_more: bool) -> Self {
+    pub fn with_pagination(
+        data: T,
+        cursor: Option<Cursor>,
+        total: Option<u64>,
+        has_more: bool,
+    ) -> Self {
         Self {
             data,
             meta: Some(Meta::with_pagination(cursor, total, has_more)),
@@ -287,7 +329,7 @@ pub struct ProgressResponse<T> {
     /// The actual response data
     #[serde(flatten)]
     pub data: T,
-    
+
     /// Progress metadata
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<Meta>,
@@ -295,24 +337,21 @@ pub struct ProgressResponse<T> {
 
 impl<T> ProgressResponse<T> {
     pub fn new(data: T) -> Self {
-        Self {
-            data,
-            meta: None,
-        }
+        Self { data, meta: None }
     }
 
     pub fn with_progress(
-        data: T, 
+        data: T,
         progress_token: Option<ProgressToken>,
         progress: f64,
         current_step: Option<u64>,
-        total_steps: Option<u64>
+        total_steps: Option<u64>,
     ) -> Self {
         let mut meta = Meta::with_progress(progress, current_step, total_steps);
         if let Some(token) = progress_token {
             meta = meta.set_progress_token(token);
         }
-        
+
         Self {
             data,
             meta: Some(meta),
@@ -339,7 +378,7 @@ mod tests {
     fn test_progress_token() {
         let token = ProgressToken::new("task-123");
         assert_eq!(token.as_str(), "task-123");
-        
+
         let from_string: ProgressToken = "task-456".into();
         assert_eq!(from_string.as_str(), "task-456");
     }
@@ -348,7 +387,7 @@ mod tests {
     fn test_cursor() {
         let cursor = Cursor::new("page-2");
         assert_eq!(cursor.as_str(), "page-2");
-        
+
         let from_string: Cursor = "page-3".into();
         assert_eq!(from_string.as_str(), "page-3");
     }
@@ -359,7 +398,7 @@ mod tests {
             .set_progress_token("task-123")
             .set_progress(0.5, Some(5), Some(10))
             .add_extra("custom_field", "custom_value");
-        
+
         assert_eq!(meta.progress_token.as_ref().unwrap().as_str(), "task-123");
         assert_eq!(meta.progress, Some(0.5));
         assert_eq!(meta.current_step, Some(5));
@@ -372,10 +411,10 @@ mod tests {
         let meta = Meta::with_progress_token("task-123")
             .set_cursor("page-1")
             .set_progress(0.75, Some(3), Some(4));
-        
+
         let json = serde_json::to_string(&meta).unwrap();
         let deserialized: Meta = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(meta.progress_token, deserialized.progress_token);
         assert_eq!(meta.cursor, deserialized.cursor);
         assert_eq!(meta.progress, deserialized.progress);
@@ -387,24 +426,30 @@ mod tests {
         struct TestData {
             items: Vec<String>,
         }
-        
+
         let data = TestData {
             items: vec!["item1".to_string(), "item2".to_string()],
         };
-        
-        let response = PaginatedResponse::with_pagination(
-            data,
-            Some("next-page".into()),
-            Some(100),
-            true
-        );
-        
+
+        let response =
+            PaginatedResponse::with_pagination(data, Some("next-page".into()), Some(100), true);
+
         let json = serde_json::to_string(&response).unwrap();
         let deserialized: PaginatedResponse<TestData> = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(deserialized.data.items.len(), 2);
         assert!(deserialized.meta.is_some());
-        assert_eq!(deserialized.meta.as_ref().unwrap().cursor.as_ref().unwrap().as_str(), "next-page");
+        assert_eq!(
+            deserialized
+                .meta
+                .as_ref()
+                .unwrap()
+                .cursor
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            "next-page"
+        );
         assert_eq!(deserialized.meta.as_ref().unwrap().total, Some(100));
         assert_eq!(deserialized.meta.as_ref().unwrap().has_more, Some(true));
     }
@@ -415,25 +460,30 @@ mod tests {
         struct TaskResult {
             status: String,
         }
-        
+
         let data = TaskResult {
             status: "processing".to_string(),
         };
-        
-        let response = ProgressResponse::with_progress(
-            data,
-            Some("task-456".into()),
-            0.8,
-            Some(8),
-            Some(10)
-        );
-        
+
+        let response =
+            ProgressResponse::with_progress(data, Some("task-456".into()), 0.8, Some(8), Some(10));
+
         let json = serde_json::to_string(&response).unwrap();
         let deserialized: ProgressResponse<TaskResult> = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(deserialized.data.status, "processing");
         assert!(deserialized.meta.is_some());
-        assert_eq!(deserialized.meta.as_ref().unwrap().progress_token.as_ref().unwrap().as_str(), "task-456");
+        assert_eq!(
+            deserialized
+                .meta
+                .as_ref()
+                .unwrap()
+                .progress_token
+                .as_ref()
+                .unwrap()
+                .as_str(),
+            "task-456"
+        );
         assert_eq!(deserialized.meta.as_ref().unwrap().progress, Some(0.8));
         assert_eq!(deserialized.meta.as_ref().unwrap().current_step, Some(8));
         assert_eq!(deserialized.meta.as_ref().unwrap().total_steps, Some(10));
@@ -443,8 +493,41 @@ mod tests {
     fn test_meta_is_empty() {
         let empty_meta = Meta::new();
         assert!(empty_meta.is_empty());
-        
+
         let non_empty_meta = Meta::new().set_progress_token("test");
         assert!(!non_empty_meta.is_empty());
+    }
+
+    #[test]
+    fn test_merge_request_extras() {
+        let mut request_meta = HashMap::new();
+        request_meta.insert("customField".to_string(), json!("custom_value"));
+        request_meta.insert("userContext".to_string(), json!("user_123"));
+        request_meta.insert("progressToken".to_string(), json!("should_be_ignored"));
+        request_meta.insert("cursor".to_string(), json!("should_be_ignored"));
+
+        let meta = Meta::with_pagination(Some("page-1".into()), Some(100), true)
+            .merge_request_extras(Some(&request_meta));
+
+        // Should preserve existing structured fields
+        assert_eq!(meta.cursor.as_ref().unwrap().as_str(), "page-1");
+        assert_eq!(meta.total, Some(100));
+        assert_eq!(meta.has_more, Some(true));
+
+        // Should add custom fields to extra
+        assert_eq!(meta.extra.get("customField"), Some(&json!("custom_value")));
+        assert_eq!(meta.extra.get("userContext"), Some(&json!("user_123")));
+
+        // Should not override structured fields in extra
+        assert!(meta.extra.get("progressToken").is_none());
+        assert!(meta.extra.get("cursor").is_none());
+    }
+
+    #[test]
+    fn test_merge_request_extras_empty() {
+        let meta = Meta::with_cursor("test-cursor").merge_request_extras(None);
+
+        assert_eq!(meta.cursor.as_ref().unwrap().as_str(), "test-cursor");
+        assert!(meta.extra.is_empty());
     }
 }

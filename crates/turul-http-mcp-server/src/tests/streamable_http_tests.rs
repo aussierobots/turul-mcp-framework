@@ -15,7 +15,9 @@ use serde_json::json;
 use crate::streamable_http::{StreamableHttpHandler, StreamableHttpContext, McpProtocolVersion};
 use crate::server::ServerConfig;
 use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
-use turul_mcp_protocol::{JsonRpcRequest, JsonRpcResponse, JsonRpcError};
+use turul_mcp_protocol::{JsonRpcRequest, JsonRpcResponse, JsonRpcError, McpError};
+use turul_mcp_session_storage::InMemorySessionStorage;
+use crate::StreamManager;
 
 /// Mock handler for streamable HTTP testing
 struct MockStreamableHandler;
@@ -59,7 +61,10 @@ mod streamable_handler_tests {
     #[tokio::test]
     async fn test_streamable_handler_creation() {
         let config = ServerConfig::default();
-        let handler = StreamableHttpHandler::new(Arc::new(config));
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager);
 
         // Handler should be created successfully
         println!("Streamable HTTP handler created successfully");
@@ -72,7 +77,10 @@ mod streamable_handler_tests {
             max_request_size: 5 * 1024 * 1024,
         };
 
-        let handler = StreamableHttpHandler::new(Arc::new(config));
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager);
 
         // Handler should accept custom configuration
         println!("Streamable HTTP handler with custom config created");
@@ -87,7 +95,10 @@ mod protocol_version_tests {
     #[tokio::test]
     async fn test_http_1_1_support() {
         let config = ServerConfig::default();
-        let handler = StreamableHttpHandler::new(Arc::new(config));
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager);
 
         // Create HTTP/1.1 request
         let mut request = Request::builder()
@@ -109,7 +120,10 @@ mod protocol_version_tests {
     #[tokio::test]
     async fn test_http_2_support() {
         let config = ServerConfig::default();
-        let handler = StreamableHttpHandler::new(Arc::new(config));
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager);
 
         // Create HTTP/2 request
         let mut request = Request::builder()
@@ -260,7 +274,10 @@ mod connection_management_tests {
     #[tokio::test]
     async fn test_connection_keep_alive() {
         let config = ServerConfig::default();
-        let handler = StreamableHttpHandler::new(Arc::new(config));
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager);
 
         // Create request with keep-alive headers
         let request = Request::builder()
@@ -277,7 +294,10 @@ mod connection_management_tests {
     #[tokio::test]
     async fn test_connection_close_handling() {
         let config = ServerConfig::default();
-        let handler = StreamableHttpHandler::new(Arc::new(config));
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager);
 
         // Create request with close connection
         let request = Request::builder()
@@ -294,7 +314,10 @@ mod connection_management_tests {
     #[tokio::test]
     async fn test_persistent_connection_reuse() {
         let config = ServerConfig::default();
-        let handler = StreamableHttpHandler::new(Arc::new(config));
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager);
 
         // Simulate multiple requests on same connection
         let requests = vec![
@@ -433,7 +456,10 @@ mod error_recovery_tests {
     #[tokio::test]
     async fn test_malformed_json_handling() {
         let config = ServerConfig::default();
-        let handler = StreamableHttpHandler::new(Arc::new(config));
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager);
 
         // Create request with malformed JSON
         let request = Request::builder()
@@ -452,7 +478,10 @@ mod error_recovery_tests {
             max_request_size: 1024, // Small limit
             cors_origins: vec![],
         };
-        let handler = StreamableHttpHandler::new(Arc::new(config));
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager);
 
         // Create oversized request
         let large_data = "x".repeat(2048);
@@ -469,7 +498,10 @@ mod error_recovery_tests {
     #[tokio::test]
     async fn test_invalid_http_method_handling() {
         let config = ServerConfig::default();
-        let handler = StreamableHttpHandler::new(Arc::new(config));
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager);
 
         // Create request with unsupported method
         let request = Request::builder()
@@ -484,7 +516,10 @@ mod error_recovery_tests {
     #[tokio::test]
     async fn test_missing_content_type_handling() {
         let config = ServerConfig::default();
-        let handler = StreamableHttpHandler::new(Arc::new(config));
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
+        let session_storage = Arc::new(InMemorySessionStorage::new());
+        let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager);
 
         // Create request without content-type
         let request = Request::builder()

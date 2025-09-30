@@ -29,12 +29,12 @@ impl Calculator {
             description: "Perform mathematical calculations with full precision".to_string(),
         }
     }
-    
+
     pub async fn execute(&self, args: HashMap<String, Value>) -> McpResult<Value> {
         let a = args.get("a").and_then(|v| v.as_f64()).unwrap_or(0.0);
         let b = args.get("b").and_then(|v| v.as_f64()).unwrap_or(0.0);
         let operation = args.get("operation").and_then(|v| v.as_str()).unwrap_or("add");
-        
+
         let result = match operation {
             "add" => a + b,
             "subtract" => a - b,
@@ -45,12 +45,12 @@ impl Calculator {
             "sqrt" if a >= 0.0 => a.sqrt(),
             "sqrt" => return Err(turul_mcp_protocol::McpError::tool_execution("Cannot take square root of negative number")),
             _ => return Err(turul_mcp_protocol::McpError::invalid_param_type(
-                "operation", 
-                "add|subtract|multiply|divide|power|sqrt", 
+                "operation",
+                "add|subtract|multiply|divide|power|sqrt",
                 operation
             )),
         };
-        
+
         info!("🔢 Calculator: {} {} {} = {}", a, operation, b, result);
         Ok(serde_json::json!({
             "result": result,
@@ -61,9 +61,8 @@ impl Calculator {
     }
 }
 
-// TODO: This will be replaced with #[derive(McpTool)] when framework supports it
-// The derive macro will automatically implement the tool traits and register
-// the "tools/call" method without any manual specification
+// NOTE: Framework now supports #[derive(McpTool)] - see examples/derive-macro-server/
+// This archived example shows the manual approach that predated derive macros
 
 // =============================================================================
 // STRING UTILITIES TOOL - Framework auto-uses "tools/call"
@@ -84,11 +83,11 @@ impl StringUtils {
             description: "Perform string manipulation operations".to_string(),
         }
     }
-    
+
     pub async fn execute(&self, args: HashMap<String, Value>) -> McpResult<Value> {
         let text = args.get("text").and_then(|v| v.as_str()).unwrap_or("");
         let operation = args.get("operation").and_then(|v| v.as_str()).unwrap_or("uppercase");
-        
+
         let result = match operation {
             "uppercase" => text.to_uppercase(),
             "lowercase" => text.to_lowercase(),
@@ -111,7 +110,7 @@ impl StringUtils {
                 operation
             )),
         };
-        
+
         info!("🔤 String Utils: {} '{}' -> '{}'", operation, text, result);
         Ok(serde_json::json!({
             "result": result,
@@ -140,12 +139,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create tool instances (framework will auto-determine methods)
     let _calculator = Calculator::new();
     let _string_utils = StringUtils::new();
-    
+
     info!("🔧 Available Tools:");
     info!("   • Calculator → tools/call (automatic)");
     info!("   • StringUtils → tools/call (automatic)");
 
-    // TODO: This will become much simpler with derive macros:
+    // NOTE: This is now possible with derive macros - see examples/derive-macro-server/
     // let server = McpServer::builder()
     //     .tool(calculator)      // Auto-registers "tools/call" for Calculator
     //     .tool(string_utils)    // Auto-registers "tools/call" for StringUtils

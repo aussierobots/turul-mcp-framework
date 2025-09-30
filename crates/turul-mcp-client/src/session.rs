@@ -447,10 +447,10 @@ mod tests {
 
         manager.handle_error("test error".to_string()).await;
 
-        match manager.state().await {
-            SessionState::Error(msg) => assert_eq!(msg, "test error"),
-            _ => panic!("Expected error state"),
-        }
+        let SessionState::Error(msg) = manager.state().await else {
+            panic!("Expected error state, got: {:?}", manager.state().await);
+        };
+        assert_eq!(msg, "test error");
     }
 
     #[tokio::test]
@@ -458,12 +458,20 @@ mod tests {
         let config = ClientConfig::default();
         let manager = SessionManager::new(config);
 
-        let original_id = manager.session_id().await.unwrap();
+        // Set a mock session ID to simulate server initialization
+        manager
+            .set_session_id("test-session-id".to_string())
+            .await
+            .unwrap();
+        let _original_id = manager.session_id().await.unwrap();
 
         manager.reset().await;
 
-        let new_id = manager.session_id().await.unwrap();
-        assert_ne!(original_id, new_id);
+        // After reset, session_id should return NotInitialized error
+        assert!(manager.session_id().await.is_err());
         assert_eq!(manager.state().await, SessionState::Uninitialized);
+
+        // Verify the session ID was actually cleared
+        assert!(manager.session_id_optional().await.is_none());
     }
 }

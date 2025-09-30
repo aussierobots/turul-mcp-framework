@@ -25,12 +25,14 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-protocol-2025-06-18 = "0.1.1"
+turul-mcp-protocol-2025-06-18 = "0.2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ```
 
 **Note**: Most users should use `turul-mcp-protocol` (the version alias) instead of importing this crate directly.
+
+**Important**: These types represent the MCP protocol messages themselves. JSON-RPC 2.0 wrapping is handled by the transport layer and framework - see `turul-http-mcp-server` for complete server implementation.
 
 ### Basic Usage
 
@@ -39,9 +41,10 @@ use turul_mcp_protocol_2025_06_18::{
     Tool, ToolSchema, JsonSchema,
     InitializeRequest, InitializeResult,
     CallToolRequest, CallToolResult,
-    ClientInfo, ServerInfo, Implementation
+    Implementation, ClientCapabilities, ServerCapabilities
 };
 use serde_json::json;
+use std::collections::HashMap;
 
 // Create a tool definition
 let tool = Tool::new("calculator", ToolSchema::object()
@@ -54,15 +57,11 @@ let tool = Tool::new("calculator", ToolSchema::object()
 ).with_description("Perform basic math operations");
 
 // Create initialization structures  
-let client_info = ClientInfo {
-    name: "My MCP Client".to_string(),
-    version: "1.0.0".to_string(),
-};
-
+let client_info = Implementation::new("My MCP Client", "1.0.0");
 let server_info = Implementation::new("My MCP Server", "1.0.0");
 
-println!("Tool name: {}", tool.name());
-println!("Tool description: {}", tool.description().unwrap_or("No description"));
+println!("Tool name: {}", tool.name);
+println!("Tool description: {}", tool.description.as_deref().unwrap_or("No description"));
 ```
 
 ## Protocol Architecture
@@ -88,6 +87,10 @@ fn process_tool(tool: &dyn ToolDefinition) {
         println!("Description: {}", desc);
     }
 }
+
+// Example usage
+let tool = Tool::new("test", ToolSchema::object());
+process_tool(&tool);
 ```
 
 ### JSON-RPC 2.0 Integration
@@ -96,27 +99,28 @@ All MCP messages follow proper JSON-RPC 2.0 patterns:
 
 ```rust
 use turul_mcp_protocol_2025_06_18::{
-    InitializeRequest, InitializeParams,
-    CallToolRequest, CallToolParams,
-    JsonRpcRequestTrait, HasMethod, HasParams
+    InitializeRequest, CallToolRequest,
+    ClientCapabilities, Implementation,
+    McpVersion
 };
 
-// Request pattern: { method, params, id?, jsonrpc }
-let init_request = InitializeRequest {
-    method: "initialize".to_string(),  // Auto-determined by framework
-    params: InitializeParams {
-        protocol_version: "2025-06-18".to_string(),
-        capabilities: Default::default(),
-        client_info: ClientInfo {
-            name: "Test Client".to_string(),
-            version: "1.0.0".to_string(),
-        },
-        meta: None, // Optional _meta field
-    },
-};
+// Request pattern: InitializeRequest struct
+let init_request = InitializeRequest::new(
+    McpVersion::V2025_06_18,
+    ClientCapabilities::default(),
+    Implementation::new("Test Client", "1.0.0"),
+);
 
-// All requests implement JsonRpcRequestTrait
-assert_eq!(init_request.method(), "initialize");
+// Tool call request
+let tool_request = CallToolRequest::new("calculator")
+    .with_arguments(HashMap::from([
+        ("operation".to_string(), json!("add")),
+        ("a".to_string(), json!(5)),
+        ("b".to_string(), json!(3)),
+    ]));
+
+println!("Initialize protocol version: {}", init_request.protocol_version);
+println!("Tool name: {}", tool_request.params.name);
 ```
 
 ## Protocol Types
@@ -127,37 +131,28 @@ assert_eq!(init_request.method(), "initialize");
 use turul_mcp_protocol_2025_06_18::{
     InitializeRequest, InitializeResult,
     ClientCapabilities, ServerCapabilities,
-    Implementation
+    Implementation, McpVersion
 };
 
 // Client initialization
-let capabilities = ClientCapabilities {
-    experimental: Some(HashMap::new()),
-    sampling: None,
-    roots: Some(RootsCapability { list_changed: true }),
-};
+let capabilities = ClientCapabilities::default();
 
-let init_params = InitializeParams {
-    protocol_version: "2025-06-18".to_string(),
+let init_request = InitializeRequest::new(
+    McpVersion::V2025_06_18,
     capabilities,
-    client_info: ClientInfo {
-        name: "My MCP Client".to_string(),
-        version: "1.0.0".to_string(),
-    },
-    meta: None,
-};
+    Implementation::new("My MCP Client", "1.0.0"),
+);
 
 // Server response
 let server_impl = Implementation::new("My Server", "1.0.0");
-let server_capabilities = ServerCapabilities {
-    experimental: Some(HashMap::new()),
-    logging: Some(LoggingCapability {}),
-    prompts: Some(PromptsCapability { list_changed: true }),
-    resources: Some(ResourcesCapability { 
-        subscribe: true, 
-        list_changed: true 
-    }),
-    tools: Some(ToolsCapability { list_changed: true }),
+let server_capabilities = ServerCapabilities::default();
+
+let init_result = InitializeResult {
+    protocol_version: McpVersion::V2025_06_18.as_str().to_string(),
+    capabilities: server_capabilities,
+    server_info: server_impl,
+    instructions: None,
+    meta: None,
 };
 ```
 
@@ -175,86 +170,73 @@ let calculator_tool = Tool::new(
     "calculator",
     ToolSchema::object()
         .with_properties(HashMap::from([
-            ("operation".to_string(), JsonSchema::string()
-                .with_enum(vec!["add", "subtract", "multiply", "divide"])),
-            ("a".to_string(), JsonSchema::number()
-                .with_description("First operand")),
-            ("b".to_string(), JsonSchema::number()
-                .with_description("Second operand")),
+            ("operation".to_string(), JsonSchema::string()),
+            ("a".to_string(), JsonSchema::number()),
+            ("b".to_string(), JsonSchema::number()),
         ]))
         .with_required(vec!["operation".to_string(), "a".to_string(), "b".to_string()])
-        .with_description("Tool input schema")
 )
 .with_description("Perform basic mathematical operations")
 .with_title("Calculator Tool");
 
 // Tool call request
-let tool_request = CallToolRequest {
-    method: "tools/call".to_string(),
-    params: CallToolParams {
-        name: "calculator".to_string(),
-        arguments: Some(serde_json::json!({
-            "operation": "add",
-            "a": 5,
-            "b": 3
-        })),
-        meta: None,
-    },
-};
+let tool_request = CallToolRequest::new("calculator")
+    .with_arguments(HashMap::from([
+        ("operation".to_string(), serde_json::json!("add")),
+        ("a".to_string(), serde_json::json!(5)),
+        ("b".to_string(), serde_json::json!(3)),
+    ]));
 
-// Tool result
-let tool_result = CallToolResult {
-    content: vec![
-        ToolResult::text("8"),
-        ToolResult::image_data("image/png", "base64data"),
-        ToolResult::resource_reference("file:///result.json"),
-    ],
-    is_error: false,
-    meta: None,
-};
+// Tool result - CallToolResult with optional is_error and structured_content
+let tool_result = CallToolResult::success(vec![
+    ToolResult::text("8"),
+    ToolResult::image("base64data", "image/png"),
+]);
+
+// Or create with error flag
+let error_result = CallToolResult::error(vec![
+    ToolResult::text("Calculation failed")
+]).with_error_flag(true);
+
+// Note: structured_content is optional and used for schema-compliant output
+// Serializes as "structuredContent" (camelCase) in JSON per MCP specification
+let structured_result = CallToolResult::success(vec![
+    ToolResult::text("8")
+]).with_structured_content(serde_json::json!({"result": 8}));
 ```
 
 ### Resources Implementation
 
 ```rust
 use turul_mcp_protocol_2025_06_18::{
-    Resource, ResourceAnnotations, ResourceTemplate,
+    Resource, ResourceTemplate,
     ReadResourceRequest, ReadResourceResult,
-    ResourceContent, TextResourceContent, ImageResourceContent
+    ResourceContent
 };
 
 // Define a resource
 let config_resource = Resource::new(
     "file:///app/config.json",
-    Some("Application configuration file")
+    "app_config"
 )
-.with_name("app_config")
+.with_description("Application configuration file")
 .with_mime_type("application/json");
 
 // Resource template for dynamic resources
 let log_template = ResourceTemplate::new(
-    "file:///logs/{date}.log",
-    Some("Daily log files")
+    "daily_logs",
+    "file:///logs/{date}.log"
 )
-.with_name("daily_logs")
+.with_description("Daily log files")
 .with_mime_type("text/plain");
 
 // Read resource content
-let resource_content = ReadResourceResult {
-    contents: vec![
-        ResourceContent::Text(TextResourceContent {
-            uri: "file:///config.json".to_string(),
-            mime_type: Some("application/json".to_string()),
-            text: r#"{"debug": true, "port": 8080}"#.to_string(),
-        }),
-        ResourceContent::Blob(BlobResourceContent {
-            uri: "file:///logo.png".to_string(), 
-            mime_type: Some("image/png".to_string()),
-            blob: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==".to_string(),
-        }),
-    ],
-    meta: None,
-};
+let resource_content = ReadResourceResult::single(
+    ResourceContent::text(
+        "file:///config.json",
+        r#"{"debug": true, "port": 8080}"#
+    )
+);
 ```
 
 ### Prompts Implementation
@@ -263,15 +245,18 @@ let resource_content = ReadResourceResult {
 use turul_mcp_protocol_2025_06_18::{
     Prompt, PromptArgument, PromptMessage,
     GetPromptRequest, GetPromptResult,
-    Role, MessageContent, TextContent
+    Role, ContentBlock
 };
 
 // Define a prompt template
-let greeting_prompt = Prompt::new("greeting", Some("Generate personalized greetings"))
+let greeting_prompt = Prompt::new("greeting")
+    .with_description("Generate personalized greetings")
     .with_arguments(vec![
-        PromptArgument::new("name", Some("Person to greet"))
+        PromptArgument::new("name")
+            .with_description("Person to greet")
             .with_required(true),
-        PromptArgument::new("style", Some("Greeting style"))
+        PromptArgument::new("style")
+            .with_description("Greeting style")
             .with_required(false),
     ]);
 
@@ -279,116 +264,39 @@ let greeting_prompt = Prompt::new("greeting", Some("Generate personalized greeti
 let prompt_result = GetPromptResult {
     description: Some("Personalized greeting prompt".to_string()),
     messages: vec![
-        PromptMessage {
-            role: Role::User,
-            content: MessageContent::Text(TextContent {
-                text: "Please create a friendly greeting for Alice".to_string(),
-            }),
-        },
-        PromptMessage {
-            role: Role::Assistant, 
-            content: MessageContent::Text(TextContent {
-                text: "Hello Alice! Welcome to our application. How can I help you today?".to_string(),
-            }),
-        },
+        PromptMessage::user_text("Please create a friendly greeting for Alice"),
+        PromptMessage::assistant_text("Hello Alice! Welcome to our application. How can I help you today?"),
     ],
-    meta: None,
-};
-```
-
-### Sampling Implementation
-
-```rust
-use turul_mcp_protocol_2025_06_18::{
-    CreateMessageRequest, CreateMessageResult,
-    SamplingMessage, ModelPreferences
-};
-
-// Sampling request for message generation
-let sampling_request = CreateMessageRequest {
-    method: "sampling/createMessage".to_string(),
-    params: CreateMessageParams {
-        messages: vec![
-            SamplingMessage {
-                role: Role::User,
-                content: MessageContent::Text(TextContent {
-                    text: "What is the capital of France?".to_string(),
-                }),
-            }
-        ],
-        model_preferences: Some(ModelPreferences {
-            hints: Some(vec![
-                ModelHint {
-                    name: Some("claude-3-opus".to_string()),
-                },
-            ]),
-            cost_priority: Some(0.5),
-            speed_priority: Some(0.7),
-            intelligence_priority: Some(0.9),
-        }),
-        system_prompt: Some("You are a helpful geography assistant.".to_string()),
-        include_context: Some("auto".to_string()),
-        temperature: Some(0.1),
-        max_tokens: Some(150),
-        stop_sequences: Some(vec!["\n\n".to_string()]),
-        meta: None,
-    },
-};
-
-// Sampling result
-let sampling_result = CreateMessageResult {
-    role: Role::Assistant,
-    content: MessageContent::Text(TextContent {
-        text: "The capital of France is Paris.".to_string(),
-    }),
-    model: Some("claude-3-opus-20240229".to_string()),
-    stop_reason: Some("end_turn".to_string()),
     meta: None,
 };
 ```
 
 ### Notifications
 
+**Important**: All notification method names follow exact MCP specification with camelCase where specified (e.g., "notifications/resources/listChanged").
+
 ```rust
 use turul_mcp_protocol_2025_06_18::{
-    ProgressNotification, LoggingNotification,
-    ResourceUpdatedNotification, ToolListChangedNotification
+    ProgressNotification, ProgressNotificationParams,
+    LoggingMessageNotification, LoggingMessageNotificationParams,
+    ResourceUpdatedNotification, ResourceUpdatedNotificationParams,
+    ProgressToken, LogLevel
 };
 
-// Progress notification
-let progress = ProgressNotification {
-    method: "notifications/progress".to_string(),
-    params: Some(ProgressNotificationParams {
-        progress_token: ProgressToken("task-123".to_string()),
-        progress: 75.0,
-        total: Some(100.0),
-        meta: None,
-    }),
-};
+let mut progress = ProgressNotification::new("task-123".to_string(), 75);
+progress.total = Some(100);
+progress.message = Some("Processing...".to_string());
+progress._meta = Some(json!({ "source": "my-app" }));
 
-// Logging notification
-let log_notification = LoggingNotification {
-    method: "notifications/message".to_string(),
-    params: Some(LoggingNotificationParams {
-        level: LogLevel::Info,
-        data: serde_json::json!({
-            "message": "Task completed successfully",
-            "duration_ms": 1250,
-            "items_processed": 42
-        }),
-        logger: Some("task_processor".to_string()),
-        meta: None,
-    }),
-};
+let mut log = LoggingMessageNotification::new(
+    LoggingLevel::Error,
+    json!({ "error": "Connection failed", "retry_count": 3 })
+);
+log.logger = Some("database".to_string());
+log._meta = Some(json!({ "request_id": "xyz-123" }));
 
-// Resource update notification
-let resource_updated = ResourceUpdatedNotification {
-    method: "notifications/resources/updated".to_string(),
-    params: Some(ResourceUpdatedNotificationParams {
-        uri: "file:///data/config.json".to_string(),
-        meta: None,
-    }),
-};
+let mut resource_change = ResourceListChangedNotification::default();
+resource_change._meta = Some(json!({ "reason": "file-watcher" }));
 ```
 
 ## Schema Generation
@@ -444,31 +352,20 @@ let coordinates_schema = JsonSchema::array()
 
 ```rust
 use turul_mcp_protocol_2025_06_18::{
-    ProgressToken, CallToolParams, CallToolResult
+    ProgressToken, CallToolRequest, CallToolResult
 };
+use std::collections::HashMap;
 
 // Request with progress token
-let tool_request = CallToolRequest {
-    method: "tools/call".to_string(),
-    params: CallToolParams {
-        name: "long_calculation".to_string(),
-        arguments: Some(serde_json::json!({"iterations": 1000})),
-        meta: Some(HashMap::from([
-            ("progressToken".to_string(), serde_json::json!("calc-2024-001")),
-            ("timeout".to_string(), serde_json::json!(30000)),
-        ])),
-    },
-};
+let tool_request = CallToolRequest::new("long_calculation")
+    .with_arguments(HashMap::from([
+        ("iterations".to_string(), serde_json::json!(1000)),
+    ]));
 
-// Response with progress updates
-let tool_result = CallToolResult {
-    content: vec![ToolResult::text("Calculation completed")],
-    is_error: false,
-    meta: Some(HashMap::from([
-        ("duration_ms".to_string(), serde_json::json!(25000)),
-        ("iterations_completed".to_string(), serde_json::json!(1000)),
-    ])),
-};
+// Response with progress updates  
+let tool_result = CallToolResult::success(vec![
+    ToolResult::text("Calculation completed")
+]);
 ```
 
 ### Cursor-Based Pagination
@@ -476,15 +373,11 @@ let tool_result = CallToolResult {
 ```rust
 use turul_mcp_protocol_2025_06_18::{Cursor, ListResourcesResult};
 
-// Response with cursor for pagination
-let resources_result = ListResourcesResult {
-    resources: vec![/* ... */],
-    next_cursor: Some(Cursor("page_2_token_abc123".to_string())),
-    meta: Some(HashMap::from([
-        ("total_count".to_string(), serde_json::json!(250)),
-        ("page_size".to_string(), serde_json::json!(50)),
-    ])),
-};
+// Response with cursor for pagination  
+// Note: _meta field supports round-trip - request meta can be included in response meta
+// Serializes as "nextCursor" and "_meta" fields (camelCase) in JSON per MCP specification
+let resources_result = ListResourcesResult::new(vec![/* resources */])
+    .with_next_cursor(Cursor("page_2_token_abc123".to_string()));
 ```
 
 ## MCP Message Coverage
@@ -514,10 +407,6 @@ These are messages sent from the client (e.g., an IDE) to the server.
 | `ProgressNotification` | `ProgressNotification` | [`notifications.rs`](./src/notifications.rs) |
 | `InitializedNotification` | `InitializedNotification` | [`notifications.rs`](./src/notifications.rs) |
 | `RootsListChangedNotification` | `RootsListChangedNotification` | [`notifications.rs`](./src/notifications.rs) |
-| `EmptyResult` | `EmptyResult` | [`ping.rs`](./src/ping.rs) |
-| `CreateMessageResult` | `CreateMessageResult` | [`sampling.rs`](./src/sampling.rs) |
-| `ListRootsResult` | `ListRootsResult` | [`roots.rs`](./src/roots.rs) |
-| `ElicitResult` | `ElicitResult` | [`elicitation.rs`](./src/elicitation.rs) |
 
 ### Server-to-Client Messages
 
@@ -536,16 +425,6 @@ These are messages sent from the server to the client.
 | `ResourceListChangedNotification` | `ResourceListChangedNotification` | [`notifications.rs`](./src/notifications.rs) |
 | `ToolListChangedNotification` | `ToolListChangedNotification` | [`notifications.rs`](./src/notifications.rs) |
 | `PromptListChangedNotification` | `PromptListChangedNotification` | [`notifications.rs`](./src/notifications.rs) |
-| `EmptyResult` | `EmptyResult` | [`ping.rs`](./src/ping.rs) |
-| `InitializeResult` | `InitializeResult` | [`initialize.rs`](./src/initialize.rs) |
-| `CompleteResult` | `CompleteResult` | [`completion.rs`](./src/completion.rs) |
-| `GetPromptResult` | `GetPromptResult` | [`prompts.rs`](./src/prompts.rs) |
-| `ListPromptsResult` | `ListPromptsResult` | [`prompts.rs`](./src/prompts.rs) |
-| `ListResourceTemplatesResult` | `ListResourceTemplatesResult` | [`resources.rs`](./src/resources.rs) |
-| `ListResourcesResult` | `ListResourcesResult` | [`resources.rs`](./src/resources.rs) |
-| `ReadResourceResult` | `ReadResourceResult` | [`resources.rs`](./src/resources.rs) |
-| `CallToolResult` | `CallToolResult` | [`tools.rs`](./src/tools.rs) |
-| `ListToolsResult` | `ListToolsResult` | [`tools.rs`](./src/tools.rs) |
 
 ## Protocol Helpers and Utilities
 
@@ -572,9 +451,6 @@ Here is a high-level guide to the primary traits for each MCP area:
 | **Resources** | `ResourceDefinition` | Implement to define a new resource that the server can provide. |
 | **Prompts** | `PromptDefinition` | Implement to define a new prompt or prompt template. |
 | **Roots** | `RootDefinition` | Implement to define a new file system root that can be exposed. |
-| **Elicitation** | `ElicitationDefinition` | Implement to define a new structured input elicitation flow. |
-| **Sampling** | `SamplingDefinition` | Implement to define custom logic for `sampling/createMessage` requests. |
-| **Logging** | `LoggerDefinition` | Implement to define custom logging behavior. |
 
 ### Granular Trait Details
 
@@ -618,28 +494,6 @@ Each of these "definition" traits is composed of smaller, more granular traits t
     - `HasRootFiltering`
     - `HasRootAnnotations`
 
-#### Elicitation ([`elicitation.rs`](./src/elicitation.rs))
-- **Core Trait**: `ElicitationDefinition`
-- **Component Traits**:
-    - `HasElicitationMetadata` (message, title)
-    - `HasElicitationSchema`
-    - `HasElicitationHandling`
-
-#### Sampling ([`sampling.rs`](./src/sampling.rs))
-- **Core Trait**: `SamplingDefinition`
-- **Component Traits**:
-    - `HasSamplingConfig` (max_tokens, temperature)
-    - `HasSamplingContext` (messages, system_prompt)
-    - `HasModelPreferences`
-
-#### Logging ([`logging.rs`](./src/logging.rs))
-- **Core Trait**: `LoggerDefinition`
-- **Component Traits**:
-    - `HasLoggingMetadata`
-    - `HasLogLevel`
-    - `HasLogFormat`
-    - `HasLogTransport`
-
 ## Testing and Validation
 
 ### Protocol Compliance Testing
@@ -654,20 +508,20 @@ mod tests {
         let tool = Tool::new("test", ToolSchema::object());
         let json = serde_json::to_string(&tool).unwrap();
         let deserialized: Tool = serde_json::from_str(&json).unwrap();
-        assert_eq!(tool.name(), deserialized.name());
+        assert_eq!(tool.name, deserialized.name);
     }
 
     #[test] 
     fn test_json_rpc_compliance() {
-        let request = InitializeRequest {
-            method: "initialize".to_string(),
-            params: InitializeParams::default(),
-        };
+        let request = InitializeRequest::new(
+            McpVersion::V2025_06_18,
+            ClientCapabilities::default(),
+            Implementation::new("test-client", "1.0.0"),
+        );
         
-        // Should serialize with proper JSON-RPC 2.0 structure
+        // Should serialize with proper structure
         let json = serde_json::to_string(&request).unwrap();
-        assert!(json.contains("\"jsonrpc\":\"2.0\""));
-        assert!(json.contains("\"method\":\"initialize\""));
+        assert!(json.contains("\"protocolVersion\":\"2025-06-18\""));
     }
 
     #[test]
@@ -702,8 +556,8 @@ cargo test --package turul-mcp-protocol-2025-06-18 sampling
 ### Usage with turul-mcp-server
 
 ```rust
-use turul_mcp_server::McpServer;
-use turul_mcp_protocol_2025_06_18::{Tool, ToolDefinition, HasBaseMetadata};
+use turul_mcp_server::prelude::*;
+use turul_mcp_protocol::prelude::*;
 
 struct MyTool;
 
@@ -745,17 +599,15 @@ async fn handle_mcp_request(request_json: &str) -> Result<String, Box<dyn std::e
         Some("tools/call") => {
             let tool_request: CallToolRequest = serde_json::from_value(request)?;
             
-            let response = CallToolResult {
-                content: vec![ToolResult::text("Tool executed successfully")],
-                is_error: false,
-                meta: None,
-            };
+            let response = CallToolResult::success(vec![
+                ToolResult::text("Tool executed successfully")
+            ]);
             
             Ok(serde_json::to_string(&response)?)
         }
         _ => {
-            let error = JsonRpcError::method_not_found(&request["method"].to_string());
-            Ok(serde_json::to_string(&error)?)
+            let error = McpError::ToolExecutionError("Method not found".to_string());
+            Ok(serde_json::to_string(&error.to_json_rpc_error())?)
         }
     }
 }
@@ -766,26 +618,25 @@ async fn handle_mcp_request(request_json: &str) -> Result<String, Box<dyn std::e
 ### Protocol Error Types
 
 ```rust
-use turul_mcp_protocol_2025_06_18::{McpError, JsonRpcError, ProtocolError};
+use turul_mcp_protocol_2025_06_18::{McpError, McpResult};
 
-fn handle_protocol_errors() {
-    // JSON-RPC errors
-    let json_rpc_error = JsonRpcError::new(-32601, "Method not found", None);
-    
+fn handle_protocol_errors() -> McpResult<String> {
     // MCP protocol errors  
-    let protocol_error = ProtocolError::InvalidCapabilities("Missing required capability".to_string());
-    
-    // Validation errors
-    let validation_error = ValidationError::MissingField("name".to_string());
+    let validation_error = McpError::InvalidParameters("Missing required field".to_string());
+    let param_error = McpError::invalid_param_type("age", "number", "string");
+    let execution_error = McpError::ToolExecutionError("Calculation failed".to_string());
     
     // Combined error handling
     match some_operation() {
-        Ok(result) => println!("Success: {:?}", result),
-        Err(McpError::JsonRpc(e)) => println!("JSON-RPC error: {}", e),
-        Err(McpError::Protocol(e)) => println!("Protocol error: {}", e),
-        Err(McpError::Validation(e)) => println!("Validation error: {}", e),
-        Err(e) => println!("Other error: {}", e),
+        Ok(result) => Ok(format!("Success: {:?}", result)),
+        Err(McpError::InvalidParameters(e)) => Err(McpError::InvalidParameters(e)),
+        Err(McpError::ToolExecutionError(e)) => Err(McpError::ToolExecutionError(e)),
+        Err(e) => Err(e),
     }
+}
+
+fn some_operation() -> McpResult<String> {
+    Ok("Success".to_string())
 }
 ```
 
@@ -793,7 +644,7 @@ fn handle_protocol_errors() {
 
 ```toml
 [dependencies]
-turul-mcp-protocol-2025-06-18 = { version = "0.1.1", features = ["server"] }
+turul-mcp-protocol-2025-06-18 = { version = "0.2.0", features = ["server"] }
 ```
 
 Available features:

@@ -8,30 +8,30 @@
 //! Usage:
 //! ```bash
 //! # First, start the server in another terminal:
-//! cargo run --package turul-mcp-server --example logging-test-server
+//! cargo run --package logging-test-server
 //!
 //! # Default: Test GET SSE mode (comprehensive test)
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client
+//! RUST_LOG=info cargo run --package logging-test-client
 //!
 //! # Test POST SSE streaming mode only
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client -- --test-post-sse
+//! RUST_LOG=info cargo run --package logging-test-client -- --test-post-sse
 //!
 //! # Test both POST and GET SSE streaming modes
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client -- --test-both-modes
+//! RUST_LOG=info cargo run --package logging-test-client -- --test-both-modes
 //!
 //! # Quick verification test (faster)
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client -- --quick-test
+//! RUST_LOG=info cargo run --package logging-test-client -- --quick-test
 //!
 //! # Test against server on different port
-//! RUST_LOG=info cargo run --package turul-mcp-server --example logging-test-client -- --port 8080
+//! RUST_LOG=info cargo run --package logging-test-client -- --port 8080
 //! ```
 
 use anyhow::Result;
 use clap::Parser;
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio::time::sleep;
 use tokio::sync::mpsc;
+use tokio::time::sleep;
 use uuid::Uuid;
 
 // Use proper MCP protocol structs instead of json! macros
@@ -52,19 +52,19 @@ struct Args {
     /// Server port to connect to
     #[arg(short, long, default_value = "8003")]
     port: u16,
-    
+
     /// Test POST SSE streaming mode (tool calls with Accept: text/event-stream)
     #[arg(long)]
     test_post_sse: bool,
-    
+
     /// Test GET SSE streaming mode (persistent SSE connection)
     #[arg(long, default_value = "true")]
     test_get_sse: bool,
-    
+
     /// Test both POST and GET SSE streaming modes
     #[arg(long)]
     test_both_modes: bool,
-    
+
     /// Only run a quick verification test (faster execution)
     #[arg(long)]
     quick_test: bool,
@@ -308,10 +308,13 @@ impl LoggingTestClient {
         sender: mpsc::UnboundedSender<(String, u64, String)>, // (notification_json, timestamp, test_context)
     ) -> Result<()> {
         let session_id = self.session_id.as_ref().unwrap();
-        let sse_url = format!("{}", self.base_url);
-        
-        println!("📡 Starting persistent SSE connection for session: {}", session_id);
-        
+        let sse_url = self.base_url.to_string();
+
+        println!(
+            "📡 Starting persistent SSE connection for session: {}",
+            session_id
+        );
+
         // Start SSE connection
         let mut sse_response = self
             .client
@@ -328,7 +331,7 @@ impl LoggingTestClient {
         println!("✅ Persistent SSE connection established");
 
         let mut notification_counter = 0u64;
-        
+
         // Read the response body as text chunks indefinitely
         loop {
             match tokio::time::timeout(Duration::from_millis(200), sse_response.chunk()).await {
@@ -340,18 +343,21 @@ impl LoggingTestClient {
                         let line = line.trim();
 
                         // Look for SSE data lines
-                        if line.starts_with("data: ") {
-                            let data = &line[6..]; // Remove "data: " prefix
+                        if let Some(data) = line.strip_prefix("data: ") {
+                            // Remove "data: " prefix
 
                             // Check if this is a notification message
                             if data.contains("notifications/message")
                                 || data.contains("\"method\":\"notifications/message\"")
                             {
                                 notification_counter += 1;
-                                
+
                                 // Extract correlation ID from the notification data
-                                let correlation_id = if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                                    parsed.get("params")
+                                let correlation_id = if let Ok(parsed) =
+                                    serde_json::from_str::<serde_json::Value>(data)
+                                {
+                                    parsed
+                                        .get("params")
                                         .and_then(|params| params.get("_meta"))
                                         .and_then(|meta| meta.get("correlation_id"))
                                         .and_then(|v| v.as_str())
@@ -362,13 +368,24 @@ impl LoggingTestClient {
                                 };
 
                                 // Send notification to channel with extracted correlation ID
-                                if sender.send((data.to_string(), notification_counter, correlation_id.clone())).is_err() {
+                                if sender
+                                    .send((
+                                        data.to_string(),
+                                        notification_counter,
+                                        correlation_id.clone(),
+                                    ))
+                                    .is_err()
+                                {
                                     println!("📡 SSE receiver dropped, closing connection");
                                     return Ok(());
                                 }
 
-                                println!("🔔 Persistent SSE received notification #{} with correlation_id: {} ({} chars)", 
-                                        notification_counter, correlation_id, data.len());
+                                println!(
+                                    "🔔 Persistent SSE received notification #{} with correlation_id: {} ({} chars)",
+                                    notification_counter,
+                                    correlation_id,
+                                    data.len()
+                                );
                             }
                         }
                     }
@@ -392,9 +409,12 @@ impl LoggingTestClient {
         Ok(())
     }
 
-    async fn call_tool_json(&self, json_rpc_request: serde_json::Value) -> Result<serde_json::Value> {
+    async fn call_tool_json(
+        &self,
+        json_rpc_request: serde_json::Value,
+    ) -> Result<serde_json::Value> {
         let session_id = self.session_id.as_ref().unwrap();
-        
+
         let response = self
             .client
             .post(&self.base_url)
@@ -405,11 +425,11 @@ impl LoggingTestClient {
             .await?
             .json::<serde_json::Value>()
             .await?;
-            
+
         if let Some(error) = response.get("error") {
             anyhow::bail!("Tool call error: {}", error);
         }
-        
+
         Ok(response)
     }
 
@@ -420,7 +440,7 @@ impl LoggingTestClient {
         test_name: &str,
     ) -> Result<Vec<(String, u64)>> {
         let session_id = self.session_id.as_ref().unwrap();
-        let sse_url = format!("{}", self.base_url);
+        let sse_url = self.base_url.to_string();
 
         println!(
             "📡 [{}] Starting SSE connection (will monitor for {} seconds)...",
@@ -462,8 +482,8 @@ impl LoggingTestClient {
                         let line = line.trim();
 
                         // Look for SSE data lines
-                        if line.starts_with("data: ") {
-                            let data = &line[6..]; // Remove "data: " prefix
+                        if let Some(data) = line.strip_prefix("data: ") {
+                            // Remove "data: " prefix
 
                             // Check if this is a notification message
                             if data.contains("notifications/message")
@@ -479,7 +499,7 @@ impl LoggingTestClient {
 
                                 // Parse the JSON to extract level, message, and correlation ID
                                 let display_content = if let Ok(parsed) =
-                                    serde_json::from_str::<serde_json::Value>(&data)
+                                    serde_json::from_str::<serde_json::Value>(data)
                                 {
                                     if let Some(params) = parsed.get("params") {
                                         let level = params
@@ -519,7 +539,7 @@ impl LoggingTestClient {
 
                                 // Log the SSE response JSON clearly and formatted
                                 let correlation_id =
-                                    serde_json::from_str::<serde_json::Value>(&data)
+                                    serde_json::from_str::<serde_json::Value>(data)
                                         .ok()
                                         .and_then(|parsed| parsed.get("params").cloned())
                                         .and_then(|params| params.get("_meta").cloned())
@@ -581,7 +601,7 @@ impl LoggingTestClient {
 async fn main() -> Result<()> {
     // Parse command-line arguments
     let args = Args::parse();
-    
+
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -591,31 +611,54 @@ async fn main() -> Result<()> {
 
     println!("🧪 LOGGING TEST CLIENT");
     println!("======================");
-    
+
     // Determine test modes
-    let test_get_sse = args.test_get_sse || args.test_both_modes || (!args.test_post_sse && !args.test_both_modes);
+    let test_get_sse = args.test_get_sse || args.test_both_modes || !args.test_post_sse;
     let test_post_sse = args.test_post_sse || args.test_both_modes;
-    
+
     println!("🔧 Configuration:");
     println!("   • Server: http://127.0.0.1:{}/mcp", args.port);
-    println!("   • GET SSE Testing: {}", if test_get_sse { "✅ ENABLED" } else { "❌ DISABLED" });
-    println!("   • POST SSE Testing: {}", if test_post_sse { "✅ ENABLED" } else { "❌ DISABLED" });
-    println!("   • Test Mode: {}", if args.quick_test { "🚀 QUICK" } else { "🔍 COMPREHENSIVE" });
-    println!("");
+    println!(
+        "   • GET SSE Testing: {}",
+        if test_get_sse {
+            "✅ ENABLED"
+        } else {
+            "❌ DISABLED"
+        }
+    );
+    println!(
+        "   • POST SSE Testing: {}",
+        if test_post_sse {
+            "✅ ENABLED"
+        } else {
+            "❌ DISABLED"
+        }
+    );
+    println!(
+        "   • Test Mode: {}",
+        if args.quick_test {
+            "🚀 QUICK"
+        } else {
+            "🔍 COMPREHENSIVE"
+        }
+    );
+    println!();
 
     let mut client = LoggingTestClient::new(args.port);
 
     // Initialize session
     client.initialize().await?;
-    println!("");
+    println!();
 
     // Create channel for persistent SSE notifications
     let (notification_sender, mut notification_receiver) = mpsc::unbounded_channel();
-    
+
     // Start persistent SSE monitoring in background
     let client_clone = client.clone();
-    let sse_handle = tokio::spawn(async move { 
-        client_clone.monitor_sse_persistent(notification_sender).await 
+    let sse_handle = tokio::spawn(async move {
+        client_clone
+            .monitor_sse_persistent(notification_sender)
+            .await
     });
 
     // Wait for SSE connection to establish
@@ -629,16 +672,26 @@ async fn main() -> Result<()> {
         duration_secs: u64,
         test_name: &str,
     ) -> Result<Vec<(String, u64, String)>> {
-        println!("⏰ Collecting notifications for {} for {} seconds...", test_name, duration_secs);
+        println!(
+            "⏰ Collecting notifications for {} for {} seconds...",
+            test_name, duration_secs
+        );
         let mut notifications = Vec::new();
         let collection_end = std::time::Instant::now() + Duration::from_secs(duration_secs);
-        
+
         while std::time::Instant::now() < collection_end {
             match tokio::time::timeout(Duration::from_millis(100), receiver.recv()).await {
                 Ok(Some((notification_json, sequence_num, corr_id))) => {
                     if corr_id == correlation_id {
-                        notifications.push((notification_json.clone(), sequence_num, corr_id.clone()));
-                        println!("📥 [SSE-{}] NOTIFICATION JSON [correlation_id: {}]:", sequence_num, corr_id);
+                        notifications.push((
+                            notification_json.clone(),
+                            sequence_num,
+                            corr_id.clone(),
+                        ));
+                        println!(
+                            "📥 [SSE-{}] NOTIFICATION JSON [correlation_id: {}]:",
+                            sequence_num, corr_id
+                        );
                         // Parse and pretty print the notification JSON
                         match serde_json::from_str::<serde_json::Value>(&notification_json) {
                             Ok(parsed) => println!("{}", serde_json::to_string_pretty(&parsed)?),
@@ -655,22 +708,31 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        
+
         Ok(notifications)
     }
 
-    // Test 1: Debug session - send 8 log messages (one per level) 
+    // Test 1: Debug session - send 8 log messages (one per level)
     println!("\n🧪 TEST 1: DEBUG session filtering - sending 8 log levels");
-    
+
     client.set_logging_level("debug").await?;
-    
-    let all_levels = ["Debug", "Info", "Notice", "Warning", "Error", "Critical", "Alert", "Emergency"];
+
+    let all_levels = [
+        "Debug",
+        "Info",
+        "Notice",
+        "Warning",
+        "Error",
+        "Critical",
+        "Alert",
+        "Emergency",
+    ];
     let mut test1_requests = Vec::new(); // Store (correlation_id, level) pairs
-    
+
     for (i, level) in all_levels.iter().enumerate() {
         let correlation_id = Uuid::now_v7().to_string();
         let sequence = i + 1;
-        
+
         let json_rpc_request = serde_json::json!({
             "jsonrpc": "2.0",
             "id": sequence,
@@ -688,26 +750,37 @@ async fn main() -> Result<()> {
                 }
             }
         });
-        
-        println!("📤 [TEST1-{}] {} level request [correlation_id: {}]", i+1, level, correlation_id);
-        
+
+        println!(
+            "📤 [TEST1-{}] {} level request [correlation_id: {}]",
+            i + 1,
+            level,
+            correlation_id
+        );
+
         let response = client.call_tool_json(json_rpc_request).await?;
         if response.get("error").is_some() {
             println!("❌ Request failed: {}", response);
         }
-        
+
         test1_requests.push((correlation_id.clone(), level.to_string()));
         tokio::time::sleep(Duration::from_millis(300)).await; // Brief delay
     }
-    
-    println!("⏰ Test 1: Sent {} requests, collecting notifications for 5 seconds...", test1_requests.len());
+
+    println!(
+        "⏰ Test 1: Sent {} requests, collecting notifications for 5 seconds...",
+        test1_requests.len()
+    );
 
     // Collect Test 1 notifications
     let mut test1_received = Vec::new();
     let mut notification_count = 0;
     while let Ok(notification) = notification_receiver.try_recv() {
         let (json, _, _) = notification;
-        println!("📥 [TEST1-SSE-{}] Notification JSON:", notification_count + 1);
+        println!(
+            "📥 [TEST1-SSE-{}] Notification JSON:",
+            notification_count + 1
+        );
         println!("{}", json);
         test1_received.push(json);
         notification_count += 1;
@@ -715,7 +788,10 @@ async fn main() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(3)).await; // Allow more notifications
     while let Ok(notification) = notification_receiver.try_recv() {
         let (json, _, _) = notification;
-        println!("📥 [TEST1-SSE-{}] Notification JSON:", notification_count + 1);
+        println!(
+            "📥 [TEST1-SSE-{}] Notification JSON:",
+            notification_count + 1
+        );
         println!("{}", json);
         test1_received.push(json);
         notification_count += 1;
@@ -723,15 +799,15 @@ async fn main() -> Result<()> {
 
     // Test 2: Info session - send 8 log messages (Debug should be filtered)
     println!("\n🧪 TEST 2: INFO session filtering - sending 8 log levels");
-    
+
     client.set_logging_level("info").await?;
-    
+
     let mut test2_requests = Vec::new();
-    
+
     for (i, level) in all_levels.iter().enumerate() {
         let correlation_id = Uuid::now_v7().to_string();
         let sequence = i + 10;
-        
+
         let json_rpc_request = serde_json::json!({
             "jsonrpc": "2.0",
             "id": sequence,
@@ -749,26 +825,37 @@ async fn main() -> Result<()> {
                 }
             }
         });
-        
-        println!("📤 [TEST2-{}] {} level request [correlation_id: {}]", i+1, level, correlation_id);
-        
+
+        println!(
+            "📤 [TEST2-{}] {} level request [correlation_id: {}]",
+            i + 1,
+            level,
+            correlation_id
+        );
+
         let response = client.call_tool_json(json_rpc_request).await?;
         if response.get("error").is_some() {
             println!("❌ Request failed: {}", response);
         }
-        
+
         test2_requests.push((correlation_id.clone(), level.to_string()));
         tokio::time::sleep(Duration::from_millis(300)).await;
     }
-    
-    println!("⏰ Test 2: Sent {} requests, collecting notifications for 5 seconds...", test2_requests.len());
+
+    println!(
+        "⏰ Test 2: Sent {} requests, collecting notifications for 5 seconds...",
+        test2_requests.len()
+    );
 
     // Collect Test 2 notifications
     let mut test2_received = Vec::new();
     notification_count = 0;
     while let Ok(notification) = notification_receiver.try_recv() {
         let (json, _, _) = notification;
-        println!("📥 [TEST2-SSE-{}] Notification JSON:", notification_count + 1);
+        println!(
+            "📥 [TEST2-SSE-{}] Notification JSON:",
+            notification_count + 1
+        );
         println!("{}", json);
         test2_received.push(json);
         notification_count += 1;
@@ -776,7 +863,10 @@ async fn main() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(3)).await;
     while let Ok(notification) = notification_receiver.try_recv() {
         let (json, _, _) = notification;
-        println!("📥 [TEST2-SSE-{}] Notification JSON:", notification_count + 1);
+        println!(
+            "📥 [TEST2-SSE-{}] Notification JSON:",
+            notification_count + 1
+        );
         println!("{}", json);
         test2_received.push(json);
         notification_count += 1;
@@ -784,15 +874,15 @@ async fn main() -> Result<()> {
 
     // Test 3: Error session - send 8 log messages (only Error+ should pass)
     println!("\n🧪 TEST 3: ERROR session filtering - sending 8 log levels");
-    
+
     client.set_logging_level("error").await?;
-    
+
     let mut test3_requests = Vec::new();
-    
+
     for (i, level) in all_levels.iter().enumerate() {
         let correlation_id = Uuid::now_v7().to_string();
         let sequence = i + 20;
-        
+
         let json_rpc_request = serde_json::json!({
             "jsonrpc": "2.0",
             "id": sequence,
@@ -810,26 +900,37 @@ async fn main() -> Result<()> {
                 }
             }
         });
-        
-        println!("📤 [TEST3-{}] {} level request [correlation_id: {}]", i+1, level, correlation_id);
-        
+
+        println!(
+            "📤 [TEST3-{}] {} level request [correlation_id: {}]",
+            i + 1,
+            level,
+            correlation_id
+        );
+
         let response = client.call_tool_json(json_rpc_request).await?;
         if response.get("error").is_some() {
             println!("❌ Request failed: {}", response);
         }
-        
+
         test3_requests.push((correlation_id.clone(), level.to_string()));
         tokio::time::sleep(Duration::from_millis(300)).await;
     }
-    
-    println!("⏰ Test 3: Sent {} requests, collecting notifications for 5 seconds...", test3_requests.len());
+
+    println!(
+        "⏰ Test 3: Sent {} requests, collecting notifications for 5 seconds...",
+        test3_requests.len()
+    );
 
     // Collect Test 3 notifications
     let mut test3_received = Vec::new();
     notification_count = 0;
     while let Ok(notification) = notification_receiver.try_recv() {
         let (json, _, _) = notification;
-        println!("📥 [TEST3-SSE-{}] Notification JSON:", notification_count + 1);
+        println!(
+            "📥 [TEST3-SSE-{}] Notification JSON:",
+            notification_count + 1
+        );
         println!("{}", json);
         test3_received.push(json);
         notification_count += 1;
@@ -837,7 +938,10 @@ async fn main() -> Result<()> {
     tokio::time::sleep(Duration::from_secs(3)).await;
     while let Ok(notification) = notification_receiver.try_recv() {
         let (json, _, _) = notification;
-        println!("📥 [TEST3-SSE-{}] Notification JSON:", notification_count + 1);
+        println!(
+            "📥 [TEST3-SSE-{}] Notification JSON:",
+            notification_count + 1
+        );
         println!("{}", json);
         test3_received.push(json);
         notification_count += 1;
@@ -849,16 +953,21 @@ async fn main() -> Result<()> {
     // Extract correlation IDs from received notifications
     let extract_correlation_id = |notification_json: &str| -> Option<String> {
         let parsed: serde_json::Value = serde_json::from_str(notification_json).ok()?;
-        parsed["params"]["_meta"]["correlation_id"].as_str().map(|s| s.to_string())
+        parsed["params"]["_meta"]["correlation_id"]
+            .as_str()
+            .map(|s| s.to_string())
     };
 
-    let test1_received_ids: Vec<String> = test1_received.iter()
+    let test1_received_ids: Vec<String> = test1_received
+        .iter()
         .filter_map(|json| extract_correlation_id(json))
         .collect();
-    let test2_received_ids: Vec<String> = test2_received.iter()
+    let test2_received_ids: Vec<String> = test2_received
+        .iter()
         .filter_map(|json| extract_correlation_id(json))
         .collect();
-    let test3_received_ids: Vec<String> = test3_received.iter()
+    let test3_received_ids: Vec<String> = test3_received
+        .iter()
         .filter_map(|json| extract_correlation_id(json))
         .collect();
 
@@ -879,36 +988,63 @@ async fn main() -> Result<()> {
         if test1_received_ids.contains(correlation_id) {
             println!("   ✅ {} [{}]: RECEIVED", level, correlation_id);
         } else {
-            println!("   ❌ {} [{}]: FILTERED (unexpected!)", level, correlation_id);
+            println!(
+                "   ❌ {} [{}]: FILTERED (unexpected!)",
+                level, correlation_id
+            );
             test1_passed = false;
         }
     }
-    println!("Expected: 8 notifications | Received: {} | Result: {}", 
-             test1_notification_count, 
-             if test1_passed && test1_notification_count == 8 { "✅ PASS" } else { "❌ FAIL" });
+    println!(
+        "Expected: 8 notifications | Received: {} | Result: {}",
+        test1_notification_count,
+        if test1_passed && test1_notification_count == 8 {
+            "✅ PASS"
+        } else {
+            "❌ FAIL"
+        }
+    );
 
     // Test 2 Analysis - INFO session (should filter Debug)
     println!("\n📊 TEST 2 - INFO Session (threshold: Info)");
     println!("Sent 8 requests at all log levels:");
     let mut test2_passed = true;
-    let expected_info_levels = ["Info", "Notice", "Warning", "Error", "Critical", "Alert", "Emergency"];
+    let expected_info_levels = [
+        "Info",
+        "Notice",
+        "Warning",
+        "Error",
+        "Critical",
+        "Alert",
+        "Emergency",
+    ];
     for (correlation_id, level) in &test2_requests {
         let should_receive = expected_info_levels.contains(&level.as_str());
         let did_receive = test2_received_ids.contains(correlation_id);
-        
+
         if should_receive && did_receive {
             println!("   ✅ {} [{}]: RECEIVED (expected)", level, correlation_id);
         } else if !should_receive && !did_receive {
             println!("   ✅ {} [{}]: FILTERED (expected)", level, correlation_id);
         } else {
-            println!("   ❌ {} [{}]: {} (unexpected!)", level, correlation_id, 
-                     if did_receive { "RECEIVED" } else { "FILTERED" });
+            println!(
+                "   ❌ {} [{}]: {} (unexpected!)",
+                level,
+                correlation_id,
+                if did_receive { "RECEIVED" } else { "FILTERED" }
+            );
             test2_passed = false;
         }
     }
-    println!("Expected: 7 notifications | Received: {} | Result: {}", 
-             test2_notification_count,
-             if test2_passed && test2_notification_count == 7 { "✅ PASS" } else { "❌ FAIL" });
+    println!(
+        "Expected: 7 notifications | Received: {} | Result: {}",
+        test2_notification_count,
+        if test2_passed && test2_notification_count == 7 {
+            "✅ PASS"
+        } else {
+            "❌ FAIL"
+        }
+    );
 
     // Test 3 Analysis - ERROR session (should filter Debug, Info, Notice, Warning)
     println!("\n📊 TEST 3 - ERROR Session (threshold: Error)");
@@ -918,27 +1054,48 @@ async fn main() -> Result<()> {
     for (correlation_id, level) in &test3_requests {
         let should_receive = expected_error_levels.contains(&level.as_str());
         let did_receive = test3_received_ids.contains(correlation_id);
-        
+
         if should_receive && did_receive {
             println!("   ✅ {} [{}]: RECEIVED (expected)", level, correlation_id);
         } else if !should_receive && !did_receive {
             println!("   ✅ {} [{}]: FILTERED (expected)", level, correlation_id);
         } else {
-            println!("   ❌ {} [{}]: {} (unexpected!)", level, correlation_id, 
-                     if did_receive { "RECEIVED" } else { "FILTERED" });
+            println!(
+                "   ❌ {} [{}]: {} (unexpected!)",
+                level,
+                correlation_id,
+                if did_receive { "RECEIVED" } else { "FILTERED" }
+            );
             test3_passed = false;
         }
     }
-    println!("Expected: 4 notifications | Received: {} | Result: {}", 
-             test3_notification_count,
-             if test3_passed && test3_notification_count == 4 { "✅ PASS" } else { "❌ FAIL" });
+    println!(
+        "Expected: 4 notifications | Received: {} | Result: {}",
+        test3_notification_count,
+        if test3_passed && test3_notification_count == 4 {
+            "✅ PASS"
+        } else {
+            "❌ FAIL"
+        }
+    );
 
     // Overall Result
-    let all_passed = test1_passed && test2_passed && test3_passed && 
-                     test1_notification_count == 8 && test2_notification_count == 7 && test3_notification_count == 4;
-    
-    println!("\n🏆 OVERALL RESULT: {}", if all_passed { "✅ ALL TESTS PASSED" } else { "❌ SOME TESTS FAILED" });
-    
+    let all_passed = test1_passed
+        && test2_passed
+        && test3_passed
+        && test1_notification_count == 8
+        && test2_notification_count == 7
+        && test3_notification_count == 4;
+
+    println!(
+        "\n🏆 OVERALL RESULT: {}",
+        if all_passed {
+            "✅ ALL TESTS PASSED"
+        } else {
+            "❌ SOME TESTS FAILED"
+        }
+    );
+
     if all_passed {
         println!("🎯 Session-aware logging filtering is working correctly!");
         println!("   • Correlation IDs properly track request→notification mapping");
@@ -950,4 +1107,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-

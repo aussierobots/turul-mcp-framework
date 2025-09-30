@@ -2,10 +2,10 @@
 //!
 //! This demonstrates the RECOMMENDED way to implement MCP notifications using types.
 //! Framework automatically maps notification types to official MCP notification methods.
-//! 
+//!
 //! **CRITICAL**: Uses ONLY official MCP 2025-06-18 specification methods:
 //! - notifications/progress
-//! - notifications/message  
+//! - notifications/message
 //! - notifications/initialized
 //! - notifications/cancelled
 //!
@@ -41,35 +41,35 @@ impl ProgressNotification {
             progress_token: None,
         }
     }
-    
+
     pub fn with_message(mut self, message: &str) -> Self {
         self.message = Some(message.to_string());
         self
     }
-    
+
     pub fn with_token(mut self, token: &str) -> Self {
         self.progress_token = Some(token.to_string());
         self
     }
-    
+
     pub async fn send(&self) -> McpResult<()> {
         let percentage = if self.total > 0 {
             (self.completed * 100) / self.total
         } else {
             0
         };
-        
-        info!("📊 Progress Notification: {} - {}% ({}/{})", 
+
+        info!("📊 Progress Notification: {} - {}% ({}/{})",
             self.stage, percentage, self.completed, self.total);
-            
+
         if let Some(ref msg) = self.message {
             info!("   Message: {}", msg);
         }
-        
+
         if let Some(ref token) = self.progress_token {
             info!("   Token: {}", token);
         }
-        
+
         // Framework automatically sends via "notifications/progress" method
         // This would integrate with SSE streaming for real-time client updates
         Ok(())
@@ -77,7 +77,7 @@ impl ProgressNotification {
 }
 
 // =============================================================================
-// MESSAGE NOTIFICATION - Framework auto-uses "notifications/message"  
+// MESSAGE NOTIFICATION - Framework auto-uses "notifications/message"
 // =============================================================================
 
 #[derive(Debug, Clone)]
@@ -105,7 +105,7 @@ impl MessageNotification {
             timestamp: chrono::Utc::now(),
         }
     }
-    
+
     pub fn warning(content: &str) -> Self {
         Self {
             content: content.to_string(),
@@ -113,7 +113,7 @@ impl MessageNotification {
             timestamp: chrono::Utc::now(),
         }
     }
-    
+
     pub fn error(content: &str) -> Self {
         Self {
             content: content.to_string(),
@@ -121,7 +121,7 @@ impl MessageNotification {
             timestamp: chrono::Utc::now(),
         }
     }
-    
+
     pub fn success(content: &str) -> Self {
         Self {
             content: content.to_string(),
@@ -129,21 +129,21 @@ impl MessageNotification {
             timestamp: chrono::Utc::now(),
         }
     }
-    
+
     pub async fn send(&self) -> McpResult<()> {
         let icon = match self.level {
             MessageLevel::Info => "ℹ️",
-            MessageLevel::Warning => "⚠️", 
+            MessageLevel::Warning => "⚠️",
             MessageLevel::Error => "❌",
             MessageLevel::Success => "✅",
         };
-        
-        info!("{} Message Notification [{}]: {}", 
-            icon, 
-            self.timestamp.format("%H:%M:%S"), 
+
+        info!("{} Message Notification [{}]: {}",
+            icon,
+            self.timestamp.format("%H:%M:%S"),
             self.content
         );
-        
+
         // Framework automatically sends via "notifications/message" method
         // This would integrate with SSE streaming for real-time client updates
         Ok(())
@@ -171,12 +171,12 @@ impl InitializedNotification {
             ready_time: chrono::Utc::now(),
         }
     }
-    
+
     pub async fn send(&self) -> McpResult<()> {
         info!("🚀 Initialization Complete: {}", self.server_name);
         info!("   Capabilities: {}", self.capabilities.join(", "));
         info!("   Ready at: {}", self.ready_time.format("%Y-%m-%d %H:%M:%S UTC"));
-        
+
         // Framework automatically sends via "notifications/initialized" method
         Ok(())
     }
@@ -199,53 +199,53 @@ impl NotificationService {
             active_operations: Arc::new(RwLock::new(Vec::new())),
         }
     }
-    
+
     pub async fn start_operation(&self, operation: &str) -> McpResult<()> {
         {
             let mut ops = self.active_operations.write().await;
             ops.push(operation.to_string());
         }
-        
+
         MessageNotification::info(&format!("Starting operation: {}", operation))
             .send().await?;
-            
+
         ProgressNotification::new(operation, 0, 100)
             .with_message("Operation initiated")
             .send().await?;
-            
+
         Ok(())
     }
-    
+
     pub async fn update_progress(&self, operation: &str, completed: u64, total: u64, message: Option<&str>) -> McpResult<()> {
         let mut progress = ProgressNotification::new(operation, completed, total);
-        
+
         if let Some(msg) = message {
             progress = progress.with_message(msg);
         }
-        
+
         progress.send().await?;
-        
+
         if completed == total {
             MessageNotification::success(&format!("Operation completed: {}", operation))
                 .send().await?;
-                
+
             let mut ops = self.active_operations.write().await;
             ops.retain(|op| op != operation);
         }
-        
+
         Ok(())
     }
-    
+
     pub async fn report_error(&self, operation: &str, error: &str) -> McpResult<()> {
         MessageNotification::error(&format!("Error in {}: {}", operation, error))
             .send().await?;
-            
+
         let mut ops = self.active_operations.write().await;
         ops.retain(|op| op != operation);
-        
+
         Ok(())
     }
-    
+
     pub async fn get_active_operations(&self) -> Vec<String> {
         self.active_operations.read().await.clone()
     }
@@ -261,31 +261,31 @@ impl NotificationService {
 
 async fn simulate_file_processing(service: &NotificationService) -> McpResult<()> {
     let operation = "file_processing";
-    
+
     service.start_operation(operation).await?;
-    
+
     // Simulate processing files
     let files = ["config.json", "data.csv", "logs.txt", "results.xml"];
-    
+
     for (i, file) in files.iter().enumerate() {
         tokio::time::sleep(std::time::Duration::from_millis(800)).await;
-        
+
         service.update_progress(
-            operation, 
-            (i + 1) as u64, 
-            files.len() as u64, 
+            operation,
+            (i + 1) as u64,
+            files.len() as u64,
             Some(&format!("Processing {}", file))
         ).await?;
     }
-    
+
     Ok(())
 }
 
 async fn simulate_data_analysis(service: &NotificationService) -> McpResult<()> {
     let operation = "data_analysis";
-    
+
     service.start_operation(operation).await?;
-    
+
     // Simulate analysis phases
     let phases = [
         ("Data validation", 20),
@@ -293,10 +293,10 @@ async fn simulate_data_analysis(service: &NotificationService) -> McpResult<()> 
         ("Model training", 80),
         ("Results generation", 100),
     ];
-    
+
     for (phase, progress) in phases.iter() {
         tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-        
+
         service.update_progress(
             operation,
             *progress,
@@ -304,7 +304,7 @@ async fn simulate_data_analysis(service: &NotificationService) -> McpResult<()> 
             Some(&format!("Phase: {}", phase))
         ).await?;
     }
-    
+
     Ok(())
 }
 
@@ -324,13 +324,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("💡 Uses ONLY MCP 2025-06-18 specification methods - zero custom methods!");
 
     let service = NotificationService::new("notifications-server-macro");
-    
+
     // Send initialization notification
     InitializedNotification::new(
         "notifications-server-macro",
         vec!["progress_tracking", "message_broadcasting", "sse_streaming"]
     ).send().await?;
-    
+
     info!("📡 Available Notification Types:");
     info!("   • ProgressNotification → notifications/progress (OFFICIAL MCP)");
     info!("   • MessageNotification → notifications/message (OFFICIAL MCP)");
@@ -355,7 +355,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service_clone = Arc::new(service);
     let service_for_file_task = service_clone.clone();
     let service_for_analysis_task = service_clone.clone();
-    
+
     tokio::spawn(async move {
         loop {
             if let Err(e) = simulate_file_processing(&service_for_file_task).await {
@@ -364,7 +364,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tokio::time::sleep(std::time::Duration::from_secs(15)).await;
         }
     });
-    
+
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
         loop {

@@ -3,11 +3,69 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-http-mcp-server.svg)](https://crates.io/crates/turul-http-mcp-server)
 [![Documentation](https://docs.rs/turul-http-mcp-server/badge.svg)](https://docs.rs/turul-http-mcp-server)
 
-HTTP transport layer for Model Context Protocol (MCP) servers with full MCP 2025-06-18 Streamable HTTP compliance and SSE support.
+HTTP and SSE transport layer for the `turul-mcp-server` framework.
 
 ## Overview
 
-`turul-http-mcp-server` provides the HTTP transport layer for the turul-mcp-framework, implementing MCP Streamable HTTP with Server-Sent Events (SSE) for real-time notifications and session resumability.
+This crate provides the low-level HTTP and SSE transport implementation.
+
+**For most use cases, you should not use this crate directly.** The main `turul-mcp-server` crate provides a simpler, integrated experience with its `.run().await` method, which uses this transport layer internally.
+
+Use this crate only when you need to:
+- Integrate the MCP server into an existing `hyper` or `axum` application.
+- Customize the HTTP transport layer beyond what `turul-mcp-server` offers.
+- Build a custom server with a different transport mechanism.
+
+## Advanced Usage: Pluggable Transport
+
+```rust
+use turul_mcp_server::prelude::*;
+use turul_mcp_server::McpServer;
+use turul_http_mcp_server::HttpMcpServerBuilder;
+use turul_mcp_derive::mcp_tool;
+use std::sync::Arc;
+
+#[mcp_tool(name = "add", description = "Add two numbers")]
+async fn add(a: f64, b: f64) -> McpResult<f64> { Ok(a + b) }
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mcp_server_config = McpServer::builder()
+        .name("pluggable-transport-server")
+        .version("1.0.0")
+        .tool_fn(add)
+        .build()?;
+
+    let http_server = HttpMcpServerBuilder::new()
+        .bind_address("127.0.0.1:8080".parse()?)
+        .with_mcp_server(Arc::new(mcp_server_config))
+        .build();
+
+    println!("Server listening on http://127.0.0.1:8080");
+    http_server.run().await?;
+    Ok(())
+}
+```
+
+## Correct Usage (Use This Instead)
+
+```rust
+use turul_mcp_server::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let server = McpServer::builder()
+        .name("my-server")
+        .version("1.0.0")
+        .bind_address("127.0.0.1:8080".parse()?)
+        .build()?;
+
+    // This automatically uses HTTP transport internally
+    server.run().await
+}
+```
+
+**That's it!** No need for manual HTTP transport setup.
 
 ## Features
 
@@ -16,68 +74,13 @@ HTTP transport layer for Model Context Protocol (MCP) servers with full MCP 2025
 - ✅ **SSE Resumability** - Last-Event-ID support with event replay
 - ✅ **CORS Support** - Browser client compatibility with configurable origins
 - ✅ **Protocol Version Detection** - Automatic feature flags based on client capabilities
-- ✅ **Pluggable Storage** - InMemory, SQLite, PostgreSQL, DynamoDB session backends
-- ✅ **Performance Optimized** - Connection pooling, streaming responses, efficient JSON-RPC dispatch
+- ✅ **JSON-RPC Dispatch** - Efficient method routing and error handling
 
-## Quick Start
+## Architecture
 
-Add this to your `Cargo.toml`:
+### Transport Layer Components
 
-```toml
-[dependencies]
-turul-http-mcp-server = "0.1.1"
-turul-mcp-server = "0.1.1"
-turul-mcp-derive = "0.1.1"
-```
-
-### Basic HTTP MCP Server
-
-```rust
-use turul_http_mcp_server::{HttpMcpServer, ServerConfig};
-use turul_mcp_server::McpServer;
-use turul_mcp_derive::mcp_tool;
-use turul_mcp_server::McpResult;
-use std::net::SocketAddr;
-
-#[mcp_tool(name = "echo", description = "Echo back the provided message")]
-async fn echo_tool(
-    #[param(description = "Message to echo back")] message: String,
-) -> McpResult<String> {
-    Ok(format!("Echo: {}", message))
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create MCP server with tools
-    let mcp_server = McpServer::builder()
-        .name("Echo Server")
-        .version("1.0.0")
-        .tool_fn(echo_tool)
-        .build()?;
-
-    // Configure HTTP server
-    let config = ServerConfig {
-        bind_address: "127.0.0.1:3000".parse()?,
-        mcp_path: "/mcp".to_string(),
-        enable_cors: true,
-        enable_sse: true,
-        ..Default::default()
-    };
-
-    // Start HTTP server
-    let server = HttpMcpServer::new(config, mcp_server).await?;
-    println!("MCP server running on http://127.0.0.1:3000/mcp");
-    
-    server.serve().await?;
-    Ok(())
-}
-```
-
-## Streamable HTTP Architecture
-
-### Protocol Flow
-
-The HTTP MCP server implements the MCP 2025-06-18 Streamable HTTP specification:
+This crate provides the building blocks used by the main server:
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -86,407 +89,453 @@ The HTTP MCP server implements the MCP 2025-06-18 Streamable HTTP specification:
 │  POST /mcp + Accept: application/json           │  ← JSON-RPC requests
 │  GET  /mcp + Accept: text/event-stream          │  ← SSE notifications
 ├─────────────────────────────────────────────────┤
-│            turul-http-mcp-server                │
+│          turul-http-mcp-server                  │  ← This crate
 │  ├─ SessionMcpHandler                          │  ← Session management
 │  ├─ StreamManager                              │  ← SSE event streaming  
 │  ├─ NotificationBroadcaster                    │  ← Real-time notifications
 │  └─ JsonRpcDispatcher                          │  ← JSON-RPC routing
 ├─────────────────────────────────────────────────┤
-│            turul-mcp-server                     │  ← Core framework
+│            turul-mcp-server                     │  ← Main framework
 └─────────────────────────────────────────────────┘
 ```
 
-### Session Management
+### Core Components
 
-Sessions are managed with UUID v7 for temporal ordering:
+```rust
+use turul_http_mcp_server::{
+    // HTTP server builder and configuration
+    HttpMcpServerBuilder, ServerConfig,
+    
+    // Session and stream management
+    SessionMcpHandler, StreamManager, StreamConfig,
+    
+    // Notifications and CORS
+    NotificationBroadcaster, CorsLayer,
+    
+    // JSON-RPC dispatch
+    JsonRpcDispatcher, JsonRpcHandler,
+};
+```
+
+## Usage
+
+### Advanced: Direct Transport Configuration
+
+**⚠️ For advanced use cases only. Most users should use `turul-mcp-server` instead.**
+
+```rust
+use turul_http_mcp_server::{HttpMcpServerBuilder, ServerConfig};
+use turul_mcp_session_storage::InMemorySessionStorage;
+use std::net::SocketAddr;
+use std::sync::Arc;
+
+// Advanced: Direct HTTP transport configuration
+// This is for custom scenarios where you need direct control over the transport layer
+let transport = HttpMcpServerBuilder::new()
+    .bind_address("127.0.0.1:3000".parse()?)
+    .mcp_path("/mcp")
+    .cors(true)
+    .sse(true)
+    .session_expiry_minutes(30)
+    .build();
+
+// Note: This only creates the transport layer. You'll need to integrate it 
+// with your own application logic and MCP message handling.
+```
+
+### Session Management Configuration
 
 ```rust
 use turul_http_mcp_server::{HttpMcpServerBuilder, SessionMcpHandler};
-use turul_mcp_session_storage::SqliteSessionStorage;
+use turul_mcp_session_storage::InMemorySessionStorage;
 use std::sync::Arc;
 
-let storage = Arc::new(SqliteSessionStorage::new("sessions.db").await?);
+// Configure session storage
+let storage = Arc::new(InMemorySessionStorage::new());
 
-let server = HttpMcpServerBuilder::new()
+let server = HttpMcpServerBuilder::with_storage(storage)
     .bind_address("0.0.0.0:3000".parse()?)
-    .session_storage(storage)  // Persistent session storage
-    .enable_sse(true)
-    .build()
-    .await?;
+    .session_expiry_minutes(30)
+    .build();
 ```
 
-### SSE Event Streaming
-
-Real-time notifications are delivered via Server-Sent Events:
+### SSE Stream Configuration
 
 ```rust
-use turul_mcp_derive::mcp_tool;
-use turul_mcp_server::{McpResult, SessionContext};
+use turul_http_mcp_server::{HttpMcpServerBuilder, StreamConfig};
 
-#[mcp_tool(name = "long_task", description = "Long-running task with progress")]
-async fn long_task(
-    #[param(description = "Task duration in seconds")] duration: u32,
-    session: SessionContext,  // Automatic session injection
-) -> McpResult<String> {
-    for i in 1..=duration {
-        // Send progress notification via SSE
-        session.notify_progress(
-            "long-task", 
-            i as f64, 
-            Some(duration as f64), 
-            Some(format!("Step {} of {}", i, duration))
-        ).await?;
-        
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    }
-    
-    Ok("Task completed".to_string())
-}
-```
-
-## Advanced Configuration
-
-### Custom Server Builder
-
-```rust
-use turul_http_mcp_server::{HttpMcpServerBuilder, ServerConfig, CorsLayer};
-use turul_mcp_session_storage::PostgreSqlSessionStorage;
-
-let cors = CorsLayer::new()
-    .allow_origins(vec!["https://myapp.com".to_string()])
-    .allow_credentials(true);
-
-let storage = Arc::new(
-    PostgreSqlSessionStorage::new("postgresql://user:pass@localhost/db").await?
-);
+let stream_config = StreamConfig {
+    buffer_size: 1000,
+    event_replay_limit: 100,
+    heartbeat_interval_seconds: 30,
+    max_concurrent_streams: 1000,
+};
 
 let server = HttpMcpServerBuilder::new()
-    .bind_address("0.0.0.0:8080".parse()?)
-    .mcp_path("/api/mcp")
-    .session_storage(storage)
-    .cors(cors)
-    .max_body_size(2 * 1024 * 1024)  // 2MB
-    .enable_sse(true)
-    .build()
-    .await?;
+    .stream_config(stream_config)
+    .get_sse(true)  // Enable GET SSE for notifications
+    .post_sse(false) // Disable POST SSE for compatibility
+    .build();
 ```
 
-### Protocol Version Detection
-
-The server automatically detects client capabilities:
-
-```rust
-// Client sends MCP-Protocol-Version header
-// Server responds with appropriate feature set:
-
-// V2024_11_05: Basic MCP without streamable HTTP
-// V2025_03_26: Streamable HTTP support
-// V2025_06_18: Full feature set with _meta, cursor, progressToken
-```
-
-## CORS Configuration
-
-### Browser Client Support
+### CORS Configuration
 
 ```rust
 use turul_http_mcp_server::{HttpMcpServerBuilder, CorsLayer};
 
-// Allow all origins (development)
+// Simple CORS enablement
 let server = HttpMcpServerBuilder::new()
-    .enable_cors(true)  // Uses permissive defaults
-    .build()
-    .await?;
+    .cors(true)  // Uses permissive defaults for development
+    .build();
 
-// Custom CORS configuration (production)
-let cors = CorsLayer::new()
-    .allow_origins(vec![
-        "https://app.example.com".to_string(),
-        "https://admin.example.com".to_string(),
-    ])
-    .allow_methods(vec!["GET", "POST", "OPTIONS"])
-    .allow_headers(vec!["Content-Type", "Accept", "MCP-Protocol-Version"])
-    .allow_credentials(true);
-
-let server = HttpMcpServerBuilder::new()
-    .cors(cors)
-    .build()
-    .await?;
+// Custom CORS configuration (Note: CorsLayer configuration
+// is handled internally - this crate provides the components
+// but turul-mcp-server provides the full API)
 ```
 
-## Session Storage Backends
+### JSON-RPC Handler Registration
 
-### InMemory (Development)
+```rust
+use turul_http_mcp_server::{HttpMcpServerBuilder, JsonRpcHandler};
+use async_trait::async_trait;
+
+// Domain error type for handlers
+#[derive(thiserror::Error, Debug)]
+enum MyError {
+    #[error("Unknown method: {0}")]
+    UnknownMethod(String),
+}
+
+impl turul_mcp_json_rpc_server::r#async::ToJsonRpcError for MyError {
+    fn to_error_object(&self) -> turul_mcp_json_rpc_server::error::JsonRpcErrorObject {
+        match self {
+            MyError::UnknownMethod(method) =>
+                turul_mcp_json_rpc_server::error::JsonRpcErrorObject::method_not_found(method),
+        }
+    }
+}
+
+// Custom handler implementation
+struct CustomHandler;
+
+#[async_trait]
+impl JsonRpcHandler for CustomHandler {
+    type Error = MyError;  // Use domain errors
+
+    async fn handle(
+        &self,
+        method: &str,
+        params: Option<turul_mcp_json_rpc_server::RequestParams>,
+        session_context: Option<turul_mcp_json_rpc_server::r#async::SessionContext>
+    ) -> Result<serde_json::Value, Self::Error> {
+        match method {
+            "custom/method" => Ok(serde_json::json!({"result": "success"})),
+            _ => Err(MyError::UnknownMethod(method.to_string())),
+        }
+    }
+}
+
+// Note: This crate provides transport layer components.
+// For full server functionality including handler registration,
+// use turul-mcp-server which builds on this transport layer.
+let server = HttpMcpServerBuilder::new()
+    .build();
+```
+
+## Protocol Version Detection
+
+The transport layer automatically detects client capabilities:
+
+```rust
+use turul_http_mcp_server::{
+    extract_protocol_version, McpProtocolVersion
+};
+
+// Protocol version extraction from headers
+let version = extract_protocol_version(&headers);
+match version {
+    McpProtocolVersion::V2024_11_05 => {
+        // Basic MCP without streamable HTTP
+    }
+    McpProtocolVersion::V2025_03_26 => {
+        // Streamable HTTP support
+    }
+    McpProtocolVersion::V2025_06_18 => {
+        // Full feature set with _meta, cursor, progressToken
+    }
+}
+```
+
+## Session Management
+
+### Session ID Extraction
+
+```rust
+use turul_http_mcp_server::{extract_session_id, SessionMcpHandler};
+
+// Extract session ID from request headers
+let session_id = extract_session_id(&headers);
+
+// Session handler for managing session lifecycle
+let handler = SessionMcpHandler::new(
+    session_storage,
+    stream_manager,
+    json_rpc_dispatcher
+);
+```
+
+### Session Storage Integration
 
 ```rust
 use turul_http_mcp_server::HttpMcpServerBuilder;
-use turul_mcp_session_storage::InMemorySessionStorage;
+use turul_mcp_session_storage::{InMemorySessionStorage, SqliteSessionStorage};
+use std::sync::Arc;
 
-let server = HttpMcpServerBuilder::new()
-    .session_storage(Arc::new(InMemorySessionStorage::new()))  // Default
-    .build()
-    .await?;
+// In-memory storage (development)
+let memory_storage = Arc::new(InMemorySessionStorage::new());
+let server = HttpMcpServerBuilder::with_storage(memory_storage).build();
+
+// SQLite storage (production)
+#[cfg(feature = "sqlite")]
+{
+    let sqlite_storage = Arc::new(SqliteSessionStorage::new().await?);
+    let server = HttpMcpServerBuilder::with_storage(sqlite_storage).build();
+}
 ```
 
-### SQLite (Single Instance)
+## Notification Broadcasting
+
+### SSE Event Streaming
 
 ```rust
-use turul_mcp_session_storage::SqliteSessionStorage;
+use turul_http_mcp_server::{
+    NotificationBroadcaster, StreamManager, 
+    StreamManagerNotificationBroadcaster
+};
+use std::sync::Arc;
 
-let storage = Arc::new(SqliteSessionStorage::new("sessions.db").await?);
-let server = HttpMcpServerBuilder::new()
-    .session_storage(storage)
-    .build()
-    .await?;
+// Create notification broadcaster
+let stream_manager = Arc::new(StreamManager::new(session_storage));
+let broadcaster = StreamManagerNotificationBroadcaster::new(stream_manager);
+
+// Send notifications to specific sessions using typed APIs
+use turul_mcp_protocol::notifications::ProgressNotification;
+
+let progress_notification = ProgressNotification {
+    progress_token: "task-456".to_string(),
+    progress: 75,
+    total: Some(100),
+    message: Some("Processing...".to_string()),
+};
+
+broadcaster.send_progress_notification("session-123", progress_notification).await?;
 ```
 
-### PostgreSQL (Multi-Instance)
+### Event Replay and Resumability
 
 ```rust
-use turul_mcp_session_storage::PostgreSqlSessionStorage;
+use turul_http_mcp_server::{extract_last_event_id, StreamManager};
 
-let storage = Arc::new(
-    PostgreSqlSessionStorage::new("postgresql://user:pass@localhost/mcp").await?
-);
-let server = HttpMcpServerBuilder::new()
-    .session_storage(storage)
-    .build()
-    .await?;
+// Extract Last-Event-ID for resumability
+let last_event_id = extract_last_event_id(&headers);
+
+// Stream manager handles event replay automatically
+let stream = stream_manager.create_stream(
+    session_id,
+    last_event_id  // Resume from this event
+).await?;
 ```
 
-### DynamoDB (Serverless)
+## Protocol Headers
+
+### MCP Header Handling
+
+The transport layer automatically handles MCP-specific headers:
 
 ```rust
-use turul_mcp_session_storage::DynamoDbSessionStorage;
+// Client sends: MCP-Protocol-Version: 2025-06-18
+// Server returns: mcp-session-id: <uuid-v7>
 
-let storage = Arc::new(DynamoDbSessionStorage::new().await?);
-let server = HttpMcpServerBuilder::new()
-    .session_storage(storage)
-    .build()
-    .await?;
+// The transport layer extracts and processes these headers automatically
+use turul_http_mcp_server::{extract_protocol_version, extract_session_id};
+
+// Headers are processed internally by SessionMcpHandler
+// Protocol version determines feature availability
+// Session ID manages state isolation between clients
 ```
 
-## Real-time Notifications
+### Lifecycle Management
 
-### SSE Event Types
-
-The server supports all MCP notification types via SSE:
+Optional strict lifecycle gating can be configured:
 
 ```rust
-// Progress notifications
-session.notify_progress("task-id", 50.0, Some(100.0), Some("Processing...")).await?;
+// Note: Use McpServer::builder() for complete lifecycle management
+let server = McpServer::builder()
+    .name("my-server")
+    .version("1.0.0")
+    .bind_address("127.0.0.1:8080".parse()?)
+    .build()?;
 
-// Resource update notifications  
-session.notify_resource_updated("file:///config.json").await?;
-
-// Prompt update notifications
-session.notify_prompt_updated("greeting").await?;
-
-// Log notifications
-session.notify_log("info", serde_json::json!({
-    "message": "Operation completed",
-    "duration_ms": 1250
-}), Some("component")).await?;
+server.run().await
 ```
 
-### SSE Resumability
+## Error Handling
 
-Clients can resume from any event using Last-Event-ID:
+### HTTP Transport Errors
+
+```rust
+use turul_http_mcp_server::{HttpMcpError, Result};
+
+fn handle_transport_error(error: HttpMcpError) {
+    match error {
+        HttpMcpError::Http(e) => {
+            println!("HTTP error: {}", e);
+        }
+        HttpMcpError::JsonRpc(e) => {
+            println!("JSON-RPC error: {}", e);
+        }
+        HttpMcpError::Mcp(e) => {
+            println!("MCP protocol error: {}", e);
+        }
+        HttpMcpError::InvalidRequest(msg) => {
+            println!("Invalid request: {}", msg);
+        }
+        _ => {
+            println!("Other transport error: {}", error);
+        }
+    }
+}
+```
+
+## Server Statistics and Monitoring
+
+```rust
+use turul_http_mcp_server::{ServerStats, StreamStats};
+
+// Server statistics (if implemented by the specific server)
+// Note: Full stats API is available in turul-mcp-server
+```
+
+## Testing the Transport Layer
+
+### Manual HTTP Testing
 
 ```bash
-# Initial connection
-curl -N -H "Accept: text/event-stream" \
-  -H "MCP-Session-Id: sess-123" \
-  http://localhost:3000/mcp
-
-# Resume from specific event
-curl -N -H "Accept: text/event-stream" \
-  -H "Last-Event-ID: event-456" \
-  -H "MCP-Session-Id: sess-123" \
-  http://localhost:3000/mcp
-```
-
-## Testing
-
-### MCP Inspector Integration
-
-Test your server with MCP Inspector:
-
-```bash
-# Start server
-cargo run --example echo-server
-
-# Connect MCP Inspector
-# URL: http://localhost:3000/mcp
-# Enable SSE notifications for real-time updates
-```
-
-### Manual Testing
-
-```bash
-# 1. Initialize session
+# Test session creation
 curl -X POST http://localhost:3000/mcp \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2025-06-18" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' \
   -v  # Note the Mcp-Session-Id header in response
 
-# 2. Call tool with session
-curl -X POST http://localhost:3000/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -H "Mcp-Session-Id: <session-id>" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"message":"Hello MCP!"}}}'
-
-# 3. Open SSE stream for notifications
+# Test SSE streaming
 curl -N -H "Accept: text/event-stream" \
+  -H "Mcp-Session-Id: <session-id>" \
+  http://localhost:3000/mcp
+
+# Test event resumability
+curl -N -H "Accept: text/event-stream" \
+  -H "Last-Event-ID: event-123" \
   -H "Mcp-Session-Id: <session-id>" \
   http://localhost:3000/mcp
 ```
 
-## Performance
-
-### Optimized Architecture
-
-- **Connection Pooling**: Database connections shared across requests
-- **Streaming Responses**: Efficient SSE event delivery without buffering
-- **JSON-RPC Dispatch**: Fast method routing with compile-time registration
-- **Session Cleanup**: Automatic cleanup every 60 seconds with 30-minute expiry
-
-### Monitoring
+### Integration Testing
 
 ```rust
-use turul_http_mcp_server::{ServerStats, StreamStats};
+use turul_http_mcp_server::{HttpMcpServerBuilder, ServerConfig};
 
-// Server statistics
-let stats = server.stats().await;
-println!("Active sessions: {}", stats.active_sessions);
-println!("Total requests: {}", stats.total_requests);
-
-// Stream statistics  
-let stream_stats = server.stream_stats().await;
-println!("Active streams: {}", stream_stats.active_streams);
-println!("Events sent: {}", stream_stats.events_sent);
-```
-
-## Error Handling
-
-### HTTP Error Responses
-
-The server provides proper HTTP error responses with MCP-compliant JSON-RPC errors:
-
-```rust
-use turul_http_mcp_server::{HttpMcpError, Result};
-
-// Tool implementation with error handling
-#[mcp_tool(name = "validate", description = "Validate input")]
-async fn validate_input(
-    #[param(description = "Value to validate")] value: String,
-) -> McpResult<String> {
-    if value.is_empty() {
-        return Err("Value cannot be empty".into());
-    }
+#[tokio::test]
+async fn test_transport_layer() {
+    let server = HttpMcpServerBuilder::new()
+        .bind_address("127.0.0.1:0".parse().unwrap()) // Random port
+        .build();
     
-    if value.len() > 100 {
-        return Err("Value too long (max 100 chars)".into());
-    }
-    
-    Ok(format!("Valid: {}", value))
+    // Test server configuration
+    assert!(server.config.enable_cors);
+    assert_eq!(server.config.mcp_path, "/mcp");
 }
 ```
 
-### Graceful Degradation
+## Framework Integration
+
+### ✅ Recommended: Using turul-mcp-server
+
+**This is the recommended approach for most users:**
 
 ```rust
-// Session operations fail gracefully
-if let Err(e) = session.set_typed_state("key", &value).await {
-    tracing::warn!("Failed to persist session state: {}", e);
-    // Operation continues without state persistence
-}
-```
-
-## Examples
-
-### Complete Production Server
-
-```rust
-use turul_http_mcp_server::{HttpMcpServerBuilder, CorsLayer};
+// Recommended: Use the main server framework
 use turul_mcp_server::McpServer;
-use turul_mcp_session_storage::PostgreSqlSessionStorage;
-use turul_mcp_derive::mcp_tool;
-use std::sync::Arc;
 
-#[mcp_tool(name = "status", description = "Check server status")]
-async fn status_check() -> McpResult<serde_json::Value> {
-    Ok(serde_json::json!({
-        "status": "healthy",
-        "timestamp": chrono::Utc::now(),
-        "version": "1.0.0"
-    }))
-}
+let server = McpServer::builder()
+    .name("My Server")
+    .version("1.0.0")
+    .bind_address("127.0.0.1:3000".parse()?)
+    .build()?;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize tracing
-    tracing_subscriber::fmt::init();
+// Note: Server configuration complete - HTTP transport layer is included
+// Refer to turul-mcp-server docs for deployment patterns
+// from turul-http-mcp-server with sensible defaults
+```
 
-    // Database connection for session storage
-    let database_url = std::env::var("DATABASE_URL")?;
-    let storage = Arc::new(PostgreSqlSessionStorage::new(&database_url).await?);
+### Advanced Transport Customization
 
-    // CORS configuration for production
-    let cors = CorsLayer::new()
-        .allow_origins(vec!["https://myapp.com".to_string()])
-        .allow_credentials(true);
+```rust
+// Advanced: Direct transport layer usage for custom scenarios
+use turul_http_mcp_server::{HttpMcpServerBuilder, SessionMcpHandler};
+use turul_mcp_session_storage::InMemorySessionStorage;
 
-    // Build MCP server
-    let mcp_server = McpServer::builder()
-        .name("Production MCP Server")
-        .version("1.0.0")
-        .tool_fn(status_check)
-        .build()?;
+// Build custom HTTP transport
+let transport = HttpMcpServerBuilder::new()
+    .bind_address("127.0.0.1:3000".parse()?)
+    .session_expiry_minutes(60)
+    .max_body_size(2 * 1024 * 1024)
+    .build();
 
-    // Build HTTP server
-    let http_server = HttpMcpServerBuilder::new()
-        .bind_address("0.0.0.0:8080".parse()?)
-        .session_storage(storage)
-        .cors(cors)
-        .max_body_size(5 * 1024 * 1024)  // 5MB
-        .enable_sse(true)
-        .mcp_server(mcp_server)
-        .build()
-        .await?;
-
-    println!("Production MCP server starting on http://0.0.0.0:8080/mcp");
-    
-    http_server.serve().await?;
-    Ok(())
-}
+// Integrate with custom application logic
 ```
 
 ## Feature Flags
 
 ```toml
 [dependencies]
-turul-http-mcp-server = { version = "0.1.1", features = ["sse"] }
+turul-http-mcp-server = { version = "0.2.0", features = ["sse"] }
 ```
 
+Available features:
 - `default` = `["sse"]` - Includes SSE support by default
 - `sse` - Server-Sent Events streaming for real-time notifications
+
+## Performance Notes
+
+- **Connection Handling**: Uses Hyper for efficient HTTP/1.1 connections
+- **Stream Management**: Optimized SSE event delivery with configurable buffers
+- **Session Cleanup**: Automatic cleanup every 60 seconds with configurable expiry
+- **JSON-RPC Dispatch**: Fast method routing with minimal allocations
 
 ## Compatibility
 
 ### MCP Protocol Versions
 
-- **2024-11-05**: Basic MCP without streamable HTTP
-- **2025-03-26**: Streamable HTTP with SSE support
-- **2025-06-18**: Full feature set with meta fields and enhanced capabilities
+This transport layer supports all MCP protocol versions:
 
-### HTTP Clients
+- **Basic MCP**: Core protocol without streamable HTTP
+- **Streamable HTTP**: Enhanced protocol with SSE support
+- **Full Feature Set**: Complete protocol with meta fields and enhanced capabilities
 
-- **MCP Inspector**: Full compatibility with browser-based testing
-- **curl**: Command-line testing and integration
-- **JavaScript/TypeScript**: Browser and Node.js client support
-- **Python**: Using `requests` library with SSE support
+### HTTP Specifications
+
+- **HTTP/1.1**: Full support with connection keep-alive
+- **Server-Sent Events**: Compliant with EventSource specification
+- **CORS**: Cross-Origin Resource Sharing for browser clients
+- **JSON-RPC 2.0**: Complete specification compliance
+
+## Related Crates
+
+- **[turul-mcp-server](../turul-mcp-server)**: Complete MCP server framework (recommended for most users)
+- **[turul-mcp-session-storage](../turul-mcp-session-storage)**: Pluggable session storage backends
+- **[turul-mcp-protocol](../turul-mcp-protocol)**: MCP protocol types and traits
+- **[turul-mcp-json-rpc-server](../turul-mcp-json-rpc-server)**: JSON-RPC 2.0 server foundation
 
 ## License
 

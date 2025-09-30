@@ -2,7 +2,7 @@
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{DeriveInput, Data, Fields, Result, Field};
+use syn::{Data, DeriveInput, Field, Fields, Result};
 
 use crate::utils::{extract_elicitation_meta, extract_field_meta};
 
@@ -16,7 +16,12 @@ pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
     // Check if it's a struct
     let data = match &input.data {
         Data::Struct(data) => data,
-        _ => return Err(syn::Error::new_spanned(&input, "McpElicitation can only be derived for structs")),
+        _ => {
+            return Err(syn::Error::new_spanned(
+                &input,
+                "McpElicitation can only be derived for structs",
+            ));
+        }
     };
 
     // Generate schema from struct fields
@@ -75,7 +80,10 @@ pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
     Ok(expanded)
 }
 
-fn generate_schema_fields(struct_name: &syn::Ident, data: &syn::DataStruct) -> Result<Vec<TokenStream>> {
+fn generate_schema_fields(
+    struct_name: &syn::Ident,
+    data: &syn::DataStruct,
+) -> Result<Vec<TokenStream>> {
     let mut schema_fields = Vec::new();
 
     match &data.fields {
@@ -83,19 +91,25 @@ fn generate_schema_fields(struct_name: &syn::Ident, data: &syn::DataStruct) -> R
             for field in &fields.named {
                 let field_name = field.ident.as_ref().unwrap();
                 let field_name_str = field_name.to_string();
-                
+
                 let field_schema = generate_field_schema(field)?;
-                
+
                 schema_fields.push(quote! {
                     schema = schema.with_property(#field_name_str.to_string(), #field_schema);
                 });
             }
         }
         Fields::Unnamed(_) => {
-            return Err(syn::Error::new_spanned(struct_name, "Tuple structs are not supported for elicitation"));
+            return Err(syn::Error::new_spanned(
+                struct_name,
+                "Tuple structs are not supported for elicitation",
+            ));
         }
         Fields::Unit => {
-            return Err(syn::Error::new_spanned(struct_name, "Unit structs are not supported for elicitation"));
+            return Err(syn::Error::new_spanned(
+                struct_name,
+                "Unit structs are not supported for elicitation",
+            ));
         }
     }
 
@@ -104,7 +118,9 @@ fn generate_schema_fields(struct_name: &syn::Ident, data: &syn::DataStruct) -> R
 
 fn generate_field_schema(field: &Field) -> Result<TokenStream> {
     let field_meta = extract_field_meta(&field.attrs)?;
-    let description = field_meta.description.unwrap_or_else(|| "No description".to_string());
+    let description = field_meta
+        .description
+        .unwrap_or_else(|| "No description".to_string());
 
     // Generate schema based on field type
     let type_name = &field.ty;
@@ -114,7 +130,11 @@ fn generate_field_schema(field: &Field) -> Result<TokenStream> {
                 turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::string_with_description(#description)
             }
         }
-        syn::Type::Path(path) if path.path.is_ident("i32") || path.path.is_ident("i64") || path.path.is_ident("isize") => {
+        syn::Type::Path(path)
+            if path.path.is_ident("i32")
+                || path.path.is_ident("i64")
+                || path.path.is_ident("isize") =>
+        {
             quote! {
                 turul_mcp_protocol::elicitation::PrimitiveSchemaDefinition::Integer {
                     title: None,
@@ -188,7 +208,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    #[test] 
+    #[test]
     fn test_different_field_types() {
         let input: DeriveInput = parse_quote! {
             #[elicitation(message = "Mixed field types")]
@@ -215,7 +235,7 @@ mod tests {
 
         let result = derive_mcp_elicitation_impl(input);
         assert!(result.is_ok());
-        
+
         // Check that the generated code contains required trait implementations
         let code = result.unwrap().to_string();
         assert!(code.contains("HasElicitationMetadata"));
@@ -233,7 +253,12 @@ mod tests {
 
         let result = derive_mcp_elicitation_impl(input);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Missing 'message'"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Missing 'message'")
+        );
     }
 
     #[test]
@@ -246,7 +271,7 @@ mod tests {
         let result = derive_mcp_elicitation_impl(input);
         // Empty messages should be allowed - just verify it doesn't panic
         match result {
-            Ok(_) => {}, // Success is fine
+            Ok(_) => {} // Success is fine
             Err(e) => {
                 println!("Empty message error: {}", e);
                 // Error is also acceptable for edge case testing

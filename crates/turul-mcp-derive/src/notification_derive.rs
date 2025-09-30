@@ -18,10 +18,10 @@ fn auto_determine_notification_method(struct_name: String) -> String {
     } else {
         &struct_name
     };
-    
+
     // Convert CamelCase to snake_case and build method
     let snake_case = camel_to_snake_case(base_name);
-    
+
     // Handle known patterns (MCP specification compliant)
     match snake_case.as_str() {
         "progress" => "notifications/progress".to_string(),
@@ -29,10 +29,14 @@ fn auto_determine_notification_method(struct_name: String) -> String {
         "cancelled" => "notifications/cancelled".to_string(),
         "initialized" => "notifications/initialized".to_string(),
         "resource_updated" | "resources_updated" => "notifications/resources/updated".to_string(),
-        "resources_list_changed" | "resources_changed" => "notifications/resources/list_changed".to_string(),
-        "roots_list_changed" | "roots_changed" => "notifications/roots/list_changed".to_string(),
-        "prompts_list_changed" | "prompts_changed" => "notifications/prompts/list_changed".to_string(),
-        "tools_list_changed" | "tools_changed" => "notifications/tools/list_changed".to_string(),
+        "resources_list_changed" | "resources_changed" => {
+            "notifications/resources/listChanged".to_string()
+        }
+        "roots_list_changed" | "roots_changed" => "notifications/roots/listChanged".to_string(),
+        "prompts_list_changed" | "prompts_changed" => {
+            "notifications/prompts/listChanged".to_string()
+        }
+        "tools_list_changed" | "tools_changed" => "notifications/tools/listChanged".to_string(),
         _ => {
             // For custom notifications, use notifications/{snake_case}
             format!("notifications/{}", snake_case)
@@ -57,15 +61,14 @@ pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
 
     // AUTO-DETERMINE method from struct name (ZERO CONFIGURATION!)
     let method = auto_determine_notification_method(struct_name.to_string());
-    
+
     // Optional: Allow override with attribute (for edge cases)
-    let method = extract_string_attribute(&input.attrs, "method")
-        .unwrap_or(method);
-    
+    let method = extract_string_attribute(&input.attrs, "method").unwrap_or(method);
+
     let priority = extract_string_attribute(&input.attrs, "priority")
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(0);
-    
+
     let requires_ack = extract_string_attribute(&input.attrs, "requires_ack")
         .map(|s| s.parse::<bool>().unwrap_or(false))
         .unwrap_or(false);
@@ -153,7 +156,7 @@ pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
             pub async fn send_impl(&self, payload: serde_json::Value) -> Result<turul_mcp_server::notifications::DeliveryResult, String> {
                 // Default: simulate successful delivery
                 println!("Sending notification [{}]: {}", #method, payload);
-                
+
                 Ok(turul_mcp_server::notifications::DeliveryResult {
                     status: turul_mcp_server::notifications::DeliveryStatus::Sent,
                     attempts: 1,
@@ -190,10 +193,10 @@ mod tests {
 
         let result = derive_mcp_notification_impl(input);
         assert!(result.is_ok());
-        
+
         // Framework auto-determines method as "notifications/progress"
     }
-    
+
     #[test]
     fn test_resources_changed_notification() {
         // ✅ ZERO CONFIGURATION - Auto-determines "notifications/resources/list_changed"
@@ -263,15 +266,25 @@ mod tests {
         // Test zero-configuration method generation for different naming patterns
         let test_cases = vec![
             ("ProgressNotification", "notifications/progress"),
-            ("ResourcesListChangedNotification", "notifications/resources/list_changed"),
-            ("ToolsChangedNotification", "notifications/tools/list_changed"),
+            (
+                "ResourcesListChangedNotification",
+                "notifications/resources/listChanged",
+            ),
+            (
+                "ToolsChangedNotification",
+                "notifications/tools/listChanged",
+            ),
             ("InitializedNotification", "notifications/initialized"),
             ("CancelledNotification", "notifications/cancelled"),
         ];
 
         for (struct_name, expected_method) in test_cases {
             let method = auto_determine_notification_method(struct_name.to_string());
-            assert_eq!(method, expected_method, "Failed for struct: {}", struct_name);
+            assert_eq!(
+                method, expected_method,
+                "Failed for struct: {}",
+                struct_name
+            );
         }
     }
 
@@ -285,7 +298,7 @@ mod tests {
 
         let result = derive_mcp_notification_impl(input);
         assert!(result.is_ok());
-        
+
         // Check that the generated code contains required trait implementations
         let code = result.unwrap().to_string();
         assert!(code.contains("HasNotificationMetadata"));
@@ -313,15 +326,31 @@ mod tests {
     fn test_special_notification_types() {
         // Test standard MCP notification types get proper method names
         let test_cases = vec![
-            ("ResourcesListChangedNotification", "notifications/resources/list_changed"),
-            ("PromptsChangedNotification", "notifications/prompts/list_changed"),
-            ("ToolsChangedNotification", "notifications/tools/list_changed"),
-            ("RootsListChangedNotification", "notifications/roots/list_changed"),
+            (
+                "ResourcesListChangedNotification",
+                "notifications/resources/listChanged",
+            ),
+            (
+                "PromptsChangedNotification",
+                "notifications/prompts/listChanged",
+            ),
+            (
+                "ToolsChangedNotification",
+                "notifications/tools/listChanged",
+            ),
+            (
+                "RootsListChangedNotification",
+                "notifications/roots/listChanged",
+            ),
         ];
 
         for (struct_name, expected_method) in test_cases {
             let method = auto_determine_notification_method(struct_name.to_string());
-            assert_eq!(method, expected_method, "Failed for struct: {}", struct_name);
+            assert_eq!(
+                method, expected_method,
+                "Failed for struct: {}",
+                struct_name
+            );
         }
     }
 }

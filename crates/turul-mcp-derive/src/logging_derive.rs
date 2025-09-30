@@ -10,11 +10,11 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
     let struct_name = &input.ident;
 
     // Extract struct-level attributes
-    let logger_name = extract_string_attribute(&input.attrs, "name")
-        .unwrap_or_else(|| "default".to_string());
-    
-    let level = extract_string_attribute(&input.attrs, "level")
-        .unwrap_or_else(|| "info".to_string());
+    let logger_name =
+        extract_string_attribute(&input.attrs, "name").unwrap_or_else(|| "default".to_string());
+
+    let level =
+        extract_string_attribute(&input.attrs, "level").unwrap_or_else(|| "info".to_string());
 
     // Parse the logging level
     let logging_level = match level.as_str() {
@@ -118,7 +118,7 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
                     serde_json::Value::String(s) => s.clone(),
                     other => serde_json::to_string(other).unwrap_or_else(|_| "Invalid data".to_string()),
                 };
-                
+
                 let level_str = format!("{:?}", level).to_uppercase();
                 println!("[{}] [{}] {}", level_str, #logger_name, formatted);
                 Ok(())

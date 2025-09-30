@@ -1,0 +1,17 @@
+[package]
+name = "streamable-http-client"
+version = "0.2.0"
+edition.workspace = true
+description = "MCP 2025-06-18 Streamable HTTP client example with multi-threaded SSE processing"
+
+[dependencies]
+turul-mcp-client = { workspace = true }
+turul-mcp-protocol = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+clap = { workspace = true }
+reqwest = { workspace = true }
+futures = { workspace = true }

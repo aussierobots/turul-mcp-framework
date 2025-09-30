@@ -10,7 +10,7 @@
 //! ## Usage
 //! ```bash
 //! # Test against a running MCP server
-//! cargo run --example client-initialise-report -- --url http://127.0.0.1:8000/mcp
+//! cargo run --package client-initialise-report -- --url http://127.0.0.1:8000/mcp
 //! ```
 //!
 //! ## Expected Output
@@ -21,7 +21,7 @@
 //! 4. Tool execution with SSE event streaming
 //!
 //! ## Equivalent Curl Commands
-//! 
+//!
 //! **Initialize Request:**
 //! ```bash
 //! curl -X POST http://127.0.0.1:8001/mcp \
@@ -37,12 +37,12 @@
 //!   http://127.0.0.1:8001/mcp
 //! ```
 
-use anyhow::{Result, anyhow, Context};
+use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::time::Duration;
-use tokio::time::{timeout, Duration as TokioDuration};
+use tokio::time::{Duration as TokioDuration, timeout};
 use tracing::{debug, info, warn};
 
 #[derive(Parser)]
@@ -77,8 +77,11 @@ async fn listen_sse_notifications(
     duration_secs: u64,
     timeout_seconds: u64,
 ) -> Result<Vec<SseNotification>> {
-    info!("🔔 Starting SSE notification listener for {} seconds", duration_secs);
-    
+    info!(
+        "🔔 Starting SSE notification listener for {} seconds",
+        duration_secs
+    );
+
     let response = client
         .get(base_url)
         .header("Accept", "text/event-stream")
@@ -100,7 +103,7 @@ async fn listen_sse_notifications(
     // Use a simpler approach: read bytes with shorter timeouts to catch data quickly
     let mut buffer = String::new();
     let end_time = std::time::Instant::now() + Duration::from_secs(duration_secs);
-    
+
     // Read data in small chunks with short timeouts
     while std::time::Instant::now() < end_time {
         match tokio::time::timeout(Duration::from_millis(200), response.chunk()).await {
@@ -118,7 +121,10 @@ async fn listen_sse_notifications(
                         continue;
                     }
 
-                    debug!("🔍 Processing SSE event: {}", event_block.replace('\n', "\\n"));
+                    debug!(
+                        "🔍 Processing SSE event: {}",
+                        event_block.replace('\n', "\\n")
+                    );
 
                     // Extract data line from SSE event
                     for line in event_block.lines() {
@@ -131,17 +137,24 @@ async fn listen_sse_notifications(
 
                             // Try to parse as JSON-RPC notification
                             if let Ok(json_data) = serde_json::from_str::<Value>(data) {
-                                if let Some(method) = json_data.get("method").and_then(|m| m.as_str()) {
-                                    if method.starts_with("notifications/") {
-                                        let notification = SseNotification {
-                                            method: method.to_string(),
-                                            params: json_data.get("params").cloned().unwrap_or(json!({})),
-                                            _raw_event: event_block.clone(),
-                                        };
-                                        info!("📨 Received notification: {}", method);
-                                        debug!("📋 Notification details: {}", serde_json::to_string_pretty(&notification.params)?);
-                                        notifications.push(notification);
-                                    }
+                                if let Some(method) =
+                                    json_data.get("method").and_then(|m| m.as_str())
+                                    && method.starts_with("notifications/")
+                                {
+                                    let notification = SseNotification {
+                                        method: method.to_string(),
+                                        params: json_data
+                                            .get("params")
+                                            .cloned()
+                                            .unwrap_or(json!({})),
+                                        _raw_event: event_block.clone(),
+                                    };
+                                    info!("📨 Received notification: {}", method);
+                                    debug!(
+                                        "📋 Notification details: {}",
+                                        serde_json::to_string_pretty(&notification.params)?
+                                    );
+                                    notifications.push(notification);
                                 }
                             } else {
                                 debug!("🔍 Could not parse as JSON: {}", data);
@@ -149,16 +162,25 @@ async fn listen_sse_notifications(
                         }
                     }
                 }
-                
+
                 // Check if we have both expected notifications
-                let has_message = notifications.iter().any(|n| n.method == "notifications/message");
-                let has_progress = notifications.iter().any(|n| n.method == "notifications/progress");
-                
+                let has_message = notifications
+                    .iter()
+                    .any(|n| n.method == "notifications/message");
+                let has_progress = notifications
+                    .iter()
+                    .any(|n| n.method == "notifications/progress");
+
                 if has_message && has_progress {
-                    info!("🎉 Got both expected notifications (message + progress), stopping early");
+                    info!(
+                        "🎉 Got both expected notifications (message + progress), stopping early"
+                    );
                     break;
                 } else if notifications.len() >= 2 {
-                    info!("🎉 Got {} notifications, stopping early", notifications.len());
+                    info!(
+                        "🎉 Got {} notifications, stopping early",
+                        notifications.len()
+                    );
                     break;
                 }
             }
@@ -180,7 +202,10 @@ async fn listen_sse_notifications(
 
     debug!("📡 Final buffer content: {}", buffer.replace('\n', "\\n"));
 
-    info!("🔔 SSE listening completed. Received {} notifications", notifications.len());
+    info!(
+        "🔔 SSE listening completed. Received {} notifications",
+        notifications.len()
+    );
     Ok(notifications)
 }
 
@@ -193,14 +218,16 @@ async fn main() -> Result<()> {
         .init();
 
     let args = Args::parse();
-    
+
     info!("🚀 MCP Initialize Session Report Client");
     info!("   • Target URL: {}", args.url);
     info!("   • Testing server-provided session IDs (MCP protocol compliance)");
     if args.test_sse_notifications {
         info!("   • SSE notification verification: ENABLED (will spawn background listener)");
     } else {
-        info!("   • SSE notification verification: DISABLED (use --test-sse-notifications to enable)");
+        info!(
+            "   • SSE notification verification: DISABLED (use --test-sse-notifications to enable)"
+        );
     }
 
     // Create HTTP client
@@ -210,10 +237,10 @@ async fn main() -> Result<()> {
 
     // Step 1: Test MCP Initialize
     let (session_id, server_info) = test_mcp_initialize(&client, &args.url, args.timeout).await?;
-    
+
     // Step 2: Send notifications/initialized (MCP lifecycle compliance)
     send_initialized_notification(&client, &args.url, &session_id, args.timeout).await?;
-    
+
     // Step 3: Start SSE Listener (MCP compliant - single connection)
     let sse_notifications = if args.test_sse_notifications {
         start_background_sse_listener(&client, &args.url, &session_id, args.timeout).await?
@@ -221,25 +248,33 @@ async fn main() -> Result<()> {
         test_sse_connection(&client, &args.url, &session_id, args.timeout).await?;
         None
     };
-    
+
     // Step 4: Test Tool with SSE
     let sse_test_result = test_echo_sse_tool(&client, &args.url, &session_id, args.timeout).await;
-    
+
     // Step 4.5: Verify SSE Notifications (if enabled)
     let received_notifications = if let Some(notifications_future) = sse_notifications {
         info!("");
         info!("🔔 Step 4.5: Verifying SSE Notifications");
         info!("   • Waiting for notifications sent by echo_sse tool...");
-        
+
         match notifications_future.await {
             Ok(Ok(notifications)) => {
                 if !notifications.is_empty() {
-                    info!("✅ Received {} notifications via SSE stream:", notifications.len());
+                    info!(
+                        "✅ Received {} notifications via SSE stream:",
+                        notifications.len()
+                    );
                     for notification in &notifications {
-                        info!("   • {}: {}", notification.method, 
-                            notification.params.get("message")
+                        info!(
+                            "   • {}: {}",
+                            notification.method,
+                            notification
+                                .params
+                                .get("message")
                                 .or_else(|| notification.params.get("progress"))
-                                .unwrap_or(&json!("details in debug log")));
+                                .unwrap_or(&json!("details in debug log"))
+                        );
                     }
                     Some(notifications)
                 } else {
@@ -260,7 +295,7 @@ async fn main() -> Result<()> {
     } else {
         None
     };
-    
+
     // Step 5: Test MCP SSE Resumability (Last-Event-ID)
     let resumability_result = if args.test_sse_notifications {
         test_sse_resumability(&client, &args.url, &session_id, args.timeout).await
@@ -269,7 +304,17 @@ async fn main() -> Result<()> {
     };
 
     // Final Report
-    print_final_report(&session_id, &server_info, sse_test_result, received_notifications, resumability_result, &client, &args.url, args.timeout).await?;
+    print_final_report(
+        &session_id,
+        &server_info,
+        sse_test_result,
+        received_notifications,
+        resumability_result,
+        &client,
+        &args.url,
+        args.timeout,
+    )
+    .await?;
 
     Ok(())
 }
@@ -283,25 +328,29 @@ async fn start_background_sse_listener(
 ) -> Result<Option<tokio::task::JoinHandle<Result<Vec<SseNotification>>>>> {
     info!("");
     info!("🔗 Step 3: Starting Single SSE Connection (MCP Compliant)");
-    info!("🔗 Creating single SSE connection for session ID: {}", session_id);
+    info!(
+        "🔗 Creating single SSE connection for session ID: {}",
+        session_id
+    );
     info!("🔔 Starting background SSE listener (MCP compliant - one connection only)");
 
-    // Spawn background task to listen for notifications 
+    // Spawn background task to listen for notifications
     // We'll start listening immediately but only collect notifications for 3 seconds after the tool call
     let client_clone = client.clone();
     let base_url_clone = base_url.to_string();
     let session_id_clone = session_id.to_string();
 
-    let listener_handle = tokio::spawn(async move {        
+    let listener_handle = tokio::spawn(async move {
         listen_sse_notifications(
             &client_clone,
             &base_url_clone,
             &session_id_clone,
             5, // Listen for 5 seconds to ensure we capture all notifications
             timeout_seconds,
-        ).await
+        )
+        .await
     });
-    
+
     // Wait longer for listener to establish connection before returning
     tokio::time::sleep(Duration::from_millis(1000)).await;
     info!("✅ Background SSE listener should be ready");
@@ -336,7 +385,10 @@ async fn test_mcp_initialize(
         }
     });
 
-    debug!("📤 Sending initialize request: {}", serde_json::to_string_pretty(&request)?);
+    debug!(
+        "📤 Sending initialize request: {}",
+        serde_json::to_string_pretty(&request)?
+    );
 
     let response = client
         .post(url)
@@ -349,7 +401,7 @@ async fn test_mcp_initialize(
 
     let status = response.status().as_u16();
     let headers = response.headers().clone();
-    
+
     info!("📥 Initialize response status: {}", status);
     debug!("   • Response headers: {:#?}", headers);
 
@@ -360,25 +412,29 @@ async fn test_mcp_initialize(
         .map(|s| s.to_string());
 
     // Handle both JSON and SSE responses per MCP Streamable HTTP spec
-    let content_type = response.headers()
+    let content_type = response
+        .headers()
         .get("content-type")
         .and_then(|h| h.to_str().ok())
         .unwrap_or("");
-    
+
     let body: Value = if content_type.starts_with("text/event-stream") {
         info!("📡 Server returned SSE stream for initialize request");
         // Read the SSE stream to get the JSON-RPC response
         let sse_text = response.text().await?;
         debug!("📥 SSE response: {}", sse_text);
-        
+
         // Parse the JSON-RPC response from the SSE data line
         parse_json_from_sse(&sse_text)?
     } else {
         // Standard JSON response
         response.json().await?
     };
-    
-    debug!("📥 Initialize response body: {}", serde_json::to_string_pretty(&body)?);
+
+    debug!(
+        "📥 Initialize response body: {}",
+        serde_json::to_string_pretty(&body)?
+    );
 
     // Extract session ID from body (non-standard but check anyway)
     let session_from_body = body
@@ -389,31 +445,51 @@ async fn test_mcp_initialize(
 
     // Determine final session ID (header takes precedence per MCP protocol)
     let session_id = if let Some(header_session) = session_from_header {
-        info!("✅ Server provided session ID via Mcp-Session-Id header: {}", header_session);
+        info!(
+            "✅ Server provided session ID via Mcp-Session-Id header: {}",
+            header_session
+        );
         header_session
     } else if let Some(body_session) = session_from_body {
-        warn!("⚠️ Session ID found in response body (non-standard): {}", body_session);
+        warn!(
+            "⚠️ Session ID found in response body (non-standard): {}",
+            body_session
+        );
         body_session
     } else {
-        return Err(anyhow!("❌ No session ID provided by server (neither header nor body)"));
+        return Err(anyhow!(
+            "❌ No session ID provided by server (neither header nor body)"
+        ));
     };
 
     // Extract server information for reporting
     let server_info = body.get("result").cloned().unwrap_or_else(|| json!({}));
-    
+
     info!("📋 Server Details:");
     if let Some(server_info_obj) = server_info.as_object() {
-        if let Some(name) = server_info_obj.get("serverInfo").and_then(|s| s.get("name")) {
+        if let Some(name) = server_info_obj
+            .get("serverInfo")
+            .and_then(|s| s.get("name"))
+        {
             info!("   • Name: {}", name.as_str().unwrap_or("unknown"));
         }
-        if let Some(version) = server_info_obj.get("serverInfo").and_then(|s| s.get("version")) {
+        if let Some(version) = server_info_obj
+            .get("serverInfo")
+            .and_then(|s| s.get("version"))
+        {
             info!("   • Version: {}", version.as_str().unwrap_or("unknown"));
         }
         if let Some(protocol) = server_info_obj.get("protocolVersion") {
-            info!("   • Protocol Version: {}", protocol.as_str().unwrap_or("unknown"));
+            info!(
+                "   • Protocol Version: {}",
+                protocol.as_str().unwrap_or("unknown")
+            );
         }
         if let Some(capabilities) = server_info_obj.get("capabilities") {
-            info!("   • Capabilities: {}", serde_json::to_string_pretty(capabilities)?);
+            info!(
+                "   • Capabilities: {}",
+                serde_json::to_string_pretty(capabilities)?
+            );
         }
     }
 
@@ -429,7 +505,9 @@ async fn send_initialized_notification(
     info!("");
     info!("📨 Step 2: Sending notifications/initialized (MCP Lifecycle Compliance)");
     info!("   • Session ID: {}", session_id);
-    info!("   • Per MCP spec: Client MUST send notifications/initialized after receiving initialize response");
+    info!(
+        "   • Per MCP spec: Client MUST send notifications/initialized after receiving initialize response"
+    );
 
     let notification = json!({
         "jsonrpc": "2.0",
@@ -437,7 +515,10 @@ async fn send_initialized_notification(
         "params": {}
     });
 
-    debug!("📤 Sending notifications/initialized: {}", serde_json::to_string_pretty(&notification)?);
+    debug!(
+        "📤 Sending notifications/initialized: {}",
+        serde_json::to_string_pretty(&notification)?
+    );
 
     let response = client
         .post(url)
@@ -451,8 +532,14 @@ async fn send_initialized_notification(
     let status = response.status().as_u16();
     info!("📥 Initialized notification response status: {}", status);
 
-    if status == 204 {
-        info!("✅ notifications/initialized sent successfully (204 No Content - expected for notifications)");
+    if status == 202 {
+        info!(
+            "✅ notifications/initialized sent successfully (202 Accepted - standard for MCP notifications)"
+        );
+    } else if status == 204 {
+        info!(
+            "✅ notifications/initialized sent successfully (204 No Content - alternative for notifications)"
+        );
     } else {
         warn!("⚠️ Unexpected response status for notification: {}", status);
         let body = response.text().await?;
@@ -481,7 +568,8 @@ async fn test_sse_connection(
         .await?;
 
     let status = response.status().as_u16();
-    let content_type = response.headers()
+    let content_type = response
+        .headers()
         .get("content-type")
         .and_then(|h| h.to_str().ok())
         .unwrap_or("");
@@ -493,7 +581,11 @@ async fn test_sse_connection(
         info!("✅ SSE connection established successfully");
         info!("📦 SSE stream ready (infinite stream - not reading body to avoid timeout)");
     } else {
-        return Err(anyhow!("❌ SSE connection failed: status={}, content-type={}", status, content_type));
+        return Err(anyhow!(
+            "❌ SSE connection failed: status={}, content-type={}",
+            status,
+            content_type
+        ));
     }
 
     Ok(())
@@ -507,11 +599,13 @@ async fn test_echo_sse_tool(
 ) -> Result<()> {
     info!("");
     info!("🔧 Step 4: Testing echo_sse Tool with SSE Streaming");
-    
+
     let test_text = "Hello from SSE test!";
     info!("🔧 Testing echo_sse tool with text: '{}'", test_text);
-    info!("🎯 MCP Streamable HTTP: POST with Accept header returns SSE stream with tool response + notifications");
-    
+    info!(
+        "🎯 MCP Streamable HTTP: POST with Accept header returns SSE stream with tool response + notifications"
+    );
+
     let tool_request = json!({
         "jsonrpc": "2.0",
         "id": 2,
@@ -523,7 +617,7 @@ async fn test_echo_sse_tool(
             }
         }
     });
-    
+
     // Send POST request with Accept: text/event-stream to get SSE response
     info!("📡 Calling echo_sse tool with SSE response requested");
     let response = client
@@ -541,28 +635,34 @@ async fn test_echo_sse_tool(
 
     if status == 200 {
         info!("✅ Tool call succeeded");
-        
-        let content_type = response.headers()
+
+        let content_type = response
+            .headers()
             .get("content-type")
             .and_then(|h| h.to_str().ok())
             .unwrap_or("");
-        
+
         if content_type.starts_with("text/event-stream") {
             info!("📡 Received SSE stream response from tool call (MCP Streamable HTTP)");
             let sse_text = response.text().await?;
             debug!("📥 Full SSE response:\n{}", sse_text);
-            
+
             // Parse all events in the SSE response
             let mut tool_response_found = false;
             let mut notifications_found = Vec::new();
-            
+
             // Split SSE response into events
             for event_block in sse_text.split("\n\n") {
                 if !event_block.trim().is_empty() {
-                    debug!("🔍 Parsing SSE event: '{}'", event_block.replace('\n', "\\n"));
-                    
+                    debug!(
+                        "🔍 Parsing SSE event: '{}'",
+                        event_block.replace('\n', "\\n")
+                    );
+
                     // Extract the data line
-                    if let Some(data_line) = event_block.lines().find(|line| line.starts_with("data:")) {
+                    if let Some(data_line) =
+                        event_block.lines().find(|line| line.starts_with("data:"))
+                    {
                         let data = data_line.trim_start_matches("data:").trim();
                         if let Ok(json_data) = serde_json::from_str::<Value>(data) {
                             // Check if this is a JSON-RPC response or notification
@@ -570,51 +670,65 @@ async fn test_echo_sse_tool(
                                 // This is a notification
                                 info!("✅ Found notification: {}", method);
                                 notifications_found.push(method.to_string());
-                            } else if json_data.get("id").is_some() && json_data.get("result").is_some() {
+                            } else if json_data.get("id").is_some()
+                                && json_data.get("result").is_some()
+                            {
                                 // This is the tool response
-                                info!("✅ Found tool response: {}", serde_json::to_string_pretty(&json_data)?);
+                                info!(
+                                    "✅ Found tool response: {}",
+                                    serde_json::to_string_pretty(&json_data)?
+                                );
                                 tool_response_found = true;
                             }
                         }
                     }
                 }
             }
-            
+
             // Verify we got both the tool response and expected notifications
             if tool_response_found {
                 info!("✅ Tool response received in SSE stream");
             } else {
                 return Err(anyhow!("❌ Tool response not found in SSE stream"));
             }
-            
+
             if notifications_found.contains(&"notifications/message".to_string()) {
                 info!("✅ notifications/message found in SSE stream");
             } else {
-                warn!("⚠️  notifications/message not found in SSE stream (expected for echo_sse tool)");
+                warn!(
+                    "⚠️  notifications/message not found in SSE stream (expected for echo_sse tool)"
+                );
             }
-            
+
             if notifications_found.contains(&"notifications/progress".to_string()) {
-                info!("✅ notifications/progress found in SSE stream");  
+                info!("✅ notifications/progress found in SSE stream");
             } else {
-                warn!("⚠️  notifications/progress not found in SSE stream (expected for echo_sse tool)");
+                warn!(
+                    "⚠️  notifications/progress not found in SSE stream (expected for echo_sse tool)"
+                );
             }
-            
-            info!("🎉 MCP Streamable HTTP test completed: tool response + {} notifications in single SSE stream", notifications_found.len());
+
+            info!(
+                "🎉 MCP Streamable HTTP test completed: tool response + {} notifications in single SSE stream",
+                notifications_found.len()
+            );
             Ok(())
-            
         } else {
             // Standard JSON response - this is expected in MCP Inspector compatibility mode
             warn!("⚠️  Received JSON response instead of SSE stream");
-            warn!("📋 NOTE: SSE streaming for tool calls is temporarily DISABLED for MCP Inspector compatibility");
+            warn!(
+                "📋 NOTE: SSE streaming for tool calls is temporarily DISABLED for MCP Inspector compatibility"
+            );
             let body: Value = response.json().await?;
             info!("📦 JSON Response: {}", serde_json::to_string_pretty(&body)?);
-            Err(anyhow!("MCP Streamable HTTP disabled for client compatibility (expected behavior)"))
+            Err(anyhow!(
+                "MCP Streamable HTTP disabled for client compatibility (expected behavior)"
+            ))
         }
     } else {
         Err(anyhow!("❌ Tool call failed with status: {}", status))
     }
 }
-
 
 /// Parse JSON-RPC response from SSE stream (MCP Streamable HTTP)
 fn parse_json_from_sse(sse_text: &str) -> Result<Value> {
@@ -627,11 +741,13 @@ fn parse_json_from_sse(sse_text: &str) -> Result<Value> {
             }
         }
     }
-    Err(anyhow::anyhow!("No valid JSON-RPC response found in SSE stream"))
+    Err(anyhow::anyhow!(
+        "No valid JSON-RPC response found in SSE stream"
+    ))
 }
 
 /// Test MCP SSE Resumability per MCP Specification
-/// 
+///
 /// Tests the MCP Resumability and Redelivery requirements:
 /// - Events have globally unique IDs within the session
 /// - Last-Event-ID header can be used to resume after disconnection
@@ -652,12 +768,12 @@ async fn test_sse_resumability(
     info!("   • Server MUST replay messages that would have been sent after the last event ID");
     info!("   • Server MUST NOT replay messages from different streams");
     info!("   • Event IDs MUST act as cursors within that particular stream");
-    
+
     // Phase 1: Generate events and verify they're stored
     info!("");
     info!("🏗️ Phase 1: Generate Test Events");
     info!("   • Triggering tool to create events with known IDs");
-    
+
     // Call the echo tool multiple times to generate events
     for i in 1..=3 {
         let tool_response = client
@@ -678,21 +794,21 @@ async fn test_sse_resumability(
             .timeout(Duration::from_secs(timeout_seconds))
             .send()
             .await?;
-            
+
         if !tool_response.status().is_success() {
             warn!("   ⚠️  Tool call {} failed: {}", i, tool_response.status());
         } else {
             info!("   ✅ Tool call {} completed successfully", i);
         }
-        
+
         // Small delay between calls to ensure distinct timestamps
         tokio::time::sleep(TokioDuration::from_millis(100)).await;
     }
-    
+
     // Phase 2: Verify events are stored in the storage backend
     info!("");
     info!("🔍 Phase 2: Verify Events Stored in Storage Backend");
-    
+
     let events_response = client
         .post(url)
         .header("Content-Type", "application/json")
@@ -711,31 +827,41 @@ async fn test_sse_resumability(
         .timeout(Duration::from_secs(timeout_seconds))
         .send()
         .await?;
-        
+
     if !events_response.status().is_success() {
-        return Err(anyhow!("Failed to retrieve session events: {}", events_response.status()));
+        return Err(anyhow!(
+            "Failed to retrieve session events: {}",
+            events_response.status()
+        ));
     }
-    
+
     let events_text = events_response.text().await?;
     let events_response: Value = serde_json::from_str(&events_text)?;
-    let events_result = events_response.get("result")
+    let events_result = events_response
+        .get("result")
         .and_then(|r| r.get("content"))
         .and_then(|c| c.get(0))
         .and_then(|t| t.get("text"))
         .and_then(|t| t.as_str())
         .ok_or_else(|| anyhow!("Failed to parse events response"))?;
-    
+
     let events_data: Value = serde_json::from_str(events_result)?;
-    let stored_events = events_data.get("events")
+    let stored_events = events_data
+        .get("events")
         .and_then(|e| e.as_array())
         .ok_or_else(|| anyhow!("No events array found in response"))?;
-    
-    info!("   📊 Found {} events stored in backend", stored_events.len());
-    
+
+    info!(
+        "   📊 Found {} events stored in backend",
+        stored_events.len()
+    );
+
     if stored_events.is_empty() {
-        return Err(anyhow!("No events found in storage - cannot test resumability"));
+        return Err(anyhow!(
+            "No events found in storage - cannot test resumability"
+        ));
     }
-    
+
     // Collect event IDs for testing
     let mut stored_event_ids = Vec::new();
     for event in stored_events {
@@ -743,43 +869,52 @@ async fn test_sse_resumability(
             stored_event_ids.push(id);
         }
     }
-    
+
     info!("   📋 Stored event IDs: {:?}", stored_event_ids);
-    
+
     // Phase 3: Test Event ID uniqueness
     info!("");
     info!("🧪 Phase 3: Verify Event ID Uniqueness (MCP Requirement)");
-    
+
     let mut unique_ids = std::collections::HashSet::new();
     let mut duplicate_found = false;
-    
+
     for &id in &stored_event_ids {
         if !unique_ids.insert(id) {
             duplicate_found = true;
             warn!("   ❌ DUPLICATE EVENT ID FOUND: {} (VIOLATES MCP SPEC)", id);
         }
     }
-    
+
     if !duplicate_found {
         info!("   ✅ All event IDs are unique within session (MCP compliant)");
     } else {
         return Err(anyhow!("Event ID uniqueness violation - not MCP compliant"));
     }
-    
+
     // Phase 4: Test Last-Event-ID resumption behavior
     info!("");
     info!("🔄 Phase 4: Test Last-Event-ID Resumption");
-    
+
     // Test with different Last-Event-ID values
     let test_cases = vec![
         (0u64, "Should return all events (cursor = 0)"),
-        (stored_event_ids.first().copied().unwrap_or(1), "Should return events after first ID"),
-        (stored_event_ids.last().copied().unwrap_or(999), "Should return no events after last ID"),
+        (
+            stored_event_ids.first().copied().unwrap_or(1),
+            "Should return events after first ID",
+        ),
+        (
+            stored_event_ids.last().copied().unwrap_or(999),
+            "Should return no events after last ID",
+        ),
     ];
-    
+
     for (last_event_id, description) in test_cases {
-        info!("   🧭 Testing Last-Event-ID: {} - {}", last_event_id, description);
-        
+        info!(
+            "   🧭 Testing Last-Event-ID: {} - {}",
+            last_event_id, description
+        );
+
         let resume_response = client
             .get(url)
             .header("Accept", "text/event-stream")
@@ -788,30 +923,33 @@ async fn test_sse_resumability(
             .timeout(Duration::from_secs(timeout_seconds))
             .send()
             .await?;
-            
+
         if !resume_response.status().is_success() {
-            warn!("     ⚠️  Resume connection failed: {}", resume_response.status());
+            warn!(
+                "     ⚠️  Resume connection failed: {}",
+                resume_response.status()
+            );
             continue;
         }
-        
+
         info!("     ✅ Resume connection established");
-        
+
         // Read events with timeout
         let max_wait = TokioDuration::from_secs(2);
         let mut received_ids = Vec::new();
-        
+
         let timeout_result = timeout(max_wait, async {
             match resume_response.bytes().await {
                 Ok(bytes) => {
                     let response_text = String::from_utf8_lossy(&bytes);
-                    
+
                     // Parse SSE events
                     for line in response_text.lines() {
                         let line = line.trim();
-                        if let Some(id_str) = line.strip_prefix("id: ") {
-                            if let Ok(event_id) = id_str.parse::<u64>() {
-                                received_ids.push(event_id);
-                            }
+                        if let Some(id_str) = line.strip_prefix("id: ")
+                            && let Ok(event_id) = id_str.parse::<u64>()
+                        {
+                            received_ids.push(event_id);
                         }
                     }
                 }
@@ -819,17 +957,24 @@ async fn test_sse_resumability(
                     // Expected for short streams
                 }
             }
-        }).await;
-        
-        tracing::debug!("Timeout result for resumption test: {:?}", timeout_result.is_ok());
-        
+        })
+        .await;
+
+        tracing::debug!(
+            "Timeout result for resumption test: {:?}",
+            timeout_result.is_ok()
+        );
+
         // Verify resumption behavior
         match last_event_id {
             0 => {
                 if received_ids.is_empty() {
                     info!("     📋 No events received (may be expected for existing sessions)");
                 } else {
-                    info!("     ✅ Received {} events for cursor 0", received_ids.len());
+                    info!(
+                        "     ✅ Received {} events for cursor 0",
+                        received_ids.len()
+                    );
                 }
             }
             id if id == stored_event_ids.last().copied().unwrap_or(999) => {
@@ -840,31 +985,45 @@ async fn test_sse_resumability(
                 }
             }
             _ => {
-                let expected_count = stored_event_ids.iter().filter(|&&x| x > last_event_id).count();
-                info!("     📊 Expected {} events after ID {}, received {}", expected_count, last_event_id, received_ids.len());
-                
+                let expected_count = stored_event_ids
+                    .iter()
+                    .filter(|&&x| x > last_event_id)
+                    .count();
+                info!(
+                    "     📊 Expected {} events after ID {}, received {}",
+                    expected_count,
+                    last_event_id,
+                    received_ids.len()
+                );
+
                 // Verify only events with IDs > last_event_id are returned
                 let invalid_events = received_ids.iter().filter(|&&x| x <= last_event_id).count();
                 if invalid_events > 0 {
-                    warn!("     ❌ Received {} events with ID <= {} (VIOLATES MCP SPEC)", invalid_events, last_event_id);
+                    warn!(
+                        "     ❌ Received {} events with ID <= {} (VIOLATES MCP SPEC)",
+                        invalid_events, last_event_id
+                    );
                 } else if !received_ids.is_empty() {
-                    info!("     ✅ All received events have ID > {} (MCP compliant)", last_event_id);
+                    info!(
+                        "     ✅ All received events have ID > {} (MCP compliant)",
+                        last_event_id
+                    );
                 }
             }
         }
-        
+
         info!("     📋 Received event IDs: {:?}", received_ids);
     }
-    
+
     // Phase 5: Test stream isolation (events from same session only)
     info!("");
     info!("🔒 Phase 5: Verify Stream Isolation (Same Session Only)");
-    
+
     // This test verifies that resumption only returns events from the current session
     // In a real multi-tenant system, we'd create another session and verify isolation
     info!("   📋 Current session: {}", session_id);
     info!("   📋 Testing that only events from current session are returned");
-    
+
     let isolation_response = client
         .get(url)
         .header("Accept", "text/event-stream")
@@ -873,27 +1032,30 @@ async fn test_sse_resumability(
         .timeout(Duration::from_secs(timeout_seconds))
         .send()
         .await?;
-        
+
     if isolation_response.status().is_success() {
         info!("   ✅ Stream isolation connection established");
-        info!("   ✅ Only events from session {} should be returned", session_id);
+        info!(
+            "   ✅ Only events from session {} should be returned",
+            session_id
+        );
     }
-    
+
     // Phase 6: Final compliance assessment
     info!("");
     info!("📋 Phase 6: Final MCP Resumability Compliance Assessment");
-    
+
     let mut compliance_issues = Vec::new();
-    
+
     // Check if we found any compliance issues
     if stored_event_ids.is_empty() {
         compliance_issues.push("No events found in storage");
     }
-    
+
     if duplicate_found {
         compliance_issues.push("Event ID uniqueness violation");
     }
-    
+
     if compliance_issues.is_empty() {
         info!("🎉 FULL MCP RESUMABILITY COMPLIANCE VERIFIED:");
         info!("   ✅ Event IDs are globally unique within session");
@@ -907,7 +1069,10 @@ async fn test_sse_resumability(
         for issue in &compliance_issues {
             warn!("   • {}", issue);
         }
-        Err(anyhow!("MCP resumability compliance test failed: {}", compliance_issues.join(", ")))
+        Err(anyhow!(
+            "MCP resumability compliance test failed: {}",
+            compliance_issues.join(", ")
+        ))
     }
 }
 
@@ -926,16 +1091,19 @@ async fn collect_initial_events(
         .timeout(Duration::from_secs(timeout_seconds))
         .send()
         .await?;
-        
+
     if !response.status().is_success() {
-        return Err(anyhow!("Failed to establish initial SSE connection: {}", response.status()));
+        return Err(anyhow!(
+            "Failed to establish initial SSE connection: {}",
+            response.status()
+        ));
     }
-    
+
     // For collecting initial events, we'll use a timeout to get a quick snapshot
     let sse_text = tokio::time::timeout(Duration::from_secs(2), response.text())
         .await
         .unwrap_or_else(|_| Ok(String::new()))?;
-    
+
     let mut events = Vec::new();
     for line in sse_text.lines() {
         let line = line.trim();
@@ -943,7 +1111,7 @@ async fn collect_initial_events(
             events.push(line.to_string());
         }
     }
-    
+
     debug!("📡 Collected {} initial event lines", events.len());
     Ok(events)
 }
@@ -955,7 +1123,7 @@ async fn test_delete_request(
     timeout: u64,
 ) -> Result<()> {
     info!("   Testing DELETE request for session cleanup...");
-    
+
     let delete_response = client
         .delete(base_url)
         .header("Content-Type", "application/json")
@@ -968,8 +1136,14 @@ async fn test_delete_request(
     if delete_response.status().is_success() {
         info!("   ✅ DELETE request successful - Session cleanup working");
     } else {
-        warn!("   ⚠️  DELETE request failed - status: {}", delete_response.status());
-        return Err(anyhow::anyhow!("DELETE request failed with status: {}", delete_response.status()));
+        warn!(
+            "   ⚠️  DELETE request failed - status: {}",
+            delete_response.status()
+        );
+        return Err(anyhow::anyhow!(
+            "DELETE request failed with status: {}",
+            delete_response.status()
+        ));
     }
 
     // Verify session is actually deleted by trying to use it
@@ -1002,8 +1176,11 @@ async fn test_delete_request(
     }
 
     info!("   💡 Note: For automatic MCP client DROP→DELETE, run:");
-    info!("      cargo run --package turul-mcp-client --example test-client-drop -- {}", base_url);
-    
+    info!(
+        "      cargo run --package turul-mcp-client --example test-client-drop -- {}",
+        base_url
+    );
+
     Ok(())
 }
 
@@ -1014,11 +1191,11 @@ async fn verify_session_data_consistency(
 ) -> Result<()> {
     info!("🔍 SESSION DATA VERIFICATION:");
     info!("   Using server inspection tools to verify session consistency");
-    
+
     // Call get_session_data tool
     info!("");
     info!("📋 Step 1: Retrieving session data from server storage...");
-    
+
     let session_data_request = json!({
         "jsonrpc": "2.0",
         "id": 100,
@@ -1039,16 +1216,25 @@ async fn verify_session_data_consistency(
         .context("Failed to call get_session_data tool")?;
 
     if response.status() != 200 {
-        return Err(anyhow!("get_session_data tool call failed with status: {}", response.status()));
+        return Err(anyhow!(
+            "get_session_data tool call failed with status: {}",
+            response.status()
+        ));
     }
 
-    let session_data_response: serde_json::Value = response.json().await
+    let session_data_response: serde_json::Value = response
+        .json()
+        .await
         .context("Failed to parse get_session_data response")?;
 
-    debug!("📋 Session data response: {}", serde_json::to_string_pretty(&session_data_response)?);
+    debug!(
+        "📋 Session data response: {}",
+        serde_json::to_string_pretty(&session_data_response)?
+    );
 
     // Extract session data from tool response
-    let session_data = session_data_response.get("result")
+    let session_data = session_data_response
+        .get("result")
         .and_then(|r| r.get("content"))
         .and_then(|c| c.as_array())
         .and_then(|arr| arr.first())
@@ -1057,34 +1243,79 @@ async fn verify_session_data_consistency(
         .context("Failed to extract session data from tool response")?;
 
     info!("✅ Retrieved session data successfully");
-    info!("   • Session ID in storage: {}", 
-        session_data.get("session_id").and_then(|s| s.as_str()).unwrap_or("unknown"));
-    info!("   • Initialization status: {}", 
-        session_data.get("is_initialized").and_then(|s| s.as_bool()).unwrap_or(false));
-    info!("   • Created at: {}", 
-        session_data.get("created_at").and_then(|s| s.as_u64()).unwrap_or(0));
-    info!("   • Last activity: {}", 
-        session_data.get("last_activity").and_then(|s| s.as_u64()).unwrap_or(0));
-    
+    info!(
+        "   • Session ID in storage: {}",
+        session_data
+            .get("session_id")
+            .and_then(|s| s.as_str())
+            .unwrap_or("unknown")
+    );
+    info!(
+        "   • Initialization status: {}",
+        session_data
+            .get("is_initialized")
+            .and_then(|s| s.as_bool())
+            .unwrap_or(false)
+    );
+    info!(
+        "   • Created at: {}",
+        session_data
+            .get("created_at")
+            .and_then(|s| s.as_u64())
+            .unwrap_or(0)
+    );
+    info!(
+        "   • Last activity: {}",
+        session_data
+            .get("last_activity")
+            .and_then(|s| s.as_u64())
+            .unwrap_or(0)
+    );
+
     // Display data source information
     if let Some(data_source) = session_data.get("data_source") {
         info!("   📊 DATA SOURCE METADATA:");
-        info!("      • Backend Type: {}", 
-            data_source.get("backend_type").and_then(|s| s.as_str()).unwrap_or("unknown"));
-        info!("      • Source Type: {}", 
-            data_source.get("source_type").and_then(|s| s.as_str()).unwrap_or("unknown"));
-        info!("      • Cache Status: {}", 
-            data_source.get("cache_status").and_then(|s| s.as_str()).unwrap_or("unknown"));
-        info!("      • Session Table: {}", 
-            data_source.get("session_table").and_then(|s| s.as_str()).unwrap_or("unknown"));
-        info!("      • Retrieved At: {}", 
-            data_source.get("retrieved_at").and_then(|s| s.as_u64()).unwrap_or(0));
+        info!(
+            "      • Backend Type: {}",
+            data_source
+                .get("backend_type")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown")
+        );
+        info!(
+            "      • Source Type: {}",
+            data_source
+                .get("source_type")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown")
+        );
+        info!(
+            "      • Cache Status: {}",
+            data_source
+                .get("cache_status")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown")
+        );
+        info!(
+            "      • Session Table: {}",
+            data_source
+                .get("session_table")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown")
+        );
+        info!(
+            "      • Retrieved At: {}",
+            data_source
+                .get("retrieved_at")
+                .and_then(|s| s.as_u64())
+                .unwrap_or(0)
+        );
     }
 
     // Call get_session_events tool
     info!("");
     info!("📊 Step 2: Retrieving session events from server storage...");
-    
+
     let session_events_request = json!({
         "jsonrpc": "2.0",
         "id": 101,
@@ -1107,16 +1338,25 @@ async fn verify_session_data_consistency(
         .context("Failed to call get_session_events tool")?;
 
     if events_response.status() != 200 {
-        return Err(anyhow!("get_session_events tool call failed with status: {}", events_response.status()));
+        return Err(anyhow!(
+            "get_session_events tool call failed with status: {}",
+            events_response.status()
+        ));
     }
 
-    let events_response_json: serde_json::Value = events_response.json().await
+    let events_response_json: serde_json::Value = events_response
+        .json()
+        .await
         .context("Failed to parse get_session_events response")?;
 
-    debug!("📊 Session events response: {}", serde_json::to_string_pretty(&events_response_json)?);
+    debug!(
+        "📊 Session events response: {}",
+        serde_json::to_string_pretty(&events_response_json)?
+    );
 
     // Extract events data from tool response
-    let events_data = events_response_json.get("result")
+    let events_data = events_response_json
+        .get("result")
         .and_then(|r| r.get("content"))
         .and_then(|c| c.as_array())
         .and_then(|arr| arr.first())
@@ -1124,35 +1364,75 @@ async fn verify_session_data_consistency(
         .and_then(|text| serde_json::from_str::<serde_json::Value>(text.as_str()?).ok())
         .context("Failed to extract events data from tool response")?;
 
-    let event_count = events_data.get("event_count").and_then(|c| c.as_u64()).unwrap_or(0);
+    let event_count = events_data
+        .get("event_count")
+        .and_then(|c| c.as_u64())
+        .unwrap_or(0);
     let empty_events = vec![];
-    let events = events_data.get("events").and_then(|e| e.as_array()).unwrap_or(&empty_events);
+    let events = events_data
+        .get("events")
+        .and_then(|e| e.as_array())
+        .unwrap_or(&empty_events);
 
     info!("✅ Retrieved session events successfully");
     info!("   • Total events stored: {}", event_count);
-    
+
     // Display data source information for events
     if let Some(data_source) = events_data.get("data_source") {
         info!("   📊 EVENTS DATA SOURCE METADATA:");
-        info!("      • Backend Type: {}", 
-            data_source.get("backend_type").and_then(|s| s.as_str()).unwrap_or("unknown"));
-        info!("      • Source Type: {}", 
-            data_source.get("source_type").and_then(|s| s.as_str()).unwrap_or("unknown"));
-        info!("      • Cache Status: {}", 
-            data_source.get("cache_status").and_then(|s| s.as_str()).unwrap_or("unknown"));
-        info!("      • Events Table: {}", 
-            data_source.get("events_table").and_then(|s| s.as_str()).unwrap_or("unknown"));
-        info!("      • Query Limit: {}", 
-            data_source.get("query_limit").and_then(|s| s.as_u64()).unwrap_or(0));
+        info!(
+            "      • Backend Type: {}",
+            data_source
+                .get("backend_type")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown")
+        );
+        info!(
+            "      • Source Type: {}",
+            data_source
+                .get("source_type")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown")
+        );
+        info!(
+            "      • Cache Status: {}",
+            data_source
+                .get("cache_status")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown")
+        );
+        info!(
+            "      • Events Table: {}",
+            data_source
+                .get("events_table")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown")
+        );
+        info!(
+            "      • Query Limit: {}",
+            data_source
+                .get("query_limit")
+                .and_then(|s| s.as_u64())
+                .unwrap_or(0)
+        );
     }
-    
+
     if event_count > 0 {
         info!("   • Recent events:");
         for (i, event) in events.iter().enumerate().take(5) {
-            let event_type = event.get("event_type").and_then(|t| t.as_str()).unwrap_or("unknown");
+            let event_type = event
+                .get("event_type")
+                .and_then(|t| t.as_str())
+                .unwrap_or("unknown");
             let event_id = event.get("id").and_then(|i| i.as_u64()).unwrap_or(0);
             let timestamp = event.get("timestamp").and_then(|t| t.as_u64()).unwrap_or(0);
-            info!("     {}. [{}] {} (ts: {})", i + 1, event_id, event_type, timestamp);
+            info!(
+                "     {}. [{}] {} (ts: {})",
+                i + 1,
+                event_id,
+                event_type,
+                timestamp
+            );
         }
         if events.len() > 5 {
             info!("     ... and {} more events", events.len() - 5);
@@ -1164,31 +1444,46 @@ async fn verify_session_data_consistency(
     // Verify session ID consistency
     info!("");
     info!("🔎 Step 3: Verifying data consistency...");
-    
+
     let stored_session_id = session_data.get("session_id").and_then(|s| s.as_str());
     if let Some(stored_id) = stored_session_id {
         if stored_id == session_id {
             info!("✅ Session ID consistency verified: {} ✓", session_id);
         } else {
-            warn!("❌ Session ID mismatch! Expected: {}, Found in storage: {}", session_id, stored_id);
+            warn!(
+                "❌ Session ID mismatch! Expected: {}, Found in storage: {}",
+                session_id, stored_id
+            );
         }
     } else {
         warn!("⚠️  No session ID found in storage data");
     }
-    
+
     // Verify initialization status
-    let is_initialized = session_data.get("is_initialized").and_then(|s| s.as_bool()).unwrap_or(false);
+    let is_initialized = session_data
+        .get("is_initialized")
+        .and_then(|s| s.as_bool())
+        .unwrap_or(false);
     if is_initialized {
         info!("✅ Session initialization status confirmed: initialized ✓");
     } else {
         warn!("⚠️  Session shows as not initialized - this may indicate a lifecycle issue");
     }
-    
+
     // Verify we have timestamps
-    let created_at = session_data.get("created_at").and_then(|s| s.as_u64()).unwrap_or(0);
-    let last_activity = session_data.get("last_activity").and_then(|s| s.as_u64()).unwrap_or(0);
+    let created_at = session_data
+        .get("created_at")
+        .and_then(|s| s.as_u64())
+        .unwrap_or(0);
+    let last_activity = session_data
+        .get("last_activity")
+        .and_then(|s| s.as_u64())
+        .unwrap_or(0);
     if created_at > 0 && last_activity > 0 {
-        info!("✅ Session timestamps present: created_at={}, last_activity={}", created_at, last_activity);
+        info!(
+            "✅ Session timestamps present: created_at={}, last_activity={}",
+            created_at, last_activity
+        );
         if last_activity >= created_at {
             info!("✅ Timestamp consistency verified: last_activity >= created_at ✓");
         } else {
@@ -1208,6 +1503,7 @@ async fn verify_session_data_consistency(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn print_final_report(
     session_id: &str,
     server_info: &Value,
@@ -1227,31 +1523,37 @@ async fn print_final_report(
     info!("   • Session ID: {}", session_id);
     info!("   • Source: Mcp-Session-Id header (proper MCP protocol)");
     info!("   • Server correctly manages sessions");
-    
+
     info!("");
     info!("📋 SERVER INFORMATION:");
     info!("   • Status: 200 OK");
-    
+
     if let Some(server_info_obj) = server_info.as_object() {
-        if let Some(name) = server_info_obj.get("serverInfo").and_then(|s| s.get("name")) {
+        if let Some(name) = server_info_obj
+            .get("serverInfo")
+            .and_then(|s| s.get("name"))
+        {
             info!("   • Name: {}", name.as_str().unwrap_or("unknown"));
         }
-        if let Some(version) = server_info_obj.get("serverInfo").and_then(|s| s.get("version")) {
+        if let Some(version) = server_info_obj
+            .get("serverInfo")
+            .and_then(|s| s.get("version"))
+        {
             info!("   • Version: {}", version.as_str().unwrap_or("unknown"));
         }
         if let Some(protocol) = server_info_obj.get("protocolVersion") {
             info!("   • Protocol: {}", protocol.as_str().unwrap_or("unknown"));
         }
     }
-    
+
     info!("");
     info!("🔧 SERVER CAPABILITIES:");
-    if let Some(capabilities) = server_info.get("capabilities") {
-        if let Some(_tools) = capabilities.get("tools") {
-            info!("   • ✅ Tools: Supported");
-        }
+    if let Some(capabilities) = server_info.get("capabilities")
+        && let Some(_tools) = capabilities.get("tools")
+    {
+        info!("   • ✅ Tools: Supported");
     }
-    
+
     info!("");
     info!("🌊 MCP STREAMABLE HTTP TEST:");
     match sse_test_result {
@@ -1264,12 +1566,14 @@ async fn print_final_report(
         Err(ref e) => {
             warn!("   ⚠️  MCP Streamable HTTP: DISABLED FOR COMPATIBILITY");
             warn!("   📋 Reason: {}", e);
-            info!("   ✅ SSE streaming temporarily disabled to ensure MCP Inspector v0.16.5 compatibility");
+            info!(
+                "   ✅ SSE streaming temporarily disabled to ensure MCP Inspector v0.16.5 compatibility"
+            );
             info!("   ✅ Tool calls return JSON responses (standard MCP protocol)");
             info!("   ✅ Server notifications still available via GET SSE connection");
         }
     }
-    
+
     info!("");
     info!("🎯 RECOMMENDATION:");
     match sse_test_result {
@@ -1280,12 +1584,14 @@ async fn print_final_report(
         }
         Err(_) => {
             info!("   ✅ 🎆 FULLY MCP COMPLIANT: Session management working!");
-            info!("   ✅ MCP Inspector v0.16.5 compatibility: Tool calls return JSON responses");  
+            info!("   ✅ MCP Inspector v0.16.5 compatibility: Tool calls return JSON responses");
             info!("   ✅ Server notifications available via dedicated GET SSE connection");
-            warn!("   📋 NOTE: MCP Streamable HTTP for tool calls temporarily disabled for broad client compatibility");
+            warn!(
+                "   📋 NOTE: MCP Streamable HTTP for tool calls temporarily disabled for broad client compatibility"
+            );
         }
     }
-    
+
     // Report SSE notification verification results
     if let Some(notifications) = received_notifications {
         info!("");
@@ -1296,13 +1602,15 @@ async fn print_final_report(
             warn!("   🔧 Verify echo_sse tool is sending notifications correctly");
         } else {
             info!("   ✅ SSE stream established successfully");
-            info!("   ✅ Received {} notification{} via SSE:", 
-                notifications.len(), 
-                if notifications.len() == 1 { "" } else { "s" });
-            
+            info!(
+                "   ✅ Received {} notification{} via SSE:",
+                notifications.len(),
+                if notifications.len() == 1 { "" } else { "s" }
+            );
+
             let mut message_found = false;
             let mut progress_found = false;
-            
+
             for notification in &notifications {
                 match notification.method.as_str() {
                     "notifications/message" => {
@@ -1315,26 +1623,37 @@ async fn print_final_report(
                     }
                     "notifications/progress" => {
                         progress_found = true;
-                        let progress = notification.params.get("progress")
+                        let progress = notification
+                            .params
+                            .get("progress")
                             .and_then(|p| p.as_u64())
                             .unwrap_or(0);
-                        let token = notification.params.get("progressToken")
+                        let token = notification
+                            .params
+                            .get("progressToken")
                             .and_then(|t| t.as_str())
                             .unwrap_or("unknown");
                         info!("      • notifications/progress: {}% ({})", progress, token);
                     }
                     _ => {
-                        info!("      • {}: {}", notification.method, 
-                            notification.params.get("message")
+                        info!(
+                            "      • {}: {}",
+                            notification.method,
+                            notification
+                                .params
+                                .get("message")
                                 .or_else(|| notification.params.get("data"))
-                                .unwrap_or(&json!("see debug log")));
+                                .unwrap_or(&json!("see debug log"))
+                        );
                     }
                 }
             }
-            
+
             if message_found && progress_found {
                 info!("   ✅ Notification routing: Tool → Broadcaster → SSE working perfectly!");
-                info!("   ✅ Session isolation confirmed: Notifications delivered to correct session");
+                info!(
+                    "   ✅ Session isolation confirmed: Notifications delivered to correct session"
+                );
             } else {
                 warn!("   ⚠️  Expected both message and progress notifications");
                 if !message_found {
@@ -1351,7 +1670,7 @@ async fn print_final_report(
         info!("   📋 SSE notification verification: DISABLED");
         info!("   📋 Use --test-sse-notifications to enable notification flow testing");
     }
-    
+
     // MCP SSE Resumability Report
     info!("");
     info!("🔁 MCP SSE RESUMABILITY SYSTEM:");
@@ -1369,12 +1688,12 @@ async fn print_final_report(
             warn!("   🔧 Check server implementation of get_events_after");
         }
     }
-    
+
     // Step 7: Test DELETE request for session cleanup
     info!("");
     info!("🗑️  Step 7: Testing DELETE Request (Session Cleanup)");
     test_delete_request(client, base_url, session_id, timeout).await?;
-    
+
     // Session Data Verification using new inspection tools
     info!("");
     if let Err(e) = verify_session_data_consistency(session_id, client, base_url).await {

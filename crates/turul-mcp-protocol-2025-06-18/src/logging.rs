@@ -64,7 +64,7 @@ impl LoggingMessageParams {
         self.logger = Some(logger.into());
         self
     }
-    
+
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
@@ -83,7 +83,7 @@ impl LoggingMessageNotification {
         self.params = self.params.with_logger(logger);
         self
     }
-    
+
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.params = self.params.with_meta(meta);
         self
@@ -103,12 +103,9 @@ pub struct SetLevelParams {
 
 impl SetLevelParams {
     pub fn new(level: LoggingLevel) -> Self {
-        Self { 
-            level,
-            meta: None,
-        }
+        Self { level, meta: None }
     }
-    
+
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
         self
@@ -132,7 +129,7 @@ impl SetLevelRequest {
             params: SetLevelParams::new(level),
         }
     }
-    
+
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.params = self.params.with_meta(meta);
         self
@@ -194,7 +191,7 @@ impl HasParams for SetLevelRequest {
     }
 }
 
-// LoggingMessageParams specific traits  
+// LoggingMessageParams specific traits
 impl HasLevelParam for LoggingMessageParams {
     fn level(&self) -> &LoggingLevel {
         &self.level
@@ -234,7 +231,7 @@ impl HasParams for LoggingMessageNotification {
 pub trait HasLoggingMetadata {
     /// The logging method name
     fn method(&self) -> &str;
-    
+
     /// Optional logger name/identifier
     fn logger_name(&self) -> Option<&str> {
         None
@@ -245,7 +242,7 @@ pub trait HasLoggingMetadata {
 pub trait HasLogLevel {
     /// The current or target logging level
     fn level(&self) -> LoggingLevel;
-    
+
     /// Check if a message at the given level should be logged
     fn should_log(&self, message_level: LoggingLevel) -> bool {
         message_level.should_log(self.level())
@@ -256,13 +253,15 @@ pub trait HasLogLevel {
 pub trait HasLogFormat {
     /// Get the log data
     fn data(&self) -> &Value;
-    
+
     /// Format the log message for output
     fn format_message(&self) -> String {
         // Default: try to format as string, fallback to JSON
         match self.data() {
             Value::String(s) => s.clone(),
-            other => serde_json::to_string(other).unwrap_or_else(|_| "<invalid log data>".to_string()),
+            other => {
+                serde_json::to_string(other).unwrap_or_else(|_| "<invalid log data>".to_string())
+            }
         }
     }
 }
@@ -273,19 +272,105 @@ pub trait HasLogTransport {
     fn should_deliver(&self, _level: LoggingLevel) -> bool {
         true
     }
-    
+
     /// Optional batching configuration
     fn batch_size(&self) -> Option<usize> {
         None
     }
 }
 
-/// Composed logging definition trait (automatically implemented via blanket impl)
-pub trait LoggerDefinition: 
-    HasLoggingMetadata + 
-    HasLogLevel + 
-    HasLogFormat + 
-    HasLogTransport 
+/// **Complete MCP Logger Creation** - Build structured logging systems with level control.
+///
+/// This trait represents a **complete, working MCP logger** that can emit structured
+/// log messages with configurable levels, formats, and transport mechanisms. When you implement
+/// the required metadata traits, you automatically get `LoggerDefinition` for free
+/// via blanket implementation.
+///
+/// # What You're Building
+///
+/// A logger is a sophisticated logging system that:
+/// - Emits structured log messages with configurable levels
+/// - Supports different output formats (JSON, text, etc.)
+/// - Routes messages through various transports (console, files, network)
+/// - Provides runtime level control for debugging
+///
+/// # How to Create a Logger
+///
+/// Implement these four traits on your struct:
+///
+/// ```rust
+/// # use turul_mcp_protocol_2025_06_18::logging::*;
+/// # use serde_json::{Value, json};
+/// #
+/// # // Simple transport enum for the example
+/// # #[derive(Debug, Clone)]
+/// # pub enum LogTransport {
+/// #     Console,
+/// #     File(String),
+/// # }
+///
+/// // This struct will automatically implement LoggerDefinition!
+/// struct ApplicationLogger {
+///     component: String,
+/// }
+///
+/// impl HasLoggingMetadata for ApplicationLogger {
+///     fn method(&self) -> &str {
+///         "notifications/message"
+///     }
+///
+///     fn logger_name(&self) -> Option<&str> {
+///         Some(&self.component)
+///     }
+/// }
+///
+/// impl HasLogLevel for ApplicationLogger {
+///     fn level(&self) -> LogLevel {
+///         LogLevel::Info
+///     }
+/// }
+///
+/// impl HasLogFormat for ApplicationLogger {
+///     fn data(&self) -> &Value {
+///         use serde_json::{json, Value};
+///         static SAMPLE_DATA: &Value = &Value::Null; // Simplified for docs
+///         SAMPLE_DATA
+///     }
+/// }
+///
+/// impl HasLogTransport for ApplicationLogger {
+///     fn should_deliver(&self, level: LoggingLevel) -> bool {
+///         level.priority() >= LoggingLevel::Info.priority()
+///     }
+/// }
+///
+/// // Now you can use it with the server:
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// let logger = ApplicationLogger { component: "user-service".to_string() };
+///
+/// // The logger automatically implements LoggerDefinition
+/// let notification = logger.to_message_notification();
+/// let level_request = logger.to_set_level_request();
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Key Benefits
+///
+/// - **Structured Logging**: JSON-based log data for easy parsing
+/// - **Level Control**: Runtime adjustment of logging verbosity
+/// - **Transport Flexibility**: Multiple output destinations
+/// - **MCP Compliant**: Fully compatible with MCP 2025-06-18 specification
+///
+/// # Common Use Cases
+///
+/// - Application component logging
+/// - Debug trace collection
+/// - Audit trail generation
+/// - Performance monitoring
+/// - Error tracking and reporting
+pub trait LoggerDefinition:
+    HasLoggingMetadata + HasLogLevel + HasLogFormat + HasLogTransport
 {
     /// Convert this logger definition to a LoggingMessageNotification
     fn to_message_notification(&self) -> LoggingMessageNotification {
@@ -295,7 +380,7 @@ pub trait LoggerDefinition:
         }
         notification
     }
-    
+
     /// Convert this logger definition to a SetLevelRequest
     fn to_set_level_request(&self) -> SetLevelRequest {
         SetLevelRequest::new(self.level())
@@ -303,10 +388,10 @@ pub trait LoggerDefinition:
 }
 
 // Blanket implementation: any type implementing the fine-grained traits automatically gets LoggerDefinition
-impl<T> LoggerDefinition for T 
-where 
-    T: HasLoggingMetadata + HasLogLevel + HasLogFormat + HasLogTransport 
-{}
+impl<T> LoggerDefinition for T where
+    T: HasLoggingMetadata + HasLogLevel + HasLogFormat + HasLogTransport
+{
+}
 
 #[cfg(test)]
 mod tests {
@@ -317,7 +402,7 @@ mod tests {
     fn test_logging_level_priority() {
         assert_eq!(LoggingLevel::Debug.priority(), 0);
         assert_eq!(LoggingLevel::Emergency.priority(), 7);
-        
+
         assert!(LoggingLevel::Error.should_log(LoggingLevel::Warning));
         assert!(!LoggingLevel::Info.should_log(LoggingLevel::Error));
     }
@@ -325,7 +410,7 @@ mod tests {
     #[test]
     fn test_set_level_request() {
         let request = SetLevelRequest::new(LoggingLevel::Warning);
-        
+
         assert_eq!(request.method, "logging/setLevel");
         assert_eq!(request.params.level, LoggingLevel::Warning);
     }
@@ -335,7 +420,7 @@ mod tests {
         let data = json!({"message": "Test log message", "context": "test"});
         let notification = LoggingMessageNotification::new(LoggingLevel::Info, data.clone())
             .with_logger("test-logger");
-        
+
         assert_eq!(notification.method, "notifications/message");
         assert_eq!(notification.params.level, LoggingLevel::Info);
         assert_eq!(notification.params.logger, Some("test-logger".to_string()));
@@ -348,7 +433,7 @@ mod tests {
         let json = serde_json::to_string(&request).unwrap();
         assert!(json.contains("logging/setLevel"));
         assert!(json.contains("error"));
-        
+
         let parsed: SetLevelRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.method, "logging/setLevel");
         assert_eq!(parsed.params.level, LoggingLevel::Error);

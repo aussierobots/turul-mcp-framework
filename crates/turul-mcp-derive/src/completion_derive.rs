@@ -12,9 +12,9 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
     // Extract struct-level attributes
     let reference = extract_string_attribute(&input.attrs, "reference")
         .unwrap_or_else(|| "ref/prompt".to_string());
-    
-    let argument_name = extract_string_attribute(&input.attrs, "argument")
-        .unwrap_or_else(|| "query".to_string());
+
+    let argument_name =
+        extract_string_attribute(&input.attrs, "argument").unwrap_or_else(|| "query".to_string());
 
     let expanded = quote! {
         #[automatically_derived]
@@ -90,12 +90,12 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
                     format!("{}suggestion2", current_value),
                     format!("{}suggestion3", current_value),
                 ];
-                
+
                 let filtered = self.filter_completions(completions, current_value);
                 let completion_result = turul_mcp_protocol::completion::CompletionResult::new(filtered)
                     .with_total(3)
                     .with_has_more(false);
-                
+
                 Ok(turul_mcp_protocol::completion::CompleteResult::new(completion_result))
             }
         }

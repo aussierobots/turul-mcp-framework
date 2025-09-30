@@ -7,26 +7,29 @@
 //!
 //! Features:
 //! - Multi-step customer onboarding flows (personal & business)
-//! - GDPR/CCPA compliance forms and data subject requests  
+//! - GDPR/CCPA compliance forms and data subject requests
 //! - User preference collection and management
 //! - Customer satisfaction surveys and feedback collection
 //! - Comprehensive validation with external reference data
 //! - Accessibility compliance and internationalization support
 
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use async_trait::async_trait;
-use turul_mcp_server::{McpServer, McpTool, SessionContext};
-use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpError, McpResult};
 use turul_mcp_protocol::tools::CallToolResult;
-use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolAnnotations};
+use turul_mcp_protocol::tools::{
+    HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasToolMeta,
+    ToolAnnotations,
+};
+use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema};
+use turul_mcp_server::{McpServer, McpTool, SessionContext};
 // ElicitationBuilder import removed - using simplified demonstrations
 use serde::Deserialize;
-use serde_json::{json, Value};
-use serde_yml;
+use serde_json::{Value, json};
 use tracing::{info, warn};
 use uuid::Uuid;
+use clap::Parser;
 
 /// Configuration for onboarding workflows loaded from external JSON
 #[derive(Debug, Deserialize, Clone)]
@@ -62,6 +65,7 @@ struct FormField {
     #[serde(rename = "type")]
     field_type: String,
     label: String,
+    #[serde(default)]
     required: bool,
     #[serde(default)]
     choices: Value,
@@ -200,9 +204,25 @@ struct CustomerOnboardingPlatform {
 
 impl CustomerOnboardingPlatform {
     fn new() -> Result<Self, Box<dyn std::error::Error>> {
+        // Try to find data directory in multiple locations for testing compatibility
+        let data_paths = vec![
+            "data",
+            "examples/elicitation-server/data",
+            "../elicitation-server/data",
+        ];
+
+        let data_dir = data_paths
+            .iter()
+            .find(|path| Path::new(path).join("onboarding_workflows.json").exists())
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                warn!("Could not find data directory in any expected location, using fallback");
+                "data".to_string()
+            });
+
         // Load onboarding workflows configuration
-        let onboarding_config = if Path::new("data/onboarding_workflows.json").exists() {
-            let content = fs::read_to_string("data/onboarding_workflows.json")?;
+        let onboarding_config = if Path::new(&format!("{}/onboarding_workflows.json", data_dir)).exists() {
+            let content = fs::read_to_string(format!("{}/onboarding_workflows.json", data_dir))?;
             serde_json::from_str(&content)?
         } else {
             warn!("onboarding_workflows.json not found, using minimal fallback configuration");
@@ -215,8 +235,8 @@ impl CustomerOnboardingPlatform {
         };
 
         // Load validation rules configuration
-        let validation_config = if Path::new("data/validation_rules.yaml").exists() {
-            let content = fs::read_to_string("data/validation_rules.yaml")?;
+        let validation_config = if Path::new(&format!("{}/validation_rules.yaml", data_dir)).exists() {
+            let content = fs::read_to_string(format!("{}/validation_rules.yaml", data_dir))?;
             serde_yml::from_str(&content)?
         } else {
             warn!("validation_rules.yaml not found, using minimal fallback configuration");
@@ -263,45 +283,73 @@ impl CustomerOnboardingPlatform {
 
     fn load_reference_data() -> HashMap<String, Vec<String>> {
         let mut reference_data = HashMap::new();
-        
+
         // In a real implementation, this would parse the markdown file
         // For now, provide fallback data
-        reference_data.insert("us_states_and_provinces".to_string(), vec![
-            "Alabama".to_string(), "Alaska".to_string(), "Arizona".to_string(), "Arkansas".to_string(),
-            "California".to_string(), "Colorado".to_string(), "Connecticut".to_string(), "Delaware".to_string(),
-            "Florida".to_string(), "Georgia".to_string(), "Hawaii".to_string(), "Idaho".to_string(),
-            // Abbreviated for space - in real implementation would load full list
-        ]);
+        reference_data.insert(
+            "us_states_and_provinces".to_string(),
+            vec![
+                "Alabama".to_string(),
+                "Alaska".to_string(),
+                "Arizona".to_string(),
+                "Arkansas".to_string(),
+                "California".to_string(),
+                "Colorado".to_string(),
+                "Connecticut".to_string(),
+                "Delaware".to_string(),
+                "Florida".to_string(),
+                "Georgia".to_string(),
+                "Hawaii".to_string(),
+                "Idaho".to_string(),
+                // Abbreviated for space - in real implementation would load full list
+            ],
+        );
 
-        reference_data.insert("supported_countries".to_string(), vec![
-            "United States".to_string(), "Canada".to_string(), "United Kingdom".to_string(),
-            "Australia".to_string(), "Germany".to_string(), "France".to_string(), "Italy".to_string(),
-            "Spain".to_string(), "Netherlands".to_string(), "Belgium".to_string(),
-        ]);
+        reference_data.insert(
+            "supported_countries".to_string(),
+            vec![
+                "United States".to_string(),
+                "Canada".to_string(),
+                "United Kingdom".to_string(),
+                "Australia".to_string(),
+                "Germany".to_string(),
+                "France".to_string(),
+                "Italy".to_string(),
+                "Spain".to_string(),
+                "Netherlands".to_string(),
+                "Belgium".to_string(),
+            ],
+        );
 
-        reference_data.insert("world_timezones".to_string(), vec![
-            "Pacific/Honolulu (UTC-10) - Hawaii".to_string(),
-            "America/Los_Angeles (UTC-8) - Pacific Time".to_string(),
-            "America/Denver (UTC-7) - Mountain Time".to_string(),
-            "America/Chicago (UTC-6) - Central Time".to_string(),
-            "America/New_York (UTC-5) - Eastern Time".to_string(),
-            "Europe/London (UTC+0/+1) - UK Time".to_string(),
-            "Europe/Paris (UTC+1) - Central European Time".to_string(),
-            "Asia/Tokyo (UTC+9) - Japan Time".to_string(),
-        ]);
+        reference_data.insert(
+            "world_timezones".to_string(),
+            vec![
+                "Pacific/Honolulu (UTC-10) - Hawaii".to_string(),
+                "America/Los_Angeles (UTC-8) - Pacific Time".to_string(),
+                "America/Denver (UTC-7) - Mountain Time".to_string(),
+                "America/Chicago (UTC-6) - Central Time".to_string(),
+                "America/New_York (UTC-5) - Eastern Time".to_string(),
+                "Europe/London (UTC+0/+1) - UK Time".to_string(),
+                "Europe/Paris (UTC+1) - Central European Time".to_string(),
+                "Asia/Tokyo (UTC+9) - Japan Time".to_string(),
+            ],
+        );
 
-        reference_data.insert("naics_industries".to_string(), vec![
-            "Software Publishers".to_string(),
-            "Computer Systems Design and Related Services".to_string(),
-            "Data Processing, Hosting, and Related Services".to_string(),
-            "Internet Publishing and Broadcasting".to_string(),
-            "Telecommunications".to_string(),
-            "Finance and Insurance".to_string(),
-            "Health Care and Social Assistance".to_string(),
-            "Manufacturing".to_string(),
-            "Retail Trade".to_string(),
-            "Professional, Scientific, and Technical Services".to_string(),
-        ]);
+        reference_data.insert(
+            "naics_industries".to_string(),
+            vec![
+                "Software Publishers".to_string(),
+                "Computer Systems Design and Related Services".to_string(),
+                "Data Processing, Hosting, and Related Services".to_string(),
+                "Internet Publishing and Broadcasting".to_string(),
+                "Telecommunications".to_string(),
+                "Finance and Insurance".to_string(),
+                "Health Care and Social Assistance".to_string(),
+                "Manufacturing".to_string(),
+                "Retail Trade".to_string(),
+                "Professional, Scientific, and Technical Services".to_string(),
+            ],
+        );
 
         reference_data
     }
@@ -312,15 +360,11 @@ impl CustomerOnboardingPlatform {
 
         for field in fields {
             let field_schema = match field.field_type.as_str() {
-                "string" | "text" => {
-                    JsonSchema::string().with_description("Text input")
-                }
-                "email" => JsonSchema::string()
-                    .with_description("Valid email address"),
+                "string" | "text" => JsonSchema::string().with_description("Text input"),
+                "email" => JsonSchema::string().with_description("Valid email address"),
                 "phone" => JsonSchema::string()
                     .with_description("Phone number with international format (+1-555-123-4567)"),
-                "date" => JsonSchema::string()
-                    .with_description("Date in YYYY-MM-DD format"),
+                "date" => JsonSchema::string().with_description("Date in YYYY-MM-DD format"),
                 "number" => JsonSchema::number().with_description("Numeric input"),
                 "boolean" => JsonSchema::boolean(),
                 "choice" => {
@@ -354,10 +398,10 @@ impl CustomerOnboardingPlatform {
                 }
                 "password" => JsonSchema::string()
                     .with_description("Strong password meeting security requirements"),
-                "text_area" => JsonSchema::string()
-                    .with_description("Multi-line text input"),
-                "file_upload" => JsonSchema::string()
-                    .with_description("File upload path or reference"),
+                "text_area" => JsonSchema::string().with_description("Multi-line text input"),
+                "file_upload" => {
+                    JsonSchema::string().with_description("File upload path or reference")
+                }
                 _ => JsonSchema::string(),
             };
 
@@ -381,17 +425,18 @@ impl CustomerOnboardingPlatform {
 
     #[allow(dead_code)] // TODO: Use in workflow status reporting
     fn get_workflow_summary(&self, workflow_id: &str) -> Option<String> {
-        if let Some(workflow) = self.onboarding_config.customer_onboarding_workflows.get(workflow_id) {
-            Some(format!(
-                "Workflow: {} ({})\nSteps: {}\nDescription: {}",
-                workflow.name,
-                workflow.workflow_id,
-                workflow.steps.len(),
-                workflow.description
-            ))
-        } else {
-            None
-        }
+        self.onboarding_config
+            .customer_onboarding_workflows
+            .get(workflow_id)
+            .map(|workflow| {
+                format!(
+                    "Workflow: {} ({})\nSteps: {}\nDescription: {}",
+                    workflow.name,
+                    workflow.workflow_id,
+                    workflow.steps.len(),
+                    workflow.description
+                )
+            })
     }
 }
 
@@ -405,7 +450,7 @@ impl HasBaseMetadata for StartOnboardingWorkflowTool {
     fn name(&self) -> &str {
         "start_onboarding_workflow"
     }
-    
+
     fn title(&self) -> Option<&str> {
         Some("Start Onboarding Workflow")
     }
@@ -421,18 +466,25 @@ impl HasInputSchema for StartOnboardingWorkflowTool {
     fn input_schema(&self) -> &ToolSchema {
         static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
         INPUT_SCHEMA.get_or_init(|| {
-        let mut properties = HashMap::new();
-        properties.insert("workflow_type".to_string(), JsonSchema::string_enum(vec![
-            "personal_account".to_string(),
-            "business_account".to_string(),
-        ]).with_description("Type of account onboarding workflow"));
-        properties.insert("step_index".to_string(), JsonSchema::number()
-            .with_minimum(0.0)
-            .with_description("Step index to start from (default: 0)"));
+            let mut properties = HashMap::new();
+            properties.insert(
+                "workflow_type".to_string(),
+                JsonSchema::string_enum(vec![
+                    "personal_account".to_string(),
+                    "business_account".to_string(),
+                ])
+                .with_description("Type of account onboarding workflow"),
+            );
+            properties.insert(
+                "step_index".to_string(),
+                JsonSchema::number()
+                    .with_minimum(0.0)
+                    .with_description("Step index to start from (default: 0)"),
+            );
 
-        ToolSchema::object()
-            .with_properties(properties)
-            .with_required(vec!["workflow_type".to_string()])
+            ToolSchema::object()
+                .with_properties(properties)
+                .with_required(vec!["workflow_type".to_string()])
         })
     }
 }
@@ -459,28 +511,40 @@ impl HasToolMeta for StartOnboardingWorkflowTool {
 
 #[async_trait]
 impl McpTool for StartOnboardingWorkflowTool {
-
     async fn call(
         &self,
         args: Value,
         _session: Option<SessionContext>,
     ) -> McpResult<CallToolResult> {
-        let workflow_type = args.get("workflow_type")
+        let workflow_type = args
+            .get("workflow_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("workflow_type"))?;
 
-        let step_index = args.get("step_index")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
+        let step_index = args.get("step_index").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
 
-        if let Some(workflow) = self.platform.onboarding_config.customer_onboarding_workflows.get(workflow_type) {
+        if let Some(workflow) = self
+            .platform
+            .onboarding_config
+            .customer_onboarding_workflows
+            .get(workflow_type)
+        {
             if step_index >= workflow.steps.len() {
-                return Err(McpError::param_out_of_range("step_index", &step_index.to_string(), &format!("0-{}", workflow.steps.len() - 1)));
+                return Err(McpError::param_out_of_range(
+                    "step_index",
+                    &step_index.to_string(),
+                    &format!("0-{}", workflow.steps.len() - 1),
+                ));
             }
 
             let current_step = &workflow.steps[step_index];
             let schema = self.platform.build_form_schema(&current_step.fields);
-            println!("📋 Generated schema for step '{}' ({}): {} fields", current_step.title, current_step.description, schema.properties.as_ref().map_or(0, |p| p.len()));
+            println!(
+                "📋 Generated schema for step '{}' ({}): {} fields",
+                current_step.title,
+                current_step.description,
+                schema.properties.as_ref().map_or(0, |p| p.len())
+            );
 
             // Simplified elicitation demonstration (complex API migration in progress)
             let progress_token = format!("onboarding_{}_{}", workflow_type, Uuid::new_v4());
@@ -543,16 +607,24 @@ impl McpTool for StartOnboardingWorkflowTool {
                 current_step.fields.len(),
                 current_step.fields.iter().filter(|f| f.required).count(),
                 current_step.step_id,
-                current_step.fields.iter()
-                    .map(|f| format!("  • {} ({}): {} {}", 
-                        f.name, 
+                current_step
+                    .fields
+                    .iter()
+                    .map(|f| format!(
+                        "  • {} ({}): {} {}",
+                        f.name,
                         f.field_type,
                         if f.required { "Required" } else { "Optional" },
-                        f.help_text.as_deref().unwrap_or("")))
+                        f.help_text.as_deref().unwrap_or("")
+                    ))
                     .collect::<Vec<_>>()
                     .join("\n"),
                 if step_index + 1 < workflow.steps.len() {
-                    format!("Continue to step {}: {}", step_index + 2, workflow.steps[step_index + 1].title)
+                    format!(
+                        "Continue to step {}: {}",
+                        step_index + 2,
+                        workflow.steps[step_index + 1].title
+                    )
                 } else {
                     "Complete workflow and trigger completion actions".to_string()
                 }
@@ -560,10 +632,17 @@ impl McpTool for StartOnboardingWorkflowTool {
 
             Ok(CallToolResult::success(vec![
                 ToolResult::text(summary),
-                ToolResult::text(format!("Workflow Data:\n{}", serde_json::to_string_pretty(&result)?))
+                ToolResult::text(format!(
+                    "Workflow Data:\n{}",
+                    serde_json::to_string_pretty(&result)?
+                )),
             ]))
         } else {
-            Err(McpError::invalid_param_type("workflow_type", "personal_account|business_account", workflow_type))
+            Err(McpError::invalid_param_type(
+                "workflow_type",
+                "personal_account|business_account",
+                workflow_type,
+            ))
         }
     }
 }
@@ -578,7 +657,7 @@ impl HasBaseMetadata for ComplianceFormTool {
     fn name(&self) -> &str {
         "compliance_form"
     }
-    
+
     fn title(&self) -> Option<&str> {
         Some("Compliance Form Handler")
     }
@@ -586,7 +665,9 @@ impl HasBaseMetadata for ComplianceFormTool {
 
 impl HasDescription for ComplianceFormTool {
     fn description(&self) -> Option<&str> {
-        Some("Handle compliance forms for GDPR data requests, CCPA opt-outs, and other regulatory requirements")
+        Some(
+            "Handle compliance forms for GDPR data requests, CCPA opt-outs, and other regulatory requirements",
+        )
     }
 }
 
@@ -594,15 +675,19 @@ impl HasInputSchema for ComplianceFormTool {
     fn input_schema(&self) -> &ToolSchema {
         static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
         INPUT_SCHEMA.get_or_init(|| {
-        let mut properties = HashMap::new();
-        properties.insert("form_type".to_string(), JsonSchema::string_enum(vec![
-            "gdpr_data_request".to_string(),
-            "ccpa_opt_out".to_string(),
-        ]).with_description("Type of compliance form to generate"));
+            let mut properties = HashMap::new();
+            properties.insert(
+                "form_type".to_string(),
+                JsonSchema::string_enum(vec![
+                    "gdpr_data_request".to_string(),
+                    "ccpa_opt_out".to_string(),
+                ])
+                .with_description("Type of compliance form to generate"),
+            );
 
-        ToolSchema::object()
-            .with_properties(properties)
-            .with_required(vec!["form_type".to_string()])
+            ToolSchema::object()
+                .with_properties(properties)
+                .with_required(vec!["form_type".to_string()])
         })
     }
 }
@@ -629,22 +714,33 @@ impl HasToolMeta for ComplianceFormTool {
 
 #[async_trait]
 impl McpTool for ComplianceFormTool {
-
     async fn call(
         &self,
         args: Value,
         _session: Option<SessionContext>,
     ) -> McpResult<CallToolResult> {
-        let form_type = args.get("form_type")
+        let form_type = args
+            .get("form_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("form_type"))?;
 
-        if let Some(compliance_form) = self.platform.onboarding_config.compliance_forms.get(form_type) {
+        if let Some(compliance_form) = self
+            .platform
+            .onboarding_config
+            .compliance_forms
+            .get(form_type)
+        {
             let schema = self.platform.build_form_schema(&compliance_form.fields);
-            println!("📋 Generated compliance form schema: {} fields", schema.properties.as_ref().map_or(0, |p| p.len()));
+            println!(
+                "📋 Generated compliance form schema: {} fields",
+                schema.properties.as_ref().map_or(0, |p| p.len())
+            );
 
             // Simplified compliance form demonstration
-            let _form_demo = format!("Compliance form: {} - {}", compliance_form.name, compliance_form.description);
+            let _form_demo = format!(
+                "Compliance form: {} - {}",
+                compliance_form.name, compliance_form.description
+            );
 
             let compliance_info = match form_type {
                 "gdpr_data_request" => {
@@ -679,7 +775,7 @@ impl McpTool for ComplianceFormTool {
                     • Must maintain \"Do Not Sell My Personal Information\" link\n\
                     • Audit trail for regulatory compliance"
                 }
-                _ => "Compliance form processing"
+                _ => "Compliance form processing",
             };
 
             let result = json!({
@@ -730,21 +826,32 @@ impl McpTool for ComplianceFormTool {
                 compliance_form.name,
                 Uuid::new_v4(),
                 compliance_info,
-                compliance_form.fields.iter()
-                    .map(|f| format!("  • {} ({}): {}", 
-                        f.name, 
+                compliance_form
+                    .fields
+                    .iter()
+                    .map(|f| format!(
+                        "  • {} ({}): {}",
+                        f.name,
                         f.field_type,
-                        f.help_text.as_deref().unwrap_or(&f.label)))
+                        f.help_text.as_deref().unwrap_or(&f.label)
+                    ))
                     .collect::<Vec<_>>()
                     .join("\n")
             );
 
             Ok(CallToolResult::success(vec![
                 ToolResult::text(summary),
-                ToolResult::text(format!("Compliance Data:\n{}", serde_json::to_string_pretty(&result)?))
+                ToolResult::text(format!(
+                    "Compliance Data:\n{}",
+                    serde_json::to_string_pretty(&result)?
+                )),
             ]))
         } else {
-            Err(McpError::invalid_param_type("form_type", "gdpr_data_request|ccpa_opt_out", form_type))
+            Err(McpError::invalid_param_type(
+                "form_type",
+                "gdpr_data_request|ccpa_opt_out",
+                form_type,
+            ))
         }
     }
 }
@@ -758,7 +865,7 @@ impl HasBaseMetadata for PreferenceCollectionTool {
     fn name(&self) -> &str {
         "collect_user_preferences"
     }
-    
+
     fn title(&self) -> Option<&str> {
         Some("Collect User Preferences")
     }
@@ -766,7 +873,9 @@ impl HasBaseMetadata for PreferenceCollectionTool {
 
 impl HasDescription for PreferenceCollectionTool {
     fn description(&self) -> Option<&str> {
-        Some("Collect user preferences for notifications, accessibility, and personalization settings")
+        Some(
+            "Collect user preferences for notifications, accessibility, and personalization settings",
+        )
     }
 }
 
@@ -774,47 +883,63 @@ impl HasInputSchema for PreferenceCollectionTool {
     fn input_schema(&self) -> &ToolSchema {
         static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
         INPUT_SCHEMA.get_or_init(|| {
-        let mut properties = HashMap::new();
-        properties.insert("preference_type".to_string(), JsonSchema::string_enum(vec![
-            "notification_preferences".to_string(),
-            "accessibility_preferences".to_string(),
-        ]).with_description("Type of preferences to collect"));
+            let mut properties = HashMap::new();
+            properties.insert(
+                "preference_type".to_string(),
+                JsonSchema::string_enum(vec![
+                    "notification_preferences".to_string(),
+                    "accessibility_preferences".to_string(),
+                ])
+                .with_description("Type of preferences to collect"),
+            );
 
-        ToolSchema::object()
-            .with_properties(properties)
-            .with_required(vec!["preference_type".to_string()])
+            ToolSchema::object()
+                .with_properties(properties)
+                .with_required(vec!["preference_type".to_string()])
         })
     }
 }
 
 impl HasOutputSchema for PreferenceCollectionTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 impl HasAnnotations for PreferenceCollectionTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
 }
 
 impl HasToolMeta for PreferenceCollectionTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
 impl McpTool for PreferenceCollectionTool {
-
     async fn call(
         &self,
         args: Value,
         _session: Option<SessionContext>,
     ) -> McpResult<CallToolResult> {
-        let preference_type = args.get("preference_type")
+        let preference_type = args
+            .get("preference_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("preference_type"))?;
 
-        if let Some(preference_collection) = self.platform.onboarding_config.preference_collection.get(preference_type) {
+        if let Some(preference_collection) = self
+            .platform
+            .onboarding_config
+            .preference_collection
+            .get(preference_type)
+        {
             let schema = if !preference_collection.fields.is_empty() {
                 // Simple field-based preferences
-                self.platform.build_form_schema(&preference_collection.fields)
+                self.platform
+                    .build_form_schema(&preference_collection.fields)
             } else {
                 // Category-based preferences (like notification preferences)
                 let mut properties = HashMap::new();
@@ -822,10 +947,18 @@ impl McpTool for PreferenceCollectionTool {
 
                 for category in &preference_collection.categories {
                     for setting in &category.settings {
-                        let field_name = format!("{}_{}", category.category.to_lowercase().replace(" ", "_"), setting.name);
-                        let channels_schema = JsonSchema::array(JsonSchema::string_enum(setting.channels.clone()));
-                        properties.insert(field_name.clone(), channels_schema.with_description(&setting.label));
-                        
+                        let field_name = format!(
+                            "{}_{}",
+                            category.category.to_lowercase().replace(" ", "_"),
+                            setting.name
+                        );
+                        let channels_schema =
+                            JsonSchema::array(JsonSchema::string_enum(setting.channels.clone()));
+                        properties.insert(
+                            field_name.clone(),
+                            channels_schema.with_description(&setting.label),
+                        );
+
                         if setting.required {
                             required.push(field_name);
                         }
@@ -836,10 +969,17 @@ impl McpTool for PreferenceCollectionTool {
                     .with_properties(properties)
                     .with_required(required)
             };
-            println!("📊 Generated preference schema for '{}': {} properties", preference_type, schema.properties.as_ref().map_or(0, |p| p.len()));
+            println!(
+                "📊 Generated preference schema for '{}': {} properties",
+                preference_type,
+                schema.properties.as_ref().map_or(0, |p| p.len())
+            );
 
             // Simplified preference collection demonstration
-            let _preference_demo = format!("Preference collection: {} - {}", preference_collection.name, preference_collection.description);
+            let _preference_demo = format!(
+                "Preference collection: {} - {}",
+                preference_collection.name, preference_collection.description
+            );
 
             let preference_details = if preference_type == "notification_preferences" {
                 let categories = &preference_collection.categories;
@@ -859,14 +999,18 @@ impl McpTool for PreferenceCollectionTool {
                     • Security notifications cannot be disabled\n\
                     • Easy unsubscribe mechanisms provided\n\
                     • Granular control over frequency and content",
-                    categories.iter()
-                        .map(|cat| format!("  {} - {}\n    {}", 
-                            cat.category, 
+                    categories
+                        .iter()
+                        .map(|cat| format!(
+                            "  {} - {}\n    {}",
+                            cat.category,
                             cat.description,
-                            cat.settings.iter()
+                            cat.settings
+                                .iter()
                                 .map(|s| format!("    • {}: {}", s.label, s.channels.join(", ")))
                                 .collect::<Vec<_>>()
-                                .join("\n")))
+                                .join("\n")
+                        ))
                         .collect::<Vec<_>>()
                         .join("\n\n")
                 )
@@ -883,7 +1027,8 @@ impl McpTool for PreferenceCollectionTool {
                 • Level AA conformance\n\
                 • Assistive technology support\n\
                 • Universal design principles\n\
-                • Regular accessibility audits".to_string()
+                • Regular accessibility audits"
+                    .to_string()
             };
 
             let result = json!({
@@ -926,10 +1071,17 @@ impl McpTool for PreferenceCollectionTool {
 
             Ok(CallToolResult::success(vec![
                 ToolResult::text(summary),
-                ToolResult::text(format!("Preference Data:\n{}", serde_json::to_string_pretty(&result)?))
+                ToolResult::text(format!(
+                    "Preference Data:\n{}",
+                    serde_json::to_string_pretty(&result)?
+                )),
             ]))
         } else {
-            Err(McpError::invalid_param_type("preference_type", "notification_preferences|accessibility_preferences", preference_type))
+            Err(McpError::invalid_param_type(
+                "preference_type",
+                "notification_preferences|accessibility_preferences",
+                preference_type,
+            ))
         }
     }
 }
@@ -943,7 +1095,7 @@ impl HasBaseMetadata for CustomerSurveyTool {
     fn name(&self) -> &str {
         "customer_satisfaction_survey"
     }
-    
+
     fn title(&self) -> Option<&str> {
         Some("Customer Satisfaction Survey")
     }
@@ -959,59 +1111,86 @@ impl HasInputSchema for CustomerSurveyTool {
     fn input_schema(&self) -> &ToolSchema {
         static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
         INPUT_SCHEMA.get_or_init(|| {
-        let mut properties = HashMap::new();
-        properties.insert("survey_type".to_string(), JsonSchema::string_enum(vec![
-            "customer_satisfaction".to_string(),
-        ]).with_description("Type of survey to conduct"));
-        properties.insert("customer_segment".to_string(), JsonSchema::string_enum(vec![
-            "new_customer".to_string(),
-            "existing_customer".to_string(),
-            "premium_customer".to_string(),
-            "at_risk_customer".to_string(),
-        ]).with_description("Customer segment for targeted survey"));
+            let mut properties = HashMap::new();
+            properties.insert(
+                "survey_type".to_string(),
+                JsonSchema::string_enum(vec!["customer_satisfaction".to_string()])
+                    .with_description("Type of survey to conduct"),
+            );
+            properties.insert(
+                "customer_segment".to_string(),
+                JsonSchema::string_enum(vec![
+                    "new_customer".to_string(),
+                    "existing_customer".to_string(),
+                    "premium_customer".to_string(),
+                    "at_risk_customer".to_string(),
+                ])
+                .with_description("Customer segment for targeted survey"),
+            );
 
-        ToolSchema::object()
-            .with_properties(properties)
-            .with_required(vec!["survey_type".to_string()])
+            ToolSchema::object()
+                .with_properties(properties)
+                .with_required(vec!["survey_type".to_string()])
         })
     }
 }
 
 impl HasOutputSchema for CustomerSurveyTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 impl HasAnnotations for CustomerSurveyTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
 }
 
 impl HasToolMeta for CustomerSurveyTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
 impl McpTool for CustomerSurveyTool {
-
     async fn call(
         &self,
         args: Value,
         _session: Option<SessionContext>,
     ) -> McpResult<CallToolResult> {
-        let survey_type = args.get("survey_type")
+        let survey_type = args
+            .get("survey_type")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("survey_type"))?;
 
-        let customer_segment = args.get("customer_segment")
+        let customer_segment = args
+            .get("customer_segment")
             .and_then(|v| v.as_str())
             .unwrap_or("existing_customer");
 
-        if let Some(survey_template) = self.platform.onboarding_config.survey_templates.get(survey_type) {
+        if let Some(survey_template) = self
+            .platform
+            .onboarding_config
+            .survey_templates
+            .get(survey_type)
+        {
             let schema = self.platform.build_form_schema(&survey_template.fields);
-            println!("📋 Generated survey schema for '{}': {} fields", survey_template.name, schema.properties.as_ref().map_or(0, |p| p.len()));
+            println!(
+                "📋 Generated survey schema for '{}': {} fields",
+                survey_template.name,
+                schema.properties.as_ref().map_or(0, |p| p.len())
+            );
 
-            let survey_title = format!("{} - {}", survey_template.name, customer_segment.replace("_", " "));
+            let survey_title = format!(
+                "{} - {}",
+                survey_template.name,
+                customer_segment.replace("_", " ")
+            );
             // Simplified survey demonstration
-            let _survey_demo = format!("Survey: {} - {}", survey_title, survey_template.description);
+            let _survey_demo =
+                format!("Survey: {} - {}", survey_title, survey_template.description);
 
             let survey_id = format!("survey_{}_{}", survey_type, Uuid::new_v4());
 
@@ -1090,11 +1269,15 @@ impl McpTool for CustomerSurveyTool {
                 survey_id,
                 survey_template.name,
                 customer_segment.replace("_", " "),
-                survey_template.fields.iter()
-                    .map(|f| format!("  • {} ({}): {}", 
-                        f.name, 
+                survey_template
+                    .fields
+                    .iter()
+                    .map(|f| format!(
+                        "  • {} ({}): {}",
+                        f.name,
                         f.field_type,
-                        f.help_text.as_deref().unwrap_or(&f.label)))
+                        f.help_text.as_deref().unwrap_or(&f.label)
+                    ))
                     .collect::<Vec<_>>()
                     .join("\n"),
                 result["incentive"].as_str().unwrap_or("None"),
@@ -1103,10 +1286,17 @@ impl McpTool for CustomerSurveyTool {
 
             Ok(CallToolResult::success(vec![
                 ToolResult::text(summary),
-                ToolResult::text(format!("Survey Data:\n{}", serde_json::to_string_pretty(&result)?))
+                ToolResult::text(format!(
+                    "Survey Data:\n{}",
+                    serde_json::to_string_pretty(&result)?
+                )),
             ]))
         } else {
-            Err(McpError::invalid_param_type("survey_type", "customer_satisfaction", survey_type))
+            Err(McpError::invalid_param_type(
+                "survey_type",
+                "customer_satisfaction",
+                survey_type,
+            ))
         }
     }
 }
@@ -1120,7 +1310,7 @@ impl HasBaseMetadata for DataValidationTool {
     fn name(&self) -> &str {
         "data_validation_demo"
     }
-    
+
     fn title(&self) -> Option<&str> {
         Some("Data Validation Demo")
     }
@@ -1136,42 +1326,52 @@ impl HasInputSchema for DataValidationTool {
     fn input_schema(&self) -> &ToolSchema {
         static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
         INPUT_SCHEMA.get_or_init(|| {
-        let mut properties = HashMap::new();
-        properties.insert("validation_category".to_string(), JsonSchema::string_enum(vec![
-            "field_validation".to_string(),
-            "business_rules".to_string(),
-            "security_policies".to_string(),
-            "compliance_checks".to_string(),
-        ]).with_description("Category of validation to demonstrate"));
+            let mut properties = HashMap::new();
+            properties.insert(
+                "validation_category".to_string(),
+                JsonSchema::string_enum(vec![
+                    "field_validation".to_string(),
+                    "business_rules".to_string(),
+                    "security_policies".to_string(),
+                    "compliance_checks".to_string(),
+                ])
+                .with_description("Category of validation to demonstrate"),
+            );
 
-        ToolSchema::object()
-            .with_properties(properties)
-            .with_required(vec!["validation_category".to_string()])
+            ToolSchema::object()
+                .with_properties(properties)
+                .with_required(vec!["validation_category".to_string()])
         })
     }
 }
 
 impl HasOutputSchema for DataValidationTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 
 impl HasAnnotations for DataValidationTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&ToolAnnotations> {
+        None
+    }
 }
 
 impl HasToolMeta for DataValidationTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 
 #[async_trait]
 impl McpTool for DataValidationTool {
-
     async fn call(
         &self,
         args: Value,
         _session: Option<SessionContext>,
     ) -> McpResult<CallToolResult> {
-        let validation_category = args.get("validation_category")
+        let validation_category = args
+            .get("validation_category")
             .and_then(|v| v.as_str())
             .ok_or_else(|| McpError::missing_param("validation_category"))?;
 
@@ -1213,8 +1413,13 @@ impl McpTool for DataValidationTool {
                 • Timezone handling"
             }
             "business_rules" => {
-                let age_rules = &self.platform.validation_config.validation_rules.business_rules.age_verification;
-                &format!(
+                let age_rules = &self
+                    .platform
+                    .validation_config
+                    .validation_rules
+                    .business_rules
+                    .age_verification;
+                format!(
                     "⚖️ BUSINESS RULES VALIDATION:\n\
                     \n\
                     Age Verification:\n\
@@ -1246,10 +1451,9 @@ impl McpTool for DataValidationTool {
                     • Monthly volume caps\n\
                     • Velocity checks\n\
                     • Risk-based adjustments",
-                    age_rules.minimum_age,
-                    age_rules.maximum_age,
-                    age_rules.age_calculation
-                ).leak()
+                    age_rules.minimum_age, age_rules.maximum_age, age_rules.age_calculation
+                )
+                .leak()
             }
             "security_policies" => {
                 "🔒 SECURITY POLICY VALIDATION:\n\
@@ -1327,7 +1531,13 @@ impl McpTool for DataValidationTool {
                 • NIST Cybersecurity Framework\n\
                 • CIS Critical Security Controls"
             }
-            _ => return Err(McpError::invalid_param_type("validation_category", "field_validation|business_rules|security_policies|compliance_checks", validation_category))
+            _ => {
+                return Err(McpError::invalid_param_type(
+                    "validation_category",
+                    "field_validation|business_rules|security_policies|compliance_checks",
+                    validation_category,
+                ));
+            }
         };
 
         let result = json!({
@@ -1340,7 +1550,7 @@ impl McpTool for DataValidationTool {
             ],
             "validation_services": [
                 "email_validator_api",
-                "phone_validator_api", 
+                "phone_validator_api",
                 "address_validation_api",
                 "identity_verification_api",
                 "document_verification_api"
@@ -1378,9 +1588,21 @@ impl McpTool for DataValidationTool {
 
         Ok(CallToolResult::success(vec![
             ToolResult::text(summary),
-            ToolResult::text(format!("Validation Data:\n{}", serde_json::to_string_pretty(&result)?))
+            ToolResult::text(format!(
+                "Validation Data:\n{}",
+                serde_json::to_string_pretty(&result)?
+            )),
         ]))
     }
+}
+
+#[derive(Parser)]
+#[command(name = "elicitation-server")]
+#[command(about = "MCP Elicitation Test Server - Customer Onboarding Platform")]
+struct Args {
+    /// Port to run the server on (0 = random port assigned by OS)
+    #[arg(short, long, default_value = "0")]
+    port: u16,
 }
 
 #[tokio::main]
@@ -1389,7 +1611,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    info!("🚀 Starting Customer Onboarding and Data Collection Platform");
+    let args = Args::parse();
+
+    // Use specified port or OS ephemeral allocation if 0
+    let port = if args.port == 0 {
+        // Use OS ephemeral port allocation - reliable for parallel testing
+        let listener = std::net::TcpListener::bind("127.0.0.1:0")
+            .map_err(|e| format!("Failed to bind to ephemeral port: {}", e))?;
+        let port = listener.local_addr()?.port();
+        drop(listener); // Release immediately so server can bind to it
+        port
+    } else {
+        args.port
+    };
+
+    info!("🚀 Starting Customer Onboarding and Data Collection Platform on port {}", port);
+    info!("📡 Server URL: http://127.0.0.1:{}/mcp", port);
 
     // Initialize the platform with external configuration
     let platform = CustomerOnboardingPlatform::new()?;
@@ -1405,10 +1642,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(CustomerSurveyTool { platform: platform.clone() })
         .tool(DataValidationTool { platform })
         .with_elicitation() // Enable elicitation support
-        .bind_address("127.0.0.1:8053".parse()?)
+        .bind_address(format!("127.0.0.1:{}", port).parse()?)
         .build()?;
-    
-    info!("🌐 Customer Onboarding Platform running at: http://127.0.0.1:8053/mcp");
+
+    info!(
+        "🌐 Customer Onboarding Platform running at: http://127.0.0.1:{}/mcp",
+        port
+    );
     info!("");
     info!("🏢 Real-world Use Cases:");
     info!("  👤 Personal account onboarding with KYC verification");
@@ -1439,9 +1679,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("  🎯 Customer segmentation and personalized experiences");
     info!("");
     info!("📖 Example usage:");
-    info!("  curl -X POST http://127.0.0.1:8053/mcp \\");
+    info!("  curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("    -H 'Content-Type: application/json' \\");
-    info!("    -d '{{\"method\": \"tools/call\", \"params\": {{\"name\": \"start_onboarding_workflow\", \"arguments\": {{\"workflow_type\": \"personal_account\"}}}}}}'");
+    info!(
+        "    -d '{{\"method\": \"tools/call\", \"params\": {{\"name\": \"start_onboarding_workflow\", \"arguments\": {{\"workflow_type\": \"personal_account\"}}}}}}'"
+    );
 
     server.run().await?;
     Ok(())

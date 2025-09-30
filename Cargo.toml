@@ -12,8 +12,10 @@ members = [
     "crates/turul-mcp-client",
     "crates/turul-mcp-builders",
     "crates/turul-mcp-aws-lambda",
+    
+    # Test crates
 
-    # Active examples (34 total)
+    # Active examples (33 total)
     "examples/alert-system-server",
     "examples/audit-trail-server",
     "examples/builders-showcase",
@@ -27,22 +29,29 @@ members = [
     "examples/dynamic-resource-server",
     "examples/elicitation-server",
     "examples/function-macro-server",
+    "examples/function-resource-server",
     "examples/lambda-mcp-client",
     "examples/lambda-mcp-server",
+    "examples/lambda-mcp-server-streaming",
     "examples/manual-tools-server",
     "examples/minimal-server",
     "examples/notification-server",
     "examples/pagination-server",
     "examples/performance-testing",
     "examples/prompts-server",
+    "examples/prompts-test-server",
     "examples/resource-server",
+    "examples/resource-test-server",
+    "examples/session-aware-resource-server",
     "examples/resources-server",
+    "examples/roots-server",
     "examples/sampling-server",
-    # "examples/simple-dynamodb-session", # TODO: Fix compilation errors
-    "examples/simple-logging-server",
-    # "examples/simple-postgres-session", # TODO: Fix compilation errors
-    # "examples/simple-sqlite-session", # TODO: Fix compilation errors
+    "examples/simple-dynamodb-session", # Simplified and ready - utility binaries commented out
+    "examples/simple-logging-server", 
+    "examples/simple-postgres-session", # Fixed API mismatches - ready to use
+    "examples/simple-sqlite-session", # Fixed API mismatches - ready to use
     "examples/stateful-server",
+    "examples/tools-test-server",
     "examples/zero-config-getting-started",
     
     # Moved from turul-mcp-server/examples
@@ -53,20 +62,27 @@ members = [
     "examples/session-aware-logging-demo",
     "examples/session-logging-proof-test",
     "examples/session-management-compliance-test",
+    "examples/streamable-http-client",
 
     # Tests
     "tests",
+    "tests/resources",
+    "tests/prompts",
+    "tests/tools",
+    "tests/sampling",
+    "tests/roots",
+    "tests/elicitation",
+    "tests/shared",
 ]
 
 exclude = [
-    # AWS examples for future phase
-    # "examples/lambda-mcp-server", # TODO: Needs trait migration for AWS tools
+    # AWS examples for future phase - re-enabled for 0.2.0
 ]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
-authors = ["Nick Hortovanyi <nick@aussierobots.com>"]
+authors = ["Nick Hortovanyi <nick@aussierobots.com.au>"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/aussierobots/turul-mcp-framework"
 homepage = "https://github.com/aussierobots/turul-mcp-framework"
@@ -109,13 +125,13 @@ turul-mcp-builders = { path = "crates/turul-mcp-builders" }
 
 # Additional dependencies for examples and tests
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-uuid = { version = "1.18", features = ["v4", "v7", "serde"] }
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
 tokio-test = "0.4"
 reqwest = { version = "0.12", features = ["json"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
-criterion = { version = "0.7", features = ["html_reports"] }
+criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }
 sqlx = { version = "0.8", features = [
     "runtime-tokio-rustls",
     "sqlite",

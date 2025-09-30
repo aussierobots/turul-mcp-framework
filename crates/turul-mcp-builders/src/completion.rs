@@ -3,13 +3,13 @@
 //! This module provides a builder pattern for creating completion requests at runtime
 //! for autocomplete functionality in prompts and resources.
 
-use std::collections::HashMap;
 use serde_json::Value;
+use std::collections::HashMap;
 
 // Import from protocol via alias
 use turul_mcp_protocol::completion::{
-    CompleteRequest, CompleteParams, CompleteArgument, CompletionReference,
-    CompletionContext, PromptReference, ResourceTemplateReference
+    CompleteArgument, CompleteParams, CompleteRequest, CompletionContext, CompletionReference,
+    PromptReference, ResourceTemplateReference,
 };
 
 /// Builder for creating completion requests at runtime
@@ -31,7 +31,7 @@ impl CompletionBuilder {
         }
     }
 
-    /// Create a new completion builder for a resource template reference  
+    /// Create a new completion builder for a resource template reference
     pub fn for_resource(uri: impl Into<String>) -> Self {
         Self {
             reference: CompletionReference::ResourceTemplate(ResourceTemplateReference::new(uri)),
@@ -90,11 +90,11 @@ impl CompletionBuilder {
     /// Build the completion request
     pub fn build(self) -> CompleteRequest {
         let mut params = CompleteParams::new(self.reference, self.argument);
-        
+
         if let Some(context) = self.context {
             params = params.with_context(context);
         }
-        
+
         if let Some(meta) = self.meta {
             params = params.with_meta(meta);
         }
@@ -108,11 +108,11 @@ impl CompletionBuilder {
     /// Build just the params (without the full request wrapper)
     pub fn build_params(self) -> CompleteParams {
         let mut params = CompleteParams::new(self.reference, self.argument);
-        
+
         if let Some(context) = self.context {
             params = params.with_context(context);
         }
-        
+
         if let Some(meta) = self.meta {
             params = params.with_meta(meta);
         }
@@ -132,9 +132,9 @@ impl CompletionBuilder {
 
     /// Create completion for a prompt argument with partial value
     pub fn prompt_argument_partial(
-        prompt_name: impl Into<String>, 
+        prompt_name: impl Into<String>,
         arg_name: impl Into<String>,
-        partial_value: impl Into<String>
+        partial_value: impl Into<String>,
     ) -> Self {
         Self::for_prompt(prompt_name)
             .argument_name(arg_name)
@@ -144,7 +144,7 @@ impl CompletionBuilder {
     /// Create completion for a resource template parameter
     pub fn resource_parameter(
         uri_template: impl Into<String>,
-        param_name: impl Into<String>
+        param_name: impl Into<String>,
     ) -> Self {
         Self::for_resource(uri_template)
             .argument_name(param_name)
@@ -155,7 +155,7 @@ impl CompletionBuilder {
     pub fn resource_parameter_partial(
         uri_template: impl Into<String>,
         param_name: impl Into<String>,
-        partial_value: impl Into<String>
+        partial_value: impl Into<String>,
     ) -> Self {
         Self::for_resource(uri_template)
             .argument_name(param_name)
@@ -175,14 +175,14 @@ mod tests {
             .build();
 
         assert_eq!(request.method, "completion/complete");
-        
+
         match &request.params.reference {
             CompletionReference::Prompt(prompt_ref) => {
                 assert_eq!(prompt_ref.name, "greeting_prompt");
-            },
+            }
             _ => panic!("Expected prompt reference"),
         }
-        
+
         assert_eq!(request.params.argument.name, "name");
         assert_eq!(request.params.argument.value, "Al");
     }
@@ -194,14 +194,14 @@ mod tests {
             .build();
 
         assert_eq!(request.method, "completion/complete");
-        
+
         match &request.params.reference {
             CompletionReference::ResourceTemplate(resource_ref) => {
                 assert_eq!(resource_ref.uri, "file:///users/{user_id}/profile.json");
-            },
+            }
             _ => panic!("Expected resource template reference"),
         }
-        
+
         assert_eq!(request.params.argument.name, "user_id");
         assert_eq!(request.params.argument.value, "123");
     }
@@ -241,30 +241,28 @@ mod tests {
     #[test]
     fn test_completion_builder_convenience_methods() {
         // Test prompt argument completion
-        let request1 = CompletionBuilder::prompt_argument("greeting", "name")
-            .build();
-        
+        let request1 = CompletionBuilder::prompt_argument("greeting", "name").build();
+
         assert_eq!(request1.params.argument.name, "name");
         assert_eq!(request1.params.argument.value, "");
 
         // Test prompt argument with partial value
-        let request2 = CompletionBuilder::prompt_argument_partial("greeting", "name", "Al")
-            .build();
-        
+        let request2 = CompletionBuilder::prompt_argument_partial("greeting", "name", "Al").build();
+
         assert_eq!(request2.params.argument.name, "name");
         assert_eq!(request2.params.argument.value, "Al");
 
         // Test resource parameter completion
-        let request3 = CompletionBuilder::resource_parameter("file:///{path}.txt", "path")
-            .build();
-        
+        let request3 = CompletionBuilder::resource_parameter("file:///{path}.txt", "path").build();
+
         assert_eq!(request3.params.argument.name, "path");
         assert_eq!(request3.params.argument.value, "");
 
         // Test resource parameter with partial value
-        let request4 = CompletionBuilder::resource_parameter_partial("file:///{path}.txt", "path", "doc")
-            .build();
-        
+        let request4 =
+            CompletionBuilder::resource_parameter_partial("file:///{path}.txt", "path", "doc")
+                .build();
+
         assert_eq!(request4.params.argument.name, "path");
         assert_eq!(request4.params.argument.value, "doc");
     }
@@ -294,7 +292,7 @@ mod tests {
 
         assert_eq!(request.params.argument.name, "step");
         assert_eq!(request.params.argument.value, "ste");
-        
+
         let context = request.params.context.expect("Expected context");
         let args = context.arguments.expect("Expected context arguments");
         assert_eq!(args.get("workflow_id").unwrap(), "wf-456");
@@ -309,10 +307,10 @@ mod tests {
         match params.reference {
             CompletionReference::Prompt(prompt_ref) => {
                 assert_eq!(prompt_ref.name, "test");
-            },
+            }
             _ => panic!("Expected prompt reference"),
         }
-        
+
         assert_eq!(params.argument.name, "arg");
         assert_eq!(params.argument.value, "val");
     }

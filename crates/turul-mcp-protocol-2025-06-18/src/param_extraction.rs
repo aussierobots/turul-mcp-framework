@@ -12,15 +12,20 @@ macro_rules! impl_serde_extractor {
         impl $crate::traits::SerdeParamExtractor<$param_type> for $param_type {
             type Error = $crate::McpError;
 
-            fn extract_serde(params: turul_mcp_json_rpc_server::RequestParams) -> Result<$param_type, Self::Error> {
+            fn extract_serde(
+                params: turul_mcp_json_rpc_server::RequestParams,
+            ) -> Result<$param_type, Self::Error> {
                 // Convert RequestParams to Value
                 let value = params.to_value();
-                
+
                 // Deserialize to the target type
-                serde_json::from_value(value)
-                    .map_err(|e| $crate::McpError::InvalidParameters(
-                        format!("Failed to deserialize {}: {}", stringify!($param_type), e)
+                serde_json::from_value(value).map_err(|e| {
+                    $crate::McpError::InvalidParameters(format!(
+                        "Failed to deserialize {}: {}",
+                        stringify!($param_type),
+                        e
                     ))
+                })
             }
         }
     };
@@ -49,15 +54,19 @@ impl_serde_extractor!(crate::resources::SubscribeParams);
 impl_serde_extractor!(crate::resources::UnsubscribeParams);
 
 /// Generic parameter extractor function that works with any type implementing SerdeParamExtractor
-pub fn extract_params<T>(params: turul_mcp_json_rpc_server::RequestParams) -> Result<T, crate::McpError>
+pub fn extract_params<T>(
+    params: turul_mcp_json_rpc_server::RequestParams,
+) -> Result<T, crate::McpError>
 where
     T: Params + SerdeParamExtractor<T, Error = crate::McpError>,
 {
     T::extract_serde(params)
 }
 
-/// Helper function to extract params from Option<RequestParams>
-pub fn extract_optional_params<T>(params: Option<turul_mcp_json_rpc_server::RequestParams>) -> Result<T, crate::McpError>
+/// Helper function to extract params from Option\<RequestParams\>
+pub fn extract_optional_params<T>(
+    params: Option<turul_mcp_json_rpc_server::RequestParams>,
+) -> Result<T, crate::McpError>
 where
     T: Params + SerdeParamExtractor<T, Error = crate::McpError> + Default,
 {

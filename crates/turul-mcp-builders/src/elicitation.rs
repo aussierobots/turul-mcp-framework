@@ -3,14 +3,14 @@
 //! This module provides a builder pattern for creating elicitation requests at runtime
 //! for collecting structured user input via restricted primitive schemas.
 
-use std::collections::HashMap;
 use serde_json::Value;
+use std::collections::HashMap;
 
 // Import from protocol via alias
 use turul_mcp_protocol::elicitation::{
-    ElicitCreateRequest, ElicitationSchema, PrimitiveSchemaDefinition,
-    StringSchema, NumberSchema, BooleanSchema, EnumSchema, StringFormat, ElicitResult,
-    HasElicitationMetadata, HasElicitationSchema, HasElicitationHandling
+    BooleanSchema, ElicitCreateRequest, ElicitResult, ElicitationSchema, EnumSchema,
+    HasElicitationHandling, HasElicitationMetadata, HasElicitationSchema, NumberSchema,
+    PrimitiveSchemaDefinition, StringFormat, StringSchema,
 };
 
 /// Builder for creating elicitation requests at runtime
@@ -54,14 +54,9 @@ impl ElicitationBuilder {
     }
 
     /// Add a string field to the schema
-    pub fn string_field(
-        mut self,
-        name: impl Into<String>,
-        description: impl Into<String>,
-    ) -> Self {
-        let schema = PrimitiveSchemaDefinition::String(
-            StringSchema::new().with_description(description)
-        );
+    pub fn string_field(mut self, name: impl Into<String>, description: impl Into<String>) -> Self {
+        let schema =
+            PrimitiveSchemaDefinition::String(StringSchema::new().with_description(description));
         self.schema = self.schema.with_property(name, schema);
         self
     }
@@ -97,14 +92,9 @@ impl ElicitationBuilder {
     }
 
     /// Add a number field to the schema
-    pub fn number_field(
-        mut self,
-        name: impl Into<String>,
-        description: impl Into<String>,
-    ) -> Self {
-        let schema = PrimitiveSchemaDefinition::Number(
-            NumberSchema::new().with_description(description)
-        );
+    pub fn number_field(mut self, name: impl Into<String>, description: impl Into<String>) -> Self {
+        let schema =
+            PrimitiveSchemaDefinition::Number(NumberSchema::new().with_description(description));
         self.schema = self.schema.with_property(name, schema);
         self
     }
@@ -132,7 +122,7 @@ impl ElicitationBuilder {
         description: impl Into<String>,
     ) -> Self {
         let schema = PrimitiveSchemaDefinition::Number(
-            NumberSchema::integer().with_description(description)
+            NumberSchema::integer().with_description(description),
         );
         self.schema = self.schema.with_property(name, schema);
         self
@@ -160,9 +150,8 @@ impl ElicitationBuilder {
         name: impl Into<String>,
         description: impl Into<String>,
     ) -> Self {
-        let schema = PrimitiveSchemaDefinition::Boolean(
-            BooleanSchema::new().with_description(description)
-        );
+        let schema =
+            PrimitiveSchemaDefinition::Boolean(BooleanSchema::new().with_description(description));
         self.schema = self.schema.with_property(name, schema);
         self
     }
@@ -188,9 +177,8 @@ impl ElicitationBuilder {
         description: impl Into<String>,
         values: Vec<String>,
     ) -> Self {
-        let schema = PrimitiveSchemaDefinition::Enum(
-            EnumSchema::new(values).with_description(description)
-        );
+        let schema =
+            PrimitiveSchemaDefinition::Enum(EnumSchema::new(values).with_description(description));
         self.schema = self.schema.with_property(name, schema);
         self
     }
@@ -206,7 +194,7 @@ impl ElicitationBuilder {
         let schema = PrimitiveSchemaDefinition::Enum(
             EnumSchema::new(values)
                 .with_description(description)
-                .with_enum_names(display_names)
+                .with_enum_names(display_names),
         );
         self.schema = self.schema.with_property(name, schema);
         self
@@ -302,7 +290,7 @@ impl HasElicitationHandling for DynamicElicitation {
                         if !value.is_number() {
                             return Err(format!("Field '{}' must be a number", field_name));
                         }
-                        if num_schema.schema_type == "integer" && !value.as_i64().is_some() {
+                        if num_schema.schema_type == "integer" && value.as_i64().is_none() {
                             return Err(format!("Field '{}' must be an integer", field_name));
                         }
                     }
@@ -321,7 +309,10 @@ impl HasElicitationHandling for DynamicElicitation {
                                 ));
                             }
                         } else {
-                            return Err(format!("Field '{}' must be a string from enum values", field_name));
+                            return Err(format!(
+                                "Field '{}' must be a string from enum values",
+                                field_name
+                            ));
                         }
                     }
                 }
@@ -331,34 +322,37 @@ impl HasElicitationHandling for DynamicElicitation {
         Ok(())
     }
 
-    fn process_content(&self, content: HashMap<String, Value>) -> Result<HashMap<String, Value>, String> {
+    fn process_content(
+        &self,
+        content: HashMap<String, Value>,
+    ) -> Result<HashMap<String, Value>, String> {
         // Validate first
         self.validate_content(&content)?;
-        
+
         // Process and normalize content
         let mut processed = HashMap::new();
-        
+
         for (field_name, value) in content {
             if let Some(field_schema) = self.schema.properties.get(&field_name) {
                 match field_schema {
                     PrimitiveSchemaDefinition::String(string_schema) => {
                         if let Some(str_value) = value.as_str() {
                             // Apply length constraints if defined
-                            if let Some(min_len) = string_schema.min_length {
-                                if str_value.len() < min_len {
-                                    return Err(format!(
-                                        "Field '{}' must be at least {} characters long",
-                                        field_name, min_len
-                                    ));
-                                }
+                            if let Some(min_len) = string_schema.min_length
+                                && str_value.len() < min_len
+                            {
+                                return Err(format!(
+                                    "Field '{}' must be at least {} characters long",
+                                    field_name, min_len
+                                ));
                             }
-                            if let Some(max_len) = string_schema.max_length {
-                                if str_value.len() > max_len {
-                                    return Err(format!(
-                                        "Field '{}' must be at most {} characters long",
-                                        field_name, max_len
-                                    ));
-                                }
+                            if let Some(max_len) = string_schema.max_length
+                                && str_value.len() > max_len
+                            {
+                                return Err(format!(
+                                    "Field '{}' must be at most {} characters long",
+                                    field_name, max_len
+                                ));
                             }
                         }
                         processed.insert(field_name, value);
@@ -366,21 +360,21 @@ impl HasElicitationHandling for DynamicElicitation {
                     PrimitiveSchemaDefinition::Number(number_schema) => {
                         if let Some(num_value) = value.as_f64() {
                             // Apply range constraints if defined
-                            if let Some(min) = number_schema.minimum {
-                                if num_value < min {
-                                    return Err(format!(
-                                        "Field '{}' must be at least {}",
-                                        field_name, min
-                                    ));
-                                }
+                            if let Some(min) = number_schema.minimum
+                                && num_value < min
+                            {
+                                return Err(format!(
+                                    "Field '{}' must be at least {}",
+                                    field_name, min
+                                ));
                             }
-                            if let Some(max) = number_schema.maximum {
-                                if num_value > max {
-                                    return Err(format!(
-                                        "Field '{}' must be at most {}",
-                                        field_name, max
-                                    ));
-                                }
+                            if let Some(max) = number_schema.maximum
+                                && num_value > max
+                            {
+                                return Err(format!(
+                                    "Field '{}' must be at most {}",
+                                    field_name, max
+                                ));
                             }
                         }
                         processed.insert(field_name, value);
@@ -556,9 +550,24 @@ mod tests {
         assert_eq!(request.method, "elicitation/create");
         assert_eq!(request.params.message, "Enter your details");
         assert_eq!(request.params.requested_schema.properties.len(), 2);
-        assert!(request.params.requested_schema.properties.contains_key("name"));
-        assert!(request.params.requested_schema.properties.contains_key("age"));
-        assert_eq!(request.params.requested_schema.required, Some(vec!["name".to_string()]));
+        assert!(
+            request
+                .params
+                .requested_schema
+                .properties
+                .contains_key("name")
+        );
+        assert!(
+            request
+                .params
+                .requested_schema
+                .properties
+                .contains_key("age")
+        );
+        assert_eq!(
+            request.params.requested_schema.required,
+            Some(vec!["name".to_string()])
+        );
     }
 
     #[test]
@@ -571,7 +580,16 @@ mod tests {
             .build();
 
         assert_eq!(request.params.requested_schema.properties.len(), 3);
-        assert_eq!(request.params.requested_schema.required.as_ref().unwrap().len(), 2);
+        assert_eq!(
+            request
+                .params
+                .requested_schema
+                .required
+                .as_ref()
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     #[test]
@@ -580,14 +598,20 @@ mod tests {
         let display_names = vec!["Red".to_string(), "Green".to_string(), "Blue".to_string()];
 
         let request = ElicitationBuilder::new("Choose a color")
-            .enum_field_with_names("color", "Your favorite color", choices.clone(), display_names)
+            .enum_field_with_names(
+                "color",
+                "Your favorite color",
+                choices.clone(),
+                display_names,
+            )
             .require_field("color")
             .build();
 
         assert_eq!(request.params.requested_schema.properties.len(), 1);
-        
-        if let Some(PrimitiveSchemaDefinition::Enum(enum_schema)) = 
-            request.params.requested_schema.properties.get("color") {
+
+        if let Some(PrimitiveSchemaDefinition::Enum(enum_schema)) =
+            request.params.requested_schema.properties.get("color")
+        {
             assert_eq!(enum_schema.enum_values, choices);
             assert!(enum_schema.enum_names.is_some());
         } else {
@@ -612,36 +636,76 @@ mod tests {
     #[test]
     fn test_convenience_builders() {
         // Text input
-        let text_request = ElicitationBuilder::text_input("Enter name", "name", "Your name")
-            .build();
-        assert!(text_request.params.requested_schema.properties.contains_key("name"));
+        let text_request =
+            ElicitationBuilder::text_input("Enter name", "name", "Your name").build();
+        assert!(
+            text_request
+                .params
+                .requested_schema
+                .properties
+                .contains_key("name")
+        );
 
         // Number input
         let number_request = ElicitationBuilder::number_input(
-            "Enter score", "score", "Your score", Some(0.0), Some(100.0)
-        ).build();
-        assert!(number_request.params.requested_schema.properties.contains_key("score"));
+            "Enter score",
+            "score",
+            "Your score",
+            Some(0.0),
+            Some(100.0),
+        )
+        .build();
+        assert!(
+            number_request
+                .params
+                .requested_schema
+                .properties
+                .contains_key("score")
+        );
 
         // Confirmation
         let confirm_request = ElicitationBuilder::confirm("Do you agree?").build();
-        assert!(confirm_request.params.requested_schema.properties.contains_key("confirmed"));
+        assert!(
+            confirm_request
+                .params
+                .requested_schema
+                .properties
+                .contains_key("confirmed")
+        );
 
         // Choice
         let choice_request = ElicitationBuilder::choice(
             "Select option",
             "option",
             "Choose an option",
-            vec!["a".to_string(), "b".to_string(), "c".to_string()]
-        ).build();
-        assert!(choice_request.params.requested_schema.properties.contains_key("option"));
+            vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        )
+        .build();
+        assert!(
+            choice_request
+                .params
+                .requested_schema
+                .properties
+                .contains_key("option")
+        );
 
         // Email
-        let email_request = ElicitationBuilder::email_input("Enter email", "email", "Email address")
-            .build();
-        assert!(email_request.params.requested_schema.properties.contains_key("email"));
-        
-        if let Some(PrimitiveSchemaDefinition::String(string_schema)) = 
-            email_request.params.requested_schema.properties.get("email") {
+        let email_request =
+            ElicitationBuilder::email_input("Enter email", "email", "Email address").build();
+        assert!(
+            email_request
+                .params
+                .requested_schema
+                .properties
+                .contains_key("email")
+        );
+
+        if let Some(PrimitiveSchemaDefinition::String(string_schema)) = email_request
+            .params
+            .requested_schema
+            .properties
+            .get("email")
+        {
             assert!(string_schema.format.is_some());
             // Note: StringFormat doesn't implement PartialEq, so we can't compare directly
         } else {
@@ -655,7 +719,11 @@ mod tests {
             .string_field("name", "Name")
             .integer_field_with_range("age", "Age", Some(0.0), Some(120.0))
             .boolean_field("active", "Active")
-            .enum_field("status", "Status", vec!["new".to_string(), "active".to_string()])
+            .enum_field(
+                "status",
+                "Status",
+                vec!["new".to_string(), "active".to_string()],
+            )
             .require_fields(vec!["name".to_string(), "age".to_string()])
             .build_dynamic();
 
@@ -724,7 +792,10 @@ mod tests {
         // Accept with single field
         let single_result = ElicitResultBuilder::accept_single("name", json!("John"));
         assert!(matches!(single_result.action, ElicitAction::Accept));
-        assert_eq!(single_result.content.as_ref().unwrap().get("name"), Some(&json!("John")));
+        assert_eq!(
+            single_result.content.as_ref().unwrap().get("name"),
+            Some(&json!("John"))
+        );
 
         // Accept with multiple fields
         let multi_result = ElicitResultBuilder::accept_fields(vec![
@@ -758,8 +829,13 @@ mod tests {
 
         // Test HasElicitationSchema
         assert_eq!(elicitation.requested_schema().schema_type, "object");
-        assert!(elicitation.requested_schema().properties.contains_key("field1"));
-        
+        assert!(
+            elicitation
+                .requested_schema()
+                .properties
+                .contains_key("field1")
+        );
+
         // Test validation (should pass for well-formed schema)
         assert!(elicitation.validate_schema().is_ok());
 
