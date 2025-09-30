@@ -150,12 +150,14 @@ async fn test_boolean_args_prompt_with_shared_utils() {
 
     TestFixtures::verify_prompt_response(&result);
 
-    // Check that booleans were used in the message content
+    // Check that boolean flags are reflected in message content
     let result_data = result["result"].as_object().unwrap();
     let messages = result_data["messages"].as_array().unwrap();
     if !messages.is_empty() {
         let message_content = messages[0]["content"]["text"].as_str().unwrap();
-        assert!(message_content.contains("true") || message_content.contains("false"));
+        // Prompt converts booleans to ENABLED/DISABLED and ON/OFF
+        assert!(message_content.contains("ENABLED") || message_content.contains("DISABLED"));
+        assert!(message_content.contains("ON") || message_content.contains("OFF"));
     }
 }
 
@@ -170,8 +172,11 @@ async fn test_multi_message_prompt_with_shared_utils() {
 
     client.initialize().await.expect("Failed to initialize");
 
+    let mut arguments = std::collections::HashMap::new();
+    arguments.insert("scenario".to_string(), serde_json::json!("debugging session"));
+
     let result = client
-        .get_prompt("multi_message_prompt", None)
+        .get_prompt("multi_message_prompt", Some(arguments))
         .await
         .expect("Failed to get multi message prompt");
 
@@ -236,15 +241,7 @@ async fn test_template_prompt_with_shared_utils() {
 
     client.initialize().await.expect("Failed to initialize");
 
-    let mut arguments = std::collections::HashMap::new();
-    arguments.insert(
-        "template_name".to_string(),
-        serde_json::json!("test_template"),
-    );
-    arguments.insert(
-        "template_value".to_string(),
-        serde_json::json!("test value"),
-    );
+    let arguments = TestFixtures::create_template_args();
 
     let result = client
         .get_prompt("template_prompt", Some(arguments))
@@ -256,10 +253,10 @@ async fn test_template_prompt_with_shared_utils() {
     let result_data = result["result"].as_object().unwrap();
     let messages = result_data["messages"].as_array().unwrap();
     if !messages.is_empty() {
-        // Check that template variables were substituted
+        // Check that template variables were substituted (using TestFixtures values)
         let message_content = messages[0]["content"]["text"].as_str().unwrap();
-        assert!(message_content.contains("test_template"));
-        assert!(message_content.contains("test value"));
+        assert!(message_content.contains("Alice"));
+        assert!(message_content.contains("machine learning"));
     }
 }
 
