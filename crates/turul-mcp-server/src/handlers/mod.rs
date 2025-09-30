@@ -932,7 +932,7 @@ impl McpHandler for RootsHandler {
     }
 }
 
-/// Sampling handler for sampling/createMessage endpoint
+/// Sampling handler for sampling/createMessage endpoint (default/mock implementation)
 pub struct SamplingHandler;
 
 #[async_trait]
@@ -968,6 +968,72 @@ impl McpHandler for SamplingHandler {
         let progress_response = ProgressResponse::with_progress(
             base_response,
             progress_token.or_else(|| Some(ProgressToken::new("sampling-default"))),
+            1.0, // Complete since we're returning immediately
+            Some(1),
+            Some(1),
+        );
+
+        serde_json::to_value(progress_response).map_err(McpError::from)
+    }
+
+    fn supported_methods(&self) -> Vec<String> {
+        vec!["sampling/createMessage".to_string()]
+    }
+}
+
+/// Sampling handler that dispatches to registered sampling providers
+///
+/// This handler validates requests and dispatches to actual McpSampling
+/// implementations registered via .sampling_provider(). It replaces the
+/// default SamplingHandler when providers are configured.
+pub struct ProvidedSamplingHandler {
+    providers: HashMap<String, Arc<dyn crate::McpSampling>>,
+}
+
+impl ProvidedSamplingHandler {
+    pub fn new(providers: HashMap<String, Arc<dyn crate::McpSampling>>) -> Self {
+        Self { providers }
+    }
+}
+
+#[async_trait]
+impl McpHandler for ProvidedSamplingHandler {
+    async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
+        use turul_mcp_protocol::meta::{ProgressResponse, ProgressToken};
+        use turul_mcp_protocol::sampling::{CreateMessageParams, CreateMessageRequest};
+
+        // Extract progress token if provided
+        let progress_token = params
+            .as_ref()
+            .and_then(|p| p.get("progressToken"))
+            .and_then(|t| t.as_str())
+            .map(ProgressToken::from);
+
+        // Parse params into CreateMessageParams
+        let message_params: CreateMessageParams = serde_json::from_value(
+            params.ok_or_else(|| McpError::missing_param("params"))?
+        )?;
+
+        // Construct full CreateMessageRequest for the provider
+        let request = CreateMessageRequest {
+            method: "sampling/createMessage".to_string(),
+            params: message_params,
+        };
+
+        // Select provider - use first for now (can enhance with can_handle/priority later)
+        let provider = self.providers.values().next()
+            .ok_or_else(|| McpError::configuration("No sampling provider available"))?;
+
+        // Validate request - THIS is where maxTokens=0 gets caught!
+        provider.validate_request(&request).await?;
+
+        // Generate message using the provider
+        let result = provider.sample(request).await?;
+
+        // Wrap in progress response for consistency with default handler
+        let progress_response = ProgressResponse::with_progress(
+            result,
+            progress_token.or_else(|| Some(ProgressToken::new("sampling-provided"))),
             1.0, // Complete since we're returning immediately
             Some(1),
             Some(1),
