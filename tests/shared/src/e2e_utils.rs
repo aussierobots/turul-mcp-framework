@@ -440,15 +440,14 @@ impl Drop for TestServerManager {
             // Kill the process and wait for it to terminate
             let _ = process.kill();
 
-            // Use wait_timeout to avoid blocking indefinitely
-            // If wait_timeout is not available, use a simple wait with a background thread
-            use std::time::Duration;
-            let wait_result = std::thread::spawn(move || {
+            // Spawn background thread to wait for process cleanup
+            // This avoids blocking test completion while still allowing cleanup
+            let _ = std::thread::spawn(move || {
                 let _ = process.wait();
             });
 
-            // Give it 1 second to clean up, then move on
-            let _ = std::thread::sleep(Duration::from_millis(1000));
+            // Brief sleep to allow immediate cleanup (most processes exit quickly)
+            std::thread::sleep(std::time::Duration::from_millis(50));
         }
     }
 }
