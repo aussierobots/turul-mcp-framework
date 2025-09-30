@@ -437,7 +437,18 @@ impl TestServerManager {
 impl Drop for TestServerManager {
     fn drop(&mut self) {
         if let Some(mut process) = self.server_process.take() {
-            std::mem::drop(process.kill());
+            // Kill the process and wait for it to terminate
+            let _ = process.kill();
+
+            // Use wait_timeout to avoid blocking indefinitely
+            // If wait_timeout is not available, use a simple wait with a background thread
+            use std::time::Duration;
+            let wait_result = std::thread::spawn(move || {
+                let _ = process.wait();
+            });
+
+            // Give it 1 second to clean up, then move on
+            let _ = std::thread::sleep(Duration::from_millis(1000));
         }
     }
 }
