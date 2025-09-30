@@ -1,195 +1,299 @@
 # Example Verification Campaign - Execution Log
 
-**Started**: 2025-01-25
-**Purpose**: Systematic verification of all 45+ examples with full MCP protocol compliance testing
-**Status**: 🔄 **IN PROGRESS** - Running comprehensive validation
-**Framework**: Post-0.2.0 test registration and warning fixes validation
+**Started**: 2025-09-30
+**Purpose**: Complete verification of all 42+ examples before 0.2.0 release
+**Status**: 🔄 **READY TO START**
 
 ---
 
-## 🏆 **VERIFICATION GOALS**
+## 🎯 **VERIFICATION OBJECTIVES**
 
-### ✅ **Validation Objectives**
-- **45+ examples tested** across 8 comprehensive phases
-- **Full MCP 2025-06-18 compliance verified** for all servers
-- **Test suite validation** - ensure all registered tests pass
-- **Zero breaking changes** - verify all existing examples continue to work
+### Goals
+- ✅ **Verify all 42+ examples work** with actual content validation
+- ✅ **Test all 4 tool creation patterns** produce identical behavior
+- ✅ **Validate MCP 2025-06-18 compliance** for all servers
+- ✅ **Confirm zero breaking changes** from framework updates
 
-### 🎯 **Pre-Campaign Status**
-- ✅ All build warnings fixed (unused imports, visibility)
-- ✅ Test registration complete (4 new tests, 4 deferred)
-- ✅ Library tests passing: 180 passed
-- 🔄 Full workspace test suite: Running
-- 🔄 Example verification: Pending
+### Success Criteria
+- All phases pass 100%
+- No compilation errors
+- All servers start successfully
+- All MCP protocol operations work
+- Content-specific validation passes (math, resources, prompts, etc.)
 
 ---
 
-## 🧪 **TESTING FRAMEWORK**
+## 🚀 **HOW TO RUN COMPLETE VERIFICATION**
 
-### **MCP Validation Levels**
-1. **Compile + Start**: Server compiles and starts successfully
-2. **Initialize**: MCP handshake with session ID creation
-3. **List**: Protocol-specific listing (tools/list, resources/list, prompts/list)
-4. **Execute**: Actual functionality (tools/call, resources/read)
-
-### **Command Pattern**
+### Quick Start - All Phases
 ```bash
-# 1. Start server (from workspace root)
-RUST_LOG=error timeout 10s cargo run --bin <server-name> -- --port <port> &
-SERVER_PID=$!
-sleep 3
+cd /home/nick/turul-mcp-framework
 
-# 2. Initialize (get session ID)
-SESSION_ID=$(curl -s -X POST http://127.0.0.1:<port>/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' \
-  | jq -r '.result.sessionId // empty')
+# Run all 8 phases in one go
+for phase in 1 2 3 4 5 6 7 8; do
+  echo ""
+  echo "======================================"
+  echo "RUNNING PHASE $phase"
+  echo "======================================"
+  bash scripts/verify_phase${phase}.sh 2>&1 | tee /tmp/phase${phase}.log
+  echo ""
+done
 
-# 3. List capabilities
-curl -s -X POST http://127.0.0.1:<port>/mcp \
-  -H "Content-Type: application/json" \
-  -H "Accept: application/json" \
-  -H "MCP-Session-ID: $SESSION_ID" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' | jq
+# View results summary
+echo ""
+echo "======================================"
+echo "RESULTS SUMMARY"
+echo "======================================"
+for phase in 1 2 3 4 5 6 7 8; do
+  echo ""
+  echo "=== PHASE $phase ==="
+  grep -E "Phase $phase Summary|Total:|Passed:|Failed:|PHASE $phase COMPLETE|PHASE $phase FAILED" /tmp/phase${phase}.log | tail -5
+done
+```
 
-# 4. Cleanup
-kill $SERVER_PID 2>/dev/null
+### Individual Phase Testing
+```bash
+# Test single phase
+bash scripts/verify_phase1.sh
+
+# With output capture
+bash scripts/verify_phase1.sh 2>&1 | tee /tmp/phase1.log
 ```
 
 ---
 
-## 📋 **PHASE-BY-PHASE RESULTS**
+## 📋 **PHASE BREAKDOWN**
 
-### ⏳ **Phase 1: Simple Standalone Servers**
-**Status**: PENDING
+### Phase 1: Calculator Learning Progression (5 servers)
+**Purpose**: Verify all 4 tool creation patterns work identically
 
-| Server | Port | Compile | Start | Initialize | Tools/List | Tools/Call | Status |
-|--------|------|---------|-------|------------|------------|------------|--------|
-| **minimal-server** | 8641 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | PENDING |
-| **calculator-add-function-server** | 8648 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | PENDING |
-| **calculator-add-simple-server-derive** | 8647 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | PENDING |
-| **calculator-add-builder-server** | 8649 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | PENDING |
-| **calculator-add-manual-server** | 8646 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | PENDING |
+| Server | Port | Pattern | Test |
+|--------|------|---------|------|
+| minimal-server | 8641 | Basic | Echo test |
+| calculator-add-function-server | 8648 | Function macro | 5+3=8 |
+| calculator-add-simple-server-derive | 8647 | Derive macro | 5+3=8 |
+| calculator-add-builder-server | 8649 | Builder | 5+3=8 |
+| calculator-add-manual-server | 8646 | Manual | 5+3=8 |
 
-**Objective**: Validate all 4 tool creation patterns (Function, Derive, Builder, Manual)
-
-### ⏳ **Phase 2: Resource Servers**
-**Status**: PENDING
-
-| Server | Port | Compile | Start | Initialize | Resources/List | Resources/Read | Status |
-|--------|------|---------|-------|------------|---------------|----------------|--------|
-| **resource-server** | 8007 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | PENDING |
-| **resources-server** | 8041 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | PENDING |
-| **resource-test-server** | 8043 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | PENDING |
-| **function-resource-server** | 8008 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | PENDING |
-| **dynamic-resource-server** | 8048 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | PENDING |
-| **session-aware-resource-server** | 8008 | ⏳ | ⏳ | ⏳ | ⏳ | ⏳ | PENDING |
-
-**Objective**: Validate session-aware resource functionality
-
-### ⏳ **Phase 3: Feature-Specific Servers**
-**Status**: PENDING
-
-- [ ] **prompts-server** (port 8006) - MCP prompts feature demonstration
-- [ ] **prompts-test-server** (port 8046) - Prompts testing and validation
-- [ ] **completion-server** (port 8042) - IDE completion integration
-- [ ] **sampling-server** (port 8044) - LLM sampling feature support
-- [ ] **elicitation-server** (port 8047) - User input elicitation patterns
-- [ ] **pagination-server** (port 8044) - Large dataset pagination support
-- [ ] **notification-server** (port 8005) - Real-time notification patterns
-
-### ⏳ **Phase 4: Session Storage Examples**
-**Status**: PENDING
-
-- [ ] **simple-sqlite-session** (port 8061) - SQLite storage backend
-- [ ] **simple-postgres-session** (port 8060) - PostgreSQL storage backend
-- [ ] **simple-dynamodb-session** (port 8062) - DynamoDB storage backend
-- [ ] **stateful-server** (port 8006) - Advanced stateful operations
-- [ ] **session-logging-proof-test** (port 8050) - Session-based logging verification
-- [ ] **session-aware-logging-demo** (port 8051) - Session-aware logging patterns
-- [ ] **logging-test-server** (port 8052) - Comprehensive logging test suite
-
-### ⏳ **Phase 5: Advanced/Composite Servers**
-**Status**: PENDING
-
-- [ ] **comprehensive-server** (port 8040) - All MCP features in one server
-- [ ] **alert-system-server** (port 8010) - Enterprise alert management system
-- [ ] **audit-trail-server** (port 8009) - Comprehensive audit logging system
-- [ ] **simple-logging-server** (port 8008) - Simplified logging patterns
-- [ ] **zero-config-getting-started** (port 8641) - Getting started tutorial server
-
-### ⏳ **Phase 6: Client Examples**
-**Status**: PENDING
-
-- [ ] **client-initialise-server** (port 52935) + **client-initialise-report** - Client initialization
-- [ ] **streamable-http-client** - Streamable HTTP client demonstration
-- [ ] **logging-test-client** + **logging-test-server** - Client-server logging
-- [ ] **session-management-compliance-test** - Session compliance validation
-- [ ] **lambda-mcp-client** - AWS Lambda client integration
-
-### ⏳ **Phase 7: Lambda Examples**
-**Status**: PENDING
-
-- [ ] **lambda-mcp-server** - Basic Lambda MCP server
-- [ ] **lambda-mcp-server-streaming** - Lambda with streaming support
-- [ ] **lambda-mcp-client** - Lambda client integration patterns
-
-### ⏳ **Phase 8: Performance Testing**
-**Status**: PENDING
-
-- [ ] **performance-testing** - Comprehensive benchmark suite
+**Status**: ⏳ NOT STARTED
 
 ---
 
-## 📊 **PROGRESS TRACKING**
+### Phase 2: Resource Servers (5 servers)
+**Purpose**: Verify resource reading, templates, external files
 
-### **Overall Status**
-- **Phase 1**: 0/5 completed (0%)
-- **Phase 2**: 0/6 completed (0%)
-- **Phase 3**: 0/7 completed (0%)
-- **Phase 4**: 0/7 completed (0%)
-- **Phase 5**: 0/5 completed (0%)
-- **Phase 6**: 0/5 completed (0%)
-- **Phase 7**: 0/3 completed (0%)
-- **Phase 8**: 0/1 completed (0%)
+| Server | Port | Features |
+|--------|------|----------|
+| resource-server | 8007 | Basic resources |
+| resources-server | 8041 | External files |
+| resource-test-server | 8043 | Comprehensive |
+| function-resource-server | 8008 | Templates |
+| session-aware-resource-server | 8008 | Session-aware |
 
-**Total Progress**: 0/39 servers verified (0%)
-
-### **Test Suite Status**
-- ✅ Library Tests: 180 passed
-- 🔄 Integration Tests: Running
-- ⏳ Example Validation: Pending
+**Status**: ⏳ NOT STARTED
 
 ---
 
-## 🔧 **TROUBLESHOOTING NOTES**
+### Phase 3: Prompts & Features (7 servers)
+**Purpose**: Verify prompts, completion, sampling, notifications
 
-### **Common Issues**
-- Port conflicts: Use `pkill <server-name>` to cleanup
-- Timeout issues: Increase timeout from 10s to 30s for complex servers
-- Session ID extraction: Ensure `jq` is installed for JSON parsing
+| Server | Port | Feature |
+|--------|------|---------|
+| prompts-server | 8006 | MCP prompts |
+| prompts-test-server | 8046 | Prompt testing |
+| completion-server | 8042 | IDE completion |
+| sampling-server | 8044 | LLM sampling |
+| elicitation-server | 8047 | User input |
+| pagination-server | 8045 | Pagination |
+| notification-server | 8005 | SSE notifications |
 
-### **Environment Requirements**
-- `jq` - JSON parsing for session ID extraction
-- `curl` - HTTP requests
-- `timeout` - Command timeouts
-- Clean ports (8000-9000 range)
+**Status**: ⏳ NOT STARTED
+
+---
+
+### Phase 4: Session Storage (4 servers)
+**Purpose**: Verify session persistence backends
+
+| Server | Port | Backend |
+|--------|------|---------|
+| simple-sqlite-session | 8061 | SQLite |
+| simple-postgres-session | 8060 | PostgreSQL |
+| simple-dynamodb-session | 8062 | DynamoDB |
+| stateful-server | 8006 | Stateful ops |
+
+**Status**: ⏳ NOT STARTED
+
+---
+
+### Phase 5: Advanced/Composite (10 servers)
+**Purpose**: Verify complex servers with multiple features
+
+| Server | Port | Type |
+|--------|------|------|
+| function-macro-server | 8003 | Tool showcase |
+| derive-macro-server | 8765 | Code generation |
+| manual-tools-server | 8007 | Manual impl |
+| tools-test-server | 8050 | E2E testing |
+| comprehensive-server | 8002 | All features |
+| alert-system-server | 8010 | Enterprise |
+| audit-trail-server | 8009 | Audit logs |
+| simple-logging-server | 8008 | Logging |
+| dynamic-resource-server | 8048 | Dynamic |
+| zero-config-getting-started | 8641 | Tutorial |
+
+**Status**: ⏳ NOT STARTED
+
+---
+
+### Phase 6: Clients & Test Utilities (5 utilities)
+**Purpose**: Verify client applications work with servers
+
+| Utility | Description |
+|---------|-------------|
+| client-initialise-server + report | Client initialization |
+| streamable-http-client | Streaming client |
+| logging-test-client + server | Logging integration |
+| session-management-compliance-test | Session compliance |
+| session-logging-proof-test | Session logging |
+
+**Status**: ⏳ NOT STARTED
+
+---
+
+### Phase 7: Lambda Examples (3 examples)
+**Purpose**: Verify Lambda deployment patterns compile
+
+| Example | Description |
+|---------|-------------|
+| lambda-mcp-server | Basic Lambda |
+| lambda-mcp-server-streaming | Streaming Lambda |
+| lambda-mcp-client | Lambda client |
+
+**Note**: Uses `cargo lambda build` (not regular cargo build)
+
+**Status**: ⏳ NOT STARTED
+
+---
+
+### Phase 8: Meta Examples (3 examples)
+**Purpose**: Verify demonstration/showcase examples
+
+| Example | Description |
+|---------|-------------|
+| builders-showcase | Builder patterns |
+| performance-testing | Benchmarks |
+| session-aware-logging-demo | Logging demo |
+
+**Status**: ⏳ NOT STARTED
+
+---
+
+## 📊 **OVERALL PROGRESS**
+
+### Current Status (2025-09-30 Session 3 - Post cargo clean/update/build)
+
+✅ **All 44 examples cleaned, updated, and built successfully**
+
+**Verification Status:**
+- **Phase 1**: 🔄 **RE-TESTING NEEDED** - After cargo clean/update/build
+- **Phase 2**: 🔄 **RE-TESTING NEEDED** - After cargo clean/update/build
+- **Phase 3**: 🔄 **RE-TESTING NEEDED** - After cargo clean/update/build
+- **Phase 4**: 🔄 **RE-TESTING NEEDED** - After cargo clean/update/build
+- **Phase 5**: 🔄 **RE-TESTING NEEDED** - Scripts fixed, cargo rebuilt
+- **Phase 6**: 🔄 **RE-TESTING NEEDED** - After cargo clean/update/build
+- **Phase 7**: 🔄 **RE-TESTING NEEDED** - After cargo clean/update/build
+- **Phase 8**: 🔄 **RE-TESTING NEEDED** - After cargo clean/update/build
+
+**Known Issues Before Testing:**
+- Scripts may have compilation delays during test runs
+- comprehensive-server missing `.prompt()` and `.resource()` registration calls
+
+---
+
+## 🔧 **KNOWN FIXES APPLIED**
+
+### Phase 5: Script Fixes
+1. **derive-macro-server & comprehensive-server Port Binding** ✅
+   - **Issue**: Servers use `.nth(1)` positional argument, not `--port` flag
+   - **Fix**: Script now detects `:` in port argument and passes as positional arg
+   - **Location**: `scripts/verify_phase5.sh` lines 65-72
+
+2. **Strict Lifecycle Support** ✅
+   - **Issue**: tools-test-server uses `.with_strict_lifecycle()` requiring `notifications/initialized`
+   - **Fix**: Added `notifications/initialized` request after session init
+   - **Location**: `scripts/verify_phase5.sh` lines 107-112
+
+3. **Port Extraction for HTTP Requests** ✅
+   - **Issue**: curl commands need port number extracted from full address
+   - **Fix**: Added port extraction logic for both formats (`8080` and `127.0.0.1:8080`)
+   - **Location**: `scripts/verify_phase5.sh` lines 85-91
+
+### Phase 7: Lambda Examples
+- **Issue**: Regular cargo build doesn't work for Lambda
+- **Fix**: Script uses `cargo lambda build` instead
+- **Status**: ❌ Still failing - needs investigation
+
+### Phase 3: Prompt Arguments (Previous session)
+- **Issue**: Prompts need specific arguments
+- **Fix**: Script includes comprehensive default arguments (all as strings)
+- **Status**: ✅ Working
 
 ---
 
 ## 📝 **EXECUTION LOG**
 
-### **2025-01-25 - Campaign Start**
-- Reset verification log
-- Fixed all build warnings
-- Registered 4 new tests
-- Ready to begin Phase 1 validation
+### 2025-09-30 Session 3 - Complete Rebuild
+- ✅ Ran `cargo clean` on all 44 examples individually
+- ✅ Ran `cargo update` on all 44 examples individually
+- ✅ Ran `cargo build` on all 44 examples individually
+- ✅ Built entire workspace with `cargo build --workspace --examples --bins`
+- **Result**: All examples successfully built and ready for testing
+- **Issue Found**: Scripts fail when compilation happens during test run (5s timeout too short)
+- **Next**: Need to run verification with pre-compiled binaries
+
+### 2025-09-30 Session 2 - Phase 5 Script Fixes
+- ✅ Fixed derive-macro-server port binding (positional arg detection)
+- ✅ Fixed comprehensive-server port binding
+- ✅ Added strict lifecycle support (`notifications/initialized`)
+- ✅ Fixed tools-test-server (now returns 12 tools correctly)
+- ✅ Added port extraction logic for full address formats
+- 🟡 Identified comprehensive-server resources/prompts implementation gap
+- **Result**: Phases 1-4, 8 fully passing (24+ examples), Phase 5 partial (4/10+)
+
+### 2025-09-30 Session 1 - Campaign Reset
+- Cleared all previous results
+- Fixed derive-macro-server port binding (initial attempt)
+- Fixed Lambda cargo-lambda integration
+- Ready for complete fresh verification run
 
 ---
 
-**Next Steps**:
-1. Begin Phase 1: Simple Standalone Servers
-2. Record results in this log
-3. Progress through all 8 phases systematically
-4. Update TODO_TRACKER.md with final results
+## 🚧 **KNOWN ISSUES**
+
+### comprehensive-server (Phase 5)
+- **Issue**: Logs claim to have resources/prompts but `resources/list` and `prompts/list` return 0
+- **Root Cause**: Server implements `WorkflowGeneratorPrompt` and `ProjectResourcesHandler` traits but doesn't register them
+- **Location**: `examples/comprehensive-server/src/main.rs`
+  - Line 983: `impl McpPrompt for WorkflowGeneratorPrompt` ✅ Implemented
+  - Line 1116: `impl McpResource for ProjectResourcesHandler` ✅ Implemented
+  - Server builder calls `.with_prompts()` and `.with_resources()` ❌ Only enables handlers
+  - **Missing**: `.prompt(WorkflowGeneratorPrompt::new(...))` and `.resource(ProjectResourcesHandler::new(...))`
+- **Type**: Server implementation bug
+- **Impact**: 1 server failing in Phase 5
+- **Fix Required**: Add registration calls to builder
+
+### Lambda Examples (Phase 7)
+- **Issue**: cargo-lambda build failing
+- **Type**: Build system or dependency issue
+- **Impact**: All 3 Lambda examples failing
+- **Status**: Needs investigation
+
+### Script Timeout Issue
+- **Issue**: Test scripts have 5-second sleep before curl, insufficient when cargo compiles during test
+- **Impact**: Tests fail with "Could not get session ID from header" when compilation happens
+- **Workaround**: Pre-compile all examples with `cargo build --workspace --examples --bins` before testing
+- **Status**: ✅ Resolved by pre-compilation
+
+---
+
+**Next Action**: Run verification tests with pre-compiled binaries

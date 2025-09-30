@@ -143,9 +143,16 @@
 - Never commit secrets. AWS examples require valid credentials; prefer env vars/roles.
 - Keep debug logs off by default; gate experimental features behind flags.
 
-## Agent‑Specific Instructions
+## Agent-Specific Instructions
 - Scope: this file applies to the entire repository.
-- Role: act as a strict critic for MCP 2025‑06‑18 compliance within the Turul MCP Framework; flag deviations and propose compliant fixes.
+- Role: act as a strict critic for MCP 2025-06-18 compliance within the Turul MCP Framework; flag deviations and propose compliant fixes.
 - Do not relax security, logging, or API contracts to “make tests pass”; fix root causes while preserving spec compliance.
 - Boundaries: do not modify core framework areas unless explicitly requested. The ~9 areas are Tools, Resources, Prompts, Sampling, Completion, Logging, Roots, Elicitation, and Notifications.
  - Extensions: if introducing non-standard fields (e.g., `structuredContent`), document them clearly, keep optional, and ensure baseline compliance without them.
+
+## Release Readiness Notes (2025-10-01)
+- **Pagination Compliance**: `prompts/list`, `resources/list`, and `resources/templates/list` now honor caller-supplied `limit` values, clamp to the DoS ceiling, and reject `limit=0`. Preserve this behaviour in future patches and cover regression paths in the relevant handler tests.
+- **Lifecycle Errors**: Strict lifecycle flows must continue returning `McpError::SessionError` for pre-initialization access. Any refactor that touches `SessionAware*` handlers needs to preserve the error mapping to `-32031`.
+- **Tool Error Propagation**: Keep propagating `McpTool::call` failures as direct `McpError` results. Never re-wrap them as successful `CallToolResult::error` payloads.
+- **Test Coverage**: Maintain the behavioural suites that assert pagination limits, lifecycle enforcement, and error propagation; add cases whenever new branches are introduced.
+- **Server Teardown Discipline**: Use `TestServerManager` (with its `drop`-based shutdown) for integration/E2E suites. Avoid manual `kill` sequences that can leave ports occupied and cascade failures into later tests.
