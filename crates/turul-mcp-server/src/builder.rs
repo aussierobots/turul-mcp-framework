@@ -1376,6 +1376,16 @@ impl McpServerBuilder {
             );
         }
 
+        // Add ProvidedSamplingHandler if sampling providers were configured
+        // This replaces the default SamplingHandler with one that actually calls
+        // the registered providers' validate_request() and sample() methods
+        if !self.sampling.is_empty() {
+            handlers.insert(
+                "sampling/createMessage".to_string(),
+                Arc::new(ProvidedSamplingHandler::new(self.sampling)),
+            );
+        }
+
         // Create server
         Ok(McpServer::new(
             implementation,
