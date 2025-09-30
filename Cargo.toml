@@ -44,6 +44,7 @@ members = [
     "examples/resource-test-server",
     "examples/session-aware-resource-server",
     "examples/resources-server",
+    "examples/roots-server",
     "examples/sampling-server",
     "examples/simple-dynamodb-session", # Simplified and ready - utility binaries commented out
     "examples/simple-logging-server", 
