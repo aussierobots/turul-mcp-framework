@@ -114,6 +114,16 @@ impl McpTestClient {
         self.initialize_with_capabilities(json!({})).await
     }
 
+    /// Send notifications/initialized to complete session handshake (required for strict lifecycle mode)
+    pub async fn send_initialized_notification(&self) -> Result<HashMap<String, Value>, reqwest::Error> {
+        let notification = json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized"
+        });
+
+        self.send_notification(notification).await
+    }
+
     /// Make a generic MCP request
     pub async fn make_request(
         &self,
