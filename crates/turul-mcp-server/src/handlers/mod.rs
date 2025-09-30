@@ -17,6 +17,21 @@ use turul_mcp_protocol::{McpError, WithMeta};
 //pub mod response;
 //pub use response::*;
 
+/// Extract limit parameter from raw params (supports both params.limit and params._meta.limit)
+///
+/// MCP spec allows arbitrary extension fields via `[key: string]: unknown` in both
+/// params root and _meta. This helper extracts limit from either location before
+/// parsing to typed params.
+fn extract_limit_from_params(params: &Option<Value>) -> Option<usize> {
+    params.as_ref().and_then(|p| {
+        // Try direct params.limit first
+        p.get("limit")
+            .or_else(|| p.get("_meta").and_then(|m| m.get("limit")))
+            .and_then(|v| v.as_u64())
+            .map(|n| n as usize)
+    })
+}
+
 /// Generic MCP handler trait
 #[async_trait]
 pub trait McpHandler: Send + Sync {
@@ -108,6 +123,14 @@ impl McpHandler for PromptsListHandler {
         use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
         use turul_mcp_protocol::prompts::{ListPromptsParams, ListPromptsResult, Prompt};
 
+        // Extract limit from raw params before parsing to typed params (MCP extension field)
+        // Clamp to 1000 for DoS protection
+        const DEFAULT_PAGE_SIZE: usize = 50;
+        const MAX_PAGE_SIZE: usize = 1000;
+        let page_size = extract_limit_from_params(&params)
+            .unwrap_or(DEFAULT_PAGE_SIZE)
+            .min(MAX_PAGE_SIZE);
+
         // Parse typed parameters with proper error handling (MCP compliance)
         let list_params = if let Some(params_value) = params {
             serde_json::from_value::<ListPromptsParams>(params_value).map_err(|e| {
@@ -119,7 +142,7 @@ impl McpHandler for PromptsListHandler {
 
         let cursor = list_params.cursor;
 
-        debug!("Listing prompts with cursor: {:?}", cursor);
+        debug!("Listing prompts with cursor: {:?}, limit: {}", cursor, page_size);
 
         // Convert all prompts and sort by name for stable ordering
         let mut all_prompts: Vec<Prompt> = self
@@ -140,10 +163,6 @@ impl McpHandler for PromptsListHandler {
 
         // Sort by name to ensure stable pagination ordering (MCP 2025-06-18 requirement)
         all_prompts.sort_by(|a, b| a.name.cmp(&b.name));
-
-        // Implement cursor-based pagination
-        const DEFAULT_PAGE_SIZE: usize = 50; // MCP suggested default
-        let page_size = DEFAULT_PAGE_SIZE;
 
         // Find starting index based on cursor
         let start_index = if let Some(cursor) = &cursor {
@@ -364,6 +383,14 @@ impl McpHandler for ResourcesListHandler {
         use turul_mcp_protocol::meta::{Cursor, PaginatedResponse};
         use turul_mcp_protocol::resources::{ListResourcesParams, ListResourcesResult, Resource};
 
+        // Extract limit from raw params before parsing to typed params (MCP extension field)
+        // Clamp to 1000 for DoS protection
+        const DEFAULT_PAGE_SIZE: usize = 50;
+        const MAX_PAGE_SIZE: usize = 1000;
+        let page_size = extract_limit_from_params(&params)
+            .unwrap_or(DEFAULT_PAGE_SIZE)
+            .min(MAX_PAGE_SIZE);
+
         // Parse typed parameters with proper error handling (MCP compliance)
         let list_params = if let Some(params_value) = params {
             serde_json::from_value::<ListResourcesParams>(params_value).map_err(|e| {
@@ -375,7 +402,7 @@ impl McpHandler for ResourcesListHandler {
 
         let cursor = list_params.cursor;
 
-        debug!("Listing resources with cursor: {:?}", cursor);
+        debug!("Listing resources with cursor: {:?}, limit: {}", cursor, page_size);
 
         // Convert all resources to descriptors and sort by URI for stable ordering
         let mut all_resources: Vec<Resource> = self
@@ -386,10 +413,6 @@ impl McpHandler for ResourcesListHandler {
 
         // Sort by URI to ensure stable pagination ordering (MCP 2025-06-18 requirement)
         all_resources.sort_by(|a, b| a.uri.cmp(&b.uri));
-
-        // Implement cursor-based pagination
-        const DEFAULT_PAGE_SIZE: usize = 50; // MCP suggested default
-        let page_size = DEFAULT_PAGE_SIZE;
 
         // Find starting index based on cursor
         let start_index = if let Some(cursor) = &cursor {
@@ -974,6 +997,14 @@ impl McpHandler for ResourceTemplatesHandler {
     async fn handle(&self, params: Option<Value>) -> McpResult<Value> {
         use turul_mcp_protocol::meta::Cursor;
 
+        // Extract limit from raw params before parsing to typed params (MCP extension field)
+        // Clamp to 1000 for DoS protection
+        const DEFAULT_PAGE_SIZE: usize = 50;
+        const MAX_PAGE_SIZE: usize = 1000;
+        let page_size = extract_limit_from_params(&params)
+            .unwrap_or(DEFAULT_PAGE_SIZE)
+            .min(MAX_PAGE_SIZE);
+
         // Parse typed parameters with proper error handling (MCP compliance)
         use turul_mcp_protocol::resources::ListResourceTemplatesParams;
         let list_params = if let Some(params_value) = params {
@@ -988,7 +1019,7 @@ impl McpHandler for ResourceTemplatesHandler {
         };
 
         let cursor = list_params.cursor;
-        debug!("Listing resource templates with cursor: {:?}", cursor);
+        debug!("Listing resource templates with cursor: {:?}, limit: {}", cursor, page_size);
 
         tracing::info!(
             "Resource templates list requested - {} templates registered",
@@ -1017,10 +1048,6 @@ impl McpHandler for ResourceTemplatesHandler {
 
         // Sort by uri_template to ensure stable pagination ordering (MCP 2025-06-18 requirement)
         all_templates.sort_by(|a, b| a.uri_template.cmp(&b.uri_template));
-
-        // Implement cursor-based pagination
-        const DEFAULT_PAGE_SIZE: usize = 50; // MCP suggested default
-        let page_size = DEFAULT_PAGE_SIZE;
 
         // Find starting index based on cursor
         let start_index = if let Some(cursor) = &cursor {
