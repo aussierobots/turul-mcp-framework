@@ -191,6 +191,66 @@ accepts_sse=true, server_sse_enabled=false, session_id=..., is_tool_call=true
 - Connection existence checks
 - Notification delivery success/failures
 
+## AWS Lambda Runtime Compatibility
+
+### Lambda Streaming Limitation (Updated 2025-10-02)
+
+**Status**: Known limitation - documented but not fixed
+
+**Problem**: Server-initiated notifications (via `session.notify_progress()`) do not reach clients in AWS Lambda deployments. The `StreamableHttpHandler` spawns background tasks (`tokio::spawn`) to forward notifications, but Lambda's execution model tears down the invocation immediately after the handler returns, killing spawned tasks before notifications can be sent.
+
+**What Works in Lambda**:
+- ✅ Tool calls execute correctly via `StreamableHttpHandler`
+- ✅ Synchronous request/response operations complete successfully
+- ✅ All MCP protocol operations except server-initiated notifications
+
+**What Doesn't Work in Lambda**:
+- ❌ Server-initiated progress notifications (`session.notify_progress()`)
+- ❌ Background task-based notification delivery
+- ❌ POST SSE streaming for notifications
+
+**Why Tool Calls Work**: Tool execution completes synchronously within the Lambda handler's lifetime. The response is fully assembled and returned before Lambda tears down the invocation, so no background tasks are required.
+
+**Why Notifications Don't Work**: Notifications require background tasks to forward messages to the SSE stream. Lambda kills these tasks when the handler returns, preventing notification delivery.
+
+**Decision**: Accept this limitation and document it clearly. The attempted fix (environment detection + routing to SessionMcpHandler) broke working tool calls, causing -32001 timeout errors. The simple solution is to use `StreamableHttpHandler` for all protocol ≥ 2025-03-26 requests and document that notifications don't work in Lambda.
+
+### Routing Logic (Restored 2025-10-02)
+
+Simple protocol-version-based routing without environment detection:
+
+```rust
+// Route based on protocol version only
+let hyper_resp = if protocol_version.supports_streamable_http() {
+    debug!("Using StreamableHttpHandler for protocol {}", protocol_version.to_string());
+    self.streamable_handler.handle_request(hyper_req).await
+} else {
+    debug!("Using SessionMcpHandler for legacy protocol {}", protocol_version.to_string());
+    self.session_handler.handle_mcp_request(hyper_req).await?
+};
+```
+
+**No Lambda Detection**: All Lambda detection code (environment variable checks, capability clamping, routing guards) has been removed. The framework uses simple protocol-version-based routing everywhere.
+
+### Lambda Compatibility Matrix
+
+| Environment | Protocol Version | Handler Used | Tool Calls | Server Notifications |
+|-------------|------------------|--------------|------------|---------------------|
+| Lambda | ≥ 2025-03-26 | StreamableHttpHandler | ✅ Works | ❌ Known limitation |
+| Lambda | ≤ 2024-11-05 | SessionMcpHandler | ✅ Works | ❌ N/A (legacy) |
+| Non-Lambda | ≥ 2025-03-26 | StreamableHttpHandler | ✅ Works | ✅ Works |
+| Non-Lambda | ≤ 2024-11-05 | SessionMcpHandler | ✅ Works | ❌ N/A (legacy) |
+
+### Alternatives for Notification Support
+
+For deployments requiring server-initiated notifications:
+
+- **AWS Fargate**: Container-based, supports long-running processes with background tasks
+- **ECS**: Full container orchestration with persistent connections
+- **EC2**: Traditional server deployment with complete streaming support
+- **Cloud Run (GCP)**: Container platform with streaming response support
+- **Standard HTTP Server**: Any long-running server process (not serverless)
+
 ## Future Considerations
 
 ### Protocol Evolution
@@ -202,6 +262,11 @@ accepts_sse=true, server_sse_enabled=false, session_id=..., is_tool_call=true
 - As clients become more compliant, JsonOnly fallback usage should decrease
 - Server operators can monitor compliance via debug logs
 - Migration path exists to stricter compliance enforcement
+
+### Lambda Streaming Future
+- AWS Lambda may add support for persistent connections/streaming responses
+- If AWS adds this capability, server-initiated notifications may work without code changes
+- Monitor AWS Lambda roadmap for streaming response support
 
 ## Conclusion
 
