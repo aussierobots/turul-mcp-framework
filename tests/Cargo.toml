@@ -186,3 +186,13 @@ path = "readme_examples.rs"
 # path = "e2e_sse_message_flow.rs"
 # DEFERRED: Requires complex API migration (JsonRpcHandler, McpError, JsonRpcDispatcher changes)
 # Replaced by e2e_sse_notification_roundtrip which uses working infrastructure
+
+[[test]]
+name = "output_field_consistency_test"
+path = "output_field_consistency_test.rs"
+
+
+[[test]]
+name = "acronym_output_field_test"
+path = "acronym_output_field_test.rs"
+
