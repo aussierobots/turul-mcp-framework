@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **Output Field Schema/Runtime Consistency**: Fixed bug where `tools/list` schema and `tools/call` structuredContent used different field names when `output = Type` specified without explicit `output_field`. Schema generation and runtime wrapping now consistently use the same field name derived from the type.
+- **Acronym CamelCase Conversion**: Fixed awkward camelCase conversion for all-caps acronyms. `LLH` now converts to `llh` (not `lLH`), `GPS` to `gps` (not `gPS`). Leading acronyms in mixed names also handled correctly: `HTTPServer` → `httpServer`.
+
 ## [0.2.0] - 2025-10-01
 
 ### Added
