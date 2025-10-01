@@ -123,7 +123,11 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         // Generate parameter extraction code
-        let extraction = generate_param_extraction(field_name, field_type, param_meta.optional || is_option_type);
+        let extraction = generate_param_extraction(
+            field_name,
+            field_type,
+            param_meta.optional || is_option_type,
+        );
         param_extractions.push(extraction);
 
         if param_meta.optional && !is_option_type {
