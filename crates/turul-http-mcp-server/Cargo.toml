@@ -1,6 +1,6 @@
 [package]
 name = "turul-http-mcp-server"
-version = "0.2.0"
+version = "0.2.1"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -13,7 +13,9 @@ default = ["sse"]
 sse = []          # Server-Sent Events support
 
 [dependencies]
-turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.2.0", features = ["streams"] }
+turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.2.0", features = [
+  "streams",
+] }
 turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.2.0" }
 turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.2.0" }
 serde.workspace = true
