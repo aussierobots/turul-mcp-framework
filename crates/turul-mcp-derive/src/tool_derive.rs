@@ -145,25 +145,33 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let tool_name = &tool_meta.name;
     let tool_description = &tool_meta.description;
-    let custom_field_name_tokens = match &tool_meta.output_field {
-        Some(field_name) => quote! { Some(#field_name) },
-        None => quote! { None },
+
+    // Determine the output field name consistently for both schema and runtime
+    let runtime_field_name = if let Some(ref output_type) = tool_meta.output_type {
+        // User specified output type - use same logic as schema generation
+        determine_output_field_name(output_type, tool_meta.output_field.as_ref())
+    } else {
+        // Zero-config case - use custom field or default to "output"
+        tool_meta
+            .output_field
+            .clone()
+            .unwrap_or_else(|| "output".to_string())
     };
+
+    let custom_field_name_tokens = quote! { Some(#runtime_field_name) };
 
     // Generate enhanced output schema with struct property introspection
     let output_schema_tokens = if let Some(ref output_type) = tool_meta.output_type {
-        // User specified output type - determine field name and generate enhanced schema
-        let field_name = determine_output_field_name(output_type, tool_meta.output_field.as_ref());
-        generate_enhanced_output_schema(output_type, &field_name, Some(&input))
+        // User specified output type - generate enhanced schema with same field name
+        generate_enhanced_output_schema(output_type, &runtime_field_name, Some(&input))
     } else {
-        // Zero-config case - generate type-aware schema using heuristics
-        let field_name = tool_meta.output_field.as_deref().unwrap_or("output");
+        // Zero-config case - generate type-aware schema using heuristics with same field name
         let struct_name_str = name.to_string();
         quote! {
             fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
                 static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                 Some(OUTPUT_SCHEMA.get_or_init(|| {
-                    Self::generate_heuristic_schema(#field_name, #struct_name_str)
+                    Self::generate_heuristic_schema(#runtime_field_name, #struct_name_str)
                 }))
             }
         }

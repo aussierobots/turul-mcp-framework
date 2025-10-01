@@ -989,12 +989,48 @@ pub fn determine_output_field_name(ty: &syn::Type, custom_field: Option<&String>
 }
 
 /// Convert struct name to camelCase for field names
+/// Handles special cases:
+/// - All-caps acronyms: LLH → llh, GPS → gps
+/// - Leading acronyms: HTTPServer → httpServer
+/// - Regular names: LocationData → locationData
 fn struct_to_camel_case(struct_name: &str) -> String {
-    let mut chars: Vec<char> = struct_name.chars().collect();
-    if !chars.is_empty() {
-        chars[0] = chars[0].to_lowercase().next().unwrap_or(chars[0]);
+    let chars: Vec<char> = struct_name.chars().collect();
+    if chars.is_empty() {
+        return String::new();
     }
-    chars.into_iter().collect()
+
+    // Check if entire name is uppercase (acronym like LLH, GPS, HTTP)
+    if chars.iter().all(|c| c.is_uppercase() || !c.is_alphabetic()) {
+        return struct_name.to_lowercase();
+    }
+
+    // Find where the leading uppercase sequence ends
+    // HTTPServer → http_Server (lowercase leading acronym)
+    // LocationData → location_Data (just first letter)
+    let mut lowercase_until = 1; // At minimum, lowercase first character
+
+    for i in 1..chars.len() {
+        if chars[i].is_uppercase() {
+            if i + 1 < chars.len() && chars[i + 1].is_lowercase() {
+                // HTTPServer: at 'S', next is 'e' (lowercase), so stop before 'S'
+                break;
+            }
+            lowercase_until = i + 1;
+        } else {
+            // Hit a lowercase letter, stop
+            break;
+        }
+    }
+
+    let mut result = String::new();
+    for (i, ch) in chars.iter().enumerate() {
+        if i < lowercase_until {
+            result.extend(ch.to_lowercase());
+        } else {
+            result.push(*ch);
+        }
+    }
+    result
 }
 
 /// Generate enhanced output schema with struct property introspection
