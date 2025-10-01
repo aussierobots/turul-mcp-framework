@@ -704,9 +704,48 @@ impl StreamableHttpHandler {
         };
 
         // 4. Stream responses back with progressive message delivery
-        // For now, return the response immediately - TODO: implement actual streaming
+        // MCP 2025-06-18 Streamable HTTP: POST responses can stream SSE events
+        // If client sends Accept: text/event-stream, we:
+        // 1. Wait for async notifications to complete (50ms delay in create_post_sse_stream)
+        // 2. Retrieve recent events from session storage
+        // 3. Stream notifications as SSE events
+        // 4. Send JSON-RPC response as final SSE event
+        // Otherwise, return standard JSON response (backwards compatible)
         match message_result {
             JsonRpcMessageResult::Response(response) => {
+                // Check if client wants SSE stream (Accept: text/event-stream)
+                if context.wants_sse_stream() {
+                    debug!(
+                        "Client requested SSE streaming for POST response (session: {})",
+                        session_id
+                    );
+                    // Use existing create_post_sse_stream method
+                    match self
+                        .stream_manager
+                        .create_post_sse_stream(session_id.clone(), response.clone())
+                        .await
+                    {
+                        Ok(sse_response) => {
+                            debug!("✅ POST SSE stream created successfully");
+                            // Convert BoxBody<Infallible> → UnsyncBoxBody<hyper::Error>
+                            return sse_response
+                                .map(|body| body.map_err(|never| match never {}).boxed_unsync());
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to create POST SSE stream, falling back to JSON: {}",
+                                e
+                            );
+                            // Fall through to JSON response below
+                        }
+                    }
+                }
+
+                // JSON response (default or fallback)
+                debug!(
+                    "Returning JSON response for POST request (session: {})",
+                    session_id
+                );
                 let response_json = serde_json::to_string(&response)
                     .unwrap_or_else(|_| r#"{"error": "Failed to serialize response"}"#.to_string());
 
@@ -718,9 +757,9 @@ impl StreamableHttpHandler {
                     .body(Full::new(Bytes::from(response_json)))
                     .unwrap()
                     .map(|body| body.map_err(|never| match never {}).boxed_unsync())
-                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
             }
             JsonRpcMessageResult::Error(error) => {
+                // Errors are immediate - no SSE streaming needed
                 let error_json = serde_json::to_string(&error)
                     .unwrap_or_else(|_| r#"{"error": "Internal error"}"#.to_string());
 
@@ -732,7 +771,6 @@ impl StreamableHttpHandler {
                     .body(Full::new(Bytes::from(error_json)))
                     .unwrap()
                     .map(|body| body.map_err(|never| match never {}).boxed_unsync())
-                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
             }
             JsonRpcMessageResult::NoResponse => {
                 // Notifications return 202 Accepted per MCP spec
@@ -742,7 +780,6 @@ impl StreamableHttpHandler {
                     .header("Mcp-Session-Id", &session_id)
                     .body(Full::new(Bytes::new()))
                     .unwrap()
-                    .map(|body| body.map_err(|never| match never {}).boxed_unsync())
                     .map(|body| body.map_err(|never| match never {}).boxed_unsync())
             }
         }
