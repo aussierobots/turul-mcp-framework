@@ -7,9 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2025-10-03
+
 ### Fixed
+- **MCP Inspector SSE Compatibility**: Changed all SSE events to use standard `event: message` type instead of custom event types. JavaScript EventSource API only processes `event: message` or omitted event lines. This fix ensures all notifications (including `notifications/progress`) are visible in MCP Inspector.
+- **Lambda DynamoDB Notification Timing**: Added `.consistent_read(true)` to DynamoDB queries in `get_recent_events()` and `get_events_after()`. Fixes race condition where notifications worked on reconnect but not initial Lambda invocation due to eventual consistency.
+- **POST SSE Response Timing**: Removed unnecessary 50ms sleep in `create_post_sse_stream()` that was a workaround, not a proper fix. Tool execution is fully awaited, so notifications are immediately available with consistent reads.
 - **Output Field Schema/Runtime Consistency**: Fixed bug where `tools/list` schema and `tools/call` structuredContent used different field names when `output = Type` specified without explicit `output_field`. Schema generation and runtime wrapping now consistently use the same field name derived from the type.
 - **Acronym CamelCase Conversion**: Fixed awkward camelCase conversion for all-caps acronyms. `LLH` now converts to `llh` (not `lLH`), `GPS` to `gps` (not `gPS`). Leading acronyms in mixed names also handled correctly: `HTTPServer` → `httpServer`.
+
+### Changed
+- **SSE Event Formatting**: Keepalive events now use SSE comment syntax (`: keepalive`) instead of `event: ping` for better client compatibility.
+- **DynamoDB Consistency**: Event queries now use strongly consistent reads (2x RCU cost) to guarantee notification visibility.
+
+### Tests
+- Updated all SSE-related tests to expect `event: message` format
+- Added keepalive-specific test cases for comment syntax
+- All 440+ tests passing
 
 ## [0.2.0] - 2025-10-01
 
@@ -70,5 +84,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
+[0.2.1]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/aussierobots/turul-mcp-framework/releases/tag/v0.1.0
