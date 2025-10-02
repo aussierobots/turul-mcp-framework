@@ -2,8 +2,13 @@
 
 A **streaming-enabled** serverless Model Context Protocol (MCP) server built with Rust for real-time SSE notifications. This implementation showcases:
 
+> **⚠️ IMPORTANT: Lambda SSE Streaming Limitation**  
+> Lambda's execution model has inherent conflicts with long-lived SSE streams. While this example demonstrates the architecture, **production deployments should use regular HTTP servers (not Lambda) for SSE notifications**. See [ADR-011](../../docs/adr/ADR-011-lambda-streaming-limitations.md) for technical details.  
+> **Use this example for**: Learning the architecture, testing tool calls, short-lived responses  
+> **Not for**: Production SSE streaming (use Axum/Hyper servers instead)
+
 - 🚀 **MCP 2025-06-18 Streamable HTTP Compliance**: POST JSON-RPC + real-time SSE streaming, session management
-- 🌊 **Real Streaming**: Uses `run_with_streaming_response` for true SSE event delivery (higher Lambda costs)
+- 🌊 **Real Streaming**: Uses `run_with_streaming_response` for true SSE event delivery (higher Lambda costs, **limited reliability**)
 - 🔄 **Clean Notification Architecture**: tokio broadcast channels for internal events, SNS for external events
 - 📡 **True Fan-out**: Multiple SSE connections share events via tokio broadcast - no competition
 - 🔧 **Advanced Session Management**: DynamoDB-backed stateless Lambda with pk/sk schema  
