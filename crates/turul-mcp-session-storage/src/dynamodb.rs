@@ -1626,6 +1626,7 @@ impl SessionStorage for DynamoDbSessionStorage {
                     AttributeValue::N(after_event_id.to_string()),
                 )
                 .scan_index_forward(true) // Sort by event_id ascending
+                .consistent_read(true) // Use strongly consistent reads for resumability
                 .send()
                 .await
                 .map_err(|e| DynamoDbError::AwsError(e.to_string()))?;
@@ -1714,6 +1715,7 @@ impl SessionStorage for DynamoDbSessionStorage {
                 )
                 .scan_index_forward(false) // Sort by event_id descending (most recent first)
                 .limit(limit as i32)
+                .consistent_read(true) // Use strongly consistent reads to see just-written events
                 .send()
                 .await
                 .map_err(|e| DynamoDbError::AwsError(e.to_string()))?;

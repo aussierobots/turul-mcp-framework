@@ -707,11 +707,9 @@ impl StreamManager {
             StreamError::StorageError(format!("Failed to serialize response: {}", e))
         })?;
 
-        // 1. Include recent notifications that may have been generated during tool execution
-        // Note: Since tool notifications are processed asynchronously, we need to wait a moment
-        // and then check for recent events to include in the POST SSE response
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
+        // 1. Include recent notifications that were generated during tool execution
+        // Tool execution is fully awaited, and storage writes use consistent reads,
+        // so all notifications should be immediately available
         let mut sse_frames = Vec::new();
         let mut event_id_counter = 1;
 
