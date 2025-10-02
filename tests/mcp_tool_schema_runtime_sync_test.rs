@@ -10,9 +10,9 @@
 //! Tests specifically cover the CountAnnouncements scenario where derive macros
 //! can generate mismatched schema vs runtime output.
 
+use serde::{Deserialize, Serialize};
 use serde_json::json;
-use serde::{Serialize, Deserialize};
-use turul_mcp_derive::{mcp_tool, McpTool};
+use turul_mcp_derive::{McpTool, mcp_tool};
 use turul_mcp_protocol::tools::{HasOutputSchema, ToolDefinition};
 use turul_mcp_server::{McpResult, McpTool, SessionContext};
 
@@ -159,8 +159,14 @@ async fn test_count_announcements_schema_runtime_sync() {
         assert!(count_result.is_object(), "countResult should be an object");
 
         let count_obj = count_result.as_object().unwrap();
-        assert!(count_obj.contains_key("count"), "countResult should have 'count' field");
-        assert!(count_obj.contains_key("message"), "countResult should have 'message' field");
+        assert!(
+            count_obj.contains_key("count"),
+            "countResult should have 'count' field"
+        );
+        assert!(
+            count_obj.contains_key("message"),
+            "countResult should have 'message' field"
+        );
         assert_eq!(count_obj["count"], 2, "Should count 2 announcements");
     }
 }
@@ -177,14 +183,14 @@ async fn test_custom_calculator_schema_runtime_sync() {
     let schema = tool.output_schema();
     assert!(schema.is_some(), "Tool should have output schema");
 
-    if let Some(schema) = schema {
-        if let Some(properties) = &schema.properties {
-            assert!(
-                properties.contains_key("calculationResult"),
-                "Schema should contain 'calculationResult' field, got: {:?}",
-                properties.keys().collect::<Vec<_>>()
-            );
-        }
+    if let Some(schema) = schema
+        && let Some(properties) = &schema.properties
+    {
+        assert!(
+            properties.contains_key("calculationResult"),
+            "Schema should contain 'calculationResult' field, got: {:?}",
+            properties.keys().collect::<Vec<_>>()
+        );
     }
 
     // Check runtime output
@@ -217,15 +223,15 @@ async fn test_default_output_field_behavior() {
     let schema = tool.output_schema();
     assert!(schema.is_some());
 
-    if let Some(schema) = schema {
-        if let Some(properties) = &schema.properties {
-            // With no custom output_field, should use "output"
-            assert!(
-                properties.contains_key("output"),
-                "Default schema should contain 'output' field, got: {:?}",
-                properties.keys().collect::<Vec<_>>()
-            );
-        }
+    if let Some(schema) = schema
+        && let Some(properties) = &schema.properties
+    {
+        // With no custom output_field, should use "output"
+        assert!(
+            properties.contains_key("output"),
+            "Default schema should contain 'output' field, got: {:?}",
+            properties.keys().collect::<Vec<_>>()
+        );
     }
 
     // Check runtime output uses default "output" field
@@ -255,14 +261,14 @@ async fn test_function_tool_custom_field_sync() {
     let schema = tool.output_schema();
     assert!(schema.is_some());
 
-    if let Some(schema) = schema {
-        if let Some(properties) = &schema.properties {
-            assert!(
-                properties.contains_key("functionResult"),
-                "Function tool schema should contain 'functionResult' field, got: {:?}",
-                properties.keys().collect::<Vec<_>>()
-            );
-        }
+    if let Some(schema) = schema
+        && let Some(properties) = &schema.properties
+    {
+        assert!(
+            properties.contains_key("functionResult"),
+            "Function tool schema should contain 'functionResult' field, got: {:?}",
+            properties.keys().collect::<Vec<_>>()
+        );
     }
 
     // Check runtime output
@@ -331,15 +337,19 @@ async fn test_tools_list_metadata_consistency() {
     // Structured content must match the schema from tools/list
     if let Some(structured) = count_result.structured_content {
         if let Some(structured_obj) = structured.as_object() {
-            assert!(structured_obj.contains_key("countResult"),
-                   "tools/call output must match tools/list schema field names");
+            assert!(
+                structured_obj.contains_key("countResult"),
+                "tools/call output must match tools/list schema field names"
+            );
         }
     }
 
     if let Some(structured) = calc_result.structured_content {
         if let Some(structured_obj) = structured.as_object() {
-            assert!(structured_obj.contains_key("calculationResult"),
-                   "tools/call output must match tools/list schema field names");
+            assert!(
+                structured_obj.contains_key("calculationResult"),
+                "tools/call output must match tools/list schema field names"
+            );
         }
     }
 }
@@ -440,7 +450,10 @@ struct OptionalParamTestTool {
 
 impl OptionalParamTestTool {
     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-        Ok(format!("Required: {}, Optional: {}", self.required_param, self.optional_param))
+        Ok(format!(
+            "Required: {}, Optional: {}",
+            self.required_param, self.optional_param
+        ))
     }
 }
 
@@ -477,14 +490,21 @@ async fn test_optional_parameter_bug_fix() {
     let result = tool.call(args_without_optional, None).await;
 
     println!("Result without optional: {:?}", result);
-    assert!(result.is_ok(), "Tool should execute successfully without optional parameter");
+    assert!(
+        result.is_ok(),
+        "Tool should execute successfully without optional parameter"
+    );
 
     // Test runtime execution with optional parameter
-    let args_with_optional = json!({"required_param": "test_value", "optional_param": "optional_value"});
+    let args_with_optional =
+        json!({"required_param": "test_value", "optional_param": "optional_value"});
     let result = tool.call(args_with_optional, None).await;
 
     println!("Result with optional: {:?}", result);
-    assert!(result.is_ok(), "Tool should execute successfully with optional parameter");
+    assert!(
+        result.is_ok(),
+        "Tool should execute successfully with optional parameter"
+    );
 
     println!("✅ Optional parameter bug fix verified!");
 }
@@ -499,7 +519,10 @@ async fn test_zero_config_tool_uses_output_field() {
 
     // Test 1: Verify schema uses "output" field
     let schema = tool.output_schema();
-    assert!(schema.is_some(), "Zero-config tool should have output schema");
+    assert!(
+        schema.is_some(),
+        "Zero-config tool should have output schema"
+    );
 
     if let Some(schema) = schema {
         println!("Zero-config tool schema: {:#?}", schema);
@@ -545,9 +568,18 @@ async fn test_zero_config_tool_uses_output_field() {
         assert!(output_data.is_object(), "Output should be an object");
 
         let output_obj = output_data.as_object().unwrap();
-        assert!(output_obj.contains_key("count"), "Output should have 'count' field");
-        assert!(output_obj.contains_key("message"), "Output should have 'message' field");
-        assert_eq!(output_obj["count"], 11, "Should count 11 characters in 'hello world'");
+        assert!(
+            output_obj.contains_key("count"),
+            "Output should have 'count' field"
+        );
+        assert!(
+            output_obj.contains_key("message"),
+            "Output should have 'message' field"
+        );
+        assert_eq!(
+            output_obj["count"], 11,
+            "Should count 11 characters in 'hello world'"
+        );
     }
 
     println!("✅ Zero-config tool schema/runtime consistency verified!");

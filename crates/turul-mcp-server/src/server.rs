@@ -988,22 +988,21 @@ impl JsonRpcHandler for ListToolsHandler {
         debug!("Handling {} request", method);
 
         // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled)
-        if self.strict_lifecycle {
-            if let (Some(session_manager), Some(session_ctx)) =
+        if self.strict_lifecycle
+            && let (Some(session_manager), Some(session_ctx)) =
                 (&self.session_manager, &session_context)
-            {
-                let session_initialized = session_manager
-                    .is_session_initialized(&session_ctx.session_id)
-                    .await;
-                if !session_initialized {
-                    debug!(
-                        "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
-                        method, session_ctx.session_id
-                    );
-                    return Err(McpError::SessionError(
-                        "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)".to_string()
-                    ));
-                }
+        {
+            let session_initialized = session_manager
+                .is_session_initialized(&session_ctx.session_id)
+                .await;
+            if !session_initialized {
+                debug!(
+                    "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
+                    method, session_ctx.session_id
+                );
+                return Err(McpError::SessionError(
+                    "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)".to_string()
+                ));
             }
         }
 
@@ -1042,12 +1041,12 @@ impl JsonRpcHandler for ListToolsHandler {
         const MAX_LIMIT: u32 = 100; // Framework-specific DoS protection
 
         // Validate limit parameter - MCP spec requires positive integer
-        if let Some(limit) = list_params.limit {
-            if limit == 0 {
-                return Err(McpError::InvalidParameters(
-                    "limit must be a positive integer (> 0)".to_string(),
-                ));
-            }
+        if let Some(limit) = list_params.limit
+            && limit == 0
+        {
+            return Err(McpError::InvalidParameters(
+                "limit must be a positive integer (> 0)".to_string(),
+            ));
         }
 
         // Apply limit clamping for DoS protection (framework extension)
