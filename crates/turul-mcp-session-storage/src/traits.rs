@@ -118,14 +118,24 @@ impl SseEvent {
     }
 
     /// Format as SSE message for HTTP response
+    ///
+    /// MCP Inspector and the official TypeScript SDK only process SSE events
+    /// with no event name or "message". Custom event names are discarded.
+    /// We use "message" for all JSON-RPC notifications to ensure compatibility.
     pub fn format(&self) -> String {
         let mut result = String::new();
 
         // Event ID for resumability
         result.push_str(&format!("id: {}\n", self.id));
 
-        // Event type
-        result.push_str(&format!("event: {}\n", self.event_type));
+        // Event type - MCP Inspector only processes "message" or empty event names
+        // Use "message" for JSON-RPC notifications, empty for keepalives
+        if self.event_type == "ping" || self.event_type == "keepalive" {
+            // Omit event line for keepalives (default event type)
+        } else {
+            // Use "message" for all JSON-RPC notifications (MCP Inspector compatible)
+            result.push_str("event: message\n");
+        }
 
         // Event data (JSON)
         if let Ok(data_str) = serde_json::to_string(&self.data) {

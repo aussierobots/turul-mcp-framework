@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use turul_mcp_session_storage::SseEvent;
 
@@ -155,6 +155,11 @@ impl StreamManager {
         Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>,
         StreamError,
     > {
+        info!(
+            "🌊 handle_sse_connection called: session={}, connection={}, last_event_id={:?}",
+            session_id, connection_id, last_event_id
+        );
+
         // Verify session exists
         if self
             .storage
@@ -167,11 +172,16 @@ impl StreamManager {
         }
 
         // Create the SSE stream (one per connection, MCP compliant)
+        debug!(
+            "🌊 Creating SSE stream for session={}, connection={}",
+            session_id, connection_id
+        );
         let sse_stream = self
             .create_sse_stream(session_id.clone(), connection_id.clone(), last_event_id)
             .await?;
 
         // Convert to HTTP response
+        debug!("🌊 Converting SSE stream to HTTP response");
         let response = self.stream_to_response(sse_stream).await;
 
         debug!(
@@ -204,20 +214,21 @@ impl StreamManager {
 
         let combined_stream = async_stream::stream! {
             // 1. First, yield any historical events (resumability)
-            if let Some(after_event_id) = last_event_id {
-                debug!("Replaying events after ID {} for session={}, connection={}",
-                       after_event_id, session_id_clone, connection_id_clone);
+            let after_id = last_event_id.unwrap_or(0);
+            debug!("🌊 Fetching events after ID {} for session={}, connection={}",
+                   after_id, session_id_clone, connection_id_clone);
 
-                match storage.get_events_after(&session_id_clone, after_event_id).await {
-                    Ok(events) => {
-                        for event in events.into_iter().take(config.max_replay_events) {
-                            yield event;
-                        }
-                    },
-                    Err(e) => {
-                        error!("Failed to get historical events: {}", e);
-                        // Continue with real-time events even if historical replay fails
+            match storage.get_events_after(&session_id_clone, after_id).await {
+                Ok(events) => {
+                    debug!("🌊 Found {} stored events to send", events.len());
+                    for event in events.into_iter().take(config.max_replay_events) {
+                        debug!("🌊 Yielding event: id={}, type={}", event.id, event.event_type);
+                        yield event;
                     }
+                },
+                Err(e) => {
+                    error!("Failed to get historical events: {}", e);
+                    // Continue with real-time events even if historical replay fails
                 }
             }
 
@@ -477,8 +488,13 @@ impl StreamManager {
         store_when_no_connections: bool,
     ) -> Result<u64, StreamError> {
         // Check subscription filtering first
-        if !self.is_subscribed(session_id, &event_type).await {
-            debug!(
+        let is_subscribed = self.is_subscribed(session_id, &event_type).await;
+        info!(
+            "🔍 Subscription check: session={}, event_type={}, is_subscribed={}",
+            session_id, event_type, is_subscribed
+        );
+        if !is_subscribed {
+            warn!(
                 "🚫 Session {} not subscribed to notification type: {}",
                 session_id, event_type
             );
