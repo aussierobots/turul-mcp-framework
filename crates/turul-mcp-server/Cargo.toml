@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-server"
-version = "0.2.0"
+version = "0.2.1"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -19,11 +19,11 @@ test-utils = []
 
 [dependencies]
 # Framework dependencies
-turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.2.0" }
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.2.0" }
-turul-mcp-protocol-2025-06-18 = { path = "../turul-mcp-protocol-2025-06-18", version = "0.2.0" }
-turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.2.0" }
-turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.2.0" }
+turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.2.1" }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.2.1" }
+turul-mcp-protocol-2025-06-18 = { path = "../turul-mcp-protocol-2025-06-18", version = "0.2.1" }
+turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.2.1" }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.2.1" }
 turul-http-mcp-server = { path = "../turul-http-mcp-server", optional = true, version = "0.2.1" }
 
 # Core dependencies
@@ -41,4 +41,4 @@ once_cell = "1.19"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
-turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.2.0" }
+turul-mcp-builders = { path = "../turul-mcp-builders", version = "0.2.1" }

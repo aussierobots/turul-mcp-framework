@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-client"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Comprehensive MCP client library with multi-transport support"
 license = "MIT OR Apache-2.0"
@@ -8,9 +8,9 @@ repository = "https://github.com/aussierobots/turul-mcp-framework"
 
 [dependencies]
 # MCP framework dependencies
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.2.0" }
-turul-mcp-protocol-2025-06-18 = { path = "../turul-mcp-protocol-2025-06-18", version = "0.2.0" }
-turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.2.0" }
+turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.2.1" }
+turul-mcp-protocol-2025-06-18 = { path = "../turul-mcp-protocol-2025-06-18", version = "0.2.1" }
+turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.2.1" }
 
 # Async runtime
 tokio = { workspace = true, features = ["full"] }

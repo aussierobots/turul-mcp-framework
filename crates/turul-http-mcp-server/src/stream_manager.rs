@@ -720,14 +720,14 @@ impl StreamManager {
                 // Convert stored SSE event to notification JSON-RPC format
                 if event.event_type != "ping" {
                     // Skip keepalive events
+                    // Use "message" event type for MCP Inspector compatibility
+                    // The JSON-RPC method is already in the data payload
                     let notification_sse = format!(
-                        "id: {}\nevent: {}\ndata: {}\n\n",
-                        event_id_counter,
-                        event.event_type, // Use actual event type (e.g., "notifications/message")
-                        event.data
+                        "id: {}\nevent: message\ndata: {}\n\n",
+                        event_id_counter, event.data
                     );
                     debug!(
-                        "📤 Including notification in POST SSE stream: id={}, event_type={}",
+                        "📤 Including notification in POST SSE stream: id={}, json_rpc_method={}",
                         event_id_counter, event.event_type
                     );
                     sse_frames.push(http_body::Frame::data(Bytes::from(notification_sse)));
@@ -737,12 +737,13 @@ impl StreamManager {
         }
 
         // 2. Add the JSON-RPC tool response
+        // Use "message" event type for MCP Inspector compatibility
         let response_sse = format!(
-            "id: {}\nevent: result\ndata: {}\n\n", // Tool responses use "result" event type
+            "id: {}\nevent: message\ndata: {}\n\n",
             event_id_counter, response_json
         );
         debug!(
-            "📤 Sending JSON-RPC response as SSE event: id={}, event=result",
+            "📤 Sending JSON-RPC response as SSE event: id={}, event=message",
             event_id_counter
         );
         sse_frames.push(http_body::Frame::data(Bytes::from(response_sse)));
