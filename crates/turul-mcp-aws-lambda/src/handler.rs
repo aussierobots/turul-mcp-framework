@@ -72,14 +72,12 @@ impl LambdaMcpHandler {
         );
 
         // Create StreamableHttpHandler for MCP 2025-06-18 support
-        // Note: Tool calls work in Lambda (synchronous execution)
-        // Server-initiated notifications may not work (background tasks killed)
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(config.clone()),
             dispatcher.clone(),
             session_storage.clone(),
             stream_manager.clone(),
-            capabilities,
+            capabilities.clone(),
         );
 
         Self {
@@ -249,9 +247,6 @@ impl LambdaMcpHandler {
             .unwrap_or(McpProtocolVersion::V2025_06_18);
 
         // Route based on protocol version
-        // Note: StreamableHttpHandler works for tool calls (synchronous execution)
-        // but notifications may not work in Lambda due to background tasks being
-        // killed when the handler returns. This is documented as a known limitation.
         let hyper_resp = if protocol_version.supports_streamable_http() {
             // Use StreamableHttpHandler for MCP 2025-06-18 (proper headers, chunked SSE)
             debug!(
@@ -702,5 +697,4 @@ mod tests {
         // Note: GET /mcp would provide real-time streaming events
         // This is the optimal configuration for real-time notifications
     }
-
 }
