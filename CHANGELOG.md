@@ -7,16 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Lambda Compilation**: Fixed `LambdaError::Config` → `LambdaError::Configuration` in builder.rs
+
 ### Changed
-- **Code Quality**: Fixed 110+ clippy warnings across workspace (156 → ~45 remaining, 71% reduction)
+- **Code Quality**: Fixed 120+ clippy warnings across workspace (156 → 87 remaining, 44% reduction)
   - Replaced `get().is_none()` with idiomatic `!contains_key()` (2 instances)
-  - Collapsed nested if statements using let-chain syntax (54 instances)
+  - Collapsed nested if statements using let-chain syntax (56 instances)
   - Used `std::io::Error::other()` for concise error creation (1 instance)
   - Replaced `let _ = future` with explicit `drop()` for async clarity (1 instance)
-  - Removed redundant closure wrappers (2 instances)
+  - Removed redundant closure wrappers (3 instances)
   - Fixed borrowed expression warnings - removed unnecessary `&` (10 instances)
   - Fixed length comparison warnings - use `.is_empty()` instead of `.len() > 0` (6 instances)
   - Removed redundant imports (6 instances)
+  - Replaced `unwrap_or_else(T::default)` with `unwrap_or_default()` (1 instance)
+  - Fixed method comparison to use dereference instead of reference (1 instance)
+  - Replaced match patterns with dereferenced value for cleaner code (3 instances)
+  - Used `is_err()` instead of `if let Err(_)` pattern matching (1 instance)
+  - Replaced `.min().max()` with `.clamp()` for range bounds (3 instances)
+  - Used `Option::map` instead of manual if-let-Some mapping (1 instance)
+  - Removed useless `format!()` macro for static strings (1 instance)
+  - Replaced `vec![]` with array `[]` for static data (1 instance)
 
 ### Documentation
 - **Doctests**: All doctests now passing in core crates
