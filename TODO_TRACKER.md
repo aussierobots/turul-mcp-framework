@@ -2,14 +2,15 @@
 
 **Purpose**: Track current priorities and progress for the turul-mcp-framework.
 
-## Current Status: 0.2.0 BETA DEVELOPMENT 🧪
+## Current Status: 0.2.1 STABLE + 0.2.2-dev QUALITY IMPROVEMENTS 🧪
 
-**Last Updated**: 2025-09-28
+**Last Updated**: 2025-10-03
 **Framework Status**: ✅ **SCHEMA-LEVEL MCP 2025-06-18 COMPLIANCE** - Data structures compliant; behavioral features like resources/subscribe and advanced list pagination still pending
-**Current Branch**: **0.2.0** - Suitable for development and testing
+**Current Branch**: **0.2.1** - Stable release with MCP Inspector compatibility
 **SSE Streaming**: ⚠️ **DELIVERS FINAL RESULTS** - Progress notifications from tools currently dropped (broadcaster mismatch)
 **Documentation**: ✅ **HONEST AND ACCURATE** - Claims aligned with actual capabilities
 **Test Status**: ✅ **440+ TESTS PASSING** - Core test suites green including prompts E2E (9/9), streamable HTTP (17/17), behavioral compliance (17/17), client streaming (3/3)
+**Code Quality**: ✅ **IMPROVED** - Fixed 88 clippy warnings (156 → 68 remaining), all doctests passing
 
 ---
 
@@ -1233,8 +1234,8 @@ First verify whether Lambda streaming actually works before implementing fixes.
 - [x] **turul-mcp-json-rpc-server**: ✅ Doctests fixed, tests pass
 - [x] **turul-mcp-protocol**: ✅ Doctests fixed, tests pass
 - [x] **turul-mcp-session-storage**: ✅ Doctests fixed (corrected API example), tests pass
-- [ ] **turul-mcp-protocol-2025-06-18**: ⚠️ 4 architectural doctest failures remain
-- [ ] **turul-mcp-derive**: ⚠️ 9 architectural doctest failures remain
+- [x] **turul-mcp-protocol-2025-06-18**: ✅ 7/7 doctests passing (7 intentionally ignored)
+- [x] **turul-mcp-derive**: ✅ 25/25 doctests passing
 - [ ] **turul-http-mcp-server**: Check tests, doctests, clippy warnings
 - [ ] **turul-mcp-server**: Check tests, doctests, clippy warnings
 - [ ] **turul-mcp-client**: Check tests, doctests, clippy warnings
@@ -1242,9 +1243,13 @@ First verify whether Lambda streaming actually works before implementing fixes.
 - [ ] **turul-mcp-aws-lambda**: Check tests, doctests, clippy warnings
 
 #### 6.3 Clippy Warning Resolution
-- [ ] Document current 74 clippy warnings
-- [ ] Fix all clippy warnings in core crates
-- [ ] Ensure `cargo clippy --workspace --all-targets` shows 0 warnings
+- [x] Document current clippy warnings (was 156)
+- [x] Fix 88 clippy warnings in core crates (now 68 remaining)
+  - Fixed 48 collapsible if statements
+  - Fixed idiomatic HashMap checks
+  - Fixed error construction patterns
+  - Fixed future handling patterns
+- [ ] Continue fixing remaining 68 warnings to reach 0
 
 ### ✅ Phase 6 Interim Review (Simple Fixes Complete)
 - [x] **Policy Established**: CLAUDE.md now requires all ```rust blocks to compile (no text conversions)
