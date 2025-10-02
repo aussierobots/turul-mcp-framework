@@ -141,9 +141,14 @@ mod tests {
         };
         let response: Value = serde_json::from_str(content).unwrap();
 
-        assert_eq!(response["value"]["input"], "hello");
-        assert_eq!(response["value"]["call_count"], 1);
-        assert!(!response["value"]["session_id"].as_str().unwrap().is_empty());
+        assert_eq!(response["output"]["input"], "hello");
+        assert_eq!(response["output"]["call_count"], 1);
+        assert!(
+            !response["output"]["session_id"]
+                .as_str()
+                .unwrap()
+                .is_empty()
+        );
 
         // Note: Skip second call test to avoid async deadlock issues in test
         // The state persistence works but testing it requires avoiding sync calls in async context
@@ -163,8 +168,8 @@ mod tests {
         };
         let response: Value = serde_json::from_str(content).unwrap();
 
-        assert_eq!(response["value"]["input"], "test");
-        assert_eq!(response["value"]["message"], "No session needed");
+        assert_eq!(response["output"]["input"], "test");
+        assert_eq!(response["output"]["message"], "No session needed");
     }
 
     #[tokio::test]
@@ -266,7 +271,7 @@ mod tests {
             _ => panic!("Expected text content"),
         };
         let response1: Value = serde_json::from_str(content1).unwrap();
-        assert_eq!(response1["value"]["call_count"], 1);
+        assert_eq!(response1["output"]["call_count"], 1);
 
         // Use function macro tool - skip setting state to avoid deadlock
         let function_tool = test_function_with_session();

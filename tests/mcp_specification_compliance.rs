@@ -28,7 +28,9 @@ async fn test_runtime_capability_truthfulness() {
         .expect("Failed to initialize with server");
 
     // Validate that server's actual capabilities match MCP truthfulness requirements
-    if let Some(capabilities) = initialize_result.get("capabilities") {
+    if let Some(result) = initialize_result.get("result")
+        && let Some(capabilities) = result.get("capabilities")
+    {
         // Validate resources capabilities
         if let Some(resources) = capabilities.get("resources") {
             // Framework is static, so listChanged MUST be false (if present)
@@ -97,40 +99,45 @@ async fn test_capabilities_truthful_advertising() {
         .await
         .expect("Failed to initialize with server");
 
-    if let Some(server_capabilities) = initialize_result.get("capabilities") {
+    if let Some(result) = initialize_result.get("result")
+        && let Some(server_capabilities) = result.get("capabilities")
+    {
         // Test MCP compliance rule: Only advertise capabilities you actually support
 
         // Check resources capabilities
         if let Some(resources) = server_capabilities.get("resources") {
             if let Some(list_changed) = resources.get("listChanged")
-                && list_changed == true {
-                    // If server advertises listChanged=true, it MUST be able to emit notifications
-                    // For now, our framework is static, so this should be false
-                    println!("⚠️  Server advertises resources.listChanged=true");
-                    println!("    This requires actual notification emission capability");
+                && list_changed == true
+            {
+                // If server advertises listChanged=true, it MUST be able to emit notifications
+                // For now, our framework is static, so this should be false
+                println!("⚠️  Server advertises resources.listChanged=true");
+                println!("    This requires actual notification emission capability");
 
-                    // In the future, when we add dynamic resources, we would test:
-                    // 1. Can server actually emit notifications/resources/listChanged?
-                    // 2. Is SSE properly wired for notification delivery?
-                    // For now, static framework should advertise false
-                }
+                // In the future, when we add dynamic resources, we would test:
+                // 1. Can server actually emit notifications/resources/listChanged?
+                // 2. Is SSE properly wired for notification delivery?
+                // For now, static framework should advertise false
+            }
 
             if let Some(subscribe) = resources.get("subscribe")
-                && subscribe == true {
-                    // If server advertises subscribe=true, it MUST support resource subscriptions
-                    println!("⚠️  Server advertises resources.subscribe=true");
-                    println!("    This requires subscription management capability");
-                }
+                && subscribe == true
+            {
+                // If server advertises subscribe=true, it MUST support resource subscriptions
+                println!("⚠️  Server advertises resources.subscribe=true");
+                println!("    This requires subscription management capability");
+            }
         }
 
         // Check tools capabilities
         if let Some(tools) = server_capabilities.get("tools")
             && let Some(list_changed) = tools.get("listChanged")
-                && list_changed == true {
-                    println!("⚠️  Server advertises tools.listChanged=true");
-                    println!("    This requires dynamic tool registration capability");
-                    // Static framework should not advertise this
-                }
+            && list_changed == true
+        {
+            println!("⚠️  Server advertises tools.listChanged=true");
+            println!("    This requires dynamic tool registration capability");
+            // Static framework should not advertise this
+        }
 
         println!("✅ Server capabilities advertising compliance validated");
         println!("   Server capabilities: {:?}", server_capabilities);
@@ -393,6 +400,14 @@ fn is_valid_mcp_uri(uri: &str) -> bool {
     // Check for whitespace/control characters
     if uri.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return false;
+    }
+
+    // Must have content after ://
+    if let Some(scheme_end) = uri.find("://") {
+        let after_scheme = &uri[scheme_end + 3..];
+        if after_scheme.is_empty() {
+            return false;
+        }
     }
 
     // file:// URIs must be absolute

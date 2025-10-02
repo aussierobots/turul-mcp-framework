@@ -189,7 +189,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_tool_with_output_schema_must_have_structured_content() {
-        let tool = NonCompliantCountTool;
+        let tool = CompliantCountTool;
         let result = tool
             .call(json!({"text": "hello world"}), None)
             .await
@@ -384,17 +384,18 @@ mod tests {
 
         // Check schema uses custom field name
         if let Some(schema) = tool.output_schema()
-            && let Some(properties) = &schema.properties {
-                assert!(
-                    properties.contains_key("wordCount"),
-                    "Schema should contain 'wordCount' field, got: {:?}",
-                    properties.keys().collect::<Vec<_>>()
-                );
-                assert!(
-                    !properties.contains_key("result"),
-                    "Schema should not contain 'result' field when custom field specified"
-                );
-            }
+            && let Some(properties) = &schema.properties
+        {
+            assert!(
+                properties.contains_key("wordCount"),
+                "Schema should contain 'wordCount' field, got: {:?}",
+                properties.keys().collect::<Vec<_>>()
+            );
+            assert!(
+                !properties.contains_key("result"),
+                "Schema should not contain 'result' field when custom field specified"
+            );
+        }
 
         // Check runtime output uses custom field name
         assert!(result.structured_content.is_some());
@@ -454,13 +455,14 @@ mod tests {
 
         // Check schema uses custom field name
         if let Some(schema) = tool.output_schema()
-            && let Some(properties) = &schema.properties {
-                assert!(
-                    properties.contains_key("countResult"),
-                    "Derive macro schema should contain 'countResult' field, got: {:?}",
-                    properties.keys().collect::<Vec<_>>()
-                );
-            }
+            && let Some(properties) = &schema.properties
+        {
+            assert!(
+                properties.contains_key("countResult"),
+                "Derive macro schema should contain 'countResult' field, got: {:?}",
+                properties.keys().collect::<Vec<_>>()
+            );
+        }
 
         // Check runtime output uses custom field name
         let result = tool

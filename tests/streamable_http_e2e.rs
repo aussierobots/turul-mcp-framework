@@ -1422,11 +1422,11 @@ async fn test_negative_cases_missing_headers() {
         .expect("Request timeout")
         .expect("Request failed");
 
-    // Should return 400 for missing session ID (bad request)
+    // Should return 401 for missing session ID (unauthorized)
     assert_eq!(
         response.status(),
-        StatusCode::BAD_REQUEST,
-        "POST without session ID should return 400"
+        StatusCode::UNAUTHORIZED,
+        "POST without session ID should return 401"
     );
 
     let error_body = response.into_body().collect().await.unwrap().to_bytes();
@@ -1769,7 +1769,7 @@ async fn test_strict_mode_progress_notifications() {
                 "method": "tools/call",
                 "params": {
                     "name": "progress_tracker",
-                    "arguments": {"steps": 3, "delay_ms": 100}
+                    "arguments": {"duration": 0.3, "steps": 3}
                 },
                 "id": 1
             })

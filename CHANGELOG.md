@@ -50,9 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - turul-mcp-protocol-2025-06-18: 7/7 doctests passing (7 intentionally ignored) ✅
 
 ### Tests
+- **Phase 7: Integration Tests Validation**: Fixed 9 test failures across 4 test files, all 161 integration tests now passing
+  - `tests/mcp_specification_compliance.rs`: Fixed URI validation for empty scheme paths and capabilities JSON path (3 failures → 9 tests passing)
+  - `tests/session_context_macro_tests.rs`: Fixed zero-config tool output structure assertions (3 failures → 8 tests passing)
+  - `tests/mcp_tool_compliance.rs`: Fixed test to use CompliantCountTool instead of NonCompliantCountTool (1 failure → 8 tests passing)
+  - `tests/streamable_http_e2e.rs`: Fixed missing session ID status code and progress_tracker parameters (2 failures → 17 tests passing)
 - Updated all SSE-related tests to expect `event: message` format
 - Added keepalive-specific test cases for comment syntax
-- All 440+ tests passing
+- All 161 integration tests passing across 20 core test suites
 
 ## [0.2.0] - 2025-10-01
 
