@@ -87,7 +87,7 @@ mod sse_event_tests {
         let event = SseEvent::Data(json!({"message": "test"}));
         let formatted = event.format();
 
-        assert!(formatted.contains("event: data"));
+        assert!(formatted.contains("event: message"));
         assert!(formatted.contains("data: "));
         assert!(formatted.ends_with("\n\n"));
     }
@@ -97,7 +97,7 @@ mod sse_event_tests {
         let event = SseEvent::KeepAlive;
         let formatted = event.format();
 
-        assert!(formatted.contains("event: ping"));
+        assert!(formatted.contains("keepalive"));
         assert!(formatted.contains("data: "));
         assert!(formatted.ends_with("\n\n"));
     }
@@ -107,7 +107,7 @@ mod sse_event_tests {
         let event = SseEvent::Error("Test error message".to_string());
         let formatted = event.format();
 
-        assert!(formatted.contains("event: error"));
+        assert!(formatted.contains("event: message"));
         assert!(formatted.contains("Test error message"));
         assert!(formatted.ends_with("\n\n"));
     }
@@ -154,7 +154,7 @@ mod sse_event_tests {
         assert!(formatted.contains("data: "));
 
         // Should be valid SSE format
-        assert!(formatted.starts_with("event: data\n"));
+        assert!(formatted.starts_with("event: message\n"));
         assert!(formatted.ends_with("\n\n"));
 
         println!("Complex JSON event formatted successfully");

@@ -26,16 +26,26 @@ impl SseEvent {
     pub fn format(&self) -> String {
         match self {
             SseEvent::Connected => {
-                "event: connected\ndata: {\"type\":\"connected\",\"message\":\"SSE connection established\"}\n\n".to_string()
+                // Use "message" event type for MCP Inspector compatibility
+                "event: message\ndata: {\"type\":\"connected\",\"message\":\"SSE connection established\"}\n\n".to_string()
             }
             SseEvent::Data(data) => {
-                format!("event: data\ndata: {}\n\n", serde_json::to_string(data).unwrap_or_else(|_| "{}".to_string()))
+                // Use "message" event type for MCP Inspector compatibility
+                format!(
+                    "event: message\ndata: {}\n\n",
+                    serde_json::to_string(data).unwrap_or_else(|_| "{}".to_string())
+                )
             }
             SseEvent::Error(msg) => {
-                format!("event: error\ndata: {{\"error\":\"{}\"}}\n\n", msg.replace('"', "\\\""))
+                // Use "message" event type for MCP Inspector compatibility
+                format!(
+                    "event: message\ndata: {{\"error\":\"{}\"}}\n\n",
+                    msg.replace('"', "\\\"")
+                )
             }
             SseEvent::KeepAlive => {
-                "event: ping\ndata: {\"type\":\"ping\"}\n\n".to_string()
+                // Keepalive events omit the event line (per SSE spec for compatibility)
+                ": keepalive\n\n".to_string()
             }
         }
     }
@@ -160,17 +170,20 @@ mod tests {
 
     #[test]
     fn test_sse_event_format() {
+        // All events except keepalive use "event: message" for MCP Inspector compatibility
         let connected = SseEvent::Connected;
-        assert!(connected.format().contains("event: connected"));
+        assert!(connected.format().contains("event: message"));
 
         let data = SseEvent::Data(json!({"message": "test"}));
-        assert!(data.format().contains("event: data"));
+        assert!(data.format().contains("event: message"));
 
         let error = SseEvent::Error("test error".to_string());
-        assert!(error.format().contains("event: error"));
+        assert!(error.format().contains("event: message"));
 
+        // Keepalive uses SSE comment syntax (no event line)
         let ping = SseEvent::KeepAlive;
-        assert!(ping.format().contains("event: ping"));
+        assert!(!ping.format().contains("event:"));
+        assert!(ping.format().starts_with(":"));
     }
 
     #[tokio::test]

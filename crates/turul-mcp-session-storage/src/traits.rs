@@ -485,10 +485,11 @@ mod tests {
 
     #[test]
     fn test_sse_event_formatting() {
+        // Test regular event formatting (should emit "event: message")
         let mut event = SseEvent {
             id: 123,
             timestamp: 1234567890,
-            event_type: "data".to_string(),
+            event_type: "notifications/progress".to_string(),
             data: serde_json::json!({"message": "test"}),
             retry: Some(1000),
         };
@@ -496,8 +497,22 @@ mod tests {
 
         let formatted = event.format();
         assert!(formatted.contains("id: 123"));
-        assert!(formatted.contains("event: data"));
+        assert!(formatted.contains("event: message")); // Always "message" for MCP Inspector compatibility
         assert!(formatted.contains("retry: 1000"));
         assert!(formatted.contains("data: {\"message\":\"test\"}"));
+
+        // Test keepalive event formatting (should NOT emit event line)
+        let keepalive = SseEvent {
+            id: 0,
+            timestamp: 1234567890,
+            event_type: "ping".to_string(),
+            data: serde_json::json!({"type": "keepalive"}),
+            retry: None,
+        };
+
+        let keepalive_formatted = keepalive.format();
+        assert!(!keepalive_formatted.contains("event:")); // No event line for keepalives
+        assert!(keepalive_formatted.contains("id: 0"));
+        assert!(keepalive_formatted.contains("data: {\"type\":\"keepalive\"}"));
     }
 }

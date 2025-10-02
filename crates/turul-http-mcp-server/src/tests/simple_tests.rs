@@ -106,23 +106,31 @@ mod sse_tests {
 
     #[tokio::test]
     async fn test_sse_event_formatting() {
-        let events = vec![
+        // Test events with "event: message"
+        let message_events = vec![
             SseEvent::Connected,
             SseEvent::Data(json!({"message": "test"})),
             SseEvent::Error("Test error".to_string()),
-            SseEvent::KeepAlive,
         ];
 
-        for event in events {
+        for event in message_events {
             let formatted = event.format();
 
-            // All events should be properly formatted
-            assert!(formatted.contains("event: "));
+            // All message events should use "event: message" for MCP Inspector compatibility
+            assert!(formatted.contains("event: message"));
             assert!(formatted.contains("data: "));
             assert!(formatted.ends_with("\n\n"));
 
             println!("Event formatted: {}", formatted.replace('\n', "\\n"));
         }
+
+        // Test keepalive separately - it uses SSE comment syntax (no event line)
+        let keepalive = SseEvent::KeepAlive;
+        let formatted = keepalive.format();
+        assert!(!formatted.contains("event:")); // Keepalives don't have event line
+        assert!(formatted.starts_with(":")); // SSE comment syntax
+        assert!(formatted.ends_with("\n\n"));
+        println!("Keepalive formatted: {}", formatted.replace('\n', "\\n"));
     }
 
     #[tokio::test]
