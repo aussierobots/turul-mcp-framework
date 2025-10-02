@@ -1255,11 +1255,32 @@ impl SessionManager {
 
     /// Check if session is initialized
     pub async fn is_session_initialized(&self, session_id: &str) -> bool {
-        let sessions = self.sessions.read().await;
-        sessions
-            .get(session_id)
-            .map(|s| s.initialized)
-            .unwrap_or(false)
+        // Check storage backend first for authoritative answer (cache might be stale)
+        match self.storage.get_session(session_id).await {
+            Ok(Some(session_info)) => {
+                debug!(
+                    "✅ Session {} initialization status from storage: {}",
+                    session_id, session_info.is_initialized
+                );
+                session_info.is_initialized
+            }
+            Ok(None) => {
+                debug!("⚠️ Session {} not found in storage", session_id);
+                false
+            }
+            Err(e) => {
+                warn!(
+                    "⚠️ Failed to check session {} in storage: {} - falling back to cache",
+                    session_id, e
+                );
+                // Fallback to cache on storage error
+                let sessions = self.sessions.read().await;
+                sessions
+                    .get(session_id)
+                    .map(|s| s.initialized)
+                    .unwrap_or(false)
+            }
+        }
     }
 
     /// Remove a session
