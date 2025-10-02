@@ -182,7 +182,7 @@ async fn test_post_streaming_delivers_progress_before_result() {
 
     // Verify progress frames were delivered
     assert!(
-        progress_frames.len() >= 1,
+        !progress_frames.is_empty(),
         "Expected at least 1 progress frame, got {}: {:?}",
         progress_frames.len(),
         progress_frames

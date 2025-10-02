@@ -778,8 +778,11 @@ struct WordCountResult {
 
 impl std::fmt::Display for WordCountResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Words: {}, Characters: {}, Sentences: {}",
-               self.word_count, self.character_count, self.sentence_count)
+        write!(
+            f,
+            "Words: {}, Characters: {}, Sentences: {}",
+            self.word_count, self.character_count, self.sentence_count
+        )
     }
 }
 
@@ -836,7 +839,10 @@ pub struct CountAnnouncementsTool {
 }
 
 impl CountAnnouncementsTool {
-    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<CountAnnouncementsResult> {
+    async fn execute(
+        &self,
+        _session: Option<SessionContext>,
+    ) -> McpResult<CountAnnouncementsResult> {
         let count = self.text.matches("announcement").count() as u32;
         Ok(CountAnnouncementsResult { count })
     }
@@ -859,12 +865,17 @@ impl CountWords {
     pub async fn execute(&self, _session: Option<SessionContext>) -> McpResult<CountResult> {
         let count = if let Some(word) = &self.word {
             // Count specific word occurrences
-            format!("The quick brown fox jumps over the lazy dog. The {} was amazing.", word)
-                .matches(word)
-                .count() as u32
+            format!(
+                "The quick brown fox jumps over the lazy dog. The {} was amazing.",
+                word
+            )
+            .matches(word)
+            .count() as u32
         } else {
             // Count total words
-            "The quick brown fox jumps over the lazy dog".split_whitespace().count() as u32
+            "The quick brown fox jumps over the lazy dog"
+                .split_whitespace()
+                .count() as u32
         };
 
         Ok(CountResult { count })
@@ -894,7 +905,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                tracing_subscriber::EnvFilter::new(&format!(
+                tracing_subscriber::EnvFilter::new(format!(
                     "tools_test_server={},turul_mcp_server={},turul_http_mcp_server={}",
                     log_level, log_level, log_level
                 ))

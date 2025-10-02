@@ -69,7 +69,7 @@ async fn test_auto_camelcase_consistency() {
 
     // Check schema uses "locationData" (camelCase from LocationData)
     let schema = tool.output_schema().expect("Should have output schema");
-    let schema_json = serde_json::to_value(&schema).unwrap();
+    let schema_json = serde_json::to_value(schema).unwrap();
     println!(
         "Schema: {}",
         serde_json::to_string_pretty(&schema_json).unwrap()
@@ -124,7 +124,7 @@ async fn test_explicit_output_field_consistency() {
 
     // Check schema uses "LLH" (explicit output_field)
     let schema = tool.output_schema().expect("Should have output schema");
-    let schema_json = serde_json::to_value(&schema).unwrap();
+    let schema_json = serde_json::to_value(schema).unwrap();
     println!(
         "Schema: {}",
         serde_json::to_string_pretty(&schema_json).unwrap()
@@ -175,7 +175,7 @@ async fn test_schema_validation_would_pass() {
     let tool = GetDeviceLocationTool::default();
 
     let schema = tool.output_schema().expect("Should have output schema");
-    let schema_json = serde_json::to_value(&schema).unwrap();
+    let schema_json = serde_json::to_value(schema).unwrap();
 
     let params = serde_json::json!({});
     let result = tool.call(params, None).await.expect("Tool should execute");

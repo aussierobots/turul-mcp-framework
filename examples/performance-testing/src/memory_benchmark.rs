@@ -202,7 +202,7 @@ fn get_rss_memory() -> Option<usize> {
     {
         use std::process::Command;
         if let Ok(output) = Command::new("ps")
-            .args(&["-o", "rss=", "-p"])
+            .args(["-o", "rss=", "-p"])
             .arg(std::process::id().to_string())
             .output()
         {

@@ -26,10 +26,6 @@ use tokio::sync::OnceCell;
 use tracing::info;
 
 // HTTP body types for streaming
-use bytes;
-use http_body_util;
-use hyper;
-
 // Framework imports
 use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
 use turul_mcp_session_storage::DynamoDbSessionStorage;

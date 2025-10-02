@@ -215,7 +215,7 @@ async fn test_tools_list_pagination() {
     assert!(body["result"]["tools"].is_array());
 
     // If there are tools, check pagination metadata
-    if body["result"]["tools"].as_array().unwrap().len() > 0 {
+    if !body["result"]["tools"].as_array().unwrap().is_empty() {
         assert!(body["result"]["_meta"]["total"].is_number());
         assert!(body["result"]["_meta"]["hasMore"].is_boolean());
 

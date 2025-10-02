@@ -1268,7 +1268,7 @@ async fn test_sse_get_with_proper_event_stream() {
                 Ok(chunk) => {
                     chunks.push(chunk);
                     // For testing, stop after first chunk to avoid infinite streams
-                    if chunks.len() >= 1 {
+                    if !chunks.is_empty() {
                         break;
                     }
                 }
