@@ -9,7 +9,6 @@ use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
-use turul_http_mcp_server::NotificationBroadcaster;
 use turul_mcp_server::McpServer;
 use turul_mcp_session_storage::InMemorySessionStorage;
 
@@ -32,29 +31,43 @@ async fn start_progress_test_server() -> String {
     async fn slow_calculation(session: Option<SessionContext>) -> McpResult<String> {
         if let Some(session_ctx) = session {
             // Emit progress notification at 25%
-            if let Some(broadcaster_any) = &session_ctx.broadcaster
-                && let Some(broadcaster) = broadcaster_any.downcast_ref::<turul_http_mcp_server::notification_bridge::StreamManagerNotificationBroadcaster>() {
-                    use turul_mcp_protocol::notifications::*;
+            if let Some(broadcaster_any) = &session_ctx.broadcaster {
+                use turul_http_mcp_server::notification_bridge::SharedNotificationBroadcaster;
+                use turul_mcp_protocol::notifications::*;
 
-                    let progress_25 = ProgressNotification::new(format!("calc-{}", uuid::Uuid::now_v7()), 25)
-                        .with_total(100)
-                        .with_message("Starting calculation".to_string());
-                    let _ = broadcaster.send_progress_notification(&session_ctx.session_id, progress_25).await;
+                if let Some(broadcaster) =
+                    broadcaster_any.downcast_ref::<SharedNotificationBroadcaster>()
+                {
+                    let progress_25 =
+                        ProgressNotification::new(format!("calc-{}", uuid::Uuid::now_v7()), 25)
+                            .with_total(100)
+                            .with_message("Starting calculation".to_string());
+                    let _ = broadcaster
+                        .send_progress_notification(&session_ctx.session_id, progress_25)
+                        .await;
                 }
+            }
 
             // Simulate work
             sleep(Duration::from_millis(100)).await;
 
             // Emit progress notification at 75%
-            if let Some(broadcaster_any) = &session_ctx.broadcaster
-                && let Some(broadcaster) = broadcaster_any.downcast_ref::<turul_http_mcp_server::notification_bridge::StreamManagerNotificationBroadcaster>() {
-                    use turul_mcp_protocol::notifications::*;
+            if let Some(broadcaster_any) = &session_ctx.broadcaster {
+                use turul_http_mcp_server::notification_bridge::SharedNotificationBroadcaster;
+                use turul_mcp_protocol::notifications::*;
 
-                    let progress_75 = ProgressNotification::new(format!("calc-{}", uuid::Uuid::now_v7()), 75)
-                        .with_total(100)
-                        .with_message("Nearly complete".to_string());
-                    let _ = broadcaster.send_progress_notification(&session_ctx.session_id, progress_75).await;
+                if let Some(broadcaster) =
+                    broadcaster_any.downcast_ref::<SharedNotificationBroadcaster>()
+                {
+                    let progress_75 =
+                        ProgressNotification::new(format!("calc-{}", uuid::Uuid::now_v7()), 75)
+                            .with_total(100)
+                            .with_message("Nearly complete".to_string());
+                    let _ = broadcaster
+                        .send_progress_notification(&session_ctx.session_id, progress_75)
+                        .await;
                 }
+            }
 
             // Final work
             sleep(Duration::from_millis(100)).await;
@@ -201,7 +214,10 @@ async fn test_post_streaming_delivers_progress_before_result() {
     // Verify final result
     let final_result = final_frame.unwrap();
     assert_eq!(final_result["id"], 2);
-    assert_eq!(final_result["result"]["result"], "Calculation complete");
+    assert_eq!(
+        final_result["result"]["structuredContent"]["result"],
+        "Calculation complete"
+    );
 
     println!(
         "✅ Progress delivery test passed: {} progress frames + 1 final result",
