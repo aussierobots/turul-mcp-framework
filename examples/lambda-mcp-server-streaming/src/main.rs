@@ -22,6 +22,7 @@ mod tools;
 
 use lambda_http::{Error, Request, run_with_streaming_response, service_fn};
 use std::env;
+use tokio::sync::OnceCell;
 use tracing::info;
 
 // HTTP body types for streaming
@@ -37,21 +38,34 @@ use turul_mcp_session_storage::DynamoDbSessionStorage;
 use session_aware_logging_demo::{
     CheckLoggingStatusTool, SessionLoggingDemoTool, SetLoggingLevelTool,
 };
-use tools::{CloudWatchMetricsTool, DynamoDbQueryTool, SnsPublishTool, SqsSendMessageTool};
+use tools::{
+    CloudWatchMetricsTool, DynamoDbQueryTool, EchoTool, SnsPublishTool, SqsSendMessageTool,
+};
 
-/// Initialize CloudWatch-optimized logging for Lambda environment
+/// Initialize logging - JSON for Lambda/CloudWatch, human-readable for local development
 fn init_logging() {
     let log_level = env::var("LOG_LEVEL").unwrap_or_else(|_| "INFO".to_string());
 
-    tracing_subscriber::fmt()
-        .with_max_level(log_level.parse().unwrap_or(tracing::Level::INFO))
-        .with_target(false) // No target for CloudWatch
-        .without_time() // CloudWatch adds timestamps
-        .json() // Structured logging for CloudWatch
-        .init();
+    if env::var("AWS_EXECUTION_ENV").is_ok() {
+        // Running in Lambda → JSON for CloudWatch
+        tracing_subscriber::fmt()
+            .with_max_level(log_level.parse().unwrap_or(tracing::Level::INFO))
+            .with_target(false) // No target for CloudWatch
+            .without_time() // CloudWatch adds timestamps
+            .json() // Structured logging for CloudWatch
+            .init();
+    } else {
+        // Running locally → human readable
+        tracing_subscriber::fmt()
+            .with_max_level(log_level.parse().unwrap_or(tracing::Level::INFO))
+            .init();
+    }
 
     info!("🚀 Logging initialized at level: {}", log_level);
 }
+
+/// Global handler instance - created once and reused across all Lambda invocations
+static HANDLER: OnceCell<turul_mcp_aws_lambda::LambdaMcpHandler> = OnceCell::const_new();
 
 /// Lambda handler function using turul-mcp-aws-lambda with streaming support
 async fn lambda_handler(
@@ -66,8 +80,10 @@ async fn lambda_handler(
         request.uri().path()
     );
 
-    // Create handler (could be cached globally for better performance)
-    let handler = create_lambda_mcp_handler().await?;
+    // Get or initialize handler (cached globally for performance)
+    let handler = HANDLER
+        .get_or_try_init(|| async { create_lambda_mcp_handler().await })
+        .await?;
 
     // Process request through the Lambda MCP streaming handler
     handler.handle_streaming(request).await
@@ -90,6 +106,8 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
     let server = LambdaMcpServerBuilder::new()
         .name("aws-lambda-mcp-server")
         .version("1.0.0")
+        // Echo tool (for testing notifications)
+        .tool(EchoTool::default())
         // AWS Lambda tools
         .tool(DynamoDbQueryTool::default())
         .tool(SnsPublishTool::default())
@@ -141,14 +159,25 @@ async fn main() -> Result<(), Error> {
     );
     info!(
         "  - AWS_REGION: {}",
-        env::var("AWS_REGION").unwrap_or("us-east-1".to_string())
+        env::var("AWS_REGION").unwrap_or_else(|_| "(not set, will use SDK default)".to_string())
     );
     info!(
         "  - MCP_SESSION_TABLE: {}",
-        env::var("MCP_SESSION_TABLE").unwrap_or("mcp-sessions".to_string())
+        env::var("MCP_SESSION_TABLE")
+            .unwrap_or_else(|_| "(not set, using default 'mcp-sessions')".to_string())
+    );
+    info!(
+        "  - MCP_SESSION_EVENT_TABLE: {}",
+        env::var("MCP_SESSION_EVENT_TABLE")
+            .unwrap_or_else(|_| "(not set, will use '{table_name}-events')".to_string())
     );
 
-    info!("🎯 Lambda handler ready");
+    // Pre-initialize handler during startup (not on first request)
+    info!("⚙️  Pre-initializing MCP handler...");
+    HANDLER
+        .get_or_try_init(|| async { create_lambda_mcp_handler().await })
+        .await?;
+    info!("🎯 Lambda handler ready and initialized");
 
     // Run Lambda HTTP runtime with streaming response support
     run_with_streaming_response(service_fn(lambda_handler)).await
