@@ -467,34 +467,23 @@ impl TestServerManager {
 impl Drop for TestServerManager {
     fn drop(&mut self) {
         if let Some(mut process) = self.server_process.take() {
-            // Send kill signal
+            // Send SIGKILL immediately - this is synchronous and doesn't block
             let _ = process.start_kill();
 
-            // Wait for process termination in blocking manner
-            // We need to block here to ensure cleanup, but do it in a thread
-            // to avoid blocking the async runtime
-            let handle = std::thread::spawn(move || {
-                // Create a runtime just for waiting on this process
-                let rt = tokio::runtime::Runtime::new().unwrap();
+            // Brief wait with timeout to allow graceful cleanup without hanging tests
+            // spawn a thread to avoid blocking async runtime during Drop
+            let _ = std::thread::spawn(move || {
+                // Try to reap the process with a very short timeout
+                let rt = tokio::runtime::Runtime::new().ok()?;
                 rt.block_on(async move {
-                    match tokio::time::timeout(Duration::from_secs(5), process.wait()).await {
-                        Ok(Ok(status)) => {
-                            debug!("Test server exited: {:?}", status);
-                        }
-                        Ok(Err(e)) => {
-                            debug!("Error waiting for test server: {}", e);
-                        }
-                        Err(_) => {
-                            debug!("Timeout waiting for test server to exit");
-                            // Force kill if it's still alive
-                            drop(process.kill());
-                        }
-                    }
-                })
+                    // Only wait 100ms - SIGKILL should be nearly instant
+                    let _ = tokio::time::timeout(Duration::from_millis(100), process.wait()).await;
+                    // Don't care if it times out - OS will clean up
+                    debug!("Test server cleanup attempted");
+                });
+                Some(())
             });
-
-            // Wait for cleanup to complete (with timeout)
-            let _ = handle.join();
+            // Don't join - let it run in background to avoid blocking Drop
         }
     }
 }

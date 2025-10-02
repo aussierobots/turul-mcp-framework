@@ -266,7 +266,22 @@ impl TestServerManager {
 impl Drop for TestServerManager {
     fn drop(&mut self) {
         if let Some(mut process) = self.server_process.take() {
-            std::mem::drop(process.kill());
+            // Send SIGKILL immediately - this is synchronous and doesn't block
+            let _ = process.start_kill();
+
+            // Brief wait with timeout to allow graceful cleanup without hanging tests
+            // spawn a thread to avoid blocking async runtime during Drop
+            let _ = std::thread::spawn(move || {
+                // Try to reap the process with a very short timeout
+                let rt = tokio::runtime::Runtime::new().ok()?;
+                rt.block_on(async move {
+                    // Only wait 100ms - SIGKILL should be nearly instant
+                    let _ = tokio::time::timeout(Duration::from_millis(100), process.wait()).await;
+                    // Don't care if it times out - OS will clean up
+                });
+                Some(())
+            });
+            // Don't join - let it run in background to avoid blocking Drop
         }
     }
 }
