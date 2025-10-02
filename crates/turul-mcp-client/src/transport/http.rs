@@ -141,11 +141,11 @@ impl HttpTransport {
         }
 
         // Capture session ID from response headers if present
-        if let Some(session_header) = response.headers().get("mcp-session-id") {
-            if let Ok(session_str) = session_header.to_str() {
-                debug!("Captured session ID from response: {}", session_str);
-                *self.session_id.lock() = Some(session_str.to_owned());
-            }
+        if let Some(session_header) = response.headers().get("mcp-session-id")
+            && let Ok(session_str) = session_header.to_str()
+        {
+            debug!("Captured session ID from response: {}", session_str);
+            *self.session_id.lock() = Some(session_str.to_owned());
         }
 
         let content_type = response
@@ -169,9 +169,9 @@ impl HttpTransport {
     async fn handle_json_stream(&mut self, response: Response) -> McpClientResult<Value> {
         use futures::StreamExt;
 
-        let stream = response.bytes_stream().map(|result| {
-            result.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-        });
+        let stream = response
+            .bytes_stream()
+            .map(|result| result.map_err(std::io::Error::other));
 
         self.handle_byte_stream(stream).await
     }
@@ -283,14 +283,14 @@ impl HttpTransport {
         }
 
         // Stream ended - check if we have a complete response in buffer
-        if !buffer.is_empty() {
-            if let Ok(json) = serde_json::from_slice::<Value>(&buffer) {
-                if json.get("id").is_some()
-                    && (json.get("result").is_some() || json.get("error").is_some())
-                {
-                    self.update_stats(|stats| stats.responses_received += 1);
-                    return Ok(json);
-                }
+        if !buffer.is_empty()
+            && let Ok(json) = serde_json::from_slice::<Value>(&buffer)
+        {
+            if json.get("id").is_some()
+                && (json.get("result").is_some() || json.get("error").is_some())
+            {
+                self.update_stats(|stats| stats.responses_received += 1);
+                return Ok(json);
             }
         }
 
@@ -459,7 +459,9 @@ impl Transport for HttpTransport {
             debug!("HTTP request using session ID: {}", session_id);
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
         } else {
-            warn!("HTTP request attempted without session ID - server may reject for non-initialize methods");
+            warn!(
+                "HTTP request attempted without session ID - server may reject for non-initialize methods"
+            );
         }
 
         let response = req_builder
@@ -967,7 +969,9 @@ mod tests {
     }
 
     /// Test helper to create an in-memory byte stream for testing
-    fn create_test_stream(data: Vec<Vec<u8>>) -> impl Stream<Item = Result<Vec<u8>, std::io::Error>> + Unpin {
+    fn create_test_stream(
+        data: Vec<Vec<u8>>,
+    ) -> impl Stream<Item = Result<Vec<u8>, std::io::Error>> + Unpin {
         futures::stream::iter(data.into_iter().map(Ok))
     }
 
@@ -1079,7 +1083,7 @@ mod tests {
         assert_eq!(result["result"]["success"], true);
 
         // Verify progress notifications were captured (with timeout to avoid hanging)
-        use tokio::time::{timeout, Duration};
+        use tokio::time::{Duration, timeout};
 
         let event1 = timeout(Duration::from_millis(100), events.recv()).await;
         assert!(event1.is_ok() && event1.unwrap().is_some());
@@ -1141,16 +1145,25 @@ mod tests {
         let mut events = transport.start_event_listener().await.unwrap();
 
         // Verify queued events are replayed (with timeout to avoid hanging)
-        use tokio::time::{timeout, Duration};
+        use tokio::time::{Duration, timeout};
 
         let event1 = timeout(Duration::from_millis(100), events.recv()).await;
-        assert!(event1.is_ok() && event1.unwrap().is_some(), "Should replay first queued event");
+        assert!(
+            event1.is_ok() && event1.unwrap().is_some(),
+            "Should replay first queued event"
+        );
 
         let event2 = timeout(Duration::from_millis(100), events.recv()).await;
-        assert!(event2.is_ok() && event2.unwrap().is_some(), "Should replay second queued event");
+        assert!(
+            event2.is_ok() && event2.unwrap().is_some(),
+            "Should replay second queued event"
+        );
 
         // Verify no more events (queue should be empty after replay)
         let no_more_events = timeout(Duration::from_millis(50), events.recv()).await;
-        assert!(no_more_events.is_err(), "Should not have any more events after replay");
+        assert!(
+            no_more_events.is_err(),
+            "Should not have any more events after replay"
+        );
     }
 }

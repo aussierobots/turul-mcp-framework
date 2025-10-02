@@ -115,7 +115,9 @@ impl McpTestClient {
     }
 
     /// Send notifications/initialized to complete session handshake (required for strict lifecycle mode)
-    pub async fn send_initialized_notification(&self) -> Result<HashMap<String, Value>, reqwest::Error> {
+    pub async fn send_initialized_notification(
+        &self,
+    ) -> Result<HashMap<String, Value>, reqwest::Error> {
         let notification = json!({
             "jsonrpc": "2.0",
             "method": "notifications/initialized"
@@ -457,7 +459,7 @@ impl Drop for TestServerManager {
                         Err(_) => {
                             debug!("Timeout waiting for test server to exit");
                             // Force kill if it's still alive
-                            let _ = process.kill();
+                            drop(process.kill());
                         }
                     }
                 })
@@ -533,25 +535,25 @@ impl TestFixtures {
     /// Create test number arguments for prompts - MCP spec requires string arguments
     pub fn create_number_args() -> HashMap<String, Value> {
         let mut args = HashMap::new();
-        args.insert("count".to_string(), json!("42"));  // number_args_prompt expects "count" as string
-        args.insert("multiplier".to_string(), json!("3.14"));  // optional multiplier as string
+        args.insert("count".to_string(), json!("42")); // number_args_prompt expects "count" as string
+        args.insert("multiplier".to_string(), json!("3.14")); // optional multiplier as string
         args
     }
 
     /// Create test boolean arguments for prompts - MCP spec requires string arguments
     pub fn create_boolean_args() -> HashMap<String, Value> {
         let mut args = HashMap::new();
-        args.insert("enable_feature".to_string(), json!("true"));  // boolean_args_prompt expects "enable_feature" as string
-        args.insert("debug_mode".to_string(), json!("false"));  // optional debug_mode as string
+        args.insert("enable_feature".to_string(), json!("true")); // boolean_args_prompt expects "enable_feature" as string
+        args.insert("debug_mode".to_string(), json!("false")); // optional debug_mode as string
         args
     }
 
     /// Create test template arguments for prompts
     pub fn create_template_args() -> HashMap<String, Value> {
         let mut args = HashMap::new();
-        args.insert("name".to_string(), json!("Alice"));  // template_prompt expects "name"
-        args.insert("topic".to_string(), json!("machine learning"));  // template_prompt expects "topic"
-        args.insert("style".to_string(), json!("casual"));  // optional style
+        args.insert("name".to_string(), json!("Alice")); // template_prompt expects "name"
+        args.insert("topic".to_string(), json!("machine learning")); // template_prompt expects "topic"
+        args.insert("style".to_string(), json!("casual")); // optional style
         args
     }
 

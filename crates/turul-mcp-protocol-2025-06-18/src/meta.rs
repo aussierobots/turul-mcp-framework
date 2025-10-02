@@ -519,8 +519,8 @@ mod tests {
         assert_eq!(meta.extra.get("userContext"), Some(&json!("user_123")));
 
         // Should not override structured fields in extra
-        assert!(meta.extra.get("progressToken").is_none());
-        assert!(meta.extra.get("cursor").is_none());
+        assert!(!meta.extra.contains_key("progressToken"));
+        assert!(!meta.extra.contains_key("cursor"));
     }
 
     #[test]

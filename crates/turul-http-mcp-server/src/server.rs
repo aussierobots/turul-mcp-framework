@@ -194,7 +194,7 @@ impl HttpMcpServerBuilder {
             Arc::clone(&session_storage),
             Arc::clone(&stream_manager),
             self.server_capabilities
-                .unwrap_or_else(|| turul_mcp_protocol::ServerCapabilities::default()),
+                .unwrap_or_else(turul_mcp_protocol::ServerCapabilities::default),
         );
 
         HttpMcpServer {

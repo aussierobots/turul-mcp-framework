@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Code Quality**: Fixed 49 clippy warnings across workspace (156 → 107)
+  - Replaced `get().is_none()` with more idiomatic `!contains_key()`
+  - Collapsed nested if statements using let-chain syntax
+  - Used `std::io::Error::other()` instead of verbose `Error::new(ErrorKind::Other, ...)`
+  - Replaced `let _ = future` with explicit `drop(future)` for better async handling
+  - Removed redundant closure wrappers where function references suffice
+
 ## [0.2.1] - 2025-10-03
 
 ### Fixed
