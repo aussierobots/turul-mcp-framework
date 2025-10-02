@@ -500,7 +500,7 @@ async fn test_accept_header_variations() -> Result<()> {
 
     // Start server
     let mut server_process = tokio::process::Command::new("cargo")
-        .args(&[
+        .args([
             "run",
             "--package",
             "tools-test-server",

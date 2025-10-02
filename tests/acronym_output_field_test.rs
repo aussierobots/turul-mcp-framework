@@ -70,7 +70,7 @@ async fn test_llh_acronym_to_lowercase() {
 
     // Check schema uses "llh" (all lowercase, not "lLH")
     let schema = tool.output_schema().expect("Should have output schema");
-    let schema_json = serde_json::to_value(&schema).unwrap();
+    let schema_json = serde_json::to_value(schema).unwrap();
     println!(
         "LLH Schema: {}",
         serde_json::to_string_pretty(&schema_json).unwrap()
@@ -123,7 +123,7 @@ async fn test_gps_acronym_to_lowercase() {
 
     // Check schema uses "gps" (all lowercase, not "gPS")
     let schema = tool.output_schema().expect("Should have output schema");
-    let schema_json = serde_json::to_value(&schema).unwrap();
+    let schema_json = serde_json::to_value(schema).unwrap();
     println!(
         "GPS Schema: {}",
         serde_json::to_string_pretty(&schema_json).unwrap()

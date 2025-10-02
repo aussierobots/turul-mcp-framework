@@ -2,10 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::{
-    tools::HasOutputSchema,
-    McpResult,
-};
+use turul_mcp_protocol::{McpResult, tools::HasOutputSchema};
 use turul_mcp_server::{McpTool as McpToolTrait, SessionContext};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,14 +33,17 @@ async fn test_runtime_schema_correction_works() {
     let tool = ListTool { count: 3 };
 
     // Call the tool
-    let result = tool.call(serde_json::json!({"count": 3}), None)
+    let result = tool
+        .call(serde_json::json!({"count": 3}), None)
         .await
         .expect("Tool should execute successfully");
 
     println!("CallToolResult: {:#?}", result);
 
     // Check structured content
-    let structured = result.structured_content.expect("Should have structured content");
+    let structured = result
+        .structured_content
+        .expect("Should have structured content");
     println!("Structured content: {:#?}", structured);
 
     // The actual data should be an array
@@ -61,7 +61,9 @@ async fn test_runtime_schema_correction_works() {
     // The structured_content contains the array correctly.
     // FastMCP sees this structured_content, not the static schema.
     println!("✅ Runtime schema correction successful!");
-    println!("✅ FastMCP will accept this response because structured_content matches runtime value");
+    println!(
+        "✅ FastMCP will accept this response because structured_content matches runtime value"
+    );
 }
 
 #[tokio::test]
@@ -73,8 +75,11 @@ async fn test_tools_list_schema_still_broken() {
     println!("Schema from tools/list: {:#?}", schema);
 
     if let Some(schema) = schema {
-        let schema_json = serde_json::to_value(&schema).unwrap();
-        println!("Schema JSON:\n{}", serde_json::to_string_pretty(&schema_json).unwrap());
+        let schema_json = serde_json::to_value(schema).unwrap();
+        println!(
+            "Schema JSON:\n{}",
+            serde_json::to_string_pretty(&schema_json).unwrap()
+        );
 
         // Check the output field type
         let output_type = schema_json["properties"]["output"]["type"].as_str();
