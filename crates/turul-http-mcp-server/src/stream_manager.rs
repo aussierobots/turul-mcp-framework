@@ -253,13 +253,13 @@ impl StreamManager {
                         }
                     },
 
-                    // Keep-alive pings
+                    // Keep-alive pings (comment-style to preserve Last-Event-ID for resumability)
                     _ = keepalive_interval.tick() => {
                         let keepalive_event = SseEvent {
-                            id: 0, // Keep-alive events don't need persistent IDs
+                            id: 0, // Will be ignored - comment-style keepalives don't have id field
                             timestamp: chrono::Utc::now().timestamp_millis() as u64,
-                            event_type: "ping".to_string(),
-                            data: serde_json::json!({"type": "keepalive"}),
+                            event_type: "keepalive".to_string(), // Triggers comment-style formatting
+                            data: serde_json::Value::Null, // No data for comment-style keepalives
                             retry: None,
                         };
                         yield keepalive_event;

@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.2.1] - 2025-10-03
 
 ### Fixed
+- **CRITICAL: MCP Resumability with SSE Keepalives**: Fixed resumable SSE path to use comment-style keepalives (`": keepalive\n\n"`) instead of events with `id: 0`. Previously, keepalives included `id: 0` which reset clients' Last-Event-ID, causing full event replay on reconnection (violating MCP resumability spec). Now keepalives preserve Last-Event-ID for proper event resumption. Affected files: `stream_manager.rs`, `traits.rs` (SseEventInfo::format), test expectations updated.
 - **MCP Inspector SSE Compatibility**: Changed all SSE events to use standard `event: message` type instead of custom event types. JavaScript EventSource API only processes `event: message` or omitted event lines. This fix ensures all notifications (including `notifications/progress`) are visible in MCP Inspector.
 - **Lambda DynamoDB Notification Timing**: Added `.consistent_read(true)` to DynamoDB queries in `get_recent_events()` and `get_events_after()`. Fixes race condition where notifications worked on reconnect but not initial Lambda invocation due to eventual consistency.
 - **POST SSE Response Timing**: Removed unnecessary 50ms sleep in `create_post_sse_stream()` that was a workaround, not a proper fix. Tool execution is fully awaited, so notifications are immediately available with consistent reads.
