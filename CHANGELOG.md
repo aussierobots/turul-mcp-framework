@@ -8,20 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **Code Quality**: Fixed 100+ clippy warnings across workspace
-  - Replaced `get().is_none()` with more idiomatic `!contains_key()`
-  - Collapsed nested if statements using let-chain syntax (48 instances)
-  - Used `std::io::Error::other()` instead of verbose `Error::new(ErrorKind::Other, ...)`
-  - Replaced `let _ = future` with explicit `drop(future)` for better async handling
-  - Removed redundant closure wrappers where function references suffice
-  - Fixed borrowed expression warnings (removed unnecessary `&` in function calls)
-  - Fixed length comparison warnings (use `.is_empty()` instead of `.len() > 0`)
-  - Removed redundant imports across examples and tests
+- **Code Quality**: Fixed 110+ clippy warnings across workspace (156 → ~45 remaining, 71% reduction)
+  - Replaced `get().is_none()` with idiomatic `!contains_key()` (2 instances)
+  - Collapsed nested if statements using let-chain syntax (54 instances)
+  - Used `std::io::Error::other()` for concise error creation (1 instance)
+  - Replaced `let _ = future` with explicit `drop()` for async clarity (1 instance)
+  - Removed redundant closure wrappers (2 instances)
+  - Fixed borrowed expression warnings - removed unnecessary `&` (10 instances)
+  - Fixed length comparison warnings - use `.is_empty()` instead of `.len() > 0` (6 instances)
+  - Removed redundant imports (6 instances)
 
 ### Documentation
 - **Doctests**: All doctests now passing in core crates
-  - turul-mcp-derive: 25/25 doctests passing
-  - turul-mcp-protocol-2025-06-18: 7/7 doctests passing (7 intentionally ignored)
+  - turul-mcp-derive: 25/25 doctests passing ✅
+  - turul-mcp-protocol-2025-06-18: 7/7 doctests passing (7 intentionally ignored) ✅
 
 ## [0.2.1] - 2025-10-03
 
