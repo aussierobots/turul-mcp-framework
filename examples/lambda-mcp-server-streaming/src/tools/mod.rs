@@ -4,7 +4,48 @@
 
 use serde_json::Value;
 use turul_mcp_derive::McpTool;
-use turul_mcp_server::McpResult;
+use turul_mcp_server::{McpResult, SessionContext};
+
+/// Echo tool that sends a notification with the echoed text
+#[derive(McpTool, Default, Clone)]
+#[tool(
+    name = "echo",
+    description = "Echo back the provided text and send a notification with it"
+)]
+pub struct EchoTool {
+    #[param(description = "Text to echo back")]
+    pub text: String,
+}
+
+impl EchoTool {
+    pub async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
+        use serde_json::json;
+
+        // Send a log notification if we have a session
+        if let Some(ref session) = session {
+            use turul_mcp_protocol::logging::LoggingLevel;
+
+            session
+                .notify_log(
+                    LoggingLevel::Info,
+                    json!({
+                        "message": format!("Echoing: {}", self.text),
+                        "text_length": self.text.len()
+                    }),
+                    None,
+                    None,
+                )
+                .await;
+        }
+
+        // Return the echoed text
+        Ok(json!({
+            "echo": self.text,
+            "length": self.text.len(),
+            "notification_sent": session.is_some()
+        }))
+    }
+}
 
 /// DynamoDB query tool for serverless data operations
 #[derive(McpTool, Default, Clone)]
