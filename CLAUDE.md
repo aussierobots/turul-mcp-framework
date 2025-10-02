@@ -52,6 +52,21 @@ struct Calculator;  // Framework → tools/call
 - **Error Handling**: Always use `McpError` types - NEVER create JsonRpcError directly in handlers
 - **Session IDs**: Always `Uuid::now_v7()` for temporal ordering
 
+### 🔤 JSON Naming: camelCase ONLY
+
+**CRITICAL**: All JSON fields MUST use camelCase per MCP 2025-06-18.
+
+```rust
+// ✅ CORRECT - Always rename snake_case fields
+#[serde(rename = "additionalProperties")]
+additional_properties: Option<bool>,
+
+// ❌ WRONG - Never serialize as snake_case
+additional_properties: Option<bool>,  // becomes "additional_properties" ❌
+```
+
+**Verify**: `cargo test --test mcp_compliance_tests` must pass
+
 ### 🚨 Critical Error Handling Rules
 
 **MANDATORY**: Handlers return domain errors only. Dispatcher owns protocol conversion.

@@ -268,6 +268,121 @@ For deployments requiring server-initiated notifications:
 - If AWS adds this capability, server-initiated notifications may work without code changes
 - Monitor AWS Lambda roadmap for streaming response support
 
+## MCP Streaming Terminology
+
+### Critical Distinction: Two Different Mechanisms
+
+**Important**: "SSE" and "Streamable HTTP" are NOT interchangeable terms. They refer to different transport mechanisms with different purposes.
+
+### POST Streamable HTTP (Tool Progress Notifications)
+
+**What it is**: MCP 2025-06-18 transport mechanism where POST requests receive chunked HTTP responses containing progress notifications + final result.
+
+**Request Pattern**:
+```http
+POST /mcp HTTP/1.1
+Accept: text/event-stream
+Content-Type: application/json
+Mcp-Session-Id: {session-id}
+
+{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{...}}
+```
+
+**Response Pattern**:
+```http
+HTTP/1.1 200 OK
+Content-Type: text/event-stream
+Transfer-Encoding: chunked
+
+data: {"jsonrpc":"2.0","method":"notifications/progress","params":{...}}
+
+data: {"jsonrpc":"2.0","id":1,"result":{...}}
+```
+
+**Key Characteristics**:
+- ✅ Request-response model (client sends POST, gets chunked response)
+- ✅ Single connection per request (terminates after final result)
+- ✅ Tool progress notifications + final result in same stream
+- ✅ Works on serverless (Lambda, Cloud Run) with buffering
+- ✅ Uses `text/event-stream` framing for chunks
+- ❌ NOT a long-lived connection
+- ❌ NOT bidirectional
+
+**Code Path**:
+- Handler: `StreamableHttpHandler::handle_post_streamable_http()`
+- Entry: POST to `/mcp` with `Accept: text/event-stream`
+- Used for: Tool execution with progress updates
+
+### GET SSE (Server-Initiated Notifications)
+
+**What it is**: Traditional Server-Sent Events - a long-lived GET request that streams server-initiated notifications to the client.
+
+**Request Pattern**:
+```http
+GET /mcp HTTP/1.1
+Accept: text/event-stream
+Mcp-Session-Id: {session-id}
+```
+
+**Response Pattern**:
+```http
+HTTP/1.1 200 OK
+Content-Type: text/event-stream
+Transfer-Encoding: chunked
+
+data: {"jsonrpc":"2.0","method":"notifications/message","params":{...}}
+
+data: {"jsonrpc":"2.0","method":"notifications/cancelled","params":{...}}
+
+[stream continues indefinitely]
+```
+
+**Key Characteristics**:
+- ✅ Long-lived connection (client keeps GET open)
+- ✅ Server→client only (unidirectional)
+- ✅ For background server notifications (not tied to specific request)
+- ✅ Uses standard SSE protocol
+- ❌ NOT request-response pattern
+- ❌ NOT for tool progress (use POST Streamable HTTP instead)
+- ❌ NOT serverless-friendly (requires long-lived process)
+
+**Code Path**:
+- Handler: `StreamableHttpHandler::handle_get_sse_notifications()`
+- Entry: GET to `/mcp` with `Accept: text/event-stream`
+- Used for: Background server notifications, subscription updates
+
+### Terminology Comparison Table
+
+| Feature | POST Streamable HTTP | GET SSE |
+|---------|---------------------|---------|
+| **HTTP Method** | POST | GET |
+| **Accept Header** | `text/event-stream` | `text/event-stream` |
+| **Connection Lifetime** | Request-response (short) | Long-lived |
+| **Direction** | Client→Server (request)<br>Server→Client (chunked response) | Server→Client only |
+| **Purpose** | Tool progress + result delivery | Background server notifications |
+| **MCP Methods** | `tools/call`, `resources/read`, etc. | Server-initiated messages |
+| **Serverless Compatible** | ✅ Yes (with buffering) | ❌ No (requires long-lived process) |
+| **Code Handler** | `handle_post_streamable_http()` | `handle_get_sse_notifications()` |
+| **Example Use Case** | Progress bar during long tool execution | Server notifying client of external event |
+
+### Documentation Standards
+
+When writing about streaming in this framework, always specify:
+
+1. **Method**: POST or GET?
+2. **Purpose**: Tool progress or server notifications?
+3. **Lifetime**: Request-response or long-lived?
+
+**✅ GOOD Examples**:
+- "POST Streamable HTTP tool progress notifications are broken in Lambda due to background task teardown"
+- "GET SSE stream for server notifications works correctly in long-running HTTP servers"
+- "The `handle_post_streamable_http()` method implements chunked responses for tool execution"
+
+**❌ BAD Examples**:
+- "SSE is broken in Lambda" (which SSE?)
+- "Streaming doesn't work" (which streaming mechanism?)
+- "The streaming handler" (which handler, which streaming type?)
+
 ## Conclusion
 
 This compatibility architecture ensures the turul-mcp-framework works seamlessly with the current MCP client ecosystem while maintaining full specification compliance. The solution prioritizes developer experience and real-world usability over strict specification enforcement, with clear paths forward as the ecosystem matures.

@@ -29,6 +29,7 @@ uuid = { workspace = true }
 anyhow = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
+http-body = { workspace = true }
 http-body-util = { workspace = true }
 bytes = { workspace = true }
 mcp-e2e-shared = { path = "shared" }
@@ -87,6 +88,10 @@ path = "http_server_examples.rs"
 [[test]]
 name = "lambda_examples"
 path = "lambda_examples.rs"
+
+[[test]]
+name = "lambda_streaming_real"
+path = "lambda_streaming_real.rs"
 
 [[test]]
 name = "client_drop_test"
@@ -195,4 +200,3 @@ path = "output_field_consistency_test.rs"
 [[test]]
 name = "acronym_output_field_test"
 path = "acronym_output_field_test.rs"
-

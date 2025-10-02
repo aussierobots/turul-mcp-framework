@@ -97,6 +97,179 @@
 
 ---
 
+## ⚠️ ACTIVE: Lambda Streaming Verification Needed (2025-01-25)
+
+**Status**: ⚠️ **UNVERIFIED** - No empirical testing conducted, status unknown
+**Priority**: P1 - Needs verification before claiming production-blocking  
+**Owner**: Investigation complete, awaiting empirical verification with cargo lambda watch
+
+### 🎯 Executive Summary
+
+**THEORETICAL CONCERNS** (unverified - no empirical testing conducted):
+1. **Tests Don't Validate Behavior**: All Lambda tests are compilation checks only - never execute handlers
+2. **Possible Architecture Mismatch**: Background tasks (tokio::spawn) might be killed when Lambda invocation returns
+3. **Pattern Usage**: Not explicitly using lambda_http's Body::from_stream pattern
+
+**ACTUAL STATUS**: 
+- ⚠️ NO empirical testing has been done with `cargo lambda watch`
+- ⚠️ NO evidence that current implementation is broken
+- ⚠️ lambda_http documentation says streaming works - we need to TEST it
+
+**REQUIRED NEXT STEP**: Empirical verification with `cargo lambda watch` before making ANY architectural changes
+
+**DISCOVERY**: Codex review of `tests/lambda_examples.rs` (lines 103-302) revealed tests assign async closures to `_` variable without execution
+
+**DOCUMENTATION**: See [ADR-011: Lambda Streaming Incompatibility](docs/adr/011-lambda-streaming-incompatibility.md) for complete analysis and investigation approach.
+
+### 📊 Codex Review Findings
+
+#### Finding 1: Tests Are Compilation Checks Only
+
+**Current Test Pattern** (`lambda_examples.rs`):
+```rust
+#[test]
+fn test_lambda_streaming_feature_e2e() {
+    async fn example_lambda_server() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let _server = LambdaMcpServerBuilder::new().sse(true).build().await?;
+        Ok(())
+    }
+    let _ = example_lambda_server; // Just assigns to _ - NEVER RUNS!
+}
+```
+
+**What's Missing**:
+- No actual HTTP request to Lambda handler
+- No verification that `handle_streaming()` executes
+- No check that SSE frames are delivered
+- No validation that notifications reach clients
+
+**Result**: Tests pass but production code path never exercised
+
+#### Finding 2: Lambda Kills Background Tasks
+
+**Current Implementation** (`handler.rs:161-220`):
+```rust
+pub async fn handle_streaming(&self, req: LambdaRequest) -> Result<Response<...>> {
+    // Delegates to StreamableHttpHandler which spawns:
+    tokio::spawn(async move {
+        // Forward notifications from StreamManager
+        while let Some(event) = rx.recv().await {
+            // ... send event to client ...
+        }
+    });
+    
+    let hyper_resp = self.streamable_handler.handle_request(hyper_req).await;
+    Ok(hyper_to_lambda_streaming(hyper_resp))
+    // Lambda tears down → background task KILLED!
+}
+```
+
+**Lambda Lifecycle**:
+```
+Request → Handler Executes → Return Response → TEARDOWN (kills all tasks)
+                                     ↑
+                                     tokio::spawn task KILLED HERE!
+```
+
+**Impact**: Client never receives progress/notification events - they're lost when Lambda tears down
+
+#### Finding 3: Not Using Lambda Stream-Building Pattern
+
+**What lambda_http Expects**:
+```rust
+async fn handler(event: Request) -> Result<Response<Body>, Error> {
+    // Build COMPLETE stream INSIDE handler before returning
+    let stream = stream::iter(vec![
+        Ok(Bytes::from("data: event1\n\n")),
+        Ok(Bytes::from("data: event2\n\n")),
+    ]);
+    
+    Ok(Response::new(Body::from(stream))) // Stream fully constructed
+}
+```
+
+**What We're Doing**:
+```rust
+// Return with background task dependency (gets killed)
+let hyper_resp = self.streamable_handler.handle_request(...).await; // Spawns task!
+Ok(hyper_to_lambda_streaming(hyper_resp)) // Lambda tears down → task killed
+```
+
+### 🔍 Root Cause: Architecture Mismatch
+
+**MCP Notification Model**:
+```
+Tool → Progress Events → Broadcaster → Background Task → HTTP Stream
+                                            ↑
+                                    Might be killed by Lambda teardown? (UNVERIFIED)
+```
+
+**Lambda Execution Model**:
+```
+Request → Handler → Return → TEARDOWN (all async tasks must complete before return)
+```
+
+**Theoretical Conflict**: MCP uses background tasks for async notifications, Lambda might kill them on return (needs empirical testing to verify)
+
+### 📋 Implementation Action Items
+
+Based on `lambda_http::Body::from_stream` pattern - see `LAMBDA_STREAMING_ANALYSIS.md` for details.
+
+**Action 1: Adopt Streaming Response Pattern**
+- Rewrite `handle_streaming()` to return `lambda_http::Response<lambda_http::Body>` not hyper types
+- Use `Body::from_stream(stream)` built inside handler
+- Build stream with `stream::iter(notification_chunks).map(Ok)` pattern
+- Remove all hyper response type dependencies from Lambda path
+
+**Reference Pattern**:
+```rust
+async fn handler(event: Request) -> Result<Response<Body>, Error> {
+    let chunks = collect_notifications_synchronously().await;
+    let stream = stream::iter(chunks).map(Ok);
+    Response::builder()
+        .header("content-type", "text/event-stream")
+        .body(Body::from_stream(stream))?
+}
+```
+
+**Action 2: Synchronous Notification Flush**
+- Eliminate all `tokio::spawn` from Lambda code path
+- Buffer all notifications into `Vec<Bytes>` before building stream
+- Remove `StreamableHttpHandler` delegation (it spawns background tasks)
+- Collect events synchronously: NO background task forwarding
+
+**Action 3: Write Real Handler Tests**
+- Remove tests that assign async closures to `_` without execution
+- Invoke `handle_streaming()` directly with real MCP requests
+- Collect SSE frames from `lambda_http::Body` stream
+- Verify progress notifications present in collected frames
+
+**Implementation Timeline**:
+- **Week 1**: Real tests (Phase Lambda-1 in TODO_TRACKER.md)
+- **Week 2**: `Body::from_stream` adoption (Phase Lambda-2)
+- **Week 3**: Production validation (Phase Lambda-3)
+
+### ✅ Investigation Artifacts
+
+- **`LAMBDA_STREAMING_ANALYSIS.md`**: Comprehensive 300+ line analysis document
+- **Codex References**: `tests/lambda_examples.rs` lines 103-302
+- **Key Files**: `handler.rs:161-220`, `adapter.rs`, `server.rs`
+
+### 🎯 Next Steps
+
+1. **Adopt `Body::from_stream` Pattern**: Rewrite `handle_streaming()` using lambda_http types, not hyper
+2. **Synchronous Notification Flush**: Buffer all events into Vec before building stream (no `tokio::spawn`)
+3. **Write Real Handler Tests**: Tests must invoke handlers and validate SSE frames delivered
+4. **Production Validation**: Deploy to Lambda and verify notifications with real MCP clients
+
+**Current Status**: Investigation complete, `Body::from_stream` pattern identified as solution, ready for implementation
+
+**Key References**:
+- **TODO_TRACKER.md**: Phases Lambda-1/2/3 with concrete deliverables
+- **LAMBDA_STREAMING_ANALYSIS.md**: Code examples showing correct vs wrong patterns
+
+---
+
 ## ✅ COMPLETED: MCP 2025-06-18 Schema Compliance + Critical Fixes (2025-09-28)
 
 **Status**: ✅ **SCHEMA-LEVEL MCP 2025-06-18 COMPLIANCE + COMPREHENSIVE E2E COVERAGE**
@@ -177,13 +350,15 @@ pub struct ResourceReference {
 
 **Current Capabilities**:
 - ✅ MCP 2025-06-18 schema compliance
-- ✅ SSE streaming functionality (verified working)
+- ✅ SSE streaming functionality (verified working for **long-running servers**, NOT Lambda - see Lambda section above)
 - ✅ 430+ comprehensive tests passing
 - ✅ Clean compilation across entire workspace
 - ✅ Pattern match forward compatibility
 - ✅ Proper serde serialization/deserialization behavior
 
 **Framework is ready for development use with complete MCP specification compliance.**
+
+**Note**: SSE streaming works for traditional HTTP servers (`turul-http-mcp-server`). Lambda streaming notifications are unverified - see "⚠️ ACTIVE: Lambda Streaming Verification Needed" section above for status.
 
 ### ✅ Additional Doctest Fixes (2025-01-25)
 
@@ -451,9 +626,9 @@ ERROR turul_mcp_server::session: ❌ Bridge error: Failed to downcast broadcaste
 let body = StreamBody::new(formatted_stream).boxed_unsync();
 ```
 
-**POST Path (BROKEN)**:
+**POST Path (UNVERIFIED - needs empirical testing)**:
 ```rust
-// All POST handlers return Full<Bytes> - no streaming!
+// Current implementation - status unknown without cargo lambda watch testing
 ```
 
 ## ✅ RESOLVED: JSON-RPC Architecture Crisis (2025-09-22)
