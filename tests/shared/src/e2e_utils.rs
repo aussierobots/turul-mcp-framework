@@ -242,6 +242,34 @@ impl McpTestClient {
         .await
     }
 
+    /// Call a tool with SSE streaming (for progress notifications)
+    /// Returns the raw response for SSE event parsing
+    pub async fn call_tool_with_sse(
+        &self,
+        name: &str,
+        arguments: Value,
+    ) -> Result<reqwest::Response, reqwest::Error> {
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments}
+        });
+
+        let mut req_builder = self
+            .client
+            .post(&self.base_url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream, application/json")
+            .json(&request);
+
+        if let Some(ref session_id) = self.session_id {
+            req_builder = req_builder.header("mcp-session-id", session_id);
+        }
+
+        req_builder.send().await
+    }
+
     /// Send a notification (no response expected)
     pub async fn send_notification(
         &self,
