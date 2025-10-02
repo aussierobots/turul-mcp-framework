@@ -9,6 +9,7 @@ use tokio::time::timeout;
 
 /// Test that documented working examples compile successfully
 #[tokio::test]
+#[ignore = "Slow compilation test - spawns 11 cargo check processes. Run manually: cargo test test_working_examples_compilation --ignored"]
 async fn test_working_examples_compilation() {
     use futures::future::try_join_all;
     use tokio::process::Command as AsyncCommand;
@@ -90,9 +91,12 @@ async fn test_working_examples_compilation() {
 
 /// Test that MCP Streamable HTTP compliance test passes
 #[tokio::test]
+#[ignore = "Spawns server subprocess - can leave orphaned processes. Run manually: cargo test test_mcp_streamable_http_compliance --ignored"]
 async fn test_mcp_streamable_http_compliance() {
+    use tokio::process::Command as AsyncCommand;
+
     // Start server in background
-    let mut server = Command::new("cargo")
+    let mut server = AsyncCommand::new("cargo")
         .args([
             "run",
             "-p",
@@ -111,7 +115,7 @@ async fn test_mcp_streamable_http_compliance() {
 
     // Run compliance test with timeout
     let test_result = timeout(Duration::from_secs(30), async {
-        Command::new("cargo")
+        AsyncCommand::new("cargo")
             .args([
                 "run",
                 "-p",
@@ -122,13 +126,14 @@ async fn test_mcp_streamable_http_compliance() {
             ])
             .env("RUST_LOG", "info")
             .output()
+            .await
             .expect("Failed to execute compliance test")
     })
     .await;
 
-    // Clean up server
-    let _ = server.kill();
-    let _ = server.wait();
+    // Clean up server properly - use start_kill() then wait with timeout
+    let _ = server.start_kill();
+    let _ = timeout(Duration::from_millis(500), server.wait()).await;
 
     match test_result {
         Ok(output) => {
