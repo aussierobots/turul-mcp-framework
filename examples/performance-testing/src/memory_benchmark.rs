@@ -205,12 +205,10 @@ fn get_rss_memory() -> Option<usize> {
             .args(["-o", "rss=", "-p"])
             .arg(std::process::id().to_string())
             .output()
+            && let Ok(rss_str) = String::from_utf8(output.stdout)
+            && let Ok(kb) = rss_str.trim().parse::<usize>()
         {
-            if let Ok(rss_str) = String::from_utf8(output.stdout) {
-                if let Ok(kb) = rss_str.trim().parse::<usize>() {
-                    return Some(kb * 1024); // Convert KB to bytes
-                }
-            }
+            return Some(kb * 1024); // Convert KB to bytes
         }
     }
 

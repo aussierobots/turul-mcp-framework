@@ -64,15 +64,12 @@ async fn test_sse_notification_round_trip_delivery() {
         let collect_duration = Duration::from_secs(3);
 
         while start.elapsed() < collect_duration {
-            if let Some(chunk_result) = response.chunk().await.transpose() {
-                if let Ok(chunk) = chunk_result {
-                    if let Ok(text) = String::from_utf8(chunk.to_vec()) {
-                        if !text.is_empty() {
+            if let Some(chunk_result) = response.chunk().await.transpose()
+                && let Ok(chunk) = chunk_result
+                    && let Ok(text) = String::from_utf8(chunk.to_vec())
+                        && !text.is_empty() {
                             events.push(text);
                         }
-                    }
-                }
-            }
             sleep(Duration::from_millis(50)).await;
         }
 
@@ -106,11 +103,11 @@ async fn test_sse_notification_round_trip_delivery() {
     for event_chunk in &events {
         // Parse SSE format (data: lines)
         for line in event_chunk.lines() {
-            if let Some(data) = line.strip_prefix("data: ") {
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
+            if let Some(data) = line.strip_prefix("data: ")
+                && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
                     // Check for progress notification (MCP 2025-06-18 spec)
-                    if let Some(method) = parsed.get("method").and_then(|m| m.as_str()) {
-                        if method == "notifications/progress" {
+                    if let Some(method) = parsed.get("method").and_then(|m| m.as_str())
+                        && method == "notifications/progress" {
                             found_progress = true;
                             info!("✅ Found progress notification from progress_tracker tool");
 
@@ -127,9 +124,7 @@ async fn test_sse_notification_round_trip_delivery() {
                                 }
                             }
                         }
-                    }
                 }
-            }
         }
     }
 
@@ -204,15 +199,12 @@ async fn test_sse_notification_session_isolation() {
         let start = std::time::Instant::now();
 
         while start.elapsed() < Duration::from_secs(3) {
-            if let Some(chunk_result) = response.chunk().await.transpose() {
-                if let Ok(chunk) = chunk_result {
-                    if let Ok(text) = String::from_utf8(chunk.to_vec()) {
-                        if !text.is_empty() {
+            if let Some(chunk_result) = response.chunk().await.transpose()
+                && let Ok(chunk) = chunk_result
+                    && let Ok(text) = String::from_utf8(chunk.to_vec())
+                        && !text.is_empty() {
                             events.push(text);
                         }
-                    }
-                }
-            }
             sleep(Duration::from_millis(50)).await;
         }
 
@@ -229,15 +221,12 @@ async fn test_sse_notification_session_isolation() {
         let start = std::time::Instant::now();
 
         while start.elapsed() < Duration::from_secs(3) {
-            if let Some(chunk_result) = response.chunk().await.transpose() {
-                if let Ok(chunk) = chunk_result {
-                    if let Ok(text) = String::from_utf8(chunk.to_vec()) {
-                        if !text.is_empty() {
+            if let Some(chunk_result) = response.chunk().await.transpose()
+                && let Ok(chunk) = chunk_result
+                    && let Ok(text) = String::from_utf8(chunk.to_vec())
+                        && !text.is_empty() {
                             events.push(text);
                         }
-                    }
-                }
-            }
             sleep(Duration::from_millis(50)).await;
         }
 
@@ -294,30 +283,24 @@ async fn test_sse_notification_session_isolation() {
     // Count progress notifications for client1 (should have notifications from its own session)
     for event_chunk in &events1 {
         for line in event_chunk.lines() {
-            if let Some(data) = line.strip_prefix("data: ") {
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                    if let Some(method) = parsed.get("method").and_then(|m| m.as_str()) {
-                        if method == "notifications/progress" {
+            if let Some(data) = line.strip_prefix("data: ")
+                && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data)
+                    && let Some(method) = parsed.get("method").and_then(|m| m.as_str())
+                        && method == "notifications/progress" {
                             client1_progress_count += 1;
                         }
-                    }
-                }
-            }
         }
     }
 
     // Count progress notifications for client2 (should have notifications from its own session)
     for event_chunk in &events2 {
         for line in event_chunk.lines() {
-            if let Some(data) = line.strip_prefix("data: ") {
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                    if let Some(method) = parsed.get("method").and_then(|m| m.as_str()) {
-                        if method == "notifications/progress" {
+            if let Some(data) = line.strip_prefix("data: ")
+                && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data)
+                    && let Some(method) = parsed.get("method").and_then(|m| m.as_str())
+                        && method == "notifications/progress" {
                             client2_progress_count += 1;
                         }
-                    }
-                }
-            }
         }
     }
 

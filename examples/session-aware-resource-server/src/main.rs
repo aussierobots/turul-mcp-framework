@@ -26,7 +26,7 @@ impl McpResource for SessionAwareProfileResource {
             // Access session-specific data
             let session_id = &session_ctx.session_id;
             let user_data = session_ctx.get_typed_state::<UserData>("user_data").await
-                .unwrap_or_else(|| UserData::default());
+                .unwrap_or_else(UserData::default);
 
             let profile = serde_json::json!({
                 "session_id": session_id.to_string(),

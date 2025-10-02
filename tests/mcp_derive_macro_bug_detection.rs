@@ -114,15 +114,14 @@ async fn test_optional_parameter_schema_bug() {
     println!("Properties: {:?}", input_schema.properties);
 
     // BUG CHECK: ticker is marked as optional but appears in required array
-    if let Some(required) = &input_schema.required {
-        if required.contains(&"ticker".to_string()) {
+    if let Some(required) = &input_schema.required
+        && required.contains(&"ticker".to_string()) {
             panic!(
                 "🐛 OPTIONAL PARAMETER BUG DETECTED! 'ticker' is marked with #[param(optional=true)] \
                  but appears in required array: {:?}. Optional parameters should not be required!",
                 required
             );
         }
-    }
 
     // CORRECT: Optional parameters should not be in required array
     if let Some(required) = &input_schema.required {
@@ -175,8 +174,8 @@ struct ValidationResult {
 }
 
 fn validate_against_schema(content: &Value, schema: &turul_mcp_protocol::tools::ToolSchema) -> ValidationResult {
-    if let Some(schema_props) = &schema.properties {
-        if let Some(required) = &schema.required {
+    if let Some(schema_props) = &schema.properties
+        && let Some(required) = &schema.required {
             let content_obj = content.as_object().unwrap();
 
             // Check all required fields are present
@@ -189,7 +188,6 @@ fn validate_against_schema(content: &Value, schema: &turul_mcp_protocol::tools::
                 }
             }
         }
-    }
 
     ValidationResult {
         is_valid: true,

@@ -47,12 +47,11 @@ where
     let mut body = std::pin::pin!(body);
 
     while let Some(chunk_result) = body.frame().await {
-        if let Ok(frame) = chunk_result {
-            if let Some(data) = frame.data_ref() {
+        if let Ok(frame) = chunk_result
+            && let Some(data) = frame.data_ref() {
                 let text = String::from_utf8(data.to_vec())?;
                 frames.push(text);
             }
-        }
     }
 
     Ok(frames)
@@ -200,9 +199,9 @@ fn create_mcp_request_with_session(
     params: serde_json::Value,
     _session_id: &str,
 ) -> Request {
-    let req = create_mcp_request(method, params);
+    
     // TODO: Add Mcp-Session-Id header
-    req
+    create_mcp_request(method, params)
 }
 
 /// Test SSE frame format compliance

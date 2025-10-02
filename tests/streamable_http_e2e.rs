@@ -1563,7 +1563,7 @@ async fn test_last_event_id_resumption() {
     let last_event_id = initial_events
         .iter()
         .filter_map(|event| event.id.as_ref())
-        .last()
+        .next_back()
         .cloned();
 
     match &last_event_id {

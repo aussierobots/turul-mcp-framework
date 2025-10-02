@@ -102,8 +102,8 @@ async fn test_capabilities_truthful_advertising() {
 
         // Check resources capabilities
         if let Some(resources) = server_capabilities.get("resources") {
-            if let Some(list_changed) = resources.get("listChanged") {
-                if list_changed == true {
+            if let Some(list_changed) = resources.get("listChanged")
+                && list_changed == true {
                     // If server advertises listChanged=true, it MUST be able to emit notifications
                     // For now, our framework is static, so this should be false
                     println!("⚠️  Server advertises resources.listChanged=true");
@@ -114,27 +114,23 @@ async fn test_capabilities_truthful_advertising() {
                     // 2. Is SSE properly wired for notification delivery?
                     // For now, static framework should advertise false
                 }
-            }
 
-            if let Some(subscribe) = resources.get("subscribe") {
-                if subscribe == true {
+            if let Some(subscribe) = resources.get("subscribe")
+                && subscribe == true {
                     // If server advertises subscribe=true, it MUST support resource subscriptions
                     println!("⚠️  Server advertises resources.subscribe=true");
                     println!("    This requires subscription management capability");
                 }
-            }
         }
 
         // Check tools capabilities
-        if let Some(tools) = server_capabilities.get("tools") {
-            if let Some(list_changed) = tools.get("listChanged") {
-                if list_changed == true {
+        if let Some(tools) = server_capabilities.get("tools")
+            && let Some(list_changed) = tools.get("listChanged")
+                && list_changed == true {
                     println!("⚠️  Server advertises tools.listChanged=true");
                     println!("    This requires dynamic tool registration capability");
                     // Static framework should not advertise this
                 }
-            }
-        }
 
         println!("✅ Server capabilities advertising compliance validated");
         println!("   Server capabilities: {:?}", server_capabilities);

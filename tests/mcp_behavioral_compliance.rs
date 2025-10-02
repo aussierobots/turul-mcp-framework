@@ -6,7 +6,6 @@
 //! 3. Limit parameter support
 //! 4. All list handlers preserve pagination fields
 
-use reqwest;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;

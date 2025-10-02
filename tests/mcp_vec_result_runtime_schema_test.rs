@@ -91,7 +91,7 @@ async fn test_tools_list_schema_still_broken() {
             println!("⚠️  WARNING: tools/list still returns 'object' schema");
             println!("⚠️  This may cause client-side validation issues BEFORE calling the tool");
             println!("⚠️  FastMCP might reject the tool in discovery phase");
-            println!("");
+            println!();
             println!("💡 SOLUTION: We need to fix the compile-time schema generation,");
             println!("   not just the runtime correction.");
         }

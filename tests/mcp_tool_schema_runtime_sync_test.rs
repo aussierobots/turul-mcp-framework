@@ -309,23 +309,21 @@ async fn test_tools_list_metadata_consistency() {
     let calc_metadata = calc_tool.to_tool();
 
     // Verify metadata output schemas match what we expect
-    if let Some(count_schema) = &count_metadata.output_schema {
-        if let Some(properties) = &count_schema.properties {
+    if let Some(count_schema) = &count_metadata.output_schema
+        && let Some(properties) = &count_schema.properties {
             assert!(
                 properties.contains_key("countResult"),
                 "tools/list metadata should show 'countResult' field"
             );
         }
-    }
 
-    if let Some(calc_schema) = &calc_metadata.output_schema {
-        if let Some(properties) = &calc_schema.properties {
+    if let Some(calc_schema) = &calc_metadata.output_schema
+        && let Some(properties) = &calc_schema.properties {
             assert!(
                 properties.contains_key("calculationResult"),
                 "tools/list metadata should show 'calculationResult' field"
             );
         }
-    }
 
     // Now verify actual tool calls match the metadata
     let count_args = json!({"text": "announcement test"});
@@ -335,23 +333,21 @@ async fn test_tools_list_metadata_consistency() {
     let calc_result = calc_tool.call(calc_args, None).await.unwrap();
 
     // Structured content must match the schema from tools/list
-    if let Some(structured) = count_result.structured_content {
-        if let Some(structured_obj) = structured.as_object() {
+    if let Some(structured) = count_result.structured_content
+        && let Some(structured_obj) = structured.as_object() {
             assert!(
                 structured_obj.contains_key("countResult"),
                 "tools/call output must match tools/list schema field names"
             );
         }
-    }
 
-    if let Some(structured) = calc_result.structured_content {
-        if let Some(structured_obj) = structured.as_object() {
+    if let Some(structured) = calc_result.structured_content
+        && let Some(structured_obj) = structured.as_object() {
             assert!(
                 structured_obj.contains_key("calculationResult"),
                 "tools/call output must match tools/list schema field names"
             );
         }
-    }
 }
 
 /// This test validates the exact scenario you showed with CountAnnouncements
@@ -377,9 +373,9 @@ async fn test_specific_count_announcements_scenario() {
 
     // Step 3: Validate they match
     // The outputSchema from tools/list should match structuredContent from tools/call
-    if let Some(output_schema) = &tool_definition.output_schema {
-        if let Some(schema_properties) = &output_schema.properties {
-            if let Some(structured_content) = &call_result.structured_content {
+    if let Some(output_schema) = &tool_definition.output_schema
+        && let Some(schema_properties) = &output_schema.properties
+            && let Some(structured_content) = &call_result.structured_content {
                 // Every field in the schema should exist in the structured content
                 if let Some(content_obj) = structured_content.as_object() {
                     for schema_field in schema_properties.keys() {
@@ -406,8 +402,6 @@ async fn test_specific_count_announcements_scenario() {
                     }
                 }
             }
-        }
-    }
 }
 
 /// Zero-configuration tool without #[tool(...)] attribute - for testing schema/runtime consistency

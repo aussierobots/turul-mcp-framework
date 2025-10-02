@@ -5,7 +5,6 @@
 //! - Progress events reach POST clients via SSE streaming before final result
 //! - Both progress frames and final result are delivered in correct order
 
-use reqwest;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
@@ -33,8 +32,8 @@ async fn start_progress_test_server() -> String {
     async fn slow_calculation(session: Option<SessionContext>) -> McpResult<String> {
         if let Some(session_ctx) = session {
             // Emit progress notification at 25%
-            if let Some(broadcaster_any) = &session_ctx.broadcaster {
-                if let Some(broadcaster) = broadcaster_any.downcast_ref::<turul_http_mcp_server::notification_bridge::StreamManagerNotificationBroadcaster>() {
+            if let Some(broadcaster_any) = &session_ctx.broadcaster
+                && let Some(broadcaster) = broadcaster_any.downcast_ref::<turul_http_mcp_server::notification_bridge::StreamManagerNotificationBroadcaster>() {
                     use turul_mcp_protocol::notifications::*;
 
                     let progress_25 = ProgressNotification::new(format!("calc-{}", uuid::Uuid::now_v7()), 25)
@@ -42,14 +41,13 @@ async fn start_progress_test_server() -> String {
                         .with_message("Starting calculation".to_string());
                     let _ = broadcaster.send_progress_notification(&session_ctx.session_id, progress_25).await;
                 }
-            }
 
             // Simulate work
             sleep(Duration::from_millis(100)).await;
 
             // Emit progress notification at 75%
-            if let Some(broadcaster_any) = &session_ctx.broadcaster {
-                if let Some(broadcaster) = broadcaster_any.downcast_ref::<turul_http_mcp_server::notification_bridge::StreamManagerNotificationBroadcaster>() {
+            if let Some(broadcaster_any) = &session_ctx.broadcaster
+                && let Some(broadcaster) = broadcaster_any.downcast_ref::<turul_http_mcp_server::notification_bridge::StreamManagerNotificationBroadcaster>() {
                     use turul_mcp_protocol::notifications::*;
 
                     let progress_75 = ProgressNotification::new(format!("calc-{}", uuid::Uuid::now_v7()), 75)
@@ -57,7 +55,6 @@ async fn start_progress_test_server() -> String {
                         .with_message("Nearly complete".to_string());
                     let _ = broadcaster.send_progress_notification(&session_ctx.session_id, progress_75).await;
                 }
-            }
 
             // Final work
             sleep(Duration::from_millis(100)).await;
@@ -166,8 +163,8 @@ async fn test_post_streaming_delivers_progress_before_result() {
     let mut final_frame = None;
 
     for line in response_text.lines() {
-        if line.starts_with("data: ") {
-            let json_str = &line[6..]; // Remove "data: " prefix
+        if let Some(json_str) = line.strip_prefix("data: ") {
+            // Remove "data: " prefix
             if let Ok(frame_json) = serde_json::from_str::<Value>(json_str) {
                 if frame_json.get("method").and_then(|m| m.as_str())
                     == Some("notifications/progress")

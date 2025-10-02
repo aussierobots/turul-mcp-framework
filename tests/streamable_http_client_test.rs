@@ -90,12 +90,11 @@ impl StreamableHttpClient {
             .await?;
 
         // ✅ CRITICAL: Extract session ID from headers
-        if let Some(session_header) = response.headers().get("mcp-session-id") {
-            if let Ok(session_str) = session_header.to_str() {
+        if let Some(session_header) = response.headers().get("mcp-session-id")
+            && let Ok(session_str) = session_header.to_str() {
                 self.session_id = Some(session_str.to_string());
                 info!("✅ Captured session ID: {}", session_str);
             }
-        }
 
         let content_type = response
             .headers()
@@ -234,8 +233,8 @@ impl StreamableHttpClient {
                                 let event_text = buffer[..pos].to_string();
                                 buffer = buffer[pos + 2..].to_string();
 
-                                if let Some(event) = Self::parse_sse_event(&event_text) {
-                                    if let Some(data) = Self::try_parse_json(&event.data) {
+                                if let Some(event) = Self::parse_sse_event(&event_text)
+                                    && let Some(data) = Self::try_parse_json(&event.data) {
                                         // Check if this is a JSON-RPC response (final result)
                                         if data.get("id").is_some() && data.get("result").is_some()
                                         {
@@ -267,8 +266,8 @@ impl StreamableHttpClient {
                                                     );
                                                     let _ = progress_tx.send(progress);
                                                 }
-                                            } else if method == "notifications/message" {
-                                                if let Some(params) = data.get("params") {
+                                            } else if method == "notifications/message"
+                                                && let Some(params) = data.get("params") {
                                                     let progress = ProgressNotification {
                                                         progress: None,
                                                         token: None,
@@ -283,10 +282,8 @@ impl StreamableHttpClient {
                                                     );
                                                     let _ = progress_tx.send(progress);
                                                 }
-                                            }
                                         }
                                     }
-                                }
                             }
                         }
                         Err(e) => {

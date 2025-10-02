@@ -290,7 +290,7 @@ mod tests {
         impl turul_mcp_protocol::tools::HasInputSchema for SimpleTextTool {
             fn input_schema(&self) -> &ToolSchema {
                 static SCHEMA: std::sync::LazyLock<ToolSchema> =
-                    std::sync::LazyLock::new(|| ToolSchema::object());
+                    std::sync::LazyLock::new(ToolSchema::object);
                 &SCHEMA
             }
         }
@@ -383,8 +383,8 @@ mod tests {
             .unwrap();
 
         // Check schema uses custom field name
-        if let Some(schema) = tool.output_schema() {
-            if let Some(properties) = &schema.properties {
+        if let Some(schema) = tool.output_schema()
+            && let Some(properties) = &schema.properties {
                 assert!(
                     properties.contains_key("wordCount"),
                     "Schema should contain 'wordCount' field, got: {:?}",
@@ -395,7 +395,6 @@ mod tests {
                     "Schema should not contain 'result' field when custom field specified"
                 );
             }
-        }
 
         // Check runtime output uses custom field name
         assert!(result.structured_content.is_some());
@@ -454,15 +453,14 @@ mod tests {
         };
 
         // Check schema uses custom field name
-        if let Some(schema) = tool.output_schema() {
-            if let Some(properties) = &schema.properties {
+        if let Some(schema) = tool.output_schema()
+            && let Some(properties) = &schema.properties {
                 assert!(
                     properties.contains_key("countResult"),
                     "Derive macro schema should contain 'countResult' field, got: {:?}",
                     properties.keys().collect::<Vec<_>>()
                 );
             }
-        }
 
         // Check runtime output uses custom field name
         let result = tool
