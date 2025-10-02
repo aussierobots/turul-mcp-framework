@@ -2,7 +2,7 @@
 
 **Purpose**: Track current priorities and progress for the turul-mcp-framework.
 
-## Current Status: 0.2.1 STABLE + 0.2.2-dev QUALITY IMPROVEMENTS 🧪
+## Current Status: 0.2.1 STABLE RELEASE 🚀
 
 **Last Updated**: 2025-10-03
 **Framework Status**: ✅ **SCHEMA-LEVEL MCP 2025-06-18 COMPLIANCE** - Data structures compliant; behavioral features like resources/subscribe and advanced list pagination still pending
