@@ -8,7 +8,7 @@
 //! If they pass, the bugs still exist!
 
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::tools::ToolDefinition;
 use turul_mcp_server::{McpResult, McpTool, SessionContext};
@@ -31,6 +31,7 @@ struct CountAnnouncementsTool {
         description = "Optional ticker to count announcements for (3-4 uppercase letters, e.g. 'BHP')",
         optional = true  // This should make the field optional in schema
     )]
+    #[allow(dead_code)]
     ticker: String,
 }
 
@@ -67,8 +68,14 @@ async fn test_derive_macro_schema_runtime_mismatch_bug() {
         let runtime_obj = structured_content.as_object().unwrap();
 
         println!("=== BUG DETECTION ===");
-        println!("Schema fields: {:?}", schema_props.keys().collect::<Vec<_>>());
-        println!("Runtime fields: {:?}", runtime_obj.keys().collect::<Vec<_>>());
+        println!(
+            "Schema fields: {:?}",
+            schema_props.keys().collect::<Vec<_>>()
+        );
+        println!(
+            "Runtime fields: {:?}",
+            runtime_obj.keys().collect::<Vec<_>>()
+        );
 
         // BUG: Schema has "output" but runtime has "countResult"
         if schema_props.contains_key("output") && runtime_obj.contains_key("countResult") {
@@ -115,13 +122,14 @@ async fn test_optional_parameter_schema_bug() {
 
     // BUG CHECK: ticker is marked as optional but appears in required array
     if let Some(required) = &input_schema.required
-        && required.contains(&"ticker".to_string()) {
-            panic!(
-                "🐛 OPTIONAL PARAMETER BUG DETECTED! 'ticker' is marked with #[param(optional=true)] \
+        && required.contains(&"ticker".to_string())
+    {
+        panic!(
+            "🐛 OPTIONAL PARAMETER BUG DETECTED! 'ticker' is marked with #[param(optional=true)] \
                  but appears in required array: {:?}. Optional parameters should not be required!",
-                required
-            );
-        }
+            required
+        );
+    }
 
     // CORRECT: Optional parameters should not be in required array
     if let Some(required) = &input_schema.required {
@@ -158,8 +166,17 @@ async fn test_mcp_inspector_validation_scenario() {
              Schema expects: {:?}, but structured content has: {:?}. \
              Error: {}. \
              This is the exact bug seen in MCP Inspector!",
-            output_schema.properties.as_ref().unwrap().keys().collect::<Vec<_>>(),
-            structured_content.as_object().unwrap().keys().collect::<Vec<_>>(),
+            output_schema
+                .properties
+                .as_ref()
+                .unwrap()
+                .keys()
+                .collect::<Vec<_>>(),
+            structured_content
+                .as_object()
+                .unwrap()
+                .keys()
+                .collect::<Vec<_>>(),
             validation_result.error
         );
     }
@@ -173,21 +190,25 @@ struct ValidationResult {
     error: String,
 }
 
-fn validate_against_schema(content: &Value, schema: &turul_mcp_protocol::tools::ToolSchema) -> ValidationResult {
-    if let Some(schema_props) = &schema.properties
-        && let Some(required) = &schema.required {
-            let content_obj = content.as_object().unwrap();
+fn validate_against_schema(
+    content: &Value,
+    schema: &turul_mcp_protocol::tools::ToolSchema,
+) -> ValidationResult {
+    if let Some(_schema_props) = &schema.properties
+        && let Some(required) = &schema.required
+    {
+        let content_obj = content.as_object().unwrap();
 
-            // Check all required fields are present
-            for required_field in required {
-                if !content_obj.contains_key(required_field) {
-                    return ValidationResult {
-                        is_valid: false,
-                        error: format!("data should have required property '{}'", required_field),
-                    };
-                }
+        // Check all required fields are present
+        for required_field in required {
+            if !content_obj.contains_key(required_field) {
+                return ValidationResult {
+                    is_valid: false,
+                    error: format!("data should have required property '{}'", required_field),
+                };
             }
         }
+    }
 
     ValidationResult {
         is_valid: true,
@@ -228,7 +249,11 @@ async fn test_correct_behavior_after_fix() {
 
     // After fix: MCP Inspector validation should pass
     let validation = validate_against_schema(structured_content, output_schema);
-    assert!(validation.is_valid, "Validation should pass after fix: {}", validation.error);
+    assert!(
+        validation.is_valid,
+        "Validation should pass after fix: {}",
+        validation.error
+    );
 
     println!("✅ All validations pass - bug is fixed!");
 }

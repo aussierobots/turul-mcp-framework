@@ -361,11 +361,9 @@ async fn test_mcp_inspector_flow_with_combined_accept_header() {
     println!("Response body: {}", response_text);
 
     // Parse SSE format: "data: {...json...}"
-    let json_content = if response_text.starts_with("data: ") {
-        &response_text[6..] // Remove "data: " prefix
-    } else {
-        &response_text // Plain JSON
-    };
+    let json_content = response_text
+        .strip_prefix("data: ")
+        .unwrap_or(&response_text);
 
     let tools_body: Value = serde_json::from_str(json_content).unwrap();
     assert_eq!(tools_body["jsonrpc"], "2.0");

@@ -17,6 +17,7 @@ use tracing::{debug, error, info, warn};
 
 /// Represents a server event from SSE stream
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct StreamEvent {
     event_type: Option<String>,
     data: String,
@@ -25,6 +26,7 @@ struct StreamEvent {
 
 /// Progress notification from tool execution
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ProgressNotification {
     progress: Option<u64>,
     token: Option<String>,
@@ -33,6 +35,7 @@ struct ProgressNotification {
 
 /// Final tool result
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ToolResult {
     content: Vec<Value>,
     is_error: bool,
@@ -91,10 +94,11 @@ impl StreamableHttpClient {
 
         // ✅ CRITICAL: Extract session ID from headers
         if let Some(session_header) = response.headers().get("mcp-session-id")
-            && let Ok(session_str) = session_header.to_str() {
-                self.session_id = Some(session_str.to_string());
-                info!("✅ Captured session ID: {}", session_str);
-            }
+            && let Ok(session_str) = session_header.to_str()
+        {
+            self.session_id = Some(session_str.to_string());
+            info!("✅ Captured session ID: {}", session_str);
+        }
 
         let content_type = response
             .headers()
@@ -234,56 +238,51 @@ impl StreamableHttpClient {
                                 buffer = buffer[pos + 2..].to_string();
 
                                 if let Some(event) = Self::parse_sse_event(&event_text)
-                                    && let Some(data) = Self::try_parse_json(&event.data) {
-                                        // Check if this is a JSON-RPC response (final result)
-                                        if data.get("id").is_some() && data.get("result").is_some()
+                                    && let Some(data) = Self::try_parse_json(&event.data)
+                                {
+                                    // Check if this is a JSON-RPC response (final result)
+                                    if data.get("id").is_some() && data.get("result").is_some() {
+                                        debug!("📦 Found final JSON-RPC result in SSE stream");
+                                        let _ = result_tx.send(data);
+                                    }
+                                    // Check if this is a progress notification
+                                    else if let Some(method) =
+                                        data.get("method").and_then(|m| m.as_str())
+                                    {
+                                        if method == "notifications/progress" {
+                                            if let Some(params) = data.get("params") {
+                                                let progress = ProgressNotification {
+                                                    progress: params
+                                                        .get("progress")
+                                                        .and_then(|p| p.as_u64()),
+                                                    token: params
+                                                        .get("progressToken")
+                                                        .and_then(|t| t.as_str())
+                                                        .map(|s| s.to_string()),
+                                                    message: params
+                                                        .get("message")
+                                                        .and_then(|m| m.as_str())
+                                                        .map(|s| s.to_string()),
+                                                };
+                                                debug!("📈 Progress notification: {:?}", progress);
+                                                let _ = progress_tx.send(progress);
+                                            }
+                                        } else if method == "notifications/message"
+                                            && let Some(params) = data.get("params")
                                         {
-                                            debug!("📦 Found final JSON-RPC result in SSE stream");
-                                            let _ = result_tx.send(data);
-                                        }
-                                        // Check if this is a progress notification
-                                        else if let Some(method) =
-                                            data.get("method").and_then(|m| m.as_str())
-                                        {
-                                            if method == "notifications/progress" {
-                                                if let Some(params) = data.get("params") {
-                                                    let progress = ProgressNotification {
-                                                        progress: params
-                                                            .get("progress")
-                                                            .and_then(|p| p.as_u64()),
-                                                        token: params
-                                                            .get("progressToken")
-                                                            .and_then(|t| t.as_str())
-                                                            .map(|s| s.to_string()),
-                                                        message: params
-                                                            .get("message")
-                                                            .and_then(|m| m.as_str())
-                                                            .map(|s| s.to_string()),
-                                                    };
-                                                    debug!(
-                                                        "📈 Progress notification: {:?}",
-                                                        progress
-                                                    );
-                                                    let _ = progress_tx.send(progress);
-                                                }
-                                            } else if method == "notifications/message"
-                                                && let Some(params) = data.get("params") {
-                                                    let progress = ProgressNotification {
-                                                        progress: None,
-                                                        token: None,
-                                                        message: params
-                                                            .get("data")
-                                                            .and_then(|d| d.as_str())
-                                                            .map(|s| s.to_string()),
-                                                    };
-                                                    debug!(
-                                                        "💬 Message notification: {:?}",
-                                                        progress
-                                                    );
-                                                    let _ = progress_tx.send(progress);
-                                                }
+                                            let progress = ProgressNotification {
+                                                progress: None,
+                                                token: None,
+                                                message: params
+                                                    .get("data")
+                                                    .and_then(|d| d.as_str())
+                                                    .map(|s| s.to_string()),
+                                            };
+                                            debug!("💬 Message notification: {:?}", progress);
+                                            let _ = progress_tx.send(progress);
                                         }
                                     }
+                                }
                             }
                         }
                         Err(e) => {

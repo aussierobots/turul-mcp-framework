@@ -30,6 +30,7 @@ struct SearchResult {
 )]
 struct SearchTool {
     query: String,
+    #[allow(dead_code)]
     limit: usize,
 }
 

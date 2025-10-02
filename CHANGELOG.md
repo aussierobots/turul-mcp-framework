@@ -7,11 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.1] - 2025-10-03
+
 ### Fixed
+- **MCP Inspector SSE Compatibility**: Changed all SSE events to use standard `event: message` type instead of custom event types. JavaScript EventSource API only processes `event: message` or omitted event lines. This fix ensures all notifications (including `notifications/progress`) are visible in MCP Inspector.
+- **Lambda DynamoDB Notification Timing**: Added `.consistent_read(true)` to DynamoDB queries in `get_recent_events()` and `get_events_after()`. Fixes race condition where notifications worked on reconnect but not initial Lambda invocation due to eventual consistency.
+- **POST SSE Response Timing**: Removed unnecessary 50ms sleep in `create_post_sse_stream()` that was a workaround, not a proper fix. Tool execution is fully awaited, so notifications are immediately available with consistent reads.
+- **Output Field Schema/Runtime Consistency**: Fixed bug where `tools/list` schema and `tools/call` structuredContent used different field names when `output = Type` specified without explicit `output_field`. Schema generation and runtime wrapping now consistently use the same field name derived from the type.
+- **Acronym CamelCase Conversion**: Fixed awkward camelCase conversion for all-caps acronyms. `LLH` now converts to `llh` (not `lLH`), `GPS` to `gps` (not `gPS`). Leading acronyms in mixed names also handled correctly: `HTTPServer` → `httpServer`.
 - **Lambda Compilation**: Fixed `LambdaError::Config` → `LambdaError::Configuration` in builder.rs
 
 ### Changed
-- **Code Quality**: Fixed 120+ clippy warnings across workspace (156 → 87 remaining, 44% reduction)
+- **SSE Event Formatting**: Keepalive events now use SSE comment syntax (`: keepalive`) instead of `event: ping` for better client compatibility.
+- **DynamoDB Consistency**: Event queries now use strongly consistent reads (2x RCU cost) to guarantee notification visibility.
+- **Code Quality**: Fixed all 156 clippy warnings across workspace (156 → 0, 100% clean)
   - Replaced `get().is_none()` with idiomatic `!contains_key()` (2 instances)
   - Collapsed nested if statements using let-chain syntax (56 instances)
   - Used `std::io::Error::other()` for concise error creation (1 instance)
@@ -28,24 +37,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Used `Option::map` instead of manual if-let-Some mapping (1 instance)
   - Removed useless `format!()` macro for static strings (1 instance)
   - Replaced `vec![]` with array `[]` for static data (1 instance)
+  - Added `#[allow(clippy::too_many_arguments)]` for Lambda handler constructors (2 instances)
+  - Fixed empty line after outer attribute in test documentation (1 instance)
+  - Replaced manual prefix stripping with `strip_prefix()` (1 instance)
+  - Added `#[allow(dead_code)]` for test-only struct fields (4 structs, 7 fields)
+  - Prefixed unused test variables with underscore (2 instances)
+  - Added `#[allow(clippy::upper_case_acronyms)]` for domain-specific types (2 instances)
 
 ### Documentation
 - **Doctests**: All doctests now passing in core crates
   - turul-mcp-derive: 25/25 doctests passing ✅
   - turul-mcp-protocol-2025-06-18: 7/7 doctests passing (7 intentionally ignored) ✅
-
-## [0.2.1] - 2025-10-03
-
-### Fixed
-- **MCP Inspector SSE Compatibility**: Changed all SSE events to use standard `event: message` type instead of custom event types. JavaScript EventSource API only processes `event: message` or omitted event lines. This fix ensures all notifications (including `notifications/progress`) are visible in MCP Inspector.
-- **Lambda DynamoDB Notification Timing**: Added `.consistent_read(true)` to DynamoDB queries in `get_recent_events()` and `get_events_after()`. Fixes race condition where notifications worked on reconnect but not initial Lambda invocation due to eventual consistency.
-- **POST SSE Response Timing**: Removed unnecessary 50ms sleep in `create_post_sse_stream()` that was a workaround, not a proper fix. Tool execution is fully awaited, so notifications are immediately available with consistent reads.
-- **Output Field Schema/Runtime Consistency**: Fixed bug where `tools/list` schema and `tools/call` structuredContent used different field names when `output = Type` specified without explicit `output_field`. Schema generation and runtime wrapping now consistently use the same field name derived from the type.
-- **Acronym CamelCase Conversion**: Fixed awkward camelCase conversion for all-caps acronyms. `LLH` now converts to `llh` (not `lLH`), `GPS` to `gps` (not `gPS`). Leading acronyms in mixed names also handled correctly: `HTTPServer` → `httpServer`.
-
-### Changed
-- **SSE Event Formatting**: Keepalive events now use SSE comment syntax (`: keepalive`) instead of `event: ping` for better client compatibility.
-- **DynamoDB Consistency**: Event queries now use strongly consistent reads (2x RCU cost) to guarantee notification visibility.
 
 ### Tests
 - Updated all SSE-related tests to expect `event: message` format

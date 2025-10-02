@@ -49,6 +49,7 @@ pub struct LambdaMcpHandler {
 
 impl LambdaMcpHandler {
     /// Create a new Lambda MCP handler with the framework components
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         dispatcher: JsonRpcDispatcher<McpError>,
         session_storage: Arc<BoxedSessionStorage>,
@@ -90,6 +91,7 @@ impl LambdaMcpHandler {
     }
 
     /// Create with shared stream manager (for advanced use cases)
+    #[allow(clippy::too_many_arguments)]
     pub fn with_shared_stream_manager(
         config: ServerConfig,
         dispatcher: Arc<JsonRpcDispatcher<McpError>>,
@@ -531,7 +533,7 @@ mod tests {
 
     /// Test matrix: 4 combinations of streaming runtime vs SSE configuration
     /// This ensures we don't have runtime hangs or configuration conflicts
-
+    ///
     /// Test 1: Non-streaming runtime + sse(false) - This should work (snapshot mode)
     #[tokio::test]
     async fn test_non_streaming_runtime_sse_false() {

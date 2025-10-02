@@ -6,6 +6,7 @@ use turul_mcp_protocol::tools::HasOutputSchema;
 use turul_mcp_server::McpTool as McpToolTrait;
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(clippy::upper_case_acronyms)]
 struct LLH {
     latitude: f64,
     longitude: f64,
@@ -13,6 +14,7 @@ struct LLH {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(clippy::upper_case_acronyms)]
 struct GPS {
     x: f64,
     y: f64,

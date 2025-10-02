@@ -48,10 +48,11 @@ where
 
     while let Some(chunk_result) = body.frame().await {
         if let Ok(frame) = chunk_result
-            && let Some(data) = frame.data_ref() {
-                let text = String::from_utf8(data.to_vec())?;
-                frames.push(text);
-            }
+            && let Some(data) = frame.data_ref()
+        {
+            let text = String::from_utf8(data.to_vec())?;
+            frames.push(text);
+        }
     }
 
     Ok(frames)
@@ -199,7 +200,6 @@ fn create_mcp_request_with_session(
     params: serde_json::Value,
     _session_id: &str,
 ) -> Request {
-    
     // TODO: Add Mcp-Session-Id header
     create_mcp_request(method, params)
 }
@@ -328,7 +328,7 @@ async fn test_lambda_post_streamable_http_notifications() {
         .await
         .expect("Failed to build server");
 
-    let handler = server.handler().await.expect("Failed to create handler");
+    let _handler = server.handler().await.expect("Failed to create handler");
 
     // TODO: Create proper POST request with Accept: text/event-stream
     // TODO: Use cargo lambda watch to test actual Lambda behavior
