@@ -25,11 +25,11 @@ use turul_mcp_protocol::tools::{
 use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema};
 use turul_mcp_server::{McpServer, McpTool, SessionContext};
 // ElicitationBuilder import removed - using simplified demonstrations
+use clap::Parser;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tracing::{info, warn};
 use uuid::Uuid;
-use clap::Parser;
 
 /// Configuration for onboarding workflows loaded from external JSON
 #[derive(Debug, Deserialize, Clone)]
@@ -205,7 +205,7 @@ struct CustomerOnboardingPlatform {
 impl CustomerOnboardingPlatform {
     fn new() -> Result<Self, Box<dyn std::error::Error>> {
         // Try to find data directory in multiple locations for testing compatibility
-        let data_paths = vec![
+        let data_paths = [
             "data",
             "examples/elicitation-server/data",
             "../elicitation-server/data",
@@ -221,7 +221,9 @@ impl CustomerOnboardingPlatform {
             });
 
         // Load onboarding workflows configuration
-        let onboarding_config = if Path::new(&format!("{}/onboarding_workflows.json", data_dir)).exists() {
+        let onboarding_config = if Path::new(&format!("{}/onboarding_workflows.json", data_dir))
+            .exists()
+        {
             let content = fs::read_to_string(format!("{}/onboarding_workflows.json", data_dir))?;
             serde_json::from_str(&content)?
         } else {
@@ -235,41 +237,42 @@ impl CustomerOnboardingPlatform {
         };
 
         // Load validation rules configuration
-        let validation_config = if Path::new(&format!("{}/validation_rules.yaml", data_dir)).exists() {
-            let content = fs::read_to_string(format!("{}/validation_rules.yaml", data_dir))?;
-            serde_yml::from_str(&content)?
-        } else {
-            warn!("validation_rules.yaml not found, using minimal fallback configuration");
-            ValidationConfig {
-                validation_rules: ValidationRules {
-                    field_types: HashMap::new(),
-                    business_rules: BusinessRules {
-                        age_verification: AgeVerificationRules {
-                            minimum_age: 18,
-                            maximum_age: 150,
-                            age_calculation: "from_birth_date".to_string(),
-                        },
-                        kyc_requirements: KycRequirements {
-                            individual: KycLevel {
-                                required_documents: vec!["government_id".to_string()],
-                                requirements: HashMap::new(),
+        let validation_config =
+            if Path::new(&format!("{}/validation_rules.yaml", data_dir)).exists() {
+                let content = fs::read_to_string(format!("{}/validation_rules.yaml", data_dir))?;
+                serde_yml::from_str(&content)?
+            } else {
+                warn!("validation_rules.yaml not found, using minimal fallback configuration");
+                ValidationConfig {
+                    validation_rules: ValidationRules {
+                        field_types: HashMap::new(),
+                        business_rules: BusinessRules {
+                            age_verification: AgeVerificationRules {
+                                minimum_age: 18,
+                                maximum_age: 150,
+                                age_calculation: "from_birth_date".to_string(),
                             },
-                            business: KycLevel {
-                                required_documents: vec!["business_registration".to_string()],
-                                requirements: HashMap::new(),
+                            kyc_requirements: KycRequirements {
+                                individual: KycLevel {
+                                    required_documents: vec!["government_id".to_string()],
+                                    requirements: HashMap::new(),
+                                },
+                                business: KycLevel {
+                                    required_documents: vec!["business_registration".to_string()],
+                                    requirements: HashMap::new(),
+                                },
                             },
+                            other_rules: HashMap::new(),
                         },
-                        other_rules: HashMap::new(),
+                        security_policies: SecurityPolicies {
+                            policies: HashMap::new(),
+                        },
+                        error_handling: ErrorHandling {
+                            rules: HashMap::new(),
+                        },
                     },
-                    security_policies: SecurityPolicies {
-                        policies: HashMap::new(),
-                    },
-                    error_handling: ErrorHandling {
-                        rules: HashMap::new(),
-                    },
-                },
-            }
-        };
+                }
+            };
 
         // Load reference data (parse from markdown file)
         let reference_data = Self::load_reference_data();
@@ -1625,7 +1628,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         args.port
     };
 
-    info!("🚀 Starting Customer Onboarding and Data Collection Platform on port {}", port);
+    info!(
+        "🚀 Starting Customer Onboarding and Data Collection Platform on port {}",
+        port
+    );
     info!("📡 Server URL: http://127.0.0.1:{}/mcp", port);
 
     // Initialize the platform with external configuration

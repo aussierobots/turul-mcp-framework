@@ -539,14 +539,12 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
         debug!("Handling {} notification via session-aware bridge", method);
 
         // Convert JSON-RPC SessionContext to MCP SessionContext
-        let mcp_session_context = if let Some(json_rpc_ctx) = session_context {
-            Some(SessionContext::from_json_rpc_with_broadcaster(
+        let mcp_session_context = session_context.map(|json_rpc_ctx| {
+            SessionContext::from_json_rpc_with_broadcaster(
                 json_rpc_ctx,
                 self.session_manager.get_storage(),
-            ))
-        } else {
-            None
-        };
+            )
+        });
 
         // MCP Lifecycle Guard for notifications: Allow notifications/initialized to pass through
         // but enforce lifecycle for other notifications if strict mode is enabled

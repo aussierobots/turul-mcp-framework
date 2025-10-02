@@ -198,7 +198,7 @@ impl StreamableHttpContext {
 
         // Only enforce session_id for GET requests with SSE streams
         // POST requests will validate session based on the JSON-RPC method (initialize vs others)
-        if method == &Method::GET && self.wants_sse_stream && self.session_id.is_none() {
+        if *method == Method::GET && self.wants_sse_stream && self.session_id.is_none() {
             return Err("Mcp-Session-Id header required for SSE streaming connections".to_string());
         }
 
@@ -384,17 +384,17 @@ impl StreamableHttpHandler {
         }
 
         // Route based on MCP 2025-06-18 specification
-        match req.method() {
-            &Method::POST => {
+        match *req.method() {
+            Method::POST => {
                 // ALL client messages (requests, notifications, responses) come via POST
                 // Server decides whether to respond with JSON or SSE stream
                 self.handle_client_message(req, context).await
             }
-            &Method::GET => {
+            Method::GET => {
                 // Optional SSE stream for server-initiated messages
                 self.handle_get_sse_notifications(req, context).await
             }
-            &Method::DELETE => {
+            Method::DELETE => {
                 // Optional session cleanup
                 self.handle_session_delete(req, context).await
             }
@@ -532,7 +532,6 @@ impl StreamableHttpHandler {
             }
         }
     }
-
 
     /// Handle POST request with JSON response (legacy compatibility)
     #[allow(dead_code)]
@@ -1167,8 +1166,8 @@ impl StreamableHttpHandler {
         use tokio_stream::wrappers::UnboundedReceiverStream; // Add StreamExt for map method
 
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Result<bytes::Bytes, hyper::Error>>();
-        let body_stream = UnboundedReceiverStream::new(rx)
-            .map(|item| item.map(|bytes| http_body::Frame::data(bytes)));
+        let body_stream =
+            UnboundedReceiverStream::new(rx).map(|item| item.map(http_body::Frame::data));
         let body = StreamBody::new(body_stream);
 
         // Create session context with notification broadcaster (same pattern as SessionMcpHandler)
@@ -1286,7 +1285,7 @@ impl StreamableHttpHandler {
                         "🔍 Progress task: signaling completion for session: {}",
                         session_id_clone
                     );
-                    if let Err(_) = completion_tx.send(()) {
+                    if completion_tx.send(()).is_err() {
                         debug!(
                             "🔍 Progress task: main task already dropped completion_rx for session: {}",
                             session_id_clone

@@ -132,10 +132,10 @@ impl McpHandler for PromptsListHandler {
         let page_size = match extract_limit_from_params(&params) {
             Some(0) => {
                 return Err(McpError::InvalidParameters(
-                    "limit must be at least 1 (zero would return empty pages forever)".to_string()
+                    "limit must be at least 1 (zero would return empty pages forever)".to_string(),
                 ));
             }
-            Some(n) => n.min(MAX_PAGE_SIZE).max(MIN_PAGE_SIZE),
+            Some(n) => n.clamp(MIN_PAGE_SIZE, MAX_PAGE_SIZE),
             None => DEFAULT_PAGE_SIZE,
         };
 
@@ -150,7 +150,10 @@ impl McpHandler for PromptsListHandler {
 
         let cursor = list_params.cursor;
 
-        debug!("Listing prompts with cursor: {:?}, limit: {}", cursor, page_size);
+        debug!(
+            "Listing prompts with cursor: {:?}, limit: {}",
+            cursor, page_size
+        );
 
         // Convert all prompts and sort by name for stable ordering
         let mut all_prompts: Vec<Prompt> = self
@@ -400,10 +403,10 @@ impl McpHandler for ResourcesListHandler {
         let page_size = match extract_limit_from_params(&params) {
             Some(0) => {
                 return Err(McpError::InvalidParameters(
-                    "limit must be at least 1 (zero would return empty pages forever)".to_string()
+                    "limit must be at least 1 (zero would return empty pages forever)".to_string(),
                 ));
             }
-            Some(n) => n.min(MAX_PAGE_SIZE).max(MIN_PAGE_SIZE),
+            Some(n) => n.clamp(MIN_PAGE_SIZE, MAX_PAGE_SIZE),
             None => DEFAULT_PAGE_SIZE,
         };
 
@@ -418,7 +421,10 @@ impl McpHandler for ResourcesListHandler {
 
         let cursor = list_params.cursor;
 
-        debug!("Listing resources with cursor: {:?}, limit: {}", cursor, page_size);
+        debug!(
+            "Listing resources with cursor: {:?}, limit: {}",
+            cursor, page_size
+        );
 
         // Convert all resources to descriptors and sort by URI for stable ordering
         let mut all_resources: Vec<Resource> = self
@@ -652,7 +658,9 @@ impl McpHandler for ResourcesReadHandler {
                 );
             }
 
-            let contents = resource.read(Some(enhanced_params), session.as_ref()).await?;
+            let contents = resource
+                .read(Some(enhanced_params), session.as_ref())
+                .await?;
 
             // Validate content before returning
             if let Some(security_middleware) = &self.security_middleware {
@@ -1010,9 +1018,8 @@ impl McpHandler for ProvidedSamplingHandler {
             .map(ProgressToken::from);
 
         // Parse params into CreateMessageParams
-        let message_params: CreateMessageParams = serde_json::from_value(
-            params.ok_or_else(|| McpError::missing_param("params"))?
-        )?;
+        let message_params: CreateMessageParams =
+            serde_json::from_value(params.ok_or_else(|| McpError::missing_param("params"))?)?;
 
         // Construct full CreateMessageRequest for the provider
         let request = CreateMessageRequest {
@@ -1021,7 +1028,10 @@ impl McpHandler for ProvidedSamplingHandler {
         };
 
         // Select provider - use first for now (can enhance with can_handle/priority later)
-        let provider = self.providers.values().next()
+        let provider = self
+            .providers
+            .values()
+            .next()
             .ok_or_else(|| McpError::configuration("No sampling provider available"))?;
 
         // Validate request - THIS is where maxTokens=0 gets caught!
@@ -1088,10 +1098,10 @@ impl McpHandler for ResourceTemplatesHandler {
         let page_size = match extract_limit_from_params(&params) {
             Some(0) => {
                 return Err(McpError::InvalidParameters(
-                    "limit must be at least 1 (zero would return empty pages forever)".to_string()
+                    "limit must be at least 1 (zero would return empty pages forever)".to_string(),
                 ));
             }
-            Some(n) => n.min(MAX_PAGE_SIZE).max(MIN_PAGE_SIZE),
+            Some(n) => n.clamp(MIN_PAGE_SIZE, MAX_PAGE_SIZE),
             None => DEFAULT_PAGE_SIZE,
         };
 
@@ -1109,7 +1119,10 @@ impl McpHandler for ResourceTemplatesHandler {
         };
 
         let cursor = list_params.cursor;
-        debug!("Listing resource templates with cursor: {:?}, limit: {}", cursor, page_size);
+        debug!(
+            "Listing resource templates with cursor: {:?}, limit: {}",
+            cursor, page_size
+        );
 
         tracing::info!(
             "Resource templates list requested - {} templates registered",

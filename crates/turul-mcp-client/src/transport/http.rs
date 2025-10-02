@@ -285,13 +285,11 @@ impl HttpTransport {
         // Stream ended - check if we have a complete response in buffer
         if !buffer.is_empty()
             && let Ok(json) = serde_json::from_slice::<Value>(&buffer)
+            && json.get("id").is_some()
+            && (json.get("result").is_some() || json.get("error").is_some())
         {
-            if json.get("id").is_some()
-                && (json.get("result").is_some() || json.get("error").is_some())
-            {
-                self.update_stats(|stats| stats.responses_received += 1);
-                return Ok(json);
-            }
+            self.update_stats(|stats| stats.responses_received += 1);
+            return Ok(json);
         }
 
         // If we get here, no final frame was found
@@ -322,11 +320,11 @@ impl HttpTransport {
         }
 
         // Capture session ID from response headers if present
-        if let Some(session_header) = response.headers().get("mcp-session-id") {
-            if let Ok(session_str) = session_header.to_str() {
-                debug!("Captured session ID from response headers: {}", session_str);
-                *self.session_id.lock() = Some(session_str.to_owned());
-            }
+        if let Some(session_header) = response.headers().get("mcp-session-id")
+            && let Ok(session_str) = session_header.to_str()
+        {
+            debug!("Captured session ID from response headers: {}", session_str);
+            *self.session_id.lock() = Some(session_str.to_owned());
         }
 
         // Extract headers

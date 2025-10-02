@@ -648,7 +648,7 @@ impl LambdaMcpServerBuilder {
         use turul_mcp_session_storage::DynamoDbSessionStorage;
 
         let storage = DynamoDbSessionStorage::new().await.map_err(|e| {
-            LambdaError::Config(format!("Failed to create DynamoDB storage: {}", e))
+            LambdaError::Configuration(format!("Failed to create DynamoDB storage: {}", e))
         })?;
 
         Ok(self.storage(Arc::new(storage)))

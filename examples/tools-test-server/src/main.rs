@@ -745,7 +745,7 @@ impl McpTool for LegacyCalculatorTool {
         let result = a + b;
 
         Ok(CallToolResult::success(vec![
-            ToolResult::text(format!("⚠️ DEPRECATED: legacy_calculator is deprecated since v0.1.0. Use 'calculator' instead.")),
+            ToolResult::text("⚠️ DEPRECATED: legacy_calculator is deprecated since v0.1.0. Use 'calculator' instead."),
             ToolResult::text(format!("{} + {} = {}", a, b, result)),
             ToolResult::resource(ResourceContents::text(
                 "file:///calculation/result.json",
