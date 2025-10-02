@@ -88,7 +88,50 @@
 - Test count: 164 integration tests (161 + 2 E2E + 1 progress)
 - External validation: ✅ Codex verified
 
+**Test Coverage Notes** (per Codex review):
+- E2E SSE tests may skip in sandboxed CI environments (socket binding restrictions)
+- Tests that fail to bind sockets skip gracefully with informative messages
+- Core test count: 440+ tests passing in normal environments
+- Conditional execution properly documented in test code
+
 **0.2.1 SSE Streaming Sign-off**: ✅ **COMPLETED 2025-10-03** - All critical SSE issues resolved, external review validated
+
+---
+
+## ✅ COMPLETED: Critical Test Infrastructure Fix (2025-10-03)
+
+**Status**: ✅ **ORPHANED PROCESS LEAK FIXED** - TestServerManager Drop implementations now prevent process accumulation  
+**Impact**: Tests no longer leave 60+ orphaned resource-test-server processes  
+**Priority**: P0 - Critical for CI/CD stability and developer experience  
+**Commit**: 336d61b
+
+### 🐛 Critical Bug Fixed
+
+**Problem**: 60+ orphaned resource-test-server processes survived test runs
+- Processes accumulated with timestamps showing multiple test runs (8:00AM, 8:04AM, 8:40AM, etc.)
+- All processes had parent PID 1 (orphaned)
+- Running on various ports in 15078-24990 range
+
+**Root Causes**:
+1. `tests/resources/tests/e2e_integration.rs`: Used `std::mem::drop(process.kill())` which dropped the Future without awaiting it - **process never killed**
+2. `tests/shared/src/e2e_utils.rs`: Used `drop(process.kill())` in timeout case with same issue
+3. Original implementations either didn't wait or blocked indefinitely causing hangs
+
+**Solution**:
+- Use `start_kill()` which sends SIGKILL synchronously (no Future to await)
+- Spawn background thread with 100ms timeout to reap zombie processes
+- Don't join thread to avoid blocking Drop and hanging tests
+- OS will clean up any remaining zombie processes
+
+**Impact**:
+- **Before**: 60+ orphaned resource-test-server processes after test runs
+- **After**: 0 orphaned processes - verified with pgrep after tests
+- Tests no longer hang during cleanup
+- CI/CD pipeline stability restored
+
+**Files Modified**:
+- tests/resources/tests/e2e_integration.rs:266-291 (Drop implementation)
+- tests/shared/src/e2e_utils.rs:467-494 (Drop implementation)
 
 ---
 
