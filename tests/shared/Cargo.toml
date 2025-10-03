@@ -12,6 +12,12 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 futures.workspace = true
 
+[dev-dependencies]
+# Test server dependencies - ensures they're built when running tests
+resource-test-server = { path = "../../examples/resource-test-server" }
+prompts-test-server = { path = "../../examples/prompts-test-server" }
+tools-test-server = { path = "../../examples/tools-test-server" }
+
 [lib]
 name = "mcp_e2e_shared"
 path = "src/lib.rs"

@@ -20,6 +20,10 @@ tokio = { version = "1.0", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
+[dev-dependencies]
+# Test server dependency - ensures it's built when running tests
+roots-server = { path = "../../examples/roots-server" }
+
 [lib]
 name = "mcp_roots_tests"
 path = "src/lib.rs"
