@@ -23,6 +23,8 @@ async fn test_tools_server_startup_and_discovery() {
         .await
         .expect("Failed to initialize");
 
+    client.send_initialized_notification().await.unwrap();
+
     debug!("Initialize result: {:?}", init_result);
 
     // Verify server info
@@ -56,6 +58,8 @@ async fn test_tools_list_endpoint() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     let tools_result = client.list_tools().await.expect("Failed to list tools");
     debug!("Tools list result: {:?}", tools_result);
@@ -128,6 +132,8 @@ async fn test_calculator_tool_execution() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     // Test addition
     let add_result = client
@@ -205,6 +211,8 @@ async fn test_string_processor_tool() {
         .await
         .unwrap();
 
+    client.send_initialized_notification().await.unwrap();
+
     // Test uppercase operation
     let result = client
         .call_tool(
@@ -272,6 +280,8 @@ async fn test_data_transformer_tool() {
         .await
         .unwrap();
 
+    client.send_initialized_notification().await.unwrap();
+
     // Test extract_keys operation
     let test_data = json!({
         "name": "test",
@@ -317,6 +327,8 @@ async fn test_session_counter_tool_state_management() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
     let session_id = client.session_id().unwrap().clone();
 
     // Test increment
@@ -410,6 +422,8 @@ async fn test_progress_tracker_with_notifications() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     // Start progress tracker (short duration for testing)
     let result = client
@@ -563,6 +577,8 @@ async fn test_error_generator_tool() {
         .await
         .unwrap();
 
+    client.send_initialized_notification().await.unwrap();
+
     // Test tool execution error
     let result = client
         .call_tool(
@@ -636,6 +652,8 @@ async fn test_notifications_initialized_lifecycle() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .expect("Failed to initialize");
+
+    client.send_initialized_notification().await.unwrap();
 
     debug!("Initialize handshake complete: {:?}", init_result);
 
@@ -759,6 +777,8 @@ async fn test_notifications_tools_list_changed_compliance() {
         .initialize_with_capabilities(tools_capabilities)
         .await
         .expect("Failed to initialize");
+
+    client.send_initialized_notification().await.unwrap();
 
     debug!(
         "Initialize result for tools listChanged test: {:?}",
@@ -925,6 +945,8 @@ async fn test_parameter_validator_tool() {
         .await
         .unwrap();
 
+    client.send_initialized_notification().await.unwrap();
+
     // Test valid parameters
     let result = client
         .call_tool(
@@ -1031,6 +1053,8 @@ async fn test_tools_protocol_compliance() {
         .await
         .unwrap();
 
+    client.send_initialized_notification().await.unwrap();
+
     // Verify MCP 2025-06-18 protocol compliance
     assert!(init_result.contains_key("jsonrpc"));
     assert_eq!(init_result.get("jsonrpc").unwrap().as_str().unwrap(), "2.0");
@@ -1086,6 +1110,8 @@ async fn test_concurrent_tool_execution() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     // Execute multiple tools concurrently
     let tasks = vec![
@@ -1156,10 +1182,13 @@ async fn test_session_storage_integration() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .expect("Failed to initialize client1");
+    client1.send_initialized_notification().await.unwrap();
+
     client2
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .expect("Failed to initialize client2");
+    client2.send_initialized_notification().await.unwrap();
 
     let session1_id = client1.session_id().unwrap().clone();
     let session2_id = client2.session_id().unwrap().clone();
