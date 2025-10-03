@@ -38,7 +38,3 @@ futures.workspace = true
 
 # Shared E2E test utilities (will create this)
 mcp-e2e-shared = { path = "../shared" }
-
-[dev-dependencies]
-# Test server dependency - ensures it's built when running tests
-tools-test-server = { path = "../../examples/tools-test-server" }

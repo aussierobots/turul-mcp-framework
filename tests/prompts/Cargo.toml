@@ -26,10 +26,6 @@ tokio-stream.workspace = true
 tempfile.workspace = true
 mcp-e2e-shared = { path = "../shared" }
 
-[dev-dependencies]
-# Test server dependency - ensures it's built when running tests
-prompts-test-server = { path = "../../examples/prompts-test-server" }
-
 [lib]
 name = "mcp_prompts_tests"
 path = "src/lib.rs"

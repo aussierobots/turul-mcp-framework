@@ -29,10 +29,6 @@ tempfile.workspace = true
 mcp-e2e-shared = { path = "../shared" }
 portpicker = "0.1"
 
-[dev-dependencies]
-# Test server dependency - ensures it's built when running tests
-resource-test-server = { path = "../../examples/resource-test-server" }
-
 [lib]
 name = "mcp_resources_tests"
 path = "src/lib.rs"

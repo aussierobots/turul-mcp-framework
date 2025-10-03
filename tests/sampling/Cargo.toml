@@ -20,10 +20,6 @@ tokio = { version = "1.0", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
 
-[dev-dependencies]
-# Test server dependency - ensures it's built when running tests
-sampling-server = { path = "../../examples/sampling-server" }
-
 [lib]
 name = "mcp_sampling_tests"
 path = "src/lib.rs"
@@ -33,5 +29,5 @@ name = "sampling_protocol_e2e"
 path = "tests/sampling_protocol_e2e.rs"
 
 [[test]]
-name = "sampling_validation_e2e"
+name = "sampling_validation_e2e" 
 path = "tests/sampling_validation_e2e.rs"
