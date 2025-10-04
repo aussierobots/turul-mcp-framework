@@ -357,6 +357,19 @@ impl TestServerManager {
         None
     }
 
+    /// Map server binary name to its package name
+    fn server_package(server_name: &str) -> Option<&'static str> {
+        match server_name {
+            "resource-test-server" => Some("mcp-resources-tests"),
+            "prompts-test-server" => Some("mcp-prompts-tests"),
+            "tools-test-server" => Some("mcp-tools-tests"),
+            "sampling-server" => Some("mcp-sampling-tests"),
+            "roots-server" => Some("mcp-roots-tests"),
+            "elicitation-server" => Some("mcp-elicitation-tests"),
+            _ => None,
+        }
+    }
+
     /// Start a test server by name on random port with robust port allocation
     pub async fn start(server_name: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let port = Self::find_available_port()
@@ -372,6 +385,42 @@ impl TestServerManager {
             .join("target")
             .join("debug")
             .join(server_name);
+
+        // Auto-build the binary if it doesn't exist
+        if !binary_path.exists() {
+            if let Some(package) = Self::server_package(server_name) {
+                info!("Binary {} not found, building package {}...", server_name, package);
+                let build_status = std::process::Command::new("cargo")
+                    .args(["build", "--package", package, "--bin", server_name])
+                    .current_dir(&workspace_root)
+                    .status();
+
+                match build_status {
+                    Ok(status) if status.success() => {
+                        info!("Successfully built {}", server_name);
+                    }
+                    Ok(status) => {
+                        return Err(format!(
+                            "Failed to build {} (exit code: {:?})",
+                            server_name,
+                            status.code()
+                        )
+                        .into());
+                    }
+                    Err(e) => {
+                        return Err(format!("Failed to run cargo build for {}: {}", server_name, e)
+                            .into());
+                    }
+                }
+            } else {
+                return Err(format!(
+                    "Binary {} not found and package mapping unknown. Binary path: {:?}",
+                    server_name, binary_path
+                )
+                .into());
+            }
+        }
+
         let mut server_process = Command::new(&binary_path)
             .args(["--port", &port.to_string()])
             .current_dir(&workspace_root)
