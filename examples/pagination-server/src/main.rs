@@ -166,11 +166,7 @@ impl DatabaseManager {
                     "{}.{}{}@{}",
                     first_name.to_lowercase(),
                     last_name.to_lowercase(),
-                    if i < 1000 {
-                        String::new()
-                    } else {
-                        format!("{}", i)
-                    }, // Add numbers for uniqueness
+                    i, // Always add number for guaranteed uniqueness
                     domains[i % domains.len()]
                 );
 
