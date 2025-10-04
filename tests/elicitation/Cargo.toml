@@ -19,6 +19,16 @@ serde_json = "1.0"
 tokio = { version = "1.0", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
+# Additional dependencies for test server binary
+clap.workspace = true
+async-trait.workspace = true
+serde = { workspace = true, features = ["derive"] }
+uuid = { workspace = true, features = ["v7", "serde"] }
+serde_yml = "0.0.12"
+
+[[bin]]
+name = "elicitation-server"
+path = "bin/main.rs"
 
 [lib]
 name = "mcp_elicitation_tests"

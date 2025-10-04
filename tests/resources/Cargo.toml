@@ -28,11 +28,18 @@ tokio-stream.workspace = true
 tempfile.workspace = true
 mcp-e2e-shared = { path = "../shared" }
 portpicker = "0.1"
+# Additional dependencies for test server binary
+clap.workspace = true
+base64.workspace = true
+chrono.workspace = true
 
 [lib]
 name = "mcp_resources_tests"
 path = "src/lib.rs"
 
+[dev-dependencies]
+serial_test = "3"
+
 [[bin]]
-name = "resources_example"
-path = "src/main.rs"
+name = "resource-test-server"
+path = "bin/main.rs"

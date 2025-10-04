@@ -1,10 +1,11 @@
 [package]
-name = "turul-mcp-framework-tools-integration-tests"
+name = "mcp-tools-tests"
 version = "0.2.0"
 edition = "2021"
 authors = ["Nick <nick@aussierobots.com.au>"]
 description = "MCP Tools Protocol Integration Tests"
 license = "MIT OR Apache-2.0"
+publish = false
 
 [dependencies]
 # HTTP client for E2E testing
@@ -38,3 +39,30 @@ futures.workspace = true
 
 # Shared E2E test utilities (will create this)
 mcp-e2e-shared = { path = "../shared" }
+
+# Additional dependencies for test server binary
+turul-mcp-server = { path = "../../crates/turul-mcp-server" }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
+clap.workspace = true
+async-trait.workspace = true
+uuid = { workspace = true, features = ["v7", "serde"] }
+
+[dev-dependencies]
+serial_test = "3"
+
+[[bin]]
+name = "tools-test-server"
+path = "bin/main.rs"
+
+[[test]]
+name = "e2e_integration"
+path = "tests/e2e_integration.rs"
+
+[[test]]
+name = "large_message_handling"
+path = "tests/large_message_handling.rs"
+
+[[test]]
+name = "mcp_error_code_coverage"
+path = "tests/mcp_error_code_coverage.rs"

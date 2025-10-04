@@ -75,6 +75,23 @@ tests/
 2. **Network Access**: Tests use random ports (22000-65535 range typically)
 3. **Build Dependencies**: All test servers must be pre-built
 
+### Test Execution Configuration
+
+The project uses `.cargo/config.toml` to configure default test behavior:
+
+```toml
+# .cargo/config.toml
+[test]
+# Uncomment to force single-threaded execution by default:
+# test-threads = 1
+
+[profile.test]
+debug = true      # Better backtraces in failures
+opt-level = 0     # Faster test compilation
+```
+
+**Note**: Network-heavy tests use `#[serial]` attribute for automatic serialization without requiring global single-threaded mode
+
 ### Setup
 
 1. **Build Test Servers** (Required):
@@ -243,6 +260,25 @@ RUST_LOG=debug cargo test test_name -- --nocapture
 curl -v http://127.0.0.1:8080/mcp
 ```
 
+**Concurrent Server Startup Failures**:
+```bash
+# Symptom: "Failed to start test server" or health check timeouts when running tests in parallel
+# Cause: Multiple tests trying to spawn server binaries simultaneously overwhelms health checks
+
+# Solution 1: Run tests serially (automatic with #[serial] attribute)
+cargo test --package mcp-tools-tests
+
+# Solution 2: Force single-threaded execution
+cargo test --package mcp-tools-tests -- --test-threads=1
+
+# Solution 3: Run individual test files
+cargo test --package mcp-tools-tests --test e2e_integration
+cargo test --package mcp-tools-tests --test large_message_handling
+cargo test --package mcp-tools-tests --test mcp_error_code_coverage
+
+# Note: Tests that spawn servers use #[serial] attribute to prevent this issue
+```
+
 ### Debug Mode
 
 Enable detailed logging for debugging:
@@ -254,13 +290,27 @@ RUST_LOG=debug cargo test -- --nocapture
 RUST_LOG=mcp_e2e_shared=debug,turul_mcp_server=info cargo test -- --nocapture
 ```
 
-### Test Isolation
+### Test Isolation and Execution
 
 Each test runs its own server instance on a random port to ensure isolation:
 - ✅ **No shared state** between tests
 - ✅ **Automatic cleanup** when tests complete
-- ✅ **Parallel execution** supported
+- ✅ **Serial execution** for network-heavy tests to prevent server startup conflicts
 - ✅ **Random port assignment** prevents conflicts
+
+**Important**: Network-heavy tests (tools, resources, prompts, sampling, roots, elicitation) use the `#[serial]` attribute from the `serial_test` crate to prevent concurrent server startup issues. When multiple tests try to start servers simultaneously, health check timeouts can occur. Serial execution ensures reliable test runs.
+
+**Running Tests Serially**:
+```bash
+# Option 1: Tests with #[serial] attribute run sequentially automatically
+cargo test --package mcp-tools-tests
+
+# Option 2: Force single-threaded execution for all tests
+cargo test --package mcp-tools-tests -- --test-threads=1
+
+# Option 3: Run specific test suite packages (automatically handles serialization)
+cargo test --workspace --exclude turul-mcp-framework-integration-tests
+```
 
 ## Teardown
 

@@ -25,11 +25,17 @@ futures.workspace = true
 tokio-stream.workspace = true
 tempfile.workspace = true
 mcp-e2e-shared = { path = "../shared" }
+# Additional dependencies for test server binary
+clap.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+serial_test = "3"
 
 [lib]
 name = "mcp_prompts_tests"
 path = "src/lib.rs"
 
 [[bin]]
-name = "prompts_example"
-path = "src/main.rs"
+name = "prompts-test-server"
+path = "bin/main.rs"
