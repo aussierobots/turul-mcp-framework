@@ -934,13 +934,11 @@ impl McpTool for ProjectManagementTool {
 }
 
 /// Development workflow generator prompt for creating standardized workflows
-#[allow(dead_code)] // TODO: Integrate workflow generation
 struct WorkflowGeneratorPrompt {
     state: Arc<PlatformState>,
 }
 
 impl WorkflowGeneratorPrompt {
-    #[allow(dead_code)] // TODO: Use in workflow generation
     fn new(state: Arc<PlatformState>) -> Self {
         Self { state }
     }
@@ -1055,13 +1053,11 @@ Consider our organization's focus on:
 }
 
 /// Project resources handler for accessing development resources and documentation
-#[allow(dead_code)] // TODO: Integrate project resources
 struct ProjectResourcesHandler {
     state: Arc<PlatformState>,
 }
 
 impl ProjectResourcesHandler {
-    #[allow(dead_code)] // TODO: Use in resource handling
     fn new(state: Arc<PlatformState>) -> Self {
         Self { state }
     }
@@ -1677,6 +1673,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Add comprehensive business tools
         .tool(TeamManagementTool::new(platform_state.clone()))
         .tool(ProjectManagementTool::new(platform_state.clone()))
+
+        // Add prompts
+        .prompt(WorkflowGeneratorPrompt::new(platform_state.clone()))
+
+        // Add resources
+        .resource(ProjectResourcesHandler::new(platform_state.clone()))
 
         // Enable all MCP handlers with real-world implementations
         .with_completion()
