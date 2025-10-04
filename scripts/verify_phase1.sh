@@ -56,11 +56,15 @@ test_server() {
     echo "Description: $test_description"
     echo "----------------------------------------"
 
-    # Start server
+    # Start server (use pre-built binary to avoid compilation delays)
     echo "Starting server..."
-    RUST_LOG=error timeout 10s cargo run --bin "$server_name" -- --port "$port" &
+    if [ ! -f "./target/debug/$server_name" ]; then
+        echo "Building $server_name..."
+        cargo build --bin "$server_name" > /dev/null 2>&1
+    fi
+    RUST_LOG=error ./target/debug/"$server_name" --port "$port" > "/tmp/${server_name}_${port}.log" 2>&1 &
     SERVER_PID=$!
-    sleep 5
+    sleep 3
 
     # Check if server is running
     if ! kill -0 $SERVER_PID 2>/dev/null; then
@@ -69,13 +73,13 @@ test_server() {
         return 1
     fi
 
-    # Initialize and get session ID (from Mcp-Session-Id header in lenient mode)
+    # Initialize and get session ID (from mcp-session-id header)
     echo "Initializing MCP session..."
     SESSION_ID=$(curl -i -s -X POST "http://127.0.0.1:$port/mcp" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json" \
         -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' \
-        | grep -i 'mcp-session-id:' | sed 's/.*: //' | tr -d '\r\n ')
+        | grep -i '^mcp-session-id:' | sed 's/^mcp-session-id: *//i' | tr -d '\r\n ')
 
     if [ -z "$SESSION_ID" ]; then
         echo -e "${RED}FAILED${NC}: Could not get session ID from header"
@@ -91,7 +95,7 @@ test_server() {
     TOOLS_RESPONSE=$(curl -s -X POST "http://127.0.0.1:$port/mcp" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json" \
-        -H "MCP-Session-ID: $SESSION_ID" \
+        -H "Mcp-Session-Id: $SESSION_ID" \
         -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')
 
     TOOL_COUNT=$(echo "$TOOLS_RESPONSE" | jq -r '.result.tools | length // 0')
@@ -114,7 +118,7 @@ test_server() {
         CALL_RESPONSE=$(curl -s -X POST "http://127.0.0.1:$port/mcp" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
-            -H "MCP-Session-ID: $SESSION_ID" \
+            -H "Mcp-Session-Id: $SESSION_ID" \
             -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"$tool_name\",\"arguments\":{\"text\":\"test\"}}}")
 
         RESULT=$(echo "$CALL_RESPONSE" | jq -r '.result.content[0].text // empty')
@@ -135,7 +139,7 @@ test_server() {
         CALL_RESPONSE=$(curl -s -X POST "http://127.0.0.1:$port/mcp" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
-            -H "MCP-Session-ID: $SESSION_ID" \
+            -H "Mcp-Session-Id: $SESSION_ID" \
             -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{\"name\":\"$tool_name\",\"arguments\":{\"a\":5.0,\"b\":3.0}}}")
 
         RESULT=$(echo "$CALL_RESPONSE" | jq -r '.result.content[0].text // empty')
