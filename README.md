@@ -877,6 +877,43 @@ cargo run --example client-initialise-server -- --port 52951 --storage-backend s
 RUST_LOG=info cargo run --example session-management-compliance-test -- http://127.0.0.1:52951/mcp
 ```
 
+## 🛠️ Development & Testing
+
+### Building the Framework
+
+```bash
+# Build all workspace crates
+cargo build
+
+# Build with release optimizations
+cargo build --release
+```
+
+### Running Tests
+
+The framework includes **300+ comprehensive tests** covering all functionality. Test server binaries are **automatically built** when needed - no manual setup required.
+
+```bash
+# Run all tests (recommended - includes E2E integration tests)
+cargo test --workspace
+
+# Run specific test suite
+cargo test --test concurrent_session_advanced
+
+# Run with logging output
+RUST_LOG=info cargo test --workspace
+
+# Clean build and test (verifies auto-build works)
+cargo clean && cargo test --workspace
+```
+
+**Key Features:**
+- ✅ **Auto-build test servers** - Missing test binaries are built automatically on first test run
+- ✅ **Zero configuration** - Just run `cargo test` and everything works
+- ✅ **Clean workspace support** - `cargo clean && cargo test` works without manual steps
+
+The test infrastructure automatically builds required test server binaries (`resource-test-server`, `prompts-test-server`, `tools-test-server`, etc.) when running integration tests. This ensures a seamless developer experience.
+
 #### What the Compliance Test Verifies
 
 The comprehensive test validates all MCP session management requirements:
