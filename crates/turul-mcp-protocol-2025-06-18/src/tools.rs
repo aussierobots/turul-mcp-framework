@@ -73,58 +73,124 @@ pub trait HasToolMeta {
 ///
 /// ## Complete Working Example
 ///
-/// ```rust,ignore
+/// ```rust
+/// use turul_mcp_protocol_2025_06_18::tools::*;
+/// use turul_mcp_protocol_2025_06_18::schema::JsonSchema;
 /// use std::collections::HashMap;
-/// use turul_mcp_protocol::schema::JsonSchema;
 ///
 /// // This struct will automatically implement ToolDefinition!
 /// struct CodeAnalyzer {
-///     language: String,
+///     input_schema: ToolSchema,
+/// }
+///
+/// impl CodeAnalyzer {
+///     fn new() -> Self {
+///         let mut props = HashMap::new();
+///         props.insert("code".to_string(), JsonSchema::String {
+///             description: Some("Source code to analyze".to_string()),
+///             pattern: None,
+///             min_length: None,
+///             max_length: None,
+///             enum_values: None,
+///         });
+///
+///         Self {
+///             input_schema: ToolSchema {
+///                 schema_type: "object".to_string(),
+///                 properties: Some(props),
+///                 required: Some(vec!["code".to_string()]),
+///                 additional: HashMap::new(),
+///             }
+///         }
+///     }
 /// }
 ///
 /// impl HasBaseMetadata for CodeAnalyzer {
 ///     fn name(&self) -> &str { "analyze_code" }
-///     fn title(&self) -> Option<&str> { Some("Code Quality Analyzer") }
+///     fn title(&self) -> Option<&str> { Some("Code Analyzer") }
 /// }
 ///
 /// impl HasDescription for CodeAnalyzer {
 ///     fn description(&self) -> Option<&str> {
-///         Some("Analyzes code quality, complexity, and suggests improvements")
+///         Some("Analyzes code quality")
 ///     }
 /// }
 ///
 /// impl HasInputSchema for CodeAnalyzer {
 ///     fn input_schema(&self) -> &ToolSchema {
-///         static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-///         SCHEMA.get_or_init(|| {
-///             let mut props = HashMap::new();
-///             props.insert("code".to_string(),
-///                 JsonSchema::string().with_description("Source code to analyze"));
-///             props.insert("language".to_string(),
-///                 JsonSchema::string_enum(vec!["rust", "python", "javascript"]));
-///             ToolSchema::object()
-///                 .with_properties(props)
-///                 .with_required(vec!["code".to_string(), "language".to_string()])
-///         })
+///         &self.input_schema
 ///     }
 /// }
 ///
-/// // Implement remaining required traits...
-/// impl HasOutputSchema for CodeAnalyzer { fn output_schema(&self) -> Option<&ToolSchema> { None } }
-/// impl HasAnnotations for CodeAnalyzer { fn annotations(&self) -> Option<&ToolAnnotations> { None } }
-/// impl HasToolMeta for CodeAnalyzer { fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None } }
+/// impl HasOutputSchema for CodeAnalyzer {
+///     fn output_schema(&self) -> Option<&ToolSchema> { None }
+/// }
+///
+/// impl HasAnnotations for CodeAnalyzer {
+///     fn annotations(&self) -> Option<&ToolAnnotations> { None }
+/// }
+///
+/// impl HasToolMeta for CodeAnalyzer {
+///     fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+/// }
 ///
 /// // 🎉 CodeAnalyzer now automatically implements ToolDefinition!
-/// // You can register it with any MCP server and clients can call it
+/// let tool = CodeAnalyzer::new();
+/// assert_eq!(tool.name(), "analyze_code");
 /// ```
 ///
 /// ## Usage Patterns
 ///
-/// ### Easy: Use Derive Macros
-/// ```rust,ignore
-/// #[derive(McpTool)]
-/// #[tool(name = "file_processor", description = "Process files")]
-/// struct FileProcessor { path: String }
+/// ### Easy: Use Derive Macros (see turul-mcp-derive crate)
+/// ```rust
+/// // Example of manual implementation without macros
+/// use turul_mcp_protocol_2025_06_18::tools::*;
+/// use std::collections::HashMap;
+///
+/// struct FileProcessor {
+///     schema: ToolSchema,
+/// }
+///
+/// impl FileProcessor {
+///     fn new() -> Self {
+///         Self {
+///             schema: ToolSchema {
+///                 schema_type: "object".to_string(),
+///                 properties: None,
+///                 required: None,
+///                 additional: HashMap::new(),
+///             }
+///         }
+///     }
+/// }
+///
+/// impl HasBaseMetadata for FileProcessor {
+///     fn name(&self) -> &str { "file_processor" }
+///     fn title(&self) -> Option<&str> { None }
+/// }
+///
+/// impl HasDescription for FileProcessor {
+///     fn description(&self) -> Option<&str> { Some("Process files") }
+/// }
+///
+/// impl HasInputSchema for FileProcessor {
+///     fn input_schema(&self) -> &ToolSchema { &self.schema }
+/// }
+///
+/// impl HasOutputSchema for FileProcessor {
+///     fn output_schema(&self) -> Option<&ToolSchema> { None }
+/// }
+///
+/// impl HasAnnotations for FileProcessor {
+///     fn annotations(&self) -> Option<&ToolAnnotations> { None }
+/// }
+///
+/// impl HasToolMeta for FileProcessor {
+///     fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+/// }
+///
+/// let tool = FileProcessor::new();
+/// assert_eq!(tool.name(), "file_processor");
 /// ```
 ///
 /// ### Advanced: Manual Implementation (shown above)

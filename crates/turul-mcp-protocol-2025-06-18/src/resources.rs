@@ -78,13 +78,22 @@ pub trait HasResourceMeta {
 ///
 /// ## Complete Working Example
 ///
-/// ```rust,ignore
+/// ```rust
+/// use turul_mcp_protocol_2025_06_18::resources::*;
+/// use turul_mcp_protocol_2025_06_18::meta::Annotations;
 /// use std::collections::HashMap;
 ///
 /// // This struct will automatically implement ResourceDefinition!
 /// struct ApiDataFeed {
-///     endpoint: String,
-///     api_key: String,
+///     uri: String,
+/// }
+///
+/// impl ApiDataFeed {
+///     fn new() -> Self {
+///         Self {
+///             uri: "https://api.example.com/data/{dataset}".to_string(),
+///         }
+///     }
 /// }
 ///
 /// impl HasResourceMetadata for ApiDataFeed {
@@ -94,12 +103,12 @@ pub trait HasResourceMeta {
 ///
 /// impl HasResourceDescription for ApiDataFeed {
 ///     fn description(&self) -> Option<&str> {
-///         Some("Real-time data feed from external API with caching")
+///         Some("Real-time data feed from external API")
 ///     }
 /// }
 ///
 /// impl HasResourceUri for ApiDataFeed {
-///     fn uri(&self) -> &str { "https://api.example.com/data/{dataset}" }
+///     fn uri(&self) -> &str { &self.uri }
 /// }
 ///
 /// impl HasResourceMimeType for ApiDataFeed {
@@ -107,24 +116,65 @@ pub trait HasResourceMeta {
 /// }
 ///
 /// impl HasResourceSize for ApiDataFeed {
-///     fn size(&self) -> Option<u64> { None } // Dynamic size
+///     fn size(&self) -> Option<u64> { None }
 /// }
 ///
-/// // Implement remaining required traits...
-/// impl HasResourceAnnotations for ApiDataFeed { fn annotations(&self) -> Option<&crate::meta::Annotations> { None } }
-/// impl HasResourceMeta for ApiDataFeed { fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None } }
+/// impl HasResourceAnnotations for ApiDataFeed {
+///     fn annotations(&self) -> Option<&Annotations> { None }
+/// }
+///
+/// impl HasResourceMeta for ApiDataFeed {
+///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+/// }
 ///
 /// // 🎉 ApiDataFeed now automatically implements ResourceDefinition!
-/// // Clients can discover it and read data with URI templates like "api_data?dataset=users"
+/// let resource = ApiDataFeed::new();
+/// assert_eq!(resource.name(), "api_data");
+/// assert_eq!(resource.mime_type(), Some("application/json"));
 /// ```
 ///
 /// ## Usage Patterns
 ///
-/// ### Easy: Use Derive Macros
-/// ```rust,ignore
-/// #[derive(McpResource)]
-/// #[resource(name = "logs", uri = "file:///var/log/{service}.log")]
-/// struct LogFiles { service: String }
+/// ### Easy: Use Derive Macros (see turul-mcp-derive crate)
+/// ```rust
+/// // Example of manual implementation without macros
+/// use turul_mcp_protocol_2025_06_18::resources::*;
+/// use turul_mcp_protocol_2025_06_18::meta::Annotations;
+/// use std::collections::HashMap;
+///
+/// struct LogFiles;
+///
+/// impl HasResourceMetadata for LogFiles {
+///     fn name(&self) -> &str { "logs" }
+///     fn title(&self) -> Option<&str> { None }
+/// }
+///
+/// impl HasResourceDescription for LogFiles {
+///     fn description(&self) -> Option<&str> { None }
+/// }
+///
+/// impl HasResourceUri for LogFiles {
+///     fn uri(&self) -> &str { "file:///var/log/{service}.log" }
+/// }
+///
+/// impl HasResourceMimeType for LogFiles {
+///     fn mime_type(&self) -> Option<&str> { None }
+/// }
+///
+/// impl HasResourceSize for LogFiles {
+///     fn size(&self) -> Option<u64> { None }
+/// }
+///
+/// impl HasResourceAnnotations for LogFiles {
+///     fn annotations(&self) -> Option<&Annotations> { None }
+/// }
+///
+/// impl HasResourceMeta for LogFiles {
+///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+/// }
+///
+/// let resource = LogFiles;
+/// assert_eq!(resource.name(), "logs");
 /// ```
 ///
 /// ### Advanced: Manual Implementation (shown above)

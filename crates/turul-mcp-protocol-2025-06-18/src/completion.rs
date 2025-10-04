@@ -348,26 +348,41 @@ pub trait HasCompletionHandling {
 ///
 /// ## Complete Working Example
 ///
-/// ```rust,ignore
+/// ```rust
+/// use turul_mcp_protocol_2025_06_18::completion::*;
+///
 /// // This struct will automatically implement CompletionDefinition!
 /// struct ResourceUriCompletion {
-///     available_resources: Vec<String>,
+///     reference: CompletionReference,
+///     argument: CompleteArgument,
+/// }
+///
+/// impl ResourceUriCompletion {
+///     fn new() -> Self {
+///         Self {
+///             reference: CompletionReference::ResourceTemplate(
+///                 ResourceTemplateReference::new("resource://")
+///             ),
+///             argument: CompleteArgument {
+///                 name: "uri".to_string(),
+///                 value: String::new()
+///             },
+///         }
+///     }
 /// }
 ///
 /// impl HasCompletionMetadata for ResourceUriCompletion {
-///     fn reference(&self) -> &CompletionReference {
-///         static REF: std::sync::OnceLock<CompletionReference> = std::sync::OnceLock::new();
-///         REF.get_or_init(|| CompletionReference::Resource { uri: "resource://".to_string() })
-///     }
+///     fn method(&self) -> &str { "completion/complete" }
 ///
-///     fn argument(&self) -> &CompleteArgument {
-///         static ARG: std::sync::OnceLock<CompleteArgument> = std::sync::OnceLock::new();
-///         ARG.get_or_init(|| CompleteArgument { name: "uri".to_string(), value: String::new() })
+///     fn reference(&self) -> &CompletionReference {
+///         &self.reference
 ///     }
 /// }
 ///
 /// impl HasCompletionContext for ResourceUriCompletion {
-///     fn context(&self) -> Option<&CompletionContext> { None }
+///     fn argument(&self) -> &CompleteArgument {
+///         &self.argument
+///     }
 /// }
 ///
 /// impl HasCompletionHandling for ResourceUriCompletion {
@@ -375,7 +390,9 @@ pub trait HasCompletionHandling {
 /// }
 ///
 /// // 🎉 ResourceUriCompletion now automatically implements CompletionDefinition!
-/// // Clients get smart autocomplete for resource URIs as they type
+/// let completion = ResourceUriCompletion::new();
+/// let request = completion.to_complete_request();
+/// assert_eq!(request.params.argument.name, "uri");
 /// ```
 ///
 /// ## Real-World Completion Ideas

@@ -67,63 +67,102 @@ pub trait HasPromptMeta {
 ///
 /// ## Complete Working Example
 ///
-/// ```rust,ignore
+/// ```rust
+/// use turul_mcp_protocol_2025_06_18::prompts::*;
 /// use std::collections::HashMap;
 ///
 /// // This struct will automatically implement PromptDefinition!
 /// struct CodeReviewPrompt {
-///     review_style: String,
+///     arguments: Vec<PromptArgument>,
+/// }
+///
+/// impl CodeReviewPrompt {
+///     fn new() -> Self {
+///         Self {
+///             arguments: vec![
+///                 PromptArgument {
+///                     name: "language".to_string(),
+///                     title: None,
+///                     description: Some("Programming language".to_string()),
+///                     required: Some(true),
+///                 },
+///                 PromptArgument {
+///                     name: "code".to_string(),
+///                     title: None,
+///                     description: Some("Source code to review".to_string()),
+///                     required: Some(true),
+///                 },
+///             ],
+///         }
+///     }
 /// }
 ///
 /// impl HasPromptMetadata for CodeReviewPrompt {
 ///     fn name(&self) -> &str { "code_review" }
-///     fn title(&self) -> Option<&str> { Some("AI Code Review Assistant") }
+///     fn title(&self) -> Option<&str> { Some("AI Code Review") }
 /// }
 ///
 /// impl HasPromptDescription for CodeReviewPrompt {
 ///     fn description(&self) -> Option<&str> {
-///         Some("Generate detailed, actionable code review comments with security and performance insights")
+///         Some("Generate code review comments")
 ///     }
 /// }
 ///
 /// impl HasPromptArguments for CodeReviewPrompt {
 ///     fn arguments(&self) -> Option<&Vec<PromptArgument>> {
-///         static ARGS: std::sync::OnceLock<Vec<PromptArgument>> = std::sync::OnceLock::new();
-///         Some(ARGS.get_or_init(|| vec![
-///             PromptArgument {
-///                 name: "language".to_string(),
-///                 description: Some("Programming language (rust, python, javascript, etc.)".to_string()),
-///                 required: Some(true),
-///             },
-///             PromptArgument {
-///                 name: "code".to_string(),
-///                 description: Some("Source code to review".to_string()),
-///                 required: Some(true),
-///             },
-///             PromptArgument {
-///                 name: "focus".to_string(),
-///                 description: Some("Review focus: security, performance, style, or general".to_string()),
-///                 required: Some(false),
-///             },
-///         ]))
+///         Some(&self.arguments)
 ///     }
 /// }
 ///
-/// // Implement remaining required traits...
-/// impl HasPromptAnnotations for CodeReviewPrompt { fn annotations(&self) -> Option<&crate::meta::Annotations> { None } }
-/// impl HasPromptMeta for CodeReviewPrompt { fn prompt_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None } }
+/// impl HasPromptAnnotations for CodeReviewPrompt {
+///     fn annotations(&self) -> Option<&PromptAnnotations> { None }
+/// }
+///
+/// impl HasPromptMeta for CodeReviewPrompt {
+///     fn prompt_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+/// }
 ///
 /// // 🎉 CodeReviewPrompt now automatically implements PromptDefinition!
-/// // Clients can discover it and generate code reviews with customizable parameters
+/// let prompt = CodeReviewPrompt::new();
+/// assert_eq!(prompt.name(), "code_review");
+/// assert_eq!(prompt.arguments().unwrap().len(), 2);
 /// ```
 ///
 /// ## Usage Patterns
 ///
-/// ### Easy: Use Derive Macros
-/// ```rust,ignore
-/// #[derive(McpPrompt)]
-/// #[prompt(name = "doc_generator", description = "Generate API documentation")]
-/// struct DocumentationPrompt { api_spec: String }
+/// ### Easy: Use Derive Macros (see turul-mcp-derive crate)
+/// ```rust
+/// // Example of manual implementation without macros
+/// use turul_mcp_protocol_2025_06_18::prompts::*;
+/// use std::collections::HashMap;
+///
+/// struct DocumentationPrompt;
+///
+/// impl HasPromptMetadata for DocumentationPrompt {
+///     fn name(&self) -> &str { "doc_generator" }
+///     fn title(&self) -> Option<&str> { None }
+/// }
+///
+/// impl HasPromptDescription for DocumentationPrompt {
+///     fn description(&self) -> Option<&str> {
+///         Some("Generate API documentation")
+///     }
+/// }
+///
+/// impl HasPromptArguments for DocumentationPrompt {
+///     fn arguments(&self) -> Option<&Vec<PromptArgument>> { None }
+/// }
+///
+/// impl HasPromptAnnotations for DocumentationPrompt {
+///     fn annotations(&self) -> Option<&PromptAnnotations> { None }
+/// }
+///
+/// impl HasPromptMeta for DocumentationPrompt {
+///     fn prompt_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+/// }
+///
+/// let prompt = DocumentationPrompt;
+/// assert_eq!(prompt.name(), "doc_generator");
 /// ```
 ///
 /// ### Advanced: Manual Implementation (shown above)
