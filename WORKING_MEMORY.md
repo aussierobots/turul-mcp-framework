@@ -1,5 +1,336 @@
 # MCP Framework - Working Memory
 
+## 🚧 PLANNED: Middleware Architecture Implementation (2025-10-04)
+
+**Status**: 📋 **PLANNING** - Trait-based middleware layer design
+**Impact**: Enables custom request/response interceptors for auth, logging, rate limiting
+**Goal**: Non-invasive extension point without modifying core framework
+**Timeline**: To be determined
+
+### 🎯 Architecture Overview
+
+**Core Concept**: Trait-based async middleware pipeline that runs in both HTTP and Lambda transports, allowing request inspection, session injection, and response modification before/after MCP dispatcher.
+
+**Key Design Principles**:
+1. **Transport-Agnostic**: Same middleware works for HTTP and Lambda
+2. **Non-Invasive**: No changes to core MCP protocol or dispatcher
+3. **Session-Aware**: Can inject data into session state for tools to access
+4. **Async-First**: Full async/await support for DB/API calls
+5. **Opt-In**: Middleware is optional, zero overhead if not used
+
+### 🏗️ Proposed Architecture
+
+**Module Structure**:
+```
+turul-mcp-server/src/middleware/
+  ├── mod.rs           - Public API, re-exports
+  ├── traits.rs        - McpMiddleware trait
+  ├── stack.rs         - MiddlewareStack executor
+  ├── context.rs       - RequestContext, SessionInjection
+  ├── error.rs         - MiddlewareError types
+  └── builtins/        - Example middleware
+      ├── mod.rs
+      ├── logging.rs   - Request/response logging
+      ├── auth.rs      - API key authentication
+      └── rate_limit.rs - Token bucket rate limiting
+```
+
+**Core Abstractions**:
+
+```rust
+// Normalized view of every inbound request
+pub struct RequestContext<'req> {
+    pub method: &'req str,              // JSON-RPC method (parsed early)
+    pub headers: &'req HashMap<String, String>, // Normalized headers
+    pub session_id: Option<&'req str>,  // MCP session ID
+    pub transport: TransportKind,       // HTTP or Lambda
+    pub params: Option<&'req Value>,    // JSON-RPC params
+    pub per_request_data: HashMap<&'static str, Value>, // Middleware scratch space
+}
+
+// What middleware can inject into session before dispatch
+pub struct SessionInjection<'inj> {
+    pub state_inserts: &'inj mut HashMap<String, Value>,  // Persisted session state
+    pub metadata: &'inj mut HashMap<String, Value>,       // Session metadata
+}
+
+// Middleware lifecycle trait
+#[async_trait]
+pub trait McpMiddleware: Send + Sync {
+    // Runs before dispatcher (can short-circuit)
+    async fn before_dispatch(
+        &self,
+        ctx: &mut RequestContext<'_>,
+        session: &SessionContext,           // Read-only session access
+        injection: &mut SessionInjection,   // Write session state/metadata
+    ) -> Result<(), MiddlewareError>;
+
+    // Runs after dispatcher (can modify response)
+    async fn after_dispatch(
+        &self,
+        ctx: &RequestContext<'_>,
+        result: &mut DispatcherResult,
+    ) -> Result<(), MiddlewareError> {
+        let _ = (ctx, result);
+        Ok(()) // Default: no-op
+    }
+}
+
+// Aggregated error for middleware
+pub enum MiddlewareError {
+    Unauthorized(String),   // 401
+    BadRequest(String),     // 400
+    Forbidden(String),      // 403
+    TooManyRequests(String), // 429
+    Internal(String),       // 500
+}
+
+// Dispatcher result wrapper
+pub enum DispatcherResult {
+    Success(Value),
+    Error(McpError),
+}
+```
+
+### 🔌 Integration Points
+
+**1. HTTP Transport** (`StreamableHttpHandler`):
+```rust
+// In handle_request(), after JSON-RPC parse but before dispatch:
+let mut ctx = RequestContext {
+    method: &json_rpc.method,
+    headers: &normalized_headers,
+    session_id: session_id.as_deref(),
+    transport: TransportKind::Http,
+    params: json_rpc.params.as_ref(),
+    per_request_data: HashMap::new(),
+};
+
+let mut injection = SessionInjection {
+    state_inserts: &mut HashMap::new(),
+    metadata: &mut HashMap::new(),
+};
+
+// Run middleware before dispatch
+if let Err(e) = middleware_stack.run_before(&mut ctx, &session_context, &mut injection).await {
+    return convert_middleware_error_to_response(e);
+}
+
+// Persist injected state/metadata
+for (key, value) in injection.state_inserts {
+    session_context.set_state(key, value).await?;
+}
+for (key, value) in injection.metadata {
+    session_context.metadata.insert(key, value);
+}
+
+// Dispatch to MCP handler
+let mut result = dispatcher.dispatch(...).await;
+
+// Run middleware after dispatch
+let _ = middleware_stack.run_after(&ctx, &mut result).await;
+
+// Convert result to response
+```
+
+**2. Lambda Transport** (`LambdaMcpHandler`):
+- Identical integration points
+- Convert Lambda event to RequestContext
+- Same session injection mechanism
+
+**3. Builder API**:
+```rust
+let middleware_stack = MiddlewareStack::new(vec![
+    Arc::new(ApiKeyAuth::new(db_pool)),
+    Arc::new(RequestLogger::new()),
+    Arc::new(RateLimiter::new(100, Duration::from_secs(60))),
+]);
+
+let server = McpServer::builder()
+    .name("my-server")
+    .middleware(middleware_stack.clone()) // Add middleware
+    .build()?;
+```
+
+### 📋 Implementation Phases
+
+**Phase 1: Core Infrastructure** (Estimated: 2-3 days)
+- [ ] Create `turul-mcp-server/src/middleware/` module
+- [ ] Define `McpMiddleware` trait with before/after hooks
+- [ ] Implement `RequestContext`, `SessionInjection`, `MiddlewareError`
+- [ ] Implement `MiddlewareStack` executor with early termination
+- [ ] Write unit tests for stack execution order
+- [ ] Write unit tests for error propagation
+- [ ] Write unit tests for session injection
+
+**Phase 2: HTTP Integration** (Estimated: 2 days)
+- [ ] Add `middleware: Option<Arc<MiddlewareStack>>` to `HttpMcpServerBuilder`
+- [ ] Parse JSON-RPC method early in `StreamableHttpHandler`
+- [ ] Hook middleware before dispatcher in `StreamableHttpHandler`
+- [ ] Hook middleware after dispatcher
+- [ ] Add same hooks to `SessionMcpHandler` (legacy)
+- [ ] Convert `MiddlewareError` → `McpError` → `JsonRpcError`
+- [ ] Write integration tests with mock middleware
+- [ ] Write integration tests for error paths
+
+**Phase 3: Lambda Integration** (Estimated: 1-2 days)
+- [ ] Add middleware to `LambdaMcpHandler`
+- [ ] Convert Lambda event to `RequestContext`
+- [ ] Hook before/after dispatch (same as HTTP)
+- [ ] Write Lambda-specific integration tests
+- [ ] Test with AWS Lambda runtime
+
+**Phase 4: Built-in Middleware Examples** (Estimated: 2 days)
+- [ ] `LoggingMiddleware`: Log requests/responses with timing
+- [ ] `ApiKeyAuth`: Validate API key from header, inject user into session
+- [ ] `RateLimiter`: Token bucket rate limiting per session/IP
+- [ ] Write tests for each built-in middleware
+- [ ] Document usage patterns
+
+**Phase 5: Documentation & Examples** (Estimated: 2 days)
+- [ ] Write ADR: Middleware Architecture (why traits? why before/after?)
+- [ ] Update CLAUDE.md with middleware section
+- [ ] Create `examples/middleware-auth-server/`
+- [ ] Create `examples/middleware-logging-server/`
+- [ ] Create `examples/middleware-rate-limit-server/`
+- [ ] Update CHANGELOG.md
+- [ ] Update README.md with middleware quick start
+
+**Total Estimated Time: 9-11 days**
+
+### 🔍 Key Design Decisions
+
+**Decision 1: Why traits over function pointers?**
+- **Rationale**: Traits allow stateful middleware (DB connections, config)
+- **Alternative**: Function pointers are stateless, require closure captures
+- **Chosen**: Traits with `Send + Sync` bounds for async safety
+
+**Decision 2: Before/After hooks vs single intercept?**
+- **Rationale**: Separate hooks are clearer and more flexible
+- **Use Cases**: Auth in before, logging in after, metrics in both
+- **Chosen**: Two separate hooks with default no-op for after
+
+**Decision 3: Session injection vs direct SessionContext modification?**
+- **Rationale**: Prevents middleware from interfering with core session management
+- **Safety**: Write-only injection prevents reading stale state
+- **Chosen**: Separate `SessionInjection` that gets merged before dispatch
+
+**Decision 4: Error handling strategy?**
+- **Rationale**: Middleware errors should map cleanly to HTTP/MCP errors
+- **Conversion**: `MiddlewareError` → `McpError` → `JsonRpcError`
+- **Chosen**: Enum with semantic variants (Unauthorized, BadRequest, etc.)
+
+**Decision 5: Async or sync middleware?**
+- **Rationale**: Many middleware need async (DB lookups, external APIs)
+- **Performance**: Async overhead negligible compared to network I/O
+- **Chosen**: `#[async_trait]` for full async/await support
+
+**Decision 6: Middleware ordering?**
+- **Rationale**: Simple registration order is predictable and sufficient
+- **Alternative**: Priority/weight system adds complexity
+- **Chosen**: Run in registration order, document that order matters
+
+**Decision 7: Read access to session in before_dispatch?**
+- **Rationale**: Middleware may need to check existing session state
+- **Example**: Rate limiter checking previous request count
+- **Chosen**: Add `session: &SessionContext` parameter for read-only access
+
+### ⚠️ Potential Issues & Mitigations
+
+**Issue 1: JSON-RPC method not parsed yet**
+- **Impact**: `RequestContext.method` is unknown at middleware time
+- **Mitigation**: Parse JSON-RPC early in transport layer before middleware
+- **Cost**: Minimal - method is small string, already needs parsing
+
+**Issue 2: Middleware performance overhead**
+- **Impact**: Extra async calls in hot path
+- **Mitigation**: Empty middleware stack has zero overhead (Option check)
+- **Measurement**: Benchmark with 0, 3, 10 middleware layers
+
+**Issue 3: Error conversion complexity**
+- **Impact**: MiddlewareError → McpError → JsonRpcError chain
+- **Mitigation**: Simple From trait implementations
+- **Validation**: Integration tests verify correct error codes
+
+**Issue 4: Session state race conditions**
+- **Impact**: Middleware writes to session, dispatcher reads same key
+- **Mitigation**: Document that middleware writes happen BEFORE dispatch
+- **Guarantee**: Session injection is persisted before dispatcher runs
+
+**Issue 5: Lambda cold start impact**
+- **Impact**: Middleware initialization time
+- **Mitigation**: Middleware stack is Arc, shared across invocations
+- **Best Practice**: Document lazy initialization patterns
+
+**Issue 6: Middleware wants to send notifications**
+- **Impact**: Middleware has no direct access to SSE broadcaster
+- **Mitigation**: Use session state flags that tools check
+- **Alternative**: Add notification injector to SessionInjection (future)
+
+### 🎯 Success Criteria
+
+**Functional**:
+- [ ] Middleware can intercept all HTTP requests
+- [ ] Middleware can intercept all Lambda requests
+- [ ] Session injection works correctly
+- [ ] Error short-circuiting prevents dispatcher execution
+- [ ] After-dispatch middleware can modify responses
+
+**Non-Functional**:
+- [ ] Zero overhead when no middleware registered
+- [ ] <5% overhead with 3 middleware layers
+- [ ] Clear error messages for middleware failures
+- [ ] Comprehensive documentation with examples
+- [ ] Backward compatible (middleware is optional)
+
+**Testing**:
+- [ ] Unit tests for middleware stack
+- [ ] Integration tests for HTTP transport
+- [ ] Integration tests for Lambda transport
+- [ ] Example middleware demonstrating common patterns
+- [ ] Performance benchmarks
+
+### 📚 Documentation Requirements
+
+**ADR (docs/adr/XXX-middleware-architecture.md)**:
+- Problem statement: Need extensibility for auth/logging/rate limiting
+- Considered alternatives: Decorators, function wrappers, events
+- Decision: Trait-based middleware with before/after hooks
+- Consequences: Complexity, flexibility, performance
+
+**CLAUDE.md Updates**:
+- Middleware section with quick start
+- Built-in middleware list
+- Custom middleware guide
+- Session injection patterns
+- Error handling best practices
+
+**Examples**:
+- `examples/middleware-auth-server/` - API key authentication
+- `examples/middleware-logging-server/` - Request/response logging
+- `examples/middleware-rate-limit-server/` - Rate limiting
+
+**API Docs**:
+- Comprehensive rustdoc for all traits
+- Usage examples in doc comments
+- Common patterns documented
+
+### 🔗 Related Work
+
+**Inspiration from**:
+- Axum middleware (tower::Service)
+- actix-web middleware
+- Express.js middleware
+- Django middleware
+
+**Key Differences**:
+- MCP-specific (not generic HTTP)
+- Session-aware (inject into session state)
+- Transport-agnostic (HTTP + Lambda)
+- Async-first design
+
+---
+
 ## ✅ COMPLETED: Phase 7 Integration Tests Validation (2025-10-03)
 
 **Status**: ✅ **PHASE 7 COMPLETE** - All 161 integration tests passing, 9 test failures fixed

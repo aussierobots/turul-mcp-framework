@@ -4,14 +4,77 @@
 
 ## Current Status: 0.2.1 STABLE RELEASE 🚀
 
-**Last Updated**: 2025-10-03
+**Last Updated**: 2025-10-04
 **Framework Status**: ✅ **SCHEMA-LEVEL MCP 2025-06-18 COMPLIANCE** - Data structures compliant; behavioral features like resources/subscribe and advanced list pagination still pending
 **Current Branch**: **0.2.1** - Stable release with MCP Inspector compatibility
 **SSE Streaming**: ✅ **FULLY FUNCTIONAL** - SSE keepalive resumability fixed, progress notifications delivered via streamable HTTP, E2E tests passing
 **Documentation**: ✅ **HONEST AND ACCURATE** - Claims aligned with actual capabilities
 **Test Status**: ✅ **440+ TESTS PASSING** - Core test suites green including prompts E2E (9/9), streamable HTTP (17/17), behavioral compliance (17/17), client streaming (3/3), E2E SSE notification (2/2)
 **Code Quality**: ✅ **EXCELLENT** - Fixed all 156 clippy warnings (100% clean), all doctests passing
+**Example Coverage**: ✅ **30/31 VERIFIED** - All examples verified working (96.8%), 4 bugs fixed
 **External Review**: ✅ **CODEX VERIFIED** - Independent code review confirmed all fixes implemented correctly
+
+---
+
+## 🚧 PLANNED: Middleware Architecture (2025-10-04+)
+
+**Status**: 📋 **PLANNING** - Design phase complete, ready for implementation
+**Priority**: P1 - High value feature for production use cases
+**Impact**: Enables auth, logging, rate limiting without modifying core framework
+**Estimated Time**: 9-11 days across 5 phases
+**See**: WORKING_MEMORY.md for complete architecture design
+
+### Implementation Tasks (5 Phases)
+
+**Phase 1: Core Infrastructure** (2-3 days)
+- [ ] Create `turul-mcp-server/src/middleware/` module structure
+- [ ] Define `McpMiddleware` trait with async before/after hooks
+- [ ] Implement `RequestContext` with method, headers, session, transport
+- [ ] Implement `SessionInjection` for state/metadata writes
+- [ ] Implement `MiddlewareError` enum with HTTP status mapping
+- [ ] Implement `MiddlewareStack` executor with early termination
+- [ ] Write unit tests: stack execution order, error propagation, session injection
+
+**Phase 2: HTTP Integration** (2 days)
+- [ ] Add middleware field to `HttpMcpServerBuilder`
+- [ ] Parse JSON-RPC method early in request handling
+- [ ] Hook before_dispatch in `StreamableHttpHandler`
+- [ ] Persist session injection before dispatcher
+- [ ] Hook after_dispatch for response modification
+- [ ] Add same hooks to `SessionMcpHandler` (legacy)
+- [ ] Convert `MiddlewareError` → `McpError` → `JsonRpcError`
+- [ ] Integration tests: mock middleware, error paths, session state
+
+**Phase 3: Lambda Integration** (1-2 days)
+- [ ] Add middleware to `LambdaMcpHandler`
+- [ ] Convert Lambda event to `RequestContext`
+- [ ] Hook before/after dispatch (same pattern as HTTP)
+- [ ] Lambda integration tests
+- [ ] Test with AWS Lambda runtime
+
+**Phase 4: Built-in Examples** (2 days)
+- [ ] `LoggingMiddleware`: Request/response with timing
+- [ ] `ApiKeyAuth`: Header validation, user injection
+- [ ] `RateLimiter`: Token bucket per session/IP
+- [ ] Tests for each example middleware
+- [ ] Usage documentation
+
+**Phase 5: Documentation** (2 days)
+- [ ] ADR: Middleware Architecture (why traits, why before/after)
+- [ ] CLAUDE.md: Middleware section with quick start
+- [ ] Example: `examples/middleware-auth-server/`
+- [ ] Example: `examples/middleware-logging-server/`
+- [ ] Example: `examples/middleware-rate-limit-server/`
+- [ ] CHANGELOG.md update
+- [ ] README.md quick start
+
+### Success Criteria
+- [ ] Zero overhead when no middleware registered
+- [ ] <5% overhead with 3 middleware layers
+- [ ] Works in both HTTP and Lambda transports
+- [ ] Session injection persists before dispatcher
+- [ ] Error short-circuiting prevents dispatch
+- [ ] Backward compatible (middleware optional)
 
 ---
 
