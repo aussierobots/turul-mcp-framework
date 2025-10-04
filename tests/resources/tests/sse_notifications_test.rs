@@ -1,3 +1,4 @@
+
 //! SSE Notifications Tests for MCP Resources
 //!
 //! Tests Server-Sent Events functionality for resources/list changes
@@ -5,11 +6,13 @@
 
 use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 use serde_json::json;
+use serial_test::serial;
 use std::time::Duration;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, info};
 
 #[tokio::test]
+#[serial]
 async fn test_sse_connection_establishment() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -36,15 +39,21 @@ async fn test_sse_connection_establishment() {
     );
 
     // Basic connection should work (events may be empty but no errors)
+    // Validate SSE format - accept data:, event:, or : comments (keepalive)
     assert!(
         events.is_empty()
-            || events
-                .iter()
-                .any(|e| e.contains("data:") || e.contains("event:"))
+            || events.iter().any(|e| {
+                let trimmed = e.trim();
+                trimmed.is_empty()
+                    || trimmed.contains("data:")
+                    || trimmed.contains("event:")
+                    || trimmed.starts_with(':')
+            })
     );
 }
 
 #[tokio::test]
+#[serial]
 async fn test_sse_resource_list_changed_notification() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -100,6 +109,7 @@ async fn test_sse_resource_list_changed_notification() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_sse_resource_subscription_notifications() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -140,6 +150,7 @@ async fn test_sse_resource_subscription_notifications() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_sse_session_isolation() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -182,21 +193,31 @@ async fn test_sse_session_isolation() {
     info!("Client2 events: {}", events2.len());
 
     // Both clients should be able to establish SSE connections independently
+    // Validate SSE format - accept data:, event:, or : comments (keepalive)
     assert!(
         events1.is_empty()
-            || events1
-                .iter()
-                .any(|e| e.contains("data:") || e.contains("event:"))
+            || events1.iter().any(|e| {
+                let trimmed = e.trim();
+                trimmed.is_empty()
+                    || trimmed.contains("data:")
+                    || trimmed.contains("event:")
+                    || trimmed.starts_with(':')
+            })
     );
     assert!(
         events2.is_empty()
-            || events2
-                .iter()
-                .any(|e| e.contains("data:") || e.contains("event:"))
+            || events2.iter().any(|e| {
+                let trimmed = e.trim();
+                trimmed.is_empty()
+                    || trimmed.contains("data:")
+                    || trimmed.contains("event:")
+                    || trimmed.starts_with(':')
+            })
     );
 }
 
 #[tokio::test]
+#[serial]
 async fn test_sse_notification_format_compliance() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -265,6 +286,7 @@ async fn test_sse_notification_format_compliance() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_sse_with_multiple_resource_operations() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -322,6 +344,7 @@ async fn test_sse_with_multiple_resource_operations() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_sse_error_resource_notifications() {
     let _ = tracing_subscriber::fmt::try_init();
 

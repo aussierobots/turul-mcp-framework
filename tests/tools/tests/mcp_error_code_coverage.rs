@@ -5,6 +5,7 @@
 
 use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 use serde_json::{json, Map, Value};
+use serial_test::serial;
 use tracing::{debug, info};
 
 /// Helper function to extract error from MCP response (handles both JSON-RPC and Tools protocol formats)
@@ -36,6 +37,7 @@ fn is_error_response(response: &std::collections::HashMap<String, Value>) -> boo
 }
 
 #[tokio::test]
+#[serial]
 async fn test_tool_not_found_error() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -51,6 +53,9 @@ async fn test_tool_not_found_error() {
 
     // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
     client.send_initialized_notification().await.unwrap();
+
+    // Brief delay to ensure server processes the notification
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     // Call non-existent tool
     let result = client.call_tool("non_existent_tool", json!({})).await;
@@ -91,6 +96,7 @@ async fn test_tool_not_found_error() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_invalid_parameters_error() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -106,6 +112,9 @@ async fn test_invalid_parameters_error() {
 
     // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
     client.send_initialized_notification().await.unwrap();
+
+    // Brief delay to ensure server processes the notification
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     // Call calculator with invalid parameters (missing required parameters)
     let result = client
@@ -144,6 +153,7 @@ async fn test_invalid_parameters_error() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_invalid_parameter_type_error() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -159,6 +169,9 @@ async fn test_invalid_parameter_type_error() {
 
     // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
     client.send_initialized_notification().await.unwrap();
+
+    // Brief delay to ensure server processes the notification
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     // Call calculator with wrong parameter types (strings instead of numbers)
     let result = client
@@ -204,6 +217,7 @@ async fn test_invalid_parameter_type_error() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_tool_execution_error() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -219,6 +233,9 @@ async fn test_tool_execution_error() {
 
     // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
     client.send_initialized_notification().await.unwrap();
+
+    // Brief delay to ensure server processes the notification
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     // Use error_generator tool to trigger execution errors
     let result = client
@@ -257,6 +274,7 @@ async fn test_tool_execution_error() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_validation_error() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -272,6 +290,9 @@ async fn test_validation_error() {
 
     // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
     client.send_initialized_notification().await.unwrap();
+
+    // Brief delay to ensure server processes the notification
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     // Use error_generator tool to trigger validation errors
     let result = client
@@ -308,6 +329,7 @@ async fn test_validation_error() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_parameter_out_of_range_error() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -323,6 +345,9 @@ async fn test_parameter_out_of_range_error() {
 
     // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
     client.send_initialized_notification().await.unwrap();
+
+    // Brief delay to ensure server processes the notification
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     // Use parameter_validator tool with invalid email format
     let result = client
@@ -379,6 +404,7 @@ async fn test_parameter_out_of_range_error() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_json_rpc_error_structure() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -394,6 +420,9 @@ async fn test_json_rpc_error_structure() {
 
     // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
     client.send_initialized_notification().await.unwrap();
+
+    // Brief delay to ensure server processes the notification
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     // Send malformed JSON-RPC request (missing required fields)
     let malformed_request = json!({
@@ -437,6 +466,7 @@ async fn test_json_rpc_error_structure() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_method_not_found_error() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -452,6 +482,9 @@ async fn test_method_not_found_error() {
 
     // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
     client.send_initialized_notification().await.unwrap();
+
+    // Brief delay to ensure server processes the notification
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     // Call non-existent method
     let result = client
@@ -493,6 +526,7 @@ async fn test_method_not_found_error() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_error_recovery_and_session_continuity() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -508,6 +542,9 @@ async fn test_error_recovery_and_session_continuity() {
 
     // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
     client.send_initialized_notification().await.unwrap();
+
+    // Brief delay to ensure server processes the notification
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     // Test that after an error, the session continues to work normally
 
@@ -536,6 +573,7 @@ async fn test_error_recovery_and_session_continuity() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_multiple_error_scenarios_batch() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -551,6 +589,9 @@ async fn test_multiple_error_scenarios_batch() {
 
     // Send notifications/initialized to complete handshake (required for strict lifecycle mode)
     client.send_initialized_notification().await.unwrap();
+
+    // Brief delay to ensure server processes the notification
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     let error_scenarios = vec![
         ("tool_not_found", "non_existent_tool", json!({})),

@@ -6,9 +6,11 @@
 use futures::future::try_join_all;
 use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 use serde_json::json;
+use serial_test::serial;
 use tracing::{debug, info};
 
 #[tokio::test]
+#[serial]
 async fn test_tools_server_startup_and_discovery() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -45,6 +47,7 @@ async fn test_tools_server_startup_and_discovery() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_tools_list_endpoint() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -120,6 +123,7 @@ async fn test_tools_list_endpoint() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_calculator_tool_execution() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -150,21 +154,16 @@ async fn test_calculator_tool_execution() {
 
     debug!("Calculator add result: {:?}", add_result);
 
-    assert!(add_result.contains_key("result"));
-    let result = add_result.get("result").unwrap().as_object().unwrap();
-    assert!(result.contains_key("content"));
+    // Extract the calculator result object from structuredContent.calculatorResult
+    let calc_result_val = TestFixtures::extract_tool_result_object(&add_result)
+        .expect("No tool result found in structuredContent");
+    let calc_result = calc_result_val.as_object().unwrap();
 
-    // Extract the calculator result object
-    if let Some(calc_result_val) = TestFixtures::extract_tool_result_object(&add_result) {
-        let calc_result = calc_result_val.as_object().unwrap();
-        assert_eq!(calc_result.get("result").unwrap().as_f64().unwrap(), 8.0);
-        assert_eq!(
-            calc_result.get("operation").unwrap().as_str().unwrap(),
-            "add"
-        );
-    } else {
-        panic!("No tool result found");
-    }
+    assert_eq!(calc_result.get("result").unwrap().as_f64().unwrap(), 8.0);
+    assert_eq!(
+        calc_result.get("operation").unwrap().as_str().unwrap(),
+        "add"
+    );
 
     // Test division by zero error
     let div_zero_result = client
@@ -198,6 +197,7 @@ async fn test_calculator_tool_execution() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_string_processor_tool() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -267,6 +267,7 @@ async fn test_string_processor_tool() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_data_transformer_tool() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -315,6 +316,7 @@ async fn test_data_transformer_tool() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_session_counter_tool_state_management() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -410,6 +412,7 @@ async fn test_session_counter_tool_state_management() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_progress_tracker_with_notifications() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -564,6 +567,7 @@ async fn test_progress_tracker_with_notifications() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_error_generator_tool() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -639,6 +643,7 @@ async fn test_error_generator_tool() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_notifications_initialized_lifecycle() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -758,6 +763,7 @@ async fn test_notifications_initialized_lifecycle() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_notifications_tools_list_changed_compliance() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -932,6 +938,7 @@ async fn test_notifications_tools_list_changed_compliance() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_parameter_validator_tool() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -1039,6 +1046,7 @@ async fn test_parameter_validator_tool() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_tools_protocol_compliance() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -1098,6 +1106,7 @@ async fn test_tools_protocol_compliance() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_concurrent_tool_execution() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -1165,6 +1174,7 @@ async fn test_concurrent_tool_execution() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_session_storage_integration() {
     let _ = tracing_subscriber::fmt::try_init();
     info!("🧪 Testing SessionStorage integration and session isolation...");

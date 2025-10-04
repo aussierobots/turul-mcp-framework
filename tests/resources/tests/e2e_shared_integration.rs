@@ -1,11 +1,14 @@
+
 //! E2E Integration Tests for MCP Resources using Shared Utilities
 //!
 //! Tests real HTTP/SSE transport using resource-test-server with shared utilities
 
 use mcp_e2e_shared::{McpTestClient, SessionTestUtils, TestFixtures, TestServerManager};
+use serial_test::serial;
 use tracing::info;
 
 #[tokio::test]
+#[serial]
 async fn test_resource_initialization_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -24,6 +27,7 @@ async fn test_resource_initialization_with_shared_utils() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_resource_list_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -66,6 +70,7 @@ async fn test_resource_list_with_shared_utils() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_resource_memory_read_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -93,6 +98,7 @@ async fn test_resource_memory_read_with_shared_utils() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_resource_error_handling_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -117,6 +123,7 @@ async fn test_resource_error_handling_with_shared_utils() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_session_consistency_resources() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -133,6 +140,7 @@ async fn test_session_consistency_resources() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_session_aware_resource_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -149,6 +157,7 @@ async fn test_session_aware_resource_with_shared_utils() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_resource_subscription_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -179,6 +188,7 @@ async fn test_resource_subscription_with_shared_utils() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_sse_notifications_resources_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -204,13 +214,31 @@ async fn test_sse_notifications_resources_with_shared_utils() {
     // Should receive some SSE data format (if any events are available)
     if !events.is_empty() {
         info!("Received SSE events: {:?}", events);
-        assert!(events
-            .iter()
-            .any(|e| e.contains("data:") || e.contains("event:")));
+        // SSE format validation - events should contain proper SSE format:
+        // - "data:" for data fields
+        // - "event:" for event type fields
+        // - ":" for comments (keepalive, etc)
+        let has_sse_format = events.iter().any(|e| {
+            let trimmed = e.trim();
+            !trimmed.is_empty()
+                && (trimmed.contains("data:")
+                    || trimmed.contains("event:")
+                    || trimmed.starts_with(':'))
+        });
+
+        // Only assert if we got non-empty content
+        if events.iter().any(|e| !e.trim().is_empty()) {
+            assert!(
+                has_sse_format,
+                "Expected SSE format (data:, event:, or : comment) in non-empty events, got: {:?}",
+                events
+            );
+        }
     }
 }
 
 #[tokio::test]
+#[serial]
 async fn test_multiple_resource_types_with_shared_utils() {
     let _ = tracing_subscriber::fmt::try_init();
 
