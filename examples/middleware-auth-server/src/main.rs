@@ -26,8 +26,8 @@ use clap::Parser;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use turul_mcp_protocol::tools::{CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasToolMeta};
-use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema};
+use turul_mcp_derive::McpTool;
+use turul_mcp_protocol::{McpError, McpResult};
 use turul_mcp_server::prelude::*;
 
 #[derive(Parser)]
@@ -113,79 +113,28 @@ impl McpMiddleware for AuthMiddleware {
 }
 
 /// Tool that reads the authenticated user_id from session
-struct WhoAmITool {
-    input_schema: ToolSchema,
-}
+#[derive(McpTool, Clone, Default)]
+#[tool(name = "whoami", description = "Returns the authenticated user ID from the session")]
+struct WhoAmITool {}
 
 impl WhoAmITool {
-    fn new() -> Self {
-        Self {
-            input_schema: ToolSchema::object(),
-        }
-    }
-}
-
-impl HasBaseMetadata for WhoAmITool {
-    fn name(&self) -> &str {
-        "whoami"
-    }
-}
-
-impl HasDescription for WhoAmITool {
-    fn description(&self) -> Option<&str> {
-        Some("Returns the authenticated user ID from the session")
-    }
-}
-
-impl HasInputSchema for WhoAmITool {
-    fn input_schema(&self) -> &ToolSchema {
-        &self.input_schema
-    }
-}
-
-impl HasOutputSchema for WhoAmITool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for WhoAmITool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for WhoAmITool {}
-
-#[async_trait]
-impl McpTool for WhoAmITool {
-    async fn call(
-        &self,
-        _args: serde_json::Value,
-        session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let session = session.ok_or_else(|| McpError::InvalidRequest { message: "Session required".to_string() })?;
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
+        let session = session.ok_or_else(|| McpError::InvalidRequest {
+            message: "Session required".to_string()
+        })?;
 
         // Read user_id from session state (written by AuthMiddleware)
         let user_id = session
             .get_typed_state::<String>("user_id")
             .await
-            .ok_or_else(|| McpError::InvalidRequest { message: "Not authenticated".to_string() })?;
+            .ok_or_else(|| McpError::InvalidRequest {
+                message: "Not authenticated".to_string()
+            })?;
 
-        let authenticated = session
-            .get_typed_state::<bool>("authenticated")
-            .await
-            .unwrap_or(false);
-
-        let result = json!({
+        Ok(json!({
             "user_id": user_id,
-            "authenticated": authenticated,
             "message": format!("You are logged in as: {}", user_id)
-        });
-
-        Ok(CallToolResult::success(vec![
-            ToolResult::text(&serde_json::to_string_pretty(&result)?)
-        ]))
+        }))
     }
 }
 
@@ -219,7 +168,7 @@ async fn main() -> McpResult<()> {
         // Register authentication middleware FIRST (executes before other middleware)
         .middleware(Arc::new(AuthMiddleware::new()))
         // Register tools that can access session state
-        .tool(WhoAmITool::new())
+        .tool(WhoAmITool::default())
         .bind_address(bind_address)
         .build()?;
 

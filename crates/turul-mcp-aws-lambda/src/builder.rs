@@ -127,6 +127,9 @@ pub struct LambdaMcpServerBuilder {
     server_config: ServerConfig,
     stream_config: StreamConfig,
 
+    /// Middleware stack for request/response interception
+    middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
+
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
     cors_config: Option<CorsConfig>,
@@ -228,6 +231,7 @@ impl LambdaMcpServerBuilder {
             enable_sse: cfg!(feature = "sse"),
             server_config: ServerConfig::default(),
             stream_config: StreamConfig::default(),
+            middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack::new(),
             #[cfg(feature = "cors")]
             cors_config: None,
         }
@@ -654,6 +658,34 @@ impl LambdaMcpServerBuilder {
         Ok(self.storage(Arc::new(storage)))
     }
 
+    /// Register middleware for request/response interception
+    ///
+    /// Middleware can inspect and modify requests before they reach handlers,
+    /// inject data into sessions, and transform responses. Multiple middleware
+    /// can be registered and will execute in FIFO order for before_dispatch
+    /// and LIFO order for after_dispatch.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use std::sync::Arc;
+    /// use turul_mcp_aws_lambda::LambdaMcpServer;
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let server = LambdaMcpServer::builder()
+    ///     .name("my-server")
+    ///     .middleware(Arc::new(AuthMiddleware::new()))
+    ///     .middleware(Arc::new(RateLimitMiddleware::new()))
+    ///     .build()
+    ///     .await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn middleware(mut self, middleware: Arc<dyn turul_http_mcp_server::middleware::McpMiddleware>) -> Self {
+        self.middleware_stack.push(middleware);
+        self
+    }
+
     /// Configure server settings
     pub fn server_config(mut self, config: ServerConfig) -> Self {
         self.server_config = config;
@@ -856,6 +888,7 @@ impl LambdaMcpServerBuilder {
             self.stream_config,
             #[cfg(feature = "cors")]
             self.cors_config,
+            self.middleware_stack,
         ))
     }
 }

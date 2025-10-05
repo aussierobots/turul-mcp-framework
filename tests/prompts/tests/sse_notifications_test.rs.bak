@@ -1,0 +1,380 @@
+//! SSE Notifications Tests for MCP Prompts
+//!
+//! Tests Server-Sent Events functionality for prompts/list changes
+//! and other prompt-related notifications
+
+use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
+use serde_json::json;
+use serial_test::serial;
+use std::time::Duration;
+use tokio::time::{sleep, timeout};
+use tracing::{debug, info};
+
+#[tokio::test]
+#[serial]
+async fn test_sse_prompts_connection_establishment() {
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
+    let mut client = McpTestClient::new(server.port());
+
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
+        .expect("Failed to initialize");
+
+    // Test SSE stream connection
+    let events = client
+        .test_sse_notifications()
+        .await
+        .expect("Failed to test SSE notifications");
+
+    info!(
+        "SSE connection test completed. Events received: {}",
+        events.len()
+    );
+
+    // Basic connection should work (events may be empty but no errors)
+    // Validate SSE format - accept data:, event:, or : comments (keepalive)
+    assert!(
+        events.is_empty()
+            || events.iter().any(|e| {
+                let trimmed = e.trim();
+                trimmed.is_empty()
+                    || trimmed.contains("data:")
+                    || trimmed.contains("event:")
+                    || trimmed.starts_with(':')
+            })
+    );
+}
+
+#[tokio::test]
+async fn test_sse_prompts_list_changed_notification() {
+    
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
+    let mut client = McpTestClient::new(server.port());
+
+    // Initialize with listChanged capability
+    client
+        .initialize_with_capabilities(json!({
+            "prompts": {
+                "listChanged": false  // MCP compliance: static framework
+            }
+        }))
+        .await
+        .expect("Failed to initialize");
+
+    // Trigger potential prompt list operations
+    let _list_result = client.list_prompts().await.expect("Failed to list prompts");
+
+    // Test for potential listChanged events
+    let events = client
+        .test_sse_notifications()
+        .await
+        .expect("Failed to test SSE notifications");
+
+    info!("Prompts list operation completed. Events: {}", events.len());
+
+    // Attempt to trigger prompts/list changes (framework may not emit for static lists)
+    let sse_timeout = timeout(Duration::from_secs(3), async {
+        loop {
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await;
+
+    match sse_timeout {
+        Ok(_) => {}
+        Err(_) => {
+            info!("SSE timeout - no events received within 3 seconds");
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_sse_prompt_operations_notifications() {
+    
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
+    let mut client = McpTestClient::new(server.port());
+
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
+        .expect("Failed to initialize");
+
+    // Perform prompt operations that might generate notifications
+    let _list_result = client.list_prompts().await;
+    let _get_result = client
+        .get_prompt("simple_prompt", json!({}))
+        .await;
+
+    // Check for operation-related SSE events
+    let events = client
+        .test_sse_notifications()
+        .await
+        .expect("Failed to test SSE notifications");
+
+    info!(
+        "Prompt operations completed. SSE events received: {}",
+        events.len()
+    );
+
+    // Validate we can collect events (may be empty for stateless servers)
+    if !events.is_empty() {
+        debug!("SSE events collected during prompt operations");
+    }
+
+    // Check event format if any were received
+    for event in events {
+        if event.contains("prompt") || event.contains("data:") {
+            info!("✅ Detected prompt-related notification");
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_sse_prompts_session_isolation() {
+    
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
+
+    // Create two separate clients
+    let mut client1 = McpTestClient::new(server.port());
+    let mut client2 = McpTestClient::new(server.port());
+
+    client1
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
+        .expect("Failed to initialize client1");
+
+    client2
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
+        .expect("Failed to initialize client2");
+
+    let events1 = client1
+        .test_sse_notifications()
+        .await
+        .expect("Failed to get events for client1");
+
+    let events2 = client2
+        .test_sse_notifications()
+        .await
+        .expect("Failed to get events for client2");
+
+    info!("Client1 events: {}", events1.len());
+    info!("Client2 events: {}", events2.len());
+
+    // Both clients should be able to establish SSE connections independently
+    // Validate SSE format - accept data:, event:, or : comments (keepalive)
+    assert!(
+        events1.is_empty()
+            || events1.iter().any(|e| {
+                let trimmed = e.trim();
+                trimmed.is_empty()
+                    || trimmed.contains("data:")
+                    || trimmed.contains("event:")
+                    || trimmed.starts_with(':')
+            })
+    );
+    assert!(
+        events2.is_empty()
+            || events2.iter().any(|e| {
+                let trimmed = e.trim();
+                trimmed.is_empty()
+                    || trimmed.contains("data:")
+                    || trimmed.contains("event:")
+                    || trimmed.starts_with(':')
+            })
+    );
+}
+
+#[tokio::test]
+async fn test_sse_prompts_notification_format_compliance() {
+    
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
+    let mut client = McpTestClient::new(server.port());
+
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
+        .expect("Failed to initialize");
+
+    // Collect events
+    let events = client
+        .test_sse_notifications()
+        .await
+        .expect("Failed to test SSE notifications");
+
+    info!("Format compliance check. Events received: {}", events.len());
+
+    // Validate SSE format compliance if events were received
+    for event in &events {
+        if event.contains("data:") {
+            // JSON-RPC notification format check
+            if event.contains("jsonrpc") {
+                assert!(
+                    event.contains("\"jsonrpc\":\"2.0\""),
+                    "JSON-RPC notifications must include version"
+                );
+                assert!(
+                    event.contains("\"method\":"),
+                    "JSON-RPC notifications must include method"
+                );
+            }
+
+            // MCP notification fields
+            if event.contains("method") {
+                let is_prompt_notification = event.contains("prompts/")
+                    || event.contains("notification");
+
+                if is_prompt_notification {
+                    info!("✅ Detected MCP prompt notification");
+                    debug!("Notification content: {}", event);
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_sse_prompts_error_handling_notifications() {
+    
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
+    let mut client = McpTestClient::new(server.port());
+
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
+        .expect("Failed to initialize");
+
+    // Trigger operations that might cause notifications
+    let _error_result = client
+        .get_prompt("nonexistent_prompt", json!({}))
+        .await;
+
+    // Check for error-related notifications
+    let events = client
+        .test_sse_notifications()
+        .await
+        .expect("Failed to test SSE notifications");
+
+    info!(
+        "Error handling test completed. Events received: {}",
+        events.len()
+    );
+
+    // Validate events if any were received
+    for event in events {
+        if !event.is_empty() {
+            debug!("Error-related SSE event: {}", event);
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_sse_prompts_with_session_aware_operations() {
+    
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
+    let mut client = McpTestClient::new(server.port());
+
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
+        .expect("Failed to initialize");
+
+    // Perform session-aware prompt operations
+    let _result = client
+        .get_prompt(
+            "session_aware_prompt",
+            json!({
+                "user_id": "test-user-123"
+            }),
+        )
+        .await;
+
+    // Test SSE notifications during session-aware operations
+    let events = client
+        .test_sse_notifications()
+        .await
+        .expect("Failed to test SSE notifications");
+
+    info!(
+        "Session-aware operations completed. Events: {}",
+        events.len()
+    );
+
+    // Check for session-aware notification content
+    for event in events {
+        if event.contains("session") || event.contains("data:") {
+            info!(
+                "Session-aware SSE event: {}",
+                event.lines().next().unwrap_or("")
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_sse_prompts_concurrent_operations() {
+    
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let server = TestServerManager::start_prompts_server()
+        .await
+        .expect("Failed to start server");
+    let mut client = McpTestClient::new(server.port());
+
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
+        .expect("Failed to initialize");
+
+    // Perform multiple operations
+    let _ = client.list_prompts().await;
+    let _ = client.get_prompt("simple_prompt", json!({})).await;
+    let _ = client.get_prompt("template_prompt", json!({"name": "Test"})).await;
+
+    // Check for accumulated SSE events
+    let events = client
+        .test_sse_notifications()
+        .await
+        .expect("Failed to test SSE notifications");
+
+    info!(
+        "Concurrent operations completed. Total events: {}",
+        events.len()
+    );
+
+    // Events should not interfere with each other
+    for event in events {
+        if event.contains("data:") && event.contains("method") {
+            debug!("Concurrent operation SSE event detected");
+        }
+    }
+}

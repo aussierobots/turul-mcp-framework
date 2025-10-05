@@ -43,13 +43,11 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
+use tokio::sync::OnceCell;
 use tracing::{error, info};
 use turul_http_mcp_server::middleware::{
-    DispatcherResult, McpMiddleware, MiddlewareError, MiddlewareStack, RequestContext,
-    SessionInjection,
+    DispatcherResult, McpMiddleware, MiddlewareError, RequestContext, SessionInjection,
 };
-use turul_mcp_protocol::McpError;
-use turul_mcp_session_storage::DynamoDbSessionStorage;
 
 /// Authentication middleware that validates X-API-Key header
 struct AuthMiddleware {
@@ -124,15 +122,16 @@ impl McpMiddleware for AuthMiddleware {
     }
 }
 
-/// Initialize CloudWatch-optimized logging for Lambda
+/// Global handler instance (created once, reused across invocations)
+static HANDLER: OnceCell<turul_mcp_aws_lambda::LambdaMcpHandler> = OnceCell::const_new();
+
+/// Initialize logging
 fn init_logging() {
     let log_level = env::var("LOG_LEVEL").unwrap_or_else(|_| "INFO".to_string());
 
     tracing_subscriber::fmt()
         .with_max_level(log_level.parse().unwrap_or(tracing::Level::INFO))
-        .with_target(false) // No target for CloudWatch
-        .without_time() // CloudWatch adds timestamps
-        .json() // Structured logging for CloudWatch
+        .with_env_filter("middleware_auth_lambda=info,turul_mcp_server=info")
         .init();
 
     info!("🚀 Logging initialized at level: {}", log_level);
@@ -146,28 +145,26 @@ async fn lambda_handler(request: Request) -> Result<Response<Body>, Error> {
         request.uri().path()
     );
 
-    // Create handler (could be cached globally for better performance)
-    let handler = create_lambda_mcp_handler()
-        .await
-        .map_err(|e| Error::from(e.to_string()))?;
+    // Get or create handler (cached globally for session persistence)
+    let handler = HANDLER
+        .get_or_try_init(|| async { create_lambda_mcp_handler().await })
+        .await?;
 
     // Process request through the Lambda MCP handler
-    handler.handle(request).await.map_err(|e| {
-        error!("❌ Lambda MCP handler error: {}", e);
-        Error::from(e.to_string())
-    })
+    handler
+        .handle(request)
+        .await
+        .map_err(|e| Error::from(e.to_string()))
 }
 
 /// Create the Lambda MCP handler with authentication middleware
 async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHandler, Error> {
-    use turul_http_mcp_server::{ServerConfig, StreamConfig, StreamManager};
-    use turul_mcp_json_rpc_server::JsonRpcDispatcher;
-    use turul_mcp_protocol::ServerCapabilities;
+    use turul_mcp_session_storage::DynamoDbSessionStorage;
 
     info!("🔧 Creating Lambda MCP handler with auth middleware");
 
     // Create DynamoDB session storage
-    let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> = Arc::new(
+    let storage = Arc::new(
         DynamoDbSessionStorage::new()
             .await
             .map_err(|e| Error::from(format!("Failed to create DynamoDB storage: {}", e)))?,
@@ -175,47 +172,32 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
 
     info!("💾 DynamoDB session storage initialized");
 
-    // Create middleware stack with authentication
-    let mut middleware_stack = MiddlewareStack::new();
-    middleware_stack.push(Arc::new(AuthMiddleware::new()));
+    // Create authentication middleware
+    let auth_middleware = Arc::new(AuthMiddleware::new());
 
     info!("🔐 Authentication middleware registered");
     info!("Valid API keys:");
     info!("  - secret-key-123 (user-alice)");
     info!("  - secret-key-456 (user-bob)");
 
-    // NOTE: For production with tools, use LambdaMcpServerBuilder then manually construct handler.
-    // This example focuses on demonstrating middleware authentication in Lambda.
-    // To add tools, build a server with .tool(), get the dispatcher, then use with_middleware().
+    // Build server with middleware using builder pattern
+    let server = turul_mcp_aws_lambda::LambdaMcpServerBuilder::new()
+        .name("middleware-auth-lambda")
+        .version("1.0.0")
+        .middleware(auth_middleware)
+        .storage(storage)
+        .cors_allow_all_origins()
+        .build()
+        .await
+        .map_err(|e| Error::from(format!("{}", e)))?;
 
-    // Create basic dispatcher (tools would be registered here in production)
-    let dispatcher = JsonRpcDispatcher::<McpError>::new();
+    info!("✅ Lambda MCP server created successfully with middleware and CORS");
 
-    info!("🔧 Dispatcher created (add tools via builder in production)");
-
-    // Create server configuration
-    let config = ServerConfig::default();
-    let stream_config = StreamConfig::default();
-    let stream_manager = Arc::new(StreamManager::new(Arc::clone(&storage)));
-
-    // Build capabilities
-    let capabilities = ServerCapabilities::default();
-
-    // Create Lambda MCP handler with middleware
-    // This is the key method - same middleware stack works in both HTTP and Lambda!
-    let handler = turul_mcp_aws_lambda::LambdaMcpHandler::with_middleware(
-        config,
-        Arc::new(dispatcher),
-        storage,
-        stream_manager,
-        stream_config,
-        capabilities,
-        Arc::new(middleware_stack),
-        false, // sse_enabled
-    );
-
-    info!("✅ Lambda MCP handler created successfully with middleware");
-    Ok(handler)
+    // Create handler from server
+    server
+        .handler()
+        .await
+        .map_err(|e| Error::from(format!("{}", e)))
 }
 
 /// Main Lambda entry point

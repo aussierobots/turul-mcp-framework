@@ -8,6 +8,7 @@ publish = false
 turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http", "sse"] }
 turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
 turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage" }
+turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
 tokio = { version = "1.47", features = ["full"] }
 async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
