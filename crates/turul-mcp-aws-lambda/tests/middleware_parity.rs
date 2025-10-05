@@ -73,7 +73,7 @@ impl McpMiddleware for BlockingMiddleware {
 async fn test_lambda_handler_executes_middleware() {
     // Setup storage and session
     let storage: Arc<BoxedSessionStorage> = Arc::new(InMemorySessionStorage::new());
-    let session_info = storage
+    let _session_info = storage
         .create_session(ServerCapabilities::default())
         .await
         .unwrap();
@@ -103,7 +103,7 @@ async fn test_lambda_handler_executes_middleware() {
     );
 
     // Create Lambda request
-    use lambda_http::{Request, Body};
+    use lambda_http::Body;
 
     let request_body = json!({
         "jsonrpc": "2.0",
@@ -119,15 +119,13 @@ async fn test_lambda_handler_executes_middleware() {
         }
     });
 
-    let http_request = http::Request::builder()
+    let request = http::Request::builder()
         .method("POST")
         .uri("/mcp")
         .header("Content-Type", "application/json")
         .header("Accept", "application/json")
         .body(Body::from(serde_json::to_string(&request_body).unwrap()))
         .unwrap();
-
-    let request: Request = http_request.into();
 
     // Handle request
     let response = handler.handle(request).await.unwrap();
@@ -147,7 +145,7 @@ async fn test_lambda_handler_executes_middleware() {
 async fn test_lambda_middleware_error_short_circuits() {
     // Setup storage
     let storage: Arc<BoxedSessionStorage> = Arc::new(InMemorySessionStorage::new());
-    let session_info = storage
+    let _session_info = storage
         .create_session(ServerCapabilities::default())
         .await
         .unwrap();
@@ -174,7 +172,7 @@ async fn test_lambda_middleware_error_short_circuits() {
     );
 
     // Create request
-    use lambda_http::{Request, Body};
+    use lambda_http::Body;
 
     let request_body = json!({
         "jsonrpc": "2.0",
@@ -183,16 +181,14 @@ async fn test_lambda_middleware_error_short_circuits() {
         "params": {}
     });
 
-    let http_request = http::Request::builder()
+    let request = http::Request::builder()
         .method("POST")
         .uri("/mcp")
         .header("Content-Type", "application/json")
         .header("Accept", "application/json")
-        .header("Mcp-Session-Id", &session_info.session_id)
+        .header("Mcp-Session-Id", &_session_info.session_id)
         .body(Body::from(serde_json::to_string(&request_body).unwrap()))
         .unwrap();
-
-    let request: Request = http_request.into();
 
     // Handle request
     let response = handler.handle(request).await.unwrap();
@@ -223,7 +219,7 @@ async fn test_lambda_middleware_parity_with_http() {
     // Both transports delegate to handlers that call run_middleware_and_dispatch.
 
     let storage: Arc<BoxedSessionStorage> = Arc::new(InMemorySessionStorage::new());
-    let session_info = storage
+    let _session_info = storage
         .create_session(ServerCapabilities::default())
         .await
         .unwrap();

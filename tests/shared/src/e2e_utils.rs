@@ -212,11 +212,11 @@ impl McpTestClient {
         // Read SSE events for a short time
         let start = std::time::Instant::now();
         while start.elapsed() < Duration::from_secs(2) {
-            if let Some(chunk) = response.chunk().await? {
-                if let Ok(text) = String::from_utf8(chunk.to_vec()) {
-                    events.push(text);
-                    break; // Got an event, that's enough for the test
-                }
+            if let Some(chunk) = response.chunk().await?
+                && let Ok(text) = String::from_utf8(chunk.to_vec())
+            {
+                events.push(text);
+                break; // Got an event, that's enough for the test
             }
         }
 
@@ -339,13 +339,13 @@ impl TestServerManager {
         // Use OS ephemeral port allocation (bind to 0) - this is the most reliable approach
         // The OS will assign an available port from the ephemeral range
         for attempt in 1..=5 {
-            if let Ok(listener) = std::net::TcpListener::bind("127.0.0.1:0") {
-                if let Ok(addr) = listener.local_addr() {
-                    let port = addr.port();
-                    drop(listener); // Release the port immediately
-                    debug!("OS assigned ephemeral port {} (attempt {})", port, attempt);
-                    return Some(port);
-                }
+            if let Ok(listener) = std::net::TcpListener::bind("127.0.0.1:0")
+                && let Ok(addr) = listener.local_addr()
+            {
+                let port = addr.port();
+                drop(listener); // Release the port immediately
+                debug!("OS assigned ephemeral port {} (attempt {})", port, attempt);
+                return Some(port);
             }
             // Small delay between attempts to avoid tight loops
             std::thread::sleep(std::time::Duration::from_millis(10));
@@ -458,18 +458,17 @@ impl TestServerManager {
                 .json(&test_request)
                 .send()
                 .await
+                && response.status().is_success()
             {
-                if response.status().is_success() {
-                    info!(
-                        "Server {} started successfully on port {}",
-                        server_name, port
-                    );
-                    return Ok(Self {
-                        server_process: Some(server_process),
-                        port,
-                        _server_name: server_name.to_string(),
-                    });
-                }
+                info!(
+                    "Server {} started successfully on port {}",
+                    server_name, port
+                );
+                return Ok(Self {
+                    server_process: Some(server_process),
+                    port,
+                    _server_name: server_name.to_string(),
+                });
             }
             attempts += 1;
         }
@@ -641,13 +640,11 @@ impl TestFixtures {
 
     /// Extract and parse the first tool result object from structured content
     pub fn extract_tool_result_object(result: &HashMap<String, Value>) -> Option<Value> {
-        if let Some(structured) = Self::extract_tool_structured_content(result) {
-            // Get the first key-value pair from structured content (the actual tool result)
-            if let Some(obj) = structured.as_object() {
-                if let Some((_, value)) = obj.iter().next() {
-                    return Some(value.clone());
-                }
-            }
+        if let Some(structured) = Self::extract_tool_structured_content(result)
+            && let Some(obj) = structured.as_object()
+            && let Some((_, value)) = obj.iter().next()
+        {
+            return Some(value.clone());
         }
         None
     }

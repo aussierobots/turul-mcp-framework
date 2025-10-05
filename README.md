@@ -327,9 +327,14 @@ let server = McpServer::builder()
 - ✅ Execution order control (FIFO before, LIFO after dispatch)
 
 **Examples:**
-- `examples/middleware-logging-server` - Request timing and tracing
-- `examples/middleware-rate-limit-server` - Per-session rate limiting
-- `examples/middleware-auth-server` - API key authentication
+- `examples/middleware-logging-server` - Request timing and tracing (HTTP)
+- `examples/middleware-rate-limit-server` - Per-session rate limiting (HTTP)
+- `examples/middleware-auth-server` - API key authentication (HTTP)
+- `examples/middleware-auth-lambda` - API key authentication (AWS Lambda)
+
+**Testing:**
+- Test HTTP middleware: `bash scripts/test_middleware_live.sh`
+- Test Lambda middleware: `cargo lambda watch --package middleware-auth-lambda`
 
 **Documentation:**
 See [ADR 012: Middleware Architecture](docs/adr/012-middleware-architecture.md) for design details.

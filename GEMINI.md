@@ -23,6 +23,8 @@ I will **not** directly modify the code or create files myself. My role is to pr
 
 The Turul MCP Framework is a production-ready, comprehensively tested implementation of the Model Context Protocol (MCP) 2025-06-18 specification. It provides a robust and idiomatic Rust solution for building MCP servers and clients. A full schema-level compliance review confirms that the framework's data structures are a meticulous match for the official specification. The testing strategy is mature, with E2E tests covering all major protocol areas, including advanced concurrency and state-management scenarios. While the protocol implementation is fully compliant, it's important to distinguish this from full behavioral completeness, as several advanced features are not yet fully implemented, representing the next frontier for development.
 
+The `0.2.1` release represents a significant step forward in the framework's maturity, focusing on stability, developer experience, and verification. This release addressed numerous bugs, improved the testing infrastructure, and enhanced documentation, resulting in a more robust and reliable framework.
+
 ### From TypeScript Inheritance to Rust Traits: A Critical Analysis
 
 The core of the framework's success lies in its elegant solution to the "inheritance vs. composition" problem. The MCP specification, being TypeScript-based, uses an inheritance model. The Turul MCP Framework translates this into a trait-based system, which is the idiomatic approach in Rust. This is achieved through a consistent pattern across all MCP capabilities:
@@ -71,19 +73,29 @@ A critical review of the test suite reveals several key strengths:
 
 *   **Negative Testing:** The test suite includes a comprehensive set of negative tests that verify the framework's resilience to invalid inputs and error conditions. This includes everything from invalid URI formats to incorrect protocol usage.
 
-While the testing strategy is excellent, there is always room for improvement. The distinction between "integration" and "E2E" tests could be clearer, and some of the compliance tests are more like unit tests than true integration tests. However, these are minor points in an otherwise exemplary testing strategy. The framework's investment in comprehensive, realistic testing is a clear indicator of its production-readiness.
+The `0.2.1` release significantly improved the verification infrastructure, with 30 out of 31 examples now passing a comprehensive verification suite. This demonstrates a commitment to quality and provides a high degree of confidence in the framework's stability.
 
-### Compliance vs. Behavioral Completeness: The Next Step for 0.2.0
+### Compliance vs. Behavioral Completeness: The Next Step for 0.2.1 and Beyond
 
 A key insight from the latest round of reviews is the distinction between protocol compliance and behavioral completeness. My analysis confirms that the framework is **fully compliant at the protocol level**—it correctly implements the data structures and rules defined in the MCP `schema.ts`.
 
-However, for the `0.2.0` release, it is important to note this is different from being **fully behavior-complete**. As detailed in the `MCP_E2E_COMPLIANCE_TEST_PLAN.md`, several advanced capabilities, while defined, are not yet fully implemented. These represent the next frontier of development for the framework. Key examples include:
+However, for the `0.2.1` release, it is important to note this is different from being **fully behavior-complete**. As detailed in the `MCP_E2E_COMPLIANCE_TEST_PLAN.md`, several advanced capabilities, while defined, are not yet fully implemented. These represent the next frontier of development for the framework. Key examples include:
 
 *   **Resource Subscriptions:** The framework does not provide a first-class implementation for the `resources/subscribe` method. It correctly advertises this capability as `false` in the `initialize` handshake, adhering to the protocol's truthfulness requirement. The necessary hooks exist for developers to implement this logic themselves.
 *   **Advanced List Endpoint Features:** Some list-based endpoints, such as `tools/list`, do not yet support advanced features like stable sorting, pagination, or the propagation of the `_meta` field from request to response.
 *   **Session-Aware Resources:** The `McpResource::read` trait currently lacks access to the session context, meaning resources cannot dynamically change their content based on the session state. The `session://` resource in examples is therefore a simulation of this capability.
 
-These are not compliance bugs but rather represent the current scope of the framework's maturity. They are documented as the immediate focus for future releases.
+These are not compliance bugs but rather represent the current scope of the framework's maturity. They are documented as the immediate focus for future releases. The `0.2.1` release focused on shoring up the existing features and improving the overall stability of the framework, laying a solid foundation for tackling these larger features in the future.
+
+## Release 0.2.1 Highlights
+
+The `0.2.1` release focused on stability, bug fixing, and improving the developer experience. Key highlights include:
+
+*   **Bug Fixes:** Addressed several bugs in the examples and the core protocol implementation, including issues with database constraints, missing registrations, and incorrect connection URLs.
+*   **Improved SSE Resumability:** Ensured that SSE keepalive events preserve the `Last-Event-ID`, allowing for proper reconnection.
+*   **Enhanced Verification:** The verification infrastructure was significantly improved, with deterministic polling, pre-built binaries, and better error diagnosis. 30 out of 31 examples are now verified.
+*   **Code Quality:** Fixed 156 clippy warnings, resulting in a 100% clean codebase.
+*   **Documentation:** All doctests are now passing, and the README has been updated with the latest verification and testing commands.
 
 ## Building and Running
 
@@ -131,4 +143,3 @@ The framework offers four levels of abstraction for creating tools:
 4.  **Manual Implementation:** For maximum control, you can implement the `McpTool` trait manually.
 
 The project uses `tracing` for logging.
-

@@ -22,6 +22,7 @@ mod tests {
     /// Test tool that claims to have an output schema but doesn't provide structured content
     /// This SHOULD fail compliance tests with current macro implementation
     #[derive(Clone)]
+    #[allow(dead_code)]
     struct NonCompliantCountTool;
 
     #[async_trait::async_trait]
