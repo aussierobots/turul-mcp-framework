@@ -337,7 +337,59 @@ let server = McpServer::builder()
 - Test Lambda middleware: `cargo lambda watch --package middleware-auth-lambda`
 
 **Documentation:**
-See [ADR 012: Middleware Architecture](docs/adr/012-middleware-architecture.md) for design details.
+- [ADR 012: Middleware Architecture](docs/adr/012-middleware-architecture.md) - Core middleware design
+- [ADR 013: Lambda Authorizer Integration](docs/adr/013-lambda-authorizer-integration.md) - API Gateway authorizer support
+
+#### Lambda Authorizer Integration
+
+**Seamless API Gateway authorizer context extraction for Lambda deployments:**
+
+```rust
+// API Gateway authorizer adds context (userId, tenantId, role, etc.)
+// → turul-mcp-aws-lambda adapter extracts → injects x-authorizer-* headers
+// → Middleware reads headers → stores in session state
+// → Tools access via session.get_typed_state("authorizer")
+
+#[async_trait]
+impl McpMiddleware for AuthMiddleware {
+    async fn before_dispatch(
+        &self,
+        ctx: &mut RequestContext<'_>,
+        _session: Option<&dyn SessionView>,
+        injection: &mut SessionInjection,
+    ) -> Result<(), MiddlewareError> {
+        // Extract authorizer context from x-authorizer-* headers
+        let metadata = ctx.metadata();
+        let mut authorizer_context = HashMap::new();
+
+        for (key, value) in metadata.iter() {
+            if let Some(field_name) = key.strip_prefix("x-authorizer-") {
+                if let Some(value_str) = value.as_str() {
+                    authorizer_context.insert(field_name.to_string(), value_str.to_string());
+                }
+            }
+        }
+
+        if !authorizer_context.is_empty() {
+            // Store for tools to access
+            injection.set_state("authorizer", json!(authorizer_context));
+        }
+
+        Ok(())
+    }
+}
+```
+
+**Key Features:**
+- ✅ Supports API Gateway V1 (REST API) and V2 (HTTP API)
+- ✅ Field name sanitization (camelCase → lowercase for HTTP headers)
+- ✅ Defensive programming (never fails requests)
+- ✅ Transport-agnostic (appears as standard HTTP metadata)
+- ✅ Session state integration
+
+**Example:**
+- `examples/middleware-auth-lambda` - Full authorizer extraction pattern
+- Test events: `test-events/apigw-v1-with-authorizer.json`, `apigw-v2-with-authorizer.json`
 
 ### Core Framework (10 Crates)
 - **`turul-mcp-server`** - High-level server builder with session management
