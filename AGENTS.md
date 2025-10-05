@@ -17,6 +17,7 @@
 - `turul-http-mcp-server`: HTTP/SSE transport.
 - `turul-mcp-aws-lambda`: AWS Lambda entrypoint integration for serverless deployments.
 - `turul-mcp-derive` / `turul-mcp-builders`: Macros and builders for ergonomics.
+- `examples/middleware-*/`: Reference middleware servers (HTTP + Lambda auth/logging/rate limiting).
 
 ## Building MCP Services (Servers)
 - Prefer `turul_mcp_server::McpServer::builder()` for integrated HTTP transport; choose function macros, derive macros, builders, or manual traits depending on ergonomics.
@@ -24,6 +25,11 @@
 - Handlers must return domain errors: derive `thiserror::Error` for new error types and implement `turul_mcp_json_rpc_server::r#async::ToJsonRpcError`; avoid creating `JsonRpcError` directly.
 - Register additional JSON-RPC methods via `JsonRpcDispatcher<McpError>` (or your custom error type) to guarantee type-safe conversion to protocol errors.
 - Always advertise only the capabilities actually wired (e.g., leave `resources.listChanged=false` when notifications are not emitted) and back responses with cursor-aware pagination helpers from `turul_mcp_protocol`.
+- Middleware:
+  - Attach request/response middleware via `.middleware(Arc<dyn McpMiddleware>)` on both `McpServer::builder()` and `LambdaMcpServerBuilder`.
+  - Middleware executes FIFO before dispatch and reverse order after dispatch.
+  - Use `StorageBackedSessionView` + `SessionInjection` to read/write session state safely.
+  - See `examples/middleware-auth-server`, `middleware-logging-server`, and `middleware-auth-lambda` for working patterns (API-key auth, logging, rate limiting).
 
 ## Building MCP Clients
 - Use `turul_mcp_client::McpClientBuilder` with an appropriate transport (`HttpTransport`, `SseTransport`, etc.); the builder owns connection retries and timeouts.
@@ -39,6 +45,7 @@
 - Lint: `cargo clippy --workspace --all-targets -- -D warnings`
 - Format: `cargo fmt --all -- --check`  •  Fix: `cargo fmt --all`
 - Run example: `cd examples/minimal-server && cargo run` (adjust folder as needed)
+- Middleware smoke tests: `bash scripts/test_middleware_live.sh` (HTTP) and `cargo lambda watch --package middleware-auth-lambda` (Lambda) for interactive validation.
 
 ## MCP Specification Compliance
 - Target spec: https://modelcontextprotocol.io/specification/2025-06-18
