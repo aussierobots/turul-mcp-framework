@@ -135,18 +135,19 @@ async fn lambda_handler(request: Request) -> Result<Response<Body>, Error> {
 ```
 
 **Critical Requirement:** Lambda containers may handle multiple sequential requests. Without handler caching:
-- ❌ Each request creates new session storage client (DynamoDB connection lost)
-- ❌ Each request creates new StreamManager (SSE connection tracking lost)
-- ❌ Each request creates new middleware stack instances
-- ❌ Middleware can't read session state from previous requests
-- ❌ Authentication state lost between requests
+- ❌ Each request creates new DynamoDB client (connection state lost)
+- ❌ Each request creates new StreamManager (in-memory SSE tracking lost)
+- ❌ Each request creates new middleware instances (middleware state lost)
+- ❌ Middleware can't access session data stored in DynamoDB (client recreated)
+
+**What Gets Lost:** Handler infrastructure (DynamoDB client, StreamManager, middleware instances)
+**What Persists:** Session data in DynamoDB (stored correctly, but handler can't access efficiently)
 
 **With Caching:**
-- ✅ Same session storage instance across container lifetime
-- ✅ Same StreamManager tracks connections correctly
+- ✅ Same DynamoDB client across container lifetime
+- ✅ Same StreamManager tracks SSE connections in memory
 - ✅ Same middleware instances maintain any internal state
-- ✅ Middleware reads/writes session state correctly
-- ✅ Authentication persists across requests
+- ✅ Handler can efficiently access session data in DynamoDB
 - ✅ Transport parity with long-running HTTP servers
 
 **Pattern:** All Lambda middleware examples MUST use `tokio::sync::OnceCell` or equivalent for handler caching.
@@ -227,7 +228,7 @@ let server = McpServer::builder()
 ⚠️ **Learning Curve** - Users need to understand `SessionView` vs `SessionInjection`
 ⚠️ **Immediate Application** - Injection is applied immediately (no deferred writes)
 ⚠️ **No Async After** - `after_dispatch()` can't perform async writes (by design)
-⚠️ **Lambda Handler Caching Required** - Lambda implementations MUST cache the handler globally (via `OnceCell` or equivalent) to maintain session state across requests. Failure to do so breaks middleware session access and transport parity.
+⚠️ **Lambda Handler Caching Required** - Lambda implementations MUST cache the handler globally (via `OnceCell` or equivalent) to preserve handler infrastructure (DynamoDB client, StreamManager, middleware instances). Failure to do so breaks middleware's ability to access session data and transport parity.
 
 ### Migration
 
