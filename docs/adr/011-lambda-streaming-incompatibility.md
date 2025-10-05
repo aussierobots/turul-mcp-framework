@@ -23,6 +23,99 @@
 
 ---
 
+## Status Update (2025-10-05) - Empirical Findings from Middleware Implementation
+
+**Lambda Streaming HTTP Works - But Requires Handler Caching**
+
+Implementing middleware for Lambda (`middleware-auth-lambda`, commit `8be4234`) revealed critical insights that update this ADR's theoretical analysis:
+
+### ✅ Confirmed Working (Empirically Verified):
+
+**1. StreamableHttpHandler in Lambda**
+- Lambda successfully uses `StreamableHttpHandler` for protocol ≥ 2025-03-26
+- Tool calls execute correctly with proper responses
+- Chunked transfer encoding and SSE format work as expected
+- No issues with request/response lifecycle
+- Verified via `middleware-auth-lambda` example
+
+**2. Synchronous Tool Execution**
+- Tool calls complete fully within Lambda handler lifetime
+- All results assembled before response returns
+- No background task issues for tool execution path
+- Session state persists correctly across requests (with proper handler caching)
+
+### ⚠️ Critical Requirement Discovered:
+
+**Handler Instance Persistence (OnceCell Pattern) - MANDATORY**
+
+Lambda containers may handle multiple sequential requests. Without global handler caching:
+
+```rust
+// BROKEN: Creates new instances per request
+async fn lambda_handler(request: Request) -> Result<Response<Body>, Error> {
+    let handler = create_lambda_mcp_handler().await?;  // ❌ New every time
+    handler.handle(request).await
+}
+```
+
+**What breaks without caching**:
+- ❌ New DynamoDB client → handler can't efficiently access session data stored in DynamoDB
+- ❌ New StreamManager → in-memory SSE connection tracking lost between requests
+- ❌ New middleware stack instances → middleware internal state lost, authentication fails
+- ❌ Handler infrastructure recreated → middleware can't access session data (client lost)
+
+**Required Solution (Empirically Verified)**:
+```rust
+use tokio::sync::OnceCell;
+
+// Global handler instance - created once per Lambda container
+static HANDLER: OnceCell<LambdaMcpHandler> = OnceCell::const_new();
+
+async fn lambda_handler(request: Request) -> Result<Response<Body>, Error> {
+    let handler = HANDLER
+        .get_or_try_init(|| async { create_lambda_mcp_handler().await })
+        .await?;
+    handler.handle(request).await  // ✅ Same instance across requests
+}
+```
+
+**Reference Implementation**: `examples/middleware-auth-lambda/src/main.rs`
+
+**Also Documented In**: [ADR-012: Middleware Architecture](012-middleware-architecture.md#lambda-handler-lifecycle-requirements)
+
+### 🔍 Still Unverified (Original Theoretical Concern):
+
+**Server-Initiated Background Notifications**:
+- Original ADR concern about background tasks being killed remains theoretical
+- No empirical testing conducted of async notification delivery after request completes
+- Current implementation handles all tested use cases successfully (tool calls, middleware, session management)
+- If background notifications are required, the theoretical solution in this ADR may or may not work
+
+### Revised Understanding:
+
+**The original ADR identified real architectural concerns but conflated two distinct issues:**
+
+1. **Handler Instance Lifecycle** ✅ **SOLVED**
+   - Root cause: Handler recreated per request
+   - Symptom: Session state lost, authentication fails
+   - Solution: OnceCell global handler caching (mandatory pattern)
+   - Status: Empirically verified and documented
+
+2. **Background Task Lifecycle** ⚠️ **UNVERIFIED**
+   - Root cause: Background tasks killed after handler returns
+   - Symptom: Async notifications may not reach clients
+   - Solution: Theoretical (synchronous buffering, untested)
+   - Status: Original concern remains theoretical, no empirical data
+
+**Key Takeaway**: Lambda streaming HTTP works correctly for synchronous request/response patterns. The critical architectural requirement is handler instance persistence via OnceCell, not streaming protocol compatibility.
+
+**Production Status**:
+- ✅ Lambda middleware fully functional with OnceCell pattern
+- ✅ All MCP operations work (tools, resources, prompts, session management)
+- ⚠️ Server-initiated background notifications untested (original limitation may or may not exist)
+
+---
+
 ## Original Context (Historical)
 
 In version 0.2.1, the framework introduced protocol version-based routing (commit `cb4ad8943b21b6a638892bb6bc67eea3ee9c5af5`) that routes all clients with MCP protocol ≥ 2025-03-26 through `StreamableHttpHandler`. This broke notification delivery in AWS Lambda deployments, despite the same code working correctly in local/container environments.
