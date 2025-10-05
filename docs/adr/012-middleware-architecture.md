@@ -116,6 +116,43 @@ fn run_middleware_and_dispatch(...) -> (JsonRpcResponse, bool) {
 
 **Key Invariant:** Middleware behavior is **identical** across all transports.
 
+### Lambda Handler Lifecycle Requirements
+
+Lambda requires handler caching to maintain transport parity:
+
+```rust
+use tokio::sync::OnceCell;
+
+// Global handler instance - created once per Lambda container
+static HANDLER: OnceCell<LambdaMcpHandler> = OnceCell::const_new();
+
+async fn lambda_handler(request: Request) -> Result<Response<Body>, Error> {
+    let handler = HANDLER
+        .get_or_try_init(|| async { create_lambda_mcp_handler().await })
+        .await?;
+    handler.handle(request).await
+}
+```
+
+**Critical Requirement:** Lambda containers may handle multiple sequential requests. Without handler caching:
+- ❌ Each request creates new session storage client (DynamoDB connection lost)
+- ❌ Each request creates new StreamManager (SSE connection tracking lost)
+- ❌ Each request creates new middleware stack instances
+- ❌ Middleware can't read session state from previous requests
+- ❌ Authentication state lost between requests
+
+**With Caching:**
+- ✅ Same session storage instance across container lifetime
+- ✅ Same StreamManager tracks connections correctly
+- ✅ Same middleware instances maintain any internal state
+- ✅ Middleware reads/writes session state correctly
+- ✅ Authentication persists across requests
+- ✅ Transport parity with long-running HTTP servers
+
+**Pattern:** All Lambda middleware examples MUST use `tokio::sync::OnceCell` or equivalent for handler caching.
+
+**Example:** See `examples/middleware-auth-lambda/src/main.rs` for reference implementation.
+
 ### Error Mapping
 
 Middleware errors are mapped to semantic JSON-RPC error codes:
@@ -190,6 +227,7 @@ let server = McpServer::builder()
 ⚠️ **Learning Curve** - Users need to understand `SessionView` vs `SessionInjection`
 ⚠️ **Immediate Application** - Injection is applied immediately (no deferred writes)
 ⚠️ **No Async After** - `after_dispatch()` can't perform async writes (by design)
+⚠️ **Lambda Handler Caching Required** - Lambda implementations MUST cache the handler globally (via `OnceCell` or equivalent) to maintain session state across requests. Failure to do so breaks middleware session access and transport parity.
 
 ### Migration
 
@@ -208,10 +246,12 @@ let server = McpServer::builder()
 ## Examples
 
 See framework examples:
-- `middleware-auth-server` - API key authentication
-- `middleware-logging-server` - Request timing and tracing
-- `middleware-rate-limit-server` - Rate limiting with `retryAfter`
-- `middleware-lambda-auth` - Lambda authentication (proves parity)
+- `middleware-auth-server` - API key authentication (HTTP)
+- `middleware-logging-server` - Request timing and tracing (HTTP)
+- `middleware-rate-limit-server` - Rate limiting with `retryAfter` (HTTP)
+- `middleware-auth-lambda` - Lambda authentication with handler caching (proves transport parity)
+
+**Critical Pattern:** The `middleware-auth-lambda` example demonstrates the required `OnceCell` handler caching pattern. This is MANDATORY for all Lambda middleware implementations to maintain session state across requests.
 
 ## References
 
