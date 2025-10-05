@@ -7,7 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.1] - 2025-10-04
+## [0.2.1] - 2025-10-05
+
+### Added
+
+**Middleware System:**
+- Complete middleware architecture for HTTP and Lambda transports
+- `.middleware()` builder method on `McpServer` and `LambdaMcpServerBuilder`
+- Transport-agnostic middleware execution (FIFO before dispatch, LIFO after)
+- Session-aware middleware with `StorageBackedSessionView` and `SessionInjection`
+- Error short-circuiting with semantic JSON-RPC error codes
+
+**Middleware Examples:**
+- `middleware-auth-server` - API key authentication (HTTP)
+- `middleware-auth-lambda` - API key authentication (AWS Lambda)
+- `middleware-logging-server` - Request timing and tracing
+- `middleware-rate-limit-server` - Per-session rate limiting
+
+**Testing Infrastructure:**
+- Shared verification utilities (`tests/shared/bin/wait_for_server.sh`)
+- Test server bin targets in all test packages (tools, prompts, resources, sampling, roots, elicitation)
+- Comprehensive example verification suite (5 phases, 31 servers)
+- Session lifecycle compliance: `notifications/initialized` in all e2e tests
 
 ### Fixed
 
@@ -21,9 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SSE resumability: Keepalive events preserve Last-Event-ID for proper reconnection
 - MCP Inspector compatibility: Events use standard `event: message` format
 - Lambda notifications: DynamoDB consistent reads fix race condition
+- Lambda handler caching: Global `OnceCell` prevents session loss across invocations
 - Tool output: Schema and runtime field names now consistent
 - CamelCase: Proper acronym handling (GPS → gps, HTTPServer → httpServer)
 - Lambda compilation: Fixed `LambdaError::Config` reference
+
+**Code Quality:**
+- Fixed 9 collapsible_if clippy warnings using Rust 2024 let-chain syntax
+- Fixed unused variable warnings in test suite
+- Fixed useless type conversions in Lambda tests
+- All clippy style warnings addressed (clean builds with `-D warnings`)
 
 **Verification Infrastructure:**
 - Scripts use deterministic 15s polling instead of fixed sleeps
@@ -31,26 +59,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SKIPPED tracked separately from PASSED (no hidden failures)
 - Build errors properly diagnosed with detailed logs
 
-### Added
-- Shared verification utilities (`tests/shared/bin/wait_for_server.sh`)
-- Test server bin targets in all test packages
-- Comprehensive example verification suite (5 phases, 31 servers)
-- Session lifecycle compliance: `notifications/initialized` in all e2e tests
-
 ### Changed
+
 - SSE keepalives use comment syntax for better client compatibility
 - DynamoDB queries use strongly consistent reads
-- Fixed 156 clippy warnings (100% clean)
+- Lambda `LambdaMcpHandler` now cached globally for session persistence
+- Test packages updated to Rust edition 2024 and tokio version "1"
+- Middleware stack execution order documented (FIFO/LIFO)
 
 ### Documentation
+
+- README middleware section with examples and testing commands
+- AGENTS.md middleware guidance with ADR 012 reference
 - Doctests passing: turul-mcp-derive (25/25), turul-mcp-protocol (7/7)
 - Complete verification run documented with bug fixes and runbook
-- README updated with verification and testing commands
+- Middleware testing scripts: `test_middleware_live.sh` and Lambda examples
 
 ### Tests
+
 - Fixed 9 integration test failures
 - All 161 integration tests passing across 20 test suites
 - 30/31 examples verified (Phases 1-5: 100% passing)
+- Middleware parity tests verify HTTP/Lambda consistency
 
 ## [0.2.0] - 2025-10-01
 
