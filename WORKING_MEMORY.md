@@ -1,11 +1,105 @@
 # MCP Framework - Working Memory
 
-## 🚧 PLANNED: Middleware Architecture Implementation (2025-10-04)
+## ✅ COMPLETED: Middleware Architecture Implementation (2025-10-05)
 
-**Status**: 📋 **PLANNING** - Trait-based middleware layer design
-**Impact**: Enables custom request/response interceptors for auth, logging, rate limiting
+**Status**: ✅ **FUNCTIONAL** - Middleware working in HTTP and Lambda transports
+**Impact**: Users can now add auth, logging, rate limiting without modifying core framework
+**Completion**: Core infrastructure + HTTP integration + Lambda integration + 3 working examples
+**Timeline**: Completed across Phases 1-4 (documentation pending in Phase 5)
+
+### 🎯 What Was Delivered
+
+**Infrastructure** (Phase 1):
+- ✅ `McpMiddleware` trait with async before/after hooks
+- ✅ `MiddlewareStack` executor with early termination
+- ✅ `RequestContext` with method, headers, session, transport
+- ✅ `SessionInjection` for state/metadata writes
+- ✅ `MiddlewareError` enum with JSON-RPC error mapping (-32001/-32002/-32003)
+- ✅ Unit tests: stack execution, error propagation, session injection
+
+**HTTP Integration** (Phase 2):
+- ✅ Fixed middleware stack passing from builder → server → HTTP handler
+- ✅ Middleware executes in `StreamableHttpHandler` (MCP 2025-06-18)
+- ✅ Middleware executes in `SessionMcpHandler` (legacy protocols)
+- ✅ Session injection persists before dispatcher execution
+
+**Lambda Integration** (Phase 3):
+- ✅ `LambdaMcpHandler::with_middleware()` method
+- ✅ Middleware delegates to HTTP handlers (StreamableHttpHandler/SessionMcpHandler)
+- ✅ 3 unit tests in `middleware_parity.rs` verify Lambda middleware works
+
+**Examples** (Phase 4):
+- ✅ `examples/middleware-logging-server` - Request timing with before/after hooks
+- ✅ `examples/middleware-auth-server` - API key validation with `whoami` tool
+- ✅ `examples/middleware-rate-limit-server` - Token bucket limiting (VERIFIED WORKING)
+- ✅ CLI port configuration for all examples (8670, 8671, 8672)
+- ✅ Test script `scripts/test_rate_limit.sh` verifies actual request counting
+
+### 🔧 Critical Fix: Middleware Stack Passing
+
+**Problem**: Middleware registered with `.middleware()` but never executed
+**Root Cause**: `HttpMcpServer::build()` created empty middleware stack instead of using builder's
+**Solution**: Added middleware_stack field to builder chain:
+- `HttpMcpServerBuilder::with_middleware_stack()` method
+- `McpServer` struct holds middleware_stack
+- Pass `Arc::new(self.middleware_stack.clone())` to HTTP builder
+- HTTP handler uses `self.middleware_stack` instead of creating empty one
+
+**Files Changed**:
+- `crates/turul-http-mcp-server/src/server.rs` - Builder and handler
+- `crates/turul-mcp-server/src/server.rs` - Server struct
+- `crates/turul-mcp-server/src/builder.rs` - Pass middleware to server
+
+**Commit**: `609b820` - Fix middleware stack passing from builder to HTTP handler
+
+### 📊 Verification Results
+
+**Rate Limit Middleware** (Empirically Verified):
+```
+Session: 0199b2d3-6d4a-7083-86ef-08e5928773c9
+Request 1: Session ... request count: 1/5
+Request 2: Session ... request count: 2/5
+Request 3: Session ... request count: 3/5
+Request 4: Session ... request count: 4/5
+Request 5: Session ... request count: 5/5
+Request 6: Rate limit exceeded
+Error: {"code":-32003,"message":"Rate limit exceeded: 5 requests per 60 seconds","data":{"retryAfter":60}}
+```
+
+**Success Criteria Met**:
+- ✅ Zero overhead when no middleware registered (empty stack skips execution)
+- ✅ Works in both HTTP and Lambda transports (verified via tests)
+- ✅ Session injection persists before dispatcher (verified in rate-limit)
+- ✅ Error short-circuiting prevents dispatch (verified in auth middleware)
+- ✅ Backward compatible (all existing tests pass)
+
+### ⏳ Remaining Work
+
+**Documentation** (Phase 5):
+- [ ] ADR: Middleware Architecture (design decisions, trade-offs)
+- [ ] CLAUDE.md: Middleware conventions and quick start
+- [ ] CHANGELOG.md: Feature announcement
+- [ ] README.md: Quick start example
+
+**Lambda Example** (Phase Lambda-E1):
+- [ ] Create `examples/middleware-auth-lambda`
+- [ ] Test with `cargo lambda watch`
+- [ ] Verify empirically that middleware works in real Lambda environment
+
+**Performance**:
+- [ ] Benchmark middleware overhead with 1/3/5 layers
+
+### 📚 Historical Context
+
+For complete architectural design and planning, see sections below starting at line 10.
+
+---
+
+## 🚧 ORIGINAL PLANNING: Middleware Architecture (2025-10-04)
+
+**Note**: This section preserved for historical context. Implementation is now complete (see above).
+
 **Goal**: Non-invasive extension point without modifying core framework
-**Timeline**: To be determined
 
 ### 🎯 Architecture Overview
 

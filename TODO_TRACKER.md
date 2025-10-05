@@ -92,36 +92,50 @@
 - [ ] Integration tests: error codes (-32001/-32002/-32003) match documented mapping
 - [ ] Integration tests: session injection persists and is readable in subsequent requests
 
-**Phase 3: Lambda Integration** (1-2 days)
-- [ ] Add middleware to `LambdaMcpHandler`
-- [ ] Convert Lambda event to `RequestContext`
-- [ ] Hook before/after dispatch (same pattern as HTTP)
-- [ ] Lambda integration tests
-- [ ] Test with AWS Lambda runtime
+**Phase 3: Lambda Integration** ✅ **COMPLETE** (2025-10-05)
+- [x] Add middleware to `LambdaMcpHandler` - ALREADY COMPLETE via `.with_middleware()` method
+- [x] Convert Lambda event to `RequestContext` - handled by StreamableHttpHandler/SessionMcpHandler
+- [x] Hook before/after dispatch (same pattern as HTTP) - delegated to HTTP handlers
+- [x] Lambda integration tests - 3 tests in `crates/turul-mcp-aws-lambda/tests/middleware_parity.rs`
+- [ ] Test with AWS Lambda runtime - manual testing with `cargo lambda watch` (see Phase Lambda-E1 below)
 
-**Phase 4: Built-in Examples** (2 days)
-- [ ] `LoggingMiddleware`: Request/response with timing
-- [ ] `ApiKeyAuth`: Header validation, user injection
-- [ ] `RateLimiter`: Token bucket per session/IP
-- [ ] Tests for each example middleware
-- [ ] Usage documentation
+**Phase 4: Built-in Examples** ✅ **COMPLETE** (2025-10-05)
+- [x] `LoggingMiddleware`: Request/response with timing - `examples/middleware-logging-server` ✅
+- [x] `ApiKeyAuth`: Header validation, user injection - `examples/middleware-auth-server` ✅
+- [x] `RateLimiter`: Token bucket per session/IP - `examples/middleware-rate-limit-server` ✅ VERIFIED WORKING
+- [x] Tests for each example middleware - integration via test_rate_limit.sh script
+- [x] Usage documentation - MIDDLEWARE_STATUS.md (pending consolidation)
 
 **Phase 5: Documentation** (2 days)
 - [ ] ADR: Middleware Architecture (why traits, why before/after)
 - [ ] CLAUDE.md: Middleware section with quick start
-- [ ] Example: `examples/middleware-auth-server/`
-- [ ] Example: `examples/middleware-logging-server/`
-- [ ] Example: `examples/middleware-rate-limit-server/`
+- [x] Example: `examples/middleware-auth-server/` ✅
+- [x] Example: `examples/middleware-logging-server/` ✅
+- [x] Example: `examples/middleware-rate-limit-server/` ✅
 - [ ] CHANGELOG.md update
 - [ ] README.md quick start
 
 ### Success Criteria
-- [ ] Zero overhead when no middleware registered
-- [ ] <5% overhead with 3 middleware layers
-- [ ] Works in both HTTP and Lambda transports
-- [ ] Session injection persists before dispatcher
-- [ ] Error short-circuiting prevents dispatch
-- [ ] Backward compatible (middleware optional)
+- [x] Zero overhead when no middleware registered - empty MiddlewareStack skips execution ✅
+- [ ] <5% overhead with 3 middleware layers - needs benchmarking
+- [x] Works in both HTTP and Lambda transports - verified via middleware_parity.rs tests ✅
+- [x] Session injection persists before dispatcher - verified in rate-limit example ✅
+- [x] Error short-circuiting prevents dispatch - verified in auth middleware ✅
+- [x] Backward compatible (middleware optional) - all existing tests pass ✅
+
+### 🎯 Middleware Implementation Status
+
+**✅ FUNCTIONAL** (2025-10-05):
+- Core middleware infrastructure complete
+- HTTP transport integration working (all 3 examples verified)
+- Lambda transport integration complete (unit tests passing)
+- Rate limiting VERIFIED WORKING via test script
+- Auth and logging examples compile and run
+
+**⏳ REMAINING**:
+- Phase Lambda-E1: Manual testing with `cargo lambda watch` (see below)
+- Documentation (ADR, CHANGELOG, README updates)
+- Performance benchmarking
 
 ---
 
@@ -1303,6 +1317,72 @@ First verify whether Lambda streaming actually works before implementing fixes.
 - [ ] Phase Lambda-3 (Production Validation): ___________ (or N/A)
 
 **Lambda Streaming Decision:** ___________
+
+---
+
+## Phase Lambda-E1: Lambda Middleware Example Testing (Week 1)
+
+**Objective**: Create and test middleware examples in AWS Lambda environment
+
+**Status:** ⏳ Not Started
+**Priority:** P2 - Completes middleware feature parity across transports
+**Deliverables**: Lambda middleware example + empirical verification with `cargo lambda watch`
+
+### 📋 Pre-Phase Checklist
+- [x] HTTP middleware examples working (logging, auth, rate-limit)
+- [x] Lambda middleware infrastructure complete (`.with_middleware()` method)
+- [x] Unit tests passing (middleware_parity.rs)
+- [ ] Review Lambda handler middleware integration code
+- [ ] Plan Lambda example structure
+
+### 🎯 Phase Lambda-E1 Tasks
+
+#### E1.1 Create Lambda Middleware Example
+- [ ] **Create `examples/middleware-auth-lambda/`**: Port auth-server to Lambda
+  - [ ] Copy middleware-auth-server as template
+  - [ ] Replace HTTP server with LambdaMcpHandler
+  - [ ] Add Lambda runtime setup (lambda_http::run)
+  - [ ] Configure for Function URL deployment
+  - [ ] Add Cargo.toml with lambda_http dependencies
+
+#### E1.2 Test with cargo lambda watch (EMPIRICAL VERIFICATION)
+- [ ] **Build Lambda binary**: `cargo lambda build --package middleware-auth-lambda`
+- [ ] **Deploy locally**: `cargo lambda watch --package middleware-auth-lambda`
+- [ ] **Test without API key**: Verify 401/403 error from middleware
+  ```bash
+  curl -X POST http://localhost:9000/lambda-url/middleware-auth-lambda \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize",...}'
+  ```
+- [ ] **Test with valid API key**: Verify initialization succeeds
+  ```bash
+  curl -X POST http://localhost:9000/lambda-url/middleware-auth-lambda \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json" \
+    -H "X-API-Key: secret-key-123" \
+    -d '{"jsonrpc":"2.0","id":1,"method":"initialize",...}'
+  ```
+- [ ] **Test whoami tool**: Verify user context injected by middleware
+- [ ] **Capture logs**: Document middleware execution in Lambda environment
+
+#### E1.3 Document Results
+- [ ] **Update MIDDLEWARE_STATUS.md**: Add Lambda testing results
+- [ ] **Record empirical findings**:
+  - Does middleware execute in Lambda? (yes/no)
+  - Are errors mapped correctly? (error codes -32001/-32002/-32003)
+  - Does session injection work? (whoami tool returns user)
+  - Any Lambda-specific issues? (cold start, timeouts, etc.)
+- [ ] **Update TODO_TRACKER.md**: Mark Phase Lambda-E1 complete
+
+### ✅ Phase Lambda-E1 Review Checkpoint
+- [ ] **Lambda example builds**: `cargo lambda build` succeeds
+- [ ] **Empirical evidence collected**: Real testing with `cargo lambda watch`
+- [ ] **Results documented**: Clear statement of middleware behavior in Lambda
+- [ ] **Parity verified**: Lambda middleware works identically to HTTP
+- [ ] **Commit message**: "feat(examples): add Lambda middleware auth example with verification"
+
+**Phase Lambda-E1 Sign-off:** ___________
 
 ---
 
