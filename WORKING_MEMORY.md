@@ -29,11 +29,11 @@
 - ✅ 3 unit tests in `middleware_parity.rs` verify Lambda middleware works
 
 **Examples** (Phase 4):
-- ✅ `examples/middleware-logging-server` - Request timing with before/after hooks
-- ✅ `examples/middleware-auth-server` - API key validation with `whoami` tool
-- ✅ `examples/middleware-rate-limit-server` - Token bucket limiting (VERIFIED WORKING)
-- ✅ CLI port configuration for all examples (8670, 8671, 8672)
-- ✅ Test script `scripts/test_rate_limit.sh` verifies actual request counting
+- ✅ `examples/middleware-logging-server` (HTTP, port 8670) - **VERIFIED WORKING**
+- ✅ `examples/middleware-auth-server` (HTTP, port 8672) - **VERIFIED WORKING** (whoami returns user-alice)
+- ✅ `examples/middleware-rate-limit-server` (HTTP, port 8671) - **VERIFIED WORKING** (enforces 5 req limit)
+- ✅ `examples/middleware-auth-lambda` (Lambda) - **BUILDS SUCCESSFULLY** (ready for cargo lambda watch)
+- ✅ CLI port configuration for all HTTP examples (8670, 8671, 8672)
 
 ### 🔧 Critical Fix: Middleware Stack Passing
 
@@ -54,17 +54,25 @@
 
 ### 📊 Verification Results
 
-**Rate Limit Middleware** (Empirically Verified):
-```
-Session: 0199b2d3-6d4a-7083-86ef-08e5928773c9
-Request 1: Session ... request count: 1/5
-Request 2: Session ... request count: 2/5
-Request 3: Session ... request count: 3/5
-Request 4: Session ... request count: 4/5
-Request 5: Session ... request count: 5/5
-Request 6: Rate limit exceeded
-Error: {"code":-32003,"message":"Rate limit exceeded: 5 requests per 60 seconds","data":{"retryAfter":60}}
-```
+**All 3 HTTP Examples Verified via `scripts/test_middleware_live.sh`:**
+
+1. **Logging Server** (port 8670):
+   - ✅ Initialized successfully
+   - ✅ Middleware logs: `→ initialize starting` / `← initialize completed`
+
+2. **Rate Limit Server** (port 8671):
+   - ✅ Sends 6 requests, counts: 1/5, 2/5, 3/5, 4/5, 5/5
+   - ✅ 6th request returns error -32003 (Rate limit enforced correctly)
+   - ✅ Error data: `{"retryAfter":60}`
+
+3. **Auth Server** (port 8672):
+   - ✅ Initialize with API key `secret-key-123`
+   - ✅ Middleware authenticates: `user-alice`
+   - ✅ whoami tool returns correct user ID from session
+
+**Lambda Example** (build verification):
+- ✅ Builds successfully with `cargo build --package middleware-auth-lambda`
+- ⏳ Runtime testing requires `cargo lambda watch` (see `scripts/test_lambda_middleware.sh`)
 
 **Success Criteria Met**:
 - ✅ Zero overhead when no middleware registered (empty stack skips execution)
@@ -93,10 +101,14 @@ Error: {"code":-32003,"message":"Rate limit exceeded: 5 requests per 60 seconds"
 
 ### 📝 Test Scripts Created
 
-1. **scripts/test_rate_limit.sh** - Full rate limit verification (VERIFIED WORKING)
-2. **scripts/test_middleware_live.sh** - Integration test for all three HTTP examples
+**HTTP Examples:**
+1. **scripts/test_middleware_live.sh** - **Comprehensive test - ALL 3 HTTP examples** ✅ PASSING
+2. **scripts/test_rate_limit.sh** - Rate limit only (detailed output) ✅ PASSING
 3. **scripts/quick_test_middleware.sh** - Manual test instructions
 4. **scripts/test_middleware_examples.sh** - Original test script (port conflicts)
+
+**Lambda Example:**
+5. **scripts/test_lambda_middleware.sh** - Build verification + manual testing instructions ✅ BUILD PASSING
 
 ### 🚀 How to Run Examples
 
