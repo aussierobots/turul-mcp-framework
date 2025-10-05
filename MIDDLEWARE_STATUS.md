@@ -69,22 +69,47 @@ Middleware parity test passes: `test_lambda_middleware_parity_with_http`
 3. **scripts/test_middleware_examples.sh**
    Original test script (has port conflict issues)
 
+## 🎯 Lambda Middleware Support
+
+**Lambda Example Created:** `examples/middleware-auth-lambda`
+
+The example demonstrates:
+- ✅ Using `LambdaMcpHandler::with_middleware()` for manual construction
+- ✅ X-API-Key header validation (secret-key-123, secret-key-456)
+- ✅ Transport parity - same AuthMiddleware works in both HTTP and Lambda
+- ✅ DynamoDB session storage integration
+- ✅ CloudWatch-optimized structured logging
+
+**Testing with cargo lambda watch:**
+```bash
+# Build
+cargo lambda build --package middleware-auth-lambda
+
+# Run locally
+cargo lambda watch --package middleware-auth-lambda
+
+# Test without API key (should fail)
+curl -X POST http://localhost:9000/lambda-url/middleware-auth-lambda \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize",...}'
+
+# Test with valid API key (should succeed)
+curl -X POST http://localhost:9000/lambda-url/middleware-auth-lambda \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -H "X-API-Key: secret-key-123" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize",...}'
+```
+
+**Note:** The Lambda builder doesn't expose `.middleware()` yet. For now, use the manual `LambdaMcpHandler::with_middleware()` constructor as shown in the example.
+
 ## 🎯 Next Steps
 
-1. **Debug Rate Limit Middleware**
-   - Add debug logging to middleware invocation
-   - Verify middleware is in the execution pipeline
-   - Check session availability in middleware context
-
-2. **Test Auth Server**
-   - Verify API key validation
-   - Test `whoami` tool
-   - Confirm unauthorized requests fail
-
-3. **Lambda Middleware Testing**
-   - No Lambda-specific examples yet
-   - Could add `middleware-auth-lambda` example
-   - Test middleware parity across transports
+1. ✅ **Rate Limit Middleware** - VERIFIED WORKING via test script
+2. ✅ **Auth Server** - Example complete and tested
+3. ✅ **Lambda Middleware** - Example created, ready for empirical testing
+4. **Documentation** - ADR, CHANGELOG, README updates pending
 
 ## 🚀 How to Run Examples
 
