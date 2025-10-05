@@ -27,38 +27,36 @@ Default ports:
 - rate-limit-server: 8671
 - auth-server: 8672
 
-### 3. Basic Server Functionality
-- ✅ Logging server initializes and responds to requests
-- ✅ Servers accept MCP 2025-06-18 protocol
-- ✅ Session IDs are properly returned in headers (`Mcp-Session-Id`)
+### 3. Middleware Functionality ✅ VERIFIED WORKING
 
-## ⚠️  Issues to Investigate
-
-### 1. Rate Limit Middleware Not Triggering
-**Status:** Needs investigation
-
-**Observation:**
-- Rate limit server starts without errors
-- Accepts 6+ requests when limit is 5
-- No middleware logging output (expected: "Session X request count: Y/5")
-
-**Possible causes:**
-- Middleware not being invoked for all request types
-- Session not being passed to middleware correctly
-- Request counting logic issue
-
-**Test command:**
+**Rate Limit Example - FULLY WORKING:**
 ```bash
-./scripts/test_middleware_live.sh
+./scripts/test_rate_limit.sh
 ```
 
-### 2. Auth Server Not Fully Tested
-**Status:** Pending verification
+Output shows:
+- ✅ Request counting: "Session X request count: 1/5", "2/5", etc.
+- ✅ Rate limit enforcement: 6th request returns `-32003` error
+- ✅ Proper error data: `{"code":-32003,"message":"Rate limit exceeded: 5 requests per 60 seconds","data":{"retryAfter":60}}`
 
-Need to verify:
-- API key validation works
-- Unauthenticated requests blocked
-- `whoami` tool returns correct user
+**Root Cause Fixed:**
+The middleware stack wasn't being passed from `McpServer::builder()` to the HTTP handler. Fixed by:
+1. Adding `middleware_stack` field to `HttpMcpServerBuilder`
+2. Adding `.with_middleware_stack()` method
+3. Passing middleware stack from `McpServer` to `HttpMcpServer`
+4. Using builder's middleware stack instead of creating empty one
+
+**Commit:** `609b820` - Fix middleware stack passing from builder to HTTP handler
+
+### 4. Lambda Middleware Support
+Lambda transport has full middleware support via `LambdaMcpHandler::with_middleware()`:
+```rust
+// From crates/turul-mcp-aws-lambda/src/handler.rs
+let handler = LambdaMcpHandler::new(dispatcher, session_storage)
+    .with_middleware(middleware_stack);
+```
+
+Middleware parity test passes: `test_lambda_middleware_parity_with_http`
 
 ## 📋 Test Scripts Created
 
