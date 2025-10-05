@@ -26,24 +26,71 @@
 
 ### Implementation Tasks (5 Phases)
 
-**Phase 1: Core Infrastructure** (2-3 days)
-- [ ] Create `turul-mcp-server/src/middleware/` module structure
-- [ ] Define `McpMiddleware` trait with async before/after hooks
-- [ ] Implement `RequestContext` with method, headers, session, transport
-- [ ] Implement `SessionInjection` for state/metadata writes
-- [ ] Implement `MiddlewareError` enum with HTTP status mapping
-- [ ] Implement `MiddlewareStack` executor with early termination
-- [ ] Write unit tests: stack execution order, error propagation, session injection
+**Phase 1: Core Infrastructure** (2-3 days) ✅ **COMPLETE** (Codex Reviewed × 2)
+- [x] Create `turul-mcp-server/src/middleware/` module structure (TEMP LOCATION)
+- [x] Define `McpMiddleware` trait with async before/after hooks
+- [x] **FIX**: Change signature to `before_dispatch(session: Option<&SessionContext>)` for `initialize` support
+- [x] Implement `RequestContext` with method, headers, session, transport
+- [x] Implement `SessionInjection` for state/metadata writes
+- [x] Implement `MiddlewareError` enum with JSON-RPC error code mapping (-32001, -32002, -32003)
+- [x] Implement `MiddlewareStack` executor with early termination
+- [x] Write unit tests: stack execution order, error propagation, session injection
+- [x] Add `.middleware()` to McpServerBuilder
+- [x] Export `error_codes` module for public documentation
+- [x] **ARCHITECTURE DECISION**: Extract to shared `turul-mcp-middleware` crate (Codex-approved)
 
-**Phase 2: HTTP Integration** (2 days)
-- [ ] Add middleware field to `HttpMcpServerBuilder`
-- [ ] Parse JSON-RPC method early in request handling
-- [ ] Hook before_dispatch in `StreamableHttpHandler`
-- [ ] Persist session injection before dispatcher
-- [ ] Hook after_dispatch for response modification
-- [ ] Add same hooks to `SessionMcpHandler` (legacy)
-- [ ] Convert `MiddlewareError` → `McpError` → `JsonRpcError`
-- [ ] Integration tests: mock middleware, error paths, session state
+**Phase 1.5: SessionView Abstraction + Middleware Crate** (1 day) ⚠️ **REQUIRED FOR PHASE 2** (Codex Reviewed ×3)
+- [ ] **WHY**: HTTP/Lambda handlers can't see `SessionContext` (circular dependency)
+- [ ] **REJECTED**: Trait objects (`Arc<dyn Any>`) - type-unsafe, loses compiler checks
+- [ ] **DECISION**: SessionView trait pattern (see WORKING_MEMORY.md ultrathink #3)
+  - Abstract over session interface (SessionView trait)
+  - Middleware uses trait, not concrete SessionContext
+  - Type-safe, testable, future-proof
+- [ ] **Step 1: Define SessionView in turul-mcp-protocol** (15 min)
+  - [ ] Create `turul-mcp-protocol/src/session_view.rs`
+  - [ ] Define trait: `session_id()`, `get_state()`, `set_state()`, `get_metadata()`
+  - [ ] Export from lib.rs
+- [ ] **Step 2: Create turul-mcp-middleware crate** (30 min)
+  - [ ] Create `crates/turul-mcp-middleware/` (depends on `turul-mcp-protocol`)
+  - [ ] Move middleware files, change signature to `Option<&dyn SessionView>`
+  - [ ] Add to workspace Cargo.toml
+- [ ] **Step 3: Implement SessionView in turul-mcp-server** (15 min)
+  - [ ] `impl SessionView for SessionContext` (delegate to closures)
+  - [ ] Add `turul-mcp-middleware` dependency
+  - [ ] Re-export: `pub use turul_mcp_middleware as middleware`
+- [ ] **Step 4: Add dependencies to transports** (30 min)
+  - [ ] `turul-http-mcp-server` → depends on `turul-mcp-middleware`
+  - [ ] `turul-mcp-aws-lambda` → depends on `turul-mcp-middleware`
+- [ ] **Step 5: Verify** (15 min)
+  - [ ] Run `cargo test --package turul-mcp-middleware --lib` (8 tests pass)
+  - [ ] Run `cargo check --workspace` (no circular deps)
+
+**Phase 2: HTTP Integration** (2 days) ⚠️ **CRITICAL: DUAL HANDLER COVERAGE** (Codex Reviewed)
+- [ ] **⚠️ SECURITY REQUIREMENT**: Integrate into BOTH HTTP handlers (see WORKING_MEMORY.md ultrathink)
+- [ ] **KEY FIX**: Parse JSON-RPC body ONCE to extract `method` field BEFORE middleware (avoid double-parse)
+- [ ] **KEY FIX**: `initialize` gets `session = None`, all other methods get `session = Some(...)`
+- [ ] **KEY FIX**: Only persist SessionInjection if session exists (not for `initialize`)
+- [ ] **Handler 1: StreamableHttpHandler (≥2025-03-26)**
+  - [ ] Add `middleware_stack: Arc<MiddlewareStack>` field
+  - [ ] Parse method from body_bytes (cheap single-field parse)
+  - [ ] Create RequestContext with method + HTTP headers as metadata
+  - [ ] Determine session: `None` if `initialize`, `Some(session)` otherwise
+  - [ ] Hook `execute_before(&mut ctx, session_opt)` → session injection
+  - [ ] Persist injection to session state/metadata (only if session exists)
+  - [ ] Dispatcher full parse (reuses body_bytes)
+  - [ ] Hook `execute_after(&ctx, &mut result)` → response transformation
+  - [ ] Error conversion: `MiddlewareError` → `McpError` (error_codes::-32001/2/3) → `JsonRpcError`
+- [ ] **Handler 2: SessionMcpHandler (≤2024-11-05) ← MUST NOT SKIP**
+  - [ ] Identical implementation to Handler 1 (same pseudocode)
+  - [ ] Add `middleware_stack: Arc<MiddlewareStack>` field
+  - [ ] Parse method, create RequestContext, determine session
+  - [ ] Hook before/after with same session handling
+  - [ ] Error conversion with same error codes
+- [ ] Pass `middleware_stack` from builder to both handlers
+- [ ] Integration tests: middleware runs for BOTH protocol versions (≥2025-03-26 AND ≤2024-11-05)
+- [ ] Integration tests: `initialize` method with `session = None` works correctly
+- [ ] Integration tests: error codes (-32001/-32002/-32003) match documented mapping
+- [ ] Integration tests: session injection persists and is readable in subsequent requests
 
 **Phase 3: Lambda Integration** (1-2 days)
 - [ ] Add middleware to `LambdaMcpHandler`

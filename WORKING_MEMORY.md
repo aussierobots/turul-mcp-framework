@@ -48,6 +48,13 @@ pub struct RequestContext<'req> {
     pub per_request_data: HashMap<&'static str, Value>, // Middleware scratch space
 }
 
+// Minimal session view exposed to middleware
+pub trait SessionView {
+    fn session_id(&self) -> &str;
+    fn get_state(&self, key: &str) -> BoxFuture<Option<Value>>;
+    fn current_metadata(&self) -> &HashMap<String, Value>;
+}
+
 // What middleware can inject into session before dispatch
 pub struct SessionInjection<'inj> {
     pub state_inserts: &'inj mut HashMap<String, Value>,  // Persisted session state
@@ -58,10 +65,11 @@ pub struct SessionInjection<'inj> {
 #[async_trait]
 pub trait McpMiddleware: Send + Sync {
     // Runs before dispatcher (can short-circuit)
+    // NOTE: session will be None for initialize/unauthenticated calls
     async fn before_dispatch(
         &self,
         ctx: &mut RequestContext<'_>,
-        session: &SessionContext,           // Read-only session access
+        session: Option<&dyn SessionView>,  // Read-only session access when available
         injection: &mut SessionInjection,   // Write session state/metadata
     ) -> Result<(), MiddlewareError>;
 
@@ -112,11 +120,14 @@ let mut injection = SessionInjection {
 };
 
 // Run middleware before dispatch
-if let Err(e) = middleware_stack.run_before(&mut ctx, &session_context, &mut injection).await {
+if let Err(e) = middleware_stack
+    .run_before(&mut ctx, session.as_ref(), &mut injection)
+    .await
+{
     return convert_middleware_error_to_response(e);
 }
 
-// Persist injected state/metadata
+// Persist injected state/metadata (only when we actually have a session)
 for (key, value) in injection.state_inserts {
     session_context.set_state(key, value).await?;
 }
@@ -152,26 +163,325 @@ let server = McpServer::builder()
     .build()?;
 ```
 
+### 🧠 ULTRATHINK: Multi-Transport Middleware Coverage
+
+**Critical Requirement**: Middleware MUST execute for ALL MCP requests regardless of:
+- Protocol version (2024-11-05 vs 2025-03-26 vs 2025-06-18)
+- Transport type (HTTP vs AWS Lambda)
+- Request routing path (streamable vs legacy)
+
+**Current Transport Architecture**:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    MCP Client Request                        │
+└───────────────────┬─────────────────────────────────────────┘
+                    │
+        ┌───────────┴───────────┐
+        │                       │
+    HTTP Transport         Lambda Transport
+        │                       │
+        ├─ Protocol Detection   └─ LambdaMcpHandler
+        │                           │
+        ├─ ≥2025-03-26             └─ NEEDS MIDDLEWARE ✓
+        │  StreamableHttpHandler
+        │  NEEDS MIDDLEWARE ✓
+        │
+        └─ ≤2024-11-05
+           SessionMcpHandler (LEGACY)
+           NEEDS MIDDLEWARE ✓ ← CRITICAL!
+```
+
+**Why All Three Handlers Need Middleware**:
+
+1. **StreamableHttpHandler** (`crates/turul-http-mcp-server/src/streamable_http.rs:324`)
+   - Handles: Protocol ≥ 2025-03-26 (current spec)
+   - Routes: Chunked transfer encoding, SSE streaming
+   - Usage: Modern MCP clients (MCP Inspector, FastMCP)
+   - **Without middleware**: New clients bypass auth/logging/rate limits
+
+2. **SessionMcpHandler** (`crates/turul-http-mcp-server/src/session_handler.rs:144`)
+   - Handles: Protocol ≤ 2024-11-05 (legacy spec)
+   - Routes: Buffered JSON responses, traditional SSE
+   - Usage: Older MCP clients, fallback mode
+   - **Without middleware**: Old clients bypass security ← **SECURITY HOLE**
+
+3. **LambdaMcpHandler** (`crates/turul-mcp-aws-lambda/src/handler.rs:34`)
+   - Handles: AWS Lambda Function URL events
+   - Routes: Serverless invocations, DynamoDB session storage
+   - Usage: Production serverless deployments
+   - **Without middleware**: Lambda deployments unprotected ← **PRODUCTION RISK**
+
+**Routing Logic** (`crates/turul-http-mcp-server/src/server.rs:383-396`):
+```rust
+if protocol_version.supports_streamable_http() {
+    StreamableHttpHandler.handle(req)  // ≥2025-03-26
+} else {
+    SessionMcpHandler.handle(req)      // ≤2024-11-05 ← MUST NOT SKIP!
+}
+```
+
+**If we skip SessionMcpHandler integration**:
+- ❌ Legacy clients (≤2024-11-05) bypass ALL middleware
+- ❌ Auth middleware doesn't validate old clients → security breach
+- ❌ Rate limiting doesn't apply to legacy requests → DoS vulnerability
+- ❌ Logging doesn't capture old client traffic → audit gaps
+- ❌ Production systems can't safely support both old and new clients
+
+**Conclusion**: Phase 2 MUST integrate into BOTH HTTP handlers (not just StreamableHttpHandler). This is non-negotiable for security and consistency.
+
+### 🧠 ULTRATHINK: Critical Implementation Gaps (Codex Review)
+
+**Gap 1: Session Context Doesn't Exist for `initialize`**
+- **Problem**: `before_dispatch(&SessionContext)` assumes session exists, but `initialize` creates it
+- **Impact**: First request from new client will panic
+- **Solution**: Change signature to `Option<&SessionContext>`
+  - `initialize`: middleware gets `None`, can still validate headers/rate-limit
+  - All other methods: middleware gets `Some(session)`, full state access
+- **Code Change**: `async fn before_dispatch(&self, ctx: &mut RequestContext<'_>, session: Option<&SessionContext>, ...)`
+
+**Gap 2: Method Extraction Requires Parse**
+- **Problem**: HTTP body must be parsed to extract JSON-RPC `method` field
+- **Risk**: Double-parsing (once for middleware, once for dispatcher) wastes CPU
+- **Solution**: Minimal early parse - extract ONLY `method` field
+  ```rust
+  // Cheap: Only parse method (one field)
+  let method = serde_json::from_slice::<Value>(&body)?
+      .get("method")
+      .and_then(|v| v.as_str())
+      .ok_or("Missing method")?;
+
+  // Dispatcher does full parse later (unavoidable)
+  ```
+- **Notifications**: JSON-RPC notifications omit `id` but still have `method` - middleware doesn't care about `id`
+
+**Gap 3: Error Code Mapping Not Defined**
+- **Problem**: Converting `MiddlewareError` → `JsonRpcError` needs specific error codes
+- **JSON-RPC 2.0 Standard Codes**:
+  - `-32700`: Parse error
+  - `-32600`: Invalid Request
+  - `-32601`: Method not found
+  - `-32602`: Invalid params
+  - `-32603`: Internal error
+  - `-32000` to `-32099`: Server error (application-defined)
+- **Proposed Mapping**:
+  ```rust
+  MiddlewareError::Unauthenticated    → -32001 "Authentication required"
+  MiddlewareError::Unauthorized       → -32002 "Permission denied"
+  MiddlewareError::RateLimitExceeded  → -32003 "Rate limit exceeded"
+  MiddlewareError::InvalidRequest     → -32600 (standard Invalid Request)
+  MiddlewareError::Internal           → -32603 (standard Internal error)
+  MiddlewareError::Custom{code, msg}  → custom code from variant
+  ```
+- **Rationale**: Unique codes let clients programmatically handle auth/rate-limit vs generic errors
+- **Documentation**: Must document these codes in public API (rustdoc on MiddlewareError)
+
+**Gap 4: Legacy Handler Parity** ✅
+- **Status**: Already addressed in ultrathink above
+- Both `StreamableHttpHandler` and `SessionMcpHandler` explicitly called out
+- Security warnings and integration test requirements added
+
+**Gap 5: No Runtime Code Changed Yet** ✅
+- **Status**: Confirmed - only doc changes so far
+- Safe to update plan and proceed with Phase 1 implementation
+
+### 🧠 ULTRATHINK: Integration Architecture Decision (Codex Review #2 + #3)
+
+**Problem**: Middleware types in `turul-mcp-server` are invisible to HTTP/Lambda handlers in their own crates (circular dependency issue).
+
+**Dispatcher Integration Rejected**: Dispatcher isn't a shared choke point - each transport owns its dispatcher.
+
+**Correct Integration Point**: HTTP/Lambda handlers (`StreamableHttpHandler`, `SessionMcpHandler`, `LambdaMcpHandler`)
+
+**Initial Attempts (Rejected)**:
+
+1. **New shared crate (naive)** ❌
+   - Problem: SessionContext is in `turul-mcp-server`, not `turul-mcp-protocol`
+   - Moving SessionContext requires massive refactoring
+   - Doesn't solve the core dependency problem
+
+2. **Trait object (`Arc<dyn Any>`)** ❌
+   - Type-unsafe (runtime downcasting everywhere)
+   - Loses compiler checks
+   - Every middleware must downcast session
+   - Violates Rust best practices
+
+3. **Keep in turul-mcp-server, pass as Any** ❌
+   - Middleware is type-safe but handlers aren't
+   - Transport layer still does runtime downcasting
+   - Doesn't improve architecture
+
+**✅ CORRECT SOLUTION: SessionView Trait Pattern**
+
+**Key Insight**: Abstract over the session interface, not the concrete type.
+
+**Architecture**:
+```
+turul-mcp-protocol
+├── SessionView trait (minimal interface)
+│   - session_id() -> &str
+│   - get_state(key) -> Option<Value>
+│   - set_state(key, value)
+│   - get_metadata(key) -> Option<Value>
+
+turul-mcp-middleware (new crate)
+├── depends on turul-mcp-protocol (for SessionView)
+├── McpMiddleware trait (accepts &dyn SessionView)
+├── RequestContext, MiddlewareError, MiddlewareStack
+└── No knowledge of concrete SessionContext
+
+turul-mcp-server
+├── depends on turul-mcp-middleware
+├── SessionContext (concrete implementation)
+├── impl SessionView for SessionContext (delegation)
+└── Built-in middleware (LoggingMiddleware, etc.)
+
+turul-http-mcp-server, turul-mcp-aws-lambda
+├── depend on turul-mcp-middleware
+├── Handlers have Arc<MiddlewareStack>
+└── Execute with &dyn SessionView (type-safe!)
+```
+
+**Type Signature**:
+```rust
+// In turul-mcp-middleware
+#[async_trait]
+pub trait McpMiddleware: Send + Sync {
+    async fn before_dispatch(
+        &self,
+        ctx: &mut RequestContext<'_>,
+        session: Option<&dyn SessionView>, // ← Trait, not concrete!
+        injection: &mut SessionInjection,
+    ) -> Result<(), MiddlewareError>;
+}
+```
+
+**Why This Works**:
+- ✅ Type-safe (no `dyn Any`, compiler checks everywhere)
+- ✅ Decoupled (middleware doesn't know about SessionContext)
+- ✅ Minimal (SessionView only exposes what middleware needs)
+- ✅ Testable (can mock SessionView)
+- ✅ Future-proof (other session types can implement trait)
+- ✅ No circular dependencies
+
+**Dependency Inversion**: High-level SessionContext implements low-level SessionView interface.
+
+---
+
 ### 📋 Implementation Phases
 
-**Phase 1: Core Infrastructure** (Estimated: 2-3 days)
-- [ ] Create `turul-mcp-server/src/middleware/` module
-- [ ] Define `McpMiddleware` trait with before/after hooks
-- [ ] Implement `RequestContext`, `SessionInjection`, `MiddlewareError`
-- [ ] Implement `MiddlewareStack` executor with early termination
-- [ ] Write unit tests for stack execution order
-- [ ] Write unit tests for error propagation
-- [ ] Write unit tests for session injection
+**Phase 1: Core Infrastructure** (Estimated: 2-3 days) ✅ **COMPLETE** (Codex Reviewed × 2)
+- [x] Create `turul-mcp-server/src/middleware/` module (TEMP LOCATION)
+- [x] Define `McpMiddleware` trait with `Option<&SessionContext>` for `initialize`
+- [x] Implement `RequestContext`, `SessionInjection`, `DispatcherResult`
+- [x] Implement `MiddlewareError` with JSON-RPC error codes (-32001/-32002/-32003)
+- [x] Implement `MiddlewareStack` executor with before/after hooks
+- [x] Write 8 unit tests (execution order, error propagation, session injection)
+- [x] Add `.middleware()` to McpServerBuilder
+- [x] Address all Codex feedback (session optional, error codes, parse timing)
+- [x] Architecture decision: Extract to shared `turul-mcp-middleware` crate
 
-**Phase 2: HTTP Integration** (Estimated: 2 days)
-- [ ] Add `middleware: Option<Arc<MiddlewareStack>>` to `HttpMcpServerBuilder`
-- [ ] Parse JSON-RPC method early in `StreamableHttpHandler`
-- [ ] Hook middleware before dispatcher in `StreamableHttpHandler`
-- [ ] Hook middleware after dispatcher
-- [ ] Add same hooks to `SessionMcpHandler` (legacy)
-- [ ] Convert `MiddlewareError` → `McpError` → `JsonRpcError`
-- [ ] Write integration tests with mock middleware
-- [ ] Write integration tests for error paths
+**Phase 1.5: SessionView Abstraction + Middleware Crate** (Estimated: 1 day) ⚠️ **ARCHITECTURAL FIX**
+- [ ] **Step 1: Define SessionView trait in turul-mcp-protocol** (15 min)
+  - [ ] Create `turul-mcp-protocol/src/session_view.rs`
+  - [ ] Define `SessionView` trait with minimal interface:
+    - `fn session_id(&self) -> &str`
+    - `async fn get_state(&self, key: &str) -> Option<Value>`
+    - `async fn set_state(&self, key: &str, value: Value)`
+    - `async fn get_metadata(&self, key: &str) -> Option<Value>`
+  - [ ] Export from `turul-mcp-protocol/src/lib.rs`
+- [ ] **Step 2: Create turul-mcp-middleware crate** (30 min)
+  - [ ] Create `crates/turul-mcp-middleware/` with Cargo.toml (depends on turul-mcp-protocol)
+  - [ ] Move middleware files from `turul-mcp-server/src/middleware/`
+  - [ ] Change `McpMiddleware::before_dispatch` signature to accept `Option<&dyn SessionView>`
+  - [ ] Update all imports (SessionContext → SessionView)
+  - [ ] Add to workspace in root Cargo.toml
+- [ ] **Step 3: Implement SessionView in turul-mcp-server** (15 min)
+  - [ ] Add `impl SessionView for SessionContext` (delegate to closures)
+  - [ ] Add `turul-mcp-middleware` as dependency
+  - [ ] Re-export middleware module: `pub use turul_mcp_middleware as middleware`
+  - [ ] Update `McpServerBuilder::middleware()` to use re-exported types
+- [ ] **Step 4: Update transport crates** (30 min)
+  - [ ] Add `turul-mcp-middleware` dependency to `turul-http-mcp-server`
+  - [ ] Add `turul-mcp-middleware` dependency to `turul-mcp-aws-lambda`
+- [ ] **Step 5: Verify** (15 min)
+  - [ ] Run `cargo test --package turul-mcp-middleware --lib` (8 tests should pass)
+  - [ ] Run `cargo check` on all affected crates
+  - [ ] Verify no circular dependencies
+
+**Phase 2: HTTP Integration** (Estimated: 2 days) ⚠️ **CRITICAL: DUAL HANDLER COVERAGE**
+- [ ] **⚠️ BOTH HANDLERS REQUIRED FOR SECURITY** (see ultrathink above)
+- [ ] **Integration Pseudocode** (applies to BOTH handlers):
+  ```rust
+  async fn handle_request(...) -> Response {
+      // 1. Read body bytes
+      let body_bytes = read_body_to_bytes(request).await?;
+
+      // 2. Parse ONLY method field (cheap, single field)
+      let method = serde_json::from_slice::<Value>(&body_bytes)?
+          .get("method")
+          .and_then(|v| v.as_str())
+          .ok_or("Missing method")?;
+
+      // 3. Create RequestContext with method + headers
+      let mut ctx = RequestContext::new(method, None);
+      ctx.add_metadata("user-agent", headers.get("user-agent"));
+      // ... add other headers as metadata
+
+      // 4. Get session (if exists) - for initialize this is None
+      let session_opt = if method == "initialize" {
+          None
+      } else {
+          Some(get_or_create_session(&session_id)?)
+      };
+
+      // 5. Execute middleware BEFORE dispatch
+      let injection = match middleware_stack.execute_before(&mut ctx, session_opt.as_ref()).await {
+          Ok(inj) => inj,
+          Err(middleware_err) => {
+              // Convert MiddlewareError → McpError → JsonRpcError
+              return error_response(middleware_err);
+          }
+      };
+
+      // 6. Persist session injection ONLY if session exists
+      if let Some(session) = session_opt.as_ref() {
+          for (key, value) in injection.state() {
+              session.set_state(key, value.clone()).await;
+          }
+          for (key, value) in injection.metadata() {
+              session.set_metadata(key, value.clone()).await;
+          }
+      }
+      // For initialize: injection saved and applied AFTER session creation in dispatcher
+
+      // 7. Dispatcher does full JSON-RPC parse (reuses body_bytes)
+      let mut result = dispatcher.handle_request_bytes(body_bytes, session_opt).await;
+
+      // 8. Execute middleware AFTER dispatch
+      middleware_stack.execute_after(&ctx, &mut result).await?;
+
+      // 9. Convert to HTTP response
+      result_to_response(result)
+  }
+  ```
+- [ ] **Handler 1: StreamableHttpHandler** (≥2025-03-26)
+  - [ ] Add `middleware_stack: Arc<MiddlewareStack>` field to struct
+  - [ ] Implement integration pseudocode above
+  - [ ] Handle `initialize` with `session = None`
+  - [ ] Handle all other methods with `session = Some(...)`
+  - [ ] Error conversion: `MiddlewareError` → `McpError` (use error_codes) → `JsonRpcError` → HTTP status
+- [ ] **Handler 2: SessionMcpHandler** (≤2024-11-05) ← **DO NOT SKIP**
+  - [ ] Add `middleware_stack: Arc<MiddlewareStack>` field to struct
+  - [ ] Implement integration pseudocode above (identical to Handler 1)
+  - [ ] Handle `initialize` with `session = None`
+  - [ ] Handle all other methods with `session = Some(...)`
+  - [ ] Error conversion: `MiddlewareError` → `McpError` (use error_codes) → `JsonRpcError` → HTTP status
+- [ ] Pass `middleware_stack` from builder to both handlers
+- [ ] Write integration tests: middleware runs for BOTH protocol versions (≥2025-03-26 AND ≤2024-11-05)
+- [ ] Write integration tests: `initialize` works with `session = None`
+- [ ] Write integration tests: error codes match documented mapping
+- [ ] Write integration tests: session injection persists correctly
 
 **Phase 3: Lambda Integration** (Estimated: 1-2 days)
 - [ ] Add middleware to `LambdaMcpHandler`
