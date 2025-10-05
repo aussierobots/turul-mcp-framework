@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-protocol-2025-06-18"
-version = "0.2.1"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -14,7 +14,7 @@ server = []  # Server-side features
 client = []  # Client-side features
 
 [dependencies]
-turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.2.1" }
+turul-mcp-json-rpc-server.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true

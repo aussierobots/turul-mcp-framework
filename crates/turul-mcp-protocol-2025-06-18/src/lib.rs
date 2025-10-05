@@ -141,6 +141,9 @@ pub enum McpError {
     #[error("Prompt not found: {0}")]
     PromptNotFound(String),
 
+    #[error("Invalid request: {message}")]
+    InvalidRequest { message: String },
+
     #[error("Invalid parameters: {0}")]
     InvalidParameters(String),
 
@@ -271,6 +274,9 @@ impl McpError {
         use turul_mcp_json_rpc_server::error::JsonRpcErrorObject;
 
         match self {
+            // Request-level errors map to InvalidParams (-32602) with descriptive message
+            McpError::InvalidRequest { message } => JsonRpcErrorObject::invalid_params(message),
+
             // Parameter-related errors map to InvalidParams (-32602)
             McpError::InvalidParameters(msg) => JsonRpcErrorObject::invalid_params(msg),
             McpError::MissingParameter(param) => JsonRpcErrorObject::invalid_params(&format!(
