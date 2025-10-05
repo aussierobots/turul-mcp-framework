@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-protocol"
-version = "0.2.1"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -14,7 +14,7 @@ server = ["turul-mcp-protocol-2025-06-18/server"]
 client = ["turul-mcp-protocol-2025-06-18/client"]
 
 [dependencies]
-turul-mcp-protocol-2025-06-18 = { path = "../turul-mcp-protocol-2025-06-18", version = "0.2.1" }
+turul-mcp-protocol-2025-06-18.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

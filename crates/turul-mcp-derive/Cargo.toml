@@ -1,6 +1,6 @@
 [package]
 name = "turul-mcp-derive"
-version = "0.2.1"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -12,19 +12,20 @@ description = "Procedural macros for the MCP framework"
 proc-macro = true
 
 [dependencies]
-proc-macro2 = "1.0"
-quote = "1.0"
-syn = { version = "2.0", features = ["full", "extra-traits"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-regex = "1.0"
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true, features = ["full", "extra-traits"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+regex = { workspace = true }
 async-trait.workspace = true
 
 # Internal dependencies
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.2.1" }
+turul-mcp-protocol.workspace = true
+turul-mcp-protocol-2025-06-18.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 async-trait.workspace = true
-tracing-test = "0.2"
-turul-mcp-server = { path = "../turul-mcp-server", version = "0.2.1" }
+tracing-test = { workspace = true }
+turul-mcp-server = { workspace = true }
