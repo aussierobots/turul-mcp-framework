@@ -1,11 +1,14 @@
 //! Middleware Authentication Example for AWS Lambda
 //!
-//! This example demonstrates middleware-based authentication in Lambda.
+//! This example demonstrates middleware-based authentication in Lambda with
+//! API Gateway authorizer context integration.
+//!
 //! The middleware:
 //! 1. Extracts the X-API-Key header from Lambda requests
 //! 2. Validates the API key (hardcoded for demo)
-//! 3. Stores the authenticated user_id in session state
-//! 4. Tools can read the user_id from session
+//! 3. Extracts Lambda authorizer context (x-authorizer-* headers)
+//! 4. Stores the authenticated user_id and authorizer data in session state
+//! 5. Tools can read the user_id and context from session
 //!
 //! # Deployment
 //!
@@ -18,6 +21,34 @@
 //!
 //! # Test locally
 //! cargo lambda watch --package middleware-auth-lambda
+//! ```
+//!
+//! # How Authorizer Context Works
+//!
+//! **Pattern**: API Gateway Authorizer → Lambda Extensions → Middleware → Session State
+//!
+//! 1. API Gateway authorizer adds context (userId, tenantId, role, etc.)
+//! 2. turul-mcp-aws-lambda adapter extracts context → injects `x-authorizer-*` headers
+//! 3. Middleware reads headers → stores in session state
+//! 4. Your tools access via `session.get_typed_state("authorizer")`
+//!
+//! **Example tool using authorizer context**:
+//! ```rust,ignore
+//! #[mcp_tool(name = "get_account", description = "Get account info")]
+//! async fn get_account(
+//!     #[param(session)] session: SessionContext,
+//! ) -> McpResult<serde_json::Value> {
+//!     // Read authorizer context from session (fields are lowercase-sanitized)
+//!     let authorizer: Option<HashMap<String, String>> =
+//!         session.get_typed_state("authorizer").await.ok().flatten();
+//!
+//!     // Field names are sanitized: "userId" → "userid" (lowercase)
+//!     let user_id = authorizer
+//!         .and_then(|ctx| ctx.get("userid").cloned())  // lowercase!
+//!         .ok_or_else(|| McpError::validation("Missing userid from authorizer"))?;
+//!
+//!     Ok(json!({ "userId": user_id }))
+//! }
 //! ```
 //!
 //! # Usage
@@ -44,10 +75,11 @@ use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use turul_http_mcp_server::middleware::{
     DispatcherResult, McpMiddleware, MiddlewareError, RequestContext, SessionInjection,
 };
+use turul_mcp_server::prelude::*;
 
 /// Authentication middleware that validates X-API-Key header
 struct AuthMiddleware {
@@ -75,7 +107,7 @@ impl McpMiddleware for AuthMiddleware {
     ) -> Result<(), MiddlewareError> {
         // Skip authentication for initialize method (required for session creation)
         if ctx.method() == "initialize" {
-            info!("Skipping auth for initialize method");
+            debug!("Skipping auth for initialize method");
             return Ok(());
         }
 
@@ -86,7 +118,7 @@ impl McpMiddleware for AuthMiddleware {
             Some(key) => {
                 // Validate API key
                 if let Some(user_id) = self.valid_keys.get(key) {
-                    info!("✅ Authenticated user: {}", user_id);
+                    debug!("✅ Authenticated user: {}", user_id);
 
                     // Store user_id in session state for tools to access
                     injection.set_state("user_id", json!(user_id));
@@ -94,6 +126,26 @@ impl McpMiddleware for AuthMiddleware {
 
                     // Store API key scope in metadata
                     injection.set_metadata("api_key_scope", json!("read_write"));
+
+                    // Extract Lambda authorizer context from x-authorizer-* headers
+                    // These are injected by turul-mcp-aws-lambda adapter
+                    let metadata: &serde_json::Map<String, serde_json::Value> = ctx.metadata();
+                    let mut authorizer_context = HashMap::new();
+
+                    // Iterate over metadata entries
+                    for (key, value) in metadata.iter() {
+                        if let Some(field_name) = key.strip_prefix("x-authorizer-") {
+                            if let Some(value_str) = value.as_str() {
+                                debug!("📋 Authorizer context: {} = {}", field_name, value_str);
+                                authorizer_context.insert(field_name.to_string(), value_str.to_string());
+                            }
+                        }
+                    }
+
+                    if !authorizer_context.is_empty() {
+                        debug!("✅ Extracted {} authorizer fields", authorizer_context.len());
+                        injection.set_state("authorizer", json!(authorizer_context));
+                    }
 
                     Ok(())
                 } else {
@@ -117,7 +169,7 @@ impl McpMiddleware for AuthMiddleware {
         ctx: &RequestContext<'_>,
         _result: &mut DispatcherResult,
     ) -> Result<(), MiddlewareError> {
-        info!("Request {} completed", ctx.method());
+        debug!("Request {} completed", ctx.method());
         Ok(())
     }
 }
@@ -208,6 +260,7 @@ async fn main() -> Result<(), Error> {
     info!("🚀 Starting AWS Lambda MCP Server with Authentication Middleware");
     info!("Architecture: MCP 2025-06-18 with middleware auth layer");
     info!("  - X-API-Key header validation");
+    info!("  - Lambda authorizer context extraction");
     info!("  - User context injection");
     info!("  - DynamoDB session storage");
     info!("  - CORS support");
