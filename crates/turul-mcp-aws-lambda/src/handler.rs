@@ -63,6 +63,9 @@ impl LambdaMcpHandler {
     ) -> Self {
         let dispatcher = Arc::new(dispatcher);
 
+        // Create empty middleware stack (shared by both handlers)
+        let middleware_stack = Arc::new(turul_http_mcp_server::middleware::MiddlewareStack::new());
+
         // Create SessionMcpHandler for legacy protocol support
         let session_handler = SessionMcpHandler::with_shared_stream_manager(
             config.clone(),
@@ -70,6 +73,7 @@ impl LambdaMcpHandler {
             session_storage.clone(),
             stream_config.clone(),
             stream_manager.clone(),
+            middleware_stack.clone(),
         );
 
         // Create StreamableHttpHandler for MCP 2025-06-18 support
@@ -79,6 +83,7 @@ impl LambdaMcpHandler {
             session_storage.clone(),
             stream_manager.clone(),
             capabilities.clone(),
+            middleware_stack,
         );
 
         Self {
@@ -102,6 +107,9 @@ impl LambdaMcpHandler {
         capabilities: ServerCapabilities,
         sse_enabled: bool,
     ) -> Self {
+        // Create empty middleware stack (shared by both handlers)
+        let middleware_stack = Arc::new(turul_http_mcp_server::middleware::MiddlewareStack::new());
+
         // Create SessionMcpHandler for legacy protocol support
         let session_handler = SessionMcpHandler::with_shared_stream_manager(
             config.clone(),
@@ -109,6 +117,7 @@ impl LambdaMcpHandler {
             session_storage.clone(),
             stream_config.clone(),
             stream_manager.clone(),
+            middleware_stack.clone(),
         );
 
         // Create StreamableHttpHandler for MCP 2025-06-18 support
@@ -118,6 +127,48 @@ impl LambdaMcpHandler {
             session_storage,
             stream_manager,
             capabilities,
+            middleware_stack,
+        );
+
+        Self {
+            session_handler,
+            streamable_handler,
+            sse_enabled,
+            #[cfg(feature = "cors")]
+            cors_config: None,
+        }
+    }
+
+    /// Create with custom middleware stack (for testing and examples)
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_middleware(
+        config: ServerConfig,
+        dispatcher: Arc<JsonRpcDispatcher<McpError>>,
+        session_storage: Arc<BoxedSessionStorage>,
+        stream_manager: Arc<StreamManager>,
+        stream_config: StreamConfig,
+        capabilities: ServerCapabilities,
+        middleware_stack: Arc<turul_http_mcp_server::middleware::MiddlewareStack>,
+        sse_enabled: bool,
+    ) -> Self {
+        // Create SessionMcpHandler with custom middleware
+        let session_handler = SessionMcpHandler::with_shared_stream_manager(
+            config.clone(),
+            dispatcher.clone(),
+            session_storage.clone(),
+            stream_config.clone(),
+            stream_manager.clone(),
+            middleware_stack.clone(),
+        );
+
+        // Create StreamableHttpHandler with custom middleware
+        let streamable_handler = StreamableHttpHandler::new(
+            Arc::new(config),
+            dispatcher,
+            session_storage,
+            stream_manager,
+            capabilities,
+            middleware_stack,
         );
 
         Self {

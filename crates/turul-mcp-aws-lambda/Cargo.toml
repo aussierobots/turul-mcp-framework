@@ -18,12 +18,12 @@ dynamodb = ["turul-mcp-session-storage/dynamodb"] # DynamoDB session storage
 
 [dependencies]
 # Core MCP framework
-turul-mcp-server = { path = "../turul-mcp-server", version = "0.2.0" }
-turul-http-mcp-server = { path = "../turul-http-mcp-server", version = "0.2.1" }
-turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.2.0" }
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.2.0" }
-turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.2.0" }
-turul-mcp-derive = { path = "../turul-mcp-derive", version = "0.2.0" }
+turul-mcp-server = { workspace = true }
+turul-http-mcp-server = { workspace = true }
+turul-mcp-json-rpc-server = { workspace = true }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-session-storage = { workspace = true }
+turul-mcp-derive = { workspace = true }
 
 # AWS Lambda runtime
 lambda_http = { workspace = true }
@@ -59,7 +59,7 @@ tokio = { workspace = true, features = ["test-util"] }
 tokio-test = { workspace = true }
 tracing-subscriber = { workspace = true }
 aws_lambda_events = { workspace = true }
-serial_test = "3.2"
+serial_test = { workspace = true }
 
 # Binary target required for `cargo lambda watch` to work properly
 # Must be [[bin]] not [[example]] for lambda tooling compatibility
