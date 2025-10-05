@@ -1,0 +1,20 @@
+[package]
+name = "middleware-auth-server"
+version = "0.2.1"
+edition = "2021"
+publish = false
+
+[dependencies]
+turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http", "sse"] }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
+turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage" }
+tokio = { version = "1.47", features = ["full"] }
+async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[[bin]]
+name = "middleware-auth-server"
+path = "src/main.rs"
