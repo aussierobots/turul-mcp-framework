@@ -1490,6 +1490,7 @@ impl McpServerBuilder {
             self.session_cleanup_interval_seconds,
             self.session_storage,
             self.strict_lifecycle,
+            self.middleware_stack,
             #[cfg(feature = "http")]
             self.bind_address,
             #[cfg(feature = "http")]

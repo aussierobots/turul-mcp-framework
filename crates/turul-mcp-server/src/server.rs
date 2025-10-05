@@ -38,6 +38,8 @@ pub struct McpServer {
     instructions: Option<String>,
     /// Strict MCP lifecycle enforcement
     strict_lifecycle: bool,
+    /// Middleware stack for request/response processing
+    middleware_stack: crate::middleware::MiddlewareStack,
 
     // HTTP configuration (if enabled)
     #[cfg(feature = "http")]
@@ -63,6 +65,7 @@ impl McpServer {
         session_cleanup_interval_seconds: Option<u64>,
         session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
         strict_lifecycle: bool,
+        middleware_stack: crate::middleware::MiddlewareStack,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
@@ -124,6 +127,7 @@ impl McpServer {
             session_storage,
             instructions,
             strict_lifecycle,
+            middleware_stack,
             #[cfg(feature = "http")]
             bind_address,
             #[cfg(feature = "http")]
@@ -212,6 +216,7 @@ impl McpServer {
                 .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
                 // POST SSE remains at default (false) for compatibility
                 .server_capabilities(self.capabilities.clone()) // Pass server capabilities
+                .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(
                     vec!["tools/list".to_string()],
@@ -374,6 +379,7 @@ impl McpServer {
                 .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
                 // POST SSE remains at default (false) for compatibility
                 .server_capabilities(self.capabilities.clone()) // Pass server capabilities
+                .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(
                     vec!["tools/list".to_string()],

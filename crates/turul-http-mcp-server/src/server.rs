@@ -61,6 +61,7 @@ pub struct HttpMcpServerBuilder {
     session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
     stream_config: StreamConfig,
     server_capabilities: Option<turul_mcp_protocol::ServerCapabilities>,
+    middleware_stack: Arc<crate::middleware::MiddlewareStack>,
 }
 
 impl HttpMcpServerBuilder {
@@ -72,6 +73,7 @@ impl HttpMcpServerBuilder {
             session_storage: Some(Arc::new(InMemorySessionStorage::new())),
             stream_config: StreamConfig::default(),
             server_capabilities: None,
+            middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
         }
     }
 }
@@ -87,7 +89,17 @@ impl HttpMcpServerBuilder {
             session_storage: Some(session_storage),
             stream_config: StreamConfig::default(),
             server_capabilities: None,
+            middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
         }
+    }
+
+    /// Set the middleware stack (for HTTP transport middleware support)
+    pub fn with_middleware_stack(
+        mut self,
+        middleware_stack: Arc<crate::middleware::MiddlewareStack>,
+    ) -> Self {
+        self.middleware_stack = middleware_stack;
+        self
     }
 
     /// Set the bind address
@@ -187,8 +199,8 @@ impl HttpMcpServerBuilder {
         // Create shared dispatcher Arc
         let dispatcher = Arc::new(self.dispatcher);
 
-        // Create empty middleware stack (users can configure via McpServer::builder().middleware())
-        let middleware_stack = Arc::new(crate::middleware::MiddlewareStack::new());
+        // Use middleware stack from builder
+        let middleware_stack = self.middleware_stack;
 
         // Create StreamableHttpHandler for MCP 2025-06-18 support
         let streamable_handler = StreamableHttpHandler::new(
@@ -197,7 +209,7 @@ impl HttpMcpServerBuilder {
             Arc::clone(&session_storage),
             Arc::clone(&stream_manager),
             self.server_capabilities.unwrap_or_default(),
-            middleware_stack,
+            Arc::clone(&middleware_stack),
         );
 
         HttpMcpServer {
