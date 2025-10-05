@@ -21,6 +21,7 @@ mod tools;
 
 use lambda_http::{Body, Error, Request, run, service_fn};
 use std::env;
+use tokio::sync::OnceCell;
 use tracing::{error, info};
 
 // Framework imports
@@ -32,6 +33,9 @@ use session_aware_logging_demo::{
     CheckLoggingStatusTool, SessionLoggingDemoTool, SetLoggingLevelTool,
 };
 use tools::{CloudWatchMetricsTool, DynamoDbQueryTool, SnsPublishTool, SqsSendMessageTool};
+
+/// Global handler instance - created once per Lambda container, reused across invocations
+static HANDLER: OnceCell<turul_mcp_aws_lambda::LambdaMcpHandler> = OnceCell::const_new();
 
 /// Initialize CloudWatch-optimized logging for Lambda environment
 fn init_logging() {
@@ -55,8 +59,10 @@ async fn lambda_handler(request: Request) -> Result<lambda_http::Response<Body>,
         request.uri().path()
     );
 
-    // Create handler (could be cached globally for better performance)
-    let handler = create_lambda_mcp_handler().await?;
+    // Get or create handler (cached globally for session persistence)
+    let handler = HANDLER
+        .get_or_try_init(|| async { create_lambda_mcp_handler().await })
+        .await?;
 
     // Process request through the Lambda MCP handler
     handler.handle(request).await.map_err(|e| {
