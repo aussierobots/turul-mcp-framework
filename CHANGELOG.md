@@ -42,16 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SSE resumability: Keepalive events preserve Last-Event-ID for proper reconnection
 - MCP Inspector compatibility: Events use standard `event: message` format
 - Lambda notifications: DynamoDB consistent reads fix race condition
-- Lambda handler caching: Global `OnceCell` prevents session loss across invocations
+- Lambda handler caching: Global `OnceCell` preserves handler instance (DynamoDB client, StreamManager, middleware) across invocations
 - Tool output: Schema and runtime field names now consistent
 - CamelCase: Proper acronym handling (GPS → gps, HTTPServer → httpServer)
 - Lambda compilation: Fixed `LambdaError::Config` reference
 
 **Code Quality:**
-- Fixed 9 collapsible_if clippy warnings using Rust 2024 let-chain syntax
+- Fixed 14 collapsible_if clippy warnings using Rust 2024 let-chain syntax
 - Fixed unused variable warnings in test suite
 - Fixed useless type conversions in Lambda tests
-- All clippy style warnings addressed (clean builds with `-D warnings`)
+- All clippy warnings addressed (100% clean workspace builds with `-D warnings`)
 
 **Verification Infrastructure:**
 - Scripts use deterministic 15s polling instead of fixed sleeps
@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - SSE keepalives use comment syntax for better client compatibility
 - DynamoDB queries use strongly consistent reads
-- Lambda `LambdaMcpHandler` now cached globally for session persistence
+- Lambda `LambdaMcpHandler` now cached globally (preserves DynamoDB client, StreamManager, middleware instances)
 - Test packages updated to Rust edition 2024 and tokio version "1"
 - Middleware stack execution order documented (FIFO/LIFO)
 
