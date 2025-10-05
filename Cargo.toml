@@ -66,6 +66,7 @@ members = [
 
   # Middleware examples
   "examples/middleware-auth-server",
+  "examples/middleware-auth-lambda",
   "examples/middleware-logging-server",
   "examples/middleware-rate-limit-server",
 
