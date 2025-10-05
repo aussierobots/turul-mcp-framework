@@ -21,6 +21,7 @@ use hyper::header::{ACCEPT, CONTENT_TYPE};
 use hyper::{HeaderMap, Method, Request, Response, StatusCode};
 use serde_json::Value;
 use tracing::{debug, error, warn};
+use turul_mcp_session_storage::SessionView;
 
 use crate::ServerConfig;
 
@@ -327,6 +328,7 @@ pub struct StreamableHttpHandler {
     session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     stream_manager: Arc<crate::StreamManager>,
     server_capabilities: turul_mcp_protocol::ServerCapabilities,
+    pub(crate) middleware_stack: Arc<crate::middleware::MiddlewareStack>,
 }
 
 impl StreamableHttpHandler {
@@ -336,6 +338,7 @@ impl StreamableHttpHandler {
         session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
         stream_manager: Arc<crate::StreamManager>,
         server_capabilities: turul_mcp_protocol::ServerCapabilities,
+        middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     ) -> Self {
         Self {
             config,
@@ -343,6 +346,7 @@ impl StreamableHttpHandler {
             session_storage,
             stream_manager,
             server_capabilities,
+            middleware_stack,
         }
     }
 
@@ -1307,9 +1311,12 @@ impl StreamableHttpHandler {
         };
 
         // Spawn task to handle streaming dispatch
-        let dispatcher = Arc::clone(&self.dispatcher);
         let request_id = request.id.clone();
         let sender = tx; // Rename for clarity
+
+        // Capture headers for middleware (clone before move into spawn)
+        let headers = context.headers.clone();
+        let self_clone = self.clone();
 
         tokio::spawn(async move {
             debug!(
@@ -1317,9 +1324,10 @@ impl StreamableHttpHandler {
                 request_id, wants_sse
             );
 
-            // Process actual request
-            let response = dispatcher
-                .handle_request_with_context(request, session_context)
+            // Process actual request through middleware pipeline
+            // Injection is applied immediately inside run_middleware_and_dispatch
+            let (response, _) = self_clone
+                .run_middleware_and_dispatch(request, headers, session_context)
                 .await;
 
             // Send final result - format depends on client type
@@ -1542,6 +1550,155 @@ impl StreamableHttpHandler {
         // For simple JSON clients, streaming will send only the final result (no progress frames)
         debug!("Using streaming POST handler for all requests");
         return self.handle_post_streamable_http(req, context).await;
+    }
+
+    /// Run middleware stack around dispatcher call
+    ///
+    /// This helper:
+    /// 1. Fast-paths when middleware stack is empty
+    /// 2. Normalizes headers to lowercase String keys
+    /// 3. Builds RequestContext with method + headers
+    /// 4. Executes before_dispatch
+    /// 5. Applies or stashes SessionInjection
+    /// 6. Calls dispatcher
+    /// 7. Executes after_dispatch
+    ///
+    /// Returns (JsonRpcMessage, Option<SessionInjection>) where the injection
+    /// is Some when session was None (initialize case) and needs to be applied
+    /// after session creation.
+    async fn run_middleware_and_dispatch(
+        &self,
+        request: turul_mcp_json_rpc_server::JsonRpcRequest,
+        headers: HashMap<String, String>,
+        session: turul_mcp_json_rpc_server::SessionContext,
+    ) -> (turul_mcp_json_rpc_server::JsonRpcMessage, Option<crate::middleware::SessionInjection>) {
+        // Fast path: if middleware stack is empty, dispatch directly
+        if self.middleware_stack.is_empty() {
+            let result = self.dispatcher
+                .handle_request_with_context(request, session)
+                .await;
+            return (result, None);
+        }
+
+        // Normalize headers: lowercase String keys
+        let normalized_headers: HashMap<String, String> = headers
+            .iter()
+            .map(|(k, v)| (k.to_lowercase(), v.clone()))
+            .collect();
+
+        // Build RequestContext with method and headers
+        // Clone method and session_id for ctx (request will be moved to dispatcher)
+        let method = request.method.clone();
+        let session_id = session.session_id.clone();
+
+        // Convert params to Option<Value>
+        let params = request.params.clone().map(|p| match p {
+            turul_mcp_json_rpc_server::RequestParams::Object(map) => {
+                serde_json::Value::Object(map.into_iter().collect())
+            }
+            turul_mcp_json_rpc_server::RequestParams::Array(arr) => serde_json::Value::Array(arr),
+        });
+        let mut ctx = crate::middleware::RequestContext::new(&method, params);
+
+        for (k, v) in normalized_headers {
+            ctx.add_metadata(k, serde_json::json!(v));
+        }
+
+        // Create SessionView adapter for middleware to access storage-backed session
+        let session_view = crate::middleware::StorageBackedSessionView::new(
+            session_id.clone(),
+            Arc::clone(&self.session_storage),
+        );
+
+        // Execute before_dispatch with SessionView
+        let injection = match self.middleware_stack.execute_before(&mut ctx, Some(&session_view)).await {
+            Ok(inj) => inj,
+            Err(err) => {
+                // Map middleware error to proper JSON-RPC error code
+                return (Self::map_middleware_error_to_jsonrpc(err, request.id), None);
+            }
+        };
+
+        // Apply injection immediately to session storage
+        if !injection.is_empty() {
+            for (key, value) in injection.state() {
+                if let Err(e) = session_view.set_state(key, value.clone()).await {
+                    tracing::warn!("Failed to apply injection state '{}': {}", key, e);
+                }
+            }
+            for (key, value) in injection.metadata() {
+                if let Err(e) = session_view.set_metadata(key, value.clone()).await {
+                    tracing::warn!("Failed to apply injection metadata '{}': {}", key, e);
+                }
+            }
+        }
+
+        // Dispatch the request
+        let result = self.dispatcher
+            .handle_request_with_context(request, session)
+            .await;
+
+        // Execute after_dispatch
+        // Convert JsonRpcMessage to DispatcherResult for middleware
+        let mut dispatcher_result = match &result {
+            turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
+                match &resp.result {
+                    turul_mcp_json_rpc_server::response::ResponseResult::Success(val) => {
+                        crate::middleware::DispatcherResult::Success(val.clone())
+                    }
+                    turul_mcp_json_rpc_server::response::ResponseResult::Null => {
+                        crate::middleware::DispatcherResult::Success(serde_json::Value::Null)
+                    }
+                }
+            }
+            turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
+                crate::middleware::DispatcherResult::Error(err.error.message.clone())
+            }
+        };
+
+        // Ignore errors from after_dispatch (they shouldn't prevent returning the result)
+        let _ = self.middleware_stack.execute_after(&ctx, &mut dispatcher_result).await;
+
+        (result, None) // Injection already applied, no need to return it
+    }
+
+    /// Map MiddlewareError to JSON-RPC error with semantic error codes
+    fn map_middleware_error_to_jsonrpc(
+        err: crate::middleware::MiddlewareError,
+        request_id: turul_mcp_json_rpc_server::RequestId,
+    ) -> turul_mcp_json_rpc_server::JsonRpcMessage {
+        use crate::middleware::error::error_codes;
+        use crate::middleware::MiddlewareError;
+
+        let (code, message, data) = match err {
+            MiddlewareError::Unauthenticated(msg) => (error_codes::UNAUTHENTICATED, msg, None),
+            MiddlewareError::Unauthorized(msg) => (error_codes::UNAUTHORIZED, msg, None),
+            MiddlewareError::RateLimitExceeded {
+                message,
+                retry_after,
+            } => {
+                let data = retry_after.map(|s| serde_json::json!({"retryAfter": s}));
+                (error_codes::RATE_LIMIT_EXCEEDED, message, data)
+            }
+            MiddlewareError::InvalidRequest(msg) => (error_codes::INVALID_REQUEST, msg, None),
+            MiddlewareError::Internal(msg) => (error_codes::INTERNAL_ERROR, msg, None),
+            MiddlewareError::Custom { message, .. } => (error_codes::INTERNAL_ERROR, message, None),
+        };
+
+        let error_obj = if let Some(d) = data {
+            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(code, &message, Some(d))
+        } else {
+            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
+                code,
+                &message,
+                None::<serde_json::Value>,
+            )
+        };
+
+        turul_mcp_json_rpc_server::JsonRpcMessage::Error(turul_mcp_json_rpc_server::JsonRpcError::new(
+            Some(request_id),
+            error_obj,
+        ))
     }
 }
 

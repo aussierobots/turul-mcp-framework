@@ -13,11 +13,11 @@ default = ["sse"]
 sse = []          # Server-Sent Events support
 
 [dependencies]
-turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.2.0", features = [
+turul-mcp-json-rpc-server = { workspace = true, features = [
   "streams",
 ] }
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.2.0" }
-turul-mcp-session-storage = { path = "../turul-mcp-session-storage", version = "0.2.0" }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-session-storage = { workspace = true }
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true

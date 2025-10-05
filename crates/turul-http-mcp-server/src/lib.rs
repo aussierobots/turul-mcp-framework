@@ -50,6 +50,7 @@ pub mod cors;
 pub mod handler;
 pub mod json_rpc_responses;
 pub mod mcp_session;
+pub mod middleware;
 pub mod notification_bridge;
 pub mod prelude;
 pub mod protocol;
