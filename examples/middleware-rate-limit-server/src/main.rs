@@ -6,10 +6,18 @@
 //! 3. Maps to -32003 JSON-RPC error with retryAfter data
 
 use async_trait::async_trait;
+use clap::Parser;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use turul_mcp_server::prelude::*;
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(long, default_value = "8671")]
+    port: u16,
+}
 
 /// Rate limiting middleware with per-session counters
 struct RateLimitMiddleware {
@@ -89,14 +97,20 @@ impl McpMiddleware for RateLimitMiddleware {
 
 #[tokio::main]
 async fn main() -> McpResult<()> {
+    let args = Args::parse();
+
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter("middleware_rate_limit_server=info,turul_mcp_server=info")
         .init();
 
-    tracing::info!("Starting middleware-rate-limit-server example");
+    tracing::info!("Starting middleware-rate-limit-server example on port {}", args.port);
     tracing::info!("Rate limit: 5 requests per session");
     tracing::info!("After 5 requests, you'll receive error -32003 (RateLimitExceeded)");
+
+    let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", args.port)
+        .parse()
+        .expect("Failed to parse bind address");
 
     let server = McpServer::builder()
         .name("middleware-rate-limit-server")
@@ -105,9 +119,10 @@ async fn main() -> McpResult<()> {
         .instructions("Demonstrates rate limiting. Max 5 requests per session before hitting rate limit.")
         // Register rate limiting middleware (5 requests per session)
         .middleware(Arc::new(RateLimitMiddleware::new(5, 60)))
+        .bind_address(bind_address)
         .build()?;
 
-    tracing::info!("Server listening on http://localhost:8080/mcp");
+    tracing::info!("Server listening on http://localhost:{}/mcp", args.port);
     tracing::info!("Try sending multiple requests to see rate limiting in action");
 
     server.run().await

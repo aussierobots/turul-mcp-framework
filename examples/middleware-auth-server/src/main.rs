@@ -22,12 +22,20 @@
 //! ```
 
 use async_trait::async_trait;
+use clap::Parser;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
 use turul_mcp_protocol::tools::{CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasToolMeta};
 use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema};
 use turul_mcp_server::prelude::*;
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(long, default_value = "8672")]
+    port: u16,
+}
 
 /// Authentication middleware that validates X-API-Key header
 struct AuthMiddleware {
@@ -183,15 +191,21 @@ impl McpTool for WhoAmITool {
 
 #[tokio::main]
 async fn main() -> McpResult<()> {
+    let args = Args::parse();
+
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter("middleware_auth_server=debug,turul_mcp_server=debug,turul_http_mcp_server=debug")
         .init();
 
-    tracing::info!("Starting middleware-auth-server example");
+    tracing::info!("Starting middleware-auth-server example on port {}", args.port);
     tracing::info!("Valid API keys:");
     tracing::info!("  - secret-key-123 (user-alice)");
     tracing::info!("  - secret-key-456 (user-bob)");
+
+    let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", args.port)
+        .parse()
+        .expect("Failed to parse bind address");
 
     let server = McpServer::builder()
         .name("middleware-auth-server")
@@ -206,12 +220,13 @@ async fn main() -> McpResult<()> {
         .middleware(Arc::new(AuthMiddleware::new()))
         // Register tools that can access session state
         .tool(WhoAmITool::new())
+        .bind_address(bind_address)
         .build()?;
 
-    tracing::info!("Server listening on http://localhost:8080/mcp");
+    tracing::info!("Server listening on http://localhost:{}/mcp", args.port);
     tracing::info!("");
     tracing::info!("Try:");
-    tracing::info!("  curl -X POST http://localhost:8080/mcp \\");
+    tracing::info!("  curl -X POST http://localhost:{}/mcp \\", args.port);
     tracing::info!("    -H 'Content-Type: application/json' \\");
     tracing::info!("    -H 'Accept: application/json' \\");
     tracing::info!("    -H 'X-API-Key: secret-key-123' \\");

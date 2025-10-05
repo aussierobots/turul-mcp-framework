@@ -8,10 +8,18 @@
 //! Tools can read the injected metadata to see request timing.
 
 use async_trait::async_trait;
+use clap::Parser;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Instant;
 use turul_mcp_server::prelude::*;
+
+#[derive(Parser)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(long, default_value = "8670")]
+    port: u16,
+}
 
 /// Logging middleware that tracks request timing
 struct TimingMiddleware;
@@ -47,13 +55,19 @@ impl McpMiddleware for TimingMiddleware {
 
 #[tokio::main]
 async fn main() -> McpResult<()> {
+    let args = Args::parse();
+
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter("middleware_logging_server=info,turul_mcp_server=info")
         .init();
 
-    tracing::info!("Starting middleware-logging-server example");
+    tracing::info!("Starting middleware-logging-server example on port {}", args.port);
     tracing::info!("All requests will be logged with timing information");
+
+    let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", args.port)
+        .parse()
+        .expect("Failed to parse bind address");
 
     let server = McpServer::builder()
         .name("middleware-logging-server")
@@ -62,10 +76,11 @@ async fn main() -> McpResult<()> {
         .instructions("Demonstrates request timing and tracing middleware. Every request is logged with timing info.")
         // Register timing middleware - this is the key demonstration
         .middleware(Arc::new(TimingMiddleware))
+        .bind_address(bind_address)
         .build()?;
 
-    tracing::info!("Server listening on http://localhost:8080/mcp");
-    tracing::info!("Try: curl -X POST http://localhost:8080/mcp -H 'Content-Type: application/json' -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{...}}}}'");
+    tracing::info!("Server listening on http://localhost:{}/mcp", args.port);
+    tracing::info!("Try: curl -X POST http://localhost:{}/mcp -H 'Content-Type: application/json' -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{...}}}}'", args.port);
 
     server.run().await
 }
