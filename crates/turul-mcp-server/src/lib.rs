@@ -120,6 +120,7 @@ pub mod completion;
 pub mod elicitation;
 pub mod handlers;
 pub mod logging;
+pub mod middleware;
 pub mod notifications;
 pub mod prompt;
 pub mod resource;
@@ -181,6 +182,8 @@ pub use server::{
 };
 /// Session management and context for stateful operations
 pub use session::{SessionContext, SessionEvent, SessionManager};
+/// SessionView trait for middleware - re-exported from turul-mcp-session-storage
+pub use turul_mcp_session_storage::SessionView;
 /// Tool trait for executable MCP functions
 pub use tool::McpTool;
 

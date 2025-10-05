@@ -24,6 +24,13 @@ pub use crate::http::ServerConfig;
 // Server trait interfaces
 pub use crate::{McpPrompt, McpResource, McpTool};
 
+// Middleware types (when HTTP feature is enabled)
+#[cfg(feature = "http")]
+pub use turul_http_mcp_server::middleware::{
+    DispatcherResult, McpMiddleware, MiddlewareError, MiddlewareStack, RequestContext,
+    SessionInjection, StorageBackedSessionView,
+};
+
 // Essential async trait for implementations
 pub use async_trait::async_trait;
 

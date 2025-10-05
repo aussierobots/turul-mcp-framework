@@ -78,6 +78,9 @@ pub struct McpServerBuilder {
     /// Test mode - disables security middleware for test servers
     test_mode: bool,
 
+    /// Middleware stack for request/response interception
+    middleware_stack: crate::middleware::MiddlewareStack,
+
     /// HTTP configuration (if enabled)
     #[cfg(feature = "http")]
     bind_address: SocketAddr,
@@ -188,6 +191,7 @@ impl McpServerBuilder {
             session_storage: None,   // Default: InMemory storage
             strict_lifecycle: false, // Default: lenient mode for compatibility
             test_mode: false,        // Default: production mode with security
+            middleware_stack: crate::middleware::MiddlewareStack::new(), // Default: empty middleware stack
             #[cfg(feature = "http")]
             bind_address: "127.0.0.1:8000".parse().unwrap(),
             #[cfg(feature = "http")]
@@ -321,6 +325,95 @@ impl McpServerBuilder {
         for tool in tools {
             self = self.tool(tool);
         }
+        self
+    }
+
+    /// Add middleware to the request/response processing chain
+    ///
+    /// **This method is additive** - each call adds a new middleware to the stack.
+    /// Middleware execute in the order they are registered (FIFO):
+    /// - **Before dispatch**: First registered executes first (FIFO order)
+    /// - **After dispatch**: First registered executes last (LIFO/reverse order)
+    ///
+    /// Multiple middleware can be composed by calling this method multiple times.
+    /// Middleware works identically across all transports (HTTP, Lambda, etc.).
+    ///
+    /// # Behavior with Other Builder Methods
+    ///
+    /// - **`.test_mode()`**: Does NOT affect middleware - middleware always executes
+    /// - **Non-HTTP builds**: Middleware is available but requires manual wiring
+    ///
+    /// # Examples
+    ///
+    /// ## Single Middleware
+    ///
+    /// ```rust,no_run
+    /// use turul_mcp_server::prelude::*;
+    /// use async_trait::async_trait;
+    /// use std::sync::Arc;
+    ///
+    /// struct LoggingMiddleware;
+    ///
+    /// #[async_trait]
+    /// impl McpMiddleware for LoggingMiddleware {
+    ///     async fn before_dispatch(
+    ///         &self,
+    ///         ctx: &mut RequestContext<'_>,
+    ///         _session: Option<&dyn turul_mcp_session_storage::SessionView>,
+    ///         _injection: &mut SessionInjection,
+    ///     ) -> Result<(), MiddlewareError> {
+    ///         println!("Request: {}", ctx.method());
+    ///         Ok(())
+    ///     }
+    /// }
+    ///
+    /// # async fn example() -> McpResult<()> {
+    /// let server = McpServer::builder()
+    ///     .name("my-server")
+    ///     .middleware(Arc::new(LoggingMiddleware))
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// ## Multiple Middleware Composition
+    ///
+    /// ```rust,no_run
+    /// use turul_mcp_server::prelude::*;
+    /// use async_trait::async_trait;
+    /// use std::sync::Arc;
+    /// use serde_json::json;
+    /// # struct AuthMiddleware;
+    /// # struct LoggingMiddleware;
+    /// # struct RateLimitMiddleware;
+    /// # #[async_trait]
+    /// # impl McpMiddleware for AuthMiddleware {
+    /// #     async fn before_dispatch(&self, _ctx: &mut RequestContext<'_>, _session: Option<&dyn turul_mcp_session_storage::SessionView>, _injection: &mut SessionInjection) -> Result<(), MiddlewareError> { Ok(()) }
+    /// # }
+    /// # #[async_trait]
+    /// # impl McpMiddleware for LoggingMiddleware {
+    /// #     async fn before_dispatch(&self, _ctx: &mut RequestContext<'_>, _session: Option<&dyn turul_mcp_session_storage::SessionView>, _injection: &mut SessionInjection) -> Result<(), MiddlewareError> { Ok(()) }
+    /// # }
+    /// # #[async_trait]
+    /// # impl McpMiddleware for RateLimitMiddleware {
+    /// #     async fn before_dispatch(&self, _ctx: &mut RequestContext<'_>, _session: Option<&dyn turul_mcp_session_storage::SessionView>, _injection: &mut SessionInjection) -> Result<(), MiddlewareError> { Ok(()) }
+    /// # }
+    ///
+    /// # async fn example() -> McpResult<()> {
+    /// // Execution order:
+    /// // Before dispatch: Auth → Logging → RateLimit
+    /// // After dispatch: RateLimit → Logging → Auth (reverse)
+    /// let server = McpServer::builder()
+    ///     .name("my-server")
+    ///     .middleware(Arc::new(AuthMiddleware))      // 1st before, 3rd after
+    ///     .middleware(Arc::new(LoggingMiddleware))   // 2nd before, 2nd after
+    ///     .middleware(Arc::new(RateLimitMiddleware)) // 3rd before, 1st after
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn middleware(mut self, middleware: Arc<dyn crate::middleware::McpMiddleware>) -> Self {
+        self.middleware_stack.push(middleware);
         self
     }
 

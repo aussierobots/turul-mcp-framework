@@ -22,7 +22,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use turul_mcp_protocol::{ClientCapabilities, Implementation, McpVersion, ServerCapabilities};
-use turul_mcp_session_storage::{SessionStorage, SessionStorageError};
+use turul_mcp_session_storage::{SessionStorage, SessionStorageError, SessionView};
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 
@@ -260,6 +260,61 @@ impl SessionContext {
                 Ok(())
             }
             Err(e) => Err(format!("Failed to serialize value: {}", e)),
+        }
+    }
+
+    /// Create a test session context (for unit tests)
+    #[cfg(test)]
+    pub fn new_test() -> Self {
+        use std::collections::HashMap;
+        use std::sync::Arc;
+        use tokio::sync::RwLock;
+
+        let state = Arc::new(RwLock::new(HashMap::<String, Value>::new()));
+
+        let get_state = {
+            let state = state.clone();
+            Arc::new(move |key: &str| -> BoxFuture<Option<Value>> {
+                let state = state.clone();
+                let key = key.to_string();
+                Box::pin(async move { state.read().await.get(&key).cloned() })
+            })
+        };
+
+        let set_state = {
+            let state = state.clone();
+            Arc::new(move |key: &str, value: Value| -> BoxFuture<()> {
+                let state = state.clone();
+                let key = key.to_string();
+                Box::pin(async move {
+                    state.write().await.insert(key, value);
+                })
+            })
+        };
+
+        let remove_state = {
+            let state = state.clone();
+            Arc::new(move |key: &str| -> BoxFuture<Option<Value>> {
+                let state = state.clone();
+                let key = key.to_string();
+                Box::pin(async move { state.write().await.remove(&key) })
+            })
+        };
+
+        let is_initialized = Arc::new(|| -> BoxFuture<bool> { Box::pin(async { true }) });
+
+        let send_notification = Arc::new(|_event: SessionEvent| -> BoxFuture<()> {
+            Box::pin(async {})
+        });
+
+        SessionContext {
+            session_id: Uuid::now_v7().to_string(),
+            get_state,
+            set_state,
+            remove_state,
+            is_initialized,
+            send_notification,
+            broadcaster: None,
         }
     }
 
@@ -502,6 +557,44 @@ impl SessionContext {
         // For sync compatibility, block on async get_logging_level
         let session_level = futures::executor::block_on(self.get_logging_level());
         message_level.should_log(session_level)
+    }
+}
+
+// ============================================================================
+// === SessionView Implementation ===
+// ============================================================================
+
+/// Implement SessionView trait for SessionContext
+/// (trait is defined in turul-mcp-session-storage)
+///
+/// This allows SessionContext to be used with middleware. Metadata is stored using a
+/// special prefix ("__meta__:") to distinguish it from regular state.
+#[async_trait]
+impl SessionView for SessionContext {
+    fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
+    async fn get_state(&self, key: &str) -> Result<Option<Value>, String> {
+        Ok((self.get_state)(key).await)
+    }
+
+    async fn set_state(&self, key: &str, value: Value) -> Result<(), String> {
+        (self.set_state)(key, value).await;
+        Ok(())
+    }
+
+    async fn get_metadata(&self, key: &str) -> Result<Option<Value>, String> {
+        // Store metadata with a special prefix to distinguish from regular state
+        let metadata_key = format!("__meta__:{}", key);
+        Ok((self.get_state)(&metadata_key).await)
+    }
+
+    async fn set_metadata(&self, key: &str, value: Value) -> Result<(), String> {
+        // Store metadata with a special prefix to distinguish from regular state
+        let metadata_key = format!("__meta__:{}", key);
+        (self.set_state)(&metadata_key, value).await;
+        Ok(())
     }
 }
 
