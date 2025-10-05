@@ -81,13 +81,66 @@ Error: {"code":-32003,"message":"Rate limit exceeded: 5 requests per 60 seconds"
 - [ ] CHANGELOG.md: Feature announcement
 - [ ] README.md: Quick start example
 
-**Lambda Example** (Phase Lambda-E1):
-- [ ] Create `examples/middleware-auth-lambda`
-- [ ] Test with `cargo lambda watch`
-- [ ] Verify empirically that middleware works in real Lambda environment
+**Lambda Testing** (Phase Lambda-E1):
+- [x] Create `examples/middleware-auth-lambda` ✅
+- [ ] Test with `cargo lambda watch` - empirical verification
+- [ ] Verify middleware executes in real Lambda environment
+- [ ] Verify error codes map correctly (-32001/-32002/-32003)
+- [ ] Document any Lambda-specific issues (cold start, timeouts, etc.)
 
 **Performance**:
 - [ ] Benchmark middleware overhead with 1/3/5 layers
+
+### 📝 Test Scripts Created
+
+1. **scripts/test_rate_limit.sh** - Full rate limit verification (VERIFIED WORKING)
+2. **scripts/test_middleware_live.sh** - Integration test for all three HTTP examples
+3. **scripts/quick_test_middleware.sh** - Manual test instructions
+4. **scripts/test_middleware_examples.sh** - Original test script (port conflicts)
+
+### 🚀 How to Run Examples
+
+**HTTP Examples:**
+
+```bash
+# Logging Server (port 8670)
+cargo run --package middleware-logging-server -- --port 8670
+
+# Rate Limit Server (port 8671) - VERIFIED WORKING
+cargo run --package middleware-rate-limit-server -- --port 8671
+
+# Auth Server (port 8672)
+cargo run --package middleware-auth-server -- --port 8672
+```
+
+**Lambda Example:**
+
+```bash
+# Build
+cargo lambda build --package middleware-auth-lambda
+
+# Run locally
+cargo lambda watch --package middleware-auth-lambda
+
+# Test without API key (should fail)
+curl -X POST http://localhost:9000/lambda-url/middleware-auth-lambda \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+
+# Test with valid API key (should succeed)
+curl -X POST http://localhost:9000/lambda-url/middleware-auth-lambda \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json" \
+  -H "X-API-Key: secret-key-123" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+```
+
+**Valid API Keys:**
+- `secret-key-123` → user-alice
+- `secret-key-456` → user-bob
+
+**Note:** Lambda builder doesn't expose `.middleware()` yet. Use manual `LambdaMcpHandler::with_middleware()` constructor as shown in example.
 
 ### 📚 Historical Context
 
