@@ -21,9 +21,7 @@ I will **not** directly modify the code or create files myself. My role is to pr
 
 ### Executive Summary
 
-The Turul MCP Framework is a production-ready, comprehensively tested implementation of the Model Context Protocol (MCP) 2025-06-18 specification. It provides a robust and idiomatic Rust solution for building MCP servers and clients. A full schema-level compliance review confirms that the framework's data structures are a meticulous match for the official specification. The testing strategy is mature, with E2E tests covering all major protocol areas, including advanced concurrency and state-management scenarios. While the protocol implementation is fully compliant, it's important to distinguish this from full behavioral completeness, as several advanced features are not yet fully implemented, representing the next frontier for development.
-
-The `0.2.1` release represents a significant step forward in the framework's maturity, focusing on stability, developer experience, and verification. This release addressed numerous bugs, improved the testing infrastructure, and enhanced documentation, resulting in a more robust and reliable framework.
+The Turul MCP Framework is a production-ready, comprehensively tested implementation of the Model Context Protocol (MCP) 2025-06-18 specification. It provides a robust and idiomatic Rust solution for building MCP servers and clients. A full schema-level compliance review confirms that the framework's data structures are a meticulous match for the official specification. The testing strategy is mature, with E2E tests covering all major protocol areas, including advanced concurrency and state-management scenarios. The `0.2.1` release introduces a powerful, transport-agnostic middleware architecture, further enhancing the framework's capabilities for handling cross-cutting concerns like authentication, logging, and rate limiting.
 
 ### From TypeScript Inheritance to Rust Traits: A Critical Analysis
 
@@ -47,6 +45,23 @@ While the trait-based architecture is a significant strength, a critical analysi
 *   **Duality of Trait and Struct:** The parallel existence of the `ToolDefinition` trait and the `Tool` struct is a necessary consequence of this design pattern in Rust. The `to_tool()` method on the trait, which converts the abstract trait object into a concrete, serializable struct, is a clean solution. However, it requires developers to be mindful of whether they are working with an abstract `&dyn ToolDefinition` or a concrete `Tool`, which can be a point of confusion.
 
 In summary, the framework's core design makes a deliberate trade-off in favor of flexibility and power over simplicity. This is a reasonable choice for a framework intended to be comprehensive and extensible, but it's a trade-off that should be acknowledged. The provided macros are essential for mitigating this complexity and making the framework approachable for a wider range of developers.
+
+### Middleware Architecture
+
+The `0.2.1` release introduces a powerful and flexible middleware architecture, designed to handle cross-cutting concerns in a clean and transport-agnostic manner. The same middleware can be used for both HTTP and AWS Lambda transports, ensuring consistent behavior across different deployment environments.
+
+The core of the middleware system is the `McpMiddleware` trait, which defines two key methods:
+
+*   `before_dispatch`: Executed before the MCP request is processed. This allows for request validation, authentication, rate limiting, and session data injection.
+*   `after_dispatch`: Executed after the MCP request has been processed. This allows for response modification, logging, and other post-processing tasks.
+
+Middleware is registered on the server builder using the `.middleware()` method, and multiple middleware can be chained together to form a processing pipeline. The framework provides examples for common use cases, including:
+
+*   **Authentication:** `examples/middleware-auth-server` and `examples/middleware-auth-lambda`
+*   **Logging:** `examples/middleware-logging-server`
+*   **Rate Limiting:** `examples/middleware-rate-limit-server`
+
+This middleware system provides a robust mechanism for adding custom logic to the request/response lifecycle, without cluttering the core MCP implementation.
 
 ### Capability-by-Capability Compliance
 
@@ -91,6 +106,7 @@ These are not compliance bugs but rather represent the current scope of the fram
 
 The `0.2.1` release focused on stability, bug fixing, and improving the developer experience. Key highlights include:
 
+*   **Middleware Architecture:** Introduced a transport-agnostic middleware system for both HTTP and AWS Lambda, with examples for authentication, logging, and rate limiting.
 *   **Bug Fixes:** Addressed several bugs in the examples and the core protocol implementation, including issues with database constraints, missing registrations, and incorrect connection URLs.
 *   **Improved SSE Resumability:** Ensured that SSE keepalive events preserve the `Last-Event-ID`, allowing for proper reconnection.
 *   **Enhanced Verification:** The verification infrastructure was significantly improved, with deterministic polling, pre-built binaries, and better error diagnosis. 30 out of 31 examples are now verified.
@@ -121,6 +137,20 @@ To run the comprehensive server:
 
 ```bash
 cargo run --example comprehensive-server
+```
+
+To run the middleware examples:
+
+```bash
+cargo run --example middleware-auth-server
+cargo run --example middleware-logging-server
+cargo run --example middleware-rate-limit-server
+```
+
+To run the Lambda middleware example, you will need to use `cargo-lambda`:
+
+```bash
+cargo lambda watch --example middleware-auth-lambda
 ```
 
 ### Running the tests
