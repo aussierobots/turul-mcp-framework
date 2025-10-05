@@ -7,6 +7,9 @@ Production-ready Rust framework for Model Context Protocol (MCP) servers with ze
 
 ## 🚨 Critical Rules
 
+### 📜 Protocol Crate Purity
+**NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2025-06-18` unless it directly relates to MCP spec compliance.** These crates MUST remain clean mirrors of the official MCP specification. No framework features, middleware hooks, or convenience additions belong here.
+
 ### 🎯 Simple Solutions First
 **ALWAYS** prefer simple, minimal fixes over complex or over-engineered solutions:
 
