@@ -305,6 +305,35 @@ cargo run -p minimal-server &
 
 ## 🏛️ Architecture Overview
 
+### Middleware System
+
+The framework provides a trait-based middleware architecture for cross-cutting concerns like authentication, logging, and rate limiting:
+
+```rust
+use turul_mcp_server::prelude::*;
+use std::sync::Arc;
+
+let server = McpServer::builder()
+    .middleware(Arc::new(AuthMiddleware::new()))
+    .middleware(Arc::new(LoggingMiddleware))
+    .middleware(Arc::new(RateLimitMiddleware::new(5, 60)))
+    .build()?;
+```
+
+**Key Features:**
+- ✅ Transport-agnostic (HTTP, Lambda, etc.)
+- ✅ Session-aware (read/write session state)
+- ✅ Error short-circuiting with semantic JSON-RPC codes
+- ✅ Execution order control (FIFO before, LIFO after dispatch)
+
+**Examples:**
+- `examples/middleware-logging-server` - Request timing and tracing
+- `examples/middleware-rate-limit-server` - Per-session rate limiting
+- `examples/middleware-auth-server` - API key authentication
+
+**Documentation:**
+See [ADR 012: Middleware Architecture](docs/adr/012-middleware-architecture.md) for design details.
+
 ### Core Framework (10 Crates)
 - **`turul-mcp-server`** - High-level server builder with session management
 - **`turul-mcp-client`** - Comprehensive client library with HTTP transport support
