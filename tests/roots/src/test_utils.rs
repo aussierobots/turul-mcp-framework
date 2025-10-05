@@ -45,11 +45,10 @@ pub fn validate_root_object(root: &Value) -> bool {
     }
 
     // name field is optional but should be string if present
-    if let Some(name) = root_obj.get("name") {
-        if !name.is_string() {
+    if let Some(name) = root_obj.get("name")
+        && !name.is_string() {
             return false;
         }
-    }
 
     true
 }

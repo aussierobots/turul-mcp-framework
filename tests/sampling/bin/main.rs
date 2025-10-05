@@ -235,13 +235,12 @@ I'd love to help you develop this further! What specific aspect would you like t
         }
 
         // Validate temperature if provided
-        if let Some(temp) = request.params.temperature {
-            if !(0.0..=2.0).contains(&temp) {
+        if let Some(temp) = request.params.temperature
+            && !(0.0..=2.0).contains(&temp) {
                 return Err(McpError::validation(
                     "temperature must be between 0.0 and 2.0",
                 ));
             }
-        }
 
         Ok(())
     }
