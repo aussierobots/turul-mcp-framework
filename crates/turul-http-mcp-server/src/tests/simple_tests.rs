@@ -60,6 +60,7 @@ mod basic_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let middleware_stack = Arc::new(crate::middleware::MiddlewareStack::new());
 
         let _handler = StreamableHttpHandler::new(
             Arc::new(config),
@@ -67,6 +68,7 @@ mod basic_tests {
             session_storage,
             stream_manager,
             turul_mcp_protocol::ServerCapabilities::default(),
+            middleware_stack,
         );
 
         // Handler should be created successfully
@@ -259,6 +261,7 @@ mod concurrency_tests {
                 let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
                 let session_storage = Arc::new(InMemorySessionStorage::new());
                 let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+                let middleware_stack = Arc::new(crate::middleware::MiddlewareStack::new());
 
                 let _handler = StreamableHttpHandler::new(
                     Arc::new(config),
@@ -266,6 +269,7 @@ mod concurrency_tests {
                     session_storage,
                     stream_manager,
                     turul_mcp_protocol::ServerCapabilities::default(),
+                    middleware_stack,
                 );
                 format!("Handler {} created", i)
             });
@@ -393,6 +397,7 @@ mod performance_tests {
             let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
             let session_storage = Arc::new(InMemorySessionStorage::new());
             let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+            let middleware_stack = Arc::new(crate::middleware::MiddlewareStack::new());
 
             let handler = StreamableHttpHandler::new(
                 Arc::new(config),
@@ -400,6 +405,7 @@ mod performance_tests {
                 session_storage,
                 stream_manager,
                 turul_mcp_protocol::ServerCapabilities::default(),
+                middleware_stack,
             );
             handlers.push(handler);
         }
