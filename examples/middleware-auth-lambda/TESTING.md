@@ -196,7 +196,7 @@ Both test events include:
 **❌ Not Working (Investigate)**:
 ```
 ⚠️  No authorizer fields extracted
-Error: Missing accountid from authorizer
+Error: Missing account_id from authorizer
 ```
 
 ---

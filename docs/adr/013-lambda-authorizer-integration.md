@@ -197,8 +197,8 @@ Tool Implementation
            session.get_typed_state("authorizer").await.ok().flatten();
 
        let account_id = authorizer
-           .and_then(|ctx| ctx.get("accountid").cloned())  // lowercase!
-           .ok_or_else(|| McpError::validation("Missing accountid"))?;
+           .and_then(|ctx| ctx.get("account_id").cloned())  // snake_case!
+           .ok_or_else(|| McpError::validation("Missing account_id"))?;
 
        Ok(json!({ "accountId": account_id }))
    }
@@ -245,11 +245,11 @@ cargo lambda invoke middleware-auth-lambda \
 
 **Expected Debug Output:**
 ```
-📋 Authorizer context: userid = user-123
-📋 Authorizer context: tenantid = tenant-456
+📋 Authorizer context: user_id = user-123
+📋 Authorizer context: tenant_id = tenant-456
 📋 Authorizer context: role = admin
 📋 Authorizer context: permissions = read,write,delete
-📋 Authorizer context: customclaim = example-value
+📋 Authorizer context: custom_claim = example-value
 ✅ Extracted 5 authorizer fields
 ```
 

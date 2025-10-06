@@ -382,7 +382,7 @@ impl McpMiddleware for AuthMiddleware {
 
 **Key Features:**
 - ✅ Supports API Gateway V1 (REST API) and V2 (HTTP API)
-- ✅ Field name sanitization (camelCase → lowercase for HTTP headers)
+- ✅ Field name sanitization (camelCase → snake_case: `userId` → `user_id`)
 - ✅ Defensive programming (never fails requests)
 - ✅ Transport-agnostic (appears as standard HTTP metadata)
 - ✅ Session state integration
