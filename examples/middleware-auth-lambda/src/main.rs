@@ -38,14 +38,14 @@
 //! async fn get_account(
 //!     #[param(session)] session: SessionContext,
 //! ) -> McpResult<serde_json::Value> {
-//!     // Read authorizer context from session (fields are lowercase-sanitized)
+//!     // Read authorizer context from session (fields are snake_case)
 //!     let authorizer: Option<HashMap<String, String>> =
 //!         session.get_typed_state("authorizer").await.ok().flatten();
 //!
-//!     // Field names are sanitized: "userId" → "userid" (lowercase)
+//!     // Field names are converted: "userId" → "user_id" (snake_case)
 //!     let user_id = authorizer
-//!         .and_then(|ctx| ctx.get("userid").cloned())  // lowercase!
-//!         .ok_or_else(|| McpError::validation("Missing userid from authorizer"))?;
+//!         .and_then(|ctx| ctx.get("user_id").cloned())  // snake_case!
+//!         .ok_or_else(|| McpError::validation("Missing user_id from authorizer"))?;
 //!
 //!     Ok(json!({ "userId": user_id }))
 //! }

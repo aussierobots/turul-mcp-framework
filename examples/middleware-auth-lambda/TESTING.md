@@ -25,8 +25,10 @@ cargo test --package turul-mcp-aws-lambda --lib adapter::tests::authorizer_tests
 ```
 
 **Coverage**:
-- ✅ `test_sanitize_field_name_camelcase` - userId → userid
-- ✅ `test_sanitize_field_name_snake_case` - device_id → device_id
+- ✅ `test_sanitize_field_name_camelcase` - userId → user_id (snake_case conversion)
+- ✅ `test_sanitize_field_name_snake_case` - device_id → device_id (unchanged)
+- ✅ `test_sanitize_field_name_acronyms` - APIKey → api_key (acronyms as unit)
+- ✅ `test_sanitize_field_name_with_numbers` - userId123 → user_id123
 - ✅ `test_sanitize_field_name_special_chars` - user@email → user-email
 - ✅ `test_sanitize_field_name_unicode` - 用户 → --
 - ✅ `test_extract_authorizer_no_context` - Empty context handling
@@ -71,11 +73,11 @@ cargo build --package turul-mcp-aws-lambda
 ✅ Unit tests passed (6/6)
 ✅ Build successful
 ✅ Lambda started
-📋 Authorizer context: userid = user-123
-📋 Authorizer context: tenantid = tenant-456
+📋 Authorizer context: user_id = user-123
+📋 Authorizer context: tenant_id = tenant-456
 📋 Authorizer context: role = admin
 📋 Authorizer context: permissions = read,write,delete
-📋 Authorizer context: customclaim = example-value
+📋 Authorizer context: custom_claim = example-value
 ✅ Extracted 5 authorizer fields
 ✅ All tests completed!
 ```
@@ -127,11 +129,11 @@ cargo lambda invoke middleware-auth-lambda \
 
 **Expected logs** (Terminal 1):
 ```
-📋 Authorizer context: userid = user-123
-📋 Authorizer context: tenantid = tenant-456
+📋 Authorizer context: user_id = user-123
+📋 Authorizer context: tenant_id = tenant-456
 📋 Authorizer context: role = admin
 📋 Authorizer context: permissions = read,write,delete
-📋 Authorizer context: customclaim = example-value
+📋 Authorizer context: custom_claim = example-value
 ✅ Extracted 5 authorizer fields
 ```
 
@@ -157,11 +159,11 @@ Both test events include:
 
 | Field | Value | Stored As |
 |-------|-------|-----------|
-| `userId` | user-123 | `userid` |
-| `tenantId` | tenant-456 | `tenantid` |
+| `userId` | user-123 | `user_id` |
+| `tenantId` | tenant-456 | `tenant_id` |
 | `role` | admin | `role` |
 | `permissions` | read,write,delete | `permissions` |
-| `customClaim` | example-value | `customclaim` |
+| `customClaim` | example-value | `custom_claim` |
 
 **Format Differences**:
 
@@ -179,7 +181,7 @@ Both test events include:
 - [ ] **Lambda starts**: Handler ready message appears
 - [ ] **V2 extraction works**: Debug logs show 5 authorizer fields
 - [ ] **V1 extraction works**: Same fields extracted as V2
-- [ ] **Field sanitization**: camelCase → lowercase (`userId` → `userid`)
+- [ ] **Field sanitization**: camelCase → snake_case (`userId` → `user_id`)
 - [ ] **Defensive behavior**: No crashes on missing/invalid data
 - [ ] **Initialize succeeds**: Returns valid MCP initialize response
 
@@ -187,7 +189,7 @@ Both test events include:
 
 **✅ Working (Expected)**:
 ```
-📋 Authorizer context: userid = user-123
+📋 Authorizer context: user_id = user-123
 ✅ Extracted 5 authorizer fields
 ```
 
@@ -236,10 +238,10 @@ cargo lambda watch --package middleware-auth-lambda
 
 ### Field Names Don't Match
 
-**Remember**: Fields are lowercase-sanitized!
-- ✅ `userid` (not `userId`)
-- ✅ `tenantid` (not `tenantId`)
-- ✅ `customclaim` (not `customClaim`)
+**Remember**: Fields are snake_case!
+- ✅ `user_id` (not `userId`)
+- ✅ `tenant_id` (not `tenantId`)
+- ✅ `custom_claim` (not `customClaim`)
 
 ---
 

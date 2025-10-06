@@ -52,7 +52,11 @@ Tool Implementation
 1. **Field Sanitization** (`adapter.rs::sanitize_authorizer_field_name`)
    ```rust
    pub fn sanitize_authorizer_field_name(field: &str) -> String {
-       field
+       // Step 1: Convert camelCase to snake_case
+       let snake_case = camel_to_snake(field);
+
+       // Step 2: Sanitize for HTTP header compatibility
+       snake_case
            .to_ascii_lowercase()
            .chars()
            .map(|c| {
@@ -66,17 +70,19 @@ Tool Implementation
    }
    ```
 
+   Examples:
+   - `userId` → `user_id`
+   - `deviceId` → `device_id`
+   - `APIKey` → `api_key` (acronyms treated as single unit)
+   - `HTTPSEnabled` → `https_enabled`
+   - `subscription_tier` → `subscription_tier` (unchanged)
+
    **Rules:**
+   - Convert camelCase to snake_case
    - Convert to ASCII lowercase
    - Replace non-alphanumeric (except `_` and `-`) with dash
+   - Skip invalid entries (never fail requests)
    - Unicode characters → `-`
-
-   **Examples:**
-   - `userId` → `userid`
-   - `tenantId` → `tenantid`
-   - `user@email` → `user-email`
-   - `subscription_tier` → `subscription_tier`
-   - `用户` → `--`
 
 2. **Context Extraction** (`adapter.rs::extract_authorizer_context`)
    ```rust
@@ -261,9 +267,9 @@ cargo lambda invoke middleware-auth-lambda \
 
 ### Negative
 
-1. **Field Name Case**: Original casing lost (userId → userid, tenantId → tenantid)
-   - **Mitigation**: Documented clearly in examples and test events
-   - **Rationale**: HTTP headers are case-insensitive anyway
+1. **Acronym Handling**: Consecutive uppercase letters treated as single unit (APIKey → api_key)
+   - **Behavior**: Standard snake_case convention for acronyms
+   - **Rationale**: More readable than splitting each letter (api_key vs a_p_i_key)
 2. **Lambda-Specific**: Only works in Lambda environment
    - **Mitigation**: Gracefully degrades (empty context) in HTTP-only
 3. **Prefix Requirement**: Tools must know to use `x-authorizer-` metadata
