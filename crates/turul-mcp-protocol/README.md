@@ -140,30 +140,30 @@ fn handle_mcp_error(error: McpError) {
 
 ```rust
 use turul_mcp_protocol::{
-    // Tool traits
-    HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema,
-    ToolDefinition,
-    
-    // Resource traits
-    HasResourceMetadata, ResourceDefinition, McpResource,
-    
-    // Request/Response traits
+    // MCP Spec Types
+    Tool, Resource, Prompt,
+    ToolSchema, ResourceContent, PromptMessage,
+    McpError, McpResult,
+
+    // Request/Response traits (spec-level)
     HasMethod, HasParams,
     HasData, HasMeta,
 };
 
-// Example implementation
-struct MyTool {
+// For framework traits like HasBaseMetadata, ToolDefinition, etc:
+// use turul_mcp_builders::prelude::*;
+
+// Example using spec types
+struct MyConfig {
     name: String,
     description: String,
 }
 
-impl HasBaseMetadata for MyTool {
-    fn name(&self) -> &str { &self.name }
-}
-
-impl HasDescription for MyTool {
-    fn description(&self) -> Option<&str> { Some(&self.description) }
+impl MyConfig {
+    fn to_tool(&self) -> Tool {
+        Tool::new(&self.name)
+            .with_description(&self.description)
+    }
 }
 ```
 
