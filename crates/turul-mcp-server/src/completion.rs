@@ -91,9 +91,9 @@ pub fn completion_to_request(completion: &dyn McpCompletion) -> CompleteRequest 
 mod tests {
     use super::*;
     use turul_mcp_protocol::completion::{
-        CompleteArgument, CompletionReference, CompletionResult, HasCompletionContext,
-        HasCompletionHandling, HasCompletionMetadata,
+        CompleteArgument, CompletionReference, CompletionResult,
     };
+    use turul_mcp_builders::prelude::*;  // HasCompletionContext, HasCompletionHandling, etc.
 
     struct TestCompletion {
         reference: CompletionReference,

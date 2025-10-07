@@ -1516,10 +1516,8 @@ mod tests {
     use async_trait::async_trait;
     use serde_json::Value;
     use std::collections::HashMap;
-    use turul_mcp_protocol::tools::{
-        HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema,
-        HasToolMeta, ToolAnnotations,
-    };
+    use turul_mcp_protocol::tools::ToolAnnotations;
+    use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
     use turul_mcp_protocol::{CallToolResult, ToolSchema};
 
     struct TestTool {
@@ -1641,10 +1639,8 @@ mod tests {
     }
 
     // Test resources for auto-detection testing
-    use turul_mcp_protocol::resources::{
-        HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-        HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
-    };
+    use turul_mcp_protocol::resources::ResourceContent;
+    // Resource traits now in builders crate (already imported via prelude above)
 
     struct StaticTestResource;
 

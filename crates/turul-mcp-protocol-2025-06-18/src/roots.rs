@@ -257,7 +257,7 @@ impl RpcResult for ListRootsResult {}
 /// Trait for root metadata (URI, name, path info)
 #[cfg(test)]
 mod tests {
-    use super::Root;
+    use super::{Root, ListRootsRequest, ListRootsResult, RootsListChangedNotification};
     use std::collections::HashMap;
     use serde_json::json;
 
