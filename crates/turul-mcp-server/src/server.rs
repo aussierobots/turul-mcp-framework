@@ -1271,10 +1271,8 @@ mod tests {
     use serde_json::Value;
     use std::collections::HashMap;
     use turul_mcp_protocol::ToolSchema;
-    use turul_mcp_protocol::tools::{
-        CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
-        HasOutputSchema, HasToolMeta, ToolResult,
-    };
+    use turul_mcp_protocol::tools::{CallToolResult, ToolResult};
+    use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
 
     struct TestTool {
         input_schema: ToolSchema,
