@@ -5,7 +5,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::*;
+    use crate::{McpResource, McpResult, SessionContext};
     use crate::handlers::ResourcesReadHandler;
     use crate::security::{
         AccessLevel, InputValidator, RateLimitConfig, ResourceAccessControl, SecurityMiddleware,

@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::*;
+    use crate::{McpResource, McpResult, SessionContext};
     use crate::uri_template::{UriTemplate, VariableValidator};
     use async_trait::async_trait;
     use serde_json::{Value, json};
