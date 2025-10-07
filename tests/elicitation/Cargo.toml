@@ -7,6 +7,7 @@ edition = "2024"
 # Core framework
 turul-mcp-server = { path = "../../crates/turul-mcp-server" }
 turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
 
 # Shared test utilities
 mcp-e2e-shared = { path = "../shared" }
