@@ -418,12 +418,14 @@ The [turul-mcp-framework repository](https://github.com/anthropics/turul-mcp-fra
 
 ### Trait-Based Design
 
-All MCP components use consistent trait patterns:
+All MCP components use consistent trait patterns from `turul-mcp-builders`:
 
 - **Tools** → `ToolDefinition` trait with fine-grained composition
 - **Resources** → `ResourceDefinition` trait
 - **Prompts** → `PromptDefinition` trait
 - **Notifications** → `NotificationDefinition` trait
+
+See [`turul-mcp-builders`](../turul-mcp-builders/README.md) for trait documentation.
 
 ## Feature Flags
 
