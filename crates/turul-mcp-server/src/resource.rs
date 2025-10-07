@@ -54,10 +54,7 @@ pub fn resource_to_descriptor(
 mod tests {
     use super::*;
     use turul_mcp_protocol::meta;
-    use turul_mcp_protocol::resources::{
-        HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-        HasResourceMimeType, HasResourceSize, HasResourceUri,
-    };
+    use turul_mcp_builders::prelude::*;  // HasResourceMetadata, HasResourceDescription, etc.
 
     struct TestResource {
         uri: String,

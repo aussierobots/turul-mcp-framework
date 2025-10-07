@@ -119,10 +119,8 @@ mod tests {
     use super::*;
     use serde_json::{Value, json};
     use std::collections::HashMap;
-    use turul_mcp_protocol::prompts::{
-        HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
-        HasPromptMetadata, PromptAnnotations, PromptArgument,
-    };
+    use turul_mcp_protocol::prompts::{PromptAnnotations, PromptArgument};
+    use turul_mcp_builders::prelude::*;  // HasPromptMetadata, HasPromptDescription, etc.
 
     struct TestPrompt {
         name: String,
