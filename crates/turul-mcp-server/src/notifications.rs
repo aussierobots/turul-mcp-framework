@@ -146,9 +146,7 @@ pub fn notification_to_protocol(
 mod tests {
     use super::*;
     use serde_json::json;
-    use turul_mcp_protocol::notifications::{
-        HasNotificationMetadata, HasNotificationPayload, HasNotificationRules,
-    };
+    use turul_mcp_builders::prelude::*;  // HasNotificationMetadata, etc.
 
     struct TestNotification {
         method: String,

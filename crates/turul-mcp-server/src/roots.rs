@@ -173,9 +173,7 @@ pub fn root_to_list_request(_root: &dyn McpRoot) -> ListRootsRequest {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use turul_mcp_protocol::roots::{
-        HasRootAnnotations, HasRootFiltering, HasRootMetadata, HasRootPermissions,
-    };
+    use turul_mcp_builders::prelude::*;  // HasRootMetadata, HasRootPermissions, etc.
 
     struct TestRoot {
         uri: String,
