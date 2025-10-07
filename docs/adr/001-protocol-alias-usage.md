@@ -32,11 +32,17 @@ turul-mcp-protocol-2025-06-18 = { path = "path/to/turul-mcp-protocol-2025-06-18"
 
 ### Import Pattern
 ```rust
-// ✅ CORRECT: Use the alias
-use turul_mcp_protocol::resources::{HasResourceMetadata, ResourceDefinition};
+// ✅ CORRECT: Protocol types via alias
+use turul_mcp_protocol::{Resource, ResourceContent};
+
+// ✅ CORRECT: Framework traits via builders
+use turul_mcp_builders::prelude::*;  // HasResourceMetadata, ResourceDefinition, etc.
 
 // ❌ WRONG: Direct versioned import
-use turul_mcp_protocol_2025_06_18::resources::{HasResourceMetadata, ResourceDefinition};
+use turul_mcp_protocol_2025_06_18::{Resource, ResourceContent};
+
+// ❌ WRONG: Framework traits from protocol crate (no longer exist there)
+use turul_mcp_protocol::{HasResourceMetadata, ResourceDefinition};
 ```
 
 ## Enforcement
