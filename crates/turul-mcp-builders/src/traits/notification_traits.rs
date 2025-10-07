@@ -82,7 +82,8 @@ pub trait HasNotificationRules {
 /// Implement these three traits on your struct:
 ///
 /// ```rust
-/// # use turul_mcp_protocol_2025_06_18::notifications::*;
+/// # use turul_mcp_protocol::notifications::*;
+/// # use turul_mcp_builders::prelude::*;
 /// # use serde_json::{Value, json};
 ///
 /// // This struct will automatically implement NotificationDefinition!

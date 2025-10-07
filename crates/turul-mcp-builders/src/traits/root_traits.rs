@@ -106,7 +106,8 @@ pub trait HasRootAnnotations {
 /// Implement these four traits on your struct:
 ///
 /// ```rust
-/// # use turul_mcp_protocol_2025_06_18::roots::*;
+/// # use turul_mcp_protocol::roots::*;
+/// # use turul_mcp_builders::prelude::*;
 /// # use serde_json::{Value, json};
 /// # use std::collections::HashMap;
 ///

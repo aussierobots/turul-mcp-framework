@@ -65,7 +65,8 @@ pub trait HasElicitationHandling {
 /// Implement these three traits on your struct:
 ///
 /// ```rust
-/// # use turul_mcp_protocol_2025_06_18::elicitation::*;
+/// # use turul_mcp_protocol::elicitation::*;
+/// # use turul_mcp_builders::prelude::*;
 /// # use serde_json::Value;
 /// # use std::collections::HashMap;
 ///

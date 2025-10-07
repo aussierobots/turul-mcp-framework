@@ -66,7 +66,8 @@ pub trait HasPromptMeta {
 /// ## Complete Working Example
 ///
 /// ```rust
-/// use turul_mcp_protocol_2025_06_18::prompts::*;
+/// use turul_mcp_protocol::prompts::*;
+/// use turul_mcp_builders::prelude::*;  // Import framework traits
 /// use std::collections::HashMap;
 ///
 /// // This struct will automatically implement PromptDefinition!
@@ -131,7 +132,8 @@ pub trait HasPromptMeta {
 /// ### Easy: Use Derive Macros (see turul-mcp-derive crate)
 /// ```rust
 /// // Example of manual implementation without macros
-/// use turul_mcp_protocol_2025_06_18::prompts::*;
+/// use turul_mcp_protocol::prompts::*;
+/// use turul_mcp_builders::prelude::*;  // Import framework traits
 /// use std::collections::HashMap;
 ///
 /// struct DocumentationPrompt;
