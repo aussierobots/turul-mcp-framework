@@ -68,29 +68,27 @@ println!("Tool description: {}", tool.description.as_deref().unwrap_or("No descr
 
 ### Trait-Based Design Pattern
 
-The crate implements a comprehensive trait-based architecture that mirrors the TypeScript specification:
+The crate provides concrete MCP specification types that can be serialized and deserialized:
 
 ```rust
 use turul_mcp_protocol_2025_06_18::{
-    // Fine-grained traits
-    HasBaseMetadata, HasDescription, HasInputSchema,
-    // Composed definition traits  
-    ToolDefinition,
     // Concrete protocol types
-    Tool, ToolSchema
+    Tool, ToolSchema, Resource, Prompt,
+    // Request/Response types
+    CallToolRequest, ListResourcesRequest, GetPromptRequest,
+    // Common types
+    McpError, McpResult
 };
 
-// All protocol types implement corresponding definition traits
-fn process_tool(tool: &dyn ToolDefinition) {
-    println!("Tool: {}", tool.name());
-    if let Some(desc) = tool.description() {
-        println!("Description: {}", desc);
-    }
-}
+// Create protocol types directly
+let tool = Tool::new("calculator", ToolSchema::object())
+    .with_description("Perform calculations");
 
-// Example usage
-let tool = Tool::new("test", ToolSchema::object());
-process_tool(&tool);
+// Serialize for JSON-RPC transport
+let json = serde_json::to_string(&tool)?;
+
+// For framework traits like ToolDefinition, ResourceDefinition:
+// use turul_mcp_builders::prelude::*;
 ```
 
 ### JSON-RPC 2.0 Integration
@@ -439,60 +437,36 @@ This crate also provides a number of helper modules that define the core primiti
 
 For complete details on the specification that these types implement, please refer to the official [MCP 2025-06-18 TypeScript Schema](https://github.com/metacall-protocol/mcp-spec/blob/main/mcp-2025-06-18.ts).
 
-## Implementing MCP Features with Traits
+## Using Protocol Types
 
-This crate uses a trait-based architecture to allow for flexible and type-safe implementation of MCP features. To create your own custom logic for a specific MCP capability, you can implement its corresponding "definition" trait.
+This crate provides the concrete MCP specification types for serialization and protocol compliance.
 
-Here is a high-level guide to the primary traits for each MCP area:
+### Core Protocol Types
 
-| MCP Capability | Core Rust Trait | Purpose |
+| MCP Capability | Core Type | Purpose |
 | :--- | :--- | :--- |
-| **Tools** | `ToolDefinition` | Implement to define a new tool that the server can execute. |
-| **Resources** | `ResourceDefinition` | Implement to define a new resource that the server can provide. |
-| **Prompts** | `PromptDefinition` | Implement to define a new prompt or prompt template. |
-| **Roots** | `RootDefinition` | Implement to define a new file system root that can be exposed. |
+| **Tools** | `Tool`, `ToolSchema` | Define tool metadata and input/output schemas |
+| **Resources** | `Resource`, `ResourceContent` | Define resources and their content |
+| **Prompts** | `Prompt`, `PromptMessage` | Define prompts and messages |
+| **Roots** | `Root` | Define file system roots |
+| **Requests** | `*Request` types | Protocol request structures |
+| **Results** | `*Result` types | Protocol response structures |
 
-### Granular Trait Details
+### Building Framework Features
 
-Each of these "definition" traits is composed of smaller, more granular traits that allow for precise control over each part of the definition.
+**For framework traits and builders** (ToolDefinition, ResourceDefinition, etc.), use the `turul-mcp-builders` crate:
 
-#### Tools ([`tools.rs`](./src/tools.rs))
-- **Core Trait**: `ToolDefinition`
-- **Component Traits**:
-    - `HasBaseMetadata` (name, title)
-    - `HasDescription`
-    - `HasInputSchema`
-    - `HasOutputSchema`
-    - `HasAnnotations`
-    - `HasToolMeta`
+```rust
+// Protocol types (this crate)
+use turul_mcp_protocol::Tool;
 
-#### Resources ([`resources.rs`](./src/resources.rs))
-- **Core Trait**: `ResourceDefinition`
-- **Component Traits**:
-    - `HasResourceMetadata` (name, title)
-    - `HasResourceDescription`
-    - `HasResourceUri`
-    - `HasResourceMimeType`
-    - `HasResourceSize`
-    - `HasResourceAnnotations`
-    - `HasResourceMeta`
+// Framework traits (builders crate)
+use turul_mcp_builders::prelude::*;
 
-#### Prompts ([`prompts.rs`](./src/prompts.rs))
-- **Core Trait**: `PromptDefinition`
-- **Component Traits**:
-    - `HasPromptMetadata` (name, title)
-    - `HasPromptDescription`
-    - `HasPromptArguments`
-    - `HasPromptAnnotations`
-    - `HasPromptMeta`
+// Now you have both protocol types and framework traits
+```
 
-#### Roots ([`roots.rs`](./src/roots.rs))
-- **Core Trait**: `RootDefinition`
-- **Component Traits**:
-    - `HasRootMetadata` (uri, name)
-    - `HasRootPermissions`
-    - `HasRootFiltering`
-    - `HasRootAnnotations`
+See [`turul-mcp-builders`](../turul-mcp-builders/README.md) for trait-based construction patterns
 
 ## Testing and Validation
 
@@ -525,16 +499,16 @@ mod tests {
     }
 
     #[test]
-    fn test_trait_implementations() {
+    fn test_protocol_types() {
         let tool = Tool::new("test", ToolSchema::object());
-        
-        // Test fine-grained traits
-        assert_eq!(tool.name(), "test");
-        assert!(tool.description().is_none());
-        
-        // Test composed trait
-        fn accepts_tool_definition(_tool: &dyn ToolDefinition) {}
-        accepts_tool_definition(&tool);
+
+        // Test protocol type fields
+        assert_eq!(tool.name, "test");
+        assert!(tool.description.is_none());
+
+        // Protocol types serialize to JSON
+        let json = serde_json::to_string(&tool).unwrap();
+        assert!(json.contains("\"name\":\"test\""));
     }
 }
 ```
@@ -557,20 +531,18 @@ cargo test --package turul-mcp-protocol-2025-06-18 sampling
 
 ```rust
 use turul_mcp_server::prelude::*;
-use turul_mcp_protocol::prelude::*;
+use turul_mcp_derive::mcp_tool;
 
-struct MyTool;
-
-impl HasBaseMetadata for MyTool {
-    fn name(&self) -> &str { "my_tool" }
+// Use derive macro for automatic trait implementation
+#[mcp_tool(name = "my_tool", description = "My tool")]
+async fn my_tool(input: String) -> McpResult<String> {
+    Ok(format!("Processed: {}", input))
 }
-
-// Implement other required traits...
 
 let server = McpServer::builder()
     .name("My Server")
     .version("1.0.0")
-    .tool(MyTool)  // Protocol types work directly with framework
+    .tool_fn(my_tool)
     .build()?;
 ```
 
