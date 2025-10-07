@@ -61,11 +61,9 @@ use std::io::Write;
 use tempfile::NamedTempFile;
 use tokio::time::sleep;
 use tracing::info;
-use turul_mcp_protocol::resources::{
-    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-    HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
-};
+use turul_mcp_protocol::resources::ResourceContent;
 use turul_mcp_protocol::{meta::Annotations, McpError};
+use turul_mcp_builders::prelude::*;  // HasResourceMetadata, HasResourceDescription, etc.
 use turul_mcp_server::McpResource;
 use turul_mcp_server::{McpResult, McpServer, SessionContext};
 

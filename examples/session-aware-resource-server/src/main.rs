@@ -7,7 +7,8 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use turul_mcp_derive::McpResource;
-use turul_mcp_protocol::resources::{HasResourceUri, ResourceContent};
+use turul_mcp_protocol::resources::ResourceContent;
+use turul_mcp_builders::prelude::*;  // HasResourceUri, etc.
 use turul_mcp_server::{McpResource, McpResult, McpServer, SessionContext};
 
 /// Session-aware user profile resource that returns different content based on session

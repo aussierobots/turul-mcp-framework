@@ -6,10 +6,8 @@
 use async_trait::async_trait;
 use serde_json::{Value, json};
 use std::collections::HashMap;
-use turul_mcp_protocol::resources::{
-    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-    HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
-};
+use turul_mcp_protocol::resources::ResourceContent;
+use turul_mcp_builders::prelude::*;  // HasResourceMetadata, HasResourceDescription, etc.
 use turul_mcp_server::{McpResource, McpResult, McpServer, SessionContext};
 
 // Static configuration resource

@@ -10,11 +10,9 @@ use serde_json::{Value, json};
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
 use std::sync::Arc;
-use turul_mcp_protocol::tools::{
-    CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
-    HasOutputSchema, HasToolMeta,
-};
+use turul_mcp_protocol::tools::CallToolResult;
 use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema};
+use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
 use turul_mcp_server::{McpServer, McpTool, SessionContext};
 use turul_mcp_session_storage::SqliteSessionStorage;
 use uuid::Uuid;

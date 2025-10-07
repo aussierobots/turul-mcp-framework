@@ -11,10 +11,8 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
-use turul_mcp_protocol::{
-    McpError,
-    notifications::{HasNotificationMetadata, HasNotificationPayload, HasNotificationRules},
-};
+use turul_mcp_protocol::McpError;
+use turul_mcp_builders::prelude::*;  // HasNotificationMetadata, HasNotificationPayload, etc.
 use turul_mcp_server::notifications::{DeliveryResult, DeliveryStatus, McpNotification};
 use turul_mcp_server::{McpResult, McpServer};
 
