@@ -42,5 +42,5 @@ path = "src/lib.rs"
 serial_test = "3"
 
 [[bin]]
-name = "resource-test-server"
+name = "resource-test-server-e2e"
 path = "bin/main.rs"

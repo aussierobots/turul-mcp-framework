@@ -27,7 +27,7 @@ serde.workspace = true
 uuid = { workspace = true, features = ["v7", "serde"] }
 
 [[bin]]
-name = "sampling-server"
+name = "sampling-server-e2e"
 path = "bin/main.rs"
 
 [lib]

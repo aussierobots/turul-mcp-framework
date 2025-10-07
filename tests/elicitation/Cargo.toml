@@ -28,7 +28,7 @@ uuid = { workspace = true, features = ["v7", "serde"] }
 serde_yml = "0.0.12"
 
 [[bin]]
-name = "elicitation-server"
+name = "elicitation-server-e2e"
 path = "bin/main.rs"
 
 [lib]

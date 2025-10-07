@@ -53,7 +53,7 @@ uuid = { workspace = true, features = ["v7", "serde"] }
 serial_test = "3"
 
 [[bin]]
-name = "tools-test-server"
+name = "tools-test-server-e2e"
 path = "bin/main.rs"
 
 [[test]]
