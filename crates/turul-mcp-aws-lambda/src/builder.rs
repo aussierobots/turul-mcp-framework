@@ -966,24 +966,25 @@ where
 mod tests {
     use super::*;
     use turul_mcp_session_storage::InMemorySessionStorage;
+    use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
 
     // Mock tool for testing
     #[derive(Clone, Default)]
     struct TestTool;
 
-    impl turul_mcp_protocol::tools::HasBaseMetadata for TestTool {
+    impl HasBaseMetadata for TestTool {
         fn name(&self) -> &str {
             "test_tool"
         }
     }
 
-    impl turul_mcp_protocol::tools::HasDescription for TestTool {
+    impl HasDescription for TestTool {
         fn description(&self) -> Option<&str> {
             Some("Test tool")
         }
     }
 
-    impl turul_mcp_protocol::tools::HasInputSchema for TestTool {
+    impl HasInputSchema for TestTool {
         fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
             use turul_mcp_protocol::ToolSchema;
             static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
@@ -991,19 +992,19 @@ mod tests {
         }
     }
 
-    impl turul_mcp_protocol::tools::HasOutputSchema for TestTool {
+    impl HasOutputSchema for TestTool {
         fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> {
             None
         }
     }
 
-    impl turul_mcp_protocol::tools::HasAnnotations for TestTool {
+    impl HasAnnotations for TestTool {
         fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
             None
         }
     }
 
-    impl turul_mcp_protocol::tools::HasToolMeta for TestTool {
+    impl HasToolMeta for TestTool {
         fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
             None
         }

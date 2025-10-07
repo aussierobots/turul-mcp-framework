@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use turul_mcp_protocol::meta::*;
 use turul_mcp_protocol::resources::*;
 use turul_mcp_server::handlers::{McpHandler, ResourcesListHandler, ResourcesReadHandler};
-use turul_mcp_server::prelude::*;
+use turul_mcp_server::prelude::*;  // Re-exports builders prelude + server types
 
 // Test resource for JSON-RPC integration
 #[derive(Clone)]
@@ -36,11 +36,7 @@ impl McpResource for SimpleJsonRpcTestResource {
     }
 }
 
-// Required trait implementations
-use turul_mcp_protocol::resources::{
-    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-    HasResourceMimeType, HasResourceSize, HasResourceUri,
-};
+// Trait implementations (traits from server prelude which re-exports builders prelude)
 
 impl HasResourceMetadata for SimpleJsonRpcTestResource {
     fn name(&self) -> &str {
