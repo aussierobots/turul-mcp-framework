@@ -4,10 +4,10 @@
 
 use async_trait::async_trait;
 use serde_json::Value;
-use turul_mcp_protocol::logging::{LoggerDefinition, LoggingLevel};
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{
     McpResult,
-    logging::{LoggingMessageNotification, SetLevelRequest},
+    logging::{LoggingLevel, LoggingMessageNotification, SetLevelRequest},
 };
 
 /// High-level trait for implementing MCP logging

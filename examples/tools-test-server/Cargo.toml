@@ -15,6 +15,7 @@ path = "src/main.rs"
 turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http"] }
 turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol-2025-06-18", package = "turul-mcp-protocol-2025-06-18" }
 turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
 
 # Async runtime
 tokio.workspace = true

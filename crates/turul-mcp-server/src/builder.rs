@@ -251,18 +251,18 @@ impl McpServerBuilder {
     /// struct AddTool;
     ///
     /// // Implement all required traits for ToolDefinition
-    /// impl turul_mcp_protocol::tools::HasBaseMetadata for AddTool {
+    /// impl turul_mcp_builders::traits::HasBaseMetadata for AddTool {
     ///     fn name(&self) -> &str { "add" }
     ///     fn title(&self) -> Option<&str> { Some("Add Numbers") }
     /// }
     ///
-    /// impl turul_mcp_protocol::tools::HasDescription for AddTool {
+    /// impl turul_mcp_builders::traits::HasDescription for AddTool {
     ///     fn description(&self) -> Option<&str> {
     ///         Some("Add two numbers together")
     ///     }
     /// }
     ///
-    /// impl turul_mcp_protocol::tools::HasInputSchema for AddTool {
+    /// impl turul_mcp_builders::traits::HasInputSchema for AddTool {
     ///     fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
     ///         use turul_mcp_protocol::schema::JsonSchema;
     ///         static SCHEMA: std::sync::OnceLock<turul_mcp_protocol::ToolSchema> = std::sync::OnceLock::new();
@@ -277,15 +277,15 @@ impl McpServerBuilder {
     ///     }
     /// }
     ///
-    /// impl turul_mcp_protocol::tools::HasOutputSchema for AddTool {
+    /// impl turul_mcp_builders::traits::HasOutputSchema for AddTool {
     ///     fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> { None }
     /// }
     ///
-    /// impl turul_mcp_protocol::tools::HasAnnotations for AddTool {
+    /// impl turul_mcp_builders::traits::HasAnnotations for AddTool {
     ///     fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
     /// }
     ///
-    /// impl turul_mcp_protocol::tools::HasToolMeta for AddTool {
+    /// impl turul_mcp_builders::traits::HasToolMeta for AddTool {
     ///     fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
@@ -436,34 +436,34 @@ impl McpServerBuilder {
     /// }
     ///
     /// // Implement all required traits for ResourceDefinition
-    /// impl turul_mcp_protocol::resources::HasResourceMetadata for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceMetadata for ConfigResource {
     ///     fn name(&self) -> &str { "config" }
     ///     fn title(&self) -> Option<&str> { Some("Configuration") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceDescription for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceDescription for ConfigResource {
     ///     fn description(&self) -> Option<&str> {
     ///         Some("Application configuration file")
     ///     }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceUri for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceUri for ConfigResource {
     ///     fn uri(&self) -> &str { "file:///config.json" }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceMimeType for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceMimeType for ConfigResource {
     ///     fn mime_type(&self) -> Option<&str> { Some("application/json") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceSize for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceSize for ConfigResource {
     ///     fn size(&self) -> Option<u64> { Some(self.data.len() as u64) }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceAnnotations for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceAnnotations for ConfigResource {
     ///     fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceMeta for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceMeta for ConfigResource {
     ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
@@ -547,32 +547,32 @@ impl McpServerBuilder {
     /// }
     ///
     /// // Implement all required traits for ResourceDefinition (same as resource() example)
-    /// impl turul_mcp_protocol::resources::HasResourceMetadata for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceMetadata for DataResource {
     ///     fn name(&self) -> &str { "data" }
     ///     fn title(&self) -> Option<&str> { Some("Data File") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceDescription for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceDescription for DataResource {
     ///     fn description(&self) -> Option<&str> { Some("Sample data file") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceUri for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceUri for DataResource {
     ///     fn uri(&self) -> &str { "file:///data/sample.json" }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceMimeType for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceMimeType for DataResource {
     ///     fn mime_type(&self) -> Option<&str> { Some("application/json") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceSize for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceSize for DataResource {
     ///     fn size(&self) -> Option<u64> { Some(self.content.len() as u64) }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceAnnotations for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceAnnotations for DataResource {
     ///     fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceMeta for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceMeta for DataResource {
     ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
@@ -636,32 +636,32 @@ impl McpServerBuilder {
     /// }
     ///
     /// // Implement all required traits for ResourceDefinition
-    /// impl turul_mcp_protocol::resources::HasResourceMetadata for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceMetadata for TemplateResource {
     ///     fn name(&self) -> &str { "template-data" }
     ///     fn title(&self) -> Option<&str> { Some("Template Data") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceDescription for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceDescription for TemplateResource {
     ///     fn description(&self) -> Option<&str> { Some("Template-based data resource") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceUri for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceUri for TemplateResource {
     ///     fn uri(&self) -> &str { "file:///data/{id}.json" }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceMimeType for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceMimeType for TemplateResource {
     ///     fn mime_type(&self) -> Option<&str> { Some("application/json") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceSize for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceSize for TemplateResource {
     ///     fn size(&self) -> Option<u64> { None } // Size varies by template
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceAnnotations for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceAnnotations for TemplateResource {
     ///     fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceMeta for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceMeta for TemplateResource {
     ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///

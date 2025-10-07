@@ -129,6 +129,7 @@
 //! ```
 
 pub mod prelude;
+pub mod traits;
 
 pub mod completion;
 pub mod elicitation;
@@ -139,6 +140,9 @@ pub mod prompt;
 pub mod resource;
 pub mod root;
 pub mod tool;
+
+// Re-export all framework traits for convenience
+pub use traits::*;
 
 // Re-export all builders for convenience
 /// Builder for completion provider configuration with sampling parameters

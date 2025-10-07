@@ -10,6 +10,24 @@ Production-ready Rust framework for Model Context Protocol (MCP) servers with ze
 ### 📜 Protocol Crate Purity
 **NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2025-06-18` unless it directly relates to MCP spec compliance.** These crates MUST remain clean mirrors of the official MCP specification. No framework features, middleware hooks, or convenience additions belong here.
 
+**Forbidden in Protocol Crates:**
+- ❌ Trait hierarchies (HasBaseMetadata, ToolDefinition, etc.)
+- ❌ Builder patterns (ToolBuilder, ResourceBuilder, etc.)
+- ❌ Framework helpers (blanket implementations, convenience methods)
+- ❌ Tutorial documentation (belongs in builders crate)
+
+**Allowed in Protocol Crates:**
+- ✅ MCP spec types (Tool, Resource, Prompt, etc.)
+- ✅ Serialization/deserialization (#[derive(Serialize, Deserialize)])
+- ✅ Basic builder methods on concrete types (Tool::new(), with_description())
+- ✅ MCP spec error types (McpError with spec error codes)
+
+**Framework Traits Belong in `turul-mcp-builders`:**
+All framework trait hierarchies live in `turul-mcp-builders/src/traits/`:
+- Tool traits: HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolDefinition
+- Resource traits: HasResourceMetadata, HasResourceDescription, HasResourceUri, ResourceDefinition
+- Prompt traits: HasPromptMetadata, HasPromptDescription, HasPromptArguments, PromptDefinition
+
 ### 🎯 Simple Solutions First
 **ALWAYS** prefer simple, minimal fixes over complex or over-engineered solutions:
 
@@ -30,13 +48,23 @@ trait McpResourceV2 { ... }      // Avoid versioned APIs
 
 ### Import Conventions
 ```rust
-// ✅ BEST - Use preludes
-use turul_mcp_server::prelude::*;
+// ✅ BEST - Use preludes for framework traits and builders
+use turul_mcp_server::prelude::*;      // Gets protocol types + builders + traits
+use turul_mcp_builders::prelude::*;    // Gets builders + traits (if not using server)
 use turul_mcp_derive::{McpTool, McpResource, McpPrompt, mcp_tool};
+
+// ❌ WRONG - Direct trait imports
+use turul_mcp_protocol::tools::ToolDefinition;     // Trait moved to builders!
+use turul_mcp_builders::traits::ToolDefinition;    // Use prelude instead
 
 // ❌ WRONG - Versioned imports
 use turul_mcp_protocol_2025_06_18::*;  // Use turul_mcp_protocol::* instead
 ```
+
+**Import Hierarchy:**
+- `turul_mcp_protocol::*` - MCP spec types only (Tool, Resource, Prompt, McpError)
+- `turul_mcp_builders::prelude::*` - Framework traits + runtime builders
+- `turul_mcp_server::prelude::*` - Re-exports everything (protocol + builders + server types)
 
 ### Zero-Configuration Design
 Users NEVER specify method strings - framework auto-determines from types:

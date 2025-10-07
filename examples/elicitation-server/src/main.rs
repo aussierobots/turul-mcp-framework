@@ -17,11 +17,8 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use turul_mcp_protocol::tools::CallToolResult;
-use turul_mcp_protocol::tools::{
-    HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasToolMeta,
-    ToolAnnotations,
-};
+use turul_mcp_builders::prelude::*;
+use turul_mcp_protocol::tools::{CallToolResult, ToolAnnotations};
 use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema};
 use turul_mcp_server::{McpServer, McpTool, SessionContext};
 // ElicitationBuilder import removed - using simplified demonstrations

@@ -6,11 +6,11 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-// Import from protocol via alias
-use turul_mcp_protocol::logging::{
-    HasLogFormat, HasLogLevel, HasLogTransport, HasLoggingMetadata, LoggingLevel,
-    LoggingMessageNotification, SetLevelRequest,
-};
+// Import protocol types
+use turul_mcp_protocol::logging::{LoggingLevel, LoggingMessageNotification, SetLevelRequest};
+
+// Import framework traits from local crate
+use crate::traits::{HasLogFormat, HasLogLevel, HasLogTransport, HasLoggingMetadata};
 
 // Re-export the trait for convenience (defined below)
 // pub use LoggingTarget;
@@ -421,7 +421,7 @@ impl LogLevel {
 mod tests {
     use super::*;
     use serde_json::json;
-    use turul_mcp_protocol::logging::LoggerDefinition;
+    // LoggerDefinition now in crate::traits
 
     #[test]
     fn test_logging_builder_basic() {

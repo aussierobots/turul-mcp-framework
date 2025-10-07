@@ -9,6 +9,7 @@ license.workspace = true
 turul-mcp-server.workspace = true
 turul-mcp-protocol.workspace = true
 turul-mcp-derive.workspace = true
+turul-mcp-builders.workspace = true
 async-trait.workspace = true
 tokio.workspace = true
 tracing.workspace = true

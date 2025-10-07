@@ -7,11 +7,11 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-// Import from protocol via alias
-use turul_mcp_protocol::roots::{
-    HasRootAnnotations, HasRootFiltering, HasRootMetadata, HasRootPermissions, ListRootsRequest,
-    RootsListChangedNotification,
-};
+// Import protocol types
+use turul_mcp_protocol::roots::{ListRootsRequest, RootsListChangedNotification};
+
+// Import framework traits from local crate
+use crate::traits::{HasRootAnnotations, HasRootFiltering, HasRootMetadata, HasRootPermissions};
 
 /// Builder for creating root configurations at runtime
 pub struct RootBuilder {
@@ -407,7 +407,7 @@ impl RootBuilder {
 mod tests {
     use super::*;
     use serde_json::json;
-    use turul_mcp_protocol::roots::RootDefinition;
+    use crate::traits::RootDefinition;
 
     #[test]
     fn test_root_builder_basic() {

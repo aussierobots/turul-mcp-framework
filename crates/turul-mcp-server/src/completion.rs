@@ -3,7 +3,7 @@
 //! This module defines the high-level trait for implementing MCP completion.
 
 use async_trait::async_trait;
-use turul_mcp_protocol::completion::CompletionDefinition;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{
     McpResult,
     completion::{CompleteRequest, CompleteResult},

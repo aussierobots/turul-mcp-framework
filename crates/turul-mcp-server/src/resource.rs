@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use serde_json::Value;
-use turul_mcp_protocol::resources::ResourceDefinition;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{McpResult, resources::ResourceContent};
 use crate::SessionContext;
 

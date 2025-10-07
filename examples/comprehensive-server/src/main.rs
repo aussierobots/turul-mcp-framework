@@ -15,18 +15,10 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, from_str, json};
 use tracing::info;
-use turul_mcp_protocol::prompts::{
-    HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
-    HasPromptMetadata, PromptAnnotations, PromptArgument, PromptMessage,
-};
-use turul_mcp_protocol::resources::{
-    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-    HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
-};
-use turul_mcp_protocol::tools::{
-    CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
-    HasOutputSchema, HasToolMeta, ToolAnnotations,
-};
+use turul_mcp_builders::prelude::*;
+use turul_mcp_protocol::prompts::{PromptAnnotations, PromptArgument, PromptMessage};
+use turul_mcp_protocol::resources::ResourceContent;
+use turul_mcp_protocol::tools::{CallToolResult, ToolAnnotations};
 use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema};
 use turul_mcp_server::handlers::McpPrompt;
 use turul_mcp_server::{McpResource, McpServer, McpTool, SessionContext};

@@ -11,10 +11,8 @@ use chrono::Utc;
 use clap::Parser;
 use serde_json::Value;
 use tracing::info;
-use turul_mcp_protocol::prompts::{
-    HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
-    HasPromptMetadata, PromptAnnotations, PromptArgument, PromptMessage,
-};
+use turul_mcp_builders::prelude::*;
+use turul_mcp_protocol::prompts::{PromptAnnotations, PromptArgument, PromptMessage};
 use turul_mcp_protocol::McpError;
 use turul_mcp_server::prompt::McpPrompt;
 use turul_mcp_server::{McpResult, McpServer};

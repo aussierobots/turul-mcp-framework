@@ -3,7 +3,7 @@
 //! This module defines the high-level trait for implementing MCP sampling.
 
 use async_trait::async_trait;
-use turul_mcp_protocol::sampling::SamplingDefinition;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{
     McpResult,
     sampling::{CreateMessageRequest, CreateMessageResult},

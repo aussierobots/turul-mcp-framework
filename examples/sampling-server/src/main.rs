@@ -8,12 +8,12 @@ use async_trait::async_trait;
 use clap::Parser;
 use serde_json::Value;
 use tracing::info;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{
     McpError,
     prompts::ContentBlock,
     sampling::{
-        CreateMessageRequest, CreateMessageResult, HasModelPreferences, HasSamplingConfig,
-        HasSamplingContext, ModelPreferences, Role, SamplingMessage,
+        CreateMessageRequest, CreateMessageResult, ModelPreferences, Role, SamplingMessage,
     },
 };
 use turul_mcp_server::sampling::McpSampling;

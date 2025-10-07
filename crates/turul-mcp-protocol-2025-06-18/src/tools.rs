@@ -8,250 +8,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-// ===========================================
-// === Tool Definition Trait Hierarchy ===
-// ===========================================
-
-/// Base metadata trait - matches TypeScript BaseMetadata interface
-pub trait HasBaseMetadata {
-    /// Programmatic identifier (fallback display name)
-    fn name(&self) -> &str;
-
-    /// Human-readable display name (UI contexts)
-    fn title(&self) -> Option<&str> {
-        None
-    }
-}
-
-/// Tool description trait
-pub trait HasDescription {
-    fn description(&self) -> Option<&str> {
-        None
-    }
-}
-
-/// Input schema trait
-pub trait HasInputSchema {
-    fn input_schema(&self) -> &ToolSchema;
-}
-
-/// Output schema trait
-pub trait HasOutputSchema {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-/// Annotations trait
-pub trait HasAnnotations {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        None
-    }
-}
-
-/// Tool-specific meta trait (separate from RPC _meta)
-pub trait HasToolMeta {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
-}
-
-/// Complete tool definition - composed from fine-grained traits
-/// **Complete MCP Tool Creation** - Build executable tools that clients can invoke.
-///
-/// This trait represents a **complete, working MCP tool** that can be registered with a server
-/// and invoked by clients. When you implement the required metadata traits, you automatically
-/// get `ToolDefinition` for free via blanket implementation.
-///
-/// ## What This Enables
-///
-/// Tools implementing `ToolDefinition` become **full MCP citizens** that are:
-/// - 🔍 **Discoverable** via `tools/list` requests
-/// - ⚡ **Callable** via `tools/call` requests
-/// - ✅ **Validated** against their input schemas automatically
-/// - 📡 **Protocol-ready** for JSON-RPC communication
-///
-/// ## Complete Working Example
-///
-/// ```rust
-/// use turul_mcp_protocol_2025_06_18::tools::*;
-/// use turul_mcp_protocol_2025_06_18::schema::JsonSchema;
-/// use std::collections::HashMap;
-///
-/// // This struct will automatically implement ToolDefinition!
-/// struct CodeAnalyzer {
-///     input_schema: ToolSchema,
-/// }
-///
-/// impl CodeAnalyzer {
-///     fn new() -> Self {
-///         let mut props = HashMap::new();
-///         props.insert("code".to_string(), JsonSchema::String {
-///             description: Some("Source code to analyze".to_string()),
-///             pattern: None,
-///             min_length: None,
-///             max_length: None,
-///             enum_values: None,
-///         });
-///
-///         Self {
-///             input_schema: ToolSchema {
-///                 schema_type: "object".to_string(),
-///                 properties: Some(props),
-///                 required: Some(vec!["code".to_string()]),
-///                 additional: HashMap::new(),
-///             }
-///         }
-///     }
-/// }
-///
-/// impl HasBaseMetadata for CodeAnalyzer {
-///     fn name(&self) -> &str { "analyze_code" }
-///     fn title(&self) -> Option<&str> { Some("Code Analyzer") }
-/// }
-///
-/// impl HasDescription for CodeAnalyzer {
-///     fn description(&self) -> Option<&str> {
-///         Some("Analyzes code quality")
-///     }
-/// }
-///
-/// impl HasInputSchema for CodeAnalyzer {
-///     fn input_schema(&self) -> &ToolSchema {
-///         &self.input_schema
-///     }
-/// }
-///
-/// impl HasOutputSchema for CodeAnalyzer {
-///     fn output_schema(&self) -> Option<&ToolSchema> { None }
-/// }
-///
-/// impl HasAnnotations for CodeAnalyzer {
-///     fn annotations(&self) -> Option<&ToolAnnotations> { None }
-/// }
-///
-/// impl HasToolMeta for CodeAnalyzer {
-///     fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
-/// }
-///
-/// // 🎉 CodeAnalyzer now automatically implements ToolDefinition!
-/// let tool = CodeAnalyzer::new();
-/// assert_eq!(tool.name(), "analyze_code");
-/// ```
-///
-/// ## Usage Patterns
-///
-/// ### Easy: Use Derive Macros (see turul-mcp-derive crate)
-/// ```rust
-/// // Example of manual implementation without macros
-/// use turul_mcp_protocol_2025_06_18::tools::*;
-/// use std::collections::HashMap;
-///
-/// struct FileProcessor {
-///     schema: ToolSchema,
-/// }
-///
-/// impl FileProcessor {
-///     fn new() -> Self {
-///         Self {
-///             schema: ToolSchema {
-///                 schema_type: "object".to_string(),
-///                 properties: None,
-///                 required: None,
-///                 additional: HashMap::new(),
-///             }
-///         }
-///     }
-/// }
-///
-/// impl HasBaseMetadata for FileProcessor {
-///     fn name(&self) -> &str { "file_processor" }
-///     fn title(&self) -> Option<&str> { None }
-/// }
-///
-/// impl HasDescription for FileProcessor {
-///     fn description(&self) -> Option<&str> { Some("Process files") }
-/// }
-///
-/// impl HasInputSchema for FileProcessor {
-///     fn input_schema(&self) -> &ToolSchema { &self.schema }
-/// }
-///
-/// impl HasOutputSchema for FileProcessor {
-///     fn output_schema(&self) -> Option<&ToolSchema> { None }
-/// }
-///
-/// impl HasAnnotations for FileProcessor {
-///     fn annotations(&self) -> Option<&ToolAnnotations> { None }
-/// }
-///
-/// impl HasToolMeta for FileProcessor {
-///     fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
-/// }
-///
-/// let tool = FileProcessor::new();
-/// assert_eq!(tool.name(), "file_processor");
-/// ```
-///
-/// ### Advanced: Manual Implementation (shown above)
-/// Perfect when you need fine-grained control over schemas and metadata.
-///
-/// ## Real-World Tool Ideas
-///
-/// - **Code Tools**: Formatters, linters, complexity analyzers, documentation generators
-/// - **File Tools**: Processors, converters, validators, backup utilities
-/// - **API Tools**: REST clients, GraphQL queries, webhook handlers, data fetchers
-/// - **Data Tools**: CSV processors, JSON transformers, database queries, analytics
-/// - **System Tools**: Process monitors, log analyzers, config validators, health checkers
-///
-/// ## How It Works in MCP
-///
-/// 1. **Registration**: Server registers your tool during startup
-/// 2. **Discovery**: Client calls `tools/list` → sees your tool with metadata
-/// 3. **Invocation**: Client calls `tools/call` with your tool name and arguments
-/// 4. **Validation**: Framework validates arguments against your input schema
-/// 5. **Execution**: Your tool runs and returns results
-/// 6. **Response**: Framework serializes results back to client
-///
-/// The framework handles all the protocol details - you just implement the business logic!
-pub trait ToolDefinition:
-    HasBaseMetadata +           // name, title
-    HasDescription +            // description
-    HasInputSchema +            // inputSchema
-    HasOutputSchema +           // outputSchema
-    HasAnnotations +            // annotations
-    HasToolMeta +               // _meta (tool-specific)
-    Send +
-    Sync
-{
-    /// Display name precedence: title > annotations.title > name (matches TypeScript spec)
-    fn display_name(&self) -> &str {
-        if let Some(title) = self.title() {
-            title
-        } else if let Some(annotations) = self.annotations() {
-            if let Some(title) = &annotations.title {
-                title
-            } else {
-                self.name()
-            }
-        } else {
-            self.name()
-        }
-    }
-
-    /// Convert to concrete Tool struct for protocol serialization
-    fn to_tool(&self) -> Tool {
-        Tool {
-            name: self.name().to_string(),
-            title: self.title().map(String::from),
-            description: self.description().map(String::from),
-            input_schema: self.input_schema().clone(),
-            output_schema: self.output_schema().cloned(),
-            annotations: self.annotations().cloned(),
-            meta: self.tool_meta().cloned(),
-        }
-    }
-}
 
 /// Tool annotations structure (matches TypeScript ToolAnnotations)
 /// NOTE: all properties in ToolAnnotations are **hints**.
@@ -327,9 +83,7 @@ impl ToolAnnotations {
     }
 }
 
-// ===========================================
 // === Protocol Types ===
-// ===========================================
 
 /// JSON Schema definition for tool input/output (matches TypeScript spec exactly)
 /// Must be an object with type: "object", properties, and required fields
@@ -438,64 +192,6 @@ impl Tool {
         self.meta = Some(meta);
         self
     }
-}
-
-// ===========================================
-// === Tool Implements ToolDefinition ===
-// ===========================================
-
-impl HasBaseMetadata for Tool {
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn title(&self) -> Option<&str> {
-        self.title.as_deref()
-    }
-}
-
-impl HasDescription for Tool {
-    fn description(&self) -> Option<&str> {
-        self.description.as_deref()
-    }
-}
-
-impl HasInputSchema for Tool {
-    fn input_schema(&self) -> &ToolSchema {
-        &self.input_schema
-    }
-}
-
-impl HasOutputSchema for Tool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        self.output_schema.as_ref()
-    }
-}
-
-impl HasAnnotations for Tool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        self.annotations.as_ref()
-    }
-}
-
-impl HasToolMeta for Tool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        self.meta.as_ref()
-    }
-}
-
-// Blanket implementation: any type that implements all component traits automatically implements ToolDefinition
-impl<T> ToolDefinition for T
-where
-    T: HasBaseMetadata
-        + HasDescription
-        + HasInputSchema
-        + HasOutputSchema
-        + HasAnnotations
-        + HasToolMeta
-        + Send
-        + Sync,
-{
-    // Default implementations are provided by the trait definition
 }
 
 /// Parameters for tools/list request
@@ -780,25 +476,27 @@ impl CallToolResult {
     // === Smart Response Builders ===
     // ===========================================
 
-    /// Create response from serializable result with automatic structured content based on ToolDefinition
-    pub fn from_result_with_tool<T: serde::Serialize>(
+    /// Create response from serializable result with optional structured content
+    pub fn from_result<T: serde::Serialize>(result: &T) -> Result<Self, crate::McpError> {
+        let text_content = serde_json::to_string(result)
+            .map_err(|e| crate::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
+
+        Ok(Self::success(vec![ToolResult::text(text_content)]))
+    }
+
+    /// Create response with both text and structured content
+    pub fn from_result_with_structured<T: serde::Serialize>(
         result: &T,
-        tool: &dyn ToolDefinition,
     ) -> Result<Self, crate::McpError> {
         let text_content = serde_json::to_string(result)
             .map_err(|e| crate::McpError::tool_execution(&format!("Serialization error: {}", e)))?;
 
-        let response = Self::success(vec![ToolResult::text(text_content)]);
+        let structured = serde_json::to_value(result).map_err(|e| {
+            crate::McpError::tool_execution(&format!("Structured content error: {}", e))
+        })?;
 
-        // Auto-add structured content if tool has output schema
-        if tool.output_schema().is_some() {
-            let structured = serde_json::to_value(result).map_err(|e| {
-                crate::McpError::tool_execution(&format!("Structured content error: {}", e))
-            })?;
-            Ok(response.with_structured_content(structured))
-        } else {
-            Ok(response)
-        }
+        Ok(Self::success(vec![ToolResult::text(text_content)])
+            .with_structured_content(structured))
     }
 
     /// Create response from serializable result with automatic structured content based on schema
@@ -1011,8 +709,6 @@ impl HasParams for CallToolRequest {
         Some(&self.params)
     }
 }
-
-pub mod builder;
 
 #[cfg(test)]
 mod tests {

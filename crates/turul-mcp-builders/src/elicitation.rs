@@ -6,12 +6,14 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-// Import from protocol via alias
+// Import protocol types
 use turul_mcp_protocol::elicitation::{
     BooleanSchema, ElicitCreateRequest, ElicitResult, ElicitationSchema, EnumSchema,
-    HasElicitationHandling, HasElicitationMetadata, HasElicitationSchema, NumberSchema,
-    PrimitiveSchemaDefinition, StringFormat, StringSchema,
+    NumberSchema, PrimitiveSchemaDefinition, StringFormat, StringSchema,
 };
+
+// Import framework traits from local crate
+use crate::traits::{HasElicitationHandling, HasElicitationMetadata, HasElicitationSchema};
 
 /// Builder for creating elicitation requests at runtime
 pub struct ElicitationBuilder {
@@ -536,7 +538,8 @@ impl ElicitResultBuilder {
 mod tests {
     use super::*;
     use serde_json::json;
-    use turul_mcp_protocol::elicitation::{ElicitAction, ElicitationDefinition};
+    use turul_mcp_protocol::elicitation::ElicitAction;
+    use crate::traits::ElicitationDefinition;
 
     #[test]
     fn test_elicitation_builder_basic() {

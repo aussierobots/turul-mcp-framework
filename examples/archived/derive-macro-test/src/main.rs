@@ -6,9 +6,13 @@
 //! Lines of code: ~50 (vs 400+ with manual trait implementations)
 
 use turul_mcp_derive::{McpTool, McpResource, McpNotification};
+use turul_mcp_builders::prelude::*;
 use turul_mcp_server::{McpServer, McpResult};
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::resources::HasResourceUri; // Import trait for .uri() method
+use turul_mcp_builders::prelude::*;
 use tracing::info;
+use turul_mcp_builders::prelude::*;
 
 // =============================================================================
 // DERIVE MACRO TOOLS - TRUE Zero-Configuration

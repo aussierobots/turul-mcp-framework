@@ -22,6 +22,7 @@ path = "src/bin/dynamodb-teardown.rs"
 turul-mcp-server = { workspace = true, features = ["http", "sse", "dynamodb"] }
 turul-mcp-session-storage = { workspace = true, features = ["dynamodb"] }
 turul-mcp-derive.workspace = true
+turul-mcp-builders.workspace = true
 turul-mcp-protocol.workspace = true
 
 tokio.workspace = true

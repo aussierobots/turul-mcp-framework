@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use std::path::PathBuf;
-use turul_mcp_protocol::roots::RootDefinition;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{
     McpResult,
     roots::{ListRootsRequest, ListRootsResult, RootsListChangedNotification},

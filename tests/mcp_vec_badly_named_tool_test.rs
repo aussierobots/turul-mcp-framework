@@ -2,10 +2,15 @@
 //! that return Vec<T> but don't match heuristics
 
 use serde::{Deserialize, Serialize};
+use turul_mcp_builders::prelude::*;
 use turul_mcp_derive::McpTool;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::McpResult;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::tools::HasOutputSchema;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_server::{McpTool as McpToolTrait, SessionContext};
+use turul_mcp_builders::prelude::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Record {

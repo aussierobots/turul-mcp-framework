@@ -49,7 +49,8 @@ use uuid::Uuid;
 
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::schema::{JsonSchema, JsonSchemaGenerator};
-use turul_mcp_protocol::tools::{HasAnnotations, ToolAnnotations, ToolSchema};
+use turul_mcp_builders::prelude::*;
+use turul_mcp_protocol::tools::{ToolAnnotations, ToolSchema};
 use turul_mcp_protocol::ResourceContents;
 use turul_mcp_server::prelude::*;
 

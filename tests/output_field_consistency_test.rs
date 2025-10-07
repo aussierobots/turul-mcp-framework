@@ -3,9 +3,13 @@
 /// Bug: When output = Type is specified without explicit output_field,
 /// the schema would use camelCase (e.g., "locationLLH") but runtime would use "output"
 use serde::{Deserialize, Serialize};
+use turul_mcp_builders::prelude::*;
 use turul_mcp_derive::McpTool;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::tools::HasOutputSchema;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_server::McpTool as McpToolTrait;
+use turul_mcp_builders::prelude::*;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct LocationData {

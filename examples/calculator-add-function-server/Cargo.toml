@@ -12,6 +12,7 @@ description = "Example MCP calculator server using function macro (Level 1)"
 turul-mcp-server = { workspace = true }
 turul-mcp-protocol = { workspace = true }
 turul-mcp-derive = { workspace = true }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
 serde_json = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }

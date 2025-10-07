@@ -11,8 +11,11 @@
 //! // Now you have access to all common server types plus protocol types
 //! ```
 
-// Re-export all protocol prelude items
+// Re-export all protocol prelude items (spec-pure types only)
 pub use turul_mcp_protocol::prelude::*;
+
+// Re-export all builders prelude items (includes framework traits)
+pub use turul_mcp_builders::prelude::*;
 
 // Server core types
 pub use crate::{McpResult, McpServer, McpServerBuilder, SessionContext};

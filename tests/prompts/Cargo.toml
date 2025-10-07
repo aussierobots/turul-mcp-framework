@@ -8,6 +8,7 @@ publish = false
 turul-mcp-server = { path = "../../crates/turul-mcp-server" }
 turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
 turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
+turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
 turul-mcp-json-rpc-server = { path = "../../crates/turul-mcp-json-rpc-server" }
 tokio.workspace = true
 serde.workspace = true

@@ -10,6 +10,7 @@ turul-mcp-server.workspace = true
 turul-mcp-protocol.workspace = true
 turul-mcp-session-storage.workspace = true
 turul-mcp-derive.workspace = true
+turul-mcp-builders.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 clap.workspace = true

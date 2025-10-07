@@ -195,7 +195,7 @@ pub use turul_mcp_protocol::*;
 
 // Re-export builder pattern for Level 3 tool creation
 /// Dynamic tool creation with runtime configuration and type-safe builders
-pub use turul_mcp_protocol::tools::builder::{DynamicTool, ToolBuilder};
+pub use turul_mcp_builders::tool::{DynamicTool, DynamicToolFn, ToolBuilder};
 
 // Explicitly re-export error types for convenience
 /// Domain error type for MCP operations with protocol conversion support
@@ -226,7 +226,8 @@ impl McpTool for DynamicTool {
         args: serde_json::Value,
         _session: Option<SessionContext>,
     ) -> McpResult<turul_mcp_protocol::tools::CallToolResult> {
-        use turul_mcp_protocol::tools::{CallToolResult, HasOutputSchema};
+        use turul_mcp_protocol::tools::CallToolResult;
+        use turul_mcp_builders::prelude::HasOutputSchema;
 
         match self.execute(args).await {
             Ok(result) => {

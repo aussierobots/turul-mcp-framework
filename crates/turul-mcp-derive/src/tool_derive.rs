@@ -180,7 +180,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     let expanded = quote! {
         #[automatically_derived]
         // Generate fine-grained trait implementations
-        impl turul_mcp_protocol::tools::HasBaseMetadata for #name {
+        impl turul_mcp_builders::traits::HasBaseMetadata for #name {
             fn name(&self) -> &str {
                 #tool_name
             }
@@ -191,13 +191,13 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl turul_mcp_protocol::tools::HasDescription for #name {
+        impl turul_mcp_builders::traits::HasDescription for #name {
             fn description(&self) -> Option<&str> {
                 Some(#tool_description)
             }
         }
 
-        impl turul_mcp_protocol::tools::HasInputSchema for #name {
+        impl turul_mcp_builders::traits::HasInputSchema for #name {
             fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
                 // Generate static schema at compile time
                 static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
@@ -214,7 +214,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl turul_mcp_protocol::tools::HasOutputSchema for #name {
+        impl turul_mcp_builders::traits::HasOutputSchema for #name {
             #output_schema_tokens
         }
 
@@ -341,14 +341,14 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl turul_mcp_protocol::tools::HasAnnotations for #name {
+        impl turul_mcp_builders::traits::HasAnnotations for #name {
             fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
                 // TODO: Extract from tool attributes when available
                 None
             }
         }
 
-        impl turul_mcp_protocol::tools::HasToolMeta for #name {
+        impl turul_mcp_builders::traits::HasToolMeta for #name {
             fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
                 None
             }
@@ -361,7 +361,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         impl turul_mcp_server::McpTool for #name {
             async fn call(&self, args: serde_json::Value, session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
                 use serde_json::Value;
-                use turul_mcp_protocol::tools::HasOutputSchema;
+                use turul_mcp_builders::traits::HasOutputSchema;
 
                 // Extract parameters
                 #(#param_extractions)*

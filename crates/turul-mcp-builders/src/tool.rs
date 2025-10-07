@@ -8,11 +8,12 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
-// Import from protocol via alias
-use turul_mcp_protocol::schema::JsonSchema;
-use turul_mcp_protocol::tools::{
+// Import traits from local traits module
+use crate::traits::{
     HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasToolMeta,
 };
+// Import protocol types
+use turul_mcp_protocol::schema::JsonSchema;
 use turul_mcp_protocol::tools::{ToolAnnotations, ToolSchema};
 
 /// Type alias for dynamic tool execution function

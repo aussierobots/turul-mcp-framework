@@ -15,14 +15,12 @@ use async_trait::async_trait;
 use serde_json::json;
 use std::{collections::HashMap, sync::Arc};
 use tokio::time::{Duration, sleep};
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{
     ToolResult,
     logging::LoggingLevel,
     schema::JsonSchema,
-    tools::{
-        CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
-        HasOutputSchema, HasToolMeta, ToolAnnotations, ToolSchema,
-    },
+    tools::{CallToolResult, ToolAnnotations, ToolSchema},
 };
 use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
 use turul_mcp_session_storage::InMemorySessionStorage;
