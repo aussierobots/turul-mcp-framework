@@ -407,7 +407,7 @@ impl McpMiddleware for AuthMiddleware {
 **Modern composable design pattern for all MCP areas:**
 
 ```rust
-use turul_mcp_protocol::tools::*;
+use turul_mcp_builders::prelude::*;  // Framework traits + builders
 use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpResult};
 use turul_mcp_server::{McpTool, SessionContext};
 use async_trait::async_trait;
@@ -804,9 +804,8 @@ let server = McpServer::builder()
 **Best for:** Performance optimization, custom behavior
 
 ```rust
-use turul_mcp_protocol::tools::*;
+use turul_mcp_server::prelude::*;  // Re-exports builders prelude + framework traits
 use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpResult};
-use turul_mcp_server::prelude::*;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
