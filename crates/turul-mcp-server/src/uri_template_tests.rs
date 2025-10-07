@@ -8,10 +8,8 @@ mod tests {
     use serde_json::{Value, json};
     use std::collections::HashMap;
     use turul_mcp_protocol::meta;
-    use turul_mcp_protocol::resources::{
-        HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-        HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
-    };
+    use turul_mcp_protocol::resources::ResourceContent;
+    use turul_mcp_builders::prelude::*;  // HasResourceMetadata, HasResourceDescription, etc.
 
     /// Test resource that supports URI templates
     #[derive(Clone)]
