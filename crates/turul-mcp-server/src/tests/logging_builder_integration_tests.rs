@@ -7,10 +7,8 @@ use crate::session::SessionManager;
 use serde_json::json;
 use std::sync::Arc;
 use turul_mcp_builders::logging::LoggingBuilder;
-use turul_mcp_protocol::{
-    ServerCapabilities,
-    logging::{HasLogFormat, HasLogLevel, HasLoggingMetadata, LoggingLevel},
-};
+use turul_mcp_protocol::{ServerCapabilities, logging::LoggingLevel};
+use turul_mcp_builders::prelude::*;  // HasLogFormat, HasLogLevel, etc.
 
 /// Test LoggingTarget trait implementation for SessionContext
 #[cfg(test)]

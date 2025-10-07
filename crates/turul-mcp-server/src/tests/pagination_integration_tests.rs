@@ -40,10 +40,7 @@ impl crate::McpResource for TestResource {
 }
 
 // Required trait implementations for TestResource
-use turul_mcp_protocol::resources::{
-    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-    HasResourceMimeType, HasResourceSize, HasResourceUri,
-};
+use turul_mcp_builders::prelude::*;  // HasResourceMetadata, HasResourceDescription, etc.
 
 impl HasResourceMetadata for TestResource {
     fn name(&self) -> &str {
