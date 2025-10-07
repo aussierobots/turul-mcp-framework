@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use turul_mcp_protocol::logging::{LoggingLevel, LoggingMessageNotification, SetLevelRequest};
 
 // Import framework traits from local crate
-use crate::traits::{HasLogFormat, HasLogLevel, HasLogTransport, HasLoggingMetadata};
+use crate::traits::{HasLogFormat, HasLogLevel, HasLogTransport, HasLoggingMetadata, LoggerDefinition};
 
 // Re-export the trait for convenience (defined below)
 // pub use LoggingTarget;
