@@ -130,6 +130,7 @@
 
 pub mod prelude;
 pub mod traits;
+pub mod protocol_impls;
 
 pub mod completion;
 pub mod elicitation;
@@ -140,6 +141,15 @@ pub mod prompt;
 pub mod resource;
 pub mod root;
 pub mod tool;
+
+// Schemars integration for JSON schema generation
+pub mod schemars_helpers;
+pub use schemars_helpers::{ToolSchemaExt, convert_value_to_json_schema, convert_value_to_json_schema_with_defs};
+
+// Re-export schemars for use in generated code
+// This ensures schemars::schema_for!() works in user code without requiring
+// users to add schemars as an explicit dependency
+pub use schemars;
 
 // Re-export all framework traits for convenience
 pub use traits::*;
