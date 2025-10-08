@@ -1033,31 +1033,38 @@ fn struct_to_camel_case(struct_name: &str) -> String {
     result
 }
 
-/// Generate enhanced output schema with struct property introspection
-pub fn generate_enhanced_output_schema(
+/// Extract schema content (without function wrapper) for reuse
+/// This is the core logic used by both generate_enhanced_output_schema and generate_output_schema_auto
+fn extract_schema_content(
     ty: &syn::Type,
     field_name: &str,
     input: Option<&DeriveInput>,
 ) -> TokenStream {
     // Try to introspect struct properties if we have the DeriveInput
-    if let (syn::Type::Path(type_path), Some(derive_input)) = (ty, input)
-        && let Some(ident) = type_path.path.get_ident()
-    {
-        // Check if this is the same struct we're deriving for
-        if ident == &derive_input.ident
-            && let Data::Struct(data_struct) = &derive_input.data
-            && let Fields::Named(fields) = &data_struct.fields
-        {
-            return generate_struct_schema_with_properties(fields, field_name);
+    if let (syn::Type::Path(type_path), Some(derive_input)) = (ty, input) {
+        if let Some(ident) = type_path.path.get_ident() {
+            // Check if this is Self or the same struct we're deriving for
+            let is_self_type = ident == "Self";
+            let is_same_struct = ident == &derive_input.ident;
+
+            if (is_self_type || is_same_struct)
+                && let Data::Struct(data_struct) = &derive_input.data
+                && let Fields::Named(fields) = &data_struct.fields
+            {
+                return extract_struct_schema_content(fields, field_name);
+            }
         }
     }
 
-    // Fallback to basic type schema generation
-    generate_output_schema_for_type_with_field(ty, field_name)
+    // Fallback - extract content from the existing function
+    // Extract just the schema creation content (not the full function)
+    // Use the basic type schema generation for types we can't introspect
+    generate_basic_type_schema_content(ty, field_name)
 }
 
-/// Generate schema for struct with all properties introspected
-fn generate_struct_schema_with_properties(
+
+/// Extract schema content for struct (without function wrapper) - used by extract_schema_content
+fn extract_struct_schema_content(
     fields: &syn::FieldsNamed,
     output_field_name: &str,
 ) -> TokenStream {
@@ -1088,36 +1095,29 @@ fn generate_struct_schema_with_properties(
     }
 
     quote! {
-        fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-            static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
-            Some(OUTPUT_SCHEMA.get_or_init(|| {
-                use turul_mcp_protocol::schema::JsonSchema;
-                use std::collections::HashMap;
+        use turul_mcp_protocol::schema::JsonSchema;
+        use std::collections::HashMap;
 
-                // Create schema for the struct content
-                let struct_schema = turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(HashMap::from([
-                        #(#property_definitions),*
-                    ]))
-                    .with_required(vec![
-                        #(#required_fields),*
-                    ]);
+        // Create schema for the struct content
+        let struct_schema = turul_mcp_protocol::tools::ToolSchema::object()
+            .with_properties(HashMap::from([
+                #(#property_definitions),*
+            ]))
+            .with_required(vec![
+                #(#required_fields),*
+            ]);
 
-                // Wrap in outer object with custom output field name
-                turul_mcp_protocol::tools::ToolSchema::object()
-                    .with_properties(HashMap::from([
-                        (#output_field_name.to_string(), JsonSchema::Object {
-                            properties: struct_schema.properties.clone(),
-                            required: struct_schema.required.clone(),
-                            additional: HashMap::new(),
-                            schema_type: "object".to_string(),
-                            title: None,
-                            description: None,
-                        })
-                    ]))
-                    .with_required(vec![#output_field_name.to_string()])
-            }))
-        }
+        // Wrap in outer object with custom output field name
+        turul_mcp_protocol::tools::ToolSchema::object()
+            .with_properties(HashMap::from([
+                (#output_field_name.to_string(), JsonSchema::Object {
+                    description: None,
+                    properties: struct_schema.properties.clone(),
+                    required: struct_schema.required.clone(),
+                    additional_properties: Some(false),
+                })
+            ]))
+            .with_required(vec![#output_field_name.to_string()])
     }
 }
 
@@ -1127,5 +1127,162 @@ fn is_option_type(ty: &syn::Type) -> bool {
         type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Option"
     } else {
         false
+    }
+}
+
+/// Check if a type is a basic primitive that doesn't need schemars
+fn is_basic_type(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(ident) = type_path.path.get_ident() {
+            matches!(
+                ident.to_string().as_str(),
+                "f64" | "f32" | "i64" | "i32" | "i16" | "i8" |
+                "u64" | "u32" | "u16" | "u8" | "String" | "str" | "bool"
+            )
+        } else {
+            false
+        }
+    } else {
+        false
+    }
+}
+
+/// Generate output schema with automatic schemars detection
+///
+/// Automatically tries to use schemars::schema_for!() on the output type first.
+/// Falls back to struct introspection if schemars is not available for that type.
+///
+/// This provides zero-configuration automatic detection: if the output type has
+/// `#[derive(JsonSchema)]`, the framework automatically uses it - no manual flags needed!
+pub fn generate_output_schema_auto(
+    ty: &syn::Type,
+    field_name: &str,
+    input: Option<&DeriveInput>,
+) -> TokenStream {
+    // Extract schema content for fallback (struct introspection)
+    let fallback_schema_content = extract_schema_content(ty, field_name, input);
+
+    // For Self type, always use introspection
+    let is_self_type = if let syn::Type::Path(type_path) = ty {
+        type_path.path.is_ident("Self")
+    } else {
+        false
+    };
+
+    if is_self_type {
+        // Self type - use introspection
+        return quote! {
+            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
+                static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
+                    std::sync::OnceLock::new();
+                Some(OUTPUT_SCHEMA.get_or_init(|| {
+                    #fallback_schema_content
+                }))
+            }
+        };
+    }
+
+    // For basic types (String, i32, etc.), use simple schema without requiring schemars
+    if is_basic_type(ty) {
+        return quote! {
+            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
+                static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
+                    std::sync::OnceLock::new();
+                Some(OUTPUT_SCHEMA.get_or_init(|| {
+                    #fallback_schema_content
+                }))
+            }
+        };
+    }
+
+    // For complex external types, use schemars with safe converter
+    // NOTE: External output types MUST have #[derive(schemars::JsonSchema)]
+    // If you get a compile error, add JsonSchema to your output type
+    quote! {
+        fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
+            static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
+                std::sync::OnceLock::new();
+            Some(OUTPUT_SCHEMA.get_or_init(|| {
+                use std::collections::HashMap;
+                use turul_mcp_protocol::schema::JsonSchema;
+
+                // Generate detailed schema via schemars
+                // Requires: #[derive(schemars::JsonSchema)] on output type
+                let schemars_schema = turul_mcp_builders::schemars::schema_for!(#ty);
+
+                // Convert schemars RootSchema to JSON Value
+                let mut schema_value = serde_json::to_value(&schemars_schema)
+                    .expect("schemars Schema should always serialize to JSON");
+
+                // Extract definitions for $ref resolution
+                let definitions = if let Some(defs_value) = schema_value.get("definitions")
+                    .or_else(|| schema_value.get("$defs")) {
+                    // Parse definitions into HashMap<String, Value>
+                    defs_value.as_object()
+                        .map(|obj| obj.iter()
+                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .collect::<HashMap<String, serde_json::Value>>())
+                        .unwrap_or_default()
+                } else {
+                    HashMap::new()
+                };
+
+                // Remove definitions from root to get clean schema
+                if let Some(obj) = schema_value.as_object_mut() {
+                    obj.remove("definitions");
+                    obj.remove("$defs");
+                }
+
+                // Use safe converter with definitions for $ref resolution
+                let inner_schema = turul_mcp_builders::convert_value_to_json_schema_with_defs(
+                    &schema_value,
+                    &definitions
+                );
+
+                // Wrap in output field
+                turul_mcp_protocol::tools::ToolSchema::object()
+                    .with_properties(HashMap::from([
+                        (#field_name.to_string(), inner_schema)
+                    ]))
+                    .with_required(vec![#field_name.to_string()])
+            }))
+        }
+    }
+}
+
+/// Generate basic type schema content (without function wrapper)
+fn generate_basic_type_schema_content(ty: &syn::Type, field_name: &str) -> TokenStream {
+    match ty {
+        syn::Type::Path(type_path) => {
+            if let Some(ident) = type_path.path.get_ident() {
+                let schema_type = match ident.to_string().as_str() {
+                    "f64" | "f32" => quote! { JsonSchema::number() },
+                    "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" => {
+                        quote! { JsonSchema::integer() }
+                    }
+                    "String" | "str" => quote! { JsonSchema::string() },
+                    "bool" => quote! { JsonSchema::boolean() },
+                    _ => quote! { JsonSchema::object() },
+                };
+
+                quote! {
+                    use turul_mcp_protocol::schema::JsonSchema;
+                    use std::collections::HashMap;
+
+                    turul_mcp_protocol::tools::ToolSchema::object()
+                        .with_properties(HashMap::from([
+                            (#field_name.to_string(), #schema_type)
+                        ]))
+                        .with_required(vec![#field_name.to_string()])
+                }
+            } else {
+                quote! {
+                    turul_mcp_protocol::tools::ToolSchema::object()
+                }
+            }
+        }
+        _ => quote! {
+            turul_mcp_protocol::tools::ToolSchema::object()
+        },
     }
 }
