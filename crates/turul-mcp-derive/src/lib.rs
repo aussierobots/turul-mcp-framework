@@ -155,9 +155,81 @@ mod tests;
 ///
 /// # Attributes
 ///
-/// - `#[tool(name = "...", description = "...")]` - Tool metadata
+/// - `#[tool(name = "...", description = "...", output = Type)]` - Tool metadata and output type
 /// - `#[param(description = "...", ...)]` - Parameter descriptions and validation
-/// - `#[output_type(StructType)]` - Specify structured output type
+///
+/// # Output Schema Generation
+///
+/// The framework automatically generates detailed output schemas:
+/// - **Primitives** (f64, String, bool): Simple wrapped schemas without requiring JsonSchema
+/// - **Self-returning tools**: Automatic struct introspection for detailed schemas
+/// - **External structs**: **MUST** have `#[derive(schemars::JsonSchema)]` for detailed schemas
+///
+/// ## JsonSchema Requirement for Custom Output Types
+///
+/// When using custom output types (structs/enums), you **MUST** derive `JsonSchema`:
+///
+/// ```rust,no_run
+/// use schemars::JsonSchema;
+/// use serde::{Serialize, Deserialize};
+/// use turul_mcp_derive::McpTool;
+/// use turul_mcp_protocol::McpResult;
+///
+/// #[derive(Serialize, Deserialize, JsonSchema)]  // ← JsonSchema required!
+/// struct MyOutput {
+///     field1: String,
+///     field2: i32,
+///
+///     // Optional fields: use skip_serializing_if to omit when None
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     field3: Option<String>,
+/// }
+///
+/// #[derive(McpTool, Clone)]
+/// #[tool(name = "my_tool", description = "Example", output = MyOutput)]
+/// struct MyTool {}
+///
+/// impl MyTool {
+///     async fn execute(&self, _session: Option<turul_mcp_server::SessionContext>) -> McpResult<MyOutput> {
+///         Ok(MyOutput { field1: "test".to_string(), field2: 42, field3: None })
+///     }
+/// }
+/// ```
+///
+/// **Without JsonSchema**, you'll get a compile error:
+/// ```text
+/// error[E0277]: the trait `schemars::JsonSchema` is not implemented for `MyOutput`
+/// ```
+///
+/// **Solution**: Add `#[derive(schemars::JsonSchema)]` to your output type.
+///
+/// ## Optional Fields Best Practice
+///
+/// For `Option<T>` fields, use `#[serde(skip_serializing_if = "Option::is_none")]` to omit
+/// the field when None instead of serializing as `null`. This prevents MCP validation errors:
+///
+/// ```rust,no_run
+/// use schemars::JsonSchema;
+/// use serde::{Serialize, Deserialize};
+///
+/// #[derive(Serialize, Deserialize, JsonSchema)]
+/// struct Output {
+///     required_field: String,
+///
+///     // ✅ CORRECT: Omit when None
+///     #[serde(skip_serializing_if = "Option::is_none")]
+///     optional_field: Option<String>,
+///
+///     // ❌ WRONG: Serializes as null, fails validation
+///     // optional_field: Option<String>,
+/// }
+/// ```
+///
+/// **Why?** The schema converter extracts type as `"string"` (not nullable) from schemars'
+/// `"type": ["string", "null"]`. When the value is `None`, omitting the field passes validation,
+/// but serializing as `null` fails because the schema expects a string.
+///
+/// **Note**: Primitive types (String, i32, f64, bool, Vec<T>) don't need JsonSchema
 ///
 /// # Example
 ///
@@ -176,12 +248,12 @@ mod tests;
 /// }
 ///
 /// impl AddTool {
-///     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-///         Ok(format!("{} + {} = {}", self.a, self.b, self.a + self.b))
+///     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<f64> {
+///         Ok(self.a + self.b)
 ///     }
 /// }
 /// ```
-#[proc_macro_derive(McpTool, attributes(tool, param, output_type))]
+#[proc_macro_derive(McpTool, attributes(tool, param))]
 pub fn derive_mcp_tool(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     tool_derive::derive_mcp_tool_impl(input)
@@ -272,7 +344,8 @@ pub fn mcp_resource(args: TokenStream, input: TokenStream) -> TokenStream {
 /// use async_trait::async_trait;
 /// use serde::{Deserialize, Serialize};
 /// use turul_mcp_server::{McpResource, McpResult, SessionContext};
-/// use turul_mcp_protocol::resources::{ResourceContent, HasResourceUri};
+/// use turul_mcp_protocol::resources::ResourceContent;
+/// use turul_mcp_builders::prelude::HasResourceUri;
 /// use serde_json::Value;
 ///
 /// #[derive(McpResource, Clone)]
@@ -462,8 +535,7 @@ pub fn derive_mcp_sampling(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::McpCompletion;
-/// use turul_mcp_protocol::completion::CompletionDefinition;
-/// use turul_mcp_protocol::prelude::HasCompletionHandling;
+/// use turul_mcp_builders::prelude::{CompletionDefinition, HasCompletionHandling};
 ///
 /// #[derive(McpCompletion)]
 /// #[completion(reference = "prompt://code_assist")]
@@ -486,7 +558,7 @@ pub fn derive_mcp_completion(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::McpLogger;
-/// use turul_mcp_protocol::logging::{HasLoggingMetadata, LoggerDefinition, HasLogLevel};
+/// use turul_mcp_builders::prelude::{HasLoggingMetadata, LoggerDefinition, HasLogLevel};
 ///
 /// #[derive(McpLogger)]
 /// #[logger(name = "app_logger", level = "info")]
@@ -509,7 +581,7 @@ pub fn derive_mcp_logger(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::McpRoot;
-/// use turul_mcp_protocol::roots::{HasRootFiltering, HasRootPermissions, RootDefinition, HasRootMetadata};
+/// use turul_mcp_builders::prelude::{HasRootFiltering, HasRootPermissions, RootDefinition, HasRootMetadata};
 ///
 /// #[derive(McpRoot)]
 /// #[root(uri = "file:///home/user/project", name = "Project Root")]
@@ -562,6 +634,7 @@ pub fn derive_mcp_notification(input: TokenStream) -> TokenStream {
 /// ```rust,no_run
 /// use turul_mcp_derive::tool;
 /// use turul_mcp_protocol::prelude::*;
+/// use turul_mcp_builders::prelude::*;
 ///
 /// let divide_tool = tool! {
 ///     name: "divide",
@@ -696,7 +769,7 @@ pub fn notification(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::completion;
-/// use turul_mcp_protocol::prelude::HasCompletionHandling;
+/// use turul_mcp_builders::prelude::HasCompletionHandling;
 ///
 /// completion! {
 ///     text_editor {
@@ -741,7 +814,7 @@ pub fn elicitation(input: TokenStream) -> TokenStream {
 ///
 /// ```rust,no_run
 /// use turul_mcp_derive::roots;
-/// use turul_mcp_protocol::prelude::{RootDefinition, HasRootMetadata, HasRootFiltering, HasRootPermissions};
+/// use turul_mcp_builders::prelude::{RootDefinition, HasRootMetadata, HasRootFiltering, HasRootPermissions};
 ///
 /// roots! {
 ///     project, "/path/to/project", name = "Project Files", read_only = false
@@ -762,6 +835,7 @@ pub fn roots(input: TokenStream) -> TokenStream {
 /// ```rust,no_run
 /// use turul_mcp_derive::logging;
 /// use turul_mcp_protocol::prelude::*;
+/// use turul_mcp_builders::prelude::*;
 ///
 /// logging! {
 ///     file_logger {
