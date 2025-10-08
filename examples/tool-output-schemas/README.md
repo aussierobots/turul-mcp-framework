@@ -1,65 +1,106 @@
 # Tool Output Schemas Example
 
-This example demonstrates using the optional `schemars` feature to auto-generate tool output schemas.
+Demonstrates automatic schema generation using `schemars` derive macros.
 
-## Usage
+## What This Example Shows
 
-**Manual Schema Approach:**
-```rust
-use turul_mcp_protocol::{ToolSchema, schema::JsonSchema};
-use std::sync::OnceLock;
-use std::collections::HashMap;
+1. **Flat Structures** - Simple output types with basic fields
+2. **Nested Objects** - Complex types with nested structs
+3. **Arrays of Objects** - Vec<T> with detailed item schemas
+4. **Optional Fields** - Proper handling of Option<T> types
 
-impl HasOutputSchema for MyTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        static SCHEMA: OnceLock<ToolSchema> = OnceLock::new();
-        Some(SCHEMA.get_or_init(|| {
-            ToolSchema {
-                schema_type: "object".to_string(),
-                properties: Some({
-                    let mut props = HashMap::new();
-                    props.insert(
-                        "result".to_string(),
-                        JsonSchema::number().with_description("Calculation result".to_string()),
-                    );
-                    props
-                }),
-                required: Some(vec!["result".to_string()]),
-                additional: HashMap::new(),
+## Running the Example
+
+```bash
+cargo run --package tool-output-schemas
+```
+
+The server provides three tools:
+- `calculator_derive` - Flat structure (value, operation)
+- `calculator_function` - Function macro example
+- `analyze_data` - Nested structure with arrays and optional fields
+
+## Output Schema Examples
+
+### Flat Structure (calculator_derive)
+
+```json
+{
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "result": {
+        "type": "object",
+        "properties": {
+          "value": { "type": "number" },
+          "operation": { "type": "string" }
+        },
+        "required": ["value", "operation"]
+      }
+    }
+  }
+}
+```
+
+### Nested Structure (analyze_data)
+
+```json
+{
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "result": {
+        "type": "object",
+        "properties": {
+          "dataset": { "type": "string" },
+          "stats": {
+            "type": "object",
+            "properties": {
+              "min": { "type": "number" },
+              "max": { "type": "number" },
+              "mean": { "type": "number" },
+              "count": { "type": "integer" }
             }
-        }))
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "timestamp": { "type": "string" },
+                "value": { "type": "number" }
+              }
+            }
+          }
+        }
+      }
     }
+  }
 }
 ```
 
-**Schemars Approach (requires `--features schemars`):**
+## Optional Fields Pattern
+
+For `Option<T>` fields, use `skip_serializing_if` to omit None values:
+
 ```rust
-use schemars::{JsonSchema, schema_for};
-use turul_mcp_builders::ToolSchemaExt;
+#[derive(Serialize, Deserialize, JsonSchema)]
+pub struct Output {
+    pub required_field: String,
 
-#[derive(Serialize, JsonSchema)]
-struct MyOutput {
-    /// Result of calculation
-    result: f64,
-}
-
-impl HasOutputSchema for MyTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        static SCHEMA: OnceLock<ToolSchema> = OnceLock::new();
-        Some(SCHEMA.get_or_init(|| {
-            let json_schema = schema_for!(MyOutput);
-            ToolSchema::from_schemars(json_schema).expect("Valid schema")
-        }))
-    }
+    // ✅ CORRECT: Omitted when None, not serialized as null
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optional_field: Option<String>,
 }
 ```
 
-## Benefits
+## Known Limitations
 
-- **Manual**: Full control, works always
-- **Schemars**: Auto-syncs with Rust types, includes doc comments
+- **HashMap/BTreeMap**: May show as generic `{type: "object"}` without value type details
+- **Complex $refs**: Unresolvable references fall back to generic object schema
+- **Deep Nesting**: Tested to 2 levels; deeper nesting may have edge cases
 
-## Limitations
+## See Also
 
-- Complex schemas with `anyOf`/`oneOf` (from `Option` types) may not convert
-- Keep output schemas simple for best results
+- [ADR-014: Schemars Schema Generation](../../docs/adr/014-schemars-schema-generation.md) - Architecture decision
+- [Schemars Integration Tests](../../crates/turul-mcp-derive/tests/schemars_integration_test.rs) - Comprehensive test coverage
