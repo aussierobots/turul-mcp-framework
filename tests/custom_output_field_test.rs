@@ -3,6 +3,7 @@
 use serde_json::json;
 use turul_mcp_derive::mcp_tool;
 use turul_mcp_server::{McpResult, McpTool};
+use turul_mcp_builders::{HasOutputSchema, ToolDefinition};
 
 #[mcp_tool(
     name = "test_custom_field",
@@ -67,7 +68,7 @@ async fn test_default_output_field_name() {
 }
 
 // Test struct for custom output field (like TileMetadata)
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 struct TileMetadata {
     pub tile_id: String,
     pub elevation: f64,
@@ -98,7 +99,7 @@ impl GetTileMetadataTool {
 
 #[tokio::test]
 async fn test_struct_custom_output_field_name() {
-    use turul_mcp_protocol::tools::{HasOutputSchema, ToolDefinition};
+    // Traits already imported at top of file
 
     let tool = GetTileMetadataTool {
         tile_id: "TILE_123".to_string(),
