@@ -35,6 +35,7 @@ bytes = { workspace = true }
 mcp-e2e-shared = { path = "shared" }
 serial_test = "3.0"
 portpicker = "0.1"
+schemars = { workspace = true }
 
 [[test]]
 name = "basic_session_test"
@@ -200,3 +201,20 @@ path = "output_field_consistency_test.rs"
 [[test]]
 name = "acronym_output_field_test"
 path = "acronym_output_field_test.rs"
+
+[[test]]
+name = "notification_payload_correctness"
+path = "notification_payload_correctness.rs"
+
+# Schemars integration tests
+[[test]]
+name = "test_schemars_derive"
+path = "test_schemars_derive.rs"
+
+[[test]]
+name = "schemars_detailed_schema_test"
+path = "schemars_detailed_schema_test.rs"
+
+[[test]]
+name = "schemars_optional_fields_test"
+path = "schemars_optional_fields_test.rs"
