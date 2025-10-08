@@ -252,6 +252,7 @@ pub fn sanitize_authorizer_field_name(field: &str) -> String {
 /// ```no_run
 /// # use lambda_http::Request;
 /// # use turul_mcp_aws_lambda::adapter::extract_authorizer_context;
+/// # let request: Request = unimplemented!();
 /// let fields = extract_authorizer_context(&request);
 /// assert_eq!(fields.get("account_id"), Some(&"acc_123".to_string()));
 /// ```

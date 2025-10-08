@@ -669,15 +669,27 @@ impl LambdaMcpServerBuilder {
     ///
     /// ```rust,no_run
     /// use std::sync::Arc;
-    /// use turul_mcp_aws_lambda::LambdaMcpServer;
+    /// use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
+    /// use turul_http_mcp_server::middleware::McpMiddleware;
+    /// # use turul_mcp_session_storage::SessionView;
+    /// # use turul_http_mcp_server::middleware::{RequestContext, SessionInjection, MiddlewareError};
+    /// # use async_trait::async_trait;
+    /// # struct AuthMiddleware;
+    /// # #[async_trait]
+    /// # impl McpMiddleware for AuthMiddleware {
+    /// #     async fn before_dispatch(&self, _: &mut RequestContext<'_>, _: Option<&dyn SessionView>, _: &mut SessionInjection) -> Result<(), MiddlewareError> { Ok(()) }
+    /// # }
+    /// # struct RateLimitMiddleware;
+    /// # #[async_trait]
+    /// # impl McpMiddleware for RateLimitMiddleware {
+    /// #     async fn before_dispatch(&self, _: &mut RequestContext<'_>, _: Option<&dyn SessionView>, _: &mut SessionInjection) -> Result<(), MiddlewareError> { Ok(()) }
+    /// # }
     ///
     /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let server = LambdaMcpServer::builder()
+    /// let builder = LambdaMcpServerBuilder::new()
     ///     .name("my-server")
-    ///     .middleware(Arc::new(AuthMiddleware::new()))
-    ///     .middleware(Arc::new(RateLimitMiddleware::new()))
-    ///     .build()
-    ///     .await?;
+    ///     .middleware(Arc::new(AuthMiddleware))
+    ///     .middleware(Arc::new(RateLimitMiddleware));
     /// # Ok(())
     /// # }
     /// ```

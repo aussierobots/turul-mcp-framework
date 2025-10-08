@@ -45,7 +45,7 @@ pub mod error_codes {
 /// # Examples
 ///
 /// ```rust,no_run
-/// use turul_mcp_middleware::{MiddlewareError, McpMiddleware, RequestContext, SessionInjection};
+/// use turul_http_mcp_server::middleware::{MiddlewareError, McpMiddleware, RequestContext, SessionInjection};
 /// use turul_mcp_session_storage::SessionView;
 /// use async_trait::async_trait;
 ///

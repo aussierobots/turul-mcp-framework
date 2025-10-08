@@ -19,7 +19,7 @@ use std::sync::Arc;
 /// # Examples
 ///
 /// ```rust,no_run
-/// use turul_mcp_middleware::{MiddlewareStack, McpMiddleware, RequestContext, SessionInjection, MiddlewareError};
+/// use turul_http_mcp_server::middleware::{MiddlewareStack, McpMiddleware, RequestContext, SessionInjection, MiddlewareError};
 /// use turul_mcp_session_storage::SessionView;
 /// use async_trait::async_trait;
 /// use std::sync::Arc;

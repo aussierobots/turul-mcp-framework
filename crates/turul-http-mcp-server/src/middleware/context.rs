@@ -10,7 +10,7 @@ use std::collections::HashMap;
 /// # Examples
 ///
 /// ```rust
-/// use turul_mcp_middleware::RequestContext;
+/// use turul_http_mcp_server::middleware::RequestContext;
 /// use serde_json::json;
 ///
 /// let mut ctx = RequestContext::new(
@@ -76,7 +76,7 @@ impl<'a> RequestContext<'a> {
     /// # Examples
     ///
     /// ```rust
-    /// use turul_mcp_middleware::RequestContext;
+    /// use turul_http_mcp_server::middleware::RequestContext;
     /// use serde_json::json;
     ///
     /// let mut ctx = RequestContext::new("tools/call", None);
@@ -101,7 +101,7 @@ impl<'a> RequestContext<'a> {
 /// # Examples
 ///
 /// ```rust
-/// use turul_mcp_middleware::SessionInjection;
+/// use turul_http_mcp_server::middleware::SessionInjection;
 /// use serde_json::json;
 ///
 /// let mut injection = SessionInjection::new();
@@ -174,7 +174,7 @@ impl SessionInjection {
 /// # Examples
 ///
 /// ```rust
-/// use turul_mcp_middleware::DispatcherResult;
+/// use turul_http_mcp_server::middleware::DispatcherResult;
 /// use serde_json::json;
 ///
 /// let mut result = DispatcherResult::Success(json!({"output": "Hello"}));
