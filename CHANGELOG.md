@@ -7,7 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.1] - 2025-10-05
+## [0.2.1] - 2025-10-08
+
+### Breaking Changes
+
+**Framework Trait Reorganization (Protocol Crate Purity):**
+- **BREAKING**: All framework traits moved from `turul-mcp-protocol` to `turul-mcp-builders::traits`
+- **BREAKING**: `HasNotificationPayload::payload()` now returns `Option<Value>` (owned) instead of `Option<&Value>` (reference)
+- **Impact**: Protocol crate is now 100% MCP spec-pure (no framework-specific code)
+- **Migration**: Update imports to use preludes:
+  ```rust
+  // Before
+  use turul_mcp_protocol::{ToolDefinition, ResourceDefinition};
+
+  // After
+  use turul_mcp_builders::prelude::*;  // or turul_mcp_server::prelude::*
+  ```
+
+### Fixed
+
+**Critical Notification Payload Regression:**
+- Fixed all notification types returning `None` for payloads (data loss bug)
+- Base Notification now properly serializes `params.other` and `_meta`
+- ProgressNotification now preserves progressToken, progress, total, message, _meta
+- ResourceUpdatedNotification now preserves uri, _meta
+- CancelledNotification now preserves requestId, reason, _meta
+- All list-changed notifications now preserve _meta fields
+- Added 18 comprehensive tests validating notification payload correctness
+
+### Changed
+
+**Framework Trait Locations:**
+- Moved 10 trait hierarchies (~1200 LOC) from protocol to builders crate
+- All protocol type implementations now in `turul-mcp-builders/src/protocol_impls.rs`
+- Derive macros updated to generate correct trait signatures
+- All examples and tests updated to use new import paths
+
+## [0.2.0] - 2025-10-05
 
 ### Added
 

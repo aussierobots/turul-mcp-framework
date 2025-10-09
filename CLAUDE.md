@@ -190,6 +190,58 @@ let tool = ToolBuilder::new("calc").execute(|args| async { /*...*/ }).build()?;
 // Level 4: Manual trait implementation
 ```
 
+### Tool Output Schemas (Optional)
+
+Tools can optionally define output schemas using two approaches:
+
+**Manual Schema (Full Control):**
+```rust
+use std::sync::OnceLock;
+use std::collections::HashMap;
+use turul_mcp_protocol::{ToolSchema, schema::JsonSchema};
+use turul_mcp_builders::HasOutputSchema;
+
+impl HasOutputSchema for MyTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        static SCHEMA: OnceLock<ToolSchema> = OnceLock::new();
+        Some(SCHEMA.get_or_init(|| {
+            ToolSchema {
+                schema_type: "object".to_string(),
+                properties: Some({
+                    let mut props = HashMap::new();
+                    props.insert(
+                        "result".to_string(),
+                        JsonSchema::number().with_description("Result".to_string()),
+                    );
+                    props
+                }),
+                required: Some(vec!["result".to_string()]),
+                additional: HashMap::new(),
+            }
+        }))
+    }
+}
+```
+
+**Schemars (Auto-sync with types):**
+```rust
+use schemars::JsonSchema;
+
+#[derive(Serialize, JsonSchema)]
+struct MyOutput { value: f64 }
+
+// Derive macro
+#[derive(McpTool)]
+#[tool(name = "calc", description = "...", output = MyOutput, schemars)]
+struct MyTool { a: f64 }
+
+// Function macro
+#[mcp_tool(name = "add", description = "...", schemars)]
+async fn add(a: f64) -> McpResult<MyOutput> { Ok(MyOutput { value: a }) }
+```
+
+**Note**: Keep schemas simple - complex `Option` types may not convert
+
 ### Basic Server
 ```rust
 use turul_mcp_server::prelude::*;
