@@ -1195,9 +1195,9 @@ pub fn generate_output_schema_auto(
         };
     }
 
-    // For complex external types, use schemars with safe converter
-    // NOTE: External output types MUST have #[derive(schemars::JsonSchema)]
-    // If you get a compile error, add JsonSchema to your output type
+    // For complex external types, generate detailed schemas using schemars
+    // REQUIRES: Output type must derive schemars::JsonSchema
+    // If the type doesn't implement JsonSchema, compilation will fail with a clear error
     quote! {
         fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
             static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
@@ -1207,7 +1207,8 @@ pub fn generate_output_schema_auto(
                 use turul_mcp_protocol::schema::JsonSchema;
 
                 // Generate detailed schema via schemars
-                // Requires: #[derive(schemars::JsonSchema)] on output type
+                // IMPORTANT: Output type MUST derive schemars::JsonSchema
+                // If you get a compile error here, add #[derive(schemars::JsonSchema)] to your output type
                 let schemars_schema = turul_mcp_builders::schemars::schema_for!(#ty);
 
                 // Convert schemars RootSchema to JSON Value

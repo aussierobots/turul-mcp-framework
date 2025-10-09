@@ -267,65 +267,45 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 use std::collections::HashMap;
                 use turul_mcp_protocol::schema::JsonSchema;
 
-                let field_schema = match value {
-                    serde_json::Value::Number(n) if n.is_f64() => JsonSchema::number(),
-                    serde_json::Value::Number(_) => JsonSchema::integer(),
-                    serde_json::Value::String(_) => JsonSchema::string(),
-                    serde_json::Value::Bool(_) => JsonSchema::boolean(),
-                    serde_json::Value::Array(_) => JsonSchema::Array {
-                        description: Some("Array output".to_string()),
-                        items: None,
-                        min_items: None,
-                        max_items: None,
-                    },
-                    serde_json::Value::Object(obj) => {
-                        // Generate detailed schema from object structure
-                        let mut properties = std::collections::HashMap::new();
-                        let mut required = Vec::new();
-
-                        for (key, value) in obj.iter() {
-                            let prop_schema = match value {
-                                serde_json::Value::String(_) => JsonSchema::string(),
-                                serde_json::Value::Number(n) if n.is_f64() => JsonSchema::number(),
-                                serde_json::Value::Number(_) => JsonSchema::integer(),
-                                serde_json::Value::Bool(_) => JsonSchema::boolean(),
-                                serde_json::Value::Array(arr) => {
-                                    // Try to determine array item type from first element
-                                    let item_type = arr.first().map(|first| match first {
-                                        serde_json::Value::String(_) => JsonSchema::string(),
-                                        serde_json::Value::Number(n) if n.is_f64() => JsonSchema::number(),
-                                        serde_json::Value::Number(_) => JsonSchema::integer(),
-                                        serde_json::Value::Bool(_) => JsonSchema::boolean(),
-                                        _ => JsonSchema::string(), // Fallback
-                                    });
-                                    JsonSchema::Array {
-                                        description: Some("Array of items".to_string()),
-                                        items: item_type.map(Box::new),
-                                        min_items: None,
-                                        max_items: None,
-                                    }
-                                },
-                                serde_json::Value::Object(_) => JsonSchema::Object {
-                                    description: Some("Nested object".to_string()),
-                                    properties: None,
-                                    required: None,
-                                    additional_properties: Some(true),
-                                },
-                                serde_json::Value::Null => continue, // Skip null values
-                            };
-                            properties.insert(key.clone(), prop_schema);
-                            required.push(key.clone());
+                fn infer_schema(value: &serde_json::Value) -> JsonSchema {
+                    match value {
+                        serde_json::Value::Number(n) if n.is_f64() => JsonSchema::number(),
+                        serde_json::Value::Number(_) => JsonSchema::integer(),
+                        serde_json::Value::String(_) => JsonSchema::string(),
+                        serde_json::Value::Bool(_) => JsonSchema::boolean(),
+                        serde_json::Value::Array(arr) => {
+                            let item_schema = arr.first().map(|item| Box::new(infer_schema(item)));
+                            JsonSchema::Array {
+                                description: Some("Array output".to_string()),
+                                items: item_schema,
+                                min_items: None,
+                                max_items: None,
+                            }
                         }
-
-                        JsonSchema::Object {
-                            description: Some("Generated from runtime object structure".to_string()),
-                            properties: Some(properties),
-                            required: Some(required),
-                            additional_properties: Some(false), // We know the exact structure
+                        serde_json::Value::Object(obj) => {
+                            let mut properties = HashMap::new();
+                            let mut required = Vec::new();
+                            for (key, value) in obj.iter() {
+                                properties.insert(key.clone(), infer_schema(value));
+                                required.push(key.clone());
+                            }
+                            JsonSchema::Object {
+                                description: Some("Generated from runtime object structure".to_string()),
+                                properties: Some(properties),
+                                required: Some(required),
+                                additional_properties: Some(false),
+                            }
                         }
-                    },
-                    serde_json::Value::Null => JsonSchema::string(), // Fallback
-                };
+                        serde_json::Value::Null => JsonSchema::Object {
+                            description: Some("JSON value".to_string()),
+                            properties: None,
+                            required: None,
+                            additional_properties: Some(true),
+                        },
+                    }
+                }
+
+                let field_schema = infer_schema(value);
 
                 turul_mcp_protocol::tools::ToolSchema::object()
                     .with_properties(HashMap::from([
