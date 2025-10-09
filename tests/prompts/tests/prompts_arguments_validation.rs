@@ -49,7 +49,7 @@ impl ValidatedTestPrompt {
 }
 
 // Required trait implementations
-use turul_mcp_protocol::prompts::{
+use turul_mcp_builders::prelude::{
     HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
     HasPromptMetadata,
 };

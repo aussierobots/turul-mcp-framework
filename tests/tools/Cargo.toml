@@ -48,6 +48,7 @@ turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
 clap.workspace = true
 async-trait.workspace = true
 uuid = { workspace = true, features = ["v7", "serde"] }
+schemars = { workspace = true }
 
 [dev-dependencies]
 serial_test = "3"

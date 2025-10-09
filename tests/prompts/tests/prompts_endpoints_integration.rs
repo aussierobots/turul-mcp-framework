@@ -34,9 +34,10 @@ impl SimpleTestPrompt {
 }
 
 // Required trait implementations
-use turul_mcp_protocol::prompts::{
+use turul_mcp_protocol::prompts::PromptArgument;
+use turul_mcp_builders::prelude::{
     HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
-    HasPromptMetadata, PromptArgument,
+    HasPromptMetadata,
 };
 use turul_mcp_server::McpPrompt;
 

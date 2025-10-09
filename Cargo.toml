@@ -51,6 +51,8 @@ members = [
   "examples/simple-postgres-session",             # Fixed API mismatches - ready to use
   "examples/simple-sqlite-session",               # Fixed API mismatches - ready to use
   "examples/stateful-server",
+  "examples/tool-output-introspection",
+  "examples/tool-output-schemas",
   "examples/tools-test-server",
   "examples/zero-config-getting-started",
 
@@ -97,6 +99,7 @@ homepage = "https://github.com/aussierobots/turul-mcp-framework"
 # Core dependencies shared across crates
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+schemars = "1.0"
 serde_yml = "0.0.12"
 thiserror = "2.0"
 async-trait = "0.1"
