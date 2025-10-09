@@ -22,6 +22,43 @@
 
 ---
 
+## ✅ P0: RESOLVED - Vec<T> Schema Documentation
+
+**Status**: ✅ RESOLVED (2025-10-09) - Test documentation clarified, not a bug
+**Resolution**: Users must specify `output = Vec<T>` attribute for Vec return types
+
+**Finding**: The "bug" was actually a missing `output` attribute in the test. The framework correctly requires users to explicitly declare their output type when it's not `Self`.
+
+**Correct Usage** (now documented in tests):
+```rust
+#[derive(McpTool)]
+#[tool(
+    name = "search_items",
+    description = "Search for items",
+    output = Vec<SearchResult>  // ← REQUIRED for Vec return types
+)]
+struct SearchTool {
+    query: String,
+    limit: usize,
+}
+```
+
+**Why This Is Correct Design**:
+1. **Type Safety**: Macros can't inspect `execute` method return types at compile time
+2. **Explicit > Implicit**: Clear declaration of what the tool returns
+3. **Consistent Pattern**: All custom output types require the `output` attribute
+
+**Tests Updated**:
+- ✅ `tests/mcp_vec_result_schema_test.rs` - Now has `output = Vec<SearchResult>`
+- ✅ All 3 tests passing (schema generation, actual return value, validation)
+- ✅ Documentation clarified in test file header
+
+**Framework Behavior** (working as designed):
+- With `output = Vec<T>`: Generates array schema with detailed item type
+- Without `output`: Falls back to Self schema (tool's input parameters)
+
+---
+
 ## 🎯 P0: Schemars Coverage Gaps
 
 **Status**: ✅ COMPLETE (2025-10-09)
