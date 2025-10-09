@@ -2,12 +2,13 @@
 ///
 /// Bug: When output = Type is specified without explicit output_field,
 /// the schema would use camelCase (e.g., "locationLLH") but runtime would use "output"
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use turul_mcp_derive::McpTool;
 use turul_mcp_builders::prelude::HasOutputSchema;
 use turul_mcp_server::McpTool as McpToolTrait;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 struct LocationData {
     latitude: f64,
     longitude: f64,

@@ -7,14 +7,15 @@
 //! CRITICAL: These tests should FAIL until the bugs are fixed.
 //! If they pass, the bugs still exist!
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::tools::ToolDefinition;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_server::{McpResult, McpTool, SessionContext};
 
 /// This struct reproduces the exact CountAnnouncements scenario
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, JsonSchema)]
 struct CountResult {
     count: u32,
 }
