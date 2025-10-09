@@ -11,6 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Breaking Changes
 
+**Schemars Integration (Detailed Schema Generation):**
+- **BREAKING**: Tool output types MUST now derive `schemars::JsonSchema`
+- **Impact**: Tools with custom output types generate detailed schemas with full property information
+- **Migration**: Add `#[derive(JsonSchema)]` to all tool output types:
+  ```rust
+  use schemars::JsonSchema;
+
+  #[derive(Serialize, Deserialize, JsonSchema)]  // Added JsonSchema
+  struct MyOutput {
+      result: f64,
+      message: String,
+  }
+  ```
+- **Benefit**: All tools now provide detailed schemas in `tools/list` with property names, types, and descriptions
+- **Note**: `schemars` is already a workspace dependency - no Cargo.toml changes needed
+
 **Framework Trait Reorganization (Protocol Crate Purity):**
 - **BREAKING**: All framework traits moved from `turul-mcp-protocol` to `turul-mcp-builders::traits`
 - **BREAKING**: `HasNotificationPayload::payload()` now returns `Option<Value>` (owned) instead of `Option<&Value>` (reference)
