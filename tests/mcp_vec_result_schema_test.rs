@@ -1,14 +1,23 @@
-//! Test for Vec<T> return type schema generation bug
+//! Test for Vec<T> return type schema generation
 //!
-//! **Issue**: Tools returning Vec<T> generate incorrect schemas:
-//! - Current: Wraps in object with "output" field containing object type
-//! - Expected: Should be array type at top level or correctly typed array in output field
+//! **Requirement**: Tools returning Vec<T> MUST specify `output = Vec<T>` in the #[tool] attribute.
+//! Without this, the macro cannot know the return type and will default to generating a schema
+//! based on the tool's input parameters (Self).
 //!
-//! **Root Cause**: tool_derive.rs always wraps return values in ToolSchema::object()
-//! even when the actual return type is Vec<T> (array)
+//! **Correct Usage**:
+//! ```rust
+//! #[derive(McpTool)]
+//! #[tool(
+//!     name = "search",
+//!     description = "Search for items",
+//!     output = Vec<SearchResult>  // ← REQUIRED for Vec return types
+//! )]
+//! struct SearchTool { ... }
+//! ```
 //!
-//! **Impact**: FastMCP and MCP Inspector schema validation rejects valid array responses
+//! **Impact**: FastMCP and MCP Inspector require array schemas for array responses
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use turul_mcp_builders::prelude::*;
 use turul_mcp_derive::McpTool;
@@ -16,18 +25,19 @@ use turul_mcp_protocol::McpResult;
 use turul_mcp_server::{McpTool as McpToolTrait, SessionContext};
 
 /// Test struct for array item
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 struct SearchResult {
     id: String,
     title: String,
     score: f64,
 }
 
-/// Tool that returns Vec<SearchResult> - this causes schema validation issues
+/// Tool that returns Vec<SearchResult> - must specify output type for correct schema
 #[derive(Debug, Clone, Default, McpTool)]
 #[tool(
     name = "search_items",
-    description = "Search for items and return array of results"
+    description = "Search for items and return array of results",
+    output = Vec<SearchResult>
 )]
 struct SearchTool {
     query: String,
