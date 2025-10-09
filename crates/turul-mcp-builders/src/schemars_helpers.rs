@@ -162,6 +162,7 @@ pub fn convert_value_to_json_schema_with_defs(
         });
 
     let schema_type = schema_type.as_deref();
+    // Note: Unknown schema types fall back to generic object
 
     // Convert based on type
     match schema_type {
