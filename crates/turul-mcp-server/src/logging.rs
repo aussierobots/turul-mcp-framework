@@ -108,7 +108,7 @@ pub fn logger_to_notification(
 mod tests {
     use super::*;
     use serde_json::json;
-    use turul_mcp_builders::prelude::*;  // HasLoggingMetadata, HasLogLevel, etc.
+      // HasLoggingMetadata, HasLogLevel, etc.
 
     struct TestLogger {
         logger_name: String,

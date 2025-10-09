@@ -21,8 +21,9 @@ use turul_mcp_server::{McpResult, SessionContext};
 
 /// Simple echo tool that returns whatever message is sent to it
 #[derive(McpTool, Clone, Default)]
-#[tool(name = "echo", description = "Echo back the provided message")]
-#[output_type(String)]
+#[tool(name = "echo", description = "Echo back the provided message",
+    output = String
+)]
 struct EchoTool {
     #[param(description = "Message to echo back")]
     message: String,

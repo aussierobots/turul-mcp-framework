@@ -146,7 +146,7 @@ pub fn notification_to_protocol(
 mod tests {
     use super::*;
     use serde_json::json;
-    use turul_mcp_builders::prelude::*;  // HasNotificationMetadata, etc.
+      // HasNotificationMetadata, etc.
 
     struct TestNotification {
         method: String,
@@ -166,8 +166,8 @@ mod tests {
     }
 
     impl HasNotificationPayload for TestNotification {
-        fn payload(&self) -> Option<&Value> {
-            self.payload.as_ref()
+        fn payload(&self) -> Option<Value> {
+            self.payload.clone()
         }
     }
 

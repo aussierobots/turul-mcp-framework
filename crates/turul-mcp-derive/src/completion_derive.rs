@@ -18,7 +18,7 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_protocol::completion::HasCompletionMetadata for #struct_name {
+        impl turul_mcp_builders::HasCompletionMetadata for #struct_name {
             fn method(&self) -> &str {
                 "completion/complete"
             }
@@ -37,7 +37,7 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::completion::HasCompletionContext for #struct_name {
+        impl turul_mcp_builders::HasCompletionContext for #struct_name {
             fn argument(&self) -> &turul_mcp_protocol::completion::CompleteArgument {
                 use std::sync::LazyLock;
                 static ARGUMENT: LazyLock<turul_mcp_protocol::completion::CompleteArgument> = LazyLock::new(|| {
@@ -52,7 +52,7 @@ pub fn derive_mcp_completion_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::completion::HasCompletionHandling for #struct_name {
+        impl turul_mcp_builders::HasCompletionHandling for #struct_name {
             fn validate_request(&self, _request: &turul_mcp_protocol::completion::CompleteRequest) -> Result<(), String> {
                 Ok(())
             }

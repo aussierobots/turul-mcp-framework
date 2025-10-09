@@ -144,7 +144,7 @@ impl HasNotificationMetadata for DynamicNotification {
 }
 
 impl HasNotificationPayload for DynamicNotification {
-    fn payload(&self) -> Option<&Value> {
+    fn payload(&self) -> Option<Value> {
         // Convert params to a single Value if needed
         None // For simplicity, custom payloads can be added via trait extension
     }

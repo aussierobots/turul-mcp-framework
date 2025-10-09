@@ -58,3 +58,6 @@ jsonschema = "0.17"
 
 # Math operations
 num-bigint = "0.4"
+
+# JSON Schema generation
+schemars = { workspace = true }

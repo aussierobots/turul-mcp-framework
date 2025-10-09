@@ -23,9 +23,11 @@ async-trait.workspace = true
 # Internal dependencies
 turul-mcp-protocol.workspace = true
 turul-mcp-protocol-2025-06-18.workspace = true
+schemars.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 async-trait.workspace = true
 tracing-test = { workspace = true }
 turul-mcp-server = { workspace = true }
+turul-mcp-builders = { workspace = true }

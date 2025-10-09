@@ -32,7 +32,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::roots::HasRootMetadata for #struct_name {
+        impl turul_mcp_builders::HasRootMetadata for #struct_name {
             fn uri(&self) -> &str {
                 Self::ROOT_URI
             }
@@ -47,7 +47,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::roots::HasRootPermissions for #struct_name {
+        impl turul_mcp_builders::HasRootPermissions for #struct_name {
             fn can_read(&self, _path: &str) -> bool {
                 true
             }
@@ -62,7 +62,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::roots::HasRootFiltering for #struct_name {
+        impl turul_mcp_builders::HasRootFiltering for #struct_name {
             fn allowed_extensions(&self) -> Option<&[String]> {
                 None // Allow all extensions by default
             }
@@ -95,7 +95,7 @@ pub fn derive_mcp_root_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::roots::HasRootAnnotations for #struct_name {
+        impl turul_mcp_builders::HasRootAnnotations for #struct_name {
             fn annotations(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
                 None
             }

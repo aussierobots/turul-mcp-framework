@@ -71,7 +71,7 @@ impl HasNotificationMetadata for DevAlertNotification {
 }
 
 impl HasNotificationPayload for DevAlertNotification {
-    fn payload(&self) -> Option<&Value> {
+    fn payload(&self) -> Option<Value> {
         None // Dynamic payloads
     }
 }
@@ -244,7 +244,7 @@ impl HasNotificationMetadata for CiCdNotification {
 }
 
 impl HasNotificationPayload for CiCdNotification {
-    fn payload(&self) -> Option<&Value> {
+    fn payload(&self) -> Option<Value> {
         None
     }
 }
@@ -337,7 +337,7 @@ impl HasNotificationMetadata for MonitoringNotification {
 }
 
 impl HasNotificationPayload for MonitoringNotification {
-    fn payload(&self) -> Option<&Value> {
+    fn payload(&self) -> Option<Value> {
         None
     }
 }

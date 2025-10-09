@@ -252,37 +252,37 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             }
 
             // Implement fine-grained traits
-            impl turul_mcp_protocol::tools::HasBaseMetadata for #tool_name_ident {
+            impl turul_mcp_builders::HasBaseMetadata for #tool_name_ident {
                 fn name(&self) -> &str {
                     #tool_name
                 }
             }
 
-            impl turul_mcp_protocol::tools::HasDescription for #tool_name_ident {
+            impl turul_mcp_builders::HasDescription for #tool_name_ident {
                 fn description(&self) -> Option<&str> {
                     Some(#tool_description)
                 }
             }
 
-            impl turul_mcp_protocol::tools::HasInputSchema for #tool_name_ident {
+            impl turul_mcp_builders::HasInputSchema for #tool_name_ident {
                 fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
                     &self.input_schema
                 }
             }
 
-            impl turul_mcp_protocol::tools::HasOutputSchema for #tool_name_ident {
+            impl turul_mcp_builders::HasOutputSchema for #tool_name_ident {
                 fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> {
                     None
                 }
             }
 
-            impl turul_mcp_protocol::tools::HasAnnotations for #tool_name_ident {
+            impl turul_mcp_builders::HasAnnotations for #tool_name_ident {
                 fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
                     None
                 }
             }
 
-            impl turul_mcp_protocol::tools::HasToolMeta for #tool_name_ident {
+            impl turul_mcp_builders::HasToolMeta for #tool_name_ident {
                 fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
                     None
                 }

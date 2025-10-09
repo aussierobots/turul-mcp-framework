@@ -57,7 +57,7 @@ use turul_mcp_server::prelude::*;
 // ===== BASIC TOOLS (Core functionality testing) =====
 
 /// Result type for calculator operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct CalculatorResult {
     result: f64,
     operation: String,
@@ -87,9 +87,9 @@ impl JsonSchemaGenerator for CalculatorResult {
 #[derive(McpTool, Clone)]
 #[tool(
     name = "calculator",
-    description = "Performs basic arithmetic operations (add, subtract, multiply, divide) with validation"
+    description = "Performs basic arithmetic operations (add, subtract, multiply, divide) with validation",
+    output = CalculatorResult
 )]
-#[output_type(CalculatorResult)]
 pub struct CalculatorTool {
     /// The operation to perform
     #[param(description = "Operation: add, subtract, multiply, divide")]
@@ -134,7 +134,7 @@ impl CalculatorTool {
 }
 
 /// Result type for string processing operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct StringResult {
     result: String,
     operation: String,
@@ -163,9 +163,9 @@ impl JsonSchemaGenerator for StringResult {
 #[derive(McpTool, Clone)]
 #[tool(
     name = "string_processor",
-    description = "Processes text with operations like uppercase, lowercase, reverse, length"
+    description = "Processes text with operations like uppercase, lowercase, reverse, length",
+    output = StringResult
 )]
-#[output_type(StringResult)]
 pub struct StringProcessorTool {
     /// Text to process
     #[param(description = "Input text to process")]
@@ -210,7 +210,7 @@ impl StringProcessorTool {
 }
 
 /// Result type for data transformation operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct DataResult {
     result: serde_json::Value,
     operation: String,
@@ -239,9 +239,9 @@ impl JsonSchemaGenerator for DataResult {
 #[derive(McpTool, Clone)]
 #[tool(
     name = "data_transformer",
-    description = "Transforms JSON data with operations like extract, merge, validate"
+    description = "Transforms JSON data with operations like extract, merge, validate",
+    output = DataResult
 )]
-#[output_type(DataResult)]
 pub struct DataTransformerTool {
     /// JSON data to transform
     #[param(description = "JSON data to transform")]
@@ -317,7 +317,7 @@ impl DataTransformerTool {
 }
 
 /// Result type for session counter operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct CounterResult {
     session_id: String,
     operation: String,
@@ -348,9 +348,9 @@ impl JsonSchemaGenerator for CounterResult {
 #[derive(McpTool, Clone)]
 #[tool(
     name = "session_counter",
-    description = "Maintains a counter per session, demonstrating proper SessionStorage integration"
+    description = "Maintains a counter per session, demonstrating proper SessionStorage integration",
+    output = CounterResult
 )]
-#[output_type(CounterResult)]
 pub struct SessionCounterTool {
     /// Operation to perform on counter
     #[param(description = "Operation: increment, decrement, get, reset")]
@@ -415,7 +415,7 @@ impl SessionCounterTool {
 }
 
 /// Result type for progress tracking operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct ProgressResult {
     operation: String,
     duration: f64,
@@ -449,9 +449,9 @@ impl JsonSchemaGenerator for ProgressResult {
 #[derive(McpTool, Clone)]
 #[tool(
     name = "progress_tracker",
-    description = "Simulates long-running operation with progress notifications"
+    description = "Simulates long-running operation with progress notifications",
+    output = ProgressResult
 )]
-#[output_type(ProgressResult)]
 pub struct ProgressTrackerTool {
     /// Duration in seconds for the operation
     #[param(description = "Duration of operation in seconds")]
@@ -512,7 +512,7 @@ impl ProgressTrackerTool {
 }
 
 /// Result type for error generator operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct ErrorResult {
     message: String,
 }
@@ -532,9 +532,9 @@ impl JsonSchemaGenerator for ErrorResult {
 #[derive(McpTool, Clone)]
 #[tool(
     name = "error_generator",
-    description = "Generates specific types of errors for testing error handling"
+    description = "Generates specific types of errors for testing error handling",
+    output = ErrorResult
 )]
-#[output_type(ErrorResult)]
 pub struct ErrorGeneratorTool {
     /// Type of error to generate
     #[param(description = "Error type: invalid_params, tool_execution, timeout, resource_error")]
@@ -572,7 +572,7 @@ impl ErrorGeneratorTool {
 }
 
 /// Result type for parameter validator operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct ValidationResult {
     validation_result: String,
     email: String,
@@ -608,9 +608,9 @@ impl JsonSchemaGenerator for ValidationResult {
 #[derive(McpTool, Clone)]
 #[tool(
     name = "parameter_validator",
-    description = "Tests complex parameter validation scenarios"
+    description = "Tests complex parameter validation scenarios",
+    output = ValidationResult
 )]
-#[output_type(ValidationResult)]
 pub struct ParameterValidatorTool {
     /// Email address to validate
     #[param(description = "Email address")]
@@ -770,7 +770,7 @@ impl McpTool for LegacyCalculatorTool {
 use turul_mcp_derive::mcp_tool;
 
 /// Word count result for MCP compliance testing
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct WordCountResult {
     word_count: u32,
     character_count: u32,
@@ -821,7 +821,7 @@ async fn custom_calculator(
 
 // ===== BUG REPRODUCTION TOOLS =====
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct CountAnnouncementsResult {
     pub count: u32,
 }
@@ -850,7 +850,7 @@ impl CountAnnouncementsTool {
 }
 
 /// Result type for simple counting
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct CountResult {
     pub count: u32,
 }

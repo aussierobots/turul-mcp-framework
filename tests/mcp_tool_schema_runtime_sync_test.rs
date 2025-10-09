@@ -13,12 +13,12 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use turul_mcp_derive::{McpTool, mcp_tool};
-use turul_mcp_protocol::tools::{HasOutputSchema, ToolDefinition};
+use turul_mcp_builders::prelude::{HasOutputSchema, ToolDefinition};
 use turul_mcp_server::{McpResult, McpTool, SessionContext};
 
 /// Test struct that simulates the CountAnnouncements scenario
 /// This should demonstrate the schema/runtime mismatch bug
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct CountAnnouncements {
     pub message: String,
     pub count: u32,

@@ -421,7 +421,7 @@ impl LogLevel {
 mod tests {
     use super::*;
     use serde_json::json;
-    // LoggerDefinition now in crate::traits
+    use crate::traits::LoggerDefinition;
 
     #[test]
     fn test_logging_builder_basic() {

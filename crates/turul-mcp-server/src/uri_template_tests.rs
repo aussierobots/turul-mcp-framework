@@ -2,8 +2,8 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{McpResource, McpResult, McpServer, SessionContext};
-    use crate::handlers::{McpHandler, ResourcesReadHandler};
+    use crate::{McpResult, McpServer};
+    use crate::handlers::McpHandler;
     use crate::uri_template::{UriTemplate, VariableValidator};
     use async_trait::async_trait;
     use serde_json::{Value, json};

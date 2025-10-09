@@ -93,7 +93,7 @@ mod tests {
     use turul_mcp_protocol::completion::{
         CompleteArgument, CompletionReference, CompletionResult,
     };
-    use turul_mcp_builders::prelude::*;  // HasCompletionContext, HasCompletionHandling, etc.
+      // HasCompletionContext, HasCompletionHandling, etc.
 
     struct TestCompletion {
         reference: CompletionReference,

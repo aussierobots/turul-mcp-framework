@@ -31,7 +31,7 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_protocol::logging::HasLoggingMetadata for #struct_name {
+        impl turul_mcp_builders::HasLoggingMetadata for #struct_name {
             fn method(&self) -> &str {
                 "notifications/message"
             }
@@ -42,7 +42,7 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::logging::HasLogLevel for #struct_name {
+        impl turul_mcp_builders::HasLogLevel for #struct_name {
             fn level(&self) -> turul_mcp_protocol::logging::LoggingLevel {
                 #logging_level
             }
@@ -53,7 +53,7 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::logging::HasLogFormat for #struct_name {
+        impl turul_mcp_builders::HasLogFormat for #struct_name {
             fn data(&self) -> &serde_json::Value {
                 use std::sync::LazyLock;
                 static DEFAULT_DATA: LazyLock<serde_json::Value> = LazyLock::new(|| {
@@ -78,7 +78,7 @@ pub fn derive_mcp_logger_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::logging::HasLogTransport for #struct_name {
+        impl turul_mcp_builders::HasLogTransport for #struct_name {
             fn should_deliver(&self, level: turul_mcp_protocol::logging::LoggingLevel) -> bool {
                 self.should_log(level)
             }

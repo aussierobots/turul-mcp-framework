@@ -23,8 +23,9 @@ pub struct CalculationMetadata {
 
 // Calculator tool that returns a struct
 #[derive(McpTool, Clone)]
-#[tool(name = "calculator_struct", description = "Advanced calculator that returns structured calculation results")]
-#[output_type(CalculationResult)]
+#[tool(name = "calculator_struct", description = "Advanced calculator that returns structured calculation results",
+    output = CalculationResult
+)]
 struct CalculatorStructTool {
     #[param(description = "First number")]
     a: f64,
@@ -90,8 +91,9 @@ pub struct StatisticsResult {
 }
 
 #[derive(McpTool, Clone)]
-#[tool(name = "statistics_calculator", description = "Calculate comprehensive statistics for a list of numbers")]
-#[output_type(StatisticsResult)]
+#[tool(name = "statistics_calculator", description = "Calculate comprehensive statistics for a list of numbers",
+    output = StatisticsResult
+)]
 struct StatisticsCalculatorTool {
     #[param(description = "List of numbers to analyze")]
     numbers: Vec<f64>,
@@ -163,8 +165,9 @@ pub struct QuadraticProperties {
 }
 
 #[derive(McpTool, Clone)]
-#[tool(name = "quadratic_solver", description = "Solve quadratic equations and provide comprehensive analysis")]
-#[output_type(QuadraticResult)]
+#[tool(name = "quadratic_solver", description = "Solve quadratic equations and provide comprehensive analysis",
+    output = QuadraticResult
+)]
 struct QuadraticSolverTool {
     #[param(description = "Coefficient a in ax² + bx + c = 0")]
     a: f64,

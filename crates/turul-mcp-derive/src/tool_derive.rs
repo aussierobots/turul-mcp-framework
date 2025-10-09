@@ -6,7 +6,7 @@ use syn::{Data, DeriveInput, Fields, Result};
 
 use crate::utils::{
     determine_output_field_name, extract_param_meta, extract_tool_meta,
-    generate_enhanced_output_schema, generate_param_extraction, type_to_schema,
+    generate_output_schema_auto, generate_param_extraction, type_to_schema,
 };
 
 /// Auto-determine tool name from struct name (ZERO CONFIGURATION!)
@@ -160,21 +160,15 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let custom_field_name_tokens = quote! { Some(#runtime_field_name) };
 
-    // Generate enhanced output schema with struct property introspection
+    // Generate output schema with automatic schemars detection
     let output_schema_tokens = if let Some(ref output_type) = tool_meta.output_type {
-        // User specified output type - generate enhanced schema with same field name
-        generate_enhanced_output_schema(output_type, &runtime_field_name, Some(&input))
+        // User specified output type - use auto-detection (schemars if available, else introspection)
+        generate_output_schema_auto(output_type, &runtime_field_name, Some(&input))
     } else {
-        // Zero-config case - generate type-aware schema using heuristics with same field name
-        let struct_name_str = name.to_string();
-        quote! {
-            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-                static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
-                Some(OUTPUT_SCHEMA.get_or_init(|| {
-                    Self::generate_heuristic_schema(#runtime_field_name, #struct_name_str)
-                }))
-            }
-        }
+        // Zero-config case - treat as Self for introspection
+        // This allows tools to return Self and get detailed schemas automatically
+        let self_type: syn::Type = syn::parse_quote!(Self);
+        generate_output_schema_auto(&self_type, &runtime_field_name, Some(&input))
     };
 
     let expanded = quote! {

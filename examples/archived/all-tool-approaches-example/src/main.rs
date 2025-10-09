@@ -23,8 +23,9 @@ use std::collections::HashMap;
 // Cons: More boilerplate for simple tools
 
 #[derive(McpTool, Clone)]
-#[tool(name = "approach1_multiply", description = "Multiply two numbers using derive macro")]
-#[output_type(f64)]
+#[tool(name = "approach1_multiply", description = "Multiply two numbers using derive macro",
+    output = f64
+)]
 struct MultiplyTool {
     #[param(description = "First number")]
     a: f64,

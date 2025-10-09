@@ -71,7 +71,7 @@ pub fn sampling_to_params(
 mod tests {
     use super::*;
     use turul_mcp_protocol::sampling::SamplingMessage;
-    use turul_mcp_builders::prelude::*;  // HasSamplingConfig, HasSamplingContext, etc.
+      // HasSamplingConfig, HasSamplingContext, etc.
 
     struct TestSampling {
         messages: Vec<SamplingMessage>,

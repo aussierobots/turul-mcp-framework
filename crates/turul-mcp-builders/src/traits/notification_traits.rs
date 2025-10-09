@@ -23,8 +23,8 @@ pub trait HasNotificationMetadata {
 
 /// Trait for notification payload and data structure
 pub trait HasNotificationPayload {
-    /// Get the notification payload data
-    fn payload(&self) -> Option<&Value> {
+    /// Get the notification payload data (owned Value for computed serialization)
+    fn payload(&self) -> Option<Value> {
         None
     }
 
@@ -32,7 +32,7 @@ pub trait HasNotificationPayload {
     fn serialize_payload(&self) -> Result<String, String> {
         match self.payload() {
             Some(data) => {
-                serde_json::to_string(data).map_err(|e| format!("Serialization error: {}", e))
+                serde_json::to_string(&data).map_err(|e| format!("Serialization error: {}", e))
             }
             None => Ok("{}".to_string()),
         }
@@ -111,8 +111,8 @@ pub trait HasNotificationRules {
 /// }
 ///
 /// impl HasNotificationPayload for FileChangeNotification {
-///     fn payload(&self) -> Option<&Value> {
-///         Some(&self.payload_data)
+///     fn payload(&self) -> Option<Value> {
+///         Some(self.payload_data.clone())
 ///     }
 /// }
 ///

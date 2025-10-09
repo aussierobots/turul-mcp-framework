@@ -5,8 +5,7 @@ use quote::quote;
 use syn::{FnArg, ItemFn, Lit, Meta, Pat, Result, Token, punctuated::Punctuated};
 
 use crate::utils::{
-    extract_param_meta, generate_output_schema_for_return_type_with_field,
-    generate_param_extraction, type_to_schema,
+    extract_param_meta, generate_output_schema_auto, generate_param_extraction, type_to_schema,
 };
 
 pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result<TokenStream> {
@@ -69,17 +68,19 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         fn_name.span(),
     );
 
-    // Analyze return type for output schema generation
+    // Analyze return type for output schema generation with automatic schemars detection
     let output_schema_tokens = match return_type {
-        syn::ReturnType::Type(_, ty) => generate_output_schema_for_return_type_with_field(
-            ty,
-            &output_field_name,
-        )
-        .unwrap_or_else(|| {
-            quote! {
-                fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> { None }
-            }
-        }),
+        syn::ReturnType::Type(_, ty) => {
+            // Extract inner type from Result<T, E>
+            let schema_type = if let Some(inner_type) = extract_result_ok_type(ty) {
+                inner_type
+            } else {
+                ty.as_ref()
+            };
+
+            // Use automatic detection (will try schemars if feature enabled, else introspection)
+            generate_output_schema_auto_for_function(schema_type, &output_field_name)
+        }
         _ => quote! {
             fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> { None }
         },
@@ -238,7 +239,11 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                             // Wrap in {field_name: value} to match generated schema
                             serde_json::json!({#output_field_name: result})
                         } else {
-                            serde_json::to_value(&result).unwrap_or_else(|_| serde_json::json!(result.to_string()))
+                            // No schema - directly serialize the result
+                            serde_json::to_value(&result)
+                                .unwrap_or_else(|e| serde_json::json!({
+                                    "error": format!("Failed to serialize result: {}", e)
+                                }))
                         };
 
                         // Use smart response builder with automatic structured content
@@ -308,6 +313,28 @@ fn is_session_context_type(field_type: &syn::Type) -> bool {
         }
         _ => false,
     }
+}
+
+/// Extract the Ok type from Result<T, E> or McpResult<T>
+fn extract_result_ok_type(ty: &syn::Type) -> Option<&syn::Type> {
+    if let syn::Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+    {
+        if segment.ident == "Result" || segment.ident == "McpResult" {
+            if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+                && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
+            {
+                return Some(inner_type);
+            }
+        }
+    }
+    None
+}
+
+/// Generate output schema for function macros with automatic schemars detection
+fn generate_output_schema_auto_for_function(ty: &syn::Type, field_name: &str) -> TokenStream {
+    // Use the same auto-detection, but without DeriveInput (function macros don't have it)
+    generate_output_schema_auto(ty, field_name, None)
 }
 
 #[cfg(test)]

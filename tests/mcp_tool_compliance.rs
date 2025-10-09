@@ -15,8 +15,9 @@ mod tests {
     use turul_mcp_derive::mcp_tool;
     use turul_mcp_protocol::{
         McpResult, ToolResult,
-        tools::{CallToolResult, HasOutputSchema, ToolDefinition, ToolSchema},
+        tools::CallToolResult,
     };
+    use turul_mcp_builders::prelude::{HasOutputSchema, ToolDefinition, ToolSchema};
     use turul_mcp_server::{McpTool, SessionContext};
 
     /// Test tool that claims to have an output schema but doesn't provide structured content
@@ -40,7 +41,7 @@ mod tests {
         }
     }
 
-    impl turul_mcp_protocol::tools::HasBaseMetadata for NonCompliantCountTool {
+    impl turul_mcp_builders::prelude::HasBaseMetadata for NonCompliantCountTool {
         fn name(&self) -> &str {
             "count_words"
         }
@@ -49,13 +50,13 @@ mod tests {
         }
     }
 
-    impl turul_mcp_protocol::tools::HasDescription for NonCompliantCountTool {
+    impl turul_mcp_builders::prelude::HasDescription for NonCompliantCountTool {
         fn description(&self) -> Option<&str> {
             Some("Count words in text")
         }
     }
 
-    impl turul_mcp_protocol::tools::HasInputSchema for NonCompliantCountTool {
+    impl turul_mcp_builders::prelude::HasInputSchema for NonCompliantCountTool {
         fn input_schema(&self) -> &ToolSchema {
             // Simple input schema - not the issue
             static SCHEMA: std::sync::LazyLock<ToolSchema> = std::sync::LazyLock::new(|| {
@@ -90,13 +91,13 @@ mod tests {
         }
     }
 
-    impl turul_mcp_protocol::tools::HasAnnotations for NonCompliantCountTool {
+    impl turul_mcp_builders::prelude::HasAnnotations for NonCompliantCountTool {
         fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
             None
         }
     }
 
-    impl turul_mcp_protocol::tools::HasToolMeta for NonCompliantCountTool {
+    impl turul_mcp_builders::prelude::HasToolMeta for NonCompliantCountTool {
         fn tool_meta(&self) -> Option<&std::collections::HashMap<String, Value>> {
             None
         }
@@ -128,7 +129,7 @@ mod tests {
         }
     }
 
-    impl turul_mcp_protocol::tools::HasBaseMetadata for CompliantCountTool {
+    impl turul_mcp_builders::prelude::HasBaseMetadata for CompliantCountTool {
         fn name(&self) -> &str {
             "compliant_count_words"
         }
@@ -137,13 +138,13 @@ mod tests {
         }
     }
 
-    impl turul_mcp_protocol::tools::HasDescription for CompliantCountTool {
+    impl turul_mcp_builders::prelude::HasDescription for CompliantCountTool {
         fn description(&self) -> Option<&str> {
             Some("Count words in text (MCP compliant)")
         }
     }
 
-    impl turul_mcp_protocol::tools::HasInputSchema for CompliantCountTool {
+    impl turul_mcp_builders::prelude::HasInputSchema for CompliantCountTool {
         fn input_schema(&self) -> &ToolSchema {
             static SCHEMA: std::sync::LazyLock<ToolSchema> = std::sync::LazyLock::new(|| {
                 ToolSchema::object()
@@ -176,13 +177,13 @@ mod tests {
         }
     }
 
-    impl turul_mcp_protocol::tools::HasAnnotations for CompliantCountTool {
+    impl turul_mcp_builders::prelude::HasAnnotations for CompliantCountTool {
         fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
             None
         }
     }
 
-    impl turul_mcp_protocol::tools::HasToolMeta for CompliantCountTool {
+    impl turul_mcp_builders::prelude::HasToolMeta for CompliantCountTool {
         fn tool_meta(&self) -> Option<&std::collections::HashMap<String, Value>> {
             None
         }
@@ -273,7 +274,7 @@ mod tests {
             }
         }
 
-        impl turul_mcp_protocol::tools::HasBaseMetadata for SimpleTextTool {
+        impl turul_mcp_builders::prelude::HasBaseMetadata for SimpleTextTool {
             fn name(&self) -> &str {
                 "simple_text"
             }
@@ -282,13 +283,13 @@ mod tests {
             }
         }
 
-        impl turul_mcp_protocol::tools::HasDescription for SimpleTextTool {
+        impl turul_mcp_builders::prelude::HasDescription for SimpleTextTool {
             fn description(&self) -> Option<&str> {
                 Some("Simple text tool")
             }
         }
 
-        impl turul_mcp_protocol::tools::HasInputSchema for SimpleTextTool {
+        impl turul_mcp_builders::prelude::HasInputSchema for SimpleTextTool {
             fn input_schema(&self) -> &ToolSchema {
                 static SCHEMA: std::sync::LazyLock<ToolSchema> =
                     std::sync::LazyLock::new(ToolSchema::object);
@@ -302,13 +303,13 @@ mod tests {
             }
         }
 
-        impl turul_mcp_protocol::tools::HasAnnotations for SimpleTextTool {
+        impl turul_mcp_builders::prelude::HasAnnotations for SimpleTextTool {
             fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
                 None
             }
         }
 
-        impl turul_mcp_protocol::tools::HasToolMeta for SimpleTextTool {
+        impl turul_mcp_builders::prelude::HasToolMeta for SimpleTextTool {
             fn tool_meta(&self) -> Option<&std::collections::HashMap<String, Value>> {
                 None
             }
@@ -421,8 +422,9 @@ mod tests {
 
         // Test derive macro with custom output field
         use serde::{Deserialize, Serialize};
+        use schemars::JsonSchema;
 
-        #[derive(Clone, Serialize, Deserialize)]
+        #[derive(Clone, Serialize, Deserialize, JsonSchema)]
         struct CountResult {
             word_count: u32,
             message: String,

@@ -2,7 +2,7 @@
 
 use serde_json::json;
 use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::tools::{HasBaseMetadata, HasOutputSchema};
+use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasOutputSchema, etc.
 use turul_mcp_server::{McpResult, McpTool as McpToolTrait, SessionContext};
 
 /// Test tool returning f64 (number)
