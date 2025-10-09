@@ -146,6 +146,9 @@ pub mod tool;
 pub mod schemars_helpers;
 pub use schemars_helpers::{ToolSchemaExt, convert_value_to_json_schema, convert_value_to_json_schema_with_defs};
 
+// Schema provider with automatic JsonSchema detection
+// schema_provider module removed - schemars detection now happens directly in derive macros
+
 // Re-export schemars for use in generated code
 // This ensures schemars::schema_for!() works in user code without requiring
 // users to add schemars as an explicit dependency
