@@ -190,6 +190,38 @@ let tool = ToolBuilder::new("calc").execute(|args| async { /*...*/ }).build()?;
 // Level 4: Manual trait implementation
 ```
 
+### Output Types and Schemas
+
+**IMPORTANT**: Tools with custom output types (including Vec<T>) MUST specify the `output` attribute:
+
+```rust
+// ✅ CORRECT - Specify output type for Vec, custom structs, etc.
+#[derive(McpTool)]
+#[tool(
+    name = "search",
+    description = "Search for items",
+    output = Vec<SearchResult>  // ← REQUIRED for Vec<T> and custom types
+)]
+struct SearchTool { query: String }
+
+// ✅ CORRECT - Specify custom struct outputs
+#[derive(McpTool)]
+#[tool(
+    name = "calculate",
+    description = "Calculate result",
+    output = CalculationResult  // ← REQUIRED for custom types
+)]
+struct CalculatorTool { a: f64, b: f64 }
+
+// ❌ WRONG - Missing output type generates incorrect schema
+#[derive(McpTool)]
+#[tool(name = "search", description = "Search")]
+struct SearchTool { query: String }
+// Without output attribute, schema will show tool inputs (query) not Vec output!
+```
+
+**Why Required**: Derive macros cannot inspect the `execute` method's return type at compile time. The `output` attribute tells the macro what schema to generate.
+
 ### Tool Output Schemas (Optional)
 
 Tools can optionally define output schemas using two approaches:
