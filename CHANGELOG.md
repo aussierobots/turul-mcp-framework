@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   // After
   use turul_mcp_builders::prelude::*;  // or turul_mcp_server::prelude::*
   ```
+- **Migration Guide**: See [MIGRATION_0.2.1.md](MIGRATION_0.2.1.md) for complete step-by-step migration instructions
 
 ### Fixed
 
