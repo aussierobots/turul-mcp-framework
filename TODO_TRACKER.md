@@ -93,114 +93,49 @@ These edge cases are **documented but not blocking**:
 
 ---
 
-## 🚧 P1: Middleware Completion (Blocked)
+## ✅ P1: Middleware System - COMPLETE
 
-**Status**: ⏸️ BLOCKED on Phase 1.5 (SessionView abstraction)
-**Estimated**: 3-4 days
-**Owner**: TBD
+**Status**: ✅ **COMPLETE** (2025-10-10)
+**Released**: v0.2.0
+**Documentation**: ADR 012, README.md, 4 working examples
 
-### Current State
+### Completed Phases
 
-- ✅ **Phase 1: Core Infrastructure** - Complete (McpMiddleware trait, stack executor, unit tests)
-- ✅ **Phase 3: Lambda Integration** - Complete (middleware parity tests)
-- ⏸️ **Phase 1.5: SessionView Abstraction** - BLOCKED (need to start)
-- ⏸️ **Phase 2: HTTP Integration** - BLOCKED (depends on 1.5)
-- ⏸️ **Phase 4: Examples & Docs** - BLOCKED (depends on 2)
+- ✅ **Phase 1: Core Infrastructure** - Complete (McpMiddleware trait, MiddlewareStack, 17 tests)
+- ✅ **Phase 2: HTTP Integration** - Complete (both handlers use run_middleware_and_dispatch pattern)
+- ✅ **Phase 3: Lambda Integration** - Complete (transport parity verified with tests)
+- ✅ **Phase 4: Examples & Documentation** - Complete (4 examples, ADR 012, README section)
 
-### Phase 1.5: SessionView Abstraction (1 day)
+### Implementation Details (Historical Record)
 
-**Problem**: HTTP/Lambda handlers can't access SessionContext due to circular dependencies
+**Note:** Phase 1.5 was NOT needed - SessionView already existed in turul-mcp-session-storage crate, avoiding circular dependencies.
 
-**Solution**: Extract middleware to separate crate with SessionView trait abstraction
+**Actual Implementation:**
+- Middleware implemented directly in turul-http-mcp-server crate
+- Re-exported via turul-mcp-server for user convenience
+- SessionView trait from turul-mcp-session-storage used for middleware
+- StorageBackedSessionView adapter bridges storage to SessionView
+- Both HTTP handlers (StreamableHttpHandler, SessionMcpHandler) use run_middleware_and_dispatch pattern
+- Lambda handler uses same middleware infrastructure (transport parity)
 
-**Tasks**:
-- [ ] Step 1: Define SessionView trait in turul-mcp-protocol (15 min)
-  - Create `turul-mcp-protocol/src/session_view.rs`
-  - Define trait methods: `session_id()`, `get_state()`, `set_state()`, `get_metadata()`
-  - Export from lib.rs
-- [ ] Step 2: Create turul-mcp-middleware crate (30 min)
-  - Create `crates/turul-mcp-middleware/` directory
-  - Move middleware files from turul-mcp-server
-  - Change signatures to use `Option<&dyn SessionView>`
-  - Add to workspace Cargo.toml
-  - Depend on turul-mcp-protocol only
-- [ ] Step 3: Implement SessionView in turul-mcp-server (15 min)
-  - `impl SessionView for SessionContext`
-  - Delegate to existing closure-based implementation
-  - Add turul-mcp-middleware dependency
-  - Re-export: `pub use turul_mcp_middleware as middleware`
-- [ ] Step 4: Update transport dependencies (30 min)
-  - turul-http-mcp-server → add turul-mcp-middleware dependency
-  - turul-mcp-aws-lambda → add turul-mcp-middleware dependency
-  - Update import paths
-- [ ] Step 5: Verify no circular dependencies (15 min)
-  - Run `cargo check --workspace`
-  - Run middleware unit tests: `cargo test --package turul-mcp-middleware --lib`
-  - Verify 8 middleware tests still pass
+**Test Coverage:**
+- 17 middleware tests (unit + integration)
+- 1 Lambda parity test
+- Error code mapping verified (-32001, -32002, -32003)
+- Session injection verified working
+- Handler integration tests confirm both handlers use middleware
 
-**Acceptance**:
-- Middleware extracted to separate crate
-- No circular dependencies
-- All existing tests pass
-- SessionView trait cleanly abstracts session access
+**Examples:**
+- middleware-auth-server (HTTP with X-API-Key)
+- middleware-auth-lambda (Lambda with OnceCell handler caching)
+- middleware-logging-server (Request timing/tracing)
+- middleware-rate-limit-server (Per-session limits with retry_after)
 
-### Phase 2: HTTP Integration (2 days)
-
-**Critical Requirements**:
-- ⚠️ MUST integrate into BOTH HTTP handlers:
-  - `StreamableHttpHandler` (protocol ≥ 2025-03-26)
-  - `SessionMcpHandler` (protocol ≤ 2024-11-05)
-- Parse JSON-RPC body ONCE to extract method before middleware (avoid double-parse)
-- `initialize` method gets `session = None`, all other methods get `session = Some(...)`
-- Only persist SessionInjection if session exists (not for initialize)
-
-**Tasks**:
-- [ ] Add middleware_stack field to StreamableHttpHandler
-- [ ] Add middleware_stack field to SessionMcpHandler
-- [ ] Parse method from request body (lightweight single-field parse)
-- [ ] Create RequestContext with method + HTTP headers as metadata
-- [ ] Determine session: None if method == "initialize", Some(session) otherwise
-- [ ] Hook `execute_before(&mut ctx, session_opt)` in both handlers
-- [ ] Persist session injection (only if session exists)
-- [ ] Hook `execute_after(&ctx, &mut result)` in both handlers
-- [ ] Error conversion: MiddlewareError → McpError → JsonRpcError
-- [ ] Pass middleware_stack from builder to both handlers
-- [ ] Integration test: middleware runs for protocol ≥ 2025-03-26
-- [ ] Integration test: middleware runs for protocol ≤ 2024-11-05
-- [ ] Integration test: initialize method with session = None
-- [ ] Integration test: error codes (-32001, -32002, -32003) match spec
-- [ ] Integration test: session injection persists across requests
-
-**Acceptance**:
-- Middleware runs in both HTTP handlers
-- initialize method works without session
-- Session injection persists correctly
-- All integration tests pass
-- No regressions in existing HTTP tests
-
-### Phase 4: Examples & Documentation (1-2 days)
-
-**Examples**:
-- [ ] `middleware-auth-server` - API key authentication
-- [ ] `middleware-logging-server` - Request timing and tracing
-- [ ] `middleware-rate-limit-server` - Per-session rate limiting
-
-**Documentation**:
-- [ ] ADR-XXX: Middleware Architecture
-  - Why traits over function hooks
-  - Why before/after pattern
-  - Error handling strategy
-- [ ] CLAUDE.md: Middleware section
-  - Quick start guide
-  - Example middleware implementation
-  - Error code reference
-- [ ] CHANGELOG.md: Middleware feature announcement
-- [ ] README.md: Middleware quick start
-
-**Acceptance**:
-- All 3 examples compile and run
-- Documentation covers common use cases
-- ADR explains architectural decisions
+**Documentation:**
+- ADR 012: Middleware Architecture (comprehensive)
+- README.md: Middleware section with examples
+- CHANGELOG.md: v0.2.0 feature announcement
+- All 4 examples have detailed docstrings
 
 ---
 
