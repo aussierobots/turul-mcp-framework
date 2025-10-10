@@ -21,7 +21,7 @@ I will **not** directly modify the code or create files myself. My role is to pr
 
 ### Executive Summary
 
-The Turul MCP Framework is a production-ready, comprehensively tested implementation of the Model Context Protocol (MCP) 2025-06-18 specification. It provides a robust and idiomatic Rust solution for building MCP servers and clients. A full schema-level compliance review confirms that the framework's data structures are a meticulous match for the official specification. The testing strategy is mature, with E2E tests covering all major protocol areas, including advanced concurrency and state-management scenarios. The `0.2.1` release introduces a powerful, transport-agnostic middleware architecture, further enhancing the framework's capabilities for handling cross-cutting concerns like authentication, logging, and rate limiting.
+The Turul MCP Framework is a production-ready, comprehensively tested implementation of the Model Context Protocol (MCP) 2025-06-18 specification. It provides a robust and idiomatic Rust solution for building MCP servers and clients. A full schema-level compliance review confirms that the framework's data structures are a meticulous match for the official specification. The testing strategy is mature, with E2E tests covering all major protocol areas, including advanced concurrency and state-management scenarios. The `0.2.0` release introduced a powerful, transport-agnostic middleware architecture, and the `0.2.1` release further refines the framework with improved schema generation and protocol purity.
 
 ### From TypeScript Inheritance to Rust Traits: A Critical Analysis
 
@@ -32,7 +32,7 @@ The core of the framework's success lies in its elegant solution to the "inherit
 3.  **Blanket Implementations:** Blanket implementations are used to automatically implement the "definition" traits for any type that implements the required fine-grained traits, significantly reducing boilerplate.
 4.  **Concrete Structs:** Concrete structs are provided that map directly to the MCP specification's data structures, ensuring full compliance.
 
-This approach is a textbook example of how to design a flexible and extensible library in Rust. It empowers developers to choose their desired level of abstraction, from high-level macros to low-level manual implementation, while ensuring that the framework can handle all implementations uniformly.
+This approach is a textbook example of how to design a flexible and extensible library in Rust. It empowers developers to choose their desired level of abstraction, from high-level macros to low-level manual implementation, while ensuring that the framework can handle all implementations uniformly. The `0.2.1` release reinforced this design by moving all framework-specific traits out of the protocol crate and into the builders crate, achieving "protocol crate purity" and further clarifying the separation between the MCP specification and the framework's implementation.
 
 #### A Critical Perspective on the Trait-Based Design
 
@@ -48,7 +48,7 @@ In summary, the framework's core design makes a deliberate trade-off in favor of
 
 ### Middleware Architecture
 
-The `0.2.1` release introduces a powerful and flexible middleware architecture, designed to handle cross-cutting concerns in a clean and transport-agnostic manner. The same middleware can be used for both HTTP and AWS Lambda transports, ensuring consistent behavior across different deployment environments.
+The `0.2.0` release introduced a powerful and flexible middleware architecture, designed to handle cross-cutting concerns in a clean and transport-agnostic manner. The same middleware can be used for both HTTP and AWS Lambda transports, ensuring consistent behavior across different deployment environments.
 
 The core of the middleware system is the `McpMiddleware` trait, which defines two key methods:
 
@@ -106,12 +106,12 @@ These are not compliance bugs but rather represent the current scope of the fram
 
 The `0.2.1` release focused on stability, bug fixing, and improving the developer experience. Key highlights include:
 
-*   **Middleware Architecture:** Introduced a transport-agnostic middleware system for both HTTP and AWS Lambda, with examples for authentication, logging, and rate limiting.
-*   **Bug Fixes:** Addressed several bugs in the examples and the core protocol implementation, including issues with database constraints, missing registrations, and incorrect connection URLs.
+*   **Schemars Integration**: A breaking change now requires tool output types to derive `schemars::JsonSchema`, enabling the generation of detailed, accurate schemas for all tools in the `tools/list` endpoint.
+*   **Protocol Crate Purity**: All framework-specific traits have been moved from `turul-mcp-protocol` to `turul-mcp-builders`. This breaking change ensures the protocol crate is a pure, 1-to-1 implementation of the MCP specification.
+*   **Notification Payloads Fixed**: A critical regression where notification payloads were not being serialized correctly has been fixed, and 18 new tests have been added to prevent future regressions.
 *   **Improved SSE Resumability:** Ensured that SSE keepalive events preserve the `Last-Event-ID`, allowing for proper reconnection.
 *   **Enhanced Verification:** The verification infrastructure was significantly improved, with deterministic polling, pre-built binaries, and better error diagnosis. 30 out of 31 examples are now verified.
 *   **Code Quality:** Fixed 156 clippy warnings, resulting in a 100% clean codebase.
-*   **Documentation:** All doctests are now passing, and the README has been updated with the latest verification and testing commands.
 
 ## Building and Running
 
@@ -122,7 +122,7 @@ The project is built and tested using Cargo.
 To build the entire project, run the following command from the root of the repository:
 
 ```bash
-cargo build
+cargo build --workspace
 ```
 
 ### Running the examples
@@ -172,4 +172,10 @@ The framework offers four levels of abstraction for creating tools:
 3.  **Builder Pattern:** A runtime-flexible way to build tools.
 4.  **Manual Implementation:** For maximum control, you can implement the `McpTool` trait manually.
 
-The project uses `tracing` for logging.
+The project uses `tracing` for logging and `thiserror` for error handling. Handlers must return domain errors, and new error types should derive `thiserror::Error` and implement `turul_mcp_json_rpc_server::r#async::ToJsonRpcError`.
+
+The project has a comprehensive test suite with over 650 tests. You can run all tests with `cargo test --workspace`.
+
+## Detailed Guidelines
+
+For detailed guidelines on project structure, architecture, development conventions, testing, and MCP specification compliance, please refer to the [AGENTS.md](AGENTS.md) file. This document provides a comprehensive guide for developers and AI agents working on the Turul MCP Framework.
