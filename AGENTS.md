@@ -46,6 +46,10 @@
 - Format: `cargo fmt --all -- --check`  •  Fix: `cargo fmt --all`
 - Run example: `cd examples/minimal-server && cargo run` (adjust folder as needed)
 - Middleware smoke tests: `bash scripts/test_middleware_live.sh` (HTTP) and `cargo lambda watch --package middleware-auth-lambda` (Lambda) for interactive validation.
+- Schema/notification regressions:
+  - `cargo test --test notification_payload_correctness`
+  - `cargo test --test mcp_vec_result_schema_test`
+  - `cargo test -p turul-mcp-derive schemars_integration_test`
 
 ## MCP Specification Compliance
 - Target spec: https://modelcontextprotocol.io/specification/2025-06-18
@@ -58,6 +62,10 @@
 - Tools: `ToolSchema` type is `object`; `properties`/`required` present when needed; `annotations` are optional hints.
 - Resources: `Resource`, `ResourceTemplate`, and results (`List*Result`, `ReadResourceResult`) follow TS names, including `nextCursor` and `_meta`.
 - Extension: `CallToolResult.structuredContent` is an optional extension. Keep optional, document it, and ensure clients/tests do not depend on it for correctness.
+- Tool output schemas:
+  - External output structs **must** derive `schemars::JsonSchema` so the derive macros can emit detailed schemas via `schema_for!(T)`. Missing derives now produce compile-time errors (see `MIGRATION_0.2.1.md`).
+  - Zero-config (`output` omitted) heuristics still target `Self`; use `#[tool(output = Type)]` for accurate schemas on complex responses.
+  - Array outputs (`Vec<T>`) are validated by `mcp_vec_result_schema_test` to ensure `tools/list` advertises `"type": "array"` and the runtime result matches.
 
 ## Resources Compliance
 - Capabilities: advertise `resources.subscribe` and `resources.listChanged` when supported (only set `listChanged` when wired).
@@ -163,3 +171,5 @@
 - **Tool Error Propagation**: Keep propagating `McpTool::call` failures as direct `McpError` results. Never re-wrap them as successful `CallToolResult::error` payloads.
 - **Test Coverage**: Maintain the behavioural suites that assert pagination limits, lifecycle enforcement, and error propagation; add cases whenever new branches are introduced.
 - **Server Teardown Discipline**: Use `TestServerManager` (with its `drop`-based shutdown) for integration/E2E suites. Avoid manual `kill` sequences that can leave ports occupied and cascade failures into later tests.
+- **Tool Output Schemas**: External output types must derive `schemars::JsonSchema`; run `schemars_integration_test` and `mcp_vec_result_schema_test` before tagging a release to ensure detailed schemas (including arrays) are emitted.
+- **Notification Payloads**: `notification_payload_correctness.rs` must stay green—any custom notification should round-trip `_meta` and payload fields exactly.
