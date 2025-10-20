@@ -431,7 +431,7 @@ See [`turul-mcp-builders`](../turul-mcp-builders/README.md) for trait documentat
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.2.0", features = ["sqlite", "postgres"] }
+turul-mcp-server = { version = "0.2", features = ["sqlite", "postgres"] }
 ```
 
 - `default` - All features enabled

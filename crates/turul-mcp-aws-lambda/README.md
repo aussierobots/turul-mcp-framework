@@ -92,7 +92,7 @@ For real-time SSE streaming, enable the `streaming` feature and use `handle_stre
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.2.0", features = ["streaming"] }
+turul-mcp-aws-lambda = { version = "0.2", features = ["streaming"] }
 ```
 
 ```rust
@@ -368,7 +368,7 @@ let server = LambdaMcpServerBuilder::new()
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.2.0", features = ["cors", "sse", "dynamodb"] }
+turul-mcp-aws-lambda = { version = "0.2", features = ["cors", "sse", "dynamodb"] }
 ```
 
 - `default` - Includes `cors` and `sse`

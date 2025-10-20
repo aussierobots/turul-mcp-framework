@@ -332,7 +332,7 @@ mod tests {
 
 ```toml
 [dependencies]
-turul-mcp-protocol = { version = "0.2.0", features = ["server"] }
+turul-mcp-protocol = { version = "0.2", features = ["server"] }
 ```
 
 Available features:

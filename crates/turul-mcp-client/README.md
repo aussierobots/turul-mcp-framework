@@ -451,7 +451,7 @@ fn compare_transports() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-turul-mcp-client = { version = "0.2.0", features = ["sse"] }
+turul-mcp-client = { version = "0.2", features = ["sse"] }
 ```
 
 Available features:

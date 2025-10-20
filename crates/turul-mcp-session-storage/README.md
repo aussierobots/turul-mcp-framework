@@ -34,8 +34,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-session-storage = { version = "0.2.0", features = ["sqlite"] }
-turul-mcp-server = "0.2.0"
+turul-mcp-session-storage = { version = "0.2", features = ["sqlite"] }
+turul-mcp-server = "0.2"
 ```
 
 ### In-Memory (Development)

@@ -499,7 +499,7 @@ let transport = HttpMcpServerBuilder::new()
 
 ```toml
 [dependencies]
-turul-http-mcp-server = { version = "0.2.0", features = ["sse"] }
+turul-http-mcp-server = { version = "0.2", features = ["sse"] }
 ```
 
 Available features:
