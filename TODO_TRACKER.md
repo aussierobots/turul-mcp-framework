@@ -9,8 +9,8 @@
 
 ## Current Status
 
-**Framework Version**: v0.2.2-dev
-**Branch**: 0.2.2 (development)
+**Framework Version**: v0.2.2
+**Branch**: 0.2.2
 **Test Status**: ✅ 450+ tests passing, zero warnings
 **Build Status**: ✅ All 40+ crates compile cleanly
 

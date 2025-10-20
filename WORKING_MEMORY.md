@@ -1,7 +1,7 @@
 # MCP Framework - Working Memory
 
 **Last Updated**: 2025-10-21
-**Framework Version**: v0.2.2-dev
+**Framework Version**: v0.2.2
 **Purpose**: Track current work, active context, and immediate priorities
 
 ---
