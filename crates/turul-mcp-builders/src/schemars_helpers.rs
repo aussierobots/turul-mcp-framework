@@ -92,11 +92,11 @@ pub fn convert_value_to_json_schema_with_defs(
         let def_name = ref_path.strip_prefix("#/definitions/")
             .or_else(|| ref_path.strip_prefix("#/$defs/"));
 
-        if let Some(name) = def_name {
-            if let Some(def_schema) = definitions.get(name) {
-                // Recursively convert the referenced definition
-                return convert_value_to_json_schema_with_defs(def_schema, definitions);
-            }
+        if let Some(name) = def_name
+            && let Some(def_schema) = definitions.get(name)
+        {
+            // Recursively convert the referenced definition
+            return convert_value_to_json_schema_with_defs(def_schema, definitions);
         }
         // Couldn't resolve reference - fall back to generic object
         return JsonSchema::Object {
@@ -113,10 +113,10 @@ pub fn convert_value_to_json_schema_with_defs(
         for schema in any_of {
             // Skip null schemas
             if let Some(obj) = schema.as_object() {
-                if let Some(t) = obj.get("type") {
-                    if t.as_str() == Some("null") {
-                        continue; // Skip null type
-                    }
+                if let Some(t) = obj.get("type")
+                    && t.as_str() == Some("null")
+                {
+                    continue; // Skip null type
                 }
                 // Found non-null schema - convert it
                 return convert_value_to_json_schema_with_defs(schema, definitions);
@@ -141,10 +141,10 @@ pub fn convert_value_to_json_schema_with_defs(
                 // Array of types (e.g., ["string", "null"] for Option<String>)
                 // Find the non-null type
                 for type_val in arr {
-                    if let Some(t) = type_val.as_str() {
-                        if t != "null" {
-                            return Some(t.to_string());
-                        }
+                    if let Some(t) = type_val.as_str()
+                        && t != "null"
+                    {
+                        return Some(t.to_string());
                     }
                 }
                 None

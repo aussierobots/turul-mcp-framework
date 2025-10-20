@@ -352,10 +352,10 @@ impl HasNotificationPayload for Notification {
             }
 
             // Add _meta if present
-            if let Some(meta) = &params.meta {
-                if let Ok(meta_value) = serde_json::to_value(meta) {
-                    map.insert("_meta".to_string(), meta_value);
-                }
+            if let Some(meta) = &params.meta
+                && let Ok(meta_value) = serde_json::to_value(meta)
+            {
+                map.insert("_meta".to_string(), meta_value);
             }
 
             serde_json::Value::Object(map)
