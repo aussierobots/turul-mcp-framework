@@ -355,10 +355,6 @@ impl crate::traits::CreateMessageResult for CreateMessageResult {
 // === Fine-Grained Sampling Traits ===
 // ===========================================
 
-/// Trait for sampling message metadata (role, content from MCP spec)
-
-// ================== CONVENIENCE CONSTRUCTORS ==================
-
 // ================== CONVENIENCE CONSTRUCTORS ==================
 
 impl ModelPreferences {
