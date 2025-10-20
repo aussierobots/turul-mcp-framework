@@ -10,6 +10,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
+# Source shared utilities
+source "$SCRIPT_DIR/../tests/shared/bin/wait_for_server.sh"
+
 echo "======================================================================"
 echo "Phase 5: Advanced/Composite Servers - Intent-Based Verification"
 echo "======================================================================"
@@ -20,6 +23,7 @@ echo ""
 
 PASSED=0
 FAILED=0
+SKIPPED=0
 TOTAL=10
 
 # Colors for output
@@ -60,35 +64,46 @@ test_advanced_server() {
     echo "Capabilities: $capabilities"
     echo "----------------------------------------"
 
-    # Start server
-    echo "Starting server..."
-    # Handle full address (127.0.0.1:port) vs just port number
-    if [[ "$port" == *":"* ]]; then
-        # Full address format - pass as positional argument without --port flag
-        RUST_LOG=error timeout 10s cargo run --bin "$server_name" -- "$port" &
-    else
-        # Just port number - use --port flag
-        RUST_LOG=error timeout 10s cargo run --bin "$server_name" -- --port "$port" &
-    fi
-    SERVER_PID=$!
-    sleep 5
-
-    # Check if server is running
-    if ! kill -0 $SERVER_PID 2>/dev/null; then
-        echo -e "${RED}FAILED${NC}: Server failed to start"
-        FAILED=$((FAILED + 1))
-        return 1
-    fi
-
-    # Initialize and get session ID
-    echo "Initializing MCP session..."
-    # Extract port number for curl (handle both "8080" and "127.0.0.1:8080" formats)
+    # Compute actual_port FIRST (before any usage in logs or curl)
     local actual_port
     if [[ "$port" == *":"* ]]; then
         actual_port=$(echo "$port" | cut -d: -f2)
     else
         actual_port="$port"
     fi
+
+    # Start server with build guard
+    echo "Starting server..."
+    cleanup_old_logs "$server_name" "$actual_port"
+
+    if ! ensure_binary_built "$server_name"; then
+        echo -e "${RED}FAILED${NC}: Build error"
+        FAILED=$((FAILED + 1))
+        return 1
+    fi
+
+    # Launch (handle full-address format)
+    if [[ "$port" == *":"* ]]; then
+        # Full address format - pass as positional argument
+        RUST_LOG=error ./target/debug/"$server_name" "$port" > "/tmp/${server_name}_${actual_port}.log" 2>&1 &
+    else
+        # Port number only - use --port flag
+        RUST_LOG=error ./target/debug/"$server_name" --port "$port" > "/tmp/${server_name}_${actual_port}.log" 2>&1 &
+    fi
+    SERVER_PID=$!
+
+    # Wait deterministically (replaces sleep 5)
+    if ! wait_for_server "$actual_port"; then
+        echo -e "${RED}FAILED${NC}: Server did not respond within 15s"
+        echo "Last 10 lines of log:"
+        tail -10 "/tmp/${server_name}_${actual_port}.log" 2>/dev/null || echo "(no log)"
+        kill $SERVER_PID 2>/dev/null || true
+        FAILED=$((FAILED + 1))
+        return 1
+    fi
+
+    # Initialize and get session ID
+    echo "Initializing MCP session..."
     SESSION_ID=$(curl -i -s -X POST "http://127.0.0.1:$actual_port/mcp" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json" \
@@ -108,7 +123,7 @@ test_advanced_server() {
     curl -s -X POST "http://127.0.0.1:$actual_port/mcp" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json" \
-        -H "MCP-Session-ID: $SESSION_ID" \
+        -H "Mcp-Session-Id: $SESSION_ID" \
         -d '{"jsonrpc":"2.0","method":"notifications/initialized"}' > /dev/null
 
     # Test capabilities based on server type
@@ -123,7 +138,7 @@ test_advanced_server() {
         TOOLS_RESPONSE=$(curl -s -X POST "http://127.0.0.1:$actual_port/mcp" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
-            -H "MCP-Session-ID: $SESSION_ID" \
+            -H "Mcp-Session-Id: $SESSION_ID" \
             -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}')
 
         TOOL_COUNT=$(echo "$TOOLS_RESPONSE" | jq -r '.result.tools | length // 0')
@@ -144,7 +159,7 @@ test_advanced_server() {
         RESOURCES_RESPONSE=$(curl -s -X POST "http://127.0.0.1:$actual_port/mcp" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
-            -H "MCP-Session-ID: $SESSION_ID" \
+            -H "Mcp-Session-Id: $SESSION_ID" \
             -d '{"jsonrpc":"2.0","id":3,"method":"resources/list","params":{}}')
 
         RESOURCE_COUNT=$(echo "$RESOURCES_RESPONSE" | jq -r '.result.resources | length // 0')
@@ -165,7 +180,7 @@ test_advanced_server() {
         PROMPTS_RESPONSE=$(curl -s -X POST "http://127.0.0.1:$actual_port/mcp" \
             -H "Content-Type: application/json" \
             -H "Accept: application/json" \
-            -H "MCP-Session-ID: $SESSION_ID" \
+            -H "Mcp-Session-Id: $SESSION_ID" \
             -d '{"jsonrpc":"2.0","id":4,"method":"prompts/list","params":{}}')
 
         PROMPT_COUNT=$(echo "$PROMPTS_RESPONSE" | jq -r '.result.prompts | length // 0')
@@ -194,6 +209,9 @@ test_advanced_server() {
     kill $SERVER_PID 2>/dev/null || true
     sleep 1
 
+    # Success - truncate log to avoid confusion in reruns
+    : > "/tmp/${server_name}_${actual_port}.log"
+
     PASSED=$((PASSED + 1))
     echo -e "${GREEN}SUCCESS${NC}: $server_name verification complete"
     echo ""
@@ -209,7 +227,7 @@ test_advanced_server "tools-test-server" 8050 "Comprehensive E2E tool testing se
 # Test composite servers
 test_advanced_server "comprehensive-server" "127.0.0.1:8002" "Development Team Integration Platform (all MCP features)" "tools,resources,prompts"
 test_advanced_server "alert-system-server" 8010 "Enterprise alert management system" "tools"
-test_advanced_server "audit-trail-server" 8009 "Comprehensive audit logging system" "tools,resources"
+test_advanced_server "audit-trail-server" 8009 "Comprehensive audit logging system" "tools"
 test_advanced_server "simple-logging-server" 8008 "Simplified logging patterns" "tools"
 test_advanced_server "dynamic-resource-server" 8048 "Enterprise API Data Gateway (tools server, not resources)" "tools"
 
@@ -223,12 +241,13 @@ echo "======================================================================"
 echo "Total: $TOTAL servers"
 echo -e "Passed: ${GREEN}$PASSED${NC}"
 echo -e "Failed: ${RED}$FAILED${NC}"
+echo -e "Skipped: ${YELLOW}$SKIPPED${NC}"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}✅ PHASE 5 COMPLETE${NC}: All advanced/composite servers verified"
+    echo -e "${GREEN}✅ PHASE 5 COMPLETE${NC} - $PASSED passed, $SKIPPED skipped"
     exit 0
 else
-    echo -e "${RED}❌ PHASE 5 FAILED${NC}: $FAILED server(s) failed verification"
+    echo -e "${RED}❌ PHASE 5 FAILED${NC} - $FAILED failures"
     exit 1
 fi

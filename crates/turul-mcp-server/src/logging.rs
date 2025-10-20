@@ -4,10 +4,10 @@
 
 use async_trait::async_trait;
 use serde_json::Value;
-use turul_mcp_protocol::logging::{LoggerDefinition, LoggingLevel};
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{
     McpResult,
-    logging::{LoggingMessageNotification, SetLevelRequest},
+    logging::{LoggingLevel, LoggingMessageNotification, SetLevelRequest},
 };
 
 /// High-level trait for implementing MCP logging
@@ -108,9 +108,7 @@ pub fn logger_to_notification(
 mod tests {
     use super::*;
     use serde_json::json;
-    use turul_mcp_protocol::logging::{
-        HasLogFormat, HasLogLevel, HasLogTransport, HasLoggingMetadata,
-    };
+      // HasLoggingMetadata, HasLogLevel, etc.
 
     struct TestLogger {
         logger_name: String,

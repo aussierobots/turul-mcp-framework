@@ -29,14 +29,14 @@ pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_protocol::elicitation::HasElicitationMetadata for #struct_name {
+        impl turul_mcp_builders::HasElicitationMetadata for #struct_name {
             fn message(&self) -> &str {
                 #message
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::elicitation::HasElicitationSchema for #struct_name {
+        impl turul_mcp_builders::HasElicitationSchema for #struct_name {
             fn requested_schema(&self) -> &turul_mcp_protocol::elicitation::ElicitationSchema {
                 use std::sync::LazyLock;
                 static SCHEMA: LazyLock<turul_mcp_protocol::elicitation::ElicitationSchema> = LazyLock::new(|| {
@@ -49,7 +49,7 @@ pub fn derive_mcp_elicitation_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::elicitation::HasElicitationHandling for #struct_name {}
+        impl turul_mcp_builders::HasElicitationHandling for #struct_name {}
 
         // ElicitationDefinition is automatically implemented via blanket impl
 

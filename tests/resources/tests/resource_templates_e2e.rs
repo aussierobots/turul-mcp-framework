@@ -1,3 +1,4 @@
+
 //! Resource Templates E2E Testing
 //!
 //! Comprehensive testing for resources/templates/list endpoint
@@ -5,9 +6,11 @@
 
 use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 use serde_json::json;
+use serial_test::serial;
 use tracing::{debug, info, warn};
 
 #[tokio::test]
+#[serial]
 async fn test_resource_templates_list_endpoint() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -114,6 +117,7 @@ async fn test_resource_templates_list_endpoint() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_resource_templates_list_with_pagination() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -173,6 +177,7 @@ async fn test_resource_templates_list_with_pagination() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_resource_templates_structure_validation() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -244,6 +249,7 @@ async fn test_resource_templates_structure_validation() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_resource_templates_uri_variable_patterns() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -335,6 +341,7 @@ async fn test_resource_templates_uri_variable_patterns() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_resource_templates_json_rpc_compliance() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -387,6 +394,7 @@ async fn test_resource_templates_json_rpc_compliance() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_resource_templates_error_handling() {
     let _ = tracing_subscriber::fmt::try_init();
 

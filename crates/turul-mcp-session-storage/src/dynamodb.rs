@@ -49,13 +49,13 @@ impl Default for DynamoDbConfig {
     fn default() -> Self {
         Self {
             table_name: "mcp-sessions".to_string(),
-            region: "us-east-1".to_string(),
+            region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             session_ttl_minutes: 5, // Default 5 minutes - override in config if needed
             event_ttl_minutes: 5,   // Default 5 minutes - override in config if needed
             max_events_per_session: 1000,
             enable_backup: true,
             enable_encryption: true,
-            create_tables_if_missing: false,
+            create_tables_if_missing: true,
         }
     }
 }
@@ -86,6 +86,12 @@ pub struct DynamoDbSessionStorage {
 }
 
 impl DynamoDbSessionStorage {
+    /// Get the event table name from environment variable or default pattern
+    fn get_event_table_name(&self) -> String {
+        std::env::var("MCP_SESSION_EVENT_TABLE")
+            .unwrap_or_else(|_| format!("{}-events", self.config.table_name))
+    }
+
     /// Create a new DynamoDB session storage with default configuration
     pub async fn new() -> Result<Self, DynamoDbError> {
         Self::with_config(DynamoDbConfig::default()).await
@@ -155,8 +161,6 @@ impl DynamoDbSessionStorage {
                                         "DynamoDB table '{}' is active and ready",
                                         self.config.table_name
                                     );
-                                    // Check if TTL is enabled, and enable it if not
-                                    self.ensure_ttl_enabled().await?;
                                     Ok(())
                                 }
                                 _ => {
@@ -193,7 +197,7 @@ impl DynamoDbSessionStorage {
                         self.enable_ttl().await?;
 
                         // Also create the events table upfront
-                        let event_table = format!("{}-events", self.config.table_name);
+                        let event_table = self.get_event_table_name();
                         warn!(
                             "Creating events table '{}' upfront to ensure both tables exist",
                             event_table
@@ -346,6 +350,7 @@ impl DynamoDbSessionStorage {
 
     /// Ensure TTL is enabled on the main session table
     #[cfg(feature = "dynamodb")]
+    #[allow(dead_code)]
     async fn ensure_ttl_enabled(&self) -> Result<(), DynamoDbError> {
         info!(
             "Checking TTL status on DynamoDB table: {}",
@@ -917,7 +922,7 @@ impl DynamoDbSessionStorage {
         self.enable_ttl().await?;
 
         // Create events table
-        let event_table = format!("{}-events", self.config.table_name);
+        let event_table = self.get_event_table_name();
         self.ensure_events_table_exists(&event_table)
             .await
             .map_err(|e| {
@@ -1621,6 +1626,7 @@ impl SessionStorage for DynamoDbSessionStorage {
                     AttributeValue::N(after_event_id.to_string()),
                 )
                 .scan_index_forward(true) // Sort by event_id ascending
+                .consistent_read(true) // Use strongly consistent reads for resumability
                 .send()
                 .await
                 .map_err(|e| DynamoDbError::AwsError(e.to_string()))?;
@@ -1709,6 +1715,7 @@ impl SessionStorage for DynamoDbSessionStorage {
                 )
                 .scan_index_forward(false) // Sort by event_id descending (most recent first)
                 .limit(limit as i32)
+                .consistent_read(true) // Use strongly consistent reads to see just-written events
                 .send()
                 .await
                 .map_err(|e| DynamoDbError::AwsError(e.to_string()))?;
@@ -1925,7 +1932,9 @@ mod tests {
     async fn test_dynamodb_config() {
         let config = DynamoDbConfig::default();
         assert_eq!(config.table_name, "mcp-sessions");
-        assert_eq!(config.region, "us-east-1");
+        // Region from AWS_REGION env var or default "us-east-1"
+        let expected_region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+        assert_eq!(config.region, expected_region);
         assert_eq!(config.session_ttl_minutes, 5);
     }
 

@@ -5,9 +5,11 @@
 
 use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 use serde_json::json;
+use serial_test::serial;
 use tracing::{debug, info, warn};
 
 #[tokio::test]
+#[serial]
 async fn test_large_json_parameter_handling() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -114,6 +116,7 @@ async fn test_large_json_parameter_handling() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_very_long_string_parameters() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -179,6 +182,7 @@ async fn test_very_long_string_parameters() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_deep_nested_json_structures() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -257,6 +261,7 @@ async fn test_deep_nested_json_structures() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_large_array_parameters() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -350,6 +355,7 @@ async fn test_large_array_parameters() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_unicode_and_special_characters() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -423,6 +429,7 @@ async fn test_unicode_and_special_characters() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_message_size_limits_and_graceful_degradation() {
     let _ = tracing_subscriber::fmt::try_init();
 

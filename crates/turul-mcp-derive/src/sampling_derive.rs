@@ -68,7 +68,7 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_protocol::sampling::HasSamplingConfig for #struct_name {
+        impl turul_mcp_builders::HasSamplingConfig for #struct_name {
             fn max_tokens(&self) -> u32 {
                 #max_tokens
             }
@@ -83,7 +83,7 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::sampling::HasSamplingContext for #struct_name {
+        impl turul_mcp_builders::HasSamplingContext for #struct_name {
             fn messages(&self) -> &[turul_mcp_protocol::sampling::SamplingMessage] {
                 // Default: empty messages - should be overridden
                 &[]
@@ -99,7 +99,7 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::sampling::HasModelPreferences for #struct_name {
+        impl turul_mcp_builders::HasModelPreferences for #struct_name {
             fn model_preferences(&self) -> Option<&turul_mcp_protocol::sampling::ModelPreferences> {
                 #model_prefs_impl
             }

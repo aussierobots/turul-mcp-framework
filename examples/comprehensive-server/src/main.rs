@@ -15,18 +15,10 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, from_str, json};
 use tracing::info;
-use turul_mcp_protocol::prompts::{
-    HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
-    HasPromptMetadata, PromptAnnotations, PromptArgument, PromptMessage,
-};
-use turul_mcp_protocol::resources::{
-    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-    HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
-};
-use turul_mcp_protocol::tools::{
-    CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
-    HasOutputSchema, HasToolMeta, ToolAnnotations,
-};
+use turul_mcp_builders::prelude::*;
+use turul_mcp_protocol::prompts::{PromptAnnotations, PromptArgument, PromptMessage};
+use turul_mcp_protocol::resources::ResourceContent;
+use turul_mcp_protocol::tools::{CallToolResult, ToolAnnotations};
 use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema};
 use turul_mcp_server::handlers::McpPrompt;
 use turul_mcp_server::{McpResource, McpServer, McpTool, SessionContext};
@@ -934,13 +926,11 @@ impl McpTool for ProjectManagementTool {
 }
 
 /// Development workflow generator prompt for creating standardized workflows
-#[allow(dead_code)] // TODO: Integrate workflow generation
 struct WorkflowGeneratorPrompt {
     state: Arc<PlatformState>,
 }
 
 impl WorkflowGeneratorPrompt {
-    #[allow(dead_code)] // TODO: Use in workflow generation
     fn new(state: Arc<PlatformState>) -> Self {
         Self { state }
     }
@@ -1055,13 +1045,11 @@ Consider our organization's focus on:
 }
 
 /// Project resources handler for accessing development resources and documentation
-#[allow(dead_code)] // TODO: Integrate project resources
 struct ProjectResourcesHandler {
     state: Arc<PlatformState>,
 }
 
 impl ProjectResourcesHandler {
-    #[allow(dead_code)] // TODO: Use in resource handling
     fn new(state: Arc<PlatformState>) -> Self {
         Self { state }
     }
@@ -1677,6 +1665,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Add comprehensive business tools
         .tool(TeamManagementTool::new(platform_state.clone()))
         .tool(ProjectManagementTool::new(platform_state.clone()))
+
+        // Add prompts
+        .prompt(WorkflowGeneratorPrompt::new(platform_state.clone()))
+
+        // Add resources
+        .resource(ProjectResourcesHandler::new(platform_state.clone()))
 
         // Enable all MCP handlers with real-world implementations
         .with_completion()

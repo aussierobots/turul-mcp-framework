@@ -71,6 +71,8 @@ pub struct LambdaMcpServer {
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
     cors_config: Option<CorsConfig>,
+    /// Middleware stack for request/response interception
+    middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
 }
 
 impl LambdaMcpServer {
@@ -97,6 +99,7 @@ impl LambdaMcpServer {
         enable_sse: bool,
         stream_config: StreamConfig,
         #[cfg(feature = "cors")] cors_config: Option<CorsConfig>,
+        middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
     ) -> Self {
         // Create session manager with server capabilities
         let session_manager = Arc::new(SessionManager::with_storage_and_timeouts(
@@ -129,6 +132,7 @@ impl LambdaMcpServer {
             stream_config,
             #[cfg(feature = "cors")]
             cors_config,
+            middleware_stack,
         }
     }
 
@@ -209,18 +213,18 @@ impl LambdaMcpServer {
             dispatcher.register_method(method.clone(), bridge_handler);
         }
 
-        // Create the Lambda handler with all components
-        Ok(LambdaMcpHandler::new(
-            dispatcher,
+        // Create the Lambda handler with all components and middleware
+        let middleware_stack = Arc::new(self.middleware_stack.clone());
+
+        Ok(LambdaMcpHandler::with_middleware(
+            self.server_config.clone(),
+            Arc::new(dispatcher),
             self.session_storage.clone(),
             stream_manager,
-            self.server_config.clone(),
             self.stream_config.clone(),
-            self.implementation.clone(),
             self.capabilities.clone(),
+            middleware_stack,
             self.enable_sse,
-            #[cfg(feature = "cors")]
-            self.cors_config.clone(),
         ))
     }
 

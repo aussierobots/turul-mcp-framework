@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use serde_json::Value;
-use turul_mcp_protocol::tools::ToolDefinition;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{CallToolResult, McpResult};
 
 use crate::session::SessionContext;
@@ -37,10 +37,8 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
     use turul_mcp_protocol::schema::JsonSchema;
-    use turul_mcp_protocol::tools::{
-        CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
-        HasOutputSchema, HasToolMeta, ToolAnnotations, ToolResult, ToolSchema,
-    };
+    use turul_mcp_protocol::tools::{CallToolResult, ToolAnnotations, ToolResult, ToolSchema};
+    // Framework traits already imported via prelude at module level
 
     struct TestTool {
         input_schema: ToolSchema,

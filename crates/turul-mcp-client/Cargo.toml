@@ -1,16 +1,18 @@
 [package]
 name = "turul-mcp-client"
-version = "0.2.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "Comprehensive MCP client library with multi-transport support"
-license = "MIT OR Apache-2.0"
-repository = "https://github.com/aussierobots/turul-mcp-framework"
 
 [dependencies]
 # MCP framework dependencies
-turul-mcp-protocol = { path = "../turul-mcp-protocol", version = "0.2.0" }
-turul-mcp-protocol-2025-06-18 = { path = "../turul-mcp-protocol-2025-06-18", version = "0.2.0" }
-turul-mcp-json-rpc-server = { path = "../turul-mcp-json-rpc-server", version = "0.2.0" }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-protocol-2025-06-18 = { workspace = true }
+turul-mcp-json-rpc-server = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true, features = ["full"] }
@@ -36,8 +38,8 @@ parking_lot = { workspace = true }
 tracing = { workspace = true }
 
 # Optional features for different transports
-tokio-tungstenite = { version = "0.27", optional = true }
-tokio-util = { version = "0.7", features = ["codec"], optional = true }
+tokio-tungstenite = { workspace = true, optional = true }
+tokio-util = { workspace = true, features = ["codec"], optional = true }
 
 [features]
 default = ["http", "sse"]
@@ -50,4 +52,4 @@ stdio = ["tokio-util"]
 all-transports = ["http", "sse", "websocket", "stdio"]
 
 [dev-dependencies]
-tokio-test = { workspace = true }
+tokio-test = "0.4"

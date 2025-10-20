@@ -5,7 +5,6 @@
 //! - All other methods return 401 without session ID
 //! - Session ID is properly passed through the handshake
 
-use reqwest;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use std::time::Duration;
@@ -319,7 +318,11 @@ async fn test_mcp_inspector_flow_with_combined_accept_header() {
         .await
         .unwrap();
 
-    assert_eq!(init_response.status(), 200, "Initialize should succeed with combined Accept header");
+    assert_eq!(
+        init_response.status(),
+        200,
+        "Initialize should succeed with combined Accept header"
+    );
 
     // Extract session ID from response header
     let session_id = init_response
@@ -347,18 +350,20 @@ async fn test_mcp_inspector_flow_with_combined_accept_header() {
         .await
         .unwrap();
 
-    assert_eq!(tools_response.status(), 200, "tools/list should succeed with session ID");
+    assert_eq!(
+        tools_response.status(),
+        200,
+        "tools/list should succeed with session ID"
+    );
 
     // Handle SSE response format (data: prefix)
     let response_text = tools_response.text().await.unwrap();
     println!("Response body: {}", response_text);
 
     // Parse SSE format: "data: {...json...}"
-    let json_content = if response_text.starts_with("data: ") {
-        &response_text[6..] // Remove "data: " prefix
-    } else {
-        &response_text // Plain JSON
-    };
+    let json_content = response_text
+        .strip_prefix("data: ")
+        .unwrap_or(&response_text);
 
     let tools_body: Value = serde_json::from_str(json_content).unwrap();
     assert_eq!(tools_body["jsonrpc"], "2.0");

@@ -78,6 +78,9 @@ pub struct McpServerBuilder {
     /// Test mode - disables security middleware for test servers
     test_mode: bool,
 
+    /// Middleware stack for request/response interception
+    middleware_stack: crate::middleware::MiddlewareStack,
+
     /// HTTP configuration (if enabled)
     #[cfg(feature = "http")]
     bind_address: SocketAddr,
@@ -188,6 +191,7 @@ impl McpServerBuilder {
             session_storage: None,   // Default: InMemory storage
             strict_lifecycle: false, // Default: lenient mode for compatibility
             test_mode: false,        // Default: production mode with security
+            middleware_stack: crate::middleware::MiddlewareStack::new(), // Default: empty middleware stack
             #[cfg(feature = "http")]
             bind_address: "127.0.0.1:8000".parse().unwrap(),
             #[cfg(feature = "http")]
@@ -247,18 +251,18 @@ impl McpServerBuilder {
     /// struct AddTool;
     ///
     /// // Implement all required traits for ToolDefinition
-    /// impl turul_mcp_protocol::tools::HasBaseMetadata for AddTool {
+    /// impl turul_mcp_builders::traits::HasBaseMetadata for AddTool {
     ///     fn name(&self) -> &str { "add" }
     ///     fn title(&self) -> Option<&str> { Some("Add Numbers") }
     /// }
     ///
-    /// impl turul_mcp_protocol::tools::HasDescription for AddTool {
+    /// impl turul_mcp_builders::traits::HasDescription for AddTool {
     ///     fn description(&self) -> Option<&str> {
     ///         Some("Add two numbers together")
     ///     }
     /// }
     ///
-    /// impl turul_mcp_protocol::tools::HasInputSchema for AddTool {
+    /// impl turul_mcp_builders::traits::HasInputSchema for AddTool {
     ///     fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
     ///         use turul_mcp_protocol::schema::JsonSchema;
     ///         static SCHEMA: std::sync::OnceLock<turul_mcp_protocol::ToolSchema> = std::sync::OnceLock::new();
@@ -273,15 +277,15 @@ impl McpServerBuilder {
     ///     }
     /// }
     ///
-    /// impl turul_mcp_protocol::tools::HasOutputSchema for AddTool {
+    /// impl turul_mcp_builders::traits::HasOutputSchema for AddTool {
     ///     fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> { None }
     /// }
     ///
-    /// impl turul_mcp_protocol::tools::HasAnnotations for AddTool {
+    /// impl turul_mcp_builders::traits::HasAnnotations for AddTool {
     ///     fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
     /// }
     ///
-    /// impl turul_mcp_protocol::tools::HasToolMeta for AddTool {
+    /// impl turul_mcp_builders::traits::HasToolMeta for AddTool {
     ///     fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
@@ -324,6 +328,95 @@ impl McpServerBuilder {
         self
     }
 
+    /// Add middleware to the request/response processing chain
+    ///
+    /// **This method is additive** - each call adds a new middleware to the stack.
+    /// Middleware execute in the order they are registered (FIFO):
+    /// - **Before dispatch**: First registered executes first (FIFO order)
+    /// - **After dispatch**: First registered executes last (LIFO/reverse order)
+    ///
+    /// Multiple middleware can be composed by calling this method multiple times.
+    /// Middleware works identically across all transports (HTTP, Lambda, etc.).
+    ///
+    /// # Behavior with Other Builder Methods
+    ///
+    /// - **`.test_mode()`**: Does NOT affect middleware - middleware always executes
+    /// - **Non-HTTP builds**: Middleware is available but requires manual wiring
+    ///
+    /// # Examples
+    ///
+    /// ## Single Middleware
+    ///
+    /// ```rust,no_run
+    /// use turul_mcp_server::prelude::*;
+    /// use async_trait::async_trait;
+    /// use std::sync::Arc;
+    ///
+    /// struct LoggingMiddleware;
+    ///
+    /// #[async_trait]
+    /// impl McpMiddleware for LoggingMiddleware {
+    ///     async fn before_dispatch(
+    ///         &self,
+    ///         ctx: &mut RequestContext<'_>,
+    ///         _session: Option<&dyn turul_mcp_session_storage::SessionView>,
+    ///         _injection: &mut SessionInjection,
+    ///     ) -> Result<(), MiddlewareError> {
+    ///         println!("Request: {}", ctx.method());
+    ///         Ok(())
+    ///     }
+    /// }
+    ///
+    /// # async fn example() -> McpResult<()> {
+    /// let server = McpServer::builder()
+    ///     .name("my-server")
+    ///     .middleware(Arc::new(LoggingMiddleware))
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// ## Multiple Middleware Composition
+    ///
+    /// ```rust,no_run
+    /// use turul_mcp_server::prelude::*;
+    /// use async_trait::async_trait;
+    /// use std::sync::Arc;
+    /// use serde_json::json;
+    /// # struct AuthMiddleware;
+    /// # struct LoggingMiddleware;
+    /// # struct RateLimitMiddleware;
+    /// # #[async_trait]
+    /// # impl McpMiddleware for AuthMiddleware {
+    /// #     async fn before_dispatch(&self, _ctx: &mut RequestContext<'_>, _session: Option<&dyn turul_mcp_session_storage::SessionView>, _injection: &mut SessionInjection) -> Result<(), MiddlewareError> { Ok(()) }
+    /// # }
+    /// # #[async_trait]
+    /// # impl McpMiddleware for LoggingMiddleware {
+    /// #     async fn before_dispatch(&self, _ctx: &mut RequestContext<'_>, _session: Option<&dyn turul_mcp_session_storage::SessionView>, _injection: &mut SessionInjection) -> Result<(), MiddlewareError> { Ok(()) }
+    /// # }
+    /// # #[async_trait]
+    /// # impl McpMiddleware for RateLimitMiddleware {
+    /// #     async fn before_dispatch(&self, _ctx: &mut RequestContext<'_>, _session: Option<&dyn turul_mcp_session_storage::SessionView>, _injection: &mut SessionInjection) -> Result<(), MiddlewareError> { Ok(()) }
+    /// # }
+    ///
+    /// # async fn example() -> McpResult<()> {
+    /// // Execution order:
+    /// // Before dispatch: Auth → Logging → RateLimit
+    /// // After dispatch: RateLimit → Logging → Auth (reverse)
+    /// let server = McpServer::builder()
+    ///     .name("my-server")
+    ///     .middleware(Arc::new(AuthMiddleware))      // 1st before, 3rd after
+    ///     .middleware(Arc::new(LoggingMiddleware))   // 2nd before, 2nd after
+    ///     .middleware(Arc::new(RateLimitMiddleware)) // 3rd before, 1st after
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn middleware(mut self, middleware: Arc<dyn crate::middleware::McpMiddleware>) -> Self {
+        self.middleware_stack.push(middleware);
+        self
+    }
+
     /// Register a resource with the server
     ///
     /// Automatically detects if the resource URI contains template variables (e.g., `{ticker}`, `{id}`)
@@ -343,34 +436,34 @@ impl McpServerBuilder {
     /// }
     ///
     /// // Implement all required traits for ResourceDefinition
-    /// impl turul_mcp_protocol::resources::HasResourceMetadata for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceMetadata for ConfigResource {
     ///     fn name(&self) -> &str { "config" }
     ///     fn title(&self) -> Option<&str> { Some("Configuration") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceDescription for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceDescription for ConfigResource {
     ///     fn description(&self) -> Option<&str> {
     ///         Some("Application configuration file")
     ///     }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceUri for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceUri for ConfigResource {
     ///     fn uri(&self) -> &str { "file:///config.json" }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceMimeType for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceMimeType for ConfigResource {
     ///     fn mime_type(&self) -> Option<&str> { Some("application/json") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceSize for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceSize for ConfigResource {
     ///     fn size(&self) -> Option<u64> { Some(self.data.len() as u64) }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceAnnotations for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceAnnotations for ConfigResource {
     ///     fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceMeta for ConfigResource {
+    /// impl turul_mcp_builders::traits::HasResourceMeta for ConfigResource {
     ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
@@ -454,32 +547,32 @@ impl McpServerBuilder {
     /// }
     ///
     /// // Implement all required traits for ResourceDefinition (same as resource() example)
-    /// impl turul_mcp_protocol::resources::HasResourceMetadata for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceMetadata for DataResource {
     ///     fn name(&self) -> &str { "data" }
     ///     fn title(&self) -> Option<&str> { Some("Data File") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceDescription for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceDescription for DataResource {
     ///     fn description(&self) -> Option<&str> { Some("Sample data file") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceUri for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceUri for DataResource {
     ///     fn uri(&self) -> &str { "file:///data/sample.json" }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceMimeType for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceMimeType for DataResource {
     ///     fn mime_type(&self) -> Option<&str> { Some("application/json") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceSize for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceSize for DataResource {
     ///     fn size(&self) -> Option<u64> { Some(self.content.len() as u64) }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceAnnotations for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceAnnotations for DataResource {
     ///     fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceMeta for DataResource {
+    /// impl turul_mcp_builders::traits::HasResourceMeta for DataResource {
     ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
@@ -543,32 +636,32 @@ impl McpServerBuilder {
     /// }
     ///
     /// // Implement all required traits for ResourceDefinition
-    /// impl turul_mcp_protocol::resources::HasResourceMetadata for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceMetadata for TemplateResource {
     ///     fn name(&self) -> &str { "template-data" }
     ///     fn title(&self) -> Option<&str> { Some("Template Data") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceDescription for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceDescription for TemplateResource {
     ///     fn description(&self) -> Option<&str> { Some("Template-based data resource") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceUri for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceUri for TemplateResource {
     ///     fn uri(&self) -> &str { "file:///data/{id}.json" }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceMimeType for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceMimeType for TemplateResource {
     ///     fn mime_type(&self) -> Option<&str> { Some("application/json") }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceSize for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceSize for TemplateResource {
     ///     fn size(&self) -> Option<u64> { None } // Size varies by template
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceAnnotations for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceAnnotations for TemplateResource {
     ///     fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> { None }
     /// }
     ///
-    /// impl turul_mcp_protocol::resources::HasResourceMeta for TemplateResource {
+    /// impl turul_mcp_builders::traits::HasResourceMeta for TemplateResource {
     ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
@@ -1397,6 +1490,7 @@ impl McpServerBuilder {
             self.session_cleanup_interval_seconds,
             self.session_storage,
             self.strict_lifecycle,
+            self.middleware_stack,
             #[cfg(feature = "http")]
             self.bind_address,
             #[cfg(feature = "http")]
@@ -1422,10 +1516,8 @@ mod tests {
     use async_trait::async_trait;
     use serde_json::Value;
     use std::collections::HashMap;
-    use turul_mcp_protocol::tools::{
-        HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema,
-        HasToolMeta, ToolAnnotations,
-    };
+    use turul_mcp_protocol::tools::ToolAnnotations;
+    use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
     use turul_mcp_protocol::{CallToolResult, ToolSchema};
 
     struct TestTool {
@@ -1547,10 +1639,8 @@ mod tests {
     }
 
     // Test resources for auto-detection testing
-    use turul_mcp_protocol::resources::{
-        HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-        HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
-    };
+    use turul_mcp_protocol::resources::ResourceContent;
+    // Resource traits now in builders crate (already imported via prelude above)
 
     struct StaticTestResource;
 

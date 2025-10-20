@@ -201,24 +201,16 @@ async fn test_resource_contention_isolation() {
                             client_results.push((resource_uri.to_string(), attempt, true, None));
 
                             // Verify session-aware resources include correct session
-                            if resource_uri == "file:///session/info.json" {
-                                if let Some(result_data) =
-                                    response.get("result").and_then(|r| r.as_object())
-                                {
-                                    if let Some(contents) =
-                                        result_data.get("contents").and_then(|c| c.as_array())
-                                    {
-                                        if let Some(content) = contents
-                                            .first()
-                                            .and_then(|item| item.get("text"))
-                                            .and_then(|t| t.as_str())
-                                        {
-                                            if !content.contains("session") {
-                                                warn!("Session resource missing session info for client {}", client_id);
-                                            }
-                                        }
-                                    }
-                                }
+                            if resource_uri == "file:///session/info.json"
+                                && let Some(result_data) = response.get("result").and_then(|r| r.as_object())
+                                && let Some(contents) = result_data.get("contents").and_then(|c| c.as_array())
+                                && let Some(content) = contents
+                                    .first()
+                                    .and_then(|item| item.get("text"))
+                                    .and_then(|t| t.as_str())
+                                && !content.contains("session")
+                            {
+                                warn!("Session resource missing session info for client {}", client_id);
                             }
                         }
                         Err(e) => {
@@ -259,14 +251,14 @@ async fn test_resource_contention_isolation() {
 
             if success {
                 successful_operations += 1;
-            } else if let Some(err) = error {
-                if err.to_lowercase().contains("session") {
-                    session_errors += 1;
-                    warn!(
-                        "Session error for client {} on {}: {}",
-                        client_id, resource, err
-                    );
-                }
+            } else if let Some(err) = error
+                && err.to_lowercase().contains("session")
+            {
+                session_errors += 1;
+                warn!(
+                    "Session error for client {} on {}: {}",
+                    client_id, resource, err
+                );
             }
         }
 

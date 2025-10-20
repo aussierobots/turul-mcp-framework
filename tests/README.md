@@ -18,50 +18,94 @@ The E2E testing suite consists of:
 tests/
 ├── README.md                              # This file - main testing guide
 ├── Cargo.toml                            # Test workspace configuration
-├── E2E_TEST_IMPLEMENTATION_STATUS.md     # Implementation status tracking
 │
 ├── Protocol Test Suites (E2E):
 ├── shared/                               # Shared E2E utilities and fixtures
 │   ├── src/e2e_utils.rs                 # Common test client, server manager, fixtures
-│   ├── tests/                           # Comprehensive session validation tests
+│   ├── tests/
+│   │   ├── concurrent_session_advanced.rs       # Concurrent session testing
+│   │   └── session_validation_comprehensive.rs  # Session validation tests
 │   └── README.md                        # Shared utilities documentation
 ├── resources/                           # Resource E2E tests
-│   ├── tests/                           # All resource-related E2E tests
+│   ├── tests/
+│   │   ├── e2e_integration.rs                   # Resources E2E integration
+│   │   ├── e2e_shared_integration.rs            # Shared resources integration
+│   │   ├── mcp_resources_protocol_coverage.rs   # Protocol coverage tests
+│   │   ├── mcp_resources_specification.rs       # Specification compliance
+│   │   ├── resource_templates_e2e.rs            # Template variable testing
+│   │   └── sse_notifications_test.rs            # SSE notifications
 │   └── README.md                        # Resources testing guide
 ├── prompts/                             # Prompts E2E tests
-│   ├── tests/                           # All prompts-related E2E tests
+│   ├── tests/
+│   │   ├── e2e_integration.rs                   # Prompts E2E integration
+│   │   ├── e2e_shared_integration.rs            # Shared prompts integration
+│   │   ├── mcp_prompts_protocol_coverage.rs     # Protocol coverage tests
+│   │   ├── mcp_prompts_specification.rs         # Specification compliance
+│   │   ├── prompts_arguments_validation.rs      # Arguments validation
+│   │   ├── prompts_endpoints_integration.rs     # Endpoints integration
+│   │   ├── prompts_notifications.rs             # Notifications testing
+│   │   └── sse_notifications_test.rs            # SSE notifications
 │   └── README.md                        # Prompts testing guide
 ├── tools/                               # Tools E2E tests
-│   ├── tests/                           # All tools-related E2E tests
+│   ├── tests/
+│   │   ├── e2e_integration.rs                   # Tools E2E integration
+│   │   ├── large_message_handling.rs            # Large message testing
+│   │   └── mcp_error_code_coverage.rs           # Error code coverage
 │   └── README.md                        # Tools testing guide
 ├── sampling/                            # Sampling protocol E2E tests
-│   ├── tests/                           # Sampling-related E2E tests
+│   ├── tests/
+│   │   ├── sampling_protocol_e2e.rs             # Sampling protocol tests
+│   │   └── sampling_validation_e2e.rs           # Sampling validation
 │   └── README.md                        # Sampling testing guide
 ├── roots/                               # Roots protocol E2E tests
-│   ├── tests/                           # Roots-related E2E tests
+│   ├── tests/
+│   │   ├── roots_protocol_e2e.rs                # Roots protocol tests
+│   │   └── roots_security_e2e.rs                # Roots security tests
 │   └── README.md                        # Roots testing guide
 ├── elicitation/                         # Elicitation protocol E2E tests
-│   ├── tests/                           # Elicitation-related E2E tests
+│   ├── tests/
+│   │   └── elicitation_protocol_e2e.rs          # Elicitation protocol tests
 │   └── README.md                        # Elicitation testing guide
 │
 ├── Framework Test Files (Integration):
+├── acronym_output_field_test.rs         # Acronym output field testing
+├── basic_session_test.rs                # Basic session functionality
+├── builders_examples.rs                 # Builder pattern examples
+├── calculator_levels_integration.rs     # Tool creation levels
+├── client_drop_test.rs                  # Client cleanup testing
+├── client_examples.rs                   # Client usage examples
+├── client_integration_test.rs           # Client integration tests
+├── client_streaming_test.rs             # Client streaming tests
+├── custom_output_field_test.rs          # Custom output testing
+├── derive_examples.rs                   # Derive macro examples
+├── e2e_sse_notification_roundtrip.rs    # SSE notification roundtrip
+├── framework_integration_tests.rs       # Framework integration tests
+├── http_server_examples.rs              # HTTP server examples
+├── lambda_examples.rs                   # AWS Lambda examples
+├── lambda_streaming_real.rs             # Real Lambda streaming tests
+├── mcp_behavioral_compliance.rs         # Behavioral compliance
+├── mcp_compliance_tests.rs              # Core MCP protocol compliance
+├── mcp_derive_macro_bug_detection.rs    # Derive macro bug detection
+├── mcp_explicit_vec_output_test.rs      # Explicit Vec output testing
+├── mcp_runtime_capabilities_validation.rs # Runtime capabilities validation
 ├── mcp_runtime_capability_validation.rs # Runtime capability validation
-├── mcp_compliance_tests.rs             # Core MCP protocol compliance
-├── mcp_specification_compliance.rs     # Full specification testing
-├── framework_integration_tests.rs      # Framework integration tests
-├── working_examples_validation.rs      # Example validation tests
-├── basic_session_test.rs               # Basic session functionality
-├── client_drop_test.rs                 # Client cleanup testing
-├── session_context_macro_tests.rs      # Session context macros
-├── builders_examples.rs                # Builder pattern examples
-├── derive_examples.rs                  # Derive macro examples
-├── server_examples.rs                  # Server configuration examples
-├── http_server_examples.rs             # HTTP server examples
-├── lambda_examples.rs                  # AWS Lambda examples
-├── client_examples.rs                  # Client usage examples
-├── calculator_levels_integration.rs    # Tool creation levels
-├── resources_integration_tests.rs      # Resource integration
-├── custom_output_field_test.rs         # Custom output testing
+├── mcp_specification_compliance.rs      # Full specification testing
+├── mcp_tool_compliance.rs               # Tool compliance tests
+├── mcp_tool_schema_runtime_sync_test.rs # Tool schema runtime sync
+├── mcp_vec_badly_named_tool_test.rs     # Vec badly named tool testing
+├── mcp_vec_result_runtime_schema_test.rs # Vec result runtime schema
+├── mcp_vec_result_schema_test.rs        # Vec result schema
+├── output_field_consistency_test.rs     # Output field consistency
+├── phase5_regression_tests.rs           # Phase 5 regression tests
+├── readme_examples.rs                   # README example validation
+├── resources_integration_tests.rs       # Resource integration
+├── server_examples.rs                   # Server configuration examples
+├── session_context_macro_tests.rs       # Session context macros
+├── session_id_compliance.rs             # Session ID compliance
+├── sse_progress_delivery.rs             # SSE progress delivery
+├── streamable_http_client_test.rs       # Streamable HTTP client
+├── streamable_http_e2e.rs               # Streamable HTTP E2E
+├── working_examples_validation.rs       # Example validation tests
 │
 └── test_helpers/                        # Common test utilities
     └── README.md                        # Test helpers documentation
@@ -74,6 +118,23 @@ tests/
 1. **Rust Toolchain**: Ensure you have Rust 1.70+ installed
 2. **Network Access**: Tests use random ports (22000-65535 range typically)
 3. **Build Dependencies**: All test servers must be pre-built
+
+### Test Execution Configuration
+
+The project uses `.cargo/config.toml` to configure default test behavior:
+
+```toml
+# .cargo/config.toml
+[test]
+# Uncomment to force single-threaded execution by default:
+# test-threads = 1
+
+[profile.test]
+debug = true      # Better backtraces in failures
+opt-level = 0     # Faster test compilation
+```
+
+**Note**: Network-heavy tests use `#[serial]` attribute for automatic serialization without requiring global single-threaded mode
 
 ### Setup
 
@@ -243,6 +304,25 @@ RUST_LOG=debug cargo test test_name -- --nocapture
 curl -v http://127.0.0.1:8080/mcp
 ```
 
+**Concurrent Server Startup Failures**:
+```bash
+# Symptom: "Failed to start test server" or health check timeouts when running tests in parallel
+# Cause: Multiple tests trying to spawn server binaries simultaneously overwhelms health checks
+
+# Solution 1: Run tests serially (automatic with #[serial] attribute)
+cargo test --package mcp-tools-tests
+
+# Solution 2: Force single-threaded execution
+cargo test --package mcp-tools-tests -- --test-threads=1
+
+# Solution 3: Run individual test files
+cargo test --package mcp-tools-tests --test e2e_integration
+cargo test --package mcp-tools-tests --test large_message_handling
+cargo test --package mcp-tools-tests --test mcp_error_code_coverage
+
+# Note: Tests that spawn servers use #[serial] attribute to prevent this issue
+```
+
 ### Debug Mode
 
 Enable detailed logging for debugging:
@@ -254,13 +334,27 @@ RUST_LOG=debug cargo test -- --nocapture
 RUST_LOG=mcp_e2e_shared=debug,turul_mcp_server=info cargo test -- --nocapture
 ```
 
-### Test Isolation
+### Test Isolation and Execution
 
 Each test runs its own server instance on a random port to ensure isolation:
 - ✅ **No shared state** between tests
 - ✅ **Automatic cleanup** when tests complete
-- ✅ **Parallel execution** supported
+- ✅ **Serial execution** for network-heavy tests to prevent server startup conflicts
 - ✅ **Random port assignment** prevents conflicts
+
+**Important**: Network-heavy tests (tools, resources, prompts, sampling, roots, elicitation) use the `#[serial]` attribute from the `serial_test` crate to prevent concurrent server startup issues. When multiple tests try to start servers simultaneously, health check timeouts can occur. Serial execution ensures reliable test runs.
+
+**Running Tests Serially**:
+```bash
+# Option 1: Tests with #[serial] attribute run sequentially automatically
+cargo test --package mcp-tools-tests
+
+# Option 2: Force single-threaded execution for all tests
+cargo test --package mcp-tools-tests -- --test-threads=1
+
+# Option 3: Run specific test suite packages (automatically handles serialization)
+cargo test --workspace --exclude turul-mcp-framework-integration-tests
+```
 
 ## Teardown
 

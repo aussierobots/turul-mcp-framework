@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 turul-mcp-server = { workspace = true, features = ["http", "sse"] }
 turul-mcp-protocol = { workspace = true }
+turul-mcp-builders = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

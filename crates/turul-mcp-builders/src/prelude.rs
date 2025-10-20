@@ -1,38 +1,38 @@
-//! Prelude module for MCP builders
+//! Prelude for turul-mcp-builders
 //!
-//! This module provides a convenient way to import the most commonly used
-//! builders for runtime MCP component construction (Level 3 of creation spectrum).
+//! Convenient imports for framework traits and runtime builders.
 //!
 //! # Usage
 //!
 //! ```rust
 //! use turul_mcp_builders::prelude::*;
 //!
-//! // Now you have access to all builders and common types
+//! // Now you have access to:
+//! // - All framework traits (ToolDefinition, HasBaseMetadata, etc.)
+//! // - All runtime builders (ToolBuilder, ResourceBuilder, etc.)
 //! ```
 
-// Re-export all protocol prelude items for convenience
-pub use turul_mcp_protocol::prelude::*;
+// Re-export all framework traits
+pub use crate::traits::*;
 
-// All builders for runtime construction
-pub use crate::{
-    CompletionBuilder, ElicitationBuilder, LoggingBuilder, MessageBuilder, NotificationBuilder,
-    PromptBuilder, ResourceBuilder, RootBuilder, ToolBuilder,
+// Re-export all builders
+pub use crate::tool::{DynamicToolFn, ToolBuilder};
+pub use crate::resource::ResourceBuilder;
+pub use crate::prompt::PromptBuilder;
+pub use crate::root::RootBuilder;
+pub use crate::notification::NotificationBuilder;
+pub use crate::logging::LoggingBuilder;
+pub use crate::elicitation::ElicitationBuilder;
+pub use crate::message::MessageBuilder;
+pub use crate::completion::CompletionBuilder;
+
+// Re-export commonly used protocol types for convenience
+pub use turul_mcp_protocol::{
+    Tool, Resource, Prompt,
+    ToolSchema, ResourceContent, PromptMessage,
+    McpResult, McpError,
 };
 
-// Additional builder types
-pub use crate::{
-    CancelledNotificationBuilder, ElicitResultBuilder, ListRootsRequestBuilder,
-    ProgressNotificationBuilder, ResourceUpdatedNotificationBuilder, RootsNotificationBuilder,
-    SetLevelBuilder,
-};
-
-// Common types used in builder patterns
-pub use serde_json::{Value, json};
+// Re-export common std/external types
+pub use serde_json::{json, Value};
 pub use std::collections::HashMap;
-
-// Essential async trait for implementations
-pub use async_trait::async_trait;
-
-// Common serde types for serialization
-pub use serde::{Deserialize, Serialize};

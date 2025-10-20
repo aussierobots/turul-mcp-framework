@@ -1,86 +1,94 @@
 [workspace]
 resolver = "3"
 members = [
-    # Core crates
-    "crates/turul-mcp-json-rpc-server",
-    "crates/turul-mcp-protocol-2025-06-18",
-    "crates/turul-mcp-protocol",
-    "crates/turul-mcp-session-storage",
-    "crates/turul-http-mcp-server",
-    "crates/turul-mcp-server",
-    "crates/turul-mcp-derive",
-    "crates/turul-mcp-client",
-    "crates/turul-mcp-builders",
-    "crates/turul-mcp-aws-lambda",
-    
-    # Test crates
+  # Core crates
+  "crates/turul-mcp-json-rpc-server",
+  "crates/turul-mcp-protocol-2025-06-18",
+  "crates/turul-mcp-protocol",
+  "crates/turul-mcp-session-storage",
+  "crates/turul-http-mcp-server",
+  "crates/turul-mcp-server",
+  "crates/turul-mcp-derive",
+  "crates/turul-mcp-client",
+  "crates/turul-mcp-builders",
+  "crates/turul-mcp-aws-lambda",
 
-    # Active examples (33 total)
-    "examples/alert-system-server",
-    "examples/audit-trail-server",
-    "examples/builders-showcase",
-    "examples/calculator-add-builder-server",
-    "examples/calculator-add-function-server",
-    "examples/calculator-add-manual-server",
-    "examples/calculator-add-simple-server-derive",
-    "examples/completion-server",
-    "examples/comprehensive-server",
-    "examples/derive-macro-server",
-    "examples/dynamic-resource-server",
-    "examples/elicitation-server",
-    "examples/function-macro-server",
-    "examples/function-resource-server",
-    "examples/lambda-mcp-client",
-    "examples/lambda-mcp-server",
-    "examples/lambda-mcp-server-streaming",
-    "examples/manual-tools-server",
-    "examples/minimal-server",
-    "examples/notification-server",
-    "examples/pagination-server",
-    "examples/performance-testing",
-    "examples/prompts-server",
-    "examples/prompts-test-server",
-    "examples/resource-server",
-    "examples/resource-test-server",
-    "examples/session-aware-resource-server",
-    "examples/resources-server",
-    "examples/roots-server",
-    "examples/sampling-server",
-    "examples/simple-dynamodb-session", # Simplified and ready - utility binaries commented out
-    "examples/simple-logging-server", 
-    "examples/simple-postgres-session", # Fixed API mismatches - ready to use
-    "examples/simple-sqlite-session", # Fixed API mismatches - ready to use
-    "examples/stateful-server",
-    "examples/tools-test-server",
-    "examples/zero-config-getting-started",
-    
-    # Moved from turul-mcp-server/examples
-    "examples/client-initialise-server",
-    "examples/client-initialise-report", 
-    "examples/logging-test-client",
-    "examples/logging-test-server",
-    "examples/session-aware-logging-demo",
-    "examples/session-logging-proof-test",
-    "examples/session-management-compliance-test",
-    "examples/streamable-http-client",
+  # Test crates
 
-    # Tests
-    "tests",
-    "tests/resources",
-    "tests/prompts",
-    "tests/tools",
-    "tests/sampling",
-    "tests/roots",
-    "tests/elicitation",
-    "tests/shared",
+  # Active examples (33 total)
+  "examples/alert-system-server",
+  "examples/audit-trail-server",
+  "examples/builders-showcase",
+  "examples/calculator-add-builder-server",
+  "examples/calculator-add-function-server",
+  "examples/calculator-add-manual-server",
+  "examples/calculator-add-simple-server-derive",
+  "examples/completion-server",
+  "examples/comprehensive-server",
+  "examples/derive-macro-server",
+  "examples/dynamic-resource-server",
+  "examples/elicitation-server",
+  "examples/function-macro-server",
+  "examples/function-resource-server",
+  "examples/lambda-mcp-client",
+  "examples/lambda-mcp-server",
+  "examples/lambda-mcp-server-streaming",
+  "examples/manual-tools-server",
+  "examples/minimal-server",
+  "examples/notification-server",
+  "examples/pagination-server",
+  "examples/performance-testing",
+  "examples/prompts-server",
+  "examples/prompts-test-server",
+  "examples/resource-server",
+  "examples/resource-test-server",
+  "examples/session-aware-resource-server",
+  "examples/resources-server",
+  "examples/roots-server",
+  "examples/sampling-server",
+  "examples/simple-dynamodb-session",             # Simplified and ready - utility binaries commented out
+  "examples/simple-logging-server",
+  "examples/simple-postgres-session",             # Fixed API mismatches - ready to use
+  "examples/simple-sqlite-session",               # Fixed API mismatches - ready to use
+  "examples/stateful-server",
+  "examples/tool-output-introspection",
+  "examples/tool-output-schemas",
+  "examples/tools-test-server",
+  "examples/zero-config-getting-started",
+
+  # Moved from turul-mcp-server/examples
+  "examples/client-initialise-server",
+  "examples/client-initialise-report",
+  "examples/logging-test-client",
+  "examples/logging-test-server",
+  "examples/session-aware-logging-demo",
+  "examples/session-logging-proof-test",
+  "examples/session-management-compliance-test",
+  "examples/streamable-http-client",
+
+  # Middleware examples
+  "examples/middleware-auth-server",
+  "examples/middleware-auth-lambda",
+  "examples/middleware-logging-server",
+  "examples/middleware-rate-limit-server",
+
+  # Tests
+  "tests",
+  "tests/resources",
+  "tests/prompts",
+  "tests/tools",
+  "tests/sampling",
+  "tests/roots",
+  "tests/elicitation",
+  "tests/shared",
 ]
 
 exclude = [
-    # AWS examples for future phase - re-enabled for 0.2.0
+  # AWS examples for future phase - re-enabled for 0.2.0
 ]
 
 [workspace.package]
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 authors = ["Nick Hortovanyi <nick@aussierobots.com.au>"]
 license = "MIT OR Apache-2.0"
@@ -91,6 +99,7 @@ homepage = "https://github.com/aussierobots/turul-mcp-framework"
 # Core dependencies shared across crates
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+schemars = "1.0"
 serde_yml = "0.0.12"
 thiserror = "2.0"
 async-trait = "0.1"
@@ -98,6 +107,7 @@ async-stream = "0.3"
 futures = "0.3"
 tracing = "0.1"
 lazy_static = "1"
+once_cell = "1"
 
 # HTTP/Server dependencies
 tokio = { version = "1", features = ["full"] }
@@ -106,7 +116,8 @@ hyper-util = { version = "0.1", features = ["full"] }
 tower = { version = "0.5", features = ["full"] }
 tower-http = { version = "0.6", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["full"] }
-
+tokio-util = { version = "0.7", features = ["full"] }
+tokio-tungstenite = { version = "0.28"}
 http = "1.3"
 http-body-util = "0.1"
 http-body = "1"
@@ -126,18 +137,17 @@ turul-mcp-builders = { path = "crates/turul-mcp-builders" }
 # Additional dependencies for examples and tests
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
-tokio-test = "0.4"
 reqwest = { version = "0.12", features = ["json"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
 criterion = { version = "0.7", features = ["html_reports", "async_tokio"] }
 sqlx = { version = "0.8", features = [
-    "runtime-tokio-rustls",
-    "sqlite",
-    "postgres",
-    "chrono",
-    "uuid",
+  "runtime-tokio-rustls",
+  "sqlite",
+  "postgres",
+  "chrono",
+  "uuid",
 ] }
 tempfile = "3"
 toml = "0.9"
@@ -162,13 +172,18 @@ url = "2.5"
 parking_lot = "0.12"
 rand = "0.9"
 tracing-test = "0.2"
-pin-project = "1"
+pin-project = "1.1"
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = "2.0"
+serial_test = "3.2"
+tokio-test = "0.4"
 
 # YAML processing
 serde_yaml = "0.9"
+
 
 [profile.release]
 lto = true
 codegen-units = 1
 panic = "abort"
-

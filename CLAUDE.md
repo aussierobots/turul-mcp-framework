@@ -7,6 +7,27 @@ Production-ready Rust framework for Model Context Protocol (MCP) servers with ze
 
 ## 🚨 Critical Rules
 
+### 📜 Protocol Crate Purity
+**NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2025-06-18` unless it directly relates to MCP spec compliance.** These crates MUST remain clean mirrors of the official MCP specification. No framework features, middleware hooks, or convenience additions belong here.
+
+**Forbidden in Protocol Crates:**
+- ❌ Trait hierarchies (HasBaseMetadata, ToolDefinition, etc.)
+- ❌ Builder patterns (ToolBuilder, ResourceBuilder, etc.)
+- ❌ Framework helpers (blanket implementations, convenience methods)
+- ❌ Tutorial documentation (belongs in builders crate)
+
+**Allowed in Protocol Crates:**
+- ✅ MCP spec types (Tool, Resource, Prompt, etc.)
+- ✅ Serialization/deserialization (#[derive(Serialize, Deserialize)])
+- ✅ Basic builder methods on concrete types (Tool::new(), with_description())
+- ✅ MCP spec error types (McpError with spec error codes)
+
+**Framework Traits Belong in `turul-mcp-builders`:**
+All framework trait hierarchies live in `turul-mcp-builders/src/traits/`:
+- Tool traits: HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolDefinition
+- Resource traits: HasResourceMetadata, HasResourceDescription, HasResourceUri, ResourceDefinition
+- Prompt traits: HasPromptMetadata, HasPromptDescription, HasPromptArguments, PromptDefinition
+
 ### 🎯 Simple Solutions First
 **ALWAYS** prefer simple, minimal fixes over complex or over-engineered solutions:
 
@@ -27,13 +48,23 @@ trait McpResourceV2 { ... }      // Avoid versioned APIs
 
 ### Import Conventions
 ```rust
-// ✅ BEST - Use preludes
-use turul_mcp_server::prelude::*;
+// ✅ BEST - Use preludes for framework traits and builders
+use turul_mcp_server::prelude::*;      // Gets protocol types + builders + traits
+use turul_mcp_builders::prelude::*;    // Gets builders + traits (if not using server)
 use turul_mcp_derive::{McpTool, McpResource, McpPrompt, mcp_tool};
+
+// ❌ WRONG - Direct trait imports
+use turul_mcp_protocol::tools::ToolDefinition;     // Trait moved to builders!
+use turul_mcp_builders::traits::ToolDefinition;    // Use prelude instead
 
 // ❌ WRONG - Versioned imports
 use turul_mcp_protocol_2025_06_18::*;  // Use turul_mcp_protocol::* instead
 ```
+
+**Import Hierarchy:**
+- `turul_mcp_protocol::*` - MCP spec types only (Tool, Resource, Prompt, McpError)
+- `turul_mcp_builders::prelude::*` - Framework traits + runtime builders
+- `turul_mcp_server::prelude::*` - Re-exports everything (protocol + builders + server types)
 
 ### Zero-Configuration Design
 Users NEVER specify method strings - framework auto-determines from types:
@@ -51,6 +82,21 @@ struct Calculator;  // Framework → tools/call
 - **Builder Pattern**: `McpServer::builder()` not `McpServerBuilder::new()`
 - **Error Handling**: Always use `McpError` types - NEVER create JsonRpcError directly in handlers
 - **Session IDs**: Always `Uuid::now_v7()` for temporal ordering
+
+### 🔤 JSON Naming: camelCase ONLY
+
+**CRITICAL**: All JSON fields MUST use camelCase per MCP 2025-06-18.
+
+```rust
+// ✅ CORRECT - Always rename snake_case fields
+#[serde(rename = "additionalProperties")]
+additional_properties: Option<bool>,
+
+// ❌ WRONG - Never serialize as snake_case
+additional_properties: Option<bool>,  // becomes "additional_properties" ❌
+```
+
+**Verify**: `cargo test --test mcp_compliance_tests` must pass
 
 ### 🚨 Critical Error Handling Rules
 
@@ -143,6 +189,90 @@ let tool = ToolBuilder::new("calc").execute(|args| async { /*...*/ }).build()?;
 
 // Level 4: Manual trait implementation
 ```
+
+### Output Types and Schemas
+
+**IMPORTANT**: Tools with custom output types (including Vec<T>) MUST specify the `output` attribute:
+
+```rust
+// ✅ CORRECT - Specify output type for Vec, custom structs, etc.
+#[derive(McpTool)]
+#[tool(
+    name = "search",
+    description = "Search for items",
+    output = Vec<SearchResult>  // ← REQUIRED for Vec<T> and custom types
+)]
+struct SearchTool { query: String }
+
+// ✅ CORRECT - Specify custom struct outputs
+#[derive(McpTool)]
+#[tool(
+    name = "calculate",
+    description = "Calculate result",
+    output = CalculationResult  // ← REQUIRED for custom types
+)]
+struct CalculatorTool { a: f64, b: f64 }
+
+// ❌ WRONG - Missing output type generates incorrect schema
+#[derive(McpTool)]
+#[tool(name = "search", description = "Search")]
+struct SearchTool { query: String }
+// Without output attribute, schema will show tool inputs (query) not Vec output!
+```
+
+**Why Required**: Derive macros cannot inspect the `execute` method's return type at compile time. The `output` attribute tells the macro what schema to generate.
+
+### Tool Output Schemas (Optional)
+
+Tools can optionally define output schemas using two approaches:
+
+**Manual Schema (Full Control):**
+```rust
+use std::sync::OnceLock;
+use std::collections::HashMap;
+use turul_mcp_protocol::{ToolSchema, schema::JsonSchema};
+use turul_mcp_builders::HasOutputSchema;
+
+impl HasOutputSchema for MyTool {
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        static SCHEMA: OnceLock<ToolSchema> = OnceLock::new();
+        Some(SCHEMA.get_or_init(|| {
+            ToolSchema {
+                schema_type: "object".to_string(),
+                properties: Some({
+                    let mut props = HashMap::new();
+                    props.insert(
+                        "result".to_string(),
+                        JsonSchema::number().with_description("Result".to_string()),
+                    );
+                    props
+                }),
+                required: Some(vec!["result".to_string()]),
+                additional: HashMap::new(),
+            }
+        }))
+    }
+}
+```
+
+**Schemars (Auto-sync with types):**
+```rust
+use schemars::JsonSchema;
+
+#[derive(Serialize, JsonSchema)]
+struct MyOutput { value: f64 }
+
+// Derive macro
+#[derive(McpTool)]
+#[tool(name = "calc", description = "...", output = MyOutput, schemars)]
+struct MyTool { a: f64 }
+
+// Function macro
+#[mcp_tool(name = "add", description = "...", schemars)]
+async fn add(a: f64) -> McpResult<MyOutput> { Ok(MyOutput { value: a }) }
+```
+
+**Note**: Keep schemas simple - complex `Option` types may not convert
 
 ### Basic Server
 ```rust

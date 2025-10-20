@@ -11,24 +11,19 @@
 //! // Now you have access to all common MCP types and traits
 //! ```
 
-// Resource traits
+// Resource types (spec-pure structs only)
 pub use crate::resources::{
-    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-    HasResourceMimeType, HasResourceSize, HasResourceUri, ListResourcesParams, ReadResourceParams,
-    Resource, ResourceContent, ResourceDefinition, ResourceTemplate,
+    ListResourcesParams, ReadResourceParams, Resource, ResourceContent, ResourceTemplate,
 };
 
-// Prompt traits
+// Prompt types (spec-pure structs only)
 pub use crate::prompts::{
-    ContentBlock, GetPromptParams, HasPromptAnnotations, HasPromptArguments, HasPromptDescription,
-    HasPromptMeta, HasPromptMetadata, Prompt, PromptArgument, PromptDefinition, PromptMessage,
+    ContentBlock, GetPromptParams, Prompt, PromptArgument, PromptMessage,
 };
 
-// Tool traits
+// Tool types (spec-pure structs only)
 pub use crate::tools::{
-    CallToolParams, CallToolRequest, CallToolResult, HasAnnotations, HasBaseMetadata,
-    HasDescription, HasInputSchema, HasOutputSchema, HasToolMeta, Tool, ToolDefinition, ToolResult,
-    ToolSchema,
+    CallToolParams, CallToolRequest, CallToolResult, Tool, ToolResult, ToolSchema,
 };
 
 // Notification types (using specific structs that exist)
@@ -38,24 +33,20 @@ pub use crate::notifications::{
     ResourceUpdatedNotificationParams,
 };
 
-// Root traits
+// Root types (spec-pure structs only)
 pub use crate::roots::{
-    HasRootAnnotations, HasRootFiltering, HasRootMetadata, HasRootPermissions, RootDefinition,
+    ListRootsParams, Root,
 };
 
-// Sampling types
+// Sampling types (spec-pure structs only)
 pub use crate::sampling::{
-    CreateMessageResult, HasSamplingConfig, HasSamplingContext, Role, SamplingDefinition,
-    SamplingMessage,
+    CreateMessageResult, SamplingMessage,
 };
 
-// Completion types
+// Completion types (spec-pure structs only)
 pub use crate::completion::{
-    CompletionDefinition, HasCompletionContext, HasCompletionHandling, HasCompletionMetadata,
+    CompleteParams, CompleteResult, CompletionReference,
 };
-
-// Logging types
-pub use crate::logging::{HasLogLevel, HasLoggingMetadata, LoggerDefinition};
 
 // Initialize types
 pub use crate::McpVersion;

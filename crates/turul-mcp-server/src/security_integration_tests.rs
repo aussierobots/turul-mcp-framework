@@ -5,8 +5,8 @@
 
 #[cfg(test)]
 mod tests {
-    use super::super::*;
-    use crate::handlers::ResourcesReadHandler;
+    use crate::{McpResult, SessionContext};
+    use crate::handlers::{McpHandler, ResourcesReadHandler};
     use crate::security::{
         AccessLevel, InputValidator, RateLimitConfig, ResourceAccessControl, SecurityMiddleware,
     };
@@ -18,10 +18,8 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use turul_mcp_protocol::meta;
-    use turul_mcp_protocol::resources::{
-        HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-        HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
-    };
+    use turul_mcp_protocol::resources::ResourceContent;
+    use turul_mcp_builders::prelude::*;  // HasResourceMetadata, HasResourceDescription, etc.
 
     /// Test resource for security integration testing
     #[derive(Clone)]

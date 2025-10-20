@@ -1,0 +1,26 @@
+# Cargo configuration for turul-mcp-framework
+# See: https://doc.rust-lang.org/cargo/reference/config.html
+
+# Test configuration
+[test]
+# Run tests with single thread by default to prevent concurrent server startup issues
+# Network-heavy tests (tools, resources, prompts, etc.) spawn test servers
+# that can overwhelm health checks when run in parallel
+#
+# Individual tests use #[serial] attribute for fine-grained control,
+# but this provides a safe default for the entire workspace
+#
+# Override with: cargo test -- --test-threads=N
+# test-threads = 1  # Uncomment to force single-threaded by default
+
+# Build configuration
+[build]
+# Show warnings during build
+# rustflags = ["-W", "warnings"]
+
+# Profile configurations for testing
+[profile.test]
+# Enable debug info for better backtraces in test failures
+debug = true
+# Keep optimization low for faster test compilation
+opt-level = 0

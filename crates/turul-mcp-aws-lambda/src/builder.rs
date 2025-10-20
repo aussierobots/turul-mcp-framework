@@ -127,6 +127,9 @@ pub struct LambdaMcpServerBuilder {
     server_config: ServerConfig,
     stream_config: StreamConfig,
 
+    /// Middleware stack for request/response interception
+    middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
+
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
     cors_config: Option<CorsConfig>,
@@ -228,6 +231,7 @@ impl LambdaMcpServerBuilder {
             enable_sse: cfg!(feature = "sse"),
             server_config: ServerConfig::default(),
             stream_config: StreamConfig::default(),
+            middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack::new(),
             #[cfg(feature = "cors")]
             cors_config: None,
         }
@@ -648,10 +652,50 @@ impl LambdaMcpServerBuilder {
         use turul_mcp_session_storage::DynamoDbSessionStorage;
 
         let storage = DynamoDbSessionStorage::new().await.map_err(|e| {
-            LambdaError::Config(format!("Failed to create DynamoDB storage: {}", e))
+            LambdaError::Configuration(format!("Failed to create DynamoDB storage: {}", e))
         })?;
 
         Ok(self.storage(Arc::new(storage)))
+    }
+
+    /// Register middleware for request/response interception
+    ///
+    /// Middleware can inspect and modify requests before they reach handlers,
+    /// inject data into sessions, and transform responses. Multiple middleware
+    /// can be registered and will execute in FIFO order for before_dispatch
+    /// and LIFO order for after_dispatch.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use std::sync::Arc;
+    /// use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
+    /// use turul_http_mcp_server::middleware::McpMiddleware;
+    /// # use turul_mcp_session_storage::SessionView;
+    /// # use turul_http_mcp_server::middleware::{RequestContext, SessionInjection, MiddlewareError};
+    /// # use async_trait::async_trait;
+    /// # struct AuthMiddleware;
+    /// # #[async_trait]
+    /// # impl McpMiddleware for AuthMiddleware {
+    /// #     async fn before_dispatch(&self, _: &mut RequestContext<'_>, _: Option<&dyn SessionView>, _: &mut SessionInjection) -> Result<(), MiddlewareError> { Ok(()) }
+    /// # }
+    /// # struct RateLimitMiddleware;
+    /// # #[async_trait]
+    /// # impl McpMiddleware for RateLimitMiddleware {
+    /// #     async fn before_dispatch(&self, _: &mut RequestContext<'_>, _: Option<&dyn SessionView>, _: &mut SessionInjection) -> Result<(), MiddlewareError> { Ok(()) }
+    /// # }
+    ///
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let builder = LambdaMcpServerBuilder::new()
+    ///     .name("my-server")
+    ///     .middleware(Arc::new(AuthMiddleware))
+    ///     .middleware(Arc::new(RateLimitMiddleware));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn middleware(mut self, middleware: Arc<dyn turul_http_mcp_server::middleware::McpMiddleware>) -> Self {
+        self.middleware_stack.push(middleware);
+        self
     }
 
     /// Configure server settings
@@ -856,6 +900,7 @@ impl LambdaMcpServerBuilder {
             self.stream_config,
             #[cfg(feature = "cors")]
             self.cors_config,
+            self.middleware_stack,
         ))
     }
 }
@@ -933,24 +978,25 @@ where
 mod tests {
     use super::*;
     use turul_mcp_session_storage::InMemorySessionStorage;
+    use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
 
     // Mock tool for testing
     #[derive(Clone, Default)]
     struct TestTool;
 
-    impl turul_mcp_protocol::tools::HasBaseMetadata for TestTool {
+    impl HasBaseMetadata for TestTool {
         fn name(&self) -> &str {
             "test_tool"
         }
     }
 
-    impl turul_mcp_protocol::tools::HasDescription for TestTool {
+    impl HasDescription for TestTool {
         fn description(&self) -> Option<&str> {
             Some("Test tool")
         }
     }
 
-    impl turul_mcp_protocol::tools::HasInputSchema for TestTool {
+    impl HasInputSchema for TestTool {
         fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
             use turul_mcp_protocol::ToolSchema;
             static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
@@ -958,19 +1004,19 @@ mod tests {
         }
     }
 
-    impl turul_mcp_protocol::tools::HasOutputSchema for TestTool {
+    impl HasOutputSchema for TestTool {
         fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> {
             None
         }
     }
 
-    impl turul_mcp_protocol::tools::HasAnnotations for TestTool {
+    impl HasAnnotations for TestTool {
         fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
             None
         }
     }
 
-    impl turul_mcp_protocol::tools::HasToolMeta for TestTool {
+    impl HasToolMeta for TestTool {
         fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
             None
         }

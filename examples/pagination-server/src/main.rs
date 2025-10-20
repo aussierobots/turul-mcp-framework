@@ -15,11 +15,9 @@ use tempfile::TempDir;
 use tracing::{error, info};
 use turul_mcp_protocol::meta::{Cursor, Meta};
 use turul_mcp_protocol::schema::JsonSchema;
-use turul_mcp_protocol::tools::{
-    CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
-    HasOutputSchema, HasToolMeta,
-};
+use turul_mcp_protocol::tools::CallToolResult;
 use turul_mcp_protocol::{McpError, McpResult, ResourceContents, ToolResult, ToolSchema};
+use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
 use turul_mcp_server::{McpServer, McpTool, SessionContext};
 use clap::Parser;
 
@@ -166,11 +164,7 @@ impl DatabaseManager {
                     "{}.{}{}@{}",
                     first_name.to_lowercase(),
                     last_name.to_lowercase(),
-                    if i < 1000 {
-                        String::new()
-                    } else {
-                        format!("{}", i)
-                    }, // Add numbers for uniqueness
+                    i, // Always add number for guaranteed uniqueness
                     domains[i % domains.len()]
                 );
 

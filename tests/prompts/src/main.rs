@@ -169,8 +169,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // Show ResourceLink ContentBlock
-    if multi_messages.len() > 1 {
-        if let turul_mcp_protocol::prompts::ContentBlock::ResourceLink { resource, .. } =
+    if multi_messages.len() > 1
+        && let turul_mcp_protocol::prompts::ContentBlock::ResourceLink { resource, .. } =
             &multi_messages[1].content
         {
             info!("🔗 ResourceLink ContentBlock example:");
@@ -178,11 +178,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("   Name: {}", resource.name);
             info!("   MIME Type: {:?}", resource.mime_type);
         }
-    }
 
     // Show Image ContentBlock (if chart is included)
-    if multi_messages.len() > 2 {
-        if let turul_mcp_protocol::prompts::ContentBlock::Image {
+    if multi_messages.len() > 2
+        && let turul_mcp_protocol::prompts::ContentBlock::Image {
             data, mime_type, ..
         } = &multi_messages[2].content
         {
@@ -190,7 +189,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("   MIME Type: {}", mime_type);
             info!("   Base64 length: {} characters", data.len());
         }
-    }
 
     // Show embedded Resource ContentBlock
     if let Some(resource_msg) = multi_messages.iter().find(|msg| {
@@ -198,8 +196,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             msg.content,
             turul_mcp_protocol::prompts::ContentBlock::Resource { .. }
         )
-    }) {
-        if let turul_mcp_protocol::prompts::ContentBlock::Resource {
+    })
+        && let turul_mcp_protocol::prompts::ContentBlock::Resource {
             resource,
             annotations,
             meta,
@@ -219,7 +217,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             info!("   Has annotations: {}", annotations.is_some());
             info!("   Has meta: {}", meta.is_some());
         }
-    }
 
     // Build MCP server with all prompts
     let _server = McpServer::builder()

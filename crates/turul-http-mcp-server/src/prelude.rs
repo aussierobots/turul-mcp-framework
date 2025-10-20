@@ -22,6 +22,12 @@ pub use crate::protocol::{
     McpProtocolVersion, extract_last_event_id, extract_protocol_version, extract_session_id,
 };
 
+// Middleware types
+pub use crate::middleware::{
+    DispatcherResult, McpMiddleware, MiddlewareError, MiddlewareStack, RequestContext,
+    SessionInjection, StorageBackedSessionView, error_codes,
+};
+
 // Re-export foundational types
 pub use crate::{JsonRpcDispatcher, JsonRpcHandler};
 pub use turul_mcp_protocol::prelude::*;

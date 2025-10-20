@@ -13,10 +13,8 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use tracing::{info, warn};
-use turul_mcp_protocol::tools::{
-    HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasToolMeta,
-    ToolAnnotations,
-};
+use turul_mcp_builders::prelude::*;
+use turul_mcp_protocol::tools::ToolAnnotations;
 use turul_mcp_protocol::{
     CallToolResult, McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema,
 };

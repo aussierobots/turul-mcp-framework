@@ -25,6 +25,9 @@ mod traits;
 /// Core session storage traits and types for pluggable backend implementations
 pub use traits::*;
 
+mod session_view;
+pub use session_view::SessionView;
+
 // Implementations
 pub mod in_memory;
 pub mod prelude;

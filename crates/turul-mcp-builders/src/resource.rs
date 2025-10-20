@@ -9,12 +9,14 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
-// Import from protocol via alias
-use turul_mcp_protocol::meta::Annotations;
-use turul_mcp_protocol::resources::{
+// Import traits from local traits module
+use crate::traits::{
     HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-    HasResourceMimeType, HasResourceSize, HasResourceUri, ResourceContent,
+    HasResourceMimeType, HasResourceSize, HasResourceUri,
 };
+// Import protocol types
+use turul_mcp_protocol::meta::Annotations;
+use turul_mcp_protocol::resources::ResourceContent;
 
 /// Type alias for dynamic resource read function
 pub type DynamicResourceFn = Box<

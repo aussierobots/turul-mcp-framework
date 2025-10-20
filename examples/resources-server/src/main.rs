@@ -12,10 +12,7 @@ use std::fs;
 use std::path::Path;
 use tracing::info;
 use turul_mcp_protocol::resources::ResourceContent;
-use turul_mcp_protocol::resources::{
-    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-    HasResourceMimeType, HasResourceSize, HasResourceUri,
-};
+use turul_mcp_builders::prelude::*;  // HasResourceMetadata, HasResourceDescription, etc.
 use turul_mcp_server::McpResource;
 use turul_mcp_server::{McpResult, McpServer, SessionContext};
 

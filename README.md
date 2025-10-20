@@ -305,6 +305,92 @@ cargo run -p minimal-server &
 
 ## 🏛️ Architecture Overview
 
+### Middleware System
+
+The framework provides a trait-based middleware architecture for cross-cutting concerns like authentication, logging, and rate limiting:
+
+```rust
+use turul_mcp_server::prelude::*;
+use std::sync::Arc;
+
+let server = McpServer::builder()
+    .middleware(Arc::new(AuthMiddleware::new()))
+    .middleware(Arc::new(LoggingMiddleware))
+    .middleware(Arc::new(RateLimitMiddleware::new(5, 60)))
+    .build()?;
+```
+
+**Key Features:**
+- ✅ Transport-agnostic (HTTP, Lambda, etc.)
+- ✅ Session-aware (read/write session state)
+- ✅ Error short-circuiting with semantic JSON-RPC codes
+- ✅ Execution order control (FIFO before, LIFO after dispatch)
+
+**Examples:**
+- `examples/middleware-logging-server` - Request timing and tracing (HTTP)
+- `examples/middleware-rate-limit-server` - Per-session rate limiting (HTTP)
+- `examples/middleware-auth-server` - API key authentication (HTTP)
+- `examples/middleware-auth-lambda` - API key authentication (AWS Lambda)
+
+**Testing:**
+- Test HTTP middleware: `bash scripts/test_middleware_live.sh`
+- Test Lambda middleware: `cargo lambda watch --package middleware-auth-lambda`
+
+**Documentation:**
+- [ADR 012: Middleware Architecture](docs/adr/012-middleware-architecture.md) - Core middleware design
+- [ADR 013: Lambda Authorizer Integration](docs/adr/013-lambda-authorizer-integration.md) - API Gateway authorizer support
+
+#### Lambda Authorizer Integration
+
+**Seamless API Gateway authorizer context extraction for Lambda deployments:**
+
+```rust
+// API Gateway authorizer adds context (userId, tenantId, role, etc.)
+// → turul-mcp-aws-lambda adapter extracts → injects x-authorizer-* headers
+// → Middleware reads headers → stores in session state
+// → Tools access via session.get_typed_state("authorizer")
+
+#[async_trait]
+impl McpMiddleware for AuthMiddleware {
+    async fn before_dispatch(
+        &self,
+        ctx: &mut RequestContext<'_>,
+        _session: Option<&dyn SessionView>,
+        injection: &mut SessionInjection,
+    ) -> Result<(), MiddlewareError> {
+        // Extract authorizer context from x-authorizer-* headers
+        let metadata = ctx.metadata();
+        let mut authorizer_context = HashMap::new();
+
+        for (key, value) in metadata.iter() {
+            if let Some(field_name) = key.strip_prefix("x-authorizer-") {
+                if let Some(value_str) = value.as_str() {
+                    authorizer_context.insert(field_name.to_string(), value_str.to_string());
+                }
+            }
+        }
+
+        if !authorizer_context.is_empty() {
+            // Store for tools to access
+            injection.set_state("authorizer", json!(authorizer_context));
+        }
+
+        Ok(())
+    }
+}
+```
+
+**Key Features:**
+- ✅ Supports API Gateway V1 (REST API) and V2 (HTTP API)
+- ✅ Field name sanitization (camelCase → snake_case: `userId` → `user_id`)
+- ✅ Defensive programming (never fails requests)
+- ✅ Transport-agnostic (appears as standard HTTP metadata)
+- ✅ Session state integration
+
+**Example:**
+- `examples/middleware-auth-lambda` - Full authorizer extraction pattern
+- Test events: `test-events/apigw-v1-with-authorizer.json`, `apigw-v2-with-authorizer.json`
+
 ### Core Framework (10 Crates)
 - **`turul-mcp-server`** - High-level server builder with session management
 - **`turul-mcp-client`** - Comprehensive client library with HTTP transport support
@@ -321,7 +407,7 @@ cargo run -p minimal-server &
 **Modern composable design pattern for all MCP areas:**
 
 ```rust
-use turul_mcp_protocol::tools::*;
+use turul_mcp_builders::prelude::*;  // Framework traits + builders
 use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpResult};
 use turul_mcp_server::{McpTool, SessionContext};
 use async_trait::async_trait;
@@ -718,9 +804,8 @@ let server = McpServer::builder()
 **Best for:** Performance optimization, custom behavior
 
 ```rust
-use turul_mcp_protocol::tools::*;
+use turul_mcp_server::prelude::*;  // Re-exports builders prelude + framework traits
 use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema, McpResult};
-use turul_mcp_server::prelude::*;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -876,6 +961,43 @@ RUST_LOG=info cargo run --example session-management-compliance-test -- http://1
 cargo run --example client-initialise-server -- --port 52951 --storage-backend sqlite --create-tables
 RUST_LOG=info cargo run --example session-management-compliance-test -- http://127.0.0.1:52951/mcp
 ```
+
+## 🛠️ Development & Testing
+
+### Building the Framework
+
+```bash
+# Build all workspace crates
+cargo build
+
+# Build with release optimizations
+cargo build --release
+```
+
+### Running Tests
+
+The framework includes **300+ comprehensive tests** covering all functionality. Test server binaries are **automatically built** when needed - no manual setup required.
+
+```bash
+# Run all tests (recommended - includes E2E integration tests)
+cargo test --workspace
+
+# Run specific test suite
+cargo test --test concurrent_session_advanced
+
+# Run with logging output
+RUST_LOG=info cargo test --workspace
+
+# Clean build and test (verifies auto-build works)
+cargo clean && cargo test --workspace
+```
+
+**Key Features:**
+- ✅ **Auto-build test servers** - Missing test binaries are built automatically on first test run
+- ✅ **Zero configuration** - Just run `cargo test` and everything works
+- ✅ **Clean workspace support** - `cargo clean && cargo test` works without manual steps
+
+The test infrastructure automatically builds required test server binaries (`resource-test-server`, `prompts-test-server`, `tools-test-server`, etc.) when running integration tests. This ensures a seamless developer experience.
 
 #### What the Compliance Test Verifies
 

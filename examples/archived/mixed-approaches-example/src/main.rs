@@ -8,8 +8,9 @@ use tracing::info;
 
 // DERIVE MACRO APPROACH: Simple echo tool
 #[derive(McpTool, Clone)]
-#[tool(name = "echo_derive", description = "Echo text using derive macro")]
-#[output_type(String)]
+#[tool(name = "echo_derive", description = "Echo text using derive macro",
+    output = String
+)]
 struct EchoDeriveTool {
     #[param(description = "Text to echo")]
     text: String,

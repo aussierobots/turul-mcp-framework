@@ -30,21 +30,21 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_protocol::prompts::HasPromptMetadata for #struct_name {
+        impl turul_mcp_builders::traits::HasPromptMetadata for #struct_name {
             fn name(&self) -> &str {
                 #name
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::prompts::HasPromptDescription for #struct_name {
+        impl turul_mcp_builders::traits::HasPromptDescription for #struct_name {
             fn description(&self) -> Option<&str> {
                 Some(#description)
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::prompts::HasPromptArguments for #struct_name {
+        impl turul_mcp_builders::traits::HasPromptArguments for #struct_name {
             fn arguments(&self) -> Option<&Vec<turul_mcp_protocol::prompts::PromptArgument>> {
                 static ARGS: std::sync::OnceLock<Option<Vec<turul_mcp_protocol::prompts::PromptArgument>>> = std::sync::OnceLock::new();
                 ARGS.get_or_init(|| {
@@ -58,14 +58,14 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::prompts::HasPromptAnnotations for #struct_name {
+        impl turul_mcp_builders::traits::HasPromptAnnotations for #struct_name {
             fn annotations(&self) -> Option<&turul_mcp_protocol::prompts::PromptAnnotations> {
                 None
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::prompts::HasPromptMeta for #struct_name {
+        impl turul_mcp_builders::traits::HasPromptMeta for #struct_name {
             fn prompt_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
                 None
             }

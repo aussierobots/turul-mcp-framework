@@ -6,15 +6,18 @@
 use serde_json::Value;
 use std::collections::HashMap;
 
-// Import from protocol via alias
+// Import protocol types
 use turul_mcp_json_rpc_server::types::RequestId;
 use turul_mcp_protocol::logging::LoggingLevel;
 use turul_mcp_protocol::notifications::{
-    CancelledNotification, HasNotificationMetadata, HasNotificationPayload, HasNotificationRules,
-    InitializedNotification, LoggingMessageNotification, Notification, NotificationParams,
-    ProgressNotification, PromptListChangedNotification, ResourceListChangedNotification,
-    ResourceUpdatedNotification, RootsListChangedNotification, ToolListChangedNotification,
+    CancelledNotification, InitializedNotification, LoggingMessageNotification, Notification,
+    NotificationParams, ProgressNotification, PromptListChangedNotification,
+    ResourceListChangedNotification, ResourceUpdatedNotification, RootsListChangedNotification,
+    ToolListChangedNotification,
 };
+
+// Import framework traits from local crate
+use crate::traits::{HasNotificationMetadata, HasNotificationPayload, HasNotificationRules};
 
 /// Builder for creating notifications at runtime
 pub struct NotificationBuilder {
@@ -141,7 +144,7 @@ impl HasNotificationMetadata for DynamicNotification {
 }
 
 impl HasNotificationPayload for DynamicNotification {
-    fn payload(&self) -> Option<&Value> {
+    fn payload(&self) -> Option<Value> {
         // Convert params to a single Value if needed
         None // For simplicity, custom payloads can be added via trait extension
     }
@@ -399,7 +402,7 @@ pub mod methods {
 mod tests {
     use super::*;
     use serde_json::json;
-    use turul_mcp_protocol::notifications::NotificationDefinition;
+    use crate::traits::NotificationDefinition;
 
     #[test]
     fn test_notification_builder_basic() {

@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::McpResult;
-use turul_mcp_protocol::tools::HasOutputSchema;
+use turul_mcp_builders::prelude::HasOutputSchema;
 use turul_mcp_server::{McpTool as McpToolTrait, SessionContext};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,14 +37,17 @@ async fn test_runtime_correction_for_badly_named_tool() {
     let tool = DataFetcher { count: 5 };
 
     // Call the tool
-    let result = tool.call(serde_json::json!({"count": 5}), None)
+    let result = tool
+        .call(serde_json::json!({"count": 5}), None)
         .await
         .expect("Tool should execute successfully");
 
     println!("CallToolResult: {:#?}", result);
 
     // Check structured content
-    let structured = result.structured_content.expect("Should have structured content");
+    let structured = result
+        .structured_content
+        .expect("Should have structured content");
     println!("Structured content: {:#?}", structured);
 
     let output_value = &structured["output"];
@@ -73,7 +76,7 @@ async fn test_badly_named_tool_static_schema_is_wrong() {
     println!("Static schema: {:#?}", schema);
 
     if let Some(schema) = schema {
-        let schema_json = serde_json::to_value(&schema).unwrap();
+        let schema_json = serde_json::to_value(schema).unwrap();
         let output_type = schema_json["properties"]["output"]["type"].as_str();
         println!("Static schema output type: {:?}", output_type);
 

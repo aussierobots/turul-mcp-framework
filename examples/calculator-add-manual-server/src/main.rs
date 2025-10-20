@@ -2,10 +2,8 @@ use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
 use tracing::info;
-use turul_mcp_protocol::tools::{
-    CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
-    HasOutputSchema, HasToolMeta, ToolAnnotations, ToolResult, ToolSchema,
-};
+use turul_mcp_protocol::tools::{CallToolResult, ToolAnnotations, ToolResult, ToolSchema};
+use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
 use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
 
 /// Level 4: Manual Implementation (Maximum Control)

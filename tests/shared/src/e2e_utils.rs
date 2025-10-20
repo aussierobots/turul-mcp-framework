@@ -115,7 +115,9 @@ impl McpTestClient {
     }
 
     /// Send notifications/initialized to complete session handshake (required for strict lifecycle mode)
-    pub async fn send_initialized_notification(&self) -> Result<HashMap<String, Value>, reqwest::Error> {
+    pub async fn send_initialized_notification(
+        &self,
+    ) -> Result<HashMap<String, Value>, reqwest::Error> {
         let notification = json!({
             "jsonrpc": "2.0",
             "method": "notifications/initialized"
@@ -210,11 +212,11 @@ impl McpTestClient {
         // Read SSE events for a short time
         let start = std::time::Instant::now();
         while start.elapsed() < Duration::from_secs(2) {
-            if let Some(chunk) = response.chunk().await? {
-                if let Ok(text) = String::from_utf8(chunk.to_vec()) {
-                    events.push(text);
-                    break; // Got an event, that's enough for the test
-                }
+            if let Some(chunk) = response.chunk().await?
+                && let Ok(text) = String::from_utf8(chunk.to_vec())
+            {
+                events.push(text);
+                break; // Got an event, that's enough for the test
             }
         }
 
@@ -238,6 +240,34 @@ impl McpTestClient {
             8,
         )
         .await
+    }
+
+    /// Call a tool with SSE streaming (for progress notifications)
+    /// Returns the raw response for SSE event parsing
+    pub async fn call_tool_with_sse(
+        &self,
+        name: &str,
+        arguments: Value,
+    ) -> Result<reqwest::Response, reqwest::Error> {
+        let request = json!({
+            "jsonrpc": "2.0",
+            "id": 8,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments}
+        });
+
+        let mut req_builder = self
+            .client
+            .post(&self.base_url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "text/event-stream, application/json")
+            .json(&request);
+
+        if let Some(ref session_id) = self.session_id {
+            req_builder = req_builder.header("mcp-session-id", session_id);
+        }
+
+        req_builder.send().await
     }
 
     /// Send a notification (no response expected)
@@ -309,13 +339,13 @@ impl TestServerManager {
         // Use OS ephemeral port allocation (bind to 0) - this is the most reliable approach
         // The OS will assign an available port from the ephemeral range
         for attempt in 1..=5 {
-            if let Ok(listener) = std::net::TcpListener::bind("127.0.0.1:0") {
-                if let Ok(addr) = listener.local_addr() {
-                    let port = addr.port();
-                    drop(listener); // Release the port immediately
-                    debug!("OS assigned ephemeral port {} (attempt {})", port, attempt);
-                    return Some(port);
-                }
+            if let Ok(listener) = std::net::TcpListener::bind("127.0.0.1:0")
+                && let Ok(addr) = listener.local_addr()
+            {
+                let port = addr.port();
+                drop(listener); // Release the port immediately
+                debug!("OS assigned ephemeral port {} (attempt {})", port, attempt);
+                return Some(port);
             }
             // Small delay between attempts to avoid tight loops
             std::thread::sleep(std::time::Duration::from_millis(10));
@@ -325,6 +355,19 @@ impl TestServerManager {
         // If OS ephemeral port allocation fails, this indicates network binding is restricted
         debug!("Failed to allocate port via OS ephemeral binding - likely sandboxed environment");
         None
+    }
+
+    /// Map server binary name to its package name
+    fn server_package(server_name: &str) -> Option<&'static str> {
+        match server_name {
+            "resource-test-server" => Some("mcp-resources-tests"),
+            "prompts-test-server" => Some("mcp-prompts-tests"),
+            "tools-test-server" => Some("mcp-tools-tests"),
+            "sampling-server" => Some("mcp-sampling-tests"),
+            "roots-server" => Some("mcp-roots-tests"),
+            "elicitation-server" => Some("mcp-elicitation-tests"),
+            _ => None,
+        }
     }
 
     /// Start a test server by name on random port with robust port allocation
@@ -342,6 +385,42 @@ impl TestServerManager {
             .join("target")
             .join("debug")
             .join(server_name);
+
+        // Auto-build the binary if it doesn't exist
+        if !binary_path.exists() {
+            if let Some(package) = Self::server_package(server_name) {
+                info!("Binary {} not found, building package {}...", server_name, package);
+                let build_status = std::process::Command::new("cargo")
+                    .args(["build", "--package", package, "--bin", server_name])
+                    .current_dir(&workspace_root)
+                    .status();
+
+                match build_status {
+                    Ok(status) if status.success() => {
+                        info!("Successfully built {}", server_name);
+                    }
+                    Ok(status) => {
+                        return Err(format!(
+                            "Failed to build {} (exit code: {:?})",
+                            server_name,
+                            status.code()
+                        )
+                        .into());
+                    }
+                    Err(e) => {
+                        return Err(format!("Failed to run cargo build for {}: {}", server_name, e)
+                            .into());
+                    }
+                }
+            } else {
+                return Err(format!(
+                    "Binary {} not found and package mapping unknown. Binary path: {:?}",
+                    server_name, binary_path
+                )
+                .into());
+            }
+        }
+
         let mut server_process = Command::new(&binary_path)
             .args(["--port", &port.to_string()])
             .current_dir(&workspace_root)
@@ -379,18 +458,17 @@ impl TestServerManager {
                 .json(&test_request)
                 .send()
                 .await
+                && response.status().is_success()
             {
-                if response.status().is_success() {
-                    info!(
-                        "Server {} started successfully on port {}",
-                        server_name, port
-                    );
-                    return Ok(Self {
-                        server_process: Some(server_process),
-                        port,
-                        _server_name: server_name.to_string(),
-                    });
-                }
+                info!(
+                    "Server {} started successfully on port {}",
+                    server_name, port
+                );
+                return Ok(Self {
+                    server_process: Some(server_process),
+                    port,
+                    _server_name: server_name.to_string(),
+                });
             }
             attempts += 1;
         }
@@ -437,34 +515,23 @@ impl TestServerManager {
 impl Drop for TestServerManager {
     fn drop(&mut self) {
         if let Some(mut process) = self.server_process.take() {
-            // Send kill signal
+            // Send SIGKILL immediately - this is synchronous and doesn't block
             let _ = process.start_kill();
 
-            // Wait for process termination in blocking manner
-            // We need to block here to ensure cleanup, but do it in a thread
-            // to avoid blocking the async runtime
-            let handle = std::thread::spawn(move || {
-                // Create a runtime just for waiting on this process
-                let rt = tokio::runtime::Runtime::new().unwrap();
+            // Brief wait with timeout to allow graceful cleanup without hanging tests
+            // spawn a thread to avoid blocking async runtime during Drop
+            let _ = std::thread::spawn(move || {
+                // Try to reap the process with a very short timeout
+                let rt = tokio::runtime::Runtime::new().ok()?;
                 rt.block_on(async move {
-                    match tokio::time::timeout(Duration::from_secs(5), process.wait()).await {
-                        Ok(Ok(status)) => {
-                            debug!("Test server exited: {:?}", status);
-                        }
-                        Ok(Err(e)) => {
-                            debug!("Error waiting for test server: {}", e);
-                        }
-                        Err(_) => {
-                            debug!("Timeout waiting for test server to exit");
-                            // Force kill if it's still alive
-                            let _ = process.kill();
-                        }
-                    }
-                })
+                    // Only wait 100ms - SIGKILL should be nearly instant
+                    let _ = tokio::time::timeout(Duration::from_millis(100), process.wait()).await;
+                    // Don't care if it times out - OS will clean up
+                    debug!("Test server cleanup attempted");
+                });
+                Some(())
             });
-
-            // Wait for cleanup to complete (with timeout)
-            let _ = handle.join();
+            // Don't join - let it run in background to avoid blocking Drop
         }
     }
 }
@@ -533,25 +600,25 @@ impl TestFixtures {
     /// Create test number arguments for prompts - MCP spec requires string arguments
     pub fn create_number_args() -> HashMap<String, Value> {
         let mut args = HashMap::new();
-        args.insert("count".to_string(), json!("42"));  // number_args_prompt expects "count" as string
-        args.insert("multiplier".to_string(), json!("3.14"));  // optional multiplier as string
+        args.insert("count".to_string(), json!("42")); // number_args_prompt expects "count" as string
+        args.insert("multiplier".to_string(), json!("3.14")); // optional multiplier as string
         args
     }
 
     /// Create test boolean arguments for prompts - MCP spec requires string arguments
     pub fn create_boolean_args() -> HashMap<String, Value> {
         let mut args = HashMap::new();
-        args.insert("enable_feature".to_string(), json!("true"));  // boolean_args_prompt expects "enable_feature" as string
-        args.insert("debug_mode".to_string(), json!("false"));  // optional debug_mode as string
+        args.insert("enable_feature".to_string(), json!("true")); // boolean_args_prompt expects "enable_feature" as string
+        args.insert("debug_mode".to_string(), json!("false")); // optional debug_mode as string
         args
     }
 
     /// Create test template arguments for prompts
     pub fn create_template_args() -> HashMap<String, Value> {
         let mut args = HashMap::new();
-        args.insert("name".to_string(), json!("Alice"));  // template_prompt expects "name"
-        args.insert("topic".to_string(), json!("machine learning"));  // template_prompt expects "topic"
-        args.insert("style".to_string(), json!("casual"));  // optional style
+        args.insert("name".to_string(), json!("Alice")); // template_prompt expects "name"
+        args.insert("topic".to_string(), json!("machine learning")); // template_prompt expects "topic"
+        args.insert("style".to_string(), json!("casual")); // optional style
         args
     }
 
@@ -573,13 +640,11 @@ impl TestFixtures {
 
     /// Extract and parse the first tool result object from structured content
     pub fn extract_tool_result_object(result: &HashMap<String, Value>) -> Option<Value> {
-        if let Some(structured) = Self::extract_tool_structured_content(result) {
-            // Get the first key-value pair from structured content (the actual tool result)
-            if let Some(obj) = structured.as_object() {
-                if let Some((_, value)) = obj.iter().next() {
-                    return Some(value.clone());
-                }
-            }
+        if let Some(structured) = Self::extract_tool_structured_content(result)
+            && let Some(obj) = structured.as_object()
+            && let Some((_, value)) = obj.iter().next()
+        {
+            return Some(value.clone());
         }
         None
     }

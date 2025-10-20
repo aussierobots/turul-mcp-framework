@@ -7,6 +7,7 @@ use serde_json::json;
 use std::collections::HashMap;
 use turul_mcp_protocol::meta::{Annotations, Cursor};
 use turul_mcp_protocol::resources::*;
+use turul_mcp_builders::prelude::*;  // ResourceDefinition and all framework traits
 
 #[tokio::test]
 async fn test_uri_template_file_user_json() {
@@ -339,16 +340,17 @@ async fn test_resource_trait_implementations() {
     let resource = Resource::new("file:///test.txt", "test_resource")
         .with_description("Test resource for trait validation");
 
-    // Test ResourceDefinition trait methods
+    // Test ResourceDefinition trait methods - MUST use trait accessors to verify impls!
+    // Use method call syntax to test trait implementations
     assert_eq!(resource.name(), "test_resource");
-    assert!(resource.title().is_none());
+    assert_eq!(resource.title(), None);
     assert_eq!(
         resource.description(),
         Some("Test resource for trait validation")
     );
     assert_eq!(resource.uri(), "file:///test.txt");
-    assert!(resource.mime_type().is_none());
-    assert!(resource.size().is_none());
+    assert_eq!(resource.mime_type(), None);
+    assert_eq!(resource.size(), None);
     assert!(resource.annotations().is_none());
     assert!(resource.resource_meta().is_none());
 

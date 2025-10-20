@@ -11,10 +11,8 @@ use async_trait::async_trait;
 use serde_json::{Value, json};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
-use turul_mcp_protocol::{
-    McpError,
-    notifications::{HasNotificationMetadata, HasNotificationPayload, HasNotificationRules},
-};
+use turul_mcp_protocol::McpError;
+use turul_mcp_builders::prelude::*;  // HasNotificationMetadata, HasNotificationPayload, etc.
 use turul_mcp_server::notifications::{DeliveryResult, DeliveryStatus, McpNotification};
 use turul_mcp_server::{McpResult, McpServer};
 
@@ -73,7 +71,7 @@ impl HasNotificationMetadata for DevAlertNotification {
 }
 
 impl HasNotificationPayload for DevAlertNotification {
-    fn payload(&self) -> Option<&Value> {
+    fn payload(&self) -> Option<Value> {
         None // Dynamic payloads
     }
 }
@@ -246,7 +244,7 @@ impl HasNotificationMetadata for CiCdNotification {
 }
 
 impl HasNotificationPayload for CiCdNotification {
-    fn payload(&self) -> Option<&Value> {
+    fn payload(&self) -> Option<Value> {
         None
     }
 }
@@ -339,7 +337,7 @@ impl HasNotificationMetadata for MonitoringNotification {
 }
 
 impl HasNotificationPayload for MonitoringNotification {
-    fn payload(&self) -> Option<&Value> {
+    fn payload(&self) -> Option<Value> {
         None
     }
 }

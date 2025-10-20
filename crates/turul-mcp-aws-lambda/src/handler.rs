@@ -8,7 +8,9 @@ use std::sync::Arc;
 use lambda_http::{Body as LambdaBody, Request as LambdaRequest, Response as LambdaResponse};
 use tracing::{debug, info};
 
-use turul_http_mcp_server::{ServerConfig, SessionMcpHandler, StreamConfig, StreamManager};
+use turul_http_mcp_server::{
+    ServerConfig, SessionMcpHandler, StreamConfig, StreamManager, StreamableHttpHandler,
+};
 use turul_mcp_json_rpc_server::JsonRpcDispatcher;
 use turul_mcp_protocol::{McpError, ServerCapabilities};
 use turul_mcp_session_storage::BoxedSessionStorage;
@@ -30,8 +32,11 @@ use crate::cors::{CorsConfig, create_preflight_response, inject_cors_headers};
 /// 4. SSE validation to prevent silent failures
 #[derive(Clone)]
 pub struct LambdaMcpHandler {
-    /// SessionMcpHandler for delegation (eliminates code duplication)
+    /// SessionMcpHandler for legacy protocol support
     session_handler: SessionMcpHandler,
+
+    /// StreamableHttpHandler for MCP 2025-06-18 with proper headers
+    streamable_handler: StreamableHttpHandler,
 
     /// Whether SSE is enabled (used for testing and debugging)
     #[allow(dead_code)]
@@ -44,6 +49,7 @@ pub struct LambdaMcpHandler {
 
 impl LambdaMcpHandler {
     /// Create a new Lambda MCP handler with the framework components
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         dispatcher: JsonRpcDispatcher<McpError>,
         session_storage: Arc<BoxedSessionStorage>,
@@ -51,21 +57,38 @@ impl LambdaMcpHandler {
         config: ServerConfig,
         stream_config: StreamConfig,
         _implementation: turul_mcp_protocol::Implementation,
-        _capabilities: ServerCapabilities,
+        capabilities: ServerCapabilities,
         sse_enabled: bool,
         #[cfg(feature = "cors")] cors_config: Option<CorsConfig>,
     ) -> Self {
-        // Create SessionMcpHandler for delegation
+        let dispatcher = Arc::new(dispatcher);
+
+        // Create empty middleware stack (shared by both handlers)
+        let middleware_stack = Arc::new(turul_http_mcp_server::middleware::MiddlewareStack::new());
+
+        // Create SessionMcpHandler for legacy protocol support
         let session_handler = SessionMcpHandler::with_shared_stream_manager(
             config.clone(),
-            Arc::new(dispatcher),
+            dispatcher.clone(),
             session_storage.clone(),
-            stream_config,
+            stream_config.clone(),
             stream_manager.clone(),
+            middleware_stack.clone(),
+        );
+
+        // Create StreamableHttpHandler for MCP 2025-06-18 support
+        let streamable_handler = StreamableHttpHandler::new(
+            Arc::new(config.clone()),
+            dispatcher.clone(),
+            session_storage.clone(),
+            stream_manager.clone(),
+            capabilities.clone(),
+            middleware_stack,
         );
 
         Self {
             session_handler,
+            streamable_handler,
             sse_enabled,
             #[cfg(feature = "cors")]
             cors_config,
@@ -73,6 +96,7 @@ impl LambdaMcpHandler {
     }
 
     /// Create with shared stream manager (for advanced use cases)
+    #[allow(clippy::too_many_arguments)]
     pub fn with_shared_stream_manager(
         config: ServerConfig,
         dispatcher: Arc<JsonRpcDispatcher<McpError>>,
@@ -80,20 +104,76 @@ impl LambdaMcpHandler {
         stream_manager: Arc<StreamManager>,
         stream_config: StreamConfig,
         _implementation: turul_mcp_protocol::Implementation,
-        _capabilities: ServerCapabilities,
+        capabilities: ServerCapabilities,
         sse_enabled: bool,
     ) -> Self {
-        // Create SessionMcpHandler for delegation
+        // Create empty middleware stack (shared by both handlers)
+        let middleware_stack = Arc::new(turul_http_mcp_server::middleware::MiddlewareStack::new());
+
+        // Create SessionMcpHandler for legacy protocol support
         let session_handler = SessionMcpHandler::with_shared_stream_manager(
-            config,
+            config.clone(),
+            dispatcher.clone(),
+            session_storage.clone(),
+            stream_config.clone(),
+            stream_manager.clone(),
+            middleware_stack.clone(),
+        );
+
+        // Create StreamableHttpHandler for MCP 2025-06-18 support
+        let streamable_handler = StreamableHttpHandler::new(
+            Arc::new(config),
             dispatcher,
             session_storage,
-            stream_config,
             stream_manager,
+            capabilities,
+            middleware_stack,
         );
 
         Self {
             session_handler,
+            streamable_handler,
+            sse_enabled,
+            #[cfg(feature = "cors")]
+            cors_config: None,
+        }
+    }
+
+    /// Create with custom middleware stack (for testing and examples)
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_middleware(
+        config: ServerConfig,
+        dispatcher: Arc<JsonRpcDispatcher<McpError>>,
+        session_storage: Arc<BoxedSessionStorage>,
+        stream_manager: Arc<StreamManager>,
+        stream_config: StreamConfig,
+        capabilities: ServerCapabilities,
+        middleware_stack: Arc<turul_http_mcp_server::middleware::MiddlewareStack>,
+        sse_enabled: bool,
+    ) -> Self {
+        // Create SessionMcpHandler with custom middleware
+        let session_handler = SessionMcpHandler::with_shared_stream_manager(
+            config.clone(),
+            dispatcher.clone(),
+            session_storage.clone(),
+            stream_config.clone(),
+            stream_manager.clone(),
+            middleware_stack.clone(),
+        );
+
+        // Create StreamableHttpHandler with custom middleware
+        let streamable_handler = StreamableHttpHandler::new(
+            Arc::new(config),
+            dispatcher,
+            session_storage,
+            stream_manager,
+            capabilities,
+            middleware_stack,
+        );
+
+        Self {
+            session_handler,
+            streamable_handler,
             sse_enabled,
             #[cfg(feature = "cors")]
             cors_config: None,
@@ -210,15 +290,37 @@ impl LambdaMcpHandler {
         let hyper_req = crate::adapter::lambda_to_hyper_request(req)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
-        // 🚀 DELEGATION: Use SessionMcpHandler for all business logic
-        let hyper_resp = self
-            .session_handler
-            .handle_mcp_request(hyper_req)
-            .await
-            .map_err(|e| {
-                Box::new(crate::error::LambdaError::McpFramework(e.to_string()))
-                    as Box<dyn std::error::Error + Send + Sync>
-            })?;
+        // 🚀 PROTOCOL ROUTING: Check protocol version and route to appropriate handler
+        use turul_http_mcp_server::protocol::McpProtocolVersion;
+        let protocol_version = hyper_req
+            .headers()
+            .get("MCP-Protocol-Version")
+            .and_then(|h| h.to_str().ok())
+            .and_then(McpProtocolVersion::parse_version)
+            .unwrap_or(McpProtocolVersion::V2025_06_18);
+
+        // Route based on protocol version
+        let hyper_resp = if protocol_version.supports_streamable_http() {
+            // Use StreamableHttpHandler for MCP 2025-06-18 (proper headers, chunked SSE)
+            debug!(
+                "Using StreamableHttpHandler for protocol {}",
+                protocol_version.to_string()
+            );
+            self.streamable_handler.handle_request(hyper_req).await
+        } else {
+            // Legacy protocol: use SessionMcpHandler
+            debug!(
+                "Using SessionMcpHandler for legacy protocol {}",
+                protocol_version.to_string()
+            );
+            self.session_handler
+                .handle_mcp_request(hyper_req)
+                .await
+                .map_err(|e| {
+                    Box::new(crate::error::LambdaError::McpFramework(e.to_string()))
+                        as Box<dyn std::error::Error + Send + Sync>
+                })?
+        };
 
         // 🚀 DELEGATION: Convert hyper response to Lambda streaming response (preserves streaming!)
         let mut lambda_resp = crate::adapter::hyper_to_lambda_streaming(hyper_resp);
@@ -482,7 +584,7 @@ mod tests {
 
     /// Test matrix: 4 combinations of streaming runtime vs SSE configuration
     /// This ensures we don't have runtime hangs or configuration conflicts
-
+    ///
     /// Test 1: Non-streaming runtime + sse(false) - This should work (snapshot mode)
     #[tokio::test]
     async fn test_non_streaming_runtime_sse_false() {

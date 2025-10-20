@@ -41,7 +41,11 @@ impl McpPrompt for TestPrompt {
 /// Test that a server with tools correctly advertises listChanged: false
 #[tokio::test]
 async fn test_tools_capability_truthfulness() {
-    let port = portpicker::pick_unused_port().expect("No available port");
+    // Use ephemeral port (0) for OS allocation - safer than portpicker in sandboxes
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("Failed to bind to ephemeral port");
+    let port = listener.local_addr().unwrap().port();
+    drop(listener); // Release for server to bind
 
     // Start server with tools
     let server_handle = tokio::spawn(async move {
@@ -104,7 +108,11 @@ async fn test_tools_capability_truthfulness() {
 /// Test that a server with prompts correctly advertises listChanged: false
 #[tokio::test]
 async fn test_prompts_capability_truthfulness() {
-    let port = portpicker::pick_unused_port().expect("No available port");
+    // Use ephemeral port (0) for OS allocation - safer than portpicker in sandboxes
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("Failed to bind to ephemeral port");
+    let port = listener.local_addr().unwrap().port();
+    drop(listener); // Release for server to bind
 
     // Start server with prompts
     let server_handle = tokio::spawn(async move {
@@ -169,7 +177,11 @@ async fn test_prompts_capability_truthfulness() {
 /// Test server with no components advertises no capabilities
 #[tokio::test]
 async fn test_empty_server_capabilities() {
-    let port = portpicker::pick_unused_port().expect("No available port");
+    // Use ephemeral port (0) for OS allocation - safer than portpicker in sandboxes
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("Failed to bind to ephemeral port");
+    let port = listener.local_addr().unwrap().port();
+    drop(listener); // Release for server to bind
 
     // Start server with no components
     let server_handle = tokio::spawn(async move {
@@ -230,7 +242,11 @@ async fn test_empty_server_capabilities() {
 /// Test JSON-RPC protocol compliance
 #[tokio::test]
 async fn test_json_rpc_protocol_compliance() {
-    let port = portpicker::pick_unused_port().expect("No available port");
+    // Use ephemeral port (0) for OS allocation - safer than portpicker in sandboxes
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("Failed to bind to ephemeral port");
+    let port = listener.local_addr().unwrap().port();
+    drop(listener); // Release for server to bind
 
     let server_handle = tokio::spawn(async move {
         let server = McpServer::builder()
@@ -304,7 +320,11 @@ mod integration {
     /// Integration test to validate overall MCP compliance
     #[tokio::test]
     async fn test_full_mcp_compliance_integration() {
-        let port = portpicker::pick_unused_port().expect("No available port");
+        // Use ephemeral port (0) for OS allocation - safer than portpicker in sandboxes
+    let listener = std::net::TcpListener::bind("127.0.0.1:0")
+        .expect("Failed to bind to ephemeral port");
+    let port = listener.local_addr().unwrap().port();
+    drop(listener); // Release for server to bind
 
         let server_handle = tokio::spawn(async move {
             let server = McpServer::builder()

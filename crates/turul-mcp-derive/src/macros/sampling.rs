@@ -149,19 +149,19 @@ pub fn sampling_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 }
             }
 
-            impl HasSamplingConfig for #struct_name {
+            impl turul_mcp_builders::HasSamplingConfig for #struct_name {
                 fn max_tokens(&self) -> u32 { #max_tokens }
                 fn temperature(&self) -> Option<f64> { #temperature }
                 fn stop_sequences(&self) -> Option<&Vec<String>> { #stop_sequences }
             }
 
-            impl HasSamplingContext for #struct_name {
+            impl turul_mcp_builders::HasSamplingContext for #struct_name {
                 fn messages(&self) -> &[SamplingMessage] { &self.messages }
                 fn system_prompt(&self) -> Option<&str> { #system_prompt }
                 fn include_context(&self) -> Option<&str> { None }
             }
 
-            impl HasModelPreferences for #struct_name {
+            impl turul_mcp_builders::HasModelPreferences for #struct_name {
                 fn model_preferences(&self) -> Option<&turul_mcp_protocol::sampling::ModelPreferences> { #model_preferences }
                 fn metadata(&self) -> Option<&serde_json::Value> { None }
             }

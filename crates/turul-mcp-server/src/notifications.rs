@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use serde_json::Value;
-use turul_mcp_protocol::notifications::NotificationDefinition;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{McpResult, notifications::Notification};
 
 /// Notification delivery status
@@ -146,9 +146,7 @@ pub fn notification_to_protocol(
 mod tests {
     use super::*;
     use serde_json::json;
-    use turul_mcp_protocol::notifications::{
-        HasNotificationMetadata, HasNotificationPayload, HasNotificationRules,
-    };
+      // HasNotificationMetadata, etc.
 
     struct TestNotification {
         method: String,
@@ -168,8 +166,8 @@ mod tests {
     }
 
     impl HasNotificationPayload for TestNotification {
-        fn payload(&self) -> Option<&Value> {
-            self.payload.as_ref()
+        fn payload(&self) -> Option<Value> {
+            self.payload.clone()
         }
     }
 

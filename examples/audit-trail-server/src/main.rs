@@ -10,11 +10,9 @@ use serde_json::{Value, json};
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
 use std::sync::Arc;
-use turul_mcp_protocol::tools::{
-    CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
-    HasOutputSchema, HasToolMeta,
-};
+use turul_mcp_protocol::tools::CallToolResult;
 use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema};
+use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
 use turul_mcp_server::{McpServer, McpTool, SessionContext};
 use turul_mcp_session_storage::SqliteSessionStorage;
 use uuid::Uuid;
@@ -642,8 +640,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Starting Audit Trail MCP Server with SQLite persistence");
 
-    // Initialize SQLite database
-    let db_url = "sqlite:audit_trail.db";
+    // Initialize SQLite database with create mode
+    let db_url = "sqlite://audit_trail.db?mode=rwc";
     let pool = SqlitePool::connect(db_url).await.map_err(|e| {
         eprintln!("Failed to connect to SQLite database: {}", e);
         e

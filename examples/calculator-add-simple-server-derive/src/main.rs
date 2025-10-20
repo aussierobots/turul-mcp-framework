@@ -4,7 +4,7 @@ use tracing::info;
 use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, McpServer};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct AdditionResult {
     sum: f64,
 }
@@ -21,9 +21,9 @@ impl turul_mcp_protocol::schema::JsonSchemaGenerator for AdditionResult {
 #[derive(McpTool, Clone)]
 #[tool(
     name = "calculator_add_derive",
-    description = "Add two numbers using derive macro (Level 2)"
+    description = "Add two numbers using derive macro (Level 2)",
+    output = AdditionResult
 )]
-#[output_type(AdditionResult)]
 struct CalculatorAddDeriveTool {
     #[param(description = "First number")]
     a: f64,

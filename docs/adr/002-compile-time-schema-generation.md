@@ -43,18 +43,39 @@
 ### Current Limitations
 
 #### Detailed Schema Generation for External Types
-**Status**: ⚠️ **PARTIAL IMPLEMENTATION**
+**Status**: ✅ **RESOLVED via Schemars Integration**
 
-While `#[tool(output = Type)]` syntax exists, detailed schema generation only works when `output_type == tool_struct` (self-referential). For external struct types like `TileMetadata`, the framework falls back to generic object schemas:
+The `#[tool(output = Type)]` syntax now supports three schema generation paths:
+
+1. **Schemars integration** (with `#[derive(JsonSchema)]`): Detailed schemas for any external type
+2. **Self introspection** (when `output = Self` or omitted): Detailed schemas via compile-time analysis
+3. **Fallback** (external types without JsonSchema): Generic object schemas
 
 ```rust
-// ❌ This generates generic schema despite explicit output type
+// ✅ Detailed schema with schemars
+#[derive(Serialize, Deserialize, JsonSchema)]  // Add JsonSchema derive
+pub struct TileMetadata { ... }
+
 #[derive(McpTool, Clone)]
 #[tool(name = "get_tile", output = TileMetadata, output_field = "tileMetadata")]
 struct GetTileTool { ... }
 
-// Generates: {"tileMetadata": {"type": "object", "additionalProperties": null}}
-// Expected: {"tileMetadata": {"type": "object", "properties": {"tile_id": {...}, ...}}}
+// Generates: {"tileMetadata": {"type": "object", "properties": {"tile_id": {...}, ...}}}
+
+// ✅ Detailed schema with Self introspection (no schemars needed)
+#[derive(McpTool, Clone, Serialize, Deserialize)]
+#[tool(name = "calculator")]  // No output specified = defaults to Self
+struct Calculator {
+    #[param] pub a: f64,
+    #[param] pub b: f64,
+    pub result: f64,  // Output field
+}
+
+// ⚠️ Generic fallback (external type without JsonSchema)
+#[derive(Serialize, Deserialize)]  // NO JsonSchema
+pub struct TileMetadata { ... }
+
+// Generates: {"output": {"type": "object", "additionalProperties": true}}
 ```
 
 **Root Cause**: Rust procedural macros cannot introspect external struct definitions during compilation. The `generate_enhanced_output_schema` function can only analyze the struct being derived on.

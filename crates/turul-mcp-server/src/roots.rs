@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use std::path::PathBuf;
-use turul_mcp_protocol::roots::RootDefinition;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{
     McpResult,
     roots::{ListRootsRequest, ListRootsResult, RootsListChangedNotification},
@@ -173,9 +173,7 @@ pub fn root_to_list_request(_root: &dyn McpRoot) -> ListRootsRequest {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use turul_mcp_protocol::roots::{
-        HasRootAnnotations, HasRootFiltering, HasRootMetadata, HasRootPermissions,
-    };
+      // HasRootMetadata, HasRootPermissions, etc.
 
     struct TestRoot {
         uri: String,

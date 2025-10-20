@@ -29,11 +29,13 @@ uuid = { workspace = true }
 anyhow = { workspace = true }
 hyper = { workspace = true }
 hyper-util = { workspace = true }
+http-body = { workspace = true }
 http-body-util = { workspace = true }
 bytes = { workspace = true }
 mcp-e2e-shared = { path = "shared" }
 serial_test = "3.0"
 portpicker = "0.1"
+schemars = { workspace = true }
 
 [[test]]
 name = "basic_session_test"
@@ -87,6 +89,10 @@ path = "http_server_examples.rs"
 [[test]]
 name = "lambda_examples"
 path = "lambda_examples.rs"
+
+[[test]]
+name = "lambda_streaming_real"
+path = "lambda_streaming_real.rs"
 
 [[test]]
 name = "client_drop_test"
@@ -186,3 +192,29 @@ path = "readme_examples.rs"
 # path = "e2e_sse_message_flow.rs"
 # DEFERRED: Requires complex API migration (JsonRpcHandler, McpError, JsonRpcDispatcher changes)
 # Replaced by e2e_sse_notification_roundtrip which uses working infrastructure
+
+[[test]]
+name = "output_field_consistency_test"
+path = "output_field_consistency_test.rs"
+
+
+[[test]]
+name = "acronym_output_field_test"
+path = "acronym_output_field_test.rs"
+
+[[test]]
+name = "notification_payload_correctness"
+path = "notification_payload_correctness.rs"
+
+# Schemars integration tests
+[[test]]
+name = "test_schemars_derive"
+path = "test_schemars_derive.rs"
+
+[[test]]
+name = "schemars_detailed_schema_test"
+path = "schemars_detailed_schema_test.rs"
+
+[[test]]
+name = "schemars_optional_fields_test"
+path = "schemars_optional_fields_test.rs"

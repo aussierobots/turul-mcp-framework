@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 turul-mcp-server.workspace = true
 turul-mcp-protocol.workspace = true
+turul-mcp-builders.workspace = true
 turul-mcp-session-storage.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true

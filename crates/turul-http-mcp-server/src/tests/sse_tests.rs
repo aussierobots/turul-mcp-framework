@@ -87,7 +87,7 @@ mod sse_event_tests {
         let event = SseEvent::Data(json!({"message": "test"}));
         let formatted = event.format();
 
-        assert!(formatted.contains("event: data"));
+        assert!(formatted.contains("event: message"));
         assert!(formatted.contains("data: "));
         assert!(formatted.ends_with("\n\n"));
     }
@@ -97,8 +97,11 @@ mod sse_event_tests {
         let event = SseEvent::KeepAlive;
         let formatted = event.format();
 
-        assert!(formatted.contains("event: ping"));
-        assert!(formatted.contains("data: "));
+        // Keepalives use comment syntax to preserve Last-Event-ID for MCP resumability
+        assert_eq!(formatted, ": keepalive\n\n");
+        assert!(formatted.starts_with(":")); // Comment-style
+        assert!(!formatted.contains("id:")); // No ID field (preserves Last-Event-ID)
+        assert!(!formatted.contains("data:")); // No data field
         assert!(formatted.ends_with("\n\n"));
     }
 
@@ -107,7 +110,7 @@ mod sse_event_tests {
         let event = SseEvent::Error("Test error message".to_string());
         let formatted = event.format();
 
-        assert!(formatted.contains("event: error"));
+        assert!(formatted.contains("event: message"));
         assert!(formatted.contains("Test error message"));
         assert!(formatted.ends_with("\n\n"));
     }
@@ -154,7 +157,7 @@ mod sse_event_tests {
         assert!(formatted.contains("data: "));
 
         // Should be valid SSE format
-        assert!(formatted.starts_with("event: data\n"));
+        assert!(formatted.starts_with("event: message\n"));
         assert!(formatted.ends_with("\n\n"));
 
         println!("Complex JSON event formatted successfully");
@@ -186,7 +189,10 @@ mod sse_manager_tests {
         let _conn3 = manager.create_connection("conn3".to_string()).await;
         assert_eq!(manager.connection_count().await, 3);
 
-        println!("Connections registered: count = {}", manager.connection_count().await);
+        println!(
+            "Connections registered: count = {}",
+            manager.connection_count().await
+        );
     }
 
     #[tokio::test]
@@ -262,7 +268,9 @@ mod sse_error_handling_tests {
 
         // Subsequent operations on disconnected connection should fail
         let event = SseEvent::new("test", json!({}));
-        let result = manager.send_event_to_connection(&connection_id, event).await;
+        let result = manager
+            .send_event_to_connection(&connection_id, event)
+            .await;
         assert!(result.is_err());
 
         println!("Connection cleanup tested successfully");
@@ -291,7 +299,9 @@ mod sse_error_handling_tests {
         });
 
         let event = SseEvent::new("large_event", large_data);
-        let result = manager.send_event_to_connection(&connection_id, event).await;
+        let result = manager
+            .send_event_to_connection(&connection_id, event)
+            .await;
 
         // Should handle large events gracefully
         assert!(result.is_ok());
@@ -304,12 +314,13 @@ mod sse_error_handling_tests {
         let events = vec![
             // Event with empty data
             SseEvent::new("empty", json!(null)),
-
             // Event with special characters
-            SseEvent::new("special_chars", json!({
-                "message": "Test with 🚀 emojis and \n newlines"
-            })),
-
+            SseEvent::new(
+                "special_chars",
+                json!({
+                    "message": "Test with 🚀 emojis and \n newlines"
+                }),
+            ),
             // Event with very long event type
             SseEvent::new(&"x".repeat(1000), json!({"test": "data"})),
         ];
@@ -341,11 +352,16 @@ mod sse_error_handling_tests {
 
                 // Send some events
                 for j in 0..5 {
-                    let event = SseEvent::new("concurrent", json!({
-                        "connection": i,
-                        "event": j
-                    }));
-                    let _ = manager_clone.send_event_to_connection(&connection_id, event).await;
+                    let event = SseEvent::new(
+                        "concurrent",
+                        json!({
+                            "connection": i,
+                            "event": j
+                        }),
+                    );
+                    let _ = manager_clone
+                        .send_event_to_connection(&connection_id, event)
+                        .await;
                 }
 
                 connection_id
@@ -355,7 +371,8 @@ mod sse_error_handling_tests {
 
         // Wait for all connections to be created
         let connection_ids = futures::future::join_all(handles).await;
-        let connection_ids: Vec<String> = connection_ids.into_iter()
+        let connection_ids: Vec<String> = connection_ids
+            .into_iter()
             .map(|result| result.unwrap())
             .collect();
 
@@ -390,8 +407,14 @@ mod sse_http_integration_tests {
             .unwrap();
 
         // Validate headers
-        assert_eq!(valid_sse_request.headers().get("Accept").unwrap(), "text/event-stream");
-        assert_eq!(valid_sse_request.headers().get("Cache-Control").unwrap(), "no-cache");
+        assert_eq!(
+            valid_sse_request.headers().get("Accept").unwrap(),
+            "text/event-stream"
+        );
+        assert_eq!(
+            valid_sse_request.headers().get("Cache-Control").unwrap(),
+            "no-cache"
+        );
 
         println!("SSE request headers validated successfully");
     }
@@ -419,7 +442,9 @@ mod sse_http_integration_tests {
         // Send keepalive events
         for i in 0..5 {
             let keepalive = SseEvent::new("keepalive", json!({"sequence": i}));
-            let result = manager.send_event_to_connection(&connection_id, keepalive).await;
+            let result = manager
+                .send_event_to_connection(&connection_id, keepalive)
+                .await;
             assert!(result.is_ok());
 
             // Small delay between keepalives
@@ -446,7 +471,9 @@ mod sse_performance_tests {
         // Send events rapidly
         for i in 0..num_events {
             let event = SseEvent::new("high_freq", json!({"sequence": i}));
-            let result = manager.send_event_to_connection(&connection_id, event).await;
+            let result = manager
+                .send_event_to_connection(&connection_id, event)
+                .await;
             assert!(result.is_ok());
         }
 
@@ -483,8 +510,10 @@ mod sse_performance_tests {
         }
 
         let duration = start.elapsed();
-        println!("Broadcasted {} events to {} connections in {:?}",
-                num_broadcasts, num_connections, duration);
+        println!(
+            "Broadcasted {} events to {} connections in {:?}",
+            num_broadcasts, num_connections, duration
+        );
 
         // Cleanup
         for connection_id in connection_ids {
@@ -511,10 +540,13 @@ mod sse_performance_tests {
 
         // Send events to test memory usage
         for i in 0..10 {
-            let event = SseEvent::new("memory_test", json!({
-                "data": format!("Test data {}", i),
-                "connections": num_connections
-            }));
+            let event = SseEvent::new(
+                "memory_test",
+                json!({
+                    "data": format!("Test data {}", i),
+                    "connections": num_connections
+                }),
+            );
 
             let sent_count = manager.broadcast_event(event).await;
             assert_eq!(sent_count, num_connections);
@@ -528,6 +560,9 @@ mod sse_performance_tests {
 
         assert_eq!(manager.connection_count().await, 0);
 
-        println!("Memory usage test with {} connections completed", num_connections);
+        println!(
+            "Memory usage test with {} connections completed",
+            num_connections
+        );
     }
 }

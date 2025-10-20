@@ -178,27 +178,27 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             #[derive(Clone)]
             struct GeneratedPrompt;
 
-            impl HasPromptMetadata for GeneratedPrompt {
+            impl turul_mcp_builders::HasPromptMetadata for GeneratedPrompt {
                 fn name(&self) -> &str { #name }
                 fn title(&self) -> Option<&str> { #title }
             }
 
-            impl HasPromptDescription for GeneratedPrompt {
+            impl turul_mcp_builders::HasPromptDescription for GeneratedPrompt {
                 fn description(&self) -> Option<&str> { #description }
             }
 
-            impl HasPromptArguments for GeneratedPrompt {
+            impl turul_mcp_builders::HasPromptArguments for GeneratedPrompt {
                 fn arguments(&self) -> Option<&Vec<PromptArgument>> {
                     static ARGS: std::sync::OnceLock<Option<Vec<PromptArgument>>> = std::sync::OnceLock::new();
                     ARGS.get_or_init(|| #prompt_args).as_ref()
                 }
             }
 
-            impl HasPromptAnnotations for GeneratedPrompt {
+            impl turul_mcp_builders::HasPromptAnnotations for GeneratedPrompt {
                 fn annotations(&self) -> Option<&PromptAnnotations> { None }
             }
 
-            impl HasPromptMeta for GeneratedPrompt {
+            impl turul_mcp_builders::HasPromptMeta for GeneratedPrompt {
                 fn prompt_meta(&self) -> Option<&HashMap<String, Value>> { None }
             }
 

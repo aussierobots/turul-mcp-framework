@@ -12,11 +12,9 @@ use tracing::info;
 use turul_mcp_protocol::{
     McpError,
     schema::JsonSchema,
-    tools::{
-        CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
-        HasOutputSchema, HasToolMeta, ToolResult, ToolSchema,
-    },
+    tools::{CallToolResult, ToolResult, ToolSchema},
 };
+use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
 use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
 
 /// IDE Auto-Completion Tool that provides intelligent suggestions

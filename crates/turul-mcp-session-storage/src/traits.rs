@@ -118,14 +118,28 @@ impl SseEvent {
     }
 
     /// Format as SSE message for HTTP response
+    ///
+    /// MCP Inspector and the official TypeScript SDK only process SSE events
+    /// with no event name or "message". Custom event names are discarded.
+    /// We use "message" for all JSON-RPC notifications to ensure compatibility.
+    ///
+    /// CRITICAL: Keepalive events use comment syntax (": keepalive\n\n") to preserve
+    /// Last-Event-ID for MCP resumability. Including "id: 0" would reset the client's
+    /// Last-Event-ID, causing full event replay on reconnection.
     pub fn format(&self) -> String {
+        // Special handling for keepalives: use comment syntax (no id, no data)
+        // This preserves Last-Event-ID for proper MCP resumability
+        if self.event_type == "ping" || self.event_type == "keepalive" {
+            return ": keepalive\n\n".to_string();
+        }
+
         let mut result = String::new();
 
-        // Event ID for resumability
+        // Event ID for resumability (only for real events, not keepalives)
         result.push_str(&format!("id: {}\n", self.id));
 
-        // Event type
-        result.push_str(&format!("event: {}\n", self.event_type));
+        // Use "message" for all JSON-RPC notifications (MCP Inspector compatible)
+        result.push_str("event: message\n");
 
         // Event data (JSON)
         if let Ok(data_str) = serde_json::to_string(&self.data) {
@@ -475,10 +489,11 @@ mod tests {
 
     #[test]
     fn test_sse_event_formatting() {
+        // Test regular event formatting (should emit "event: message")
         let mut event = SseEvent {
             id: 123,
             timestamp: 1234567890,
-            event_type: "data".to_string(),
+            event_type: "notifications/progress".to_string(),
             data: serde_json::json!({"message": "test"}),
             retry: Some(1000),
         };
@@ -486,8 +501,25 @@ mod tests {
 
         let formatted = event.format();
         assert!(formatted.contains("id: 123"));
-        assert!(formatted.contains("event: data"));
+        assert!(formatted.contains("event: message")); // Always "message" for MCP Inspector compatibility
         assert!(formatted.contains("retry: 1000"));
         assert!(formatted.contains("data: {\"message\":\"test\"}"));
+
+        // Test keepalive event formatting (should use comment syntax for MCP resumability)
+        let keepalive = SseEvent {
+            id: 0,
+            timestamp: 1234567890,
+            event_type: "ping".to_string(),
+            data: serde_json::json!({"type": "keepalive"}),
+            retry: None,
+        };
+
+        let keepalive_formatted = keepalive.format();
+        // Keepalives use comment syntax to preserve Last-Event-ID
+        assert_eq!(keepalive_formatted, ": keepalive\n\n");
+        assert!(keepalive_formatted.starts_with(":")); // Comment-style
+        assert!(!keepalive_formatted.contains("id:")); // No ID field
+        assert!(!keepalive_formatted.contains("event:")); // No event field
+        assert!(!keepalive_formatted.contains("data:")); // No data field
     }
 }

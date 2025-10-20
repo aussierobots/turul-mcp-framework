@@ -6,7 +6,7 @@ use syn::{Data, DeriveInput, Fields, Result};
 
 use crate::utils::{
     determine_output_field_name, extract_param_meta, extract_tool_meta,
-    generate_enhanced_output_schema, generate_param_extraction, type_to_schema,
+    generate_output_schema_auto, generate_param_extraction, type_to_schema,
 };
 
 /// Auto-determine tool name from struct name (ZERO CONFIGURATION!)
@@ -123,7 +123,11 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         // Generate parameter extraction code
-        let extraction = generate_param_extraction(field_name, field_type, param_meta.optional || is_option_type);
+        let extraction = generate_param_extraction(
+            field_name,
+            field_type,
+            param_meta.optional || is_option_type,
+        );
         param_extractions.push(extraction);
 
         if param_meta.optional && !is_option_type {
@@ -141,34 +145,36 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let tool_name = &tool_meta.name;
     let tool_description = &tool_meta.description;
-    let custom_field_name_tokens = match &tool_meta.output_field {
-        Some(field_name) => quote! { Some(#field_name) },
-        None => quote! { None },
+
+    // Determine the output field name consistently for both schema and runtime
+    let runtime_field_name = if let Some(ref output_type) = tool_meta.output_type {
+        // User specified output type - use same logic as schema generation
+        determine_output_field_name(output_type, tool_meta.output_field.as_ref())
+    } else {
+        // Zero-config case - use custom field or default to "output"
+        tool_meta
+            .output_field
+            .clone()
+            .unwrap_or_else(|| "output".to_string())
     };
 
-    // Generate enhanced output schema with struct property introspection
+    let custom_field_name_tokens = quote! { Some(#runtime_field_name) };
+
+    // Generate output schema with automatic schemars detection
     let output_schema_tokens = if let Some(ref output_type) = tool_meta.output_type {
-        // User specified output type - determine field name and generate enhanced schema
-        let field_name = determine_output_field_name(output_type, tool_meta.output_field.as_ref());
-        generate_enhanced_output_schema(output_type, &field_name, Some(&input))
+        // User specified output type - use auto-detection (schemars if available, else introspection)
+        generate_output_schema_auto(output_type, &runtime_field_name, Some(&input))
     } else {
-        // Zero-config case - generate type-aware schema using heuristics
-        let field_name = tool_meta.output_field.as_deref().unwrap_or("output");
-        let struct_name_str = name.to_string();
-        quote! {
-            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-                static OUTPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
-                Some(OUTPUT_SCHEMA.get_or_init(|| {
-                    Self::generate_heuristic_schema(#field_name, #struct_name_str)
-                }))
-            }
-        }
+        // Zero-config case - treat as Self for introspection
+        // This allows tools to return Self and get detailed schemas automatically
+        let self_type: syn::Type = syn::parse_quote!(Self);
+        generate_output_schema_auto(&self_type, &runtime_field_name, Some(&input))
     };
 
     let expanded = quote! {
         #[automatically_derived]
         // Generate fine-grained trait implementations
-        impl turul_mcp_protocol::tools::HasBaseMetadata for #name {
+        impl turul_mcp_builders::traits::HasBaseMetadata for #name {
             fn name(&self) -> &str {
                 #tool_name
             }
@@ -179,13 +185,13 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl turul_mcp_protocol::tools::HasDescription for #name {
+        impl turul_mcp_builders::traits::HasDescription for #name {
             fn description(&self) -> Option<&str> {
                 Some(#tool_description)
             }
         }
 
-        impl turul_mcp_protocol::tools::HasInputSchema for #name {
+        impl turul_mcp_builders::traits::HasInputSchema for #name {
             fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
                 // Generate static schema at compile time
                 static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
@@ -202,7 +208,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl turul_mcp_protocol::tools::HasOutputSchema for #name {
+        impl turul_mcp_builders::traits::HasOutputSchema for #name {
             #output_schema_tokens
         }
 
@@ -261,65 +267,45 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 use std::collections::HashMap;
                 use turul_mcp_protocol::schema::JsonSchema;
 
-                let field_schema = match value {
-                    serde_json::Value::Number(n) if n.is_f64() => JsonSchema::number(),
-                    serde_json::Value::Number(_) => JsonSchema::integer(),
-                    serde_json::Value::String(_) => JsonSchema::string(),
-                    serde_json::Value::Bool(_) => JsonSchema::boolean(),
-                    serde_json::Value::Array(_) => JsonSchema::Array {
-                        description: Some("Array output".to_string()),
-                        items: None,
-                        min_items: None,
-                        max_items: None,
-                    },
-                    serde_json::Value::Object(obj) => {
-                        // Generate detailed schema from object structure
-                        let mut properties = std::collections::HashMap::new();
-                        let mut required = Vec::new();
-
-                        for (key, value) in obj.iter() {
-                            let prop_schema = match value {
-                                serde_json::Value::String(_) => JsonSchema::string(),
-                                serde_json::Value::Number(n) if n.is_f64() => JsonSchema::number(),
-                                serde_json::Value::Number(_) => JsonSchema::integer(),
-                                serde_json::Value::Bool(_) => JsonSchema::boolean(),
-                                serde_json::Value::Array(arr) => {
-                                    // Try to determine array item type from first element
-                                    let item_type = arr.first().map(|first| match first {
-                                        serde_json::Value::String(_) => JsonSchema::string(),
-                                        serde_json::Value::Number(n) if n.is_f64() => JsonSchema::number(),
-                                        serde_json::Value::Number(_) => JsonSchema::integer(),
-                                        serde_json::Value::Bool(_) => JsonSchema::boolean(),
-                                        _ => JsonSchema::string(), // Fallback
-                                    });
-                                    JsonSchema::Array {
-                                        description: Some("Array of items".to_string()),
-                                        items: item_type.map(Box::new),
-                                        min_items: None,
-                                        max_items: None,
-                                    }
-                                },
-                                serde_json::Value::Object(_) => JsonSchema::Object {
-                                    description: Some("Nested object".to_string()),
-                                    properties: None,
-                                    required: None,
-                                    additional_properties: Some(true),
-                                },
-                                serde_json::Value::Null => continue, // Skip null values
-                            };
-                            properties.insert(key.clone(), prop_schema);
-                            required.push(key.clone());
+                fn infer_schema(value: &serde_json::Value) -> JsonSchema {
+                    match value {
+                        serde_json::Value::Number(n) if n.is_f64() => JsonSchema::number(),
+                        serde_json::Value::Number(_) => JsonSchema::integer(),
+                        serde_json::Value::String(_) => JsonSchema::string(),
+                        serde_json::Value::Bool(_) => JsonSchema::boolean(),
+                        serde_json::Value::Array(arr) => {
+                            let item_schema = arr.first().map(|item| Box::new(infer_schema(item)));
+                            JsonSchema::Array {
+                                description: Some("Array output".to_string()),
+                                items: item_schema,
+                                min_items: None,
+                                max_items: None,
+                            }
                         }
-
-                        JsonSchema::Object {
-                            description: Some("Generated from runtime object structure".to_string()),
-                            properties: Some(properties),
-                            required: Some(required),
-                            additional_properties: Some(false), // We know the exact structure
+                        serde_json::Value::Object(obj) => {
+                            let mut properties = HashMap::new();
+                            let mut required = Vec::new();
+                            for (key, value) in obj.iter() {
+                                properties.insert(key.clone(), infer_schema(value));
+                                required.push(key.clone());
+                            }
+                            JsonSchema::Object {
+                                description: Some("Generated from runtime object structure".to_string()),
+                                properties: Some(properties),
+                                required: Some(required),
+                                additional_properties: Some(false),
+                            }
                         }
-                    },
-                    serde_json::Value::Null => JsonSchema::string(), // Fallback
-                };
+                        serde_json::Value::Null => JsonSchema::Object {
+                            description: Some("JSON value".to_string()),
+                            properties: None,
+                            required: None,
+                            additional_properties: Some(true),
+                        },
+                    }
+                }
+
+                let field_schema = infer_schema(value);
 
                 turul_mcp_protocol::tools::ToolSchema::object()
                     .with_properties(HashMap::from([
@@ -329,14 +315,14 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl turul_mcp_protocol::tools::HasAnnotations for #name {
+        impl turul_mcp_builders::traits::HasAnnotations for #name {
             fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
                 // TODO: Extract from tool attributes when available
                 None
             }
         }
 
-        impl turul_mcp_protocol::tools::HasToolMeta for #name {
+        impl turul_mcp_builders::traits::HasToolMeta for #name {
             fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
                 None
             }
@@ -349,7 +335,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         impl turul_mcp_server::McpTool for #name {
             async fn call(&self, args: serde_json::Value, session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
                 use serde_json::Value;
-                use turul_mcp_protocol::tools::HasOutputSchema;
+                use turul_mcp_builders::traits::HasOutputSchema;
 
                 // Extract parameters
                 #(#param_extractions)*

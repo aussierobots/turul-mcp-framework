@@ -31,7 +31,7 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_protocol::resources::HasResourceMetadata for #struct_name {
+        impl turul_mcp_builders::traits::HasResourceMetadata for #struct_name {
             fn name(&self) -> &str {
                 #name
             }
@@ -42,42 +42,42 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::resources::HasResourceDescription for #struct_name {
+        impl turul_mcp_builders::traits::HasResourceDescription for #struct_name {
             fn description(&self) -> Option<&str> {
                 Some(#description)
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::resources::HasResourceUri for #struct_name {
+        impl turul_mcp_builders::traits::HasResourceUri for #struct_name {
             fn uri(&self) -> &str {
                 #uri
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::resources::HasResourceMimeType for #struct_name {
+        impl turul_mcp_builders::traits::HasResourceMimeType for #struct_name {
             fn mime_type(&self) -> Option<&str> {
                 None  // TODO: Support mime_type from attributes
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::resources::HasResourceSize for #struct_name {
+        impl turul_mcp_builders::traits::HasResourceSize for #struct_name {
             fn size(&self) -> Option<u64> {
                 None
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::resources::HasResourceAnnotations for #struct_name {
+        impl turul_mcp_builders::traits::HasResourceAnnotations for #struct_name {
             fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
                 None
             }
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::resources::HasResourceMeta for #struct_name {
+        impl turul_mcp_builders::traits::HasResourceMeta for #struct_name {
             fn resource_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
                 None
             }

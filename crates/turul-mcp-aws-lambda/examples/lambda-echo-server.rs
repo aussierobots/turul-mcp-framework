@@ -21,7 +21,9 @@ use turul_mcp_server::{McpResult, SessionContext};
 
 /// Simple echo tool that returns whatever message is sent to it
 #[derive(McpTool, Clone, Default)]
-#[tool(name = "echo", description = "Echo back the provided message")]
+#[tool(name = "echo", description = "Echo back the provided message",
+    output = String
+)]
 struct EchoTool {
     #[param(description = "Message to echo back")]
     message: String,
@@ -63,9 +65,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let handler = handler.clone();
         async move {
             handler
-                .handle(req)
+                .handle_streaming(req) // Use handle_streaming for proper SSE support
                 .await
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
         }
     }))
     .await

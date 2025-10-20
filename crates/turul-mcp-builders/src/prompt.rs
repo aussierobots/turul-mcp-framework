@@ -9,10 +9,14 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
-// Import from protocol via alias
+// Import traits from local traits module
+use crate::traits::{
+    HasPromptAnnotations, HasPromptArguments, HasPromptDescription,
+    HasPromptMeta, HasPromptMetadata,
+};
+// Import protocol types
 use turul_mcp_protocol::prompts::{
-    ContentBlock, GetPromptResult, HasPromptAnnotations, HasPromptArguments, HasPromptDescription,
-    HasPromptMeta, HasPromptMetadata, PromptArgument, PromptMessage,
+    ContentBlock, GetPromptResult, PromptArgument, PromptMessage,
 };
 
 /// Type alias for dynamic prompt generation function

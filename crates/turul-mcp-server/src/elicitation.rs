@@ -3,7 +3,7 @@
 //! This module defines the high-level trait for implementing MCP elicitation.
 
 use async_trait::async_trait;
-use turul_mcp_protocol::elicitation::ElicitationDefinition;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{
     McpResult,
     elicitation::{ElicitCreateRequest, ElicitResult},
@@ -75,10 +75,8 @@ mod tests {
     use super::*;
     use serde_json::json;
     use std::collections::HashMap;
-    use turul_mcp_protocol::elicitation::{
-        ElicitationSchema, HasElicitationHandling, HasElicitationMetadata, HasElicitationSchema,
-        PrimitiveSchemaDefinition,
-    };
+    use turul_mcp_protocol::elicitation::{ElicitationSchema, PrimitiveSchemaDefinition};
+      // HasElicitationMetadata, etc.
 
     struct TestElicitation {
         message: String,

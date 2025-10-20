@@ -30,7 +30,7 @@ use turul_mcp_json_rpc_server::{
 };
 use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::ServerCapabilities;
-use turul_mcp_session_storage::InMemorySessionStorage;
+use turul_mcp_session_storage::{InMemorySessionStorage, SessionView};
 use uuid::Uuid;
 
 use crate::{
@@ -39,6 +39,7 @@ use crate::{
     notification_bridge::{SharedNotificationBroadcaster, StreamManagerNotificationBroadcaster},
     protocol::{extract_last_event_id, extract_protocol_version, extract_session_id},
 };
+use std::collections::HashMap;
 
 /// SSE stream body that implements hyper's Body trait
 pub struct SessionSseStream {
@@ -148,6 +149,7 @@ pub struct SessionMcpHandler {
     pub(crate) stream_config: StreamConfig,
     // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance with internal session management
     pub(crate) stream_manager: Arc<StreamManager>,
+    pub(crate) middleware_stack: Arc<crate::middleware::MiddlewareStack>,
 }
 
 impl Clone for SessionMcpHandler {
@@ -158,6 +160,7 @@ impl Clone for SessionMcpHandler {
             session_storage: Arc::clone(&self.session_storage),
             stream_config: self.stream_config.clone(),
             stream_manager: Arc::clone(&self.stream_manager),
+            middleware_stack: Arc::clone(&self.middleware_stack),
         }
     }
 }
@@ -171,7 +174,8 @@ impl SessionMcpHandler {
     ) -> Self {
         let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
             Arc::new(InMemorySessionStorage::new());
-        Self::with_storage(config, dispatcher, storage, stream_config)
+        let middleware_stack = Arc::new(crate::middleware::MiddlewareStack::new());
+        Self::with_storage(config, dispatcher, storage, stream_config, middleware_stack)
     }
 
     /// Create handler with shared StreamManager instance (corrected architecture)
@@ -181,6 +185,7 @@ impl SessionMcpHandler {
         session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
         stream_config: StreamConfig,
         stream_manager: Arc<StreamManager>,
+        middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     ) -> Self {
         Self {
             config,
@@ -188,6 +193,7 @@ impl SessionMcpHandler {
             session_storage,
             stream_config,
             stream_manager,
+            middleware_stack,
         }
     }
 
@@ -198,6 +204,7 @@ impl SessionMcpHandler {
         dispatcher: Arc<JsonRpcDispatcher<McpError>>,
         session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
         stream_config: StreamConfig,
+        middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     ) -> Self {
         // Create own StreamManager instance (not recommended for production)
         let stream_manager = Arc::new(StreamManager::with_config(
@@ -211,6 +218,7 @@ impl SessionMcpHandler {
             session_storage,
             stream_config,
             stream_manager,
+            middleware_stack,
         }
     }
 
@@ -255,6 +263,13 @@ impl SessionMcpHandler {
     where
         B: http_body::Body<Data = bytes::Bytes, Error = hyper::Error> + Send + 'static,
     {
+        // Extract all headers for middleware before body is consumed
+        let headers: HashMap<String, String> = req
+            .headers()
+            .iter()
+            .filter_map(|(k, v)| v.to_str().ok().map(|s| (k.as_str().to_string(), s.to_string())))
+            .collect();
+
         // Extract protocol version and session ID from headers
         let protocol_version = extract_protocol_version(req.headers());
         let session_id = extract_session_id(req.headers());
@@ -381,9 +396,10 @@ impl SessionMcpHandler {
                                 timestamp: chrono::Utc::now().timestamp_millis() as u64,
                             };
 
-                            let response = self
-                                .dispatcher
-                                .handle_request_with_context(request, session_context)
+                            // Run middleware pipeline and dispatch
+                            // Injection is applied immediately inside run_middleware_and_dispatch
+                            let (response, _) = self
+                                .run_middleware_and_dispatch(request, headers.clone(), session_context)
                                 .await;
 
                             // Return the session ID created by session storage for the HTTP header
@@ -424,12 +440,12 @@ impl SessionMcpHandler {
                         None
                     };
 
-                    let response = if let Some(ctx) = session_context {
-                        self.dispatcher
-                            .handle_request_with_context(request, ctx)
-                            .await
+                    // Run middleware pipeline and dispatch
+                    let (response, _stashed_injection) = if let Some(ctx) = session_context {
+                        self.run_middleware_and_dispatch(request, headers.clone(), ctx).await
                     } else {
-                        self.dispatcher.handle_request(request).await
+                        // No session - fast path (no middleware, just dispatch)
+                        (self.dispatcher.handle_request(request).await, None)
                     };
                     (response, session_id)
                 };
@@ -818,5 +834,142 @@ impl SessionMcpHandler {
                 )))
             }
         }
+    }
+
+    /// Helper method to run middleware pipeline and dispatch request
+    /// Shared logic between StreamableHttpHandler and SessionMcpHandler
+    async fn run_middleware_and_dispatch(
+        &self,
+        request: turul_mcp_json_rpc_server::JsonRpcRequest,
+        headers: HashMap<String, String>,
+        session: turul_mcp_json_rpc_server::SessionContext,
+    ) -> (turul_mcp_json_rpc_server::JsonRpcMessage, Option<crate::middleware::SessionInjection>) {
+        // Fast path: if middleware stack is empty, dispatch directly
+        if self.middleware_stack.is_empty() {
+            let result = self.dispatcher
+                .handle_request_with_context(request, session)
+                .await;
+            return (result, None);
+        }
+
+        // Normalize headers: lowercase String keys
+        let normalized_headers: HashMap<String, String> = headers
+            .iter()
+            .map(|(k, v)| (k.to_lowercase(), v.clone()))
+            .collect();
+
+        // Build RequestContext with method and headers
+        // Clone method and session_id for ctx (request will be moved to dispatcher)
+        let method = request.method.clone();
+        let session_id = session.session_id.clone();
+
+        // Convert params to Option<Value>
+        let params = request.params.clone().map(|p| match p {
+            turul_mcp_json_rpc_server::RequestParams::Object(map) => {
+                serde_json::Value::Object(map.into_iter().collect())
+            }
+            turul_mcp_json_rpc_server::RequestParams::Array(arr) => serde_json::Value::Array(arr),
+        });
+        let mut ctx = crate::middleware::RequestContext::new(&method, params);
+
+        for (k, v) in normalized_headers {
+            ctx.add_metadata(k, serde_json::json!(v));
+        }
+
+        // Create SessionView adapter for middleware to access storage-backed session
+        let session_view = crate::middleware::StorageBackedSessionView::new(
+            session_id.clone(),
+            Arc::clone(&self.session_storage),
+        );
+
+        // Execute before_dispatch with SessionView
+        let injection = match self.middleware_stack.execute_before(&mut ctx, Some(&session_view)).await {
+            Ok(inj) => inj,
+            Err(err) => {
+                // Map middleware error to proper JSON-RPC error code
+                return (Self::map_middleware_error_to_jsonrpc(err, request.id), None);
+            }
+        };
+
+        // Apply injection immediately to session storage
+        if !injection.is_empty() {
+            for (key, value) in injection.state() {
+                if let Err(e) = session_view.set_state(key, value.clone()).await {
+                    tracing::warn!("Failed to apply injection state '{}': {}", key, e);
+                }
+            }
+            for (key, value) in injection.metadata() {
+                if let Err(e) = session_view.set_metadata(key, value.clone()).await {
+                    tracing::warn!("Failed to apply injection metadata '{}': {}", key, e);
+                }
+            }
+        }
+
+        // Dispatch the request
+        let result = self.dispatcher
+            .handle_request_with_context(request, session)
+            .await;
+
+        // Execute after_dispatch
+        // Convert JsonRpcMessage to DispatcherResult for middleware
+        let mut dispatcher_result = match &result {
+            turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
+                match &resp.result {
+                    turul_mcp_json_rpc_server::response::ResponseResult::Success(val) => {
+                        crate::middleware::DispatcherResult::Success(val.clone())
+                    }
+                    turul_mcp_json_rpc_server::response::ResponseResult::Null => {
+                        crate::middleware::DispatcherResult::Success(serde_json::Value::Null)
+                    }
+                }
+            }
+            turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
+                crate::middleware::DispatcherResult::Error(err.error.message.clone())
+            }
+        };
+
+        // Ignore errors from after_dispatch (they shouldn't prevent returning the result)
+        let _ = self.middleware_stack.execute_after(&ctx, &mut dispatcher_result).await;
+
+        (result, None) // Injection already applied, no need to return it
+    }
+
+    /// Map MiddlewareError to JSON-RPC error with semantic error codes
+    fn map_middleware_error_to_jsonrpc(
+        err: crate::middleware::MiddlewareError,
+        request_id: turul_mcp_json_rpc_server::RequestId,
+    ) -> turul_mcp_json_rpc_server::JsonRpcMessage {
+        use crate::middleware::error::error_codes;
+        use crate::middleware::MiddlewareError;
+
+        let (code, message, data) = match err {
+            MiddlewareError::Unauthenticated(msg) => (error_codes::UNAUTHENTICATED, msg, None),
+            MiddlewareError::Unauthorized(msg) => (error_codes::UNAUTHORIZED, msg, None),
+            MiddlewareError::RateLimitExceeded {
+                message,
+                retry_after,
+            } => {
+                let data = retry_after.map(|s| serde_json::json!({"retryAfter": s}));
+                (error_codes::RATE_LIMIT_EXCEEDED, message, data)
+            }
+            MiddlewareError::InvalidRequest(msg) => (error_codes::INVALID_REQUEST, msg, None),
+            MiddlewareError::Internal(msg) => (error_codes::INTERNAL_ERROR, msg, None),
+            MiddlewareError::Custom { message, .. } => (error_codes::INTERNAL_ERROR, message, None),
+        };
+
+        let error_obj = if let Some(d) = data {
+            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(code, &message, Some(d))
+        } else {
+            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
+                code,
+                &message,
+                None::<serde_json::Value>,
+            )
+        };
+
+        turul_mcp_json_rpc_server::JsonRpcMessage::Error(turul_mcp_json_rpc_server::JsonRpcError::new(
+            Some(request_id),
+            error_obj,
+        ))
     }
 }

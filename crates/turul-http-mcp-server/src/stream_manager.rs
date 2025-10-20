@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use turul_mcp_session_storage::SseEvent;
 
@@ -155,6 +155,11 @@ impl StreamManager {
         Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>,
         StreamError,
     > {
+        info!(
+            "🌊 handle_sse_connection called: session={}, connection={}, last_event_id={:?}",
+            session_id, connection_id, last_event_id
+        );
+
         // Verify session exists
         if self
             .storage
@@ -167,11 +172,16 @@ impl StreamManager {
         }
 
         // Create the SSE stream (one per connection, MCP compliant)
+        debug!(
+            "🌊 Creating SSE stream for session={}, connection={}",
+            session_id, connection_id
+        );
         let sse_stream = self
             .create_sse_stream(session_id.clone(), connection_id.clone(), last_event_id)
             .await?;
 
         // Convert to HTTP response
+        debug!("🌊 Converting SSE stream to HTTP response");
         let response = self.stream_to_response(sse_stream).await;
 
         debug!(
@@ -204,20 +214,21 @@ impl StreamManager {
 
         let combined_stream = async_stream::stream! {
             // 1. First, yield any historical events (resumability)
-            if let Some(after_event_id) = last_event_id {
-                debug!("Replaying events after ID {} for session={}, connection={}",
-                       after_event_id, session_id_clone, connection_id_clone);
+            let after_id = last_event_id.unwrap_or(0);
+            debug!("🌊 Fetching events after ID {} for session={}, connection={}",
+                   after_id, session_id_clone, connection_id_clone);
 
-                match storage.get_events_after(&session_id_clone, after_event_id).await {
-                    Ok(events) => {
-                        for event in events.into_iter().take(config.max_replay_events) {
-                            yield event;
-                        }
-                    },
-                    Err(e) => {
-                        error!("Failed to get historical events: {}", e);
-                        // Continue with real-time events even if historical replay fails
+            match storage.get_events_after(&session_id_clone, after_id).await {
+                Ok(events) => {
+                    debug!("🌊 Found {} stored events to send", events.len());
+                    for event in events.into_iter().take(config.max_replay_events) {
+                        debug!("🌊 Yielding event: id={}, type={}", event.id, event.event_type);
+                        yield event;
                     }
+                },
+                Err(e) => {
+                    error!("Failed to get historical events: {}", e);
+                    // Continue with real-time events even if historical replay fails
                 }
             }
 
@@ -242,13 +253,13 @@ impl StreamManager {
                         }
                     },
 
-                    // Keep-alive pings
+                    // Keep-alive pings (comment-style to preserve Last-Event-ID for resumability)
                     _ = keepalive_interval.tick() => {
                         let keepalive_event = SseEvent {
-                            id: 0, // Keep-alive events don't need persistent IDs
+                            id: 0, // Will be ignored - comment-style keepalives don't have id field
                             timestamp: chrono::Utc::now().timestamp_millis() as u64,
-                            event_type: "ping".to_string(),
-                            data: serde_json::json!({"type": "keepalive"}),
+                            event_type: "keepalive".to_string(), // Triggers comment-style formatting
+                            data: serde_json::Value::Null, // No data for comment-style keepalives
                             retry: None,
                         };
                         yield keepalive_event;
@@ -477,8 +488,13 @@ impl StreamManager {
         store_when_no_connections: bool,
     ) -> Result<u64, StreamError> {
         // Check subscription filtering first
-        if !self.is_subscribed(session_id, &event_type).await {
-            debug!(
+        let is_subscribed = self.is_subscribed(session_id, &event_type).await;
+        info!(
+            "🔍 Subscription check: session={}, event_type={}, is_subscribed={}",
+            session_id, event_type, is_subscribed
+        );
+        if !is_subscribed {
+            warn!(
                 "🚫 Session {} not subscribed to notification type: {}",
                 session_id, event_type
             );
@@ -691,11 +707,9 @@ impl StreamManager {
             StreamError::StorageError(format!("Failed to serialize response: {}", e))
         })?;
 
-        // 1. Include recent notifications that may have been generated during tool execution
-        // Note: Since tool notifications are processed asynchronously, we need to wait a moment
-        // and then check for recent events to include in the POST SSE response
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
+        // 1. Include recent notifications that were generated during tool execution
+        // Tool execution is fully awaited, and storage writes use consistent reads,
+        // so all notifications should be immediately available
         let mut sse_frames = Vec::new();
         let mut event_id_counter = 1;
 
@@ -704,14 +718,14 @@ impl StreamManager {
                 // Convert stored SSE event to notification JSON-RPC format
                 if event.event_type != "ping" {
                     // Skip keepalive events
+                    // Use "message" event type for MCP Inspector compatibility
+                    // The JSON-RPC method is already in the data payload
                     let notification_sse = format!(
-                        "id: {}\nevent: {}\ndata: {}\n\n",
-                        event_id_counter,
-                        event.event_type, // Use actual event type (e.g., "notifications/message")
-                        event.data
+                        "id: {}\nevent: message\ndata: {}\n\n",
+                        event_id_counter, event.data
                     );
                     debug!(
-                        "📤 Including notification in POST SSE stream: id={}, event_type={}",
+                        "📤 Including notification in POST SSE stream: id={}, json_rpc_method={}",
                         event_id_counter, event.event_type
                     );
                     sse_frames.push(http_body::Frame::data(Bytes::from(notification_sse)));
@@ -721,12 +735,13 @@ impl StreamManager {
         }
 
         // 2. Add the JSON-RPC tool response
+        // Use "message" event type for MCP Inspector compatibility
         let response_sse = format!(
-            "id: {}\nevent: result\ndata: {}\n\n", // Tool responses use "result" event type
+            "id: {}\nevent: message\ndata: {}\n\n",
             event_id_counter, response_json
         );
         debug!(
-            "📤 Sending JSON-RPC response as SSE event: id={}, event=result",
+            "📤 Sending JSON-RPC response as SSE event: id={}, event=message",
             event_id_counter
         );
         sse_frames.push(http_body::Frame::data(Bytes::from(response_sse)));

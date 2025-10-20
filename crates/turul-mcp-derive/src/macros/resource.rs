@@ -35,7 +35,7 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
             }
 
             // Implement fine-grained traits
-            impl turul_mcp_protocol::resources::HasResourceMetadata for #resource_name_ident {
+            impl turul_mcp_builders::HasResourceMetadata for #resource_name_ident {
                 fn name(&self) -> &str {
                     #name
                 }
@@ -45,37 +45,37 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 }
             }
 
-            impl turul_mcp_protocol::resources::HasResourceDescription for #resource_name_ident {
+            impl turul_mcp_builders::HasResourceDescription for #resource_name_ident {
                 fn description(&self) -> Option<&str> {
                     Some(#description)
                 }
             }
 
-            impl turul_mcp_protocol::resources::HasResourceUri for #resource_name_ident {
+            impl turul_mcp_builders::HasResourceUri for #resource_name_ident {
                 fn uri(&self) -> &str {
                     #uri
                 }
             }
 
-            impl turul_mcp_protocol::resources::HasResourceMimeType for #resource_name_ident {
+            impl turul_mcp_builders::HasResourceMimeType for #resource_name_ident {
                 fn mime_type(&self) -> Option<&str> {
                     None
                 }
             }
 
-            impl turul_mcp_protocol::resources::HasResourceSize for #resource_name_ident {
+            impl turul_mcp_builders::HasResourceSize for #resource_name_ident {
                 fn size(&self) -> Option<u64> {
                     None
                 }
             }
 
-            impl turul_mcp_protocol::resources::HasResourceAnnotations for #resource_name_ident {
+            impl turul_mcp_builders::HasResourceAnnotations for #resource_name_ident {
                 fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
                     None
                 }
             }
 
-            impl turul_mcp_protocol::resources::HasResourceMeta for #resource_name_ident {
+            impl turul_mcp_builders::HasResourceMeta for #resource_name_ident {
                 fn resource_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
                     None
                 }

@@ -5,8 +5,9 @@ use tracing::info;
 
 // Test various primitive types with f64 output
 #[derive(McpTool, Clone)]
-#[tool(name = "math_operations", description = "Perform math operations on various numeric types")]
-#[output_type(f64)]
+#[tool(name = "math_operations", description = "Perform math operations on various numeric types",
+    output = f64
+)]
 struct MathOperationsTool {
     #[param(description = "Integer value")]
     int_val: i32,
@@ -33,8 +34,9 @@ impl MathOperationsTool {
 
 // Test string processing with string output
 #[derive(McpTool, Clone)]
-#[tool(name = "string_processor", description = "Process strings in various ways")]
-#[output_type(String)]
+#[tool(name = "string_processor", description = "Process strings in various ways",
+    output = String
+)]
 struct StringProcessorTool {
     #[param(description = "Input text to process")]
     text: String,
@@ -56,8 +58,9 @@ impl StringProcessorTool {
 
 // Test array/vector processing
 #[derive(McpTool, Clone)]
-#[tool(name = "array_processor", description = "Process arrays of numbers")]
-#[output_type(f64)]
+#[tool(name = "array_processor", description = "Process arrays of numbers",
+    output = f64
+)]
 struct ArrayProcessorTool {
     #[param(description = "Array of numbers to sum")]
     numbers: Vec<f64>,
@@ -75,8 +78,9 @@ impl ArrayProcessorTool {
 
 // Test boolean logic
 #[derive(McpTool, Clone)]
-#[tool(name = "boolean_logic", description = "Perform boolean operations")]
-#[output_type(bool)]
+#[tool(name = "boolean_logic", description = "Perform boolean operations",
+    output = bool
+)]
 struct BooleanLogicTool {
     #[param(description = "First boolean value")]
     a: bool,
@@ -152,8 +156,9 @@ impl DataAnalyzerTool {
 
 // Test optional parameters extensively
 #[derive(McpTool, Clone)]
-#[tool(name = "optional_params_test", description = "Test various optional parameter types")]
-#[output_type(String)]
+#[tool(name = "optional_params_test", description = "Test various optional parameter types",
+    output = String
+)]
 struct OptionalParamsTool {
     #[param(description = "Required string")]
     required_text: String,

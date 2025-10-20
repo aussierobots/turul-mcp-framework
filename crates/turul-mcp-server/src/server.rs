@@ -38,6 +38,8 @@ pub struct McpServer {
     instructions: Option<String>,
     /// Strict MCP lifecycle enforcement
     strict_lifecycle: bool,
+    /// Middleware stack for request/response processing
+    middleware_stack: crate::middleware::MiddlewareStack,
 
     // HTTP configuration (if enabled)
     #[cfg(feature = "http")]
@@ -63,6 +65,7 @@ impl McpServer {
         session_cleanup_interval_seconds: Option<u64>,
         session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
         strict_lifecycle: bool,
+        middleware_stack: crate::middleware::MiddlewareStack,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
@@ -124,6 +127,7 @@ impl McpServer {
             session_storage,
             instructions,
             strict_lifecycle,
+            middleware_stack,
             #[cfg(feature = "http")]
             bind_address,
             #[cfg(feature = "http")]
@@ -212,6 +216,7 @@ impl McpServer {
                 .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
                 // POST SSE remains at default (false) for compatibility
                 .server_capabilities(self.capabilities.clone()) // Pass server capabilities
+                .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(
                     vec!["tools/list".to_string()],
@@ -374,6 +379,7 @@ impl McpServer {
                 .get_sse(self.enable_sse) // GET SSE controlled by main server enable_sse flag
                 // POST SSE remains at default (false) for compatibility
                 .server_capabilities(self.capabilities.clone()) // Pass server capabilities
+                .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(
                     vec!["tools/list".to_string()],
@@ -539,14 +545,12 @@ impl JsonRpcHandler for SessionAwareMcpHandlerBridge {
         debug!("Handling {} notification via session-aware bridge", method);
 
         // Convert JSON-RPC SessionContext to MCP SessionContext
-        let mcp_session_context = if let Some(json_rpc_ctx) = session_context {
-            Some(SessionContext::from_json_rpc_with_broadcaster(
+        let mcp_session_context = session_context.map(|json_rpc_ctx| {
+            SessionContext::from_json_rpc_with_broadcaster(
                 json_rpc_ctx,
                 self.session_manager.get_storage(),
-            ))
-        } else {
-            None
-        };
+            )
+        });
 
         // MCP Lifecycle Guard for notifications: Allow notifications/initialized to pass through
         // but enforce lifecycle for other notifications if strict mode is enabled
@@ -988,22 +992,21 @@ impl JsonRpcHandler for ListToolsHandler {
         debug!("Handling {} request", method);
 
         // MCP Lifecycle Guard: Ensure session is initialized before allowing operations (if strict mode enabled)
-        if self.strict_lifecycle {
-            if let (Some(session_manager), Some(session_ctx)) =
+        if self.strict_lifecycle
+            && let (Some(session_manager), Some(session_ctx)) =
                 (&self.session_manager, &session_context)
-            {
-                let session_initialized = session_manager
-                    .is_session_initialized(&session_ctx.session_id)
-                    .await;
-                if !session_initialized {
-                    debug!(
-                        "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
-                        method, session_ctx.session_id
-                    );
-                    return Err(McpError::SessionError(
-                        "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)".to_string()
-                    ));
-                }
+        {
+            let session_initialized = session_manager
+                .is_session_initialized(&session_ctx.session_id)
+                .await;
+            if !session_initialized {
+                debug!(
+                    "🚫 STRICT MODE: Rejecting {} request for session {} - session not yet initialized (waiting for notifications/initialized)",
+                    method, session_ctx.session_id
+                );
+                return Err(McpError::SessionError(
+                    "Session not initialized - client must send notifications/initialized first (strict lifecycle mode)".to_string()
+                ));
             }
         }
 
@@ -1042,12 +1045,12 @@ impl JsonRpcHandler for ListToolsHandler {
         const MAX_LIMIT: u32 = 100; // Framework-specific DoS protection
 
         // Validate limit parameter - MCP spec requires positive integer
-        if let Some(limit) = list_params.limit {
-            if limit == 0 {
-                return Err(McpError::InvalidParameters(
-                    "limit must be a positive integer (> 0)".to_string(),
-                ));
-            }
+        if let Some(limit) = list_params.limit
+            && limit == 0
+        {
+            return Err(McpError::InvalidParameters(
+                "limit must be a positive integer (> 0)".to_string(),
+            ));
         }
 
         // Apply limit clamping for DoS protection (framework extension)
@@ -1268,10 +1271,8 @@ mod tests {
     use serde_json::Value;
     use std::collections::HashMap;
     use turul_mcp_protocol::ToolSchema;
-    use turul_mcp_protocol::tools::{
-        CallToolResult, HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema,
-        HasOutputSchema, HasToolMeta, ToolResult,
-    };
+    use turul_mcp_protocol::tools::{CallToolResult, ToolResult};
+    use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
 
     struct TestTool {
         input_schema: ToolSchema,

@@ -5,7 +5,7 @@
 use async_trait::async_trait;
 use serde_json::Value;
 use std::collections::HashMap;
-use turul_mcp_protocol::prompts::PromptDefinition;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{
     McpResult,
     prompts::{GetPromptResult, PromptMessage},
@@ -119,10 +119,8 @@ mod tests {
     use super::*;
     use serde_json::{Value, json};
     use std::collections::HashMap;
-    use turul_mcp_protocol::prompts::{
-        HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
-        HasPromptMetadata, PromptAnnotations, PromptArgument,
-    };
+    use turul_mcp_protocol::prompts::{PromptAnnotations, PromptArgument};
+      // HasPromptMetadata, HasPromptDescription, etc.
 
     struct TestPrompt {
         name: String,

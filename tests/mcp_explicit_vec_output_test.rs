@@ -1,14 +1,12 @@
 //! Test that #[tool(output = Vec<T>)] generates correct array schemas
 
 use serde::{Deserialize, Serialize};
+use turul_mcp_builders::prelude::*;
 use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::{
-    tools::HasOutputSchema,
-    McpResult,
-};
+use turul_mcp_protocol::McpResult;
 use turul_mcp_server::{McpTool as McpToolTrait, SessionContext};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 struct DataRecord {
     id: u32,
     value: String,
@@ -45,8 +43,11 @@ async fn test_explicit_vec_output_generates_array_schema() {
     let schema = tool.output_schema().expect("Should have output schema");
     println!("Schema with explicit output = Vec<T>: {:#?}", schema);
 
-    let schema_json = serde_json::to_value(&schema).unwrap();
-    println!("Schema JSON:\n{}", serde_json::to_string_pretty(&schema_json).unwrap());
+    let schema_json = serde_json::to_value(schema).unwrap();
+    println!(
+        "Schema JSON:\n{}",
+        serde_json::to_string_pretty(&schema_json).unwrap()
+    );
 
     // Check the output field type
     let output_type = schema_json["properties"]["output"]["type"].as_str();
@@ -67,14 +68,17 @@ async fn test_explicit_vec_output_runtime_works() {
     let tool = RecordFetcher { limit: 3 };
 
     // Call the tool
-    let result = tool.call(serde_json::json!({"limit": 3}), None)
+    let result = tool
+        .call(serde_json::json!({"limit": 3}), None)
         .await
         .expect("Tool should execute successfully");
 
     println!("CallToolResult: {:#?}", result);
 
     // Check structured content
-    let structured = result.structured_content.expect("Should have structured content");
+    let structured = result
+        .structured_content
+        .expect("Should have structured content");
     let output_value = &structured["output"];
 
     assert!(
@@ -99,13 +103,21 @@ async fn test_schema_and_runtime_match() {
 
     // Get schema
     let schema = tool.output_schema().expect("Should have schema");
-    let schema_json = serde_json::to_value(&schema).unwrap();
+    let schema_json = serde_json::to_value(schema).unwrap();
 
     // Get runtime result
-    let result = tool.call(serde_json::json!({"limit": 2}), None).await.unwrap();
-    let structured = result.structured_content.expect("Should have structured content");
+    let result = tool
+        .call(serde_json::json!({"limit": 2}), None)
+        .await
+        .unwrap();
+    let structured = result
+        .structured_content
+        .expect("Should have structured content");
 
-    println!("Schema declares: {:#?}", schema_json["properties"]["output"]);
+    println!(
+        "Schema declares: {:#?}",
+        schema_json["properties"]["output"]
+    );
     println!("Runtime returns: {:#?}", structured["output"]);
 
     // Both should agree it's an array

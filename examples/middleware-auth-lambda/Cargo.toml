@@ -1,0 +1,38 @@
+[package]
+name = "middleware-auth-lambda"
+version = "0.2.1"
+edition = "2021"
+publish = false
+description = "AWS Lambda MCP server with authentication middleware"
+
+[[bin]]
+name = "middleware-auth-lambda"
+path = "src/main.rs"
+
+[dependencies]
+# Lambda runtime
+lambda_http = { workspace = true }
+lambda_runtime = { workspace = true }
+
+# AWS SDK for session storage
+aws-config = { workspace = true }
+aws-sdk-dynamodb = { workspace = true }
+
+# MCP framework
+turul-mcp-server = { path = "../../crates/turul-mcp-server" }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
+turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage", features = ["dynamodb"] }
+turul-mcp-aws-lambda = { path = "../../crates/turul-mcp-aws-lambda" }
+turul-http-mcp-server = { path = "../../crates/turul-http-mcp-server" }
+turul-mcp-json-rpc-server = { path = "../../crates/turul-mcp-json-rpc-server" }
+
+# Core dependencies
+tokio = { version = "1.47", features = ["full"] }
+async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+[features]
+default = []

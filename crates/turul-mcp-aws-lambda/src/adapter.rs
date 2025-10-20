@@ -4,6 +4,7 @@
 //! enabling seamless integration between Lambda's HTTP model and the SessionMcpHandler.
 
 use std::collections::HashMap;
+use std::str::FromStr;
 
 use bytes::Bytes;
 use http_body_util::{BodyExt, Full};
@@ -28,11 +29,51 @@ type MappedFullBody =
 /// Convert lambda_http::Request to hyper::Request<MappedFullBody>
 ///
 /// This enables delegation to SessionMcpHandler by converting Lambda's request format
-/// to the hyper format expected by the framework. All headers are preserved.
+/// to the hyper format expected by the framework. All headers are preserved, and Lambda
+/// authorizer context (if present) is extracted and injected as `x-authorizer-*` headers.
+///
+/// # Authorizer Context
+///
+/// If the request includes API Gateway authorizer context, fields are extracted and
+/// added as headers with the `x-authorizer-` prefix. This makes authorizer data
+/// available to middleware via `RequestContext.metadata`.
+///
+/// Field names are sanitized (lowercase, alphanumeric + dash/underscore only).
+/// Invalid header names/values are skipped gracefully.
 pub fn lambda_to_hyper_request(
     lambda_req: LambdaRequest,
 ) -> Result<hyper::Request<MappedFullBody>> {
-    let (parts, lambda_body) = lambda_req.into_parts();
+    // Extract authorizer context BEFORE consuming request
+    let authorizer_fields = extract_authorizer_context(&lambda_req);
+
+    // Convert to parts (consumes request)
+    let (mut parts, lambda_body) = lambda_req.into_parts();
+
+    // Inject authorizer fields as x-authorizer-* headers (defensive - skip failures)
+    for (field_name, field_value) in authorizer_fields {
+        let header_name = format!("x-authorizer-{}", field_name);
+
+        // Try to create HeaderName and HeaderValue
+        // Skip entry if either fails (defensive - don't break request)
+        let Ok(name) = http::HeaderName::from_str(&header_name) else {
+            debug!(
+                "Skipping authorizer field '{}' - invalid header name",
+                field_name
+            );
+            continue;
+        };
+
+        let Ok(value) = http::HeaderValue::from_str(&field_value) else {
+            debug!(
+                "Skipping authorizer field '{}' - invalid header value",
+                field_name
+            );
+            continue;
+        };
+
+        parts.headers.insert(name, value);
+        trace!("Injected authorizer header: {} = {}", header_name, field_value);
+    }
 
     // Convert LambdaBody to Bytes
     let body_bytes = match lambda_body {
@@ -45,7 +86,7 @@ pub fn lambda_to_hyper_request(
     let full_body = Full::new(body_bytes)
         .map_err(infallible_to_hyper_error as fn(std::convert::Infallible) -> hyper::Error);
 
-    // Create hyper Request with preserved headers and new body type
+    // Create hyper Request with enhanced headers
     let hyper_req = hyper::Request::from_parts(parts, full_body);
 
     debug!(
@@ -117,6 +158,160 @@ pub fn hyper_to_lambda_streaming(
     );
 
     lambda_resp
+}
+
+/// Convert camelCase or PascalCase to snake_case
+///
+/// # Examples
+///
+/// ```
+/// # use turul_mcp_aws_lambda::adapter::camel_to_snake;
+/// assert_eq!(camel_to_snake("userId"), "user_id");
+/// assert_eq!(camel_to_snake("deviceId"), "device_id");
+/// assert_eq!(camel_to_snake("APIKey"), "api_key");
+/// assert_eq!(camel_to_snake("HTTPSEnabled"), "https_enabled");
+/// assert_eq!(camel_to_snake("user_id"), "user_id");
+/// ```
+pub fn camel_to_snake(s: &str) -> String {
+    let mut result = String::new();
+    let chars: Vec<char> = s.chars().collect();
+
+    for i in 0..chars.len() {
+        let ch = chars[i];
+
+        if ch.is_uppercase() {
+            let is_first = i == 0;
+            let prev_is_lower = i > 0 && chars[i - 1].is_lowercase();
+            let next_is_lower = i + 1 < chars.len() && chars[i + 1].is_lowercase();
+
+            // Add underscore before uppercase if:
+            // - Not at start AND
+            // - (Previous was lowercase OR next is lowercase)
+            if !is_first && (prev_is_lower || next_is_lower) {
+                result.push('_');
+            }
+
+            result.push(ch.to_ascii_lowercase());
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
+}
+
+/// Sanitize authorizer field name for use in HTTP headers
+///
+/// Converts field names to valid HTTP header format:
+/// 1. Convert camelCase to snake_case (userId → user_id)
+/// 2. ASCII lowercase
+/// 3. Replace non-alphanumeric (except _ and -) with dash
+///
+/// # Examples
+///
+/// ```
+/// # use turul_mcp_aws_lambda::adapter::sanitize_authorizer_field_name;
+/// assert_eq!(sanitize_authorizer_field_name("userId"), "user_id");
+/// assert_eq!(sanitize_authorizer_field_name("deviceId"), "device_id");
+/// assert_eq!(sanitize_authorizer_field_name("device_id"), "device_id");
+/// assert_eq!(sanitize_authorizer_field_name("user@email"), "user-email");
+/// ```
+pub fn sanitize_authorizer_field_name(field: &str) -> String {
+    // Step 1: Convert camelCase to snake_case
+    let snake_case = camel_to_snake(field);
+
+    // Step 2: Sanitize for HTTP header compatibility
+    snake_case
+        .to_ascii_lowercase()
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect()
+}
+
+/// Extract authorizer context from Lambda request extensions
+///
+/// Supports both API Gateway V1 (REST API) and V2 (HTTP API) formats.
+/// Returns HashMap with snake_case keys ready for header injection.
+///
+/// # Behavior
+///
+/// - Returns empty HashMap if no authorizer context present
+/// - Converts camelCase to snake_case (userId → user_id)
+/// - Skips fields that fail sanitization
+/// - Converts non-string values to JSON strings
+/// - Handles both `ApiGatewayV2.authorizer.fields` and `ApiGateway.authorizer["lambda"]`
+///
+/// # Examples
+///
+/// ```no_run
+/// # use lambda_http::Request;
+/// # use turul_mcp_aws_lambda::adapter::extract_authorizer_context;
+/// # let request: Request = unimplemented!();
+/// let fields = extract_authorizer_context(&request);
+/// assert_eq!(fields.get("account_id"), Some(&"acc_123".to_string()));
+/// ```
+pub fn extract_authorizer_context(req: &LambdaRequest) -> HashMap<String, String> {
+    use lambda_http::request::RequestContext;
+
+    let mut fields = HashMap::new();
+
+    // Get RequestContext from extensions
+    let Some(request_context) = req.extensions().get::<RequestContext>() else {
+        return fields; // No context, return empty
+    };
+
+    // Extract authorizer fields based on API Gateway version
+    // V2 uses HashMap, V1 uses serde_json::Map - convert both to HashMap
+    let mut authorizer_fields_map = HashMap::new();
+
+    match request_context {
+        RequestContext::ApiGatewayV2(ctx) => {
+            // API Gateway V2 (HTTP API) format - already HashMap
+            if let Some(ref authorizer) = ctx.authorizer {
+                for (key, value) in &authorizer.fields {
+                    authorizer_fields_map.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        RequestContext::ApiGatewayV1(ctx) => {
+            // API Gateway V1 (REST API) format - extract from authorizer.fields["lambda"]
+            if let Some(serde_json::Value::Object(auth_map)) = ctx.authorizer.fields.get("lambda") {
+                for (key, value) in auth_map {
+                    authorizer_fields_map.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        _ => {} // Other contexts (ALB, etc.) - no authorizer
+    }
+
+    // Convert extracted fields to sanitized headers
+    for (key, value) in authorizer_fields_map {
+        // Sanitize field name for header compatibility
+        let sanitized_key = sanitize_authorizer_field_name(&key);
+
+        // Convert value to string
+        let value_str = match value {
+            serde_json::Value::String(s) => s,
+            other => other.to_string(), // JSON serialize non-strings
+        };
+
+        fields.insert(sanitized_key, value_str);
+    }
+
+    if !fields.is_empty() {
+        debug!(
+            "Extracted {} authorizer fields from Lambda context",
+            fields.len()
+        );
+    }
+
+    fields
 }
 
 /// Extract MCP-specific headers from Lambda request context
@@ -384,5 +579,93 @@ mod tests {
             lambda_resp.headers().get("mcp-protocol-version").unwrap(),
             "2025-06-18"
         );
+    }
+
+    // Authorizer context tests
+    mod authorizer_tests {
+        use super::*;
+
+        #[test]
+        fn test_sanitize_field_name_camelcase() {
+            // camelCase → snake_case conversion
+            assert_eq!(sanitize_authorizer_field_name("accountId"), "account_id");
+            assert_eq!(sanitize_authorizer_field_name("entityType"), "entity_type");
+            assert_eq!(sanitize_authorizer_field_name("deviceId"), "device_id");
+            assert_eq!(sanitize_authorizer_field_name("userId"), "user_id");
+            assert_eq!(sanitize_authorizer_field_name("tenantId"), "tenant_id");
+            assert_eq!(sanitize_authorizer_field_name("customClaim"), "custom_claim");
+        }
+
+        #[test]
+        fn test_sanitize_field_name_snake_case() {
+            // Already snake_case - should remain unchanged
+            assert_eq!(sanitize_authorizer_field_name("device_id"), "device_id");
+            assert_eq!(sanitize_authorizer_field_name("user_name"), "user_name");
+            assert_eq!(sanitize_authorizer_field_name("tenant_id"), "tenant_id");
+        }
+
+        #[test]
+        fn test_sanitize_field_name_acronyms() {
+            // Acronyms: treated as a single unit, underscore before transition to lowercase
+            assert_eq!(sanitize_authorizer_field_name("APIKey"), "api_key");
+            assert_eq!(sanitize_authorizer_field_name("HTTPSEnabled"), "https_enabled");
+            assert_eq!(sanitize_authorizer_field_name("XMLParser"), "xml_parser");
+        }
+
+        #[test]
+        fn test_sanitize_field_name_with_numbers() {
+            // Numbers should be preserved
+            assert_eq!(sanitize_authorizer_field_name("userId123"), "user_id123");
+            assert_eq!(sanitize_authorizer_field_name("device2Id"), "device2_id");
+        }
+
+        #[test]
+        fn test_sanitize_field_name_special_chars() {
+            assert_eq!(sanitize_authorizer_field_name("user@email"), "user-email");
+            assert_eq!(
+                sanitize_authorizer_field_name("test.field"),
+                "test-field"
+            );
+            assert_eq!(sanitize_authorizer_field_name("a/b/c"), "a-b-c");
+        }
+
+        #[test]
+        fn test_sanitize_field_name_unicode() {
+            // Unicode characters get replaced with dashes (one dash per character)
+            assert_eq!(sanitize_authorizer_field_name("用户"), "--");
+        }
+
+        #[test]
+        fn test_extract_authorizer_no_context() {
+            // Request with no extensions
+            let lambda_req = Request::builder()
+                .method(Method::POST)
+                .uri("/mcp")
+                .body(LambdaBody::Empty)
+                .unwrap();
+
+            let fields = extract_authorizer_context(&lambda_req);
+            assert!(fields.is_empty());
+        }
+
+        #[test]
+        fn test_lambda_to_hyper_without_authorizer() {
+            // Request without authorizer should work normally
+            let lambda_req = Request::builder()
+                .method(Method::POST)
+                .uri("/mcp")
+                .header("content-type", "application/json")
+                .body(LambdaBody::Empty)
+                .unwrap();
+
+            let hyper_req = lambda_to_hyper_request(lambda_req).unwrap();
+
+            // Should succeed, no authorizer headers
+            assert!(hyper_req.headers().get("x-authorizer-account_id").is_none());
+            assert_eq!(
+                hyper_req.headers().get("content-type").unwrap(),
+                "application/json"
+            );
+        }
     }
 }

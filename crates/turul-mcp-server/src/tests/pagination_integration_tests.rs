@@ -3,7 +3,6 @@
 //! Tests for MCP 2025-06-18 pagination features.
 
 use crate::handlers::{McpHandler, ResourcesListHandler};
-use crate::resource::McpResource;
 use async_trait::async_trait;
 use serde_json::{Value, json};
 use turul_mcp_protocol::meta::PaginatedResponse;
@@ -28,7 +27,11 @@ impl TestResource {
 
 #[async_trait]
 impl crate::McpResource for TestResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&crate::SessionContext>) -> crate::McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&crate::SessionContext>,
+    ) -> crate::McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
             format!("test://item/{}", self.id),
             format!("Test content for {}", self.id),
@@ -37,10 +40,7 @@ impl crate::McpResource for TestResource {
 }
 
 // Required trait implementations for TestResource
-use turul_mcp_protocol::resources::{
-    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-    HasResourceMimeType, HasResourceSize, HasResourceUri,
-};
+use turul_mcp_builders::prelude::*;  // HasResourceMetadata, HasResourceDescription, etc.
 
 impl HasResourceMetadata for TestResource {
     fn name(&self) -> &str {

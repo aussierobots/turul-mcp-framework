@@ -60,6 +60,7 @@ mod basic_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+        let middleware_stack = Arc::new(crate::middleware::MiddlewareStack::new());
 
         let _handler = StreamableHttpHandler::new(
             Arc::new(config),
@@ -67,6 +68,7 @@ mod basic_tests {
             session_storage,
             stream_manager,
             turul_mcp_protocol::ServerCapabilities::default(),
+            middleware_stack,
         );
 
         // Handler should be created successfully
@@ -106,23 +108,31 @@ mod sse_tests {
 
     #[tokio::test]
     async fn test_sse_event_formatting() {
-        let events = vec![
+        // Test events with "event: message"
+        let message_events = vec![
             SseEvent::Connected,
             SseEvent::Data(json!({"message": "test"})),
             SseEvent::Error("Test error".to_string()),
-            SseEvent::KeepAlive,
         ];
 
-        for event in events {
+        for event in message_events {
             let formatted = event.format();
 
-            // All events should be properly formatted
-            assert!(formatted.contains("event: "));
+            // All message events should use "event: message" for MCP Inspector compatibility
+            assert!(formatted.contains("event: message"));
             assert!(formatted.contains("data: "));
             assert!(formatted.ends_with("\n\n"));
 
             println!("Event formatted: {}", formatted.replace('\n', "\\n"));
         }
+
+        // Test keepalive separately - it uses SSE comment syntax (no event line)
+        let keepalive = SseEvent::KeepAlive;
+        let formatted = keepalive.format();
+        assert!(!formatted.contains("event:")); // Keepalives don't have event line
+        assert!(formatted.starts_with(":")); // SSE comment syntax
+        assert!(formatted.ends_with("\n\n"));
+        println!("Keepalive formatted: {}", formatted.replace('\n', "\\n"));
     }
 
     #[tokio::test]
@@ -251,6 +261,7 @@ mod concurrency_tests {
                 let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
                 let session_storage = Arc::new(InMemorySessionStorage::new());
                 let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+                let middleware_stack = Arc::new(crate::middleware::MiddlewareStack::new());
 
                 let _handler = StreamableHttpHandler::new(
                     Arc::new(config),
@@ -258,6 +269,7 @@ mod concurrency_tests {
                     session_storage,
                     stream_manager,
                     turul_mcp_protocol::ServerCapabilities::default(),
+                    middleware_stack,
                 );
                 format!("Handler {} created", i)
             });
@@ -385,6 +397,7 @@ mod performance_tests {
             let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
             let session_storage = Arc::new(InMemorySessionStorage::new());
             let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+            let middleware_stack = Arc::new(crate::middleware::MiddlewareStack::new());
 
             let handler = StreamableHttpHandler::new(
                 Arc::new(config),
@@ -392,6 +405,7 @@ mod performance_tests {
                 session_storage,
                 stream_manager,
                 turul_mcp_protocol::ServerCapabilities::default(),
+                middleware_stack,
             );
             handlers.push(handler);
         }

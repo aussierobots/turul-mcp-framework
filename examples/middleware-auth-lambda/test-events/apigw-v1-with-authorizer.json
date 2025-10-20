@@ -1,0 +1,30 @@
+{
+  "resource": "/mcp",
+  "path": "/mcp",
+  "httpMethod": "POST",
+  "headers": {
+    "Content-Type": "application/json",
+    "Accept": "application/json",
+    "X-API-Key": "secret-key-123"
+  },
+  "body": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1.0\"}}}",
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "test-api-id",
+    "authorizer": {
+      "lambda": {
+        "userId": "user-123",
+        "tenantId": "tenant-456",
+        "role": "admin",
+        "permissions": "read,write,delete",
+        "customClaim": "example-value"
+      }
+    },
+    "identity": {
+      "sourceIp": "127.0.0.1",
+      "userAgent": "curl/7.64.1"
+    },
+    "requestId": "test-request-v1",
+    "stage": "prod"
+  }
+}

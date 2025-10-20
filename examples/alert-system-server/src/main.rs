@@ -13,11 +13,8 @@ use serde_json::{Value, json};
 use std::collections::HashMap;
 use turul_mcp_protocol::{
     CallToolResult, JsonSchema, McpError, ToolResult, ToolSchema,
-    tools::{
-        HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema,
-        HasToolMeta,
-    },
 };
+use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
 use turul_mcp_server::{McpResult, McpServer, McpTool as McpToolTrait, SessionContext};
 use uuid::Uuid;
 

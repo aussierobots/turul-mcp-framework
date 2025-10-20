@@ -61,6 +61,7 @@ pub struct HttpMcpServerBuilder {
     session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
     stream_config: StreamConfig,
     server_capabilities: Option<turul_mcp_protocol::ServerCapabilities>,
+    middleware_stack: Arc<crate::middleware::MiddlewareStack>,
 }
 
 impl HttpMcpServerBuilder {
@@ -72,6 +73,7 @@ impl HttpMcpServerBuilder {
             session_storage: Some(Arc::new(InMemorySessionStorage::new())),
             stream_config: StreamConfig::default(),
             server_capabilities: None,
+            middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
         }
     }
 }
@@ -87,7 +89,17 @@ impl HttpMcpServerBuilder {
             session_storage: Some(session_storage),
             stream_config: StreamConfig::default(),
             server_capabilities: None,
+            middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
         }
+    }
+
+    /// Set the middleware stack (for HTTP transport middleware support)
+    pub fn with_middleware_stack(
+        mut self,
+        middleware_stack: Arc<crate::middleware::MiddlewareStack>,
+    ) -> Self {
+        self.middleware_stack = middleware_stack;
+        self
     }
 
     /// Set the bind address
@@ -187,14 +199,17 @@ impl HttpMcpServerBuilder {
         // Create shared dispatcher Arc
         let dispatcher = Arc::new(self.dispatcher);
 
+        // Use middleware stack from builder
+        let middleware_stack = self.middleware_stack;
+
         // Create StreamableHttpHandler for MCP 2025-06-18 support
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(self.config.clone()),
             Arc::clone(&dispatcher),
             Arc::clone(&session_storage),
             Arc::clone(&stream_manager),
-            self.server_capabilities
-                .unwrap_or_else(|| turul_mcp_protocol::ServerCapabilities::default()),
+            self.server_capabilities.unwrap_or_default(),
+            Arc::clone(&middleware_stack),
         );
 
         HttpMcpServer {
@@ -259,12 +274,14 @@ impl HttpMcpServer {
         info!("Session storage: {}", self.session_storage.backend_name());
 
         // ✅ CORRECTED ARCHITECTURE: Create single SessionMcpHandler instance outside the loop
+        // Use the same middleware stack as streamable_handler (both handlers share it)
         let session_handler = SessionMcpHandler::with_shared_stream_manager(
             self.config.clone(),
             Arc::clone(&self.dispatcher),
             Arc::clone(&self.session_storage),
             self.stream_config.clone(),
             Arc::clone(&self.stream_manager),
+            Arc::clone(&self.streamable_handler.middleware_stack),
         );
 
         // Create combined handler that routes based on protocol version

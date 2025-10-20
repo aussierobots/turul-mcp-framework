@@ -120,6 +120,7 @@ pub mod completion;
 pub mod elicitation;
 pub mod handlers;
 pub mod logging;
+pub mod middleware;
 pub mod notifications;
 pub mod prompt;
 pub mod resource;
@@ -181,6 +182,8 @@ pub use server::{
 };
 /// Session management and context for stateful operations
 pub use session::{SessionContext, SessionEvent, SessionManager};
+/// SessionView trait for middleware - re-exported from turul-mcp-session-storage
+pub use turul_mcp_session_storage::SessionView;
 /// Tool trait for executable MCP functions
 pub use tool::McpTool;
 
@@ -192,7 +195,7 @@ pub use turul_mcp_protocol::*;
 
 // Re-export builder pattern for Level 3 tool creation
 /// Dynamic tool creation with runtime configuration and type-safe builders
-pub use turul_mcp_protocol::tools::builder::{DynamicTool, ToolBuilder};
+pub use turul_mcp_builders::tool::{DynamicTool, DynamicToolFn, ToolBuilder};
 
 // Explicitly re-export error types for convenience
 /// Domain error type for MCP operations with protocol conversion support
@@ -223,7 +226,8 @@ impl McpTool for DynamicTool {
         args: serde_json::Value,
         _session: Option<SessionContext>,
     ) -> McpResult<turul_mcp_protocol::tools::CallToolResult> {
-        use turul_mcp_protocol::tools::{CallToolResult, HasOutputSchema};
+        use turul_mcp_protocol::tools::CallToolResult;
+        use turul_mcp_builders::prelude::HasOutputSchema;
 
         match self.execute(args).await {
             Ok(result) => {

@@ -3,7 +3,7 @@
 //! Tests real HTTP/SSE transport using prompts-test-server
 //! Validates complete MCP 2025-06-18 specification compliance
 
-use mcp_e2e_shared::{McpTestClient, TestServerManager, TestFixtures};
+use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 use tracing::info;
 
 #[tokio::test]
@@ -13,13 +13,18 @@ async fn test_mcp_initialize_session() {
     let server = match TestServerManager::start_prompts_server().await {
         Ok(server) => server,
         Err(e) => {
-            println!("Skipping test - failed to start server (likely sandboxed environment): {}", e);
+            println!(
+                "Skipping test - failed to start server (likely sandboxed environment): {}",
+                e
+            );
             return;
         }
     };
     let mut client = McpTestClient::new(server.port());
 
-    let result = client.initialize_with_capabilities(TestFixtures::prompts_capabilities()).await
+    let result = client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
         .expect("Failed to initialize");
 
     // Verify response structure
@@ -36,13 +41,18 @@ async fn test_prompts_list() {
     let server = match TestServerManager::start_prompts_server().await {
         Ok(server) => server,
         Err(e) => {
-            println!("Skipping test - failed to start server (likely sandboxed environment): {}", e);
+            println!(
+                "Skipping test - failed to start server (likely sandboxed environment): {}",
+                e
+            );
             return;
         }
     };
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::prompts_capabilities()).await
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
         .expect("Failed to initialize");
     let result = client.list_prompts().await.expect("Failed to list prompts");
 
@@ -72,17 +82,24 @@ async fn test_simple_string_prompt_get() {
     let server = match TestServerManager::start_prompts_server().await {
         Ok(server) => server,
         Err(e) => {
-            println!("Skipping test - failed to start server (likely sandboxed environment): {}", e);
+            println!(
+                "Skipping test - failed to start server (likely sandboxed environment): {}",
+                e
+            );
             return;
         }
     };
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::prompts_capabilities()).await
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
         .expect("Failed to initialize");
 
     let args = TestFixtures::create_string_args();
-    let result = client.get_prompt("string_args_prompt", Some(args)).await
+    let result = client
+        .get_prompt("string_args_prompt", Some(args))
+        .await
         .expect("Failed to get prompt");
 
     // Verify response structure using shared test fixtures
@@ -107,17 +124,24 @@ async fn test_complex_prompt_get() {
     let server = match TestServerManager::start_prompts_server().await {
         Ok(server) => server,
         Err(e) => {
-            println!("Skipping test - failed to start server (likely sandboxed environment): {}", e);
+            println!(
+                "Skipping test - failed to start server (likely sandboxed environment): {}",
+                e
+            );
             return;
         }
     };
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::prompts_capabilities()).await
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
         .expect("Failed to initialize");
 
     let args = TestFixtures::create_template_args();
-    let result = client.get_prompt("template_prompt", Some(args)).await
+    let result = client
+        .get_prompt("template_prompt", Some(args))
+        .await
         .expect("Failed to get prompt");
 
     // Verify response structure
@@ -128,7 +152,10 @@ async fn test_complex_prompt_get() {
     assert!(!messages.is_empty(), "Should have messages");
 
     // Template prompt returns 1 message with variable substitution (not multiple messages)
-    assert!(messages.len() >= 1, "Template prompt should have at least one message");
+    assert!(
+        !messages.is_empty(),
+        "Template prompt should have at least one message"
+    );
 }
 
 #[tokio::test]
@@ -138,17 +165,24 @@ async fn test_number_prompt_get() {
     let server = match TestServerManager::start_prompts_server().await {
         Ok(server) => server,
         Err(e) => {
-            println!("Skipping test - failed to start server (likely sandboxed environment): {}", e);
+            println!(
+                "Skipping test - failed to start server (likely sandboxed environment): {}",
+                e
+            );
             return;
         }
     };
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::prompts_capabilities()).await
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
         .expect("Failed to initialize");
 
     let args = TestFixtures::create_number_args();
-    let result = client.get_prompt("number_args_prompt", Some(args)).await
+    let result = client
+        .get_prompt("number_args_prompt", Some(args))
+        .await
         .expect("Failed to get prompt");
 
     // Verify response structure
@@ -173,17 +207,24 @@ async fn test_boolean_prompt_get() {
     let server = match TestServerManager::start_prompts_server().await {
         Ok(server) => server,
         Err(e) => {
-            println!("Skipping test - failed to start server (likely sandboxed environment): {}", e);
+            println!(
+                "Skipping test - failed to start server (likely sandboxed environment): {}",
+                e
+            );
             return;
         }
     };
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::prompts_capabilities()).await
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
         .expect("Failed to initialize");
 
     let args = TestFixtures::create_boolean_args();
-    let result = client.get_prompt("boolean_args_prompt", Some(args)).await
+    let result = client
+        .get_prompt("boolean_args_prompt", Some(args))
+        .await
         .expect("Failed to get prompt");
 
     // Verify response structure
@@ -197,7 +238,12 @@ async fn test_boolean_prompt_get() {
     let first_message = &messages[0];
     let content = &first_message["content"];
     if let Some(text_content) = content["text"].as_str() {
-        assert!(text_content.contains("ENABLED") || text_content.contains("DISABLED") || text_content.contains("ON") || text_content.contains("OFF"));
+        assert!(
+            text_content.contains("ENABLED")
+                || text_content.contains("DISABLED")
+                || text_content.contains("ON")
+                || text_content.contains("OFF")
+        );
     }
 }
 
@@ -208,17 +254,24 @@ async fn test_prompt_with_missing_arguments() {
     let server = match TestServerManager::start_prompts_server().await {
         Ok(server) => server,
         Err(e) => {
-            println!("Skipping test - failed to start server (likely sandboxed environment): {}", e);
+            println!(
+                "Skipping test - failed to start server (likely sandboxed environment): {}",
+                e
+            );
             return;
         }
     };
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::prompts_capabilities()).await
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
         .expect("Failed to initialize");
 
     // Try to get a prompt that requires arguments without providing them
-    let result = client.get_prompt("string_args_prompt", None).await
+    let result = client
+        .get_prompt("string_args_prompt", None)
+        .await
         .expect("Failed to get prompt");
 
     // Should get an error response for missing required arguments
@@ -237,16 +290,23 @@ async fn test_nonexistent_prompt() {
     let server = match TestServerManager::start_prompts_server().await {
         Ok(server) => server,
         Err(e) => {
-            println!("Skipping test - failed to start server (likely sandboxed environment): {}", e);
+            println!(
+                "Skipping test - failed to start server (likely sandboxed environment): {}",
+                e
+            );
             return;
         }
     };
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::prompts_capabilities()).await
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
         .expect("Failed to initialize");
 
-    let result = client.get_prompt("nonexistent_prompt", None).await
+    let result = client
+        .get_prompt("nonexistent_prompt", None)
+        .await
         .expect("Failed to get prompt");
 
     // Should get an error response
@@ -260,17 +320,24 @@ async fn test_sse_notifications() {
     let server = match TestServerManager::start_prompts_server().await {
         Ok(server) => server,
         Err(e) => {
-            println!("Skipping test - failed to start server (likely sandboxed environment): {}", e);
+            println!(
+                "Skipping test - failed to start server (likely sandboxed environment): {}",
+                e
+            );
             return;
         }
     };
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::prompts_capabilities()).await
+    client
+        .initialize_with_capabilities(TestFixtures::prompts_capabilities())
+        .await
         .expect("Failed to initialize");
 
     // Test SSE notifications
-    let events = client.test_sse_notifications().await
+    let events = client
+        .test_sse_notifications()
+        .await
         .expect("Failed to test SSE notifications");
 
     // SSE connection should work even if no events are received immediately

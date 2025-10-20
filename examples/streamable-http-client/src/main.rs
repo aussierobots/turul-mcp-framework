@@ -208,8 +208,8 @@ impl StreamableHttpMcpClient {
                                         event_text.replace('\n', "\\n")
                                     );
 
-                                    if let Some(event_data) = Self::parse_sse_event(&event_text) {
-                                        if let Ok(json_data) =
+                                    if let Some(event_data) = Self::parse_sse_event(&event_text)
+                                        && let Ok(json_data) =
                                             serde_json::from_str::<Value>(&event_data)
                                         {
                                             // Check if this is the final JSON-RPC response
@@ -222,8 +222,7 @@ impl StreamableHttpMcpClient {
                                             // Check for progress notifications
                                             else if let Some(method) =
                                                 json_data.get("method").and_then(|m| m.as_str())
-                                            {
-                                                if method.starts_with("notifications/") {
+                                                && method.starts_with("notifications/") {
                                                     let progress =
                                                         Self::parse_progress_notification(
                                                             &json_data,
@@ -234,9 +233,7 @@ impl StreamableHttpMcpClient {
                                                     );
                                                     let _ = progress_tx.send(progress);
                                                 }
-                                            }
                                         }
-                                    }
                                 }
                             }
                             Err(e) => {

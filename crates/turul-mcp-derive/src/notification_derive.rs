@@ -79,7 +79,7 @@ pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let expanded = quote! {
         #[automatically_derived]
-        impl turul_mcp_protocol::notifications::HasNotificationMetadata for #struct_name {
+        impl turul_mcp_builders::HasNotificationMetadata for #struct_name {
             fn method(&self) -> &str {
                 #method
             }
@@ -100,18 +100,14 @@ pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::notifications::HasNotificationPayload for #struct_name {
-            fn payload(&self) -> Option<&serde_json::Value> {
-                use std::sync::LazyLock;
-                static DEFAULT_PAYLOAD: LazyLock<serde_json::Value> = LazyLock::new(|| {
-                    serde_json::json!({})
-                });
-                Some(&DEFAULT_PAYLOAD)
+        impl turul_mcp_builders::HasNotificationPayload for #struct_name {
+            fn payload(&self) -> Option<serde_json::Value> {
+                Some(serde_json::json!({}))
             }
 
             fn serialize_payload(&self) -> Result<String, String> {
                 match self.payload() {
-                    Some(data) => serde_json::to_string(data)
+                    Some(data) => serde_json::to_string(&data)
                         .map_err(|e| format!("Serialization error: {}", e)),
                     None => Ok("{}".to_string()),
                 }
@@ -119,7 +115,7 @@ pub fn derive_mcp_notification_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::notifications::HasNotificationRules for #struct_name {
+        impl turul_mcp_builders::HasNotificationRules for #struct_name {
             fn priority(&self) -> u32 {
                 #priority
             }

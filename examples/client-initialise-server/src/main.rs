@@ -26,6 +26,7 @@ use tracing::{debug, info};
 use async_trait::async_trait;
 use turul_mcp_protocol::logging::LoggingLevel;
 use turul_mcp_protocol::tools::CallToolResult;
+use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
 use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
 use turul_mcp_session_storage::InMemorySessionStorage;
 #[cfg(feature = "dynamodb")]
@@ -98,19 +99,19 @@ impl McpTool for EchoSseTool {
 }
 
 // Implement the required traits for the tool
-impl turul_mcp_protocol::tools::HasBaseMetadata for EchoSseTool {
+impl HasBaseMetadata for EchoSseTool {
     fn name(&self) -> &str {
         "echo_sse"
     }
 }
 
-impl turul_mcp_protocol::tools::HasDescription for EchoSseTool {
+impl HasDescription for EchoSseTool {
     fn description(&self) -> Option<&str> {
         Some("Echoes text back via POST response and streams it via SSE. Server logs all calls.")
     }
 }
 
-impl turul_mcp_protocol::tools::HasInputSchema for EchoSseTool {
+impl HasInputSchema for EchoSseTool {
     fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
         static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
             std::sync::OnceLock::new();
@@ -128,19 +129,19 @@ impl turul_mcp_protocol::tools::HasInputSchema for EchoSseTool {
     }
 }
 
-impl turul_mcp_protocol::tools::HasOutputSchema for EchoSseTool {
+impl HasOutputSchema for EchoSseTool {
     fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
         None
     }
 }
 
-impl turul_mcp_protocol::tools::HasAnnotations for EchoSseTool {
+impl HasAnnotations for EchoSseTool {
     fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
 
-impl turul_mcp_protocol::tools::HasToolMeta for EchoSseTool {
+impl HasToolMeta for EchoSseTool {
     fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
         None
     }
@@ -243,19 +244,19 @@ impl McpTool for GetSessionDataTool {
 }
 
 // Implement required traits for GetSessionDataTool
-impl turul_mcp_protocol::tools::HasBaseMetadata for GetSessionDataTool {
+impl HasBaseMetadata for GetSessionDataTool {
     fn name(&self) -> &str {
         "get_session_data"
     }
 }
 
-impl turul_mcp_protocol::tools::HasDescription for GetSessionDataTool {
+impl HasDescription for GetSessionDataTool {
     fn description(&self) -> Option<&str> {
         Some("Returns current session information from session storage")
     }
 }
 
-impl turul_mcp_protocol::tools::HasInputSchema for GetSessionDataTool {
+impl HasInputSchema for GetSessionDataTool {
     fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
         static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
             std::sync::OnceLock::new();
@@ -266,19 +267,19 @@ impl turul_mcp_protocol::tools::HasInputSchema for GetSessionDataTool {
     }
 }
 
-impl turul_mcp_protocol::tools::HasOutputSchema for GetSessionDataTool {
+impl HasOutputSchema for GetSessionDataTool {
     fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
         None
     }
 }
 
-impl turul_mcp_protocol::tools::HasAnnotations for GetSessionDataTool {
+impl HasAnnotations for GetSessionDataTool {
     fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
 
-impl turul_mcp_protocol::tools::HasToolMeta for GetSessionDataTool {
+impl HasToolMeta for GetSessionDataTool {
     fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
         None
     }
@@ -381,19 +382,19 @@ impl McpTool for GetSessionEventsTool {
 }
 
 // Implement required traits for GetSessionEventsTool
-impl turul_mcp_protocol::tools::HasBaseMetadata for GetSessionEventsTool {
+impl HasBaseMetadata for GetSessionEventsTool {
     fn name(&self) -> &str {
         "get_session_events"
     }
 }
 
-impl turul_mcp_protocol::tools::HasDescription for GetSessionEventsTool {
+impl HasDescription for GetSessionEventsTool {
     fn description(&self) -> Option<&str> {
         Some("Returns SSE events for the current session from session storage")
     }
 }
 
-impl turul_mcp_protocol::tools::HasInputSchema for GetSessionEventsTool {
+impl HasInputSchema for GetSessionEventsTool {
     fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
         static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
             std::sync::OnceLock::new();
@@ -410,19 +411,19 @@ impl turul_mcp_protocol::tools::HasInputSchema for GetSessionEventsTool {
     }
 }
 
-impl turul_mcp_protocol::tools::HasOutputSchema for GetSessionEventsTool {
+impl HasOutputSchema for GetSessionEventsTool {
     fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
         None
     }
 }
 
-impl turul_mcp_protocol::tools::HasAnnotations for GetSessionEventsTool {
+impl HasAnnotations for GetSessionEventsTool {
     fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
 
-impl turul_mcp_protocol::tools::HasToolMeta for GetSessionEventsTool {
+impl HasToolMeta for GetSessionEventsTool {
     fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
         None
     }
@@ -520,19 +521,19 @@ impl McpTool for GetTableInfoTool {
 }
 
 // Implement required traits for GetTableInfoTool
-impl turul_mcp_protocol::tools::HasBaseMetadata for GetTableInfoTool {
+impl HasBaseMetadata for GetTableInfoTool {
     fn name(&self) -> &str {
         "get_table_info"
     }
 }
 
-impl turul_mcp_protocol::tools::HasDescription for GetTableInfoTool {
+impl HasDescription for GetTableInfoTool {
     fn description(&self) -> Option<&str> {
         Some("Returns information about session and events tables in the storage backend")
     }
 }
 
-impl turul_mcp_protocol::tools::HasInputSchema for GetTableInfoTool {
+impl HasInputSchema for GetTableInfoTool {
     fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
         static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
             std::sync::OnceLock::new();
@@ -543,19 +544,19 @@ impl turul_mcp_protocol::tools::HasInputSchema for GetTableInfoTool {
     }
 }
 
-impl turul_mcp_protocol::tools::HasOutputSchema for GetTableInfoTool {
+impl HasOutputSchema for GetTableInfoTool {
     fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
         None
     }
 }
 
-impl turul_mcp_protocol::tools::HasAnnotations for GetTableInfoTool {
+impl HasAnnotations for GetTableInfoTool {
     fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
         None
     }
 }
 
-impl turul_mcp_protocol::tools::HasToolMeta for GetTableInfoTool {
+impl HasToolMeta for GetTableInfoTool {
     fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
         None
     }

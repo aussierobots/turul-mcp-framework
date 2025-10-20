@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use serde_json::Value;
-use turul_mcp_protocol::resources::ResourceDefinition;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{McpResult, resources::ResourceContent};
 use crate::SessionContext;
 
@@ -54,10 +54,7 @@ pub fn resource_to_descriptor(
 mod tests {
     use super::*;
     use turul_mcp_protocol::meta;
-    use turul_mcp_protocol::resources::{
-        HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
-        HasResourceMimeType, HasResourceSize, HasResourceUri,
-    };
+      // HasResourceMetadata, HasResourceDescription, etc.
 
     struct TestResource {
         uri: String,

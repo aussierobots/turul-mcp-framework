@@ -6,9 +6,11 @@
 use futures::future::try_join_all;
 use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 use serde_json::json;
+use serial_test::serial;
 use tracing::{debug, info};
 
 #[tokio::test]
+#[serial]
 async fn test_tools_server_startup_and_discovery() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -22,6 +24,8 @@ async fn test_tools_server_startup_and_discovery() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .expect("Failed to initialize");
+
+    client.send_initialized_notification().await.unwrap();
 
     debug!("Initialize result: {:?}", init_result);
 
@@ -43,6 +47,7 @@ async fn test_tools_server_startup_and_discovery() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_tools_list_endpoint() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -56,6 +61,8 @@ async fn test_tools_list_endpoint() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     let tools_result = client.list_tools().await.expect("Failed to list tools");
     debug!("Tools list result: {:?}", tools_result);
@@ -116,6 +123,7 @@ async fn test_tools_list_endpoint() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_calculator_tool_execution() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -128,6 +136,8 @@ async fn test_calculator_tool_execution() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     // Test addition
     let add_result = client
@@ -144,21 +154,16 @@ async fn test_calculator_tool_execution() {
 
     debug!("Calculator add result: {:?}", add_result);
 
-    assert!(add_result.contains_key("result"));
-    let result = add_result.get("result").unwrap().as_object().unwrap();
-    assert!(result.contains_key("content"));
+    // Extract the calculator result object from structuredContent.calculatorResult
+    let calc_result_val = TestFixtures::extract_tool_result_object(&add_result)
+        .expect("No tool result found in structuredContent");
+    let calc_result = calc_result_val.as_object().unwrap();
 
-    // Extract the calculator result object
-    if let Some(calc_result_val) = TestFixtures::extract_tool_result_object(&add_result) {
-        let calc_result = calc_result_val.as_object().unwrap();
-        assert_eq!(calc_result.get("result").unwrap().as_f64().unwrap(), 8.0);
-        assert_eq!(
-            calc_result.get("operation").unwrap().as_str().unwrap(),
-            "add"
-        );
-    } else {
-        panic!("No tool result found");
-    }
+    assert_eq!(calc_result.get("result").unwrap().as_f64().unwrap(), 8.0);
+    assert_eq!(
+        calc_result.get("operation").unwrap().as_str().unwrap(),
+        "add"
+    );
 
     // Test division by zero error
     let div_zero_result = client
@@ -192,6 +197,7 @@ async fn test_calculator_tool_execution() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_string_processor_tool() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -204,6 +210,8 @@ async fn test_string_processor_tool() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     // Test uppercase operation
     let result = client
@@ -259,6 +267,7 @@ async fn test_string_processor_tool() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_data_transformer_tool() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -271,6 +280,8 @@ async fn test_data_transformer_tool() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     // Test extract_keys operation
     let test_data = json!({
@@ -305,6 +316,7 @@ async fn test_data_transformer_tool() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_session_counter_tool_state_management() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -317,6 +329,8 @@ async fn test_session_counter_tool_state_management() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
     let session_id = client.session_id().unwrap().clone();
 
     // Test increment
@@ -398,6 +412,7 @@ async fn test_session_counter_tool_state_management() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_progress_tracker_with_notifications() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -410,6 +425,8 @@ async fn test_progress_tracker_with_notifications() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     // Start progress tracker (short duration for testing)
     let result = client
@@ -550,6 +567,7 @@ async fn test_progress_tracker_with_notifications() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_error_generator_tool() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -562,6 +580,8 @@ async fn test_error_generator_tool() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     // Test tool execution error
     let result = client
@@ -623,6 +643,7 @@ async fn test_error_generator_tool() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_notifications_initialized_lifecycle() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -636,6 +657,8 @@ async fn test_notifications_initialized_lifecycle() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .expect("Failed to initialize");
+
+    client.send_initialized_notification().await.unwrap();
 
     debug!("Initialize handshake complete: {:?}", init_result);
 
@@ -740,6 +763,7 @@ async fn test_notifications_initialized_lifecycle() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_notifications_tools_list_changed_compliance() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -759,6 +783,8 @@ async fn test_notifications_tools_list_changed_compliance() {
         .initialize_with_capabilities(tools_capabilities)
         .await
         .expect("Failed to initialize");
+
+    client.send_initialized_notification().await.unwrap();
 
     debug!(
         "Initialize result for tools listChanged test: {:?}",
@@ -912,6 +938,7 @@ async fn test_notifications_tools_list_changed_compliance() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_parameter_validator_tool() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -924,6 +951,8 @@ async fn test_parameter_validator_tool() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     // Test valid parameters
     let result = client
@@ -1017,6 +1046,7 @@ async fn test_parameter_validator_tool() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_tools_protocol_compliance() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -1030,6 +1060,8 @@ async fn test_tools_protocol_compliance() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     // Verify MCP 2025-06-18 protocol compliance
     assert!(init_result.contains_key("jsonrpc"));
@@ -1074,6 +1106,7 @@ async fn test_tools_protocol_compliance() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_concurrent_tool_execution() {
     let _ = tracing_subscriber::fmt::try_init();
 
@@ -1086,6 +1119,8 @@ async fn test_concurrent_tool_execution() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+
+    client.send_initialized_notification().await.unwrap();
 
     // Execute multiple tools concurrently
     let tasks = vec![
@@ -1139,6 +1174,7 @@ async fn test_concurrent_tool_execution() {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_session_storage_integration() {
     let _ = tracing_subscriber::fmt::try_init();
     info!("🧪 Testing SessionStorage integration and session isolation...");
@@ -1156,10 +1192,13 @@ async fn test_session_storage_integration() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .expect("Failed to initialize client1");
+    client1.send_initialized_notification().await.unwrap();
+
     client2
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .expect("Failed to initialize client2");
+    client2.send_initialized_notification().await.unwrap();
 
     let session1_id = client1.session_id().unwrap().clone();
     let session2_id = client2.session_id().unwrap().clone();

@@ -10,6 +10,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
+# Source shared utilities
+source "$SCRIPT_DIR/../tests/shared/bin/wait_for_server.sh"
+
 echo "======================================================================"
 echo "Phase 2: Resource Servers - Intent-Based Verification"
 echo "======================================================================"
@@ -20,6 +23,7 @@ echo ""
 
 PASSED=0
 FAILED=0
+SKIPPED=0
 TOTAL=5
 
 # Colors for output
@@ -55,15 +59,25 @@ test_resource_server() {
     echo "Description: $test_description"
     echo "----------------------------------------"
 
-    # Start server
+    # Start server with build guard
     echo "Starting server..."
-    RUST_LOG=error timeout 10s cargo run --bin "$server_name" -- --port "$port" &
-    SERVER_PID=$!
-    sleep 5
+    cleanup_old_logs "$server_name" "$port"
 
-    # Check if server is running
-    if ! kill -0 $SERVER_PID 2>/dev/null; then
-        echo -e "${RED}FAILED${NC}: Server failed to start"
+    if ! ensure_binary_built "$server_name"; then
+        echo -e "${RED}FAILED${NC}: Build error"
+        FAILED=$((FAILED + 1))
+        return 1
+    fi
+
+    RUST_LOG=error ./target/debug/"$server_name" --port "$port" > "/tmp/${server_name}_${port}.log" 2>&1 &
+    SERVER_PID=$!
+
+    # Wait deterministically (replaces sleep 5)
+    if ! wait_for_server "$port"; then
+        echo -e "${RED}FAILED${NC}: Server did not respond within 15s"
+        echo "Last 10 lines of log:"
+        tail -10 "/tmp/${server_name}_${port}.log" 2>/dev/null || echo "(no log)"
+        kill $SERVER_PID 2>/dev/null || true
         FAILED=$((FAILED + 1))
         return 1
     fi
@@ -90,7 +104,7 @@ test_resource_server() {
     RESOURCES_RESPONSE=$(curl -s -X POST "http://127.0.0.1:$port/mcp" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json" \
-        -H "MCP-Session-ID: $SESSION_ID" \
+        -H "Mcp-Session-Id: $SESSION_ID" \
         -d '{"jsonrpc":"2.0","id":2,"method":"resources/list","params":{}}')
 
     RESOURCE_COUNT=$(echo "$RESOURCES_RESPONSE" | jq -r '.result.resources | length // 0')
@@ -121,7 +135,7 @@ test_resource_server() {
     READ_RESPONSE=$(curl -s -X POST "http://127.0.0.1:$port/mcp" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json" \
-        -H "MCP-Session-ID: $SESSION_ID" \
+        -H "Mcp-Session-Id: $SESSION_ID" \
         -d "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"resources/read\",\"params\":{\"uri\":\"$FIRST_URI\"}}")
 
     CONTENT_COUNT=$(echo "$READ_RESPONSE" | jq -r '.result.contents | length // 0')
@@ -151,7 +165,7 @@ test_resource_server() {
     TEMPLATES_RESPONSE=$(curl -s -X POST "http://127.0.0.1:$port/mcp" \
         -H "Content-Type: application/json" \
         -H "Accept: application/json" \
-        -H "MCP-Session-ID: $SESSION_ID" \
+        -H "Mcp-Session-Id: $SESSION_ID" \
         -d '{"jsonrpc":"2.0","id":4,"method":"resources/templates/list","params":{}}')
 
     TEMPLATE_COUNT=$(echo "$TEMPLATES_RESPONSE" | jq -r '.result.resourceTemplates | length // 0')
@@ -167,6 +181,9 @@ test_resource_server() {
     # Cleanup
     kill $SERVER_PID 2>/dev/null || true
     sleep 1
+
+    # Success - truncate log to avoid confusion in reruns
+    : > "/tmp/${server_name}_${port}.log"
 
     PASSED=$((PASSED + 1))
     echo -e "${GREEN}SUCCESS${NC}: $server_name verification complete"
@@ -191,12 +208,13 @@ echo "======================================================================"
 echo "Total: $TOTAL servers"
 echo -e "Passed: ${GREEN}$PASSED${NC}"
 echo -e "Failed: ${RED}$FAILED${NC}"
+echo -e "Skipped: ${YELLOW}$SKIPPED${NC}"
 echo ""
 
 if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}✅ PHASE 2 COMPLETE${NC}: All resource servers verified"
+    echo -e "${GREEN}✅ PHASE 2 COMPLETE${NC} - $PASSED passed, $SKIPPED skipped"
     exit 0
 else
-    echo -e "${RED}❌ PHASE 2 FAILED${NC}: $FAILED server(s) failed verification"
+    echo -e "${RED}❌ PHASE 2 FAILED${NC} - $FAILED failures"
     exit 1
 fi

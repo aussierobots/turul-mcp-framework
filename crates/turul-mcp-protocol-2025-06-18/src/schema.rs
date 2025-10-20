@@ -21,9 +21,9 @@ pub enum JsonSchema {
         description: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         pattern: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(rename = "minLength", skip_serializing_if = "Option::is_none")]
         min_length: Option<u64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(rename = "maxLength", skip_serializing_if = "Option::is_none")]
         max_length: Option<u64>,
         #[serde(rename = "enum", skip_serializing_if = "Option::is_none")]
         enum_values: Option<Vec<String>>,
@@ -57,9 +57,9 @@ pub enum JsonSchema {
         description: Option<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
         items: Option<Box<JsonSchema>>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(rename = "minItems", skip_serializing_if = "Option::is_none")]
         min_items: Option<u64>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(rename = "maxItems", skip_serializing_if = "Option::is_none")]
         max_items: Option<u64>,
     },
     /// Object type
@@ -70,7 +70,10 @@ pub enum JsonSchema {
         properties: Option<HashMap<String, JsonSchema>>,
         #[serde(skip_serializing_if = "Option::is_none")]
         required: Option<Vec<String>>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(
+            rename = "additionalProperties",
+            skip_serializing_if = "Option::is_none"
+        )]
         additional_properties: Option<bool>,
     },
 }

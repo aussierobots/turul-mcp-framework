@@ -5,8 +5,7 @@ use quote::quote;
 use syn::{FnArg, ItemFn, Lit, Meta, Pat, Result, Token, punctuated::Punctuated};
 
 use crate::utils::{
-    extract_param_meta, generate_output_schema_for_return_type_with_field,
-    generate_param_extraction, type_to_schema,
+    extract_param_meta, generate_output_schema_auto, generate_param_extraction, type_to_schema,
 };
 
 pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result<TokenStream> {
@@ -69,17 +68,19 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         fn_name.span(),
     );
 
-    // Analyze return type for output schema generation
+    // Analyze return type for output schema generation with automatic schemars detection
     let output_schema_tokens = match return_type {
-        syn::ReturnType::Type(_, ty) => generate_output_schema_for_return_type_with_field(
-            ty,
-            &output_field_name,
-        )
-        .unwrap_or_else(|| {
-            quote! {
-                fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> { None }
-            }
-        }),
+        syn::ReturnType::Type(_, ty) => {
+            // Extract inner type from Result<T, E>
+            let schema_type = if let Some(inner_type) = extract_result_ok_type(ty) {
+                inner_type
+            } else {
+                ty.as_ref()
+            };
+
+            // Use automatic detection (will try schemars if feature enabled, else introspection)
+            generate_output_schema_auto_for_function(schema_type, &output_field_name)
+        }
         _ => quote! {
             fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> { None }
         },
@@ -185,18 +186,18 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
 
         // Implement all fine-grained traits
         #[automatically_derived]
-        impl turul_mcp_protocol::tools::HasBaseMetadata for #struct_name {
+        impl turul_mcp_builders::traits::HasBaseMetadata for #struct_name {
             fn name(&self) -> &str { #tool_name }
             fn title(&self) -> Option<&str> { None }
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::tools::HasDescription for #struct_name {
+        impl turul_mcp_builders::traits::HasDescription for #struct_name {
             fn description(&self) -> Option<&str> { Some(#tool_description) }
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::tools::HasInputSchema for #struct_name {
+        impl turul_mcp_builders::traits::HasInputSchema for #struct_name {
             fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
                 static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> = std::sync::OnceLock::new();
                 INPUT_SCHEMA.get_or_init(|| Self::get_input_schema())
@@ -204,17 +205,17 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::tools::HasOutputSchema for #struct_name {
+        impl turul_mcp_builders::traits::HasOutputSchema for #struct_name {
             #output_schema_tokens
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::tools::HasAnnotations for #struct_name {
+        impl turul_mcp_builders::traits::HasAnnotations for #struct_name {
             fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
         }
 
         #[automatically_derived]
-        impl turul_mcp_protocol::tools::HasToolMeta for #struct_name {
+        impl turul_mcp_builders::traits::HasToolMeta for #struct_name {
             fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> { None }
         }
 
@@ -225,7 +226,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         impl turul_mcp_server::McpTool for #struct_name {
             async fn call(&self, args: serde_json::Value, session: Option<turul_mcp_server::SessionContext>) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
                 use serde_json::Value;
-                use turul_mcp_protocol::tools::HasOutputSchema;
+                use turul_mcp_builders::traits::HasOutputSchema;
 
                 // Extract parameters
                 #(#param_extractions)*
@@ -238,7 +239,11 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                             // Wrap in {field_name: value} to match generated schema
                             serde_json::json!({#output_field_name: result})
                         } else {
-                            serde_json::to_value(&result).unwrap_or_else(|_| serde_json::json!(result.to_string()))
+                            // No schema - directly serialize the result
+                            serde_json::to_value(&result)
+                                .unwrap_or_else(|e| serde_json::json!({
+                                    "error": format!("Failed to serialize result: {}", e)
+                                }))
                         };
 
                         // Use smart response builder with automatic structured content
@@ -308,6 +313,25 @@ fn is_session_context_type(field_type: &syn::Type) -> bool {
         }
         _ => false,
     }
+}
+
+/// Extract the Ok type from Result<T, E> or McpResult<T>
+fn extract_result_ok_type(ty: &syn::Type) -> Option<&syn::Type> {
+    if let syn::Type::Path(type_path) = ty
+        && let Some(segment) = type_path.path.segments.last()
+        && (segment.ident == "Result" || segment.ident == "McpResult")
+        && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+        && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
+    {
+        return Some(inner_type);
+    }
+    None
+}
+
+/// Generate output schema for function macros with automatic schemars detection
+fn generate_output_schema_auto_for_function(ty: &syn::Type, field_name: &str) -> TokenStream {
+    // Use the same auto-detection, but without DeriveInput (function macros don't have it)
+    generate_output_schema_auto(ty, field_name, None)
 }
 
 #[cfg(test)]

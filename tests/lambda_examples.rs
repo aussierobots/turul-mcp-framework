@@ -103,6 +103,48 @@ fn test_session_persistence() {
     let _ = example_with_session_tool;
 }
 
+/// Test Lambda environment detection and routing behavior
+#[test]
+fn test_lambda_environment_routing() {
+    #[derive(McpTool, Clone, Default)]
+    #[tool(name = "test", description = "Test tool")]
+    struct TestTool {
+        message: String,
+    }
+
+    impl TestTool {
+        async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+            Ok(self.message.clone())
+        }
+    }
+
+    // Verify the Lambda routing logic compiles correctly
+    async fn example_lambda_routing() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        use std::sync::Arc;
+        use turul_mcp_session_storage::InMemorySessionStorage;
+
+        // Build server with in-memory storage
+        let storage = Arc::new(InMemorySessionStorage::new());
+        let _server = LambdaMcpServerBuilder::new()
+            .name("test-lambda-server")
+            .version("1.0.0")
+            .tool(TestTool::default())
+            .storage(storage)
+            .build()
+            .await?;
+
+        // The handler's routing logic will:
+        // - Detect Lambda environment via AWS_EXECUTION_ENV, AWS_LAMBDA_FUNCTION_NAME, or LAMBDA_TASK_ROOT
+        // - Route to SessionMcpHandler when in Lambda (even for protocol >= 2025-03-26)
+        // - Route to StreamableHttpHandler when not in Lambda (protocol >= 2025-03-26)
+        // - Respect TURUL_FORCE_STREAMING=1 to override Lambda detection
+
+        Ok(())
+    }
+
+    let _ = example_lambda_routing;
+}
+
 /// Test CORS configuration from turul-mcp-aws-lambda README
 #[test]
 fn test_lambda_cors_configuration() {

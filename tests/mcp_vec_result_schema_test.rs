@@ -1,38 +1,47 @@
-//! Test for Vec<T> return type schema generation bug
+//! Test for Vec<T> return type schema generation
 //!
-//! **Issue**: Tools returning Vec<T> generate incorrect schemas:
-//! - Current: Wraps in object with "output" field containing object type
-//! - Expected: Should be array type at top level or correctly typed array in output field
+//! **Requirement**: Tools returning Vec<T> MUST specify `output = Vec<T>` in the #[tool] attribute.
+//! Without this, the macro cannot know the return type and will default to generating a schema
+//! based on the tool's input parameters (Self).
 //!
-//! **Root Cause**: tool_derive.rs always wraps return values in ToolSchema::object()
-//! even when the actual return type is Vec<T> (array)
+//! **Correct Usage**:
+//! ```rust
+//! #[derive(McpTool)]
+//! #[tool(
+//!     name = "search",
+//!     description = "Search for items",
+//!     output = Vec<SearchResult>  // ← REQUIRED for Vec return types
+//! )]
+//! struct SearchTool { ... }
+//! ```
 //!
-//! **Impact**: FastMCP and MCP Inspector schema validation rejects valid array responses
+//! **Impact**: FastMCP and MCP Inspector require array schemas for array responses
 
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use turul_mcp_builders::prelude::*;
 use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::{
-    tools::HasOutputSchema,
-    McpResult,
-};
+use turul_mcp_protocol::McpResult;
 use turul_mcp_server::{McpTool as McpToolTrait, SessionContext};
 
 /// Test struct for array item
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 struct SearchResult {
     id: String,
     title: String,
     score: f64,
 }
 
-/// Tool that returns Vec<SearchResult> - this causes schema validation issues
+/// Tool that returns Vec<SearchResult> - must specify output type for correct schema
 #[derive(Debug, Clone, Default, McpTool)]
 #[tool(
     name = "search_items",
-    description = "Search for items and return array of results"
+    description = "Search for items and return array of results",
+    output = Vec<SearchResult>
 )]
 struct SearchTool {
     query: String,
+    #[allow(dead_code)]
     limit: usize,
 }
 
@@ -73,7 +82,10 @@ async fn test_vec_result_schema_generation() {
 
     // Serialize to JSON for inspection
     let schema_json = serde_json::to_value(schema).expect("Schema should serialize");
-    println!("Schema JSON:\n{}", serde_json::to_string_pretty(&schema_json).unwrap());
+    println!(
+        "Schema JSON:\n{}",
+        serde_json::to_string_pretty(&schema_json).unwrap()
+    );
 
     // 2. The BUG: Check if schema type is correctly identified
     let schema_type = schema_json["type"].as_str();
@@ -118,20 +130,22 @@ async fn test_vec_result_actual_return_value() {
     };
 
     // Execute the tool with proper parameters
-    let result = tool.call(serde_json::json!({
-        "query": "test",
-        "limit": 2
-    }), None).await;
+    let result = tool
+        .call(
+            serde_json::json!({
+                "query": "test",
+                "limit": 2
+            }),
+            None,
+        )
+        .await;
     assert!(result.is_ok(), "Tool execution should succeed");
 
     let result = result.unwrap();
     println!("Tool result: {:#?}", result);
 
     // Check if result has content
-    assert!(
-        !result.content.is_empty(),
-        "Tool should return content"
-    );
+    assert!(!result.content.is_empty(), "Tool should return content");
 
     // Parse the returned content
     let content_text = match &result.content[0] {
@@ -141,9 +155,12 @@ async fn test_vec_result_actual_return_value() {
         turul_mcp_protocol::ContentBlock::Audio { .. } => panic!("Expected text content"),
         turul_mcp_protocol::ContentBlock::ResourceLink { .. } => panic!("Expected text content"),
     };
-    let content_json: serde_json::Value = serde_json::from_str(content_text)
-        .expect("Content should be valid JSON");
-    println!("Content JSON:\n{}", serde_json::to_string_pretty(&content_json).unwrap());
+    let content_json: serde_json::Value =
+        serde_json::from_str(content_text).expect("Content should be valid JSON");
+    println!(
+        "Content JSON:\n{}",
+        serde_json::to_string_pretty(&content_json).unwrap()
+    );
 
     // Check if structured content exists (should for tools with output schema)
     if let Some(structured) = &result.structured_content {
@@ -178,13 +195,21 @@ async fn test_schema_validation_would_pass() {
 
     // Get schema and actual result
     let schema = tool.output_schema().expect("Should have schema");
-    let result = tool.call(serde_json::json!({
-        "query": "test",
-        "limit": 2
-    }), None).await.unwrap();
+    let result = tool
+        .call(
+            serde_json::json!({
+                "query": "test",
+                "limit": 2
+            }),
+            None,
+        )
+        .await
+        .unwrap();
 
-    let schema_json = serde_json::to_value(&schema).unwrap();
-    let structured_content = result.structured_content.expect("Should have structured content");
+    let schema_json = serde_json::to_value(schema).unwrap();
+    let structured_content = result
+        .structured_content
+        .expect("Should have structured content");
 
     println!("Schema declares: {:#?}", schema_json);
     println!("Runtime returns: {:#?}", structured_content);
@@ -196,8 +221,14 @@ async fn test_schema_validation_would_pass() {
     let actual_output_value = &structured_content["output"];
 
     println!("Schema says output type: {:?}", schema_output_type);
-    println!("Runtime output is_array: {}", actual_output_value.is_array());
-    println!("Runtime output is_object: {}", actual_output_value.is_object());
+    println!(
+        "Runtime output is_array: {}",
+        actual_output_value.is_array()
+    );
+    println!(
+        "Runtime output is_object: {}",
+        actual_output_value.is_object()
+    );
 
     // ❌ THE MISMATCH:
     // - Schema says: "output": { "type": "object", "additionalProperties": true }
