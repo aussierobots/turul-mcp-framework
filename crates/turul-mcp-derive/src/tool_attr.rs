@@ -319,14 +319,11 @@ fn is_session_context_type(field_type: &syn::Type) -> bool {
 fn extract_result_ok_type(ty: &syn::Type) -> Option<&syn::Type> {
     if let syn::Type::Path(type_path) = ty
         && let Some(segment) = type_path.path.segments.last()
+        && (segment.ident == "Result" || segment.ident == "McpResult")
+        && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+        && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
     {
-        if segment.ident == "Result" || segment.ident == "McpResult" {
-            if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
-                && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
-            {
-                return Some(inner_type);
-            }
-        }
+        return Some(inner_type);
     }
     None
 }

@@ -158,8 +158,16 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                     }
                     "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize"
                     | "usize" => {
+                        let min = param_meta.min.map(|m| {
+                            let m_int = m as i64;
+                            quote! { .with_minimum(#m_int as f64) }
+                        });
+                        let max = param_meta.max.map(|m| {
+                            let m_int = m as i64;
+                            quote! { .with_maximum(#m_int as f64) }
+                        });
                         quote! {
-                            turul_mcp_protocol::schema::JsonSchema::integer() #description
+                            turul_mcp_protocol::schema::JsonSchema::integer() #description #min #max
                         }
                     }
                     "bool" => {
@@ -1041,18 +1049,18 @@ fn extract_schema_content(
     input: Option<&DeriveInput>,
 ) -> TokenStream {
     // Try to introspect struct properties if we have the DeriveInput
-    if let (syn::Type::Path(type_path), Some(derive_input)) = (ty, input) {
-        if let Some(ident) = type_path.path.get_ident() {
-            // Check if this is Self or the same struct we're deriving for
-            let is_self_type = ident == "Self";
-            let is_same_struct = ident == &derive_input.ident;
+    if let (syn::Type::Path(type_path), Some(derive_input)) = (ty, input)
+        && let Some(ident) = type_path.path.get_ident()
+    {
+        // Check if this is Self or the same struct we're deriving for
+        let is_self_type = ident == "Self";
+        let is_same_struct = ident == &derive_input.ident;
 
-            if (is_self_type || is_same_struct)
-                && let Data::Struct(data_struct) = &derive_input.data
-                && let Fields::Named(fields) = &data_struct.fields
-            {
-                return extract_struct_schema_content(fields, field_name);
-            }
+        if (is_self_type || is_same_struct)
+            && let Data::Struct(data_struct) = &derive_input.data
+            && let Fields::Named(fields) = &data_struct.fields
+        {
+            return extract_struct_schema_content(fields, field_name);
         }
     }
 
