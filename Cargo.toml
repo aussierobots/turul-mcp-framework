@@ -124,15 +124,15 @@ http-body = "1"
 bytes = "1"
 
 # Internal crate dependencies
-turul-mcp-json-rpc-server = { path = "crates/turul-mcp-json-rpc-server" }
-turul-mcp-protocol-2025-06-18 = { path = "crates/turul-mcp-protocol-2025-06-18" }
-turul-mcp-protocol = { path = "crates/turul-mcp-protocol" }
-turul-mcp-session-storage = { path = "crates/turul-mcp-session-storage" }
-turul-http-mcp-server = { path = "crates/turul-http-mcp-server" }
-turul-mcp-server = { path = "crates/turul-mcp-server" }
-turul-mcp-derive = { path = "crates/turul-mcp-derive" }
-turul-mcp-client = { path = "crates/turul-mcp-client" }
-turul-mcp-builders = { path = "crates/turul-mcp-builders" }
+turul-mcp-json-rpc-server = { version = "0.2.1", path = "crates/turul-mcp-json-rpc-server" }
+turul-mcp-protocol-2025-06-18 = { version = "0.2.1", path = "crates/turul-mcp-protocol-2025-06-18" }
+turul-mcp-protocol = { version = "0.2.1", path = "crates/turul-mcp-protocol" }
+turul-mcp-session-storage = { version = "0.2.1", path = "crates/turul-mcp-session-storage" }
+turul-http-mcp-server = { version = "0.2.1", path = "crates/turul-http-mcp-server" }
+turul-mcp-server = { version = "0.2.1", path = "crates/turul-mcp-server" }
+turul-mcp-derive = { version = "0.2.1", path = "crates/turul-mcp-derive" }
+turul-mcp-client = { version = "0.2.1", path = "crates/turul-mcp-client" }
+turul-mcp-builders = { version = "0.2.1", path = "crates/turul-mcp-builders" }
 
 # Additional dependencies for examples and tests
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
