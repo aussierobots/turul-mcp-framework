@@ -1,16 +1,17 @@
 # MCP Framework - Working Memory
 
-**Last Updated**: 2025-10-10
-**Framework Version**: v0.2.1
+**Last Updated**: 2025-10-21
+**Framework Version**: v0.2.2-dev
 **Purpose**: Track current work, active context, and immediate priorities
 
 ---
 
-## 🎯 Current Status: Ready for v0.2.1 Release
+## 🎯 Current Status: v0.2.2 Development
 
-**Status**: ✅ **COMPLETE**
-**Branch**: 0.2.1 (stable)
+**Status**: 🔧 **IN PROGRESS**
+**Branch**: 0.2.2 (development)
 **Test Status**: All tests passing, zero warnings
+**Focus**: README testing infrastructure and documentation accuracy
 
 ### Recent Completions (2025-10-10)
 
@@ -96,6 +97,16 @@
 - [ ] Final verification run
 
 ### Post-Release Planning (v0.2.2+)
+
+**README Testing with Skeptic (v0.2.2 Priority):**
+- Add skeptic crate for markdown code block testing
+- Configure skeptic to test README.md files in all published crates
+- Fix turul-mcp-protocol-2025-06-18/README.md:
+  - Update version numbers (0.2.0 → 0.2.1)
+  - Rewrite architectural narrative (remove "trait-based" claims)
+  - Emphasize spec-purity and concrete types
+  - Ensure all code examples compile and pass tests
+- Estimated: 1-2 days
 
 **Session-Aware Resources:**
 - Add `SessionContext` parameter to `McpResource::read()`

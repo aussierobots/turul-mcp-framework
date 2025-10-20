@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] - TBD
+
+### Added
+
+**README Testing Infrastructure:**
+- Added `skeptic` crate for automated markdown code block testing
+- README.md files now validated as part of `cargo test` suite
+- Prevents documentation drift and ensures all code examples compile
+
+### Fixed
+
+**Documentation Accuracy (turul-mcp-protocol-2025-06-18):**
+- Fixed version numbers in README.md (0.2.0 → 0.2.1)
+- Corrected architectural descriptions to reflect spec-purity design
+- Removed outdated "trait-based architecture" marketing
+- Clarified that framework traits live in `turul-mcp-builders` crate
+- Updated "Why Choose This Crate" section to emphasize concrete MCP types
+- All 20+ README code examples now tested and verified
+
+### Changed
+
+- README narrative now accurately describes crate as "spec-pure protocol implementation"
+- Documentation emphasizes concrete types (Tool, Resource, Prompt) over trait abstraction
+
 ## [0.2.1] - 2025-10-08
 
 ### Breaking Changes
