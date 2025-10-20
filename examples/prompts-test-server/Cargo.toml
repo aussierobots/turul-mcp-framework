@@ -1,6 +1,6 @@
 [package]
 name = "prompts-test-server"
-version = "0.2.0"
+version = "0.2.2"
 edition = "2021"
 authors = ["Nick <nick@aussierobots.com.au>"]
 description = "MCP Prompts Test Server - Comprehensive test prompts for E2E validation"

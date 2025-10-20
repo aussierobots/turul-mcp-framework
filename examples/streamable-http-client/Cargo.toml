@@ -1,6 +1,6 @@
 [package]
 name = "streamable-http-client"
-version = "0.2.0"
+version = "0.2.2"
 edition.workspace = true
 description = "MCP 2025-06-18 Streamable HTTP client example with multi-threaded SSE processing"
 

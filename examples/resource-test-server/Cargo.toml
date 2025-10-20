@@ -1,6 +1,6 @@
 [package]
 name = "resource-test-server"
-version = "0.2.0"
+version = "0.2.2"
 edition = "2021"
 authors = ["Nick <nick@aussierobots.com.au>"]
 description = "MCP Resource Test Server - Comprehensive test resources for E2E validation"

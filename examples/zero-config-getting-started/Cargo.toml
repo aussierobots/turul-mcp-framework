@@ -1,6 +1,6 @@
 [package]
 name = "zero-config-getting-started"
-version = "0.2.0"
+version = "0.2.2"
 edition.workspace = true
 
 [dependencies]

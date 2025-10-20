@@ -1,6 +1,6 @@
 [package]
 name = "notifications-server-macro"
-version = "0.2.0"
+version = "0.2.2"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
