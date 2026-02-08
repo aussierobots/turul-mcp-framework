@@ -1,4 +1,4 @@
-//! MCP 2025-06-18 Streamable HTTP Client Test
+//! MCP Streamable HTTP Client Test
 //!
 //! Tests the CORRECT implementation of MCP Streamable HTTP with:
 //! - Multi-threaded SSE stream processing
