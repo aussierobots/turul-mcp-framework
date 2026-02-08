@@ -5,104 +5,31 @@
 
 use std::collections::HashMap;
 
-use async_trait::async_trait;
 use chrono::Utc;
+use serde::Deserialize;
 use serde_json::{Value, json};
-use turul_mcp_protocol::tools::CallToolResult;
-use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema};
-use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
-use turul_mcp_server::{McpServer, McpTool, SessionContext};
+use turul_mcp_derive::McpTool;
+use turul_mcp_protocol::{McpError, McpResult};
+use turul_mcp_server::{McpServer, SessionContext};
 use uuid::Uuid;
 
 /// File system tool that demonstrates complex schemas and state management
-struct FileSystemTool {
-    input_schema: ToolSchema,
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "file_operations",
+    description = "Simulated file system operations with session state tracking"
+)]
+pub struct FileSystemTool {
+    #[param(description = "File operation to perform (create, read, update, delete, list)")]
+    pub operation: String,
+    #[param(description = "File path")]
+    pub path: String,
+    #[param(description = "File content (for create/update operations)", optional)]
+    pub content: Option<String>,
 }
 
 impl FileSystemTool {
-    fn new() -> Self {
-        let input_schema = ToolSchema::object()
-            .with_properties(HashMap::from([
-                (
-                    "operation".to_string(),
-                    JsonSchema::string_enum(vec![
-                        "create".to_string(),
-                        "read".to_string(),
-                        "update".to_string(),
-                        "delete".to_string(),
-                        "list".to_string(),
-                    ])
-                    .with_description("File operation to perform"),
-                ),
-                (
-                    "path".to_string(),
-                    JsonSchema::string().with_description("File path"),
-                ),
-                (
-                    "content".to_string(),
-                    JsonSchema::string()
-                        .with_description("File content (for create/update operations)"),
-                ),
-            ]))
-            .with_required(vec!["operation".to_string(), "path".to_string()]);
-        Self { input_schema }
-    }
-}
-
-// Implement fine-grained traits
-impl HasBaseMetadata for FileSystemTool {
-    fn name(&self) -> &str {
-        "file_operations"
-    }
-}
-
-impl HasDescription for FileSystemTool {
-    fn description(&self) -> Option<&str> {
-        Some("Simulated file system operations with session state tracking")
-    }
-}
-
-impl HasInputSchema for FileSystemTool {
-    fn input_schema(&self) -> &ToolSchema {
-        &self.input_schema
-    }
-}
-
-impl HasOutputSchema for FileSystemTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for FileSystemTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for FileSystemTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
-}
-
-#[async_trait]
-impl McpTool for FileSystemTool {
-    async fn call(
-        &self,
-        args: Value,
-        session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let operation = args
-            .get("operation")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_param("operation"))?;
-
-        let path = args
-            .get("path")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_param("path"))?;
-
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
         let session = session.unwrap_or_else(|| panic!("Session required"));
 
         // Get or create file system state
@@ -111,97 +38,97 @@ impl McpTool for FileSystemTool {
             .await
             .unwrap_or_default();
 
-        let result = match operation {
+        let result = match self.operation.as_str() {
             "create" => {
-                let content = args
-                    .get("content")
-                    .and_then(|v| v.as_str())
+                let content = self
+                    .content
+                    .as_deref()
                     .ok_or_else(|| McpError::missing_param("content"))?;
 
-                if files.contains_key(path) {
+                if files.contains_key(&self.path) {
                     return Err(McpError::tool_execution(&format!(
                         "File '{}' already exists",
-                        path
+                        self.path
                     )));
                 }
 
-                files.insert(path.to_string(), content.to_string());
+                files.insert(self.path.clone(), content.to_string());
                 session
                     .set_typed_state("virtual_files", &files)
                     .await
                     .unwrap();
-                session.notify_progress(format!("create_{}", path), 1).await;
+                session.notify_progress(format!("create_{}", self.path), 1).await;
 
                 json!({
                     "operation": "create",
-                    "path": path,
+                    "path": self.path,
                     "size": content.len(),
                     "created": Utc::now().to_rfc3339(),
-                    "message": format!("Created file '{}'", path)
+                    "message": format!("Created file '{}'", self.path)
                 })
             }
             "read" => {
-                if let Some(content) = files.get(path) {
+                if let Some(content) = files.get(&self.path) {
                     json!({
                         "operation": "read",
-                        "path": path,
+                        "path": self.path,
                         "content": content,
                         "size": content.len(),
-                        "message": format!("Read file '{}'", path)
+                        "message": format!("Read file '{}'", self.path)
                     })
                 } else {
                     return Err(McpError::tool_execution(&format!(
                         "File '{}' not found",
-                        path
+                        self.path
                     )));
                 }
             }
             "update" => {
-                let content = args
-                    .get("content")
-                    .and_then(|v| v.as_str())
+                let content = self
+                    .content
+                    .as_deref()
                     .ok_or_else(|| McpError::missing_param("content"))?;
 
-                if !files.contains_key(path) {
+                if !files.contains_key(&self.path) {
                     return Err(McpError::tool_execution(&format!(
                         "File '{}' not found",
-                        path
+                        self.path
                     )));
                 }
 
-                files.insert(path.to_string(), content.to_string());
+                files.insert(self.path.clone(), content.to_string());
                 session
                     .set_typed_state("virtual_files", &files)
                     .await
                     .unwrap();
-                session.notify_progress(format!("update_{}", path), 1).await;
+                session.notify_progress(format!("update_{}", self.path), 1).await;
 
                 json!({
                     "operation": "update",
-                    "path": path,
+                    "path": self.path,
                     "size": content.len(),
                     "updated": Utc::now().to_rfc3339(),
-                    "message": format!("Updated file '{}'", path)
+                    "message": format!("Updated file '{}'", self.path)
                 })
             }
             "delete" => {
-                if files.remove(path).is_some() {
+                if files.remove(&self.path).is_some() {
                     session
                         .set_typed_state("virtual_files", &files)
                         .await
                         .unwrap();
-                    session.notify_progress(format!("delete_{}", path), 1).await;
+                    session.notify_progress(format!("delete_{}", self.path), 1).await;
 
                     json!({
                         "operation": "delete",
-                        "path": path,
+                        "path": self.path,
                         "deleted": Utc::now().to_rfc3339(),
-                        "message": format!("Deleted file '{}'", path)
+                        "message": format!("Deleted file '{}'", self.path)
                     })
                 } else {
                     return Err(McpError::tool_execution(&format!(
                         "File '{}' not found",
-                        path
+                        self.path
                     )));
                 }
             }
@@ -227,111 +154,34 @@ impl McpTool for FileSystemTool {
                 return Err(McpError::invalid_param_type(
                     "operation",
                     "create|read|update|delete|list",
-                    operation,
+                    &self.operation,
                 ));
             }
         };
 
-        Ok(CallToolResult {
-            content: vec![ToolResult::text(result.to_string())],
-            is_error: None,
-            structured_content: None,
-            meta: None,
-        })
+        Ok(result)
     }
 }
 
 /// Task manager tool with complex state management and notifications
-struct TaskManagerTool {
-    input_schema: ToolSchema,
-}
-
-impl TaskManagerTool {
-    fn new() -> Self {
-        let input_schema = ToolSchema::object()
-            .with_properties(HashMap::from([
-                (
-                    "action".to_string(),
-                    JsonSchema::string_enum(vec![
-                        "create".to_string(),
-                        "list".to_string(),
-                        "complete".to_string(),
-                        "delete".to_string(),
-                        "update_status".to_string(),
-                    ])
-                    .with_description("Task action to perform"),
-                ),
-                (
-                    "title".to_string(),
-                    JsonSchema::string().with_description("Task title (required for create)"),
-                ),
-                (
-                    "description".to_string(),
-                    JsonSchema::string().with_description("Task description"),
-                ),
-                (
-                    "task_id".to_string(),
-                    JsonSchema::string()
-                        .with_description("Task ID (required for complete/delete/update_status)"),
-                ),
-                (
-                    "status".to_string(),
-                    JsonSchema::string_enum(vec![
-                        "todo".to_string(),
-                        "in_progress".to_string(),
-                        "completed".to_string(),
-                    ])
-                    .with_description("Task status (for update_status)"),
-                ),
-                (
-                    "priority".to_string(),
-                    JsonSchema::string_enum(vec![
-                        "low".to_string(),
-                        "medium".to_string(),
-                        "high".to_string(),
-                    ])
-                    .with_description("Task priority"),
-                ),
-            ]))
-            .with_required(vec!["action".to_string()]);
-        Self { input_schema }
-    }
-}
-
-impl HasBaseMetadata for TaskManagerTool {
-    fn name(&self) -> &str {
-        "task_manager"
-    }
-}
-
-impl HasDescription for TaskManagerTool {
-    fn description(&self) -> Option<&str> {
-        Some("Manage tasks with status tracking and progress notifications")
-    }
-}
-
-impl HasInputSchema for TaskManagerTool {
-    fn input_schema(&self) -> &ToolSchema {
-        &self.input_schema
-    }
-}
-
-impl HasOutputSchema for TaskManagerTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for TaskManagerTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for TaskManagerTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "task_manager",
+    description = "Manage tasks with status tracking and progress notifications"
+)]
+pub struct TaskManagerTool {
+    #[param(description = "Task action to perform (create, list, complete, delete, update_status)")]
+    pub action: String,
+    #[param(description = "Task title (required for create)", optional)]
+    pub title: Option<String>,
+    #[param(description = "Task description", optional)]
+    pub description: Option<String>,
+    #[param(description = "Task ID (required for complete/delete/update_status)", optional)]
+    pub task_id: Option<String>,
+    #[param(description = "Task status: todo, in_progress, completed (for update_status)", optional)]
+    pub status: Option<String>,
+    #[param(description = "Task priority: low, medium, high", optional)]
+    pub priority: Option<String>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -345,40 +195,24 @@ struct Task {
     updated: String,
 }
 
-#[async_trait]
-impl McpTool for TaskManagerTool {
-    async fn call(
-        &self,
-        args: Value,
-        session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let action = args
-            .get("action")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_param("action"))?;
-
+impl TaskManagerTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
         let session = session.unwrap_or_else(|| panic!("Session required"));
 
         // Get or create tasks state
         let mut tasks: HashMap<String, Task> =
             session.get_typed_state("tasks").await.unwrap_or_default();
 
-        let result = match action {
+        let result = match self.action.as_str() {
             "create" => {
-                let title = args
-                    .get("title")
-                    .and_then(|v| v.as_str())
+                let title = self
+                    .title
+                    .as_deref()
                     .ok_or_else(|| McpError::missing_param("title"))?;
 
-                let description = args
-                    .get("description")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
+                let description = self.description.clone();
 
-                let priority = args
-                    .get("priority")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("medium");
+                let priority = self.priority.as_deref().unwrap_or("medium");
 
                 let task_id = Uuid::new_v4().to_string();
                 let now = Utc::now().to_rfc3339();
@@ -416,9 +250,9 @@ impl McpTool for TaskManagerTool {
                 })
             }
             "complete" => {
-                let task_id = args
-                    .get("task_id")
-                    .and_then(|v| v.as_str())
+                let task_id = self
+                    .task_id
+                    .as_deref()
                     .ok_or_else(|| McpError::missing_param("task_id"))?;
 
                 if let Some(task) = tasks.get_mut(task_id) {
@@ -443,9 +277,9 @@ impl McpTool for TaskManagerTool {
                 }
             }
             "delete" => {
-                let task_id = args
-                    .get("task_id")
-                    .and_then(|v| v.as_str())
+                let task_id = self
+                    .task_id
+                    .as_deref()
                     .ok_or_else(|| McpError::missing_param("task_id"))?;
 
                 if let Some(task) = tasks.remove(task_id) {
@@ -467,13 +301,13 @@ impl McpTool for TaskManagerTool {
                 }
             }
             "update_status" => {
-                let task_id = args
-                    .get("task_id")
-                    .and_then(|v| v.as_str())
+                let task_id = self
+                    .task_id
+                    .as_deref()
                     .ok_or_else(|| McpError::missing_param("task_id"))?;
-                let status = args
-                    .get("status")
-                    .and_then(|v| v.as_str())
+                let status = self
+                    .status
+                    .as_deref()
                     .ok_or_else(|| McpError::missing_param("status"))?;
 
                 if !["todo", "in_progress", "completed"].contains(&status) {
@@ -509,99 +343,34 @@ impl McpTool for TaskManagerTool {
                 return Err(McpError::invalid_param_type(
                     "action",
                     "create|list|complete|delete|update_status",
-                    action,
+                    &self.action,
                 ));
             }
         };
 
-        Ok(CallToolResult {
-            content: vec![ToolResult::text(result.to_string())],
-            is_error: None,
-            structured_content: None,
-            meta: None,
-        })
+        Ok(result)
     }
 }
 
 /// Weather tool demonstrating simple API-style operations
-struct WeatherTool {
-    input_schema: ToolSchema,
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "weather",
+    description = "Get weather information with session-based caching"
+)]
+pub struct WeatherTool {
+    #[param(description = "Location to get weather for")]
+    pub location: String,
+    #[param(description = "Temperature units: celsius or fahrenheit (default: celsius)", optional)]
+    pub units: Option<String>,
 }
 
 impl WeatherTool {
-    fn new() -> Self {
-        let input_schema = ToolSchema::object()
-            .with_properties(HashMap::from([
-                (
-                    "location".to_string(),
-                    JsonSchema::string().with_description("Location to get weather for"),
-                ),
-                (
-                    "units".to_string(),
-                    JsonSchema::string_enum(vec!["celsius".to_string(), "fahrenheit".to_string()])
-                        .with_description("Temperature units (default: celsius)"),
-                ),
-            ]))
-            .with_required(vec!["location".to_string()]);
-        Self { input_schema }
-    }
-}
-
-impl HasBaseMetadata for WeatherTool {
-    fn name(&self) -> &str {
-        "weather"
-    }
-}
-
-impl HasDescription for WeatherTool {
-    fn description(&self) -> Option<&str> {
-        Some("Get weather information with session-based caching")
-    }
-}
-
-impl HasInputSchema for WeatherTool {
-    fn input_schema(&self) -> &ToolSchema {
-        &self.input_schema
-    }
-}
-
-impl HasOutputSchema for WeatherTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for WeatherTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for WeatherTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
-}
-
-#[async_trait]
-impl McpTool for WeatherTool {
-    async fn call(
-        &self,
-        args: Value,
-        session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let location = args
-            .get("location")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_param("location"))?;
-
-        let units = args
-            .get("units")
-            .and_then(|v| v.as_str())
-            .unwrap_or("celsius");
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
+        let units = self.units.as_deref().unwrap_or("celsius");
 
         // Simulate weather data
-        let temp_celsius = match location.to_lowercase().as_str() {
+        let temp_celsius = match self.location.to_lowercase().as_str() {
             "london" => 15,
             "new york" => 22,
             "tokyo" => 25,
@@ -611,12 +380,12 @@ impl McpTool for WeatherTool {
         };
 
         let (temp, temp_unit) = match units {
-            "fahrenheit" => (temp_celsius * 9 / 5 + 32, "°F"),
-            _ => (temp_celsius, "°C"),
+            "fahrenheit" => (temp_celsius * 9 / 5 + 32, "F"),
+            _ => (temp_celsius, "C"),
         };
 
         let weather_data = json!({
-            "location": location,
+            "location": self.location,
             "temperature": temp,
             "units": temp_unit,
             "condition": "Partly cloudy",
@@ -628,22 +397,17 @@ impl McpTool for WeatherTool {
 
         // Cache in session if available
         if let Some(session) = session {
-            let cache_key = format!("weather_{}", location.to_lowercase().replace(" ", "_"));
+            let cache_key = format!("weather_{}", self.location.to_lowercase().replace(' ', "_"));
             session
                 .set_typed_state(&cache_key, &weather_data)
                 .await
                 .unwrap();
             session
-                .notify_progress(format!("weather_fetched_{}", location), 1)
+                .notify_progress(format!("weather_fetched_{}", self.location), 1)
                 .await;
         }
 
-        Ok(CallToolResult {
-            content: vec![ToolResult::text(weather_data.to_string())],
-            is_error: None,
-            structured_content: None,
-            meta: None,
-        })
+        Ok(weather_data)
     }
 }
 
@@ -653,34 +417,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    println!("🔧 Starting Manual Tools MCP Server");
-    println!("🎯 Demonstrating advanced manual tool implementations");
+    println!("Starting Manual Tools MCP Server");
+    println!("Demonstrating advanced manual tool implementations");
 
     let server = McpServer::builder()
         .name("manual-tools-server")
         .version("1.0.0")
         .title("Manual Tools Implementation Example")
         .instructions("This server demonstrates advanced manual implementation of MCP tools with fine-grained trait composition, session state management, progress notifications, and complex schemas.")
-        .tool(FileSystemTool::new())
-        .tool(TaskManagerTool::new())
-        .tool(WeatherTool::new())
+        .tool(FileSystemTool::default())
+        .tool(TaskManagerTool::default())
+        .tool(WeatherTool::default())
         .bind_address("127.0.0.1:8007".parse()?)
         .sse(true)
         .build()?;
 
-    println!("🚀 Manual tools server running at: http://127.0.0.1:8007/mcp");
-    println!("\n📋 Available tools:");
-    println!("  📁 file_operations: Simulated file system with CRUD operations");
-    println!("  ✅ task_manager: Task management with status tracking and priorities");
-    println!("  🌤️  weather: Weather information with session caching");
-    println!("\n✨ Advanced features demonstrated:");
-    println!("  🔧 Manual fine-grained trait implementations");
-    println!("  💾 Session-based state persistence");
-    println!("  📊 Progress notifications and status updates");
-    println!("  📝 Complex JSON schemas with enums and validation");
-    println!("  🧩 Trait composition patterns");
+    println!("Manual tools server running at: http://127.0.0.1:8007/mcp");
+    println!("\nAvailable tools:");
+    println!("  file_operations: Simulated file system with CRUD operations");
+    println!("  task_manager: Task management with status tracking and priorities");
+    println!("  weather: Weather information with session caching");
+    println!("\nAdvanced features demonstrated:");
+    println!("  - Session-based state persistence");
+    println!("  - Progress notifications and status updates");
+    println!("  - Complex JSON schemas with enums and validation");
 
-    println!("\n🎯 Example usage:");
+    println!("\nExample usage:");
     println!(
         "  1. Create file: file_operations(operation='create', path='/hello.txt', content='Hello World')"
     );
