@@ -11,46 +11,34 @@
 //! ```
 
 use anyhow::Result;
-use async_trait::async_trait;
+use serde::Deserialize;
 use serde_json::json;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 use tokio::time::{Duration, sleep};
-use turul_mcp_builders::prelude::*;
-use turul_mcp_protocol::{
-    ToolResult,
-    logging::LoggingLevel,
-    schema::JsonSchema,
-    tools::{CallToolResult, ToolAnnotations, ToolSchema},
-};
-use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
+use turul_mcp_derive::McpTool;
+use turul_mcp_protocol::logging::LoggingLevel;
+use turul_mcp_server::{McpResult, McpServer, SessionContext};
 use turul_mcp_session_storage::InMemorySessionStorage;
 
 /// Simple logging test tool that sends a message at a specified logging level
-#[derive(Clone)]
-struct LoggingTestTool;
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "test_log",
+    description = "Send a test log message at the specified level to verify session-aware filtering"
+)]
+pub struct LoggingTestTool {
+    #[param(description = "Test message to send")]
+    pub message: String,
+    #[param(description = "Logging level (debug, info, notice, warning, error, critical, alert, emergency)")]
+    pub level: String,
+}
 
-#[async_trait]
-impl McpTool for LoggingTestTool {
-    async fn call(
-        &self,
-        args: serde_json::Value,
-        session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
+impl LoggingTestTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
         let session = session.ok_or("Session context required")?;
 
-        // Extract message and level parameters
-        let message = args
-            .get("message")
-            .and_then(|v| v.as_str())
-            .ok_or("Missing 'message' parameter")?;
-
-        let level_str = args
-            .get("level")
-            .and_then(|v| v.as_str())
-            .ok_or("Missing 'level' parameter")?;
-
         // Parse logging level
-        let logging_level = match level_str.to_lowercase().as_str() {
+        let logging_level = match self.level.to_lowercase().as_str() {
             "debug" => LoggingLevel::Debug,
             "info" => LoggingLevel::Info,
             "notice" => LoggingLevel::Notice,
@@ -60,18 +48,20 @@ impl McpTool for LoggingTestTool {
             "alert" => LoggingLevel::Alert,
             "emergency" => LoggingLevel::Emergency,
             _ => {
-                return Ok(CallToolResult::success(vec![ToolResult::text(format!(
-                    "Invalid level '{}'. Valid: debug, info, notice, warning, error, critical, alert, emergency",
-                    level_str
-                ))]));
+                return Ok(json!({
+                    "error": format!(
+                        "Invalid level '{}'. Valid: debug, info, notice, warning, error, critical, alert, emergency",
+                        self.level
+                    )
+                }));
             }
         };
 
         let current_session_level = session.get_logging_level().await;
         let will_be_filtered = !(session.should_log(logging_level).await);
 
-        tracing::info!("🧪 LoggingTestTool called:");
-        tracing::info!("   Message: '{}'", message);
+        tracing::info!("LoggingTestTool called:");
+        tracing::info!("   Message: '{}'", self.message);
         tracing::info!(
             "   Level: {:?} (priority {})",
             logging_level,
@@ -88,96 +78,45 @@ impl McpTool for LoggingTestTool {
         session
             .notify_log(
                 logging_level,
-                serde_json::json!(message.to_string()),
+                serde_json::json!(self.message.clone()),
                 Some("demo".to_string()),
                 None,
             )
             .await;
 
         // Return test result information
-        Ok(CallToolResult::success(vec![ToolResult::text(
-            json!({
-                "test_message": message,
-                "test_level": format!("{:?}", logging_level),
-                "test_level_priority": logging_level.priority(),
-                "session_level": format!("{:?}", current_session_level),
-                "session_level_priority": current_session_level.priority(),
-                "should_receive_message": !will_be_filtered,
-                "note": if will_be_filtered {
-                    "Message was filtered - you should NOT see it in SSE stream"
-                } else {
-                    "Message was sent - you SHOULD see it in SSE stream"
-                }
-            })
-            .to_string(),
-        )]))
-    }
-}
-
-// Manual trait implementations for LoggingTestTool
-impl HasBaseMetadata for LoggingTestTool {
-    fn name(&self) -> &str {
-        "test_log"
-    }
-}
-
-impl HasDescription for LoggingTestTool {
-    fn description(&self) -> Option<&str> {
-        Some("Send a test log message at the specified level to verify session-aware filtering")
-    }
-}
-
-impl HasInputSchema for LoggingTestTool {
-    fn input_schema(&self) -> &ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object()
-                .with_properties(HashMap::from([
-                    ("message".to_string(), JsonSchema::string().with_description("Test message to send")),
-                    ("level".to_string(), JsonSchema::string().with_description("Logging level (debug, info, notice, warning, error, critical, alert, emergency)")),
-                ]))
-                .with_required(vec!["message".to_string(), "level".to_string()])
-        })
-    }
-}
-
-impl HasOutputSchema for LoggingTestTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for LoggingTestTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for LoggingTestTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> {
-        None
+        Ok(json!({
+            "test_message": self.message,
+            "test_level": format!("{:?}", logging_level),
+            "test_level_priority": logging_level.priority(),
+            "session_level": format!("{:?}", current_session_level),
+            "session_level_priority": current_session_level.priority(),
+            "should_receive_message": !will_be_filtered,
+            "note": if will_be_filtered {
+                "Message was filtered - you should NOT see it in SSE stream"
+            } else {
+                "Message was sent - you SHOULD see it in SSE stream"
+            }
+        }))
     }
 }
 
 /// Tool to set the session's logging level
-#[derive(Clone)]
-struct SetLogLevelTool;
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "set_log_level",
+    description = "Set the logging level for this session"
+)]
+pub struct SetLogLevelTool {
+    #[param(description = "Logging level (debug, info, notice, warning, error, critical, alert, emergency)")]
+    pub level: String,
+}
 
-#[async_trait]
-impl McpTool for SetLogLevelTool {
-    async fn call(
-        &self,
-        args: serde_json::Value,
-        session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
+impl SetLogLevelTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
         let session = session.ok_or("Session context required")?;
 
-        let level_str = args
-            .get("level")
-            .and_then(|v| v.as_str())
-            .ok_or("Missing 'level' parameter")?;
-
-        let new_level = match level_str.to_lowercase().as_str() {
+        let new_level = match self.level.to_lowercase().as_str() {
             "debug" => LoggingLevel::Debug,
             "info" => LoggingLevel::Info,
             "notice" => LoggingLevel::Notice,
@@ -187,10 +126,12 @@ impl McpTool for SetLogLevelTool {
             "alert" => LoggingLevel::Alert,
             "emergency" => LoggingLevel::Emergency,
             _ => {
-                return Ok(CallToolResult::success(vec![ToolResult::text(format!(
-                    "Invalid level '{}'. Valid: debug, info, notice, warning, error, critical, alert, emergency",
-                    level_str
-                ))]));
+                return Ok(json!({
+                    "error": format!(
+                        "Invalid level '{}'. Valid: debug, info, notice, warning, error, critical, alert, emergency",
+                        self.level
+                    )
+                }));
             }
         };
 
@@ -198,66 +139,19 @@ impl McpTool for SetLogLevelTool {
         session.set_logging_level(new_level).await;
 
         tracing::info!(
-            "🎯 Session {} logging level changed: {:?} -> {:?}",
+            "Session {} logging level changed: {:?} -> {:?}",
             session.session_id,
             old_level,
             new_level
         );
 
-        Ok(CallToolResult::success(vec![ToolResult::text(
-            json!({
-                "success": true,
-                "old_level": format!("{:?}", old_level),
-                "old_priority": old_level.priority(),
-                "new_level": format!("{:?}", new_level),
-                "new_priority": new_level.priority()
-            })
-            .to_string(),
-        )]))
-    }
-}
-
-// Manual trait implementations for SetLogLevelTool
-impl HasBaseMetadata for SetLogLevelTool {
-    fn name(&self) -> &str {
-        "set_log_level"
-    }
-}
-
-impl HasDescription for SetLogLevelTool {
-    fn description(&self) -> Option<&str> {
-        Some("Set the logging level for this session")
-    }
-}
-
-impl HasInputSchema for SetLogLevelTool {
-    fn input_schema(&self) -> &ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object()
-                .with_properties(HashMap::from([
-                    ("level".to_string(), JsonSchema::string().with_description("Logging level (debug, info, notice, warning, error, critical, alert, emergency)")),
-                ]))
-                .with_required(vec!["level".to_string()])
-        })
-    }
-}
-
-impl HasOutputSchema for SetLogLevelTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for SetLogLevelTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for SetLogLevelTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> {
-        None
+        Ok(json!({
+            "success": true,
+            "old_level": format!("{:?}", old_level),
+            "old_priority": old_level.priority(),
+            "new_level": format!("{:?}", new_level),
+            "new_priority": new_level.priority()
+        }))
     }
 }
 
@@ -278,7 +172,7 @@ impl TestClient {
     }
 
     async fn initialize(&mut self) -> Result<()> {
-        tracing::info!("🔌 Initializing client session...");
+        tracing::info!("Initializing client session...");
 
         let response = self
             .client
@@ -302,7 +196,7 @@ impl TestClient {
         if let Some(session_header) = response.headers().get("Mcp-Session-Id") {
             self.session_id = Some(session_header.to_str()?.to_string());
             tracing::info!(
-                "✅ Session initialized: {}",
+                "Session initialized: {}",
                 self.session_id.as_ref().unwrap()
             );
         } else {
@@ -318,7 +212,7 @@ impl TestClient {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No session initialized"))?;
 
-        tracing::info!("🎯 Setting session log level to: {}", level);
+        tracing::info!("Setting session log level to: {}", level);
 
         let response = self
             .client
@@ -348,7 +242,7 @@ impl TestClient {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("No session initialized"))?;
 
-        tracing::info!("🧪 Testing log message: '{}' at level '{}'", message, level);
+        tracing::info!("Testing log message: '{}' at level '{}'", message, level);
 
         let response = self
             .client
@@ -382,7 +276,7 @@ async fn main() -> Result<()> {
         .without_time()
         .init();
 
-    tracing::info!("🚀 Starting Session-Aware Logging Test");
+    tracing::info!("Starting Session-Aware Logging Test");
 
     let port = 8000;
     let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", port).parse()?;
@@ -395,17 +289,17 @@ async fn main() -> Result<()> {
         .title("Session-Aware Logging Test Server")
         .bind_address(bind_address)
         .with_session_storage(storage)
-        .tool(LoggingTestTool)
-        .tool(SetLogLevelTool)
+        .tool(LoggingTestTool::default())
+        .tool(SetLogLevelTool::default())
         .build()?;
 
-    tracing::info!("📡 Server ready at http://{}/mcp", bind_address);
-    tracing::info!("🔧 Available tools: test_log, set_log_level");
+    tracing::info!("Server ready at http://{}/mcp", bind_address);
+    tracing::info!("Available tools: test_log, set_log_level");
 
     // Start server in background
     let server_handle = tokio::spawn(async move {
         if let Err(e) = server.run().await {
-            tracing::error!("❌ Server error: {}", e);
+            tracing::error!("Server error: {}", e);
         }
     });
 
@@ -413,18 +307,18 @@ async fn main() -> Result<()> {
     sleep(Duration::from_millis(500)).await;
 
     // Run tests
-    tracing::info!("🧪 Starting automated tests...");
+    tracing::info!("Starting automated tests...");
 
     // Test 1: Initialize client and set to DEBUG level
     let mut client = TestClient::new(port);
     client.initialize().await?;
 
     client.set_log_level("debug").await?;
-    tracing::info!("✅ Test 1: Set session to DEBUG level");
+    tracing::info!("Test 1: Set session to DEBUG level");
 
     // Test 2: Send messages at different levels - all should pass through
     tracing::info!(
-        "🧪 Test 2: Send messages at different levels (DEBUG session should receive all)"
+        "Test 2: Send messages at different levels (DEBUG session should receive all)"
     );
 
     let test_cases = [
@@ -442,12 +336,12 @@ async fn main() -> Result<()> {
             should_receive
         );
         let response = client.test_log_message(message, level).await?;
-        tracing::info!("📋 Response: {}", serde_json::to_string_pretty(&response)?);
+        tracing::info!("Response: {}", serde_json::to_string_pretty(&response)?);
         sleep(Duration::from_millis(100)).await;
     }
 
     // Test 3: Change to WARNING level and test filtering
-    tracing::info!("🧪 Test 3: Change to WARNING level and test filtering");
+    tracing::info!("Test 3: Change to WARNING level and test filtering");
     client.set_log_level("warning").await?;
 
     let filtered_test_cases = [
@@ -465,12 +359,12 @@ async fn main() -> Result<()> {
             should_receive
         );
         let response = client.test_log_message(message, level).await?;
-        tracing::info!("📋 Response: {}", serde_json::to_string_pretty(&response)?);
+        tracing::info!("Response: {}", serde_json::to_string_pretty(&response)?);
         sleep(Duration::from_millis(100)).await;
     }
 
-    tracing::info!("✅ Session-aware logging test completed!");
-    tracing::info!("💡 To monitor SSE messages, run in another terminal:");
+    tracing::info!("Session-aware logging test completed!");
+    tracing::info!("To monitor SSE messages, run in another terminal:");
     tracing::info!(
         "   curl -N -H \"Accept: text/event-stream\" -H \"Mcp-Session-Id: {}\" http://127.0.0.1:{}/mcp",
         client
@@ -480,7 +374,7 @@ async fn main() -> Result<()> {
     );
 
     // Keep server running for manual testing
-    tracing::info!("🔄 Server will keep running for manual testing. Press Ctrl+C to stop.");
+    tracing::info!("Server will keep running for manual testing. Press Ctrl+C to stop.");
     server_handle.await?;
 
     Ok(())
