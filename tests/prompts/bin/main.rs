@@ -59,6 +59,7 @@ impl HasPromptAnnotations for SimplePrompt {
 }
 
 impl HasPromptMeta for SimplePrompt {}
+impl HasIcons for SimplePrompt {}
 
 #[async_trait]
 impl McpPrompt for SimplePrompt {
@@ -120,6 +121,7 @@ impl HasPromptAnnotations for StringArgsPrompt {
 }
 
 impl HasPromptMeta for StringArgsPrompt {}
+impl HasIcons for StringArgsPrompt {}
 
 #[async_trait]
 impl McpPrompt for StringArgsPrompt {
@@ -197,6 +199,7 @@ impl HasPromptAnnotations for NumberArgsPrompt {
 }
 
 impl HasPromptMeta for NumberArgsPrompt {}
+impl HasIcons for NumberArgsPrompt {}
 
 #[async_trait]
 impl McpPrompt for NumberArgsPrompt {
@@ -292,6 +295,7 @@ impl HasPromptAnnotations for BooleanArgsPrompt {
 }
 
 impl HasPromptMeta for BooleanArgsPrompt {}
+impl HasIcons for BooleanArgsPrompt {}
 
 #[async_trait]
 impl McpPrompt for BooleanArgsPrompt {
@@ -388,6 +392,7 @@ impl HasPromptAnnotations for TemplatePrompt {
 }
 
 impl HasPromptMeta for TemplatePrompt {}
+impl HasIcons for TemplatePrompt {}
 
 #[async_trait]
 impl McpPrompt for TemplatePrompt {
@@ -473,6 +478,7 @@ impl HasPromptAnnotations for MultiMessagePrompt {
 }
 
 impl HasPromptMeta for MultiMessagePrompt {}
+impl HasIcons for MultiMessagePrompt {}
 
 #[async_trait]
 impl McpPrompt for MultiMessagePrompt {
@@ -531,6 +537,7 @@ impl HasPromptAnnotations for SessionAwarePrompt {
 }
 
 impl HasPromptMeta for SessionAwarePrompt {}
+impl HasIcons for SessionAwarePrompt {}
 
 #[async_trait]
 impl McpPrompt for SessionAwarePrompt {
@@ -603,6 +610,7 @@ impl HasPromptAnnotations for ValidationPrompt {
 }
 
 impl HasPromptMeta for ValidationPrompt {}
+impl HasIcons for ValidationPrompt {}
 
 #[async_trait]
 impl McpPrompt for ValidationPrompt {
@@ -701,6 +709,7 @@ impl HasPromptAnnotations for DynamicPrompt {
 }
 
 impl HasPromptMeta for DynamicPrompt {}
+impl HasIcons for DynamicPrompt {}
 
 #[async_trait]
 impl McpPrompt for DynamicPrompt {
@@ -781,6 +790,7 @@ impl HasPromptAnnotations for EmptyMessagesPrompt {
 }
 
 impl HasPromptMeta for EmptyMessagesPrompt {}
+impl HasIcons for EmptyMessagesPrompt {}
 
 #[async_trait]
 impl McpPrompt for EmptyMessagesPrompt {
@@ -832,6 +842,7 @@ impl HasPromptAnnotations for ValidationFailurePrompt {
 }
 
 impl HasPromptMeta for ValidationFailurePrompt {}
+impl HasIcons for ValidationFailurePrompt {}
 
 #[async_trait]
 impl McpPrompt for ValidationFailurePrompt {

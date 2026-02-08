@@ -96,7 +96,9 @@ async fn test_content_block_resource_embedded_variant() {
     let resource_block = ContentBlock::Resource {
         resource: embedded_resource,
         annotations: Some(Annotations {
-            title: Some("config".to_string()),
+            audience: Some(vec!["user".to_string()]),
+            priority: None,
+            last_modified: None,
         }),
         meta: Some(meta),
     };
@@ -615,7 +617,9 @@ async fn test_complex_content_block_combinations() {
                     meta: None,
                 }),
                 annotations: Some(Annotations {
-                    title: Some("analysis_result".to_string()),
+                    audience: Some(vec!["user".to_string()]),
+                    priority: None,
+                    last_modified: None,
                 }),
                 meta: None,
             },

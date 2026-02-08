@@ -65,6 +65,8 @@ impl HasPromptAnnotations for SimpleTestPrompt {}
 
 impl HasPromptMeta for SimpleTestPrompt {}
 
+impl HasIcons for SimpleTestPrompt {}
+
 #[async_trait::async_trait]
 impl McpPrompt for SimpleTestPrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {

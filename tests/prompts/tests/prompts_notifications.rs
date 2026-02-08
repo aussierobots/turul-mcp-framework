@@ -1,7 +1,7 @@
 //! MCP Prompts Notifications Integration Tests
 //!
-//! Tests for SSE delivery of notifications/prompts/listChanged with camelCase method names.
-//! Following the same pattern as resources SSE notification tests.
+//! Tests for SSE delivery of notifications/prompts/list_changed with underscore method names.
+//! Following MCP 2025-11-25 convention for notification method strings.
 
 use serde_json::json;
 use turul_mcp_protocol::notifications::*;
@@ -10,10 +10,12 @@ use turul_mcp_protocol::notifications::*;
 async fn test_prompt_list_changed_notification_structure() {
     let notification = PromptListChangedNotification::new();
 
-    // Verify method name is camelCase (MCP 2025-06-18 compliance)
-    assert_eq!(notification.method, "notifications/prompts/listChanged");
-    assert!(notification.method.contains("listChanged"));
-    assert!(!notification.method.contains("list_changed")); // No snake_case
+    // Verify method name uses underscore convention (MCP 2025-11-25 compliance)
+    assert_eq!(
+        notification.method,
+        "notifications/prompts/list_changed"
+    );
+    assert!(notification.method.contains("list_changed"));
 
     // Verify notification structure
     assert!(notification.params.is_none()); // Empty params by default
@@ -45,9 +47,12 @@ async fn test_prompt_list_changed_json_rpc_format() {
     // Serialize to JSON and verify JSON-RPC 2.0 structure
     let json_value = serde_json::to_value(&notification).unwrap();
 
-    // Verify it has method field with correct camelCase
+    // Verify it has method field with correct underscore convention
     assert!(json_value.get("method").is_some());
-    assert_eq!(json_value["method"], "notifications/prompts/listChanged");
+    assert_eq!(
+        json_value["method"],
+        "notifications/prompts/list_changed"
+    );
 
     // Verify params field behavior (can be null/missing for empty notifications)
     if json_value.get("params").is_some() {
@@ -60,7 +65,10 @@ async fn test_prompt_notification_direct_fields() {
     let notification = PromptListChangedNotification::new();
 
     // Test direct method field access
-    assert_eq!(notification.method, "notifications/prompts/listChanged");
+    assert_eq!(
+        notification.method,
+        "notifications/prompts/list_changed"
+    );
 
     // Test params field behavior
     assert!(notification.params.is_none());
@@ -103,15 +111,13 @@ async fn test_prompt_notification_sse_event_mapping() {
     let notification = PromptListChangedNotification::new();
 
     // In SSE context, method name becomes event type
-    let expected_event_type = "notifications/prompts/listChanged";
+    let expected_event_type = "notifications/prompts/list_changed";
     assert_eq!(notification.method, expected_event_type);
 
-    // Verify event type follows MCP SSE specification:
-    // - Uses camelCase for consistency with JavaScript clients
+    // Verify event type follows MCP 2025-11-25 SSE specification:
+    // - Uses underscore convention for method strings
     // - Matches exact method name from JSON-RPC
-    // - No transformation from snake_case needed
-    assert!(!expected_event_type.contains("_"));
-    assert!(expected_event_type.contains("listChanged"));
+    assert!(expected_event_type.contains("list_changed"));
 }
 
 #[tokio::test]
@@ -125,12 +131,15 @@ async fn test_multiple_prompt_notifications_batch() {
 
     // Verify all have consistent method names
     for notification in &notifications {
-        assert_eq!(notification.method, "notifications/prompts/listChanged");
+        assert_eq!(
+            notification.method,
+            "notifications/prompts/list_changed"
+        );
     }
 
     // Test batch serialization
     let batch_json = serde_json::to_string(&notifications).unwrap();
-    assert!(batch_json.contains("notifications/prompts/listChanged"));
+    assert!(batch_json.contains("notifications/prompts/list_changed"));
 
     // Verify deserialization
     let deserialized: Vec<PromptListChangedNotification> =
@@ -138,25 +147,29 @@ async fn test_multiple_prompt_notifications_batch() {
     assert_eq!(deserialized.len(), 3);
 
     for notification in deserialized {
-        assert_eq!(notification.method, "notifications/prompts/listChanged");
+        assert_eq!(
+            notification.method,
+            "notifications/prompts/list_changed"
+        );
     }
 }
 
 #[tokio::test]
-async fn test_prompt_notification_camel_case_compliance() {
-    // This test specifically verifies MCP 2025-06-18 camelCase compliance
+async fn test_prompt_notification_method_string_compliance() {
+    // This test specifically verifies MCP 2025-11-25 underscore method string compliance
     let notification = PromptListChangedNotification::new();
 
-    // Method name MUST use camelCase as per MCP spec
-    assert_eq!(notification.method, "notifications/prompts/listChanged");
+    // Method name MUST use underscore convention as per MCP 2025-11-25 spec
+    assert_eq!(
+        notification.method,
+        "notifications/prompts/list_changed"
+    );
 
-    // Test that we're not accidentally using snake_case anywhere
+    // Test that we're using the correct underscore convention
     let json_str = serde_json::to_string_pretty(&notification).unwrap();
-    assert!(!json_str.contains("list_changed"));
-    assert!(!json_str.contains("prompt_list_changed"));
-    assert!(!json_str.contains("prompts_list_changed"));
+    assert!(json_str.contains("list_changed"));
+    assert!(json_str.contains("notifications/prompts/list_changed"));
 
-    // Should contain the correct camelCase version
-    assert!(json_str.contains("listChanged"));
-    assert!(json_str.contains("notifications/prompts/listChanged"));
+    // Should NOT contain old camelCase version
+    assert!(!json_str.contains("listChanged"));
 }

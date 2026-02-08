@@ -128,6 +128,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ContentBlock::Audio { .. } => "Audio",
             ContentBlock::ResourceLink { .. } => "ResourceLink",
             ContentBlock::Resource { .. } => "Resource (embedded)",
+            ContentBlock::ToolUse { .. } => "ToolUse",
+            ContentBlock::ToolResult { .. } => "ToolResult",
         };
         info!(
             "   Message {}: {} content - Role: {:?}",
