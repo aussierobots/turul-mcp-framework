@@ -49,8 +49,7 @@ use uuid::Uuid;
 
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::schema::{JsonSchema, JsonSchemaGenerator};
-use turul_mcp_protocol::tools::{ToolAnnotations, ToolSchema};
-use turul_mcp_protocol::ResourceContents;
+use turul_mcp_protocol::tools::ToolSchema;
 // Server prelude re-exports builders prelude + protocol types
 use turul_mcp_server::prelude::*;
 
@@ -670,98 +669,35 @@ impl ParameterValidatorTool {
 }
 
 /// Legacy calculator tool (deprecated in favor of the main calculator)
-struct LegacyCalculatorTool;
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "legacy_calculator",
+    description = "Basic addition only (deprecated - use calculator instead)"
+)]
+pub struct LegacyCalculatorTool {
+    #[param(description = "First number")]
+    pub a: f64,
 
-impl HasBaseMetadata for LegacyCalculatorTool {
-    fn name(&self) -> &str {
-        "legacy_calculator"
-    }
+    #[param(description = "Second number")]
+    pub b: f64,
 }
 
-impl HasDescription for LegacyCalculatorTool {
-    fn description(&self) -> Option<&str> {
-        Some("Basic addition only (deprecated - use calculator instead)")
-    }
-}
+impl LegacyCalculatorTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<serde_json::Value> {
+        let result = self.a + self.b;
 
-impl HasInputSchema for LegacyCalculatorTool {
-    fn input_schema(&self) -> &ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object()
-                .with_properties(HashMap::from([
-                    (
-                        "a".to_string(),
-                        JsonSchema::Number {
-                            description: Some("First number".to_string()),
-                            minimum: None,
-                            maximum: None,
-                        },
-                    ),
-                    (
-                        "b".to_string(),
-                        JsonSchema::Number {
-                            description: Some("Second number".to_string()),
-                            minimum: None,
-                            maximum: None,
-                        },
-                    ),
-                ]))
-                .with_required(vec!["a".to_string(), "b".to_string()])
-        })
-    }
-}
-
-impl HasOutputSchema for LegacyCalculatorTool {}
-
-impl HasAnnotations for LegacyCalculatorTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        static ANNOTATIONS: std::sync::OnceLock<ToolAnnotations> = std::sync::OnceLock::new();
-        Some(ANNOTATIONS.get_or_init(|| {
-            ToolAnnotations::new()
-                .with_title("Legacy Calculator (Add Only)")
-                .with_read_only_hint(true)
+        Ok(serde_json::json!({
+            "deprecation_warning": "legacy_calculator is deprecated since v0.1.0. Use 'calculator' instead.",
+            "result": result,
+            "operation": "add",
+            "inputs": {"a": self.a, "b": self.b},
+            "deprecation": {
+                "deprecated": true,
+                "since": "0.1.0",
+                "replacement": "calculator",
+                "removal_date": "2025-12-31"
+            }
         }))
-    }
-}
-
-impl HasToolMeta for LegacyCalculatorTool {}
-
-#[async_trait::async_trait]
-impl McpTool for LegacyCalculatorTool {
-    async fn call(
-        &self,
-        args: serde_json::Value,
-        _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let a = args
-            .get("a")
-            .and_then(|v| v.as_f64())
-            .ok_or_else(|| McpError::missing_param("a"))?;
-        let b = args
-            .get("b")
-            .and_then(|v| v.as_f64())
-            .ok_or_else(|| McpError::missing_param("b"))?;
-
-        let result = a + b;
-
-        Ok(CallToolResult::success(vec![
-            ToolResult::text("⚠️ DEPRECATED: legacy_calculator is deprecated since v0.1.0. Use 'calculator' instead."),
-            ToolResult::text(format!("{} + {} = {}", a, b, result)),
-            ToolResult::resource(ResourceContents::text(
-                "file:///calculation/result.json",
-                serde_json::to_string_pretty(&serde_json::json!({
-                "result": result,
-                "operation": "add",
-                "inputs": {"a": a, "b": b},
-                "deprecation_warning": {
-                    "deprecated": true,
-                    "since": "0.1.0",
-                    "replacement": "calculator",
-                    "removal_date": "2025-12-31"
-                }
-            })).unwrap())),
-        ]))
     }
 }
 
@@ -958,7 +894,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tags: None,
         })
         // Deprecated tool for testing deprecation annotations
-        .tool(LegacyCalculatorTool)
+        .tool(LegacyCalculatorTool::default())
         // Bug reproduction tool - demonstrates output_field schema mismatch
         .tool(CountAnnouncementsTool {
             text: "".to_string(),
