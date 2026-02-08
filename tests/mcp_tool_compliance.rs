@@ -103,6 +103,8 @@ mod tests {
         }
     }
 
+    impl turul_mcp_builders::prelude::HasIcons for NonCompliantCountTool {}
+
     /// Test that demonstrates what a COMPLIANT tool should look like
     #[derive(Clone)]
     struct CompliantCountTool;
@@ -188,6 +190,8 @@ mod tests {
             None
         }
     }
+
+    impl turul_mcp_builders::prelude::HasIcons for CompliantCountTool {}
 
     #[tokio::test]
     async fn test_tool_with_output_schema_must_have_structured_content() {
@@ -314,6 +318,8 @@ mod tests {
                 None
             }
         }
+
+        impl turul_mcp_builders::prelude::HasIcons for SimpleTextTool {}
 
         let tool = SimpleTextTool;
         let result = tool.call(json!({}), None).await.unwrap();
