@@ -76,12 +76,22 @@ impl McpTestClient {
         &mut self,
         capabilities: Value,
     ) -> Result<HashMap<String, Value>, reqwest::Error> {
+        self.initialize_with_capabilities_and_version(capabilities, "2025-11-25")
+            .await
+    }
+
+    /// Initialize with explicit protocol version (for testing legacy version negotiation)
+    pub async fn initialize_with_capabilities_and_version(
+        &mut self,
+        capabilities: Value,
+        protocol_version: &str,
+    ) -> Result<HashMap<String, Value>, reqwest::Error> {
         let request = json!({
             "jsonrpc": "2.0",
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": protocol_version,
                 "capabilities": capabilities,
                 "clientInfo": {
                     "name": "mcp-e2e-test",
@@ -94,7 +104,7 @@ impl McpTestClient {
             .client
             .post(&self.base_url)
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", protocol_version)
             .json(&request)
             .send()
             .await?;
@@ -360,12 +370,12 @@ impl TestServerManager {
     /// Map server binary name to its package name
     fn server_package(server_name: &str) -> Option<&'static str> {
         match server_name {
-            "resource-test-server" => Some("mcp-resources-tests"),
-            "prompts-test-server" => Some("mcp-prompts-tests"),
-            "tools-test-server" => Some("mcp-tools-tests"),
-            "sampling-server" => Some("mcp-sampling-tests"),
-            "roots-server" => Some("mcp-roots-tests"),
-            "elicitation-server" => Some("mcp-elicitation-tests"),
+            "resource-test-server" => Some("resource-test-server"),
+            "prompts-test-server" => Some("prompts-test-server"),
+            "tools-test-server" => Some("tools-test-server"),
+            "sampling-server" => Some("sampling-server"),
+            "roots-server" => Some("roots-server"),
+            "elicitation-server" => Some("elicitation-server"),
             _ => None,
         }
     }
@@ -446,7 +456,7 @@ impl TestServerManager {
                 "id": 1,
                 "method": "initialize",
                 "params": {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": "2025-11-25",
                     "capabilities": {},
                     "clientInfo": {"name": "health-check", "version": "1.0.0"}
                 }
@@ -540,7 +550,7 @@ impl Drop for TestServerManager {
 pub struct TestFixtures;
 
 impl TestFixtures {
-    /// Standard resource capabilities for initialization (MCP 2025-06-18 compliant)
+    /// Standard resource capabilities for initialization (MCP 2025-11-25 compliant)
     pub fn resource_capabilities() -> Value {
         json!({
             "resources": {
@@ -550,7 +560,7 @@ impl TestFixtures {
         })
     }
 
-    /// Standard prompts capabilities for initialization (MCP 2025-06-18 compliant)
+    /// Standard prompts capabilities for initialization (MCP 2025-11-25 compliant)
     pub fn prompts_capabilities() -> Value {
         json!({
             "prompts": {
@@ -559,7 +569,7 @@ impl TestFixtures {
         })
     }
 
-    /// Standard tools capabilities for initialization (MCP 2025-06-18 compliant)
+    /// Standard tools capabilities for initialization (MCP 2025-11-25 compliant)
     pub fn tools_capabilities() -> Value {
         json!({
             "tools": {
@@ -577,8 +587,13 @@ impl TestFixtures {
         assert!(result_data.contains_key("capabilities"));
         assert!(result_data.contains_key("serverInfo"));
 
-        // Verify protocol version
-        assert_eq!(result_data["protocolVersion"], "2025-06-18");
+        // Verify protocol version — server negotiates to client-requested version
+        let version = result_data["protocolVersion"].as_str().unwrap();
+        assert!(
+            version == "2025-11-25" || version == "2025-06-18",
+            "Expected negotiated version 2025-11-25 or 2025-06-18, got: {}",
+            version
+        );
     }
 
     /// Verify MCP error response structure
