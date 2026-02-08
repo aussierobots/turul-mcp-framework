@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Features
 
-- ✅ **MCP 2025-06-18 Streamable HTTP** - Full protocol compliance with SSE streaming
+- ✅ **MCP 2025-11-25 Streamable HTTP** - Full protocol compliance with SSE streaming
 - ✅ **Session Management** - UUID v7 session IDs with automatic cleanup
 - ✅ **SSE Resumability** - Last-Event-ID support with event replay
 - ✅ **CORS Support** - Browser client compatibility with configurable origins
