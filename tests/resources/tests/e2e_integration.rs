@@ -31,7 +31,7 @@ async fn test_mcp_initialize_session() {
     assert!(result_data.contains_key("serverInfo"));
 
     // Verify protocol version
-    assert_eq!(result_data["protocolVersion"], "2025-06-18");
+    assert_eq!(result_data["protocolVersion"], "2025-11-25");
 
     // Verify session ID was provided
     assert!(client.session_id().is_some());
