@@ -41,7 +41,7 @@ struct ToolResult {
     is_error: bool,
 }
 
-/// Comprehensive streamable HTTP client that properly implements MCP 2025-06-18
+/// Comprehensive streamable HTTP client that properly implements MCP Streamable HTTP
 struct StreamableHttpClient {
     client: Client,
     base_url: String,
@@ -207,7 +207,7 @@ impl StreamableHttpClient {
         }
     }
 
-    /// ✅ CRITICAL: Multi-threaded SSE stream processing for MCP 2025-06-18
+    /// ✅ CRITICAL: Multi-threaded SSE stream processing for MCP Streamable HTTP
     async fn process_streaming_tool_response(
         &self,
         response: reqwest::Response,
@@ -416,7 +416,7 @@ async fn test_streamable_http_with_multi_threading() -> Result<()> {
         .with_max_level(tracing::Level::INFO)
         .try_init();
 
-    info!("🚀 Testing MCP 2025-06-18 Streamable HTTP with multi-threaded SSE");
+    info!("🚀 Testing MCP Streamable HTTP with multi-threaded SSE");
 
     // Check if server is available before running test
     let test_client = Client::builder()
@@ -506,7 +506,7 @@ async fn test_accept_header_variations() -> Result<()> {
         .with_max_level(tracing::Level::INFO)
         .try_init();
 
-    info!("🧪 Testing Accept header variations for MCP 2025-06-18");
+    info!("🧪 Testing Accept header variations for MCP Streamable HTTP");
 
     let client = Client::new();
     let base_url = "http://127.0.0.1:8701/mcp";

@@ -33,7 +33,7 @@ struct SseEvent {
     data: String,
 }
 
-/// Parse SSE frames from response data according to MCP 2025-06-18 spec
+/// Parse SSE frames from response data according to MCP spec
 /// Returns parsed SSE events or error if format is invalid
 fn parse_sse_events(data: &[u8]) -> Result<Vec<SseEvent>, String> {
     let content = String::from_utf8(data.to_vec())
@@ -87,12 +87,12 @@ fn parse_sse_events(data: &[u8]) -> Result<Vec<SseEvent>, String> {
     Ok(events)
 }
 
-/// Strict SSE frame validation according to MCP 2025-06-18 spec
+/// Strict SSE frame validation according to MCP spec
 /// Validates that each event has proper structure and valid JSON-RPC content where applicable
 fn validate_sse_compliance(events: &[SseEvent], operation_name: &str) {
     assert!(
         !events.is_empty(),
-        "MCP 2025-06-18 requires at least one SSE event for {}",
+        "MCP spec requires at least one SSE event for {}",
         operation_name
     );
 
@@ -147,7 +147,7 @@ fn validate_sse_compliance(events: &[SseEvent], operation_name: &str) {
             println!("✅ SSE event {}: non-JSON event (e.g., ping)", i);
         }
 
-        // 5. For MCP 2025-06-18, events should have IDs for resumption support
+        // 5. Events should have IDs for resumption support (MCP Streamable HTTP spec)
         if event.id.is_some() {
             println!("✅ SSE event {} has ID for resumption: {:?}", i, event.id);
         }
@@ -168,7 +168,7 @@ fn validate_sse_compliance(events: &[SseEvent], operation_name: &str) {
     );
 
     println!(
-        "✅ All {} SSE events validated for strict MCP 2025-06-18 compliance",
+        "✅ All {} SSE events validated for strict MCP compliance",
         events.len()
     );
 }
@@ -308,7 +308,7 @@ async fn test_protocol_version_detection() {
     let client = create_client();
     let base_url = format!("http://127.0.0.1:{}", server.port());
 
-    // Test MCP 2025-06-18 initialize request (should route to StreamableHttpHandler and work in strict mode)
+    // Test initialize request (should route to StreamableHttpHandler and work in strict mode)
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
@@ -645,7 +645,7 @@ async fn test_cors_headers() {
 }
 
 // ============================================================================
-// ✅ STREAMING IMPLEMENTATION TESTS - Verify MCP 2025-06-18 Compliance
+// ✅ STREAMING IMPLEMENTATION TESTS - Verify MCP 2025-11-25 Compliance
 // ============================================================================
 // These tests verify that true streaming is working correctly with proper
 // chunked responses, progress tokens, and MCP headers.
@@ -834,7 +834,7 @@ async fn test_session_auto_creation_works() {
     let client = create_client();
     let base_url = format!("http://127.0.0.1:{}", server.port());
 
-    // POST without Mcp-Session-Id - server should create one per MCP 2025-06-18 spec
+    // POST without Mcp-Session-Id - server should create one per MCP spec
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
@@ -1100,7 +1100,7 @@ async fn test_post_response_contains_progress_tokens() {
     println!("✅ Progress tokens test passed!");
 }
 
-/// Test proper SSE frame structure validation according to MCP 2025-06-18 spec
+/// Test proper SSE frame structure validation according to MCP spec
 #[tokio::test]
 #[serial]
 async fn test_sse_frame_structure_compliance() {
@@ -1108,7 +1108,7 @@ async fn test_sse_frame_structure_compliance() {
     let _lock = SSE_TEST_LOCK.lock().await;
 
     let _ = tracing_subscriber::fmt::try_init();
-    println!("✅ Testing SSE frame structure for MCP 2025-06-18 compliance");
+    println!("✅ Testing SSE frame structure for MCP compliance");
 
     let server = match TestServerManager::start_tools_server().await {
         Ok(server) => server,
@@ -1184,11 +1184,11 @@ async fn test_sse_frame_structure_compliance() {
     let sse_events = parse_sse_events(&full_response)
         .expect("Failed to parse SSE events - invalid frame structure");
 
-    // Strict MCP 2025-06-18 compliance validation
+    // Strict MCP compliance validation
     validate_sse_compliance(&sse_events, "tools/list");
 
     println!(
-        "✅ SSE frame structure compliance test passed! Parsed {} valid events with strict MCP 2025-06-18 validation",
+        "✅ SSE frame structure compliance test passed! Parsed {} valid events with strict MCP validation",
         sse_events.len()
     );
 }
@@ -1477,7 +1477,7 @@ async fn test_negative_cases_missing_headers() {
 async fn test_last_event_id_resumption() {
     let _lock = SSE_TEST_LOCK.lock().await;
     let _ = tracing_subscriber::fmt::try_init();
-    println!("✅ Testing Last-Event-ID resumption for MCP 2025-06-18 compliance");
+    println!("✅ Testing Last-Event-ID resumption for MCP compliance");
 
     let server = match TestServerManager::start_tools_server().await {
         Ok(server) => server,
@@ -1603,7 +1603,7 @@ async fn test_last_event_id_resumption() {
         .await
         .expect("Resumption request failed");
 
-    // MCP 2025-06-18 requires servers to accept Last-Event-ID header
+    // MCP spec requires servers to accept Last-Event-ID header
     assert_eq!(
         response.status(),
         StatusCode::OK,
@@ -1656,7 +1656,7 @@ async fn test_last_event_id_resumption() {
         let resumption_events =
             parse_sse_events(&resumption_data).expect("Should parse resumption SSE events");
 
-        // Validate strict MCP 2025-06-18 compliance for resumption events (if any were sent)
+        // Validate strict MCP compliance for resumption events (if any were sent)
         if !resumption_events.is_empty() {
             validate_sse_structure(&resumption_events, "Last-Event-ID resumption");
         }
@@ -1670,7 +1670,7 @@ async fn test_last_event_id_resumption() {
     println!("✅ Last-Event-ID resumption test completed successfully!");
     println!("   - Server accepts Last-Event-ID header");
     println!("   - Returns proper SSE stream for resumption");
-    println!("   - MCP 2025-06-18 resumption support verified");
+    println!("   - MCP resumption support verified");
 }
 
 #[tokio::test]
