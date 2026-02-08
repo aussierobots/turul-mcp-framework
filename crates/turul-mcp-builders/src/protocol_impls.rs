@@ -71,6 +71,12 @@ impl HasResourceMeta for Resource {
     }
 }
 
+impl HasIcons for Resource {
+    fn icons(&self) -> Option<&Vec<turul_mcp_protocol::icons::Icon>> {
+        self.icons.as_ref()
+    }
+}
+
 // ResourceDefinition is automatically implemented via blanket impl
 
 // ============================================================================
@@ -109,6 +115,12 @@ impl HasPromptAnnotations for Prompt {
 impl HasPromptMeta for Prompt {
     fn prompt_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
         self.meta.as_ref()
+    }
+}
+
+impl HasIcons for Prompt {
+    fn icons(&self) -> Option<&Vec<turul_mcp_protocol::icons::Icon>> {
+        self.icons.as_ref()
     }
 }
 
@@ -155,6 +167,12 @@ impl HasAnnotations for Tool {
 impl HasToolMeta for Tool {
     fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
         self.meta.as_ref()
+    }
+}
+
+impl HasIcons for Tool {
+    fn icons(&self) -> Option<&Vec<turul_mcp_protocol::icons::Icon>> {
+        self.icons.as_ref()
     }
 }
 
@@ -229,6 +247,12 @@ impl HasModelPreferences for CreateMessageParams {
 
     fn metadata(&self) -> Option<&serde_json::Value> {
         self.metadata.as_ref()
+    }
+}
+
+impl HasSamplingTools for CreateMessageParams {
+    fn tools(&self) -> Option<&Vec<turul_mcp_protocol::Tool>> {
+        self.tools.as_ref()
     }
 }
 

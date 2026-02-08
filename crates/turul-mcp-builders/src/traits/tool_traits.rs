@@ -66,19 +66,14 @@ pub trait ToolDefinition:
     HasOutputSchema +           // outputSchema
     HasAnnotations +            // annotations
     HasToolMeta +               // _meta (tool-specific)
+    super::icon_traits::HasIcons + // icons (MCP 2025-11-25)
     Send +
     Sync
 {
-    /// Display name precedence: title > annotations.title > name (matches TypeScript spec)
+    /// Display name precedence: title > name (matches TypeScript spec)
     fn display_name(&self) -> &str {
         if let Some(title) = self.title() {
             title
-        } else if let Some(annotations) = self.annotations() {
-            if let Some(title) = &annotations.title {
-                title
-            } else {
-                self.name()
-            }
         } else {
             self.name()
         }
@@ -93,6 +88,8 @@ pub trait ToolDefinition:
             input_schema: self.input_schema().clone(),
             output_schema: self.output_schema().cloned(),
             annotations: self.annotations().cloned(),
+            execution: None,
+            icons: self.icons().cloned(),
             meta: self.tool_meta().cloned(),
         }
     }
@@ -107,6 +104,7 @@ where
         + HasOutputSchema
         + HasAnnotations
         + HasToolMeta
+        + super::icon_traits::HasIcons
         + Send
         + Sync,
 {

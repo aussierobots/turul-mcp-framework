@@ -180,7 +180,7 @@ pub trait HasRootAnnotations {
 /// - **Security**: Fine-grained access control for file operations
 /// - **Filtering**: Automatic exclusion of unwanted files/directories
 /// - **Metadata**: Rich annotations for client context
-/// - **MCP Compliant**: Fully compatible with MCP 2025-06-18 specification
+/// - **MCP Compliant**: Fully compatible with MCP 2025-11-25 specification
 ///
 /// # Common Use Cases
 ///

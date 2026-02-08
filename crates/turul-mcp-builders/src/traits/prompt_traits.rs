@@ -192,6 +192,7 @@ pub trait PromptDefinition:
     HasPromptArguments +      // arguments
     HasPromptAnnotations +    // annotations
     HasPromptMeta +           // _meta (prompt-specific)
+    super::icon_traits::HasIcons + // icons (MCP 2025-11-25)
     Send +
     Sync
 {
@@ -207,6 +208,7 @@ pub trait PromptDefinition:
             title: self.title().map(String::from),
             description: self.description().map(String::from),
             arguments: self.arguments().cloned(),
+            icons: self.icons().cloned(),
             meta: self.prompt_meta().cloned(),
         }
     }
@@ -217,6 +219,7 @@ impl<T> PromptDefinition for T where
         + HasPromptArguments
         + HasPromptAnnotations
         + HasPromptMeta
+        + super::icon_traits::HasIcons
         + Send
         + Sync
 {

@@ -53,13 +53,9 @@ impl MessageBuilder {
         self
     }
 
-    /// Add a system message with text content
-    pub fn system(mut self, content: impl Into<String>) -> Self {
-        self.messages.push(SamplingMessage {
-            role: Role::System,
-            content: ContentBlock::text(content),
-        });
-        self
+    /// Set system prompt (MCP 2025-11-25 uses system_prompt field, not Role::System)
+    pub fn system(self, content: impl Into<String>) -> Self {
+        self.system_prompt(content)
     }
 
     /// Add a user message with text content
@@ -220,34 +216,34 @@ impl ModelPreferencesBuilder {
 
     /// Add Claude 3.5 Sonnet as preferred model
     pub fn prefer_claude_sonnet(self) -> Self {
-        self.hint(ModelHint::Claude35Sonnet20241022)
+        self.hint(ModelHint::new("claude-3-5-sonnet-20241022"))
     }
 
     /// Add Claude 3.5 Haiku as preferred model
     pub fn prefer_claude_haiku(self) -> Self {
-        self.hint(ModelHint::Claude35Haiku20241022)
+        self.hint(ModelHint::new("claude-3-5-haiku-20241022"))
     }
 
     /// Add GPT-4o as preferred model
     pub fn prefer_gpt4o(self) -> Self {
-        self.hint(ModelHint::Gpt4o)
+        self.hint(ModelHint::new("gpt-4o"))
     }
 
     /// Add GPT-4o Mini as preferred model
     pub fn prefer_gpt4o_mini(self) -> Self {
-        self.hint(ModelHint::Gpt4oMini)
+        self.hint(ModelHint::new("gpt-4o-mini"))
     }
 
     /// Prefer fast models
     pub fn prefer_fast(self) -> Self {
-        self.hint(ModelHint::Claude35Haiku20241022)
-            .hint(ModelHint::Gpt4oMini)
+        self.hint(ModelHint::new("claude-3-5-haiku-20241022"))
+            .hint(ModelHint::new("gpt-4o-mini"))
     }
 
     /// Prefer high-quality models
     pub fn prefer_quality(self) -> Self {
-        self.hint(ModelHint::Claude35Sonnet20241022)
-            .hint(ModelHint::Gpt4o)
+        self.hint(ModelHint::new("claude-3-5-sonnet-20241022"))
+            .hint(ModelHint::new("gpt-4o"))
     }
 
     /// Set cost priority (0.0-1.0)
@@ -291,8 +287,6 @@ impl Default for ModelPreferencesBuilder {
 
 /// Extension trait for convenient SamplingMessage creation
 pub trait SamplingMessageExt {
-    /// Create a system message with text
-    fn system(content: impl Into<String>) -> SamplingMessage;
     /// Create a user message with text
     fn user_text(content: impl Into<String>) -> SamplingMessage;
     /// Create a user message with image
@@ -302,13 +296,6 @@ pub trait SamplingMessageExt {
 }
 
 impl SamplingMessageExt for SamplingMessage {
-    fn system(content: impl Into<String>) -> Self {
-        Self {
-            role: Role::System,
-            content: ContentBlock::text(content),
-        }
-    }
-
     fn user_text(content: impl Into<String>) -> Self {
         Self {
             role: Role::User,
@@ -346,14 +333,19 @@ mod tests {
             .temperature(0.7)
             .build_params();
 
-        assert_eq!(params.messages.len(), 3);
+        // system() sets system_prompt field, not a message
+        assert_eq!(params.messages.len(), 2);
         assert_eq!(params.max_tokens, 2000);
         assert_eq!(params.temperature, Some(0.7));
+        assert_eq!(
+            params.system_prompt,
+            Some("You are a helpful assistant.".to_string())
+        );
 
-        // Check first message (system)
-        assert_eq!(params.messages[0].role, Role::System);
+        // Check first message (user)
+        assert_eq!(params.messages[0].role, Role::User);
         if let ContentBlock::Text { text, .. } = &params.messages[0].content {
-            assert_eq!(text, "You are a helpful assistant.");
+            assert_eq!(text, "Hello, how are you?");
         } else {
             panic!("Expected text content");
         }
@@ -378,7 +370,7 @@ mod tests {
         assert_eq!(preferences.hints.as_ref().unwrap().len(), 1);
         assert_eq!(
             preferences.hints.as_ref().unwrap()[0],
-            ModelHint::Claude35Sonnet20241022
+            ModelHint::new("claude-3-5-sonnet-20241022")
         );
         assert_eq!(preferences.cost_priority, Some(0.8));
         assert_eq!(preferences.speed_priority, Some(0.6));
@@ -429,17 +421,14 @@ mod tests {
 
         let hints = preferences.hints.expect("Expected hints");
         assert_eq!(hints.len(), 2);
-        assert!(hints.contains(&ModelHint::Claude35Haiku20241022));
-        assert!(hints.contains(&ModelHint::Gpt4oMini));
+        assert!(hints.contains(&ModelHint::new("claude-3-5-haiku-20241022")));
+        assert!(hints.contains(&ModelHint::new("gpt-4o-mini")));
         assert_eq!(preferences.cost_priority, Some(0.9));
         assert_eq!(preferences.speed_priority, Some(0.8));
     }
 
     #[test]
     fn test_sampling_message_convenience_methods() {
-        let system_msg = SamplingMessage::system("System prompt");
-        assert_eq!(system_msg.role, Role::System);
-
         let user_msg = SamplingMessage::user_text("User input");
         assert_eq!(user_msg.role, Role::User);
 

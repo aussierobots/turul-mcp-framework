@@ -2,6 +2,7 @@
 //!
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 
+use turul_mcp_protocol::Tool;
 use turul_mcp_protocol::sampling::{CreateMessageParams, SamplingMessage, ModelPreferences, Role};
 use turul_mcp_protocol::prompts::ContentBlock;
 use serde_json::Value;
@@ -55,6 +56,16 @@ pub trait HasModelPreferences {
 
     /// Metadata (optional from spec)
     fn metadata(&self) -> Option<&Value> {
+        None
+    }
+}
+
+/// Trait for sampling tools (MCP 2025-11-25)
+///
+/// Tools that the LLM can use during a sampling request, enabling agentic workflows.
+pub trait HasSamplingTools {
+    /// Tools available to the LLM during sampling (optional, MCP 2025-11-25)
+    fn tools(&self) -> Option<&Vec<Tool>> {
         None
     }
 }
@@ -143,7 +154,7 @@ pub trait HasModelPreferences {
 /// - **Precise Control**: Fine-tune model behavior for specific tasks
 /// - **Context Management**: Rich conversation and system prompt support
 /// - **Model Flexibility**: Support for different AI models and capabilities
-/// - **MCP Compliant**: Fully compatible with MCP 2025-06-18 specification
+/// - **MCP Compliant**: Fully compatible with MCP 2025-11-25 specification
 ///
 /// # Common Use Cases
 ///
@@ -152,7 +163,7 @@ pub trait HasModelPreferences {
 /// - Technical documentation generation
 /// - Question-answering with domain context
 /// - Conversational AI with specific personalities
-pub trait SamplingDefinition: HasSamplingConfig + HasSamplingContext + HasModelPreferences {
+pub trait SamplingDefinition: HasSamplingConfig + HasSamplingContext + HasModelPreferences + HasSamplingTools {
     /// Convert to CreateMessageParams
     fn to_create_params(&self) -> CreateMessageParams {
         CreateMessageParams {
@@ -164,6 +175,8 @@ pub trait SamplingDefinition: HasSamplingConfig + HasSamplingContext + HasModelP
             max_tokens: self.max_tokens(),
             stop_sequences: self.stop_sequences().cloned(),
             metadata: self.metadata().cloned(),
+            tools: self.tools().cloned(),
+            tool_choice: None,
             meta: None,
         }
     }
@@ -171,6 +184,6 @@ pub trait SamplingDefinition: HasSamplingConfig + HasSamplingContext + HasModelP
 
 // Blanket implementation: any type implementing the fine-grained traits automatically gets SamplingDefinition
 impl<T> SamplingDefinition for T where
-    T: HasSamplingConfig + HasSamplingContext + HasModelPreferences
+    T: HasSamplingConfig + HasSamplingContext + HasModelPreferences + HasSamplingTools
 {
 }

@@ -11,10 +11,11 @@ use std::pin::Pin;
 
 // Import traits from local traits module
 use crate::traits::{
-    HasPromptAnnotations, HasPromptArguments, HasPromptDescription,
+    HasIcons, HasPromptAnnotations, HasPromptArguments, HasPromptDescription,
     HasPromptMeta, HasPromptMetadata,
 };
 // Import protocol types
+use turul_mcp_protocol::icons::Icon;
 use turul_mcp_protocol::prompts::{
     ContentBlock, GetPromptResult, PromptArgument, PromptMessage,
 };
@@ -35,6 +36,7 @@ pub struct PromptBuilder {
     description: Option<String>,
     arguments: Vec<PromptArgument>,
     messages: Vec<PromptMessage>,
+    icons: Option<Vec<Icon>>,
     meta: Option<HashMap<String, Value>>,
     get_fn: Option<DynamicPromptFn>,
 }
@@ -48,6 +50,7 @@ impl PromptBuilder {
             description: None,
             arguments: Vec::new(),
             messages: Vec::new(),
+            icons: None,
             meta: None,
             get_fn: None,
         }
@@ -142,6 +145,12 @@ impl PromptBuilder {
         self
     }
 
+    /// Set the prompt icons (display hints)
+    pub fn icons(mut self, icons: Vec<Icon>) -> Self {
+        self.icons = Some(icons);
+        self
+    }
+
     /// Set meta information
     pub fn meta(mut self, meta: HashMap<String, Value>) -> Self {
         self.meta = Some(meta);
@@ -188,6 +197,7 @@ impl PromptBuilder {
             description: self.description,
             arguments: self.arguments,
             messages: self.messages,
+            icons: self.icons,
             meta: self.meta,
             get_fn,
         })
@@ -202,6 +212,7 @@ pub struct DynamicPrompt {
     arguments: Vec<PromptArgument>,
     #[allow(dead_code)]
     messages: Vec<PromptMessage>,
+    icons: Option<Vec<Icon>>,
     meta: Option<HashMap<String, Value>>,
     get_fn: DynamicPromptFn,
 }
@@ -249,6 +260,13 @@ impl HasPromptAnnotations for DynamicPrompt {
 impl HasPromptMeta for DynamicPrompt {
     fn prompt_meta(&self) -> Option<&HashMap<String, Value>> {
         self.meta.as_ref()
+    }
+}
+
+/// Implements HasIcons for DynamicPrompt providing optional icons
+impl HasIcons for DynamicPrompt {
+    fn icons(&self) -> Option<&Vec<Icon>> {
+        self.icons.as_ref()
     }
 }
 
