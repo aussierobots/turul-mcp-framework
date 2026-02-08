@@ -1,7 +1,7 @@
 //! E2E Integration Tests for MCP Tools
 //!
 //! Tests real HTTP/SSE transport using tools-test-server
-//! Validates complete MCP 2025-06-18 specification compliance
+//! Validates complete MCP 2025-11-25 specification compliance
 
 use futures::future::try_join_all;
 use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
@@ -1063,7 +1063,7 @@ async fn test_tools_protocol_compliance() {
 
     client.send_initialized_notification().await.unwrap();
 
-    // Verify MCP 2025-06-18 protocol compliance
+    // Verify MCP protocol compliance
     assert!(init_result.contains_key("jsonrpc"));
     assert_eq!(init_result.get("jsonrpc").unwrap().as_str().unwrap(), "2.0");
     assert!(init_result.contains_key("id"));
@@ -1102,7 +1102,7 @@ async fn test_tools_protocol_compliance() {
     assert!(content_item.contains_key("type"));
     assert!(content_item.contains_key("text"));
 
-    info!("✅ Tools protocol MCP 2025-06-18 compliance validated");
+    info!("✅ Tools protocol MCP compliance validated");
 }
 
 #[tokio::test]

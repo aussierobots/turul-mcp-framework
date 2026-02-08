@@ -2,7 +2,7 @@
 //!
 //! Comprehensive test server providing various types of resources for E2E testing.
 //! This server implements all MCP resource patterns and edge cases to validate
-//! framework compliance with the MCP 2025-06-18 specification.
+//! framework compliance with the MCP 2025-11-25 specification.
 //!
 //! ## Test Resources Available:
 //!

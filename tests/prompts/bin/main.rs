@@ -2,7 +2,7 @@
 //!
 //! Comprehensive test server providing various types of prompts for E2E testing.
 //! This server implements all MCP prompt patterns and edge cases to validate
-//! framework compliance with the MCP 2025-06-18 specification.
+//! framework compliance with the MCP 2025-11-25 specification.
 
 use std::collections::HashMap;
 
