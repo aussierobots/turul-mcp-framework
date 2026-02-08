@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-mcp-client.svg)](https://crates.io/crates/turul-mcp-client)
 [![Documentation](https://docs.rs/turul-mcp-client/badge.svg)](https://docs.rs/turul-mcp-client)
 
-MCP client library with multi-transport support and full MCP 2025-06-18 protocol compliance.
+MCP client library with multi-transport support and full MCP 2025-11-25 protocol compliance.
 
 ## Overview
 
@@ -12,7 +12,7 @@ MCP client library with multi-transport support and full MCP 2025-06-18 protocol
 ## Features
 
 - ✅ **Multi-Transport Support** - HTTP and SSE transports
-- ✅ **MCP 2025-06-18 Compliance** - Full protocol specification support
+- ✅ **MCP 2025-11-25 Compliance** - Full protocol specification support
 - ✅ **Session Management** - Automatic session handling with recovery
 - ✅ **Streaming Support** - Real-time event streaming and progress tracking
 - ✅ **Async/Await** - Built on Tokio for high performance
@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ### HTTP Transport (Streamable HTTP)
 
-For modern MCP servers supporting MCP 2025-06-18:
+For modern MCP servers supporting MCP 2025-11-25:
 
 ```rust
 use turul_mcp_client::transport::HttpTransport;
