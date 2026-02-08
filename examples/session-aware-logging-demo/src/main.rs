@@ -178,13 +178,14 @@ impl TestClient {
             .client
             .post(&self.base_url)
             .header("Content-Type", "application/json")
+            // Intentional: testing backward compatibility with MCP 2025-06-18
             .header("MCP-Protocol-Version", "2025-06-18")
             .json(&json!({
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "initialize",
                 "params": {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": "2025-06-18", // Intentional: testing backward compatibility with MCP 2025-06-18
                     "capabilities": {},
                     "clientInfo": {"name": "test-client", "version": "1.0"}
                 }
