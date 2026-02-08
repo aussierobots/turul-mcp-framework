@@ -2,9 +2,9 @@
 
 ## Overview
 
-This document describes the **MCP 2025-06-18 Streamable HTTP transport** implementation in the lambda-turul-mcp-server, including the notification system architecture and current implementation status.
+This document describes the **MCP 2025-11-25 Streamable HTTP transport** implementation in the lambda-turul-mcp-server, including the notification system architecture and current implementation status.
 
-## MCP 2025-06-18 Compliance
+## MCP 2025-11-25 Compliance
 
 ### Supported HTTP Methods
 

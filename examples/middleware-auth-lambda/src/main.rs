@@ -258,7 +258,7 @@ async fn main() -> Result<(), Error> {
     init_logging();
 
     info!("🚀 Starting AWS Lambda MCP Server with Authentication Middleware");
-    info!("Architecture: MCP 2025-06-18 with middleware auth layer");
+    info!("Architecture: MCP 2025-11-25 with middleware auth layer");
     info!("  - X-API-Key header validation");
     info!("  - Lambda authorizer context extraction");
     info!("  - User context injection");

@@ -260,7 +260,7 @@ impl McpPrompt for CodeGenerationPrompt {
 
 ## Protocol Compliance
 
-This example follows the MCP 2025-06-18 specification for prompts:
+This example follows the MCP 2025-11-25 specification for prompts:
 
 - **prompts/list**: Returns available prompts with descriptions
 - **prompts/get**: Generates prompt content based on provided arguments

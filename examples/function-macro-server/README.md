@@ -245,7 +245,7 @@ Each tool defines its JSON schema with:
 - Manual trait implementations (this example)
 - Derive macros for struct-based tools (`#[derive(McpTool)]`)
 - Enhanced declarative `tool!` macro with parameter constraints
-- Full MCP 2025-06-18 protocol support with real-time notifications
+- Full MCP 2025-11-25 protocol support with real-time notifications
 
 **What's Coming:**
 - `#[mcp_tool]` function attribute macro completion

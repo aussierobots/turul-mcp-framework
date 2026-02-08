@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the notification system architecture for the Lambda MCP Server, focusing on simplicity and MCP 2025-06-18 Streamable HTTP compliance.
+This document describes the notification system architecture for the Lambda MCP Server, focusing on simplicity and MCP 2025-11-25 Streamable HTTP compliance.
 
 ## Core Principle: Results vs Notifications
 

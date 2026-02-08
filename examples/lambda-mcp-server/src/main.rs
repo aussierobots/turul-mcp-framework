@@ -2,7 +2,7 @@
 //!
 //! A complete MCP server for AWS Lambda with:
 //! - turul-mcp-aws-lambda integration (snapshot-based SSE)
-//! - MCP 2025-06-18 compliance with SSE notifications
+//! - MCP 2025-11-25 compliance with SSE notifications
 //! - DynamoDB session storage with automatic table creation
 //! - CORS support for browser clients
 //! - AWS tools integration (DynamoDB, SNS, SQS, CloudWatch)
@@ -123,7 +123,7 @@ async fn main() -> Result<(), Error> {
     init_logging();
 
     info!("🚀 Starting AWS Lambda MCP Server (non-SSE mode)");
-    info!("Architecture: MCP 2025-06-18 JSON-RPC compliance");
+    info!("Architecture: MCP 2025-11-25 JSON-RPC compliance");
     info!("  - turul-mcp-aws-lambda integration");
     info!("  - DynamoDB session storage");
     info!("  - CORS support");

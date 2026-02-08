@@ -1,14 +1,14 @@
-# MCP 2025-06-18 Specification Compliant Server
+# MCP 2025-11-25 Specification Compliant Server
 
-A comprehensive example demonstrating **full compliance** with the MCP 2025-06-18 specification, including proper `_meta` field handling, progress tokens, structured JSON-RPC responses, and advanced protocol features.
+A comprehensive example demonstrating **full compliance** with the MCP 2025-11-25 specification, including proper `_meta` field handling, progress tokens, structured JSON-RPC responses, and advanced protocol features.
 
 ## Overview
 
-This server showcases all the advanced features introduced in the MCP 2025-06-18 specification, providing a reference implementation for building production-ready MCP servers that fully comply with the latest protocol standards.
+This server showcases all the advanced features introduced in the MCP 2025-11-25 specification, providing a reference implementation for building production-ready MCP servers that fully comply with the latest protocol standards.
 
 ## Features
 
-### 🎯 **MCP 2025-06-18 Compliance**
+### 🎯 **MCP 2025-11-25 Compliance**
 - **Structured `_meta` fields** with progress tokens and pagination
 - **Progress tracking** with real-time updates and status notifications
 - **Proper JSON-RPC 2.0** response formatting with metadata
@@ -89,7 +89,7 @@ Demonstrates progress tracking with proper `_meta` field usage.
 - Proper metadata in responses
 - Session-aware progress tracking
 
-**MCP 2025-06-18 Response:**
+**MCP 2025-11-25 Response:**
 ```json
 {
   "result": {
@@ -283,8 +283,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = McpServer::builder()
         .name("spec-compliant-server")
         .version("1.0.0")
-        .title("MCP 2025-06-18 Specification Compliant Server")
-        .instructions("Demonstrates full compliance with MCP 2025-06-18 specification")
+        .title("MCP 2025-11-25 Specification Compliant Server")
+        .instructions("Demonstrates full compliance with MCP 2025-11-25 specification")
         .protocol_version(PROTOCOL_VERSION)
         .tool(ProcessDataTool {
             data: String::new(),
@@ -396,7 +396,7 @@ All responses include proper `_meta` fields:
 ## Use Cases
 
 ### 1. **Specification Reference**
-Perfect reference implementation for MCP 2025-06-18 compliance requirements.
+Perfect reference implementation for MCP 2025-11-25 compliance requirements.
 
 ### 2. **Production Server Development**
 Foundation for building production-ready MCP servers with full specification support.
@@ -410,4 +410,4 @@ Showcases all advanced features available in the latest MCP specification.
 ### 5. **Migration Guide**
 Example of upgrading existing MCP servers to 2025-06-18 specification compliance.
 
-This server serves as the authoritative reference for implementing MCP 2025-06-18 specification-compliant servers and demonstrates best practices for modern MCP development.
+This server serves as the authoritative reference for implementing MCP 2025-11-25 specification-compliant servers and demonstrates best practices for modern MCP development.

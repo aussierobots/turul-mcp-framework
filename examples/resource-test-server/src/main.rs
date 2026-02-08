@@ -2,7 +2,7 @@
 //!
 //! Comprehensive test server providing various types of resources for E2E testing.
 //! This server implements all MCP resource patterns and edge cases to validate
-//! framework compliance with the MCP 2025-06-18 specification.
+//! framework compliance with the MCP 2025-11-25 specification.
 //!
 //! ## Test Resources Available:
 //!
@@ -1527,7 +1527,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .instructions(
             "Comprehensive test server providing various types of resources for E2E testing.\n\
             This server implements all MCP resource patterns and edge cases to validate\n\
-            framework compliance with the MCP 2025-06-18 specification.\n\n\
+            framework compliance with the MCP 2025-11-25 specification.\n\n\
             Available test resources:\n\
             • Basic: file:///tmp/, file:///memory/, file:///error/, file:///slow/, file:///empty/, file:///large/, file:///binary/\n\
             • Templates: file:///template/items/{id}.json, file:///template/users/{user_id}.json, file:///template/files/{path}\n\

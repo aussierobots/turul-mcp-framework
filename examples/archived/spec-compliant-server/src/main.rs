@@ -1,4 +1,4 @@
-//! # MCP 2025-06-18 Specification Compliant Server
+//! # MCP 2025-11-25 Specification Compliant Server
 //!
 //! This example demonstrates a fully compliant MCP server that adheres to the
 //! 2025-06-18 specification, including proper _meta field handling, progress tokens,
@@ -128,7 +128,7 @@ impl McpTool for SessionAwareTool {
             }
         }
 
-        // Create a proper MCP 2025-06-18 compliant result with _meta
+        // Create a proper MCP 2025-11-25 compliant result with _meta
         let mut meta_data = HashMap::new();
         meta_data.insert("processing_time_ms".to_string(), json!(50));
         meta_data.insert("api_version".to_string(), json!("2025-06-18"));
@@ -148,7 +148,7 @@ async fn create_status_resource() -> impl McpResource {
     resource! {
         uri: "system://status-v2",
         name: "System Status with Meta",
-        description: "Enhanced system status with _meta information per MCP 2025-06-18",
+        description: "Enhanced system status with _meta information per MCP 2025-11-25",
         content: |_self| async move {
             let status_data = json!({
                 "system_health": "excellent",
@@ -181,7 +181,7 @@ async fn create_status_resource() -> impl McpResource {
 fn demonstrate_json_rpc_compliance() {
     println!("\n=== JSON-RPC 2.0 Specification Compliance Demo ===");
 
-    // Create a proper MCP 2025-06-18 request with _meta
+    // Create a proper MCP 2025-11-25 request with _meta
     let mut request_data = HashMap::new();
     request_data.insert("name".to_string(), json!("process_data"));
     request_data.insert("arguments".to_string(), json!({
@@ -246,7 +246,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    println!("Starting MCP 2025-06-18 Specification Compliant Server");
+    println!("Starting MCP 2025-11-25 Specification Compliant Server");
 
     // Demonstrate JSON-RPC compliance
     demonstrate_json_rpc_compliance();
@@ -261,12 +261,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create resources
     let status_resource = create_status_resource().await;
 
-    // Build server with full MCP 2025-06-18 compliance
+    // Build server with full MCP 2025-11-25 compliance
     let server = McpServer::builder()
         .name("spec-compliant-server")
         .version("1.0.0")
-        .title("MCP 2025-06-18 Specification Compliant Server")
-        .instructions("This server demonstrates full compliance with MCP 2025-06-18 specification including _meta fields, progress tokens, and proper JSON-RPC structure.")
+        .title("MCP 2025-11-25 Specification Compliant Server")
+        .instructions("This server demonstrates full compliance with MCP 2025-11-25 specification including _meta fields, progress tokens, and proper JSON-RPC structure.")
         .tool(process_tool)
         .tool(session_tool)
         .resource(status_resource)
@@ -277,7 +277,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .bind_address("127.0.0.1:8012".parse()?)
         .build()?;
 
-    println!("\nMCP 2025-06-18 Compliant Server running at: http://127.0.0.1:8012/mcp");
+    println!("\nMCP 2025-11-25 Compliant Server running at: http://127.0.0.1:8012/mcp");
     println!("\nFeatures demonstrated:");
     println!("  ✓ Proper _meta field handling in requests and responses");
     println!("  ✓ Progress token support for long-running operations");

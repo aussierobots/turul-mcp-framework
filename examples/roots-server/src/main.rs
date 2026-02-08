@@ -1,7 +1,7 @@
 //! # MCP Roots Test Server
 //!
 //! Test server providing roots for E2E testing of the MCP roots/list endpoint.
-//! This server demonstrates root directory listing and follows MCP 2025-06-18 spec.
+//! This server demonstrates root directory listing and follows MCP 2025-11-25 spec.
 //!
 //! ## Test Roots Available:
 //! - `file:///workspace` - Project Workspace (read/write)

@@ -1062,7 +1062,7 @@ async fn test_sse_resumability(
         info!("   ✅ Last-Event-ID header processed correctly");
         info!("   ✅ Event replay behavior follows MCP specification");
         info!("   ✅ Stream isolation maintained");
-        info!("   ✅ SSE resumption working as per MCP 2025-06-18 standard");
+        info!("   ✅ SSE resumption working as per MCP 2025-11-25 standard");
         Ok(())
     } else {
         warn!("❌ MCP RESUMABILITY COMPLIANCE ISSUES FOUND:");
@@ -1580,7 +1580,7 @@ async fn print_final_report(
         Ok(_) => {
             info!("   ✅ 🎆 FULLY MCP COMPLIANT: Session management + Streamable HTTP working!");
             info!("   ✅ Ready for production MCP over HTTP with real-time tool notifications");
-            info!("   ✅ Proper implementation of MCP 2025-06-18 Streamable HTTP specification");
+            info!("   ✅ Proper implementation of MCP 2025-11-25 Streamable HTTP specification");
         }
         Err(_) => {
             info!("   ✅ 🎆 FULLY MCP COMPLIANT: Session management working!");

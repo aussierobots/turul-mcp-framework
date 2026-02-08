@@ -86,7 +86,7 @@ Connect to the server using [MCP Inspector](https://github.com/modelcontextproto
 - **Hot-swappable components** - modify behavior without recompilation
 
 ### MCP Protocol Compliance
-- **Full MCP 2025-06-18 specification** support
+- **Full MCP 2025-11-25 specification** support
 - **Proper schema validation** for all inputs and outputs  
 - **Real-time notifications** with SSE streaming
 - **Session management** with progress tracking

@@ -1,6 +1,6 @@
 # Enhanced Tool Macro Test Example
 
-This example demonstrates advanced patterns using the `#[derive(McpTool)]` macro with enhanced parameter validation and optional parameters. Part of the **MCP Framework - Rust Implementation** with full MCP 2025-06-18 specification compliance.
+This example demonstrates advanced patterns using the `#[derive(McpTool)]` macro with enhanced parameter validation and optional parameters. Part of the **MCP Framework - Rust Implementation** with full MCP 2025-11-25 specification compliance.
 
 ## 🚀 What This Example Shows
 

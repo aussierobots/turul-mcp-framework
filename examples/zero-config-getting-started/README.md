@@ -59,7 +59,7 @@ server.run().await
 
 ### For Production
 - **Pluggable Storage**: Start with InMemory, scale to PostgreSQL/AWS
-- **MCP 2025-06-18 Compliance**: Latest specification support
+- **MCP 2025-11-25 Compliance**: Latest specification support
 - **SSE Resumability**: Last-Event-ID header for reconnection
 - **Session Management**: Automatic cleanup and lifecycle handling
 

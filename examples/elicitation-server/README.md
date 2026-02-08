@@ -331,7 +331,7 @@ This elicitation server integrates with the MCP framework using:
 - **Progress Tokens**: Workflow tracking and correlation
 - **Meta Support**: MCP `_meta` field integration
 
-The implementation follows MCP 2025-06-18 specification for maximum client compatibility.
+The implementation follows MCP 2025-11-25 specification for maximum client compatibility.
 
 ## Next Steps
 

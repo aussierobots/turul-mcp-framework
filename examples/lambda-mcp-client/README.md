@@ -1,11 +1,11 @@
 # Lambda MCP Test Client
 
-Comprehensive test client for validating `lambda-turul-mcp-server` implementation, ensuring MCP 2025-06-18 Streamable HTTP protocol compliance, tool functionality, session management, and infrastructure integration.
+Comprehensive test client for validating `lambda-turul-mcp-server` implementation, ensuring MCP 2025-11-25 Streamable HTTP protocol compliance, tool functionality, session management, and infrastructure integration.
 
 ## Features
 
 ### 🧪 **Comprehensive Test Suite**
-- **Protocol Compliance**: Validates MCP 2025-06-18 specification adherence
+- **Protocol Compliance**: Validates MCP 2025-11-25 specification adherence
 - **Tool Functionality**: Tests all available tools with schema validation
 - **Session Management**: Validates session lifecycle and state persistence  
 - **Infrastructure Integration**: Tests AWS Lambda, DynamoDB, SQS integration

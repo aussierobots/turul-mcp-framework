@@ -23,7 +23,7 @@ struct ProjectReadme;
 impl ProjectReadme {
     async fn read_impl(&self, _params: Option<serde_json::Value>) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(format!(
-            "# Project Documentation\n\nWelcome to our project!\n\n## Getting Started\n\n1. Install dependencies\n2. Run the server\n3. Connect your MCP client\n\n## Features\n\n- ✅ Zero-configuration setup\n- ✅ Fine-grained trait architecture  \n- ✅ MCP 2025-06-18 specification compliant\n- ✅ Real-time SSE notifications\n\nLast updated: {}",
+            "# Project Documentation\n\nWelcome to our project!\n\n## Getting Started\n\n1. Install dependencies\n2. Run the server\n3. Connect your MCP client\n\n## Features\n\n- ✅ Zero-configuration setup\n- ✅ Fine-grained trait architecture  \n- ✅ MCP 2025-11-25 specification compliant\n- ✅ Real-time SSE notifications\n\nLast updated: {}",
             chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC")
         ))])
     }
@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("🚀 Simple Resources Demo - New Trait Architecture");
     info!("   • Using derive macros with new fine-grained traits");
-    info!("   • MCP 2025-06-18 compliant resource definitions");
+    info!("   • MCP 2025-11-25 compliant resource definitions");
     info!("   • Zero-configuration resource setup");
 
     let server = McpServer::builder()

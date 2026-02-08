@@ -1,7 +1,7 @@
-//! MCP 2025-06-18 Specification Compliance Test Suite
+//! MCP 2025-11-25 Specification Compliance Test Suite
 //!
 //! This module defines comprehensive test suites that validate lambda-turul-mcp-server
-//! compliance with the official MCP 2025-06-18 specification. Tests focus on
+//! compliance with the official MCP 2025-11-25 specification. Tests focus on
 //! specification conformance rather than implementation-specific behavior.
 
 #![allow(unused_imports)]
@@ -39,7 +39,7 @@ pub struct TestSuite {
 }
 
 impl TestSuite {
-    /// Create a comprehensive MCP 2025-06-18 specification compliance test suite
+    /// Create a comprehensive MCP 2025-11-25 specification compliance test suite
     pub fn comprehensive() -> Self {
         let mut test_cases = Vec::new();
 
@@ -80,8 +80,8 @@ impl TestSuite {
         test_cases.extend(Self::ddb_persistence_tests());
 
         Self {
-            name: "MCP 2025-06-18 Specification Compliance Test Suite".to_string(),
-            description: "Comprehensive validation of server compliance with official MCP 2025-06-18 specification requirements. Tests validate specification conformance as the source of truth.".to_string(),
+            name: "MCP 2025-11-25 Specification Compliance Test Suite".to_string(),
+            description: "Comprehensive validation of server compliance with official MCP 2025-11-25 specification requirements. Tests validate specification conformance as the source of truth.".to_string(),
             test_cases,
         }
     }
@@ -90,7 +90,7 @@ impl TestSuite {
     pub fn protocol_only() -> Self {
         Self {
             name: "MCP Protocol Compliance Test Suite".to_string(),
-            description: "Validates MCP 2025-06-18 Streamable HTTP protocol implementation"
+            description: "Validates MCP 2025-11-25 Streamable HTTP protocol implementation"
                 .to_string(),
             test_cases: Self::core_mcp_compliance_tests(),
         }
@@ -150,7 +150,7 @@ impl TestSuite {
             TestCase {
                 name: "MCP Initialization Protocol".to_string(),
                 description:
-                    "Validate MCP 2025-06-18 initialization handshake per specification section 4.1"
+                    "Validate MCP 2025-11-25 initialization handshake per specification section 4.1"
                         .to_string(),
                 test_type: "mcp_spec_initialization".to_string(),
                 expected_duration_secs: 5,
@@ -277,7 +277,7 @@ impl TestSuite {
             TestCase {
                 name: "MCP Streamable HTTP DELETE Session Termination".to_string(),
                 description:
-                    "Validate DELETE requests for session termination per MCP 2025-06-18 spec"
+                    "Validate DELETE requests for session termination per MCP 2025-11-25 spec"
                         .to_string(),
                 test_type: "mcp_streamable_http_delete_session".to_string(),
                 expected_duration_secs: 10,
@@ -654,7 +654,7 @@ impl TestSuite {
         vec![
             TestCase {
                 name: "SSE Streaming Basic".to_string(),
-                description: "Test basic Server-Sent Events streaming according to MCP 2025-06-18"
+                description: "Test basic Server-Sent Events streaming according to MCP 2025-11-25"
                     .to_string(),
                 test_type: "sse_streaming_basic".to_string(),
                 expected_duration_secs: 15,
@@ -693,7 +693,7 @@ impl TestSuite {
             },
             TestCase {
                 name: "MCP Streamable HTTP Compliance".to_string(),
-                description: "Test MCP 2025-06-18 Streamable HTTP specification compliance"
+                description: "Test MCP 2025-11-25 Streamable HTTP specification compliance"
                     .to_string(),
                 test_type: "mcp_streamable_http".to_string(),
                 expected_duration_secs: 20,

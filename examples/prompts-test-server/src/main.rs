@@ -2,7 +2,7 @@
 //!
 //! Comprehensive test server providing various types of prompts for E2E testing.
 //! This server implements all MCP prompt patterns and edge cases to validate
-//! framework compliance with the MCP 2025-06-18 specification.
+//! framework compliance with the MCP 2025-11-25 specification.
 
 use std::collections::HashMap;
 
@@ -891,7 +891,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .instructions(
             "Comprehensive test server providing various types of prompts for E2E testing.\n\
             This server implements all MCP prompt patterns and edge cases to validate\n\
-            framework compliance with the MCP 2025-06-18 specification.\n\n\
+            framework compliance with the MCP 2025-11-25 specification.\n\n\
             Available test prompts:\n\
             • Basic: simple, string_args, number_args, boolean_args, template, multi_message\n\
             • Advanced: session_aware, validation, dynamic\n\
