@@ -92,7 +92,7 @@ impl LoggingTestClient {
 
         // Create proper MCP initialize request using protocol structs
         let initialize_request = InitializeRequest::new(
-            McpVersion::V2025_06_18,
+            McpVersion::V2025_11_25,
             ClientCapabilities::default(),
             Implementation::new("logging-test-client", "1.0.0"),
         );
@@ -122,7 +122,7 @@ impl LoggingTestClient {
             .client
             .post(&self.base_url)
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-11-25")
             .json(&json_rpc_request)
             .send()
             .await?;

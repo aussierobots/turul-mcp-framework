@@ -96,6 +96,8 @@ mod tests {
         }
     }
 
+    impl HasIcons for TestTool {}
+
     // ToolDefinition is automatically implemented via blanket impl!
 
     #[async_trait]

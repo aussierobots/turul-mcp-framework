@@ -1,4 +1,4 @@
-//! Streamable HTTP Transport for MCP 2025-06-18
+//! Streamable HTTP Transport for MCP 2025-11-25
 //!
 //! This module implements the "Streamable HTTP" transport mechanism introduced
 //! in MCP 2025-03-26, which replaces the previous HTTP+SSE approach from 2024-11-05.
@@ -33,8 +33,10 @@ pub enum McpProtocolVersion {
     /// Protocol including streamable HTTP (2025-03-26)
     V2025_03_26,
     /// Protocol with structured _meta, cursor, progressToken, and elicitation (2025-06-18)
-    #[default]
     V2025_06_18,
+    /// Protocol with tasks, icons, URL elicitation, and sampling tools (2025-11-25)
+    #[default]
+    V2025_11_25,
 }
 
 impl McpProtocolVersion {
@@ -44,6 +46,7 @@ impl McpProtocolVersion {
             "2024-11-05" => Some(Self::V2024_11_05),
             "2025-03-26" => Some(Self::V2025_03_26),
             "2025-06-18" => Some(Self::V2025_06_18),
+            "2025-11-25" => Some(Self::V2025_11_25),
             _ => None,
         }
     }
@@ -54,32 +57,46 @@ impl McpProtocolVersion {
             Self::V2024_11_05 => "2024-11-05",
             Self::V2025_03_26 => "2025-03-26",
             Self::V2025_06_18 => "2025-06-18",
+            Self::V2025_11_25 => "2025-11-25",
         }
     }
 
     /// Returns whether this version supports streamable HTTP
     pub fn supports_streamable_http(&self) -> bool {
-        matches!(self, Self::V2025_03_26 | Self::V2025_06_18)
+        matches!(
+            self,
+            Self::V2025_03_26 | Self::V2025_06_18 | Self::V2025_11_25
+        )
     }
 
     /// Returns whether this version supports _meta fields
     pub fn supports_meta_fields(&self) -> bool {
-        matches!(self, Self::V2025_06_18)
+        matches!(self, Self::V2025_06_18 | Self::V2025_11_25)
     }
 
     /// Returns whether this version supports cursor-based pagination
     pub fn supports_cursors(&self) -> bool {
-        matches!(self, Self::V2025_06_18)
+        matches!(self, Self::V2025_06_18 | Self::V2025_11_25)
     }
 
     /// Returns whether this version supports progress tokens
     pub fn supports_progress_tokens(&self) -> bool {
-        matches!(self, Self::V2025_06_18)
+        matches!(self, Self::V2025_06_18 | Self::V2025_11_25)
     }
 
     /// Returns whether this version supports elicitation
     pub fn supports_elicitation(&self) -> bool {
-        matches!(self, Self::V2025_06_18)
+        matches!(self, Self::V2025_06_18 | Self::V2025_11_25)
+    }
+
+    /// Returns whether this version supports the task system (experimental)
+    pub fn supports_tasks(&self) -> bool {
+        matches!(self, Self::V2025_11_25)
+    }
+
+    /// Returns whether this version supports icons
+    pub fn supports_icons(&self) -> bool {
+        matches!(self, Self::V2025_11_25)
     }
 
     /// Get list of supported features for this version
@@ -99,6 +116,12 @@ impl McpProtocolVersion {
         }
         if self.supports_elicitation() {
             features.push("elicitation");
+        }
+        if self.supports_tasks() {
+            features.push("tasks");
+        }
+        if self.supports_icons() {
+            features.push("icons");
         }
         features
     }
@@ -387,7 +410,7 @@ impl StreamableHttpHandler {
             .into_boxed_response(&context);
         }
 
-        // Route based on MCP 2025-06-18 specification
+        // Route based on MCP 2025-11-25 specification
         match *req.method() {
             Method::POST => {
                 // ALL client messages (requests, notifications, responses) come via POST
@@ -463,7 +486,7 @@ impl StreamableHttpHandler {
         }
 
         // 2. Create bi-directional stream with chunked transfer encoding
-        // For MCP 2025-06-18 Streamable HTTP, we create a stream that can handle bidirectional JSON-RPC
+        // For MCP Streamable HTTP, we create a stream that can handle bidirectional JSON-RPC
         // Unlike SSE which is unidirectional server->client, this supports client->server and server->client
 
         // Extract Last-Event-ID for resumability (if client supports it)
@@ -911,7 +934,7 @@ impl StreamableHttpHandler {
 
     /// Handle POST with tool progress notifications (POST Streamable HTTP)
     ///
-    /// Implements MCP 2025-06-18 Streamable HTTP where POST requests receive
+    /// Implements MCP 2025-11-25 Streamable HTTP where POST requests receive
     /// chunked responses containing both progress notifications AND final result.
     /// This is request-response, NOT a long-lived connection (that's GET SSE).
     ///
@@ -1506,7 +1529,7 @@ impl StreamableHttpHandler {
             .unwrap()
     }
 
-    /// Handle POST request - unified handler for all client messages (MCP 2025-06-18 compliant)
+    /// Handle POST request - unified handler for all client messages (MCP 2025-11-25 compliant)
     /// Processes JSON-RPC requests, notifications, and responses
     /// Server decides whether to respond with JSON or SSE stream based on message type
     async fn handle_client_message<T>(
@@ -1517,7 +1540,7 @@ impl StreamableHttpHandler {
     where
         T: Body + Send + 'static,
     {
-        debug!("Handling client message via POST (MCP 2025-06-18)");
+        debug!("Handling client message via POST (MCP 2025-11-25)");
 
         // Reject POST if accepts_stream_frames is false
         // Per MCP spec: "Include Accept header with application/json and text/event-stream"

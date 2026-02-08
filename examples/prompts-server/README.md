@@ -42,7 +42,7 @@ curl -X POST http://127.0.0.1:8040/mcp \
     "jsonrpc": "2.0",
     "method": "initialize",
     "params": {
-      "protocolVersion": "2025-06-18",
+      "protocolVersion": "2025-11-25",
       "capabilities": {},
       "clientInfo": {"name": "test", "version": "1.0"}
     },
@@ -260,7 +260,7 @@ impl McpPrompt for CodeGenerationPrompt {
 
 ## Protocol Compliance
 
-This example follows the MCP 2025-06-18 specification for prompts:
+This example follows the MCP 2025-11-25 specification for prompts:
 
 - **prompts/list**: Returns available prompts with descriptions
 - **prompts/get**: Generates prompt content based on provided arguments

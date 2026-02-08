@@ -42,7 +42,7 @@ cargo run --example calculator-add-simple-server
 # Test with curl
 curl -X POST http://127.0.0.1:8647/mcp \
   -H "Content-Type: application/json" \
-  -H "MCP-Protocol-Version: 2025-06-18" \
+  -H "MCP-Protocol-Version: 2025-11-25" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,

@@ -2,7 +2,7 @@
 //!
 //! Comprehensive test server providing various types of tools for E2E testing.
 //! This server implements all MCP tools patterns and edge cases to validate
-//! framework compliance with the MCP 2025-06-18 specification.
+//! framework compliance with the MCP 2025-11-25 specification.
 //!
 //! ## Test Tools Available:
 //!
@@ -23,7 +23,7 @@
 //! # Test with curl
 //! curl -X POST http://127.0.0.1:PORT/mcp \
 //!   -H "Content-Type: application/json" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 //!
 //! curl -X POST http://127.0.0.1:PORT/mcp \
 //!   -H "Content-Type: application/json" \
@@ -49,8 +49,7 @@ use uuid::Uuid;
 
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::schema::{JsonSchema, JsonSchemaGenerator};
-use turul_mcp_protocol::tools::{ToolAnnotations, ToolSchema};
-use turul_mcp_protocol::ResourceContents;
+use turul_mcp_protocol::tools::ToolSchema;
 // Server prelude re-exports builders prelude + protocol types
 use turul_mcp_server::prelude::*;
 
@@ -84,7 +83,7 @@ impl JsonSchemaGenerator for CalculatorResult {
 }
 
 /// Basic calculator tool for testing arithmetic operations with parameter validation
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "calculator",
     description = "Performs basic arithmetic operations (add, subtract, multiply, divide) with validation",
@@ -160,7 +159,7 @@ impl JsonSchemaGenerator for StringResult {
 }
 
 /// String processing tool for text manipulation operations
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "string_processor",
     description = "Processes text with operations like uppercase, lowercase, reverse, length",
@@ -236,7 +235,7 @@ impl JsonSchemaGenerator for DataResult {
 }
 
 /// Data transformation tool for JSON operations
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "data_transformer",
     description = "Transforms JSON data with operations like extract, merge, validate",
@@ -345,7 +344,7 @@ impl JsonSchemaGenerator for CounterResult {
 }
 
 /// Session-aware counter tool that maintains state per session using proper SessionStorage integration
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "session_counter",
     description = "Maintains a counter per session, demonstrating proper SessionStorage integration",
@@ -446,7 +445,7 @@ impl JsonSchemaGenerator for ProgressResult {
 }
 
 /// Progress tracking tool for long-running operations with progress notifications
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "progress_tracker",
     description = "Simulates long-running operation with progress notifications",
@@ -529,7 +528,7 @@ impl JsonSchemaGenerator for ErrorResult {
 }
 
 /// Error generator tool for testing error handling
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "error_generator",
     description = "Generates specific types of errors for testing error handling",
@@ -605,7 +604,7 @@ impl JsonSchemaGenerator for ValidationResult {
 }
 
 /// Parameter validator tool for complex schema validation
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "parameter_validator",
     description = "Tests complex parameter validation scenarios",
@@ -670,98 +669,35 @@ impl ParameterValidatorTool {
 }
 
 /// Legacy calculator tool (deprecated in favor of the main calculator)
-struct LegacyCalculatorTool;
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "legacy_calculator",
+    description = "Basic addition only (deprecated - use calculator instead)"
+)]
+pub struct LegacyCalculatorTool {
+    #[param(description = "First number")]
+    pub a: f64,
 
-impl HasBaseMetadata for LegacyCalculatorTool {
-    fn name(&self) -> &str {
-        "legacy_calculator"
-    }
+    #[param(description = "Second number")]
+    pub b: f64,
 }
 
-impl HasDescription for LegacyCalculatorTool {
-    fn description(&self) -> Option<&str> {
-        Some("Basic addition only (deprecated - use calculator instead)")
-    }
-}
+impl LegacyCalculatorTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<serde_json::Value> {
+        let result = self.a + self.b;
 
-impl HasInputSchema for LegacyCalculatorTool {
-    fn input_schema(&self) -> &ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object()
-                .with_properties(HashMap::from([
-                    (
-                        "a".to_string(),
-                        JsonSchema::Number {
-                            description: Some("First number".to_string()),
-                            minimum: None,
-                            maximum: None,
-                        },
-                    ),
-                    (
-                        "b".to_string(),
-                        JsonSchema::Number {
-                            description: Some("Second number".to_string()),
-                            minimum: None,
-                            maximum: None,
-                        },
-                    ),
-                ]))
-                .with_required(vec!["a".to_string(), "b".to_string()])
-        })
-    }
-}
-
-impl HasOutputSchema for LegacyCalculatorTool {}
-
-impl HasAnnotations for LegacyCalculatorTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        static ANNOTATIONS: std::sync::OnceLock<ToolAnnotations> = std::sync::OnceLock::new();
-        Some(ANNOTATIONS.get_or_init(|| {
-            ToolAnnotations::new()
-                .with_title("Legacy Calculator (Add Only)")
-                .with_read_only_hint(true)
+        Ok(serde_json::json!({
+            "deprecation_warning": "legacy_calculator is deprecated since v0.1.0. Use 'calculator' instead.",
+            "result": result,
+            "operation": "add",
+            "inputs": {"a": self.a, "b": self.b},
+            "deprecation": {
+                "deprecated": true,
+                "since": "0.1.0",
+                "replacement": "calculator",
+                "removal_date": "2025-12-31"
+            }
         }))
-    }
-}
-
-impl HasToolMeta for LegacyCalculatorTool {}
-
-#[async_trait::async_trait]
-impl McpTool for LegacyCalculatorTool {
-    async fn call(
-        &self,
-        args: serde_json::Value,
-        _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let a = args
-            .get("a")
-            .and_then(|v| v.as_f64())
-            .ok_or_else(|| McpError::missing_param("a"))?;
-        let b = args
-            .get("b")
-            .and_then(|v| v.as_f64())
-            .ok_or_else(|| McpError::missing_param("b"))?;
-
-        let result = a + b;
-
-        Ok(CallToolResult::success(vec![
-            ToolResult::text("⚠️ DEPRECATED: legacy_calculator is deprecated since v0.1.0. Use 'calculator' instead."),
-            ToolResult::text(format!("{} + {} = {}", a, b, result)),
-            ToolResult::resource(ResourceContents::text(
-                "file:///calculation/result.json",
-                serde_json::to_string_pretty(&serde_json::json!({
-                "result": result,
-                "operation": "add",
-                "inputs": {"a": a, "b": b},
-                "deprecation_warning": {
-                    "deprecated": true,
-                    "since": "0.1.0",
-                    "replacement": "calculator",
-                    "removal_date": "2025-12-31"
-                }
-            })).unwrap())),
-        ]))
     }
 }
 
@@ -827,7 +763,7 @@ struct CountAnnouncementsResult {
 }
 
 /// Test tool that reproduces the output_field schema bug
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "count_announcements_struct",
     description = "Count announcements using struct macro with custom output field",
@@ -856,7 +792,7 @@ pub struct CountResult {
 }
 
 /// Simple tool like user's example - no #tool attribute, just derive
-#[derive(McpTool, Default)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 pub struct CountWords {
     #[param(description = "Optional word to count (e.g. 'hello')")]
     word: Option<String>,
@@ -924,45 +860,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .instructions("Comprehensive test tools for E2E validation")
         .with_strict_lifecycle() // Enable strict lifecycle enforcement for E2E testing
         // Basic tools
-        .tool(CalculatorTool {
-            operation: "add".to_string(),
-            a: 0.0,
-            b: 0.0,
-        })
-        .tool(StringProcessorTool {
-            text: "".to_string(),
-            operation: "uppercase".to_string(),
-        })
-        .tool(DataTransformerTool {
-            data: serde_json::json!({}),
-            operation: "validate".to_string(),
-        })
+        .tool(CalculatorTool::default())
+        .tool(StringProcessorTool::default())
+        .tool(DataTransformerTool::default())
         // Advanced tools
-        .tool(SessionCounterTool {
-            operation: "get".to_string(),
-            amount: None,
-        })
-        .tool(ProgressTrackerTool {
-            duration: 1.0,
-            steps: Some(3),
-        })
+        .tool(SessionCounterTool::default())
+        .tool(ProgressTrackerTool::default())
         // Error testing tools
-        .tool(ErrorGeneratorTool {
-            error_type: "tool_execution".to_string(),
-            message: None,
-        })
-        .tool(ParameterValidatorTool {
-            email: "test@example.com".to_string(),
-            age: 25,
-            config: serde_json::json!({}),
-            tags: None,
-        })
+        .tool(ErrorGeneratorTool::default())
+        .tool(ParameterValidatorTool::default())
         // Deprecated tool for testing deprecation annotations
-        .tool(LegacyCalculatorTool)
+        .tool(LegacyCalculatorTool::default())
         // Bug reproduction tool - demonstrates output_field schema mismatch
-        .tool(CountAnnouncementsTool {
-            text: "".to_string(),
-        })
+        .tool(CountAnnouncementsTool::default())
         .tool(CountWords::default())
         // Custom output field tools for MCP compliance testing
         .tool_fn(word_count_analyzer)

@@ -10,11 +10,11 @@ description = "Model Context Protocol (MCP) specification implementation - Curre
 
 [features]
 default = []
-server = ["turul-mcp-protocol-2025-06-18/server"]
-client = ["turul-mcp-protocol-2025-06-18/client"]
+server = ["turul-mcp-protocol-2025-11-25/server"]
+client = ["turul-mcp-protocol-2025-11-25/client"]
 
 [dependencies]
-turul-mcp-protocol-2025-06-18.workspace = true
+turul-mcp-protocol-2025-11-25.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

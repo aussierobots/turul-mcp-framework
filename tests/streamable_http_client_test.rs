@@ -1,4 +1,4 @@
-//! MCP 2025-06-18 Streamable HTTP Client Test
+//! MCP Streamable HTTP Client Test
 //!
 //! Tests the CORRECT implementation of MCP Streamable HTTP with:
 //! - Multi-threaded SSE stream processing
@@ -28,7 +28,7 @@ struct StreamEvent {
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct ProgressNotification {
-    progress: Option<u64>,
+    progress: Option<f64>,
     token: Option<String>,
     message: Option<String>,
 }
@@ -41,7 +41,7 @@ struct ToolResult {
     is_error: bool,
 }
 
-/// Comprehensive streamable HTTP client that properly implements MCP 2025-06-18
+/// Comprehensive streamable HTTP client that properly implements MCP Streamable HTTP
 struct StreamableHttpClient {
     client: Client,
     base_url: String,
@@ -71,7 +71,7 @@ impl StreamableHttpClient {
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "roots": { "listChanged": false },
                     "sampling": {}
@@ -207,7 +207,7 @@ impl StreamableHttpClient {
         }
     }
 
-    /// ✅ CRITICAL: Multi-threaded SSE stream processing for MCP 2025-06-18
+    /// ✅ CRITICAL: Multi-threaded SSE stream processing for MCP Streamable HTTP
     async fn process_streaming_tool_response(
         &self,
         response: reqwest::Response,
@@ -254,7 +254,7 @@ impl StreamableHttpClient {
                                                 let progress = ProgressNotification {
                                                     progress: params
                                                         .get("progress")
-                                                        .and_then(|p| p.as_u64()),
+                                                        .and_then(|p| p.as_f64()),
                                                     token: params
                                                         .get("progressToken")
                                                         .and_then(|t| t.as_str())
@@ -416,7 +416,7 @@ async fn test_streamable_http_with_multi_threading() -> Result<()> {
         .with_max_level(tracing::Level::INFO)
         .try_init();
 
-    info!("🚀 Testing MCP 2025-06-18 Streamable HTTP with multi-threaded SSE");
+    info!("🚀 Testing MCP Streamable HTTP with multi-threaded SSE");
 
     // Check if server is available before running test
     let test_client = Client::builder()
@@ -506,7 +506,7 @@ async fn test_accept_header_variations() -> Result<()> {
         .with_max_level(tracing::Level::INFO)
         .try_init();
 
-    info!("🧪 Testing Accept header variations for MCP 2025-06-18");
+    info!("🧪 Testing Accept header variations for MCP Streamable HTTP");
 
     let client = Client::new();
     let base_url = "http://127.0.0.1:8701/mcp";
@@ -552,7 +552,7 @@ async fn test_accept_header_variations() -> Result<()> {
                 "id": 1,
                 "method": "initialize",
                 "params": {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": "2025-11-25",
                     "capabilities": {},
                     "clientInfo": {"name": "test", "version": "1.0"}
                 }

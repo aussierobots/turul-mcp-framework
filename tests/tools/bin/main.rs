@@ -2,7 +2,7 @@
 //!
 //! Comprehensive test server providing various types of tools for E2E testing.
 //! This server implements all MCP tools patterns and edge cases to validate
-//! framework compliance with the MCP 2025-06-18 specification.
+//! framework compliance with the MCP 2025-11-25 specification.
 //!
 //! ## Test Tools Available:
 //!
@@ -23,7 +23,7 @@
 //! # Test with curl
 //! curl -X POST http://127.0.0.1:PORT/mcp \
 //!   -H "Content-Type: application/json" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 //!
 //! curl -X POST http://127.0.0.1:PORT/mcp \
 //!   -H "Content-Type: application/json" \
@@ -726,6 +726,8 @@ impl HasAnnotations for LegacyCalculatorTool {
 }
 
 impl HasToolMeta for LegacyCalculatorTool {}
+
+impl HasIcons for LegacyCalculatorTool {}
 
 #[async_trait::async_trait]
 impl McpTool for LegacyCalculatorTool {

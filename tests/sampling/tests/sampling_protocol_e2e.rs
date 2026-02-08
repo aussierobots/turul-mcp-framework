@@ -40,31 +40,25 @@ async fn test_sampling_create_message_endpoint() {
     );
     let result = sampling_result.get("result").unwrap().as_object().unwrap();
 
-    // Check for required fields in CreateMessageResult
+    // Check for required fields in CreateMessageResult (MCP 2025-11-25 flattened structure)
     assert!(
-        result.contains_key("message"),
-        "Result should contain 'message'"
+        result.contains_key("role"),
+        "Result should contain 'role' (flattened in 2025-11-25)"
+    );
+    assert!(
+        result.contains_key("content"),
+        "Result should contain 'content' (flattened in 2025-11-25)"
     );
     assert!(
         result.contains_key("model"),
         "Result should contain 'model'"
     );
 
-    let message = result.get("message").unwrap().as_object().unwrap();
-    assert!(
-        message.contains_key("role"),
-        "Message should contain 'role'"
-    );
-    assert!(
-        message.contains_key("content"),
-        "Message should contain 'content'"
-    );
-
-    // Verify message role is assistant
-    assert_eq!(message.get("role").unwrap().as_str().unwrap(), "assistant");
+    // Verify role is assistant
+    assert_eq!(result.get("role").unwrap().as_str().unwrap(), "assistant");
 
     // Verify content structure
-    let content = message.get("content").unwrap().as_object().unwrap();
+    let content = result.get("content").unwrap().as_object().unwrap();
     assert!(
         content.contains_key("text"),
         "Content should contain 'text'"

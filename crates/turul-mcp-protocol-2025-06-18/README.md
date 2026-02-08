@@ -3,16 +3,16 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-mcp-protocol-2025-06-18.svg)](https://crates.io/crates/turul-mcp-protocol-2025-06-18)
 [![Documentation](https://docs.rs/turul-mcp-protocol-2025-06-18/badge.svg)](https://docs.rs/turul-mcp-protocol-2025-06-18)
 
-Complete Model Context Protocol (MCP) specification implementation for the 2025-06-18 version with comprehensive trait-based architecture and type-safe protocol compliance.
+Complete Model Context Protocol (MCP) specification implementation for the 2025-06-18 version with spec-pure concrete types and type-safe protocol compliance.
 
 ## Overview
 
-`turul-mcp-protocol-2025-06-18` provides the foundational protocol implementation for the turul-mcp-framework, including all request/response types, notifications, and trait definitions for the MCP 2025-06-18 specification.
+`turul-mcp-protocol-2025-06-18` provides the foundational protocol implementation for the turul-mcp-framework, including all request/response types, notifications, and concrete MCP types for the MCP 2025-06-18 specification.
 
 ## Features
 
 - ✅ **Complete MCP 2025-06-18 Implementation** - All protocol messages and types
-- ✅ **Trait-Based Architecture** - Fine-grained traits for composable implementations  
+- ✅ **Spec-Pure Design** - 100% MCP specification types with zero framework additions
 - ✅ **Type Safety** - Strong typing with comprehensive compile-time validation
 - ✅ **Serde Integration** - Full JSON serialization/deserialization support
 - ✅ **JSON-RPC 2.0 Compliance** - Proper JSON-RPC message wrapping
@@ -25,7 +25,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-protocol-2025-06-18 = "0.2.0"
+turul-mcp-protocol-2025-06-18 = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ```
@@ -66,9 +66,9 @@ println!("Tool description: {}", tool.description.as_deref().unwrap_or("No descr
 
 ## Protocol Architecture
 
-### Trait-Based Design Pattern
+### Concrete Protocol Types
 
-The crate provides concrete MCP specification types that can be serialized and deserialized:
+This crate provides spec-pure concrete types that exactly match the MCP specification:
 
 ```rust
 use turul_mcp_protocol_2025_06_18::{
@@ -616,7 +616,7 @@ fn some_operation() -> McpResult<String> {
 
 ```toml
 [dependencies]
-turul-mcp-protocol-2025-06-18 = { version = "0.2.0", features = ["server"] }
+turul-mcp-protocol-2025-06-18 = { version = "0.2", features = ["server"] }
 ```
 
 Available features:
@@ -626,13 +626,15 @@ Available features:
 
 ## Architectural Decisions
 
-### Why Trait-Based Architecture?
+### Why Spec-Pure Protocol Crate?
 
-1. **TypeScript Alignment**: Perfect 1:1 mapping with MCP TypeScript interfaces
-2. **Composability**: Fine-grained traits can be mixed and matched as needed
-3. **Framework Flexibility**: Same trait interfaces work for both concrete and dynamic implementations
+1. **TypeScript Alignment**: Perfect 1:1 mapping with MCP TypeScript schema types
+2. **Specification Purity**: Zero framework features - only official MCP 2025-06-18 types
+3. **Framework Independence**: Protocol types work across any framework implementation
 4. **Type Safety**: Compile-time guarantees for protocol compliance
-5. **Extensibility**: Easy to add new traits and compose them automatically
+5. **Maintainability**: Clean separation - spec updates never touch framework code
+
+**Note**: Framework traits (ToolDefinition, ResourceDefinition, etc.) are in `turul-mcp-builders` to maintain protocol purity.
 
 ### Protocol Version Guarantees
 

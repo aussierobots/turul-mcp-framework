@@ -10,7 +10,7 @@ This example demonstrates how to use the `#[derive(McpTool)]` macro for simplifi
 - **Optional Parameters**: Handling optional fields with `Option<T>`
 - **Error Handling**: Proper error handling in tool implementations
 - **Complex Data Types**: Working with various parameter types (strings, numbers, booleans)
-- **MCP 2025-06-18 Compliance**: Full specification compliance with proper `_meta` field handling
+- **MCP 2025-11-25 Compliance**: Full specification compliance with proper `_meta` field handling
 
 ## 🛠️ Available Tools
 

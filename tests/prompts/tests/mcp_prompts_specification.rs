@@ -1,6 +1,6 @@
 //! MCP Prompts Specification Compliance Tests
 //!
-//! This test suite validates complete MCP 2025-06-18 Prompts specification compliance.
+//! This test suite validates complete MCP 2025-11-25 Prompts specification compliance.
 //! Tests all required traits, fields, behaviors, and protocol requirements for Prompts.
 
 use mcp_prompts_tests::{
@@ -165,6 +165,9 @@ async fn test_prompt_content_block_mcp_compliance() {
             ContentBlock::ResourceLink { .. } | ContentBlock::Resource { .. } => {
                 // Resource content blocks are valid per MCP spec but not used in our prompts
                 panic!("Resource content not expected in our prompt implementations")
+            }
+            ContentBlock::ToolUse { .. } | ContentBlock::ToolResult { .. } => {
+                panic!("ToolUse/ToolResult content not expected in our prompt implementations")
             }
         }
     }

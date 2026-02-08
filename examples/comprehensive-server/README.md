@@ -1,6 +1,6 @@
 # Comprehensive Server Example
 
-This example demonstrates a complete MCP server with all supported handlers and capabilities enabled. It showcases the full range of MCP 2025-06-18 specification features in a single server implementation.
+This example demonstrates a complete MCP server with all supported handlers and capabilities enabled. It showcases the full range of MCP 2025-11-25 specification features in a single server implementation.
 
 ## 🚀 What This Example Shows
 
@@ -72,14 +72,14 @@ curl -X POST http://127.0.0.1:8002/mcp \
     "jsonrpc": "2.0",
     "method": "initialize",
     "params": {
-      "protocolVersion": "2025-06-18",
+      "protocolVersion": "2025-11-25",
       "capabilities": {},
       "clientInfo": {"name": "test", "version": "1.0"}
     },
     "id": 1
   }' | jq
 
-# Should return MCP 2025-06-18 compliant response with all capabilities
+# Should return MCP 2025-11-25 compliant response with all capabilities
 ```
 
 ## 🧪 Testing All Features
@@ -92,7 +92,7 @@ curl -X POST http://127.0.0.1:8002/mcp \
     "jsonrpc": "2.0",
     "method": "initialize",
     "params": {
-      "protocolVersion": "2025-06-18",
+      "protocolVersion": "2025-11-25",
       "capabilities": {},
       "clientInfo": {"name": "test-client", "version": "1.0.0"}
     },
@@ -331,7 +331,7 @@ let server = McpServer::builder()
     .build()?;
 ```
 
-## 📊 MCP 2025-06-18 Specification Compliance
+## 📊 MCP 2025-11-25 Specification Compliance
 
 This example demonstrates full compliance with the MCP specification:
 
@@ -357,7 +357,7 @@ Shows how to build servers that support multiple MCP capabilities simultaneously
 Demonstrates the framework's builder pattern for enabling specific MCP features.
 
 ### 3. Protocol Compliance
-Full implementation of MCP 2025-06-18 specification with proper JSON-RPC structure.
+Full implementation of MCP 2025-11-25 specification with proper JSON-RPC structure.
 
 ### 4. Error Handling
 Proper error handling across all handler types with descriptive error messages.

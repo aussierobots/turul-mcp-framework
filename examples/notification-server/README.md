@@ -72,7 +72,7 @@ curl -X POST http://127.0.0.1:8005/mcp \
     "jsonrpc": "2.0",
     "method": "initialize",
     "params": {
-      "protocolVersion": "2025-06-18",
+      "protocolVersion": "2025-11-25",
       "capabilities": {},
       "clientInfo": {"name": "test-client", "version": "1.0.0"}
     },

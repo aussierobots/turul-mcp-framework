@@ -4,7 +4,7 @@
 //!
 //! This crate provides a stable API that aliases the current version of the MCP specification,
 //! ensuring your code stays up-to-date with the latest protocol version while maintaining
-//! compatibility. Currently implements **MCP 2025-06-18** specification.
+//! compatibility. Currently implements **MCP 2025-11-25** specification.
 //!
 //! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-protocol.svg)](https://crates.io/crates/turul-mcp-protocol)
 //! [![Documentation](https://docs.rs/turul-mcp-protocol/badge.svg)](https://docs.rs/turul-mcp-protocol)
@@ -63,16 +63,16 @@
 //!
 //! | This Crate | MCP Spec | Implementation Crate |
 //! |------------|----------|---------------------|
-//! | `0.2.x` | `2025-06-18` | `turul-mcp-protocol-2025-06-18` |
+//! | `0.2.x` | `2025-11-25` | `turul-mcp-protocol-2025-11-25` |
 //!
-//! Currently aliases: `turul-mcp-protocol-2025-06-18`
+//! Currently aliases: `turul-mcp-protocol-2025-11-25`
 
 // Re-export the current MCP protocol version
-pub use turul_mcp_protocol_2025_06_18::*;
+pub use turul_mcp_protocol_2025_11_25::*;
 
 // Explicitly re-export the prelude module for convenient imports
 pub mod prelude {
-    pub use turul_mcp_protocol_2025_06_18::prelude::*;
+    pub use turul_mcp_protocol_2025_11_25::prelude::*;
 }
 
 /// The current MCP protocol version implemented by this crate
@@ -84,14 +84,14 @@ mod tests {
 
     #[test]
     fn test_current_version() {
-        assert_eq!(CURRENT_VERSION, "2025-06-18");
-        assert_eq!(MCP_VERSION, "2025-06-18");
+        assert_eq!(CURRENT_VERSION, "2025-11-25");
+        assert_eq!(MCP_VERSION, "2025-11-25");
     }
 
     #[test]
     fn test_version_parsing() {
-        let version = "2025-06-18".parse::<McpVersion>().unwrap();
-        assert_eq!(version, McpVersion::V2025_06_18);
+        let version = "2025-11-25".parse::<McpVersion>().unwrap();
+        assert_eq!(version, McpVersion::V2025_11_25);
     }
 
     #[test]

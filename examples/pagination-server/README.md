@@ -1,6 +1,6 @@
 # Pagination Server Example
 
-A comprehensive example demonstrating cursor-based pagination in MCP servers. This server shows how to handle large datasets efficiently using pagination with proper MCP 2025-06-18 compliant `_meta` fields.
+A comprehensive example demonstrating cursor-based pagination in MCP servers. This server shows how to handle large datasets efficiently using pagination with proper MCP 2025-11-25 compliant `_meta` fields.
 
 ## Overview
 
@@ -10,7 +10,7 @@ This example implements a complete pagination system with:
 - **Advanced search capabilities** with relevance scoring
 - **Batch processing** with progress tracking
 - **Filtering options** including active-only user filtering
-- **MCP 2025-06-18 compliant** `_meta` fields for proper pagination metadata
+- **MCP 2025-11-25 compliant** `_meta` fields for proper pagination metadata
 
 ## Features
 
@@ -27,7 +27,7 @@ This example implements a complete pagination system with:
 - **Thread-safe access** using Arc<Mutex<>> for concurrent operations
 - **Memory efficient** cursor-based navigation
 
-### 🎯 **MCP 2025-06-18 Compliance**
+### 🎯 **MCP 2025-11-25 Compliance**
 
 - **Proper `_meta` fields** with cursor, total, and has_more information
 - **Cursor management** with string-based position tracking
@@ -191,7 +191,7 @@ let next_cursor = if end_pos < total {
 };
 ```
 
-### MCP 2025-06-18 Meta Fields
+### MCP 2025-11-25 Meta Fields
 
 All paginated responses include proper `_meta` fields:
 

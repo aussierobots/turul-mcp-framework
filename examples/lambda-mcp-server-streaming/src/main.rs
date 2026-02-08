@@ -3,7 +3,7 @@
 //! A complete streaming-enabled MCP server for AWS Lambda with:
 //! - Real-time SSE streaming (requires `run_with_streaming_response`)
 //! - turul-mcp-aws-lambda integration with "streaming" feature enabled
-//! - MCP 2025-06-18 compliance with proper SSE notifications
+//! - MCP 2025-11-25 compliance with proper SSE notifications
 //! - DynamoDB session storage with automatic table creation
 //! - CORS support for browser clients
 //! - AWS tools integration (DynamoDB, SNS, SQS, CloudWatch)
@@ -139,7 +139,7 @@ async fn main() -> Result<(), Error> {
     init_logging();
 
     info!("🚀 Starting AWS Lambda MCP Server with STREAMING support");
-    info!("Architecture: MCP 2025-06-18 Streamable HTTP compliance with real-time SSE");
+    info!("Architecture: MCP 2025-11-25 Streamable HTTP compliance with real-time SSE");
     info!("  - turul-mcp-aws-lambda integration with streaming feature");
     info!("  - DynamoDB session storage");
     info!("  - CORS support");

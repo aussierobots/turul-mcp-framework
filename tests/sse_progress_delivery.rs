@@ -39,8 +39,8 @@ async fn start_progress_test_server() -> Result<String, Box<dyn std::error::Erro
                     broadcaster_any.downcast_ref::<SharedNotificationBroadcaster>()
                 {
                     let progress_25 =
-                        ProgressNotification::new(format!("calc-{}", uuid::Uuid::now_v7()), 25)
-                            .with_total(100)
+                        ProgressNotification::new(format!("calc-{}", uuid::Uuid::now_v7()), 25.0)
+                            .with_total(100.0)
                             .with_message("Starting calculation".to_string());
                     let _ = broadcaster
                         .send_progress_notification(&session_ctx.session_id, progress_25)
@@ -60,8 +60,8 @@ async fn start_progress_test_server() -> Result<String, Box<dyn std::error::Erro
                     broadcaster_any.downcast_ref::<SharedNotificationBroadcaster>()
                 {
                     let progress_75 =
-                        ProgressNotification::new(format!("calc-{}", uuid::Uuid::now_v7()), 75)
-                            .with_total(100)
+                        ProgressNotification::new(format!("calc-{}", uuid::Uuid::now_v7()), 75.0)
+                            .with_total(100.0)
                             .with_message("Nearly complete".to_string());
                     let _ = broadcaster
                         .send_progress_notification(&session_ctx.session_id, progress_75)
@@ -117,13 +117,13 @@ async fn test_post_streaming_delivers_progress_before_result() {
     let init_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",
             "id": 1,
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "experimental": {},
                     "sampling": {}
@@ -150,7 +150,7 @@ async fn test_post_streaming_delivers_progress_before_result() {
     let streaming_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", session_id)
         .header("Accept", "text/event-stream, application/json") // Request SSE streaming with JSON fallback
         .json(&json!({
@@ -211,12 +211,12 @@ async fn test_post_streaming_delivers_progress_before_result() {
     // Verify final result was delivered
     assert!(final_frame.is_some(), "Expected final result frame");
 
-    // Verify progress values
+    // Verify progress values (progress is f64 in MCP 2025-11-25)
     for (i, frame) in progress_frames.iter().enumerate() {
-        let progress = frame["params"]["progress"].as_u64().unwrap();
+        let progress = frame["params"]["progress"].as_f64().unwrap();
         println!("Progress frame {}: {}%", i, progress);
         assert!(
-            progress > 0 && progress < 100,
+            progress > 0.0 && progress < 100.0,
             "Progress should be between 0 and 100"
         );
     }

@@ -1,7 +1,7 @@
 //! # MCP Roots Test Server
 //!
 //! Test server providing roots for E2E testing of the MCP roots/list endpoint.
-//! This server demonstrates root directory listing and follows MCP 2025-06-18 spec.
+//! This server demonstrates root directory listing and follows MCP 2025-11-25 spec.
 //!
 //! ## Test Roots Available:
 //! - `file:///workspace` - Project Workspace (read/write)
@@ -21,7 +21,7 @@
 //! # Test with curl
 //! curl -X POST http://127.0.0.1:PORT/mcp \
 //!   -H "Content-Type: application/json" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 //!
 //! curl -X POST http://127.0.0.1:PORT/mcp \
 //!   -H "Content-Type: application/json" \
@@ -77,7 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("💡 Quick Test Commands:");
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("     -H 'Content-Type: application/json' \\");
-    info!("     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'");
+    info!("     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'");
     info!("");
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("     -H 'Content-Type: application/json' \\");

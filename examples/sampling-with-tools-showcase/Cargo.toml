@@ -1,0 +1,14 @@
+[package]
+name = "sampling-with-tools-showcase"
+version = "0.2.2"
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Example showcasing MCP 2025-11-25 tools field in sampling/createMessage requests"
+
+[dependencies]
+turul-mcp-protocol = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }

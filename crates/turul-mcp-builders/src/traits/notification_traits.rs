@@ -140,7 +140,7 @@ pub trait HasNotificationRules {
 /// - **Real-Time**: Instant event delivery to connected clients
 /// - **Structured Data**: JSON payloads for rich event information
 /// - **Targeted Delivery**: Client-specific routing rules
-/// - **MCP Compliant**: Fully compatible with MCP 2025-06-18 specification
+/// - **MCP Compliant**: Fully compatible with MCP 2025-11-25 specification
 ///
 /// # Common Use Cases
 ///

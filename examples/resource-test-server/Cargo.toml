@@ -1,6 +1,6 @@
 [package]
 name = "resource-test-server"
-version = "0.2.0"
+version = "0.2.2"
 edition = "2021"
 authors = ["Nick <nick@aussierobots.com.au>"]
 description = "MCP Resource Test Server - Comprehensive test resources for E2E validation"
@@ -13,7 +13,7 @@ path = "src/main.rs"
 [dependencies]
 # Framework dependencies
 turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http"] }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol-2025-06-18", package = "turul-mcp-protocol-2025-06-18" }
+turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
 turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
 
 # Async runtime

@@ -1,6 +1,6 @@
 # MCP Framework E2E Testing Suite
 
-This directory contains comprehensive End-to-End (E2E) testing infrastructure for the MCP Framework, validating complete MCP 2025-06-18 specification compliance with real HTTP/SSE transport.
+This directory contains comprehensive End-to-End (E2E) testing infrastructure for the MCP Framework, validating complete MCP 2025-11-25 specification compliance with real HTTP/SSE transport.
 
 ## Overview
 
@@ -234,7 +234,7 @@ cargo run --package prompts-test-server
 # Initialize session
 curl -X POST http://127.0.0.1:8080/mcp \
   -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 
 # List resources (use session ID from above)
 curl -X POST http://127.0.0.1:8080/mcp \
@@ -246,7 +246,7 @@ curl -X POST http://127.0.0.1:8080/mcp \
 ## Test Features Validated
 
 ### MCP Protocol Compliance
-- ✅ **Protocol Version Negotiation**: 2025-06-18 specification compliance
+- ✅ **Protocol Version Negotiation**: 2025-11-25 specification compliance
 - ✅ **JSON-RPC 2.0**: Proper request/response structure validation
 - ✅ **HTTP Transport**: Real HTTP client/server communication
 - ✅ **Session Management**: UUID v7 session IDs with proper isolation
@@ -399,7 +399,7 @@ See individual README files in each test directory for specific guidelines.
 The E2E testing architecture provides:
 
 - **Real Transport**: Actual HTTP/SSE communication (not mocks)
-- **Specification Compliance**: Full MCP 2025-06-18 protocol validation
+- **Specification Compliance**: Full MCP 2025-11-25 protocol validation
 - **Production Readiness**: Testing conditions mirror real-world usage
 - **Comprehensive Coverage**: All MCP features and edge cases tested
 - **Developer Experience**: Clear feedback and debugging capabilities

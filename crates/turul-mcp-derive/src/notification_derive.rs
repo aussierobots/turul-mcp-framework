@@ -30,13 +30,17 @@ fn auto_determine_notification_method(struct_name: String) -> String {
         "initialized" => "notifications/initialized".to_string(),
         "resource_updated" | "resources_updated" => "notifications/resources/updated".to_string(),
         "resources_list_changed" | "resources_changed" => {
-            "notifications/resources/listChanged".to_string()
+            "notifications/resources/list_changed".to_string()
         }
-        "roots_list_changed" | "roots_changed" => "notifications/roots/listChanged".to_string(),
+        "roots_list_changed" | "roots_changed" => {
+            "notifications/roots/list_changed".to_string()
+        }
         "prompts_list_changed" | "prompts_changed" => {
-            "notifications/prompts/listChanged".to_string()
+            "notifications/prompts/list_changed".to_string()
         }
-        "tools_list_changed" | "tools_changed" => "notifications/tools/listChanged".to_string(),
+        "tools_list_changed" | "tools_changed" => {
+            "notifications/tools/list_changed".to_string()
+        }
         _ => {
             // For custom notifications, use notifications/{snake_case}
             format!("notifications/{}", snake_case)
@@ -264,11 +268,11 @@ mod tests {
             ("ProgressNotification", "notifications/progress"),
             (
                 "ResourcesListChangedNotification",
-                "notifications/resources/listChanged",
+                "notifications/resources/list_changed",
             ),
             (
                 "ToolsChangedNotification",
-                "notifications/tools/listChanged",
+                "notifications/tools/list_changed",
             ),
             ("InitializedNotification", "notifications/initialized"),
             ("CancelledNotification", "notifications/cancelled"),
@@ -324,19 +328,19 @@ mod tests {
         let test_cases = vec![
             (
                 "ResourcesListChangedNotification",
-                "notifications/resources/listChanged",
+                "notifications/resources/list_changed",
             ),
             (
                 "PromptsChangedNotification",
-                "notifications/prompts/listChanged",
+                "notifications/prompts/list_changed",
             ),
             (
                 "ToolsChangedNotification",
-                "notifications/tools/listChanged",
+                "notifications/tools/list_changed",
             ),
             (
                 "RootsListChangedNotification",
-                "notifications/roots/listChanged",
+                "notifications/roots/list_changed",
             ),
         ];
 

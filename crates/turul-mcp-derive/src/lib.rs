@@ -718,13 +718,11 @@ pub fn prompt(input: TokenStream) -> TokenStream {
 ///         // Implementation would call actual model API
 ///         let response_text = "Generated response based on the input";
 ///         Ok(CreateMessageResult::new(
-///             SamplingMessage {
-///                 role: Role::Assistant,
-///                 content: ContentBlock::Text {
-///                     text: response_text.to_string(),
-///                     annotations: None,
-///                     meta: None,
-///                 }
+///             Role::Assistant,
+///             ContentBlock::Text {
+///                 text: response_text.to_string(),
+///                 annotations: None,
+///                 meta: None,
 ///             },
 ///             "claude-3-haiku"
 ///         ))

@@ -1,12 +1,13 @@
 [package]
 name = "dynamic-resource-server"
-version = "0.2.0"
+version = "0.2.2"
 edition.workspace = true
 
 [dependencies]
 turul-mcp-server.workspace = true
 turul-mcp-protocol.workspace = true
 turul-mcp-builders.workspace = true
+turul-mcp-derive.workspace = true
 tokio.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

@@ -1,6 +1,6 @@
 # Turul MCP Framework - Beta Rust Implementation
 
-A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-06-18 specification**.
+A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-11-25 specification**.
 
 ⚠️ **Beta Status** - Active development with ongoing feature enhancements. Phase 6 session-aware resources completed. Suitable for development and testing.
 
@@ -180,7 +180,7 @@ cargo run -p minimal-server
 # 4. Test the server (in another terminal)
 curl -X POST http://127.0.0.1:8641/mcp \
   -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
 ```
 
 ### Example Servers - Ready to Run
@@ -223,7 +223,7 @@ curl -X POST http://127.0.0.1:$PORT/mcp \
     "jsonrpc": "2.0",
     "method": "initialize",
     "params": {
-      "protocolVersion": "2025-06-18", 
+      "protocolVersion": "2025-11-25", 
       "capabilities": {},
       "clientInfo": {"name": "test", "version": "1.0"}
     },
@@ -237,7 +237,7 @@ curl -X POST http://127.0.0.1:$PORT/mcp \
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "protocolVersion": "2025-06-18",
+    "protocolVersion": "2025-11-25",
     "serverInfo": {"name": "server-name", "version": "0.2.0"},
     "capabilities": {"tools": {"listChanged": false}}
   }
@@ -270,7 +270,7 @@ For detailed testing instructions, server running guides, and compliance verific
 
 This guide includes:
 - ✅ All server running instructions with expected outputs
-- ✅ Manual MCP 2025-06-18 compliance verification  
+- ✅ Manual MCP 2025-11-25 compliance verification  
 - ✅ SSE event stream testing procedures
 - ✅ Performance testing and troubleshooting
 - ✅ CI/CD integration examples
@@ -286,10 +286,10 @@ echo "🧪 Testing MCP server on port $PORT"
 
 INIT_RESPONSE=$(curl -s -X POST http://127.0.0.1:$PORT/mcp \
   -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
 
-if [[ $(echo $INIT_RESPONSE | jq -r '.result.protocolVersion') == "2025-06-18" ]]; then
-    echo "✅ MCP 2025-06-18 compliant"
+if [[ $(echo $INIT_RESPONSE | jq -r '.result.protocolVersion') == "2025-11-25" ]]; then
+    echo "✅ MCP 2025-11-25 compliant"
 else
     echo "❌ Not compliant"
     exit 1
@@ -395,8 +395,8 @@ impl McpMiddleware for AuthMiddleware {
 - **`turul-mcp-server`** - High-level server builder with session management
 - **`turul-mcp-client`** - Comprehensive client library with HTTP transport support
 - **`turul-http-mcp-server`** - HTTP/SSE transport with CORS and streaming
-- **`turul-mcp-protocol`** - Current MCP specification (alias to 2025-06-18)
-- **`turul-mcp-protocol-2025-06-18`** - Complete MCP specification implementation
+- **`turul-mcp-protocol`** - Current MCP specification (alias to 2025-11-25)
+- **`turul-mcp-protocol-2025-11-25`** - Complete MCP specification implementation
 - **`turul-mcp-derive`** - Procedural macros for all MCP areas
 - **`turul-mcp-builders`** - Runtime builder patterns for dynamic MCP components
 - **`turul-mcp-json-rpc-server`** - Transport-agnostic JSON-RPC 2.0 foundation
@@ -913,7 +913,7 @@ let content = client.read_resource("config://app.json").await?;
 
 ## 🔍 MCP Protocol Compliance
 
-**Full MCP 2025-06-18 specification support:**
+**Full MCP 2025-11-25 specification support:**
 
 - ✅ **JSON-RPC 2.0** - Complete request/response with `_meta` fields
 - ✅ **Protocol Negotiation** - Version compatibility and capability exchange
@@ -927,7 +927,7 @@ let content = client.read_resource("config://app.json").await?;
 # Test tool execution
 curl -X POST http://127.0.0.1:8080/mcp \
   -H "Content-Type: application/json" \
-  -H "MCP-Protocol-Version: 2025-06-18" \
+  -H "MCP-Protocol-Version: 2025-11-25" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
@@ -1105,7 +1105,7 @@ cargo run --example prompts-server
 # 2. Get session ID via initialization
 curl -X POST http://127.0.0.1:8080/mcp \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 
 # 3. Connect to SSE stream (replace SESSION_ID with actual ID)
 curl -N -H "Accept: text/event-stream" \
@@ -1173,7 +1173,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 ## 📋 Development Status & Current Limitations
 
 ### 🎯 Current Framework State
-- **Phase 6 Complete**: Session-aware resources implemented with full MCP 2025-06-18 compliance
+- **Phase 6 Complete**: Session-aware resources implemented with full MCP 2025-11-25 compliance
 - **45+ Examples Validated**: Comprehensive testing campaign completed across all framework areas
 - **SSE Streaming Verified**: Real-time notifications and session-aware logging working correctly
 - **Beta Status**: Active development with API stability considerations before 1.0.0

@@ -26,7 +26,7 @@
 //! ```bash
 //! curl -X POST http://127.0.0.1:8001/mcp \
 //!   -H "Content-Type: application/json" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0.0"}}}' \
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0.0"}}}' \
 //!   -i
 //! ```
 //!
@@ -371,7 +371,7 @@ async fn test_mcp_initialize(
         "id": 1,
         "method": "initialize",
         "params": {
-            "protocolVersion": "2025-06-18",
+            "protocolVersion": "2025-11-25",
             "capabilities": {
                 "roots": {
                     "listChanged": false
@@ -1062,7 +1062,7 @@ async fn test_sse_resumability(
         info!("   ✅ Last-Event-ID header processed correctly");
         info!("   ✅ Event replay behavior follows MCP specification");
         info!("   ✅ Stream isolation maintained");
-        info!("   ✅ SSE resumption working as per MCP 2025-06-18 standard");
+        info!("   ✅ SSE resumption working as per MCP 2025-11-25 standard");
         Ok(())
     } else {
         warn!("❌ MCP RESUMABILITY COMPLIANCE ISSUES FOUND:");
@@ -1127,7 +1127,7 @@ async fn test_delete_request(
     let delete_response = client
         .delete(base_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", session_id)
         .timeout(Duration::from_secs(timeout))
         .send()
@@ -1580,7 +1580,7 @@ async fn print_final_report(
         Ok(_) => {
             info!("   ✅ 🎆 FULLY MCP COMPLIANT: Session management + Streamable HTTP working!");
             info!("   ✅ Ready for production MCP over HTTP with real-time tool notifications");
-            info!("   ✅ Proper implementation of MCP 2025-06-18 Streamable HTTP specification");
+            info!("   ✅ Proper implementation of MCP 2025-11-25 Streamable HTTP specification");
         }
         Err(_) => {
             info!("   ✅ 🎆 FULLY MCP COMPLIANT: Session management working!");

@@ -110,7 +110,7 @@ async fn test_lambda_handler_executes_middleware() {
         "id": 1,
         "method": "initialize",
         "params": {
-            "protocolVersion": "2024-11-05",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {
                 "name": "test",
@@ -233,7 +233,7 @@ async fn test_lambda_middleware_parity_with_http() {
 
     // Lambda handler construction shows middleware is passed to both internal handlers:
     // 1. SessionMcpHandler (legacy protocol)
-    // 2. StreamableHttpHandler (MCP 2025-06-18)
+    // 2. StreamableHttpHandler (MCP 2025-11-25)
     //
     // Both handlers use run_middleware_and_dispatch which:
     // - Creates StorageBackedSessionView

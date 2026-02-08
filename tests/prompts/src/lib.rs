@@ -368,7 +368,7 @@ impl MultiContentPrompt {
             role: turul_mcp_protocol::prompts::Role::User,
             content: ContentBlock::Resource {
                 resource: config_resource,
-                annotations: Some(Annotations::new().with_title("analysis_configuration")),
+                annotations: Some(Annotations::new().with_audience(vec!["user".to_string()])),
                 meta: Some(meta),
             },
         };

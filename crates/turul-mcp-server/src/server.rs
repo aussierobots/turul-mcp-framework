@@ -649,8 +649,8 @@ impl SessionAwareInitializeHandler {
                 // If it looks like a valid date format but we don't know it,
                 // we need to check if it's likely newer or older than our range
                 if client_version.matches('-').count() == 2 {
-                    // Check if it's likely newer than our latest version (2025-06-18)
-                    if client_version > "2025-06-18" {
+                    // Check if it's likely newer than our latest supported version
+                    if client_version > McpVersion::LATEST.as_str() {
                         // Assume it's newer, use latest as fallback
                         McpVersion::LATEST
                     } else if client_version < "2024-11-05" {
@@ -677,6 +677,7 @@ impl SessionAwareInitializeHandler {
             McpVersion::V2024_11_05,
             McpVersion::V2025_03_26,
             McpVersion::V2025_06_18,
+            McpVersion::V2025_11_25,
         ];
 
         // Strategy 1: If server supports client's requested version, use it
@@ -1110,7 +1111,7 @@ impl JsonRpcHandler for ListToolsHandler {
         let mut paginated_response =
             PaginatedResponse::with_pagination(base_response, next_cursor, total, has_more);
 
-        // Propagate optional _meta from request to response (MCP 2025-06-18 compliance)
+        // Propagate optional _meta from request to response (MCP 2025-11-25 compliance)
         if let Some(request_meta) = list_params.meta {
             // Get existing meta from PaginatedResponse or use pagination defaults
             let mut response_meta = paginated_response.meta().cloned().unwrap_or_else(|| {
@@ -1324,6 +1325,8 @@ mod tests {
             None
         }
     }
+
+    impl HasIcons for TestTool {}
 
     #[async_trait]
     impl McpTool for TestTool {

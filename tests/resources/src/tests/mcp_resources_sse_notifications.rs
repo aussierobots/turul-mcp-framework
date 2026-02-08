@@ -1,7 +1,7 @@
 //! SSE Notification Structure Tests (Option A)
 //!
 //! Tests that verify MCP notification structures are correct for SSE compliance:
-//! - camelCase naming (listChanged not list_changed)
+//! - Underscore naming per MCP 2025-11-25 spec (list_changed not listChanged)
 //! - Proper JSON-RPC 2.0 format
 //! - Correct SSE event type mapping
 //!
@@ -14,27 +14,30 @@ use turul_mcp_protocol::notifications::*;
 use turul_mcp_server::prelude::*;
 
 #[tokio::test]
-async fn test_resource_notifications_camelcase_compliance() {
-    // Test that all resource notification methods use camelCase
+async fn test_resource_notifications_method_string_compliance() {
+    // Test that all resource notification methods use underscore convention per MCP 2025-11-25
     let list_changed = ResourceListChangedNotification::new();
     let updated = ResourceUpdatedNotification::new("test://resource/1".to_string());
 
-    assert_eq!(list_changed.method, "notifications/resources/listChanged");
+    assert_eq!(
+        list_changed.method,
+        "notifications/resources/list_changed"
+    );
     assert_eq!(updated.method, "notifications/resources/updated");
 
-    // Verify no snake_case variants
-    assert!(!list_changed.method.contains("list_changed"));
+    // Verify underscore convention
+    assert!(list_changed.method.contains("list_changed"));
     assert!(!updated.method.contains("resource_updated"));
 }
 
 #[tokio::test]
-async fn test_all_notification_types_camelcase_compliance() {
-    // Test all notification method names use camelCase (not snake_case)
+async fn test_all_notification_types_method_string_compliance() {
+    // Test all notification method names use underscore convention per MCP 2025-11-25
     let resource_list = ResourceListChangedNotification::new();
     let tool_list = ToolListChangedNotification::new();
     let prompt_list = PromptListChangedNotification::new();
     let roots_list = RootsListChangedNotification::new();
-    let progress = ProgressNotification::new("token123".to_string(), 50);
+    let progress = ProgressNotification::new("token123".to_string(), 50.0);
 
     let methods = vec![
         resource_list.method,
@@ -45,10 +48,10 @@ async fn test_all_notification_types_camelcase_compliance() {
     ];
 
     for method in methods {
-        // All should contain camelCase "listChanged" if applicable
+        // All should contain underscore "list_changed" if applicable
         if method.contains("list") {
-            assert!(method.contains("listChanged"));
-            assert!(!method.contains("list_changed"));
+            assert!(method.contains("list_changed"));
+            assert!(!method.contains("listChanged"));
         }
         // All should start with notifications/
         assert!(method.starts_with("notifications/"));
@@ -62,7 +65,10 @@ async fn test_notification_json_serialization_format() {
     let json_value = serde_json::to_value(&notification).unwrap();
 
     // Should have method field
-    assert_eq!(json_value["method"], "notifications/resources/listChanged");
+    assert_eq!(
+        json_value["method"],
+        "notifications/resources/list_changed"
+    );
 
     // Should NOT have jsonrpc or id fields (those are added by transport layer)
     assert!(json_value.get("jsonrpc").is_none());
@@ -84,22 +90,22 @@ async fn test_sse_event_type_mapping_correctness() {
     let test_cases = vec![
         (
             ResourceListChangedNotification::new().method,
-            "notifications/resources/listChanged",
+            "notifications/resources/list_changed",
         ),
         (
             ToolListChangedNotification::new().method,
-            "notifications/tools/listChanged",
+            "notifications/tools/list_changed",
         ),
         (
             PromptListChangedNotification::new().method,
-            "notifications/prompts/listChanged",
+            "notifications/prompts/list_changed",
         ),
         (
             RootsListChangedNotification::new().method,
-            "notifications/roots/listChanged",
+            "notifications/roots/list_changed",
         ),
         (
-            ProgressNotification::new("test".to_string(), 0).method,
+            ProgressNotification::new("test".to_string(), 0.0).method,
             "notifications/progress",
         ),
     ];
@@ -108,10 +114,10 @@ async fn test_sse_event_type_mapping_correctness() {
         // In proper SSE implementation: event: <method_name>
         assert_eq!(actual_method, expected_event_type);
 
-        // Verify camelCase compliance
+        // Verify underscore convention for list_changed methods
         if actual_method.contains("list") {
-            assert!(actual_method.contains("listChanged"));
-            assert!(!actual_method.contains("list_changed"));
+            assert!(actual_method.contains("list_changed"));
+            assert!(!actual_method.contains("listChanged"));
         }
     }
 }
@@ -119,18 +125,21 @@ async fn test_sse_event_type_mapping_correctness() {
 #[tokio::test]
 async fn test_progress_notification_structure() {
     // Test progress notification with all fields
-    let progress = ProgressNotification::new("progress_token_123".to_string(), 75);
+    let progress = ProgressNotification::new("progress_token_123".to_string(), 75.0);
 
     assert_eq!(progress.method, "notifications/progress");
-    assert_eq!(progress.params.progress_token, "progress_token_123");
-    assert_eq!(progress.params.progress, 75);
+    assert_eq!(
+        progress.params.progress_token,
+        ProgressTokenValue::String("progress_token_123".to_string())
+    );
+    assert_eq!(progress.params.progress, 75.0);
     // Note: message field set via builder pattern if needed
 
-    // Test JSON serialization uses camelCase
+    // Test JSON serialization uses camelCase for field names
     let json_value = serde_json::to_value(&progress).unwrap();
     assert_eq!(json_value["method"], "notifications/progress");
     assert_eq!(json_value["params"]["progressToken"], "progress_token_123");
-    assert_eq!(json_value["params"]["progress"], 75);
+    assert_eq!(json_value["params"]["progress"], 75.0);
     // Note: message field would be included if set via builder
 }
 
@@ -186,7 +195,10 @@ async fn test_json_rpc_wrapper_format() {
 
     // Verify proper JSON-RPC 2.0 structure
     assert_eq!(sse_payload["jsonrpc"], "2.0");
-    assert_eq!(sse_payload["method"], "notifications/resources/listChanged");
+    assert_eq!(
+        sse_payload["method"],
+        "notifications/resources/list_changed"
+    );
     assert!(sse_payload["params"].is_null()); // No params in basic list change
 
     // Verify no id field (notifications don't have request IDs)
@@ -195,22 +207,22 @@ async fn test_json_rpc_wrapper_format() {
 
 #[tokio::test]
 async fn test_notification_method_name_constants() {
-    // Verify that method names match MCP 2025-06-18 specification exactly
+    // Verify that method names match MCP 2025-11-25 specification exactly
     let expected_methods = vec![
         (
-            "resources/listChanged",
+            "resources/list_changed",
             ResourceListChangedNotification::new().method,
         ),
         (
-            "tools/listChanged",
+            "tools/list_changed",
             ToolListChangedNotification::new().method,
         ),
         (
-            "prompts/listChanged",
+            "prompts/list_changed",
             PromptListChangedNotification::new().method,
         ),
         (
-            "roots/listChanged",
+            "roots/list_changed",
             RootsListChangedNotification::new().method,
         ),
         (
@@ -219,7 +231,7 @@ async fn test_notification_method_name_constants() {
         ),
         (
             "progress",
-            ProgressNotification::new("token".to_string(), 0).method,
+            ProgressNotification::new("token".to_string(), 0.0).method,
         ),
     ];
 
@@ -227,10 +239,10 @@ async fn test_notification_method_name_constants() {
         let expected_full_method = format!("notifications/{}", suffix);
         assert_eq!(actual_method, expected_full_method);
 
-        // Ensure camelCase compliance
-        assert!(!actual_method.contains("_"));
+        // Verify underscore convention for list_changed methods
         if actual_method.contains("list") {
-            assert!(actual_method.contains("listChanged"));
+            assert!(actual_method.contains("list_changed"));
+            assert!(!actual_method.contains("listChanged"));
         }
     }
 }

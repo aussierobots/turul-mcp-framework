@@ -4,7 +4,7 @@
 //! - SSE client receives the actual notification data
 //! - Session isolation is maintained
 //!
-//! Uses streamable HTTP (POST with Accept: text/event-stream) per MCP 2025-06-18 spec
+//! Uses streamable HTTP (POST with Accept: text/event-stream) per MCP spec
 
 use mcp_e2e_shared::{McpTestClient, TestServerManager};
 use serde_json::json;
@@ -84,7 +84,7 @@ async fn test_sse_notification_round_trip_delivery() {
     for line in response_text.lines() {
         if let Some(data) = line.strip_prefix("data: ") {
             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                // Check for progress notification (MCP 2025-06-18 spec)
+                // Check for progress notification (MCP spec)
                 if let Some(method) = parsed.get("method").and_then(|m| m.as_str()) {
                     if method == "notifications/progress" {
                         found_progress = true;

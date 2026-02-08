@@ -453,7 +453,7 @@ impl SessionContext {
     /// Send a resource list changed notification
     pub async fn notify_resources_changed(&self) {
         let notification = turul_mcp_protocol::JsonRpcNotification::new(
-            "notifications/resources/listChanged".to_string(),
+            "notifications/resources/list_changed".to_string(),
         );
         self.notify(SessionEvent::Notification(
             serde_json::to_value(notification).unwrap(),
@@ -480,7 +480,7 @@ impl SessionContext {
     /// Send a tools list changed notification
     pub async fn notify_tools_changed(&self) {
         let notification = turul_mcp_protocol::JsonRpcNotification::new(
-            "notifications/tools/listChanged".to_string(),
+            "notifications/tools/list_changed".to_string(),
         );
         self.notify(SessionEvent::Notification(
             serde_json::to_value(notification).unwrap(),
@@ -712,15 +712,15 @@ async fn parse_and_send_notification_with_broadcaster(
                         debug!("📊 Progress notification detected: token={}", token);
 
                         // Get progress value
-                        let progress = params.get("progress").and_then(|v| v.as_u64()).unwrap_or(0);
+                        let progress = params.get("progress").and_then(|v| v.as_f64()).unwrap_or(0.0);
 
                         // Create proper ProgressNotification using the struct from notifications.rs
                         let notification = ProgressNotification {
                             method: "notifications/progress".to_string(),
                             params: turul_mcp_protocol::notifications::ProgressNotificationParams {
-                                progress_token: token.to_string(),
+                                progress_token: token.to_string().into(),
                                 progress,
-                                total: params.get("total").and_then(|v| v.as_u64()),
+                                total: params.get("total").and_then(|v| v.as_f64()),
                                 message: params
                                     .get("message")
                                     .and_then(|v| v.as_str())

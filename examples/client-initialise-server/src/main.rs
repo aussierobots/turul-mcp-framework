@@ -19,15 +19,14 @@
 //! ```
 
 use anyhow::Result;
+use serde::Deserialize;
 use serde_json::json;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tracing::{debug, info};
 
-use async_trait::async_trait;
+use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::logging::LoggingLevel;
-use turul_mcp_protocol::tools::CallToolResult;
-use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
-use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
+use turul_mcp_server::prelude::*;
 use turul_mcp_session_storage::InMemorySessionStorage;
 #[cfg(feature = "dynamodb")]
 use turul_mcp_session_storage::{DynamoDbConfig, DynamoDbSessionStorage};
@@ -36,46 +35,50 @@ use turul_mcp_session_storage::{PostgresConfig, PostgresSessionStorage};
 #[cfg(feature = "sqlite")]
 use turul_mcp_session_storage::{SqliteConfig, SqliteSessionStorage};
 
+/// Shared session storage accessible by tools via OnceLock
+static SESSION_STORAGE: OnceLock<Arc<turul_mcp_session_storage::BoxedSessionStorage>> =
+    OnceLock::new();
+
 /// Echo SSE tool that demonstrates MCP notifications via SessionContext
-#[derive(Clone)]
-struct EchoSseTool;
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "echo_sse",
+    description = "Echoes text back via POST response and streams it via SSE. Server logs all calls."
+)]
+pub struct EchoSseTool {
+    #[param(description = "Text to echo back")]
+    pub text: String,
+}
 
-#[async_trait]
-impl McpTool for EchoSseTool {
-    async fn call(
+impl EchoSseTool {
+    async fn execute(
         &self,
-        args: serde_json::Value,
         session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        // Extract text parameter
-        let text = args.get("text").and_then(|v| v.as_str()).ok_or_else(|| {
-            turul_mcp_protocol::McpError::invalid_param_type("text", "string", "missing")
-        })?;
-
+    ) -> McpResult<serde_json::Value> {
         // Log the call on the server side
-        info!("🔊 echo_sse called with text: '{}'", text);
+        info!("echo_sse called with text: '{}'", self.text);
 
         // Send a progress notification if we have a session
         if let Some(session_context) = &session {
-            info!("📡 Sending progress notification via SessionContext");
+            info!("Sending progress notification via SessionContext");
             session_context.notify_progress("echo_processing", 50).await;
 
             // Also send a log message notification
             session_context
                 .notify_log(
                     LoggingLevel::Info,
-                    serde_json::json!(format!("Processing echo for text: '{}'", text)),
+                    json!(format!("Processing echo for text: '{}'", self.text)),
                     Some("echo-tool".to_string()),
                     None,
                 )
                 .await;
         } else {
-            info!("⚠️  No session context available for notifications");
+            info!("No session context available for notifications");
         }
 
         // Create response text
-        let response_text = format!("Echo: {}", text);
-        info!("📤 Echo response created: {}", response_text);
+        let response_text = format!("Echo: {}", self.text);
+        info!("Echo response created: {}", response_text);
 
         // Send completion notification
         if let Some(session_context) = &session {
@@ -85,94 +88,39 @@ impl McpTool for EchoSseTool {
             session_context
                 .notify_log(
                     LoggingLevel::Info,
-                    serde_json::json!(format!("Echo completed successfully: '{}'", response_text)),
+                    json!(format!("Echo completed successfully: '{}'", response_text)),
                     Some("echo-tool".to_string()),
                     None,
                 )
                 .await;
         }
 
-        Ok(CallToolResult::success(vec![
-            turul_mcp_protocol::ToolResult::text(json!({"result": response_text}).to_string()),
-        ]))
+        Ok(json!({"result": response_text}))
     }
-}
-
-// Implement the required traits for the tool
-impl HasBaseMetadata for EchoSseTool {
-    fn name(&self) -> &str {
-        "echo_sse"
-    }
-}
-
-impl HasDescription for EchoSseTool {
-    fn description(&self) -> Option<&str> {
-        Some("Echoes text back via POST response and streams it via SSE. Server logs all calls.")
-    }
-}
-
-impl HasInputSchema for EchoSseTool {
-    fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
-            std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            use std::collections::HashMap;
-            use turul_mcp_protocol::schema::JsonSchema;
-
-            turul_mcp_protocol::tools::ToolSchema::object()
-                .with_properties(HashMap::from([(
-                    "text".to_string(),
-                    JsonSchema::string().with_description("Text to echo back"),
-                )]))
-                .with_required(vec!["text".to_string()])
-        })
-    }
-}
-
-impl HasOutputSchema for EchoSseTool {
-    fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for EchoSseTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for EchoSseTool {
-    fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
-        None
-    }
-}
-
-fn create_echo_sse_tool() -> Result<EchoSseTool> {
-    Ok(EchoSseTool)
 }
 
 /// Session inspection tool that returns current session data
-#[derive(Clone)]
-struct GetSessionDataTool {
-    session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
-}
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "get_session_data",
+    description = "Returns current session information from session storage"
+)]
+pub struct GetSessionDataTool {}
 
-#[async_trait]
-impl McpTool for GetSessionDataTool {
-    async fn call(
+impl GetSessionDataTool {
+    async fn execute(
         &self,
-        _args: serde_json::Value,
         session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        info!("🔍 get_session_data called");
+    ) -> McpResult<serde_json::Value> {
+        info!("get_session_data called");
+
+        let storage = SESSION_STORAGE
+            .get()
+            .ok_or_else(|| turul_mcp_protocol::McpError::tool_execution("Session storage not initialized"))?;
 
         if let Some(session_ctx) = &session {
             // Get session info from storage
-            match self
-                .session_storage
-                .get_session(&session_ctx.session_id)
-                .await
-            {
+            match storage.get_session(&session_ctx.session_id).await {
                 Ok(Some(session_info)) => {
                     // Determine data source (direct from storage backend)
                     let storage_type = if cfg!(feature = "dynamodb") {
@@ -208,103 +156,55 @@ impl McpTool for GetSessionDataTool {
                         }
                     });
 
-                    info!("📋 Retrieved session data for: {}", session_ctx.session_id);
-                    Ok(CallToolResult::success(vec![
-                        turul_mcp_protocol::ToolResult::text(session_data.to_string()),
-                    ]))
+                    info!("Retrieved session data for: {}", session_ctx.session_id);
+                    Ok(session_data)
                 }
                 Ok(None) => {
                     let error_msg =
                         format!("Session {} not found in storage", session_ctx.session_id);
-                    info!("⚠️ {}", error_msg);
-                    Ok(CallToolResult::success(vec![
-                        turul_mcp_protocol::ToolResult::text(
-                            json!({"error": error_msg}).to_string(),
-                        ),
-                    ]))
+                    info!("{}", error_msg);
+                    Ok(json!({"error": error_msg}))
                 }
                 Err(e) => {
                     let error_msg = format!("Failed to retrieve session data: {}", e);
-                    info!("❌ {}", error_msg);
-                    Ok(CallToolResult::success(vec![
-                        turul_mcp_protocol::ToolResult::text(
-                            json!({"error": error_msg}).to_string(),
-                        ),
-                    ]))
+                    info!("{}", error_msg);
+                    Ok(json!({"error": error_msg}))
                 }
             }
         } else {
             let error_msg = "No session context available";
-            info!("⚠️ {}", error_msg);
-            Ok(CallToolResult::success(vec![
-                turul_mcp_protocol::ToolResult::text(json!({"error": error_msg}).to_string()),
-            ]))
+            info!("{}", error_msg);
+            Ok(json!({"error": error_msg}))
         }
     }
 }
 
-// Implement required traits for GetSessionDataTool
-impl HasBaseMetadata for GetSessionDataTool {
-    fn name(&self) -> &str {
-        "get_session_data"
-    }
-}
-
-impl HasDescription for GetSessionDataTool {
-    fn description(&self) -> Option<&str> {
-        Some("Returns current session information from session storage")
-    }
-}
-
-impl HasInputSchema for GetSessionDataTool {
-    fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
-            std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            use std::collections::HashMap;
-            turul_mcp_protocol::tools::ToolSchema::object().with_properties(HashMap::new()) // No parameters needed
-        })
-    }
-}
-
-impl HasOutputSchema for GetSessionDataTool {
-    fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for GetSessionDataTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for GetSessionDataTool {
-    fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
-        None
-    }
-}
-
 /// Session events inspection tool that returns events for the current session
-#[derive(Clone)]
-struct GetSessionEventsTool {
-    session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "get_session_events",
+    description = "Returns SSE events for the current session from session storage"
+)]
+pub struct GetSessionEventsTool {
+    #[param(description = "Maximum number of events to return (default: 10)", optional)]
+    pub limit: Option<u64>,
 }
 
-#[async_trait]
-impl McpTool for GetSessionEventsTool {
-    async fn call(
+impl GetSessionEventsTool {
+    async fn execute(
         &self,
-        args: serde_json::Value,
         session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        info!("📡 get_session_events called");
+    ) -> McpResult<serde_json::Value> {
+        info!("get_session_events called");
 
-        let limit = args.get("limit").and_then(|v| v.as_u64()).unwrap_or(10) as usize;
+        let storage = SESSION_STORAGE
+            .get()
+            .ok_or_else(|| turul_mcp_protocol::McpError::tool_execution("Session storage not initialized"))?;
+
+        let limit = self.limit.unwrap_or(10) as usize;
 
         if let Some(session_ctx) = &session {
-            match self
-                .session_storage
+            match storage
                 .get_recent_events(&session_ctx.session_id, limit)
                 .await
             {
@@ -353,100 +253,48 @@ impl McpTool for GetSessionEventsTool {
                     });
 
                     info!(
-                        "📊 Retrieved {} events for session: {}",
+                        "Retrieved {} events for session: {}",
                         events_data.len(),
                         session_ctx.session_id
                     );
-                    Ok(CallToolResult::success(vec![
-                        turul_mcp_protocol::ToolResult::text(response.to_string()),
-                    ]))
+                    Ok(response)
                 }
                 Err(e) => {
                     let error_msg = format!("Failed to retrieve session events: {}", e);
-                    info!("❌ {}", error_msg);
-                    Ok(CallToolResult::success(vec![
-                        turul_mcp_protocol::ToolResult::text(
-                            json!({"error": error_msg}).to_string(),
-                        ),
-                    ]))
+                    info!("{}", error_msg);
+                    Ok(json!({"error": error_msg}))
                 }
             }
         } else {
             let error_msg = "No session context available";
-            info!("⚠️ {}", error_msg);
-            Ok(CallToolResult::success(vec![
-                turul_mcp_protocol::ToolResult::text(json!({"error": error_msg}).to_string()),
-            ]))
+            info!("{}", error_msg);
+            Ok(json!({"error": error_msg}))
         }
     }
 }
 
-// Implement required traits for GetSessionEventsTool
-impl HasBaseMetadata for GetSessionEventsTool {
-    fn name(&self) -> &str {
-        "get_session_events"
-    }
-}
-
-impl HasDescription for GetSessionEventsTool {
-    fn description(&self) -> Option<&str> {
-        Some("Returns SSE events for the current session from session storage")
-    }
-}
-
-impl HasInputSchema for GetSessionEventsTool {
-    fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
-            std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            use std::collections::HashMap;
-            use turul_mcp_protocol::schema::JsonSchema;
-
-            turul_mcp_protocol::tools::ToolSchema::object().with_properties(HashMap::from([(
-                "limit".to_string(),
-                JsonSchema::integer()
-                    .with_description("Maximum number of events to return (default: 10)"),
-            )]))
-        })
-    }
-}
-
-impl HasOutputSchema for GetSessionEventsTool {
-    fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for GetSessionEventsTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for GetSessionEventsTool {
-    fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
-        None
-    }
-}
-
 /// Session table information inspection tool
-#[derive(Clone)]
-struct GetTableInfoTool {
-    session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
-}
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "get_table_info",
+    description = "Returns information about session and events tables in the storage backend"
+)]
+pub struct GetTableInfoTool {}
 
-// Implement McpTool for GetTableInfoTool
-#[async_trait::async_trait]
-impl McpTool for GetTableInfoTool {
-    async fn call(
+impl GetTableInfoTool {
+    async fn execute(
         &self,
-        _args: serde_json::Value,
         _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        info!("📊 get_table_info called");
+    ) -> McpResult<serde_json::Value> {
+        info!("get_table_info called");
+
+        let storage = SESSION_STORAGE
+            .get()
+            .ok_or_else(|| turul_mcp_protocol::McpError::tool_execution("Session storage not initialized"))?;
+
         debug!(
             "Using session storage for table info: {:p}",
-            &self.session_storage
+            &*storage
         );
 
         // Determine storage backend type and table information
@@ -511,70 +359,11 @@ impl McpTool for GetTableInfoTool {
         });
 
         info!(
-            "📋 Retrieved table information for backend: {}",
+            "Retrieved table information for backend: {}",
             storage_type
         );
-        Ok(CallToolResult::success(vec![
-            turul_mcp_protocol::ToolResult::text(table_info.to_string()),
-        ]))
+        Ok(table_info)
     }
-}
-
-// Implement required traits for GetTableInfoTool
-impl HasBaseMetadata for GetTableInfoTool {
-    fn name(&self) -> &str {
-        "get_table_info"
-    }
-}
-
-impl HasDescription for GetTableInfoTool {
-    fn description(&self) -> Option<&str> {
-        Some("Returns information about session and events tables in the storage backend")
-    }
-}
-
-impl HasInputSchema for GetTableInfoTool {
-    fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<turul_mcp_protocol::tools::ToolSchema> =
-            std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            use std::collections::HashMap;
-            turul_mcp_protocol::tools::ToolSchema::object().with_properties(HashMap::new()) // No parameters needed
-        })
-    }
-}
-
-impl HasOutputSchema for GetTableInfoTool {
-    fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for GetTableInfoTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for GetTableInfoTool {
-    fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
-        None
-    }
-}
-
-fn create_session_inspection_tools(
-    storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
-) -> Result<(GetSessionDataTool, GetSessionEventsTool, GetTableInfoTool)> {
-    let session_data_tool = GetSessionDataTool {
-        session_storage: Arc::clone(&storage),
-    };
-    let session_events_tool = GetSessionEventsTool {
-        session_storage: Arc::clone(&storage),
-    };
-    let table_info_tool = GetTableInfoTool {
-        session_storage: Arc::clone(&storage),
-    };
-    Ok((session_data_tool, session_events_tool, table_info_tool))
 }
 
 #[tokio::main]
@@ -585,9 +374,9 @@ async fn main() -> Result<()> {
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .init();
 
-    info!("🚀 Starting MCP Initialize Test Server");
-    info!("   • Server creates and manages session IDs");
-    info!("   • Session IDs returned via Mcp-Session-Id header");
+    info!("Starting MCP Initialize Test Server");
+    info!("   Server creates and manages session IDs");
+    info!("   Session IDs returned via Mcp-Session-Id header");
 
     // Parse command line arguments
     let args: Vec<String> = std::env::args().collect();
@@ -623,7 +412,7 @@ async fn main() -> Result<()> {
     }
 
     let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", port).parse()?;
-    info!("   • Binding to: http://{}/mcp", bind_address);
+    info!("   Binding to: http://{}/mcp", bind_address);
 
     // Build server using builder pattern with appropriate storage backend
     let server = match storage_backend.as_str() {
@@ -631,7 +420,7 @@ async fn main() -> Result<()> {
             #[cfg(feature = "sqlite")]
             {
                 let temp_dir = std::env::temp_dir();
-                info!("   • System temp directory: {}", temp_dir.display());
+                info!("   System temp directory: {}", temp_dir.display());
 
                 // Create a subdirectory for MCP sessions
                 let mcp_temp_dir = temp_dir.join("mcp-sessions");
@@ -640,7 +429,7 @@ async fn main() -> Result<()> {
 
                 let db_path = mcp_temp_dir.join("mcp_sessions.db");
                 info!(
-                    "   • Using SQLite session storage (database: {})",
+                    "   Using SQLite session storage (database: {})",
                     db_path.display()
                 );
 
@@ -650,9 +439,9 @@ async fn main() -> Result<()> {
                     ..Default::default()
                 };
                 if create_tables {
-                    info!("   • Table creation enabled: Will create tables if missing");
+                    info!("   Table creation enabled: Will create tables if missing");
                 } else {
-                    info!("   • Table creation disabled: Will fail if tables don't exist");
+                    info!("   Table creation disabled: Will fail if tables don't exist");
                 }
                 let sqlite_storage = SqliteSessionStorage::with_config(config)
                     .await
@@ -661,8 +450,7 @@ async fn main() -> Result<()> {
                 let storage_arc = Arc::new(sqlite_storage);
                 let boxed_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
                     storage_arc.clone();
-                let (session_data_tool, session_events_tool, table_info_tool) =
-                    create_session_inspection_tools(boxed_storage)?;
+                SESSION_STORAGE.set(boxed_storage).ok();
 
                 McpServer::builder()
                     .name("client-initialise-server")
@@ -670,10 +458,10 @@ async fn main() -> Result<()> {
                     .title("MCP Initialize Test Server")
                     .bind_address(bind_address)
                     .with_session_storage(storage_arc)
-                    .tool(create_echo_sse_tool()?)
-                    .tool(session_data_tool)
-                    .tool(session_events_tool)
-                    .tool(table_info_tool)
+                    .tool(EchoSseTool::default())
+                    .tool(GetSessionDataTool::default())
+                    .tool(GetSessionEventsTool::default())
+                    .tool(GetTableInfoTool::default())
                     .build()?
             }
             #[cfg(not(feature = "sqlite"))]
@@ -686,7 +474,7 @@ async fn main() -> Result<()> {
         "postgres" => {
             #[cfg(feature = "postgres")]
             {
-                info!("   • Using PostgreSQL session storage");
+                info!("   Using PostgreSQL session storage");
                 let config = PostgresConfig::default();
                 let postgres_storage = PostgresSessionStorage::with_config(config)
                     .await
@@ -695,8 +483,7 @@ async fn main() -> Result<()> {
                 let storage_arc = Arc::new(postgres_storage);
                 let boxed_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
                     storage_arc.clone();
-                let (session_data_tool, session_events_tool, table_info_tool) =
-                    create_session_inspection_tools(boxed_storage)?;
+                SESSION_STORAGE.set(boxed_storage).ok();
 
                 McpServer::builder()
                     .name("client-initialise-server")
@@ -704,10 +491,10 @@ async fn main() -> Result<()> {
                     .title("MCP Initialize Test Server")
                     .bind_address(bind_address)
                     .with_session_storage(storage_arc)
-                    .tool(create_echo_sse_tool()?)
-                    .tool(session_data_tool)
-                    .tool(session_events_tool)
-                    .tool(table_info_tool)
+                    .tool(EchoSseTool::default())
+                    .tool(GetSessionDataTool::default())
+                    .tool(GetSessionEventsTool::default())
+                    .tool(GetTableInfoTool::default())
                     .build()?
             }
             #[cfg(not(feature = "postgres"))]
@@ -720,15 +507,15 @@ async fn main() -> Result<()> {
         "dynamodb" => {
             #[cfg(feature = "dynamodb")]
             {
-                info!("   • Using DynamoDB session storage");
+                info!("   Using DynamoDB session storage");
                 let config = DynamoDbConfig {
                     create_tables_if_missing: create_tables,
                     ..Default::default()
                 };
                 if create_tables {
-                    info!("   • Table creation enabled: Will create tables if missing");
+                    info!("   Table creation enabled: Will create tables if missing");
                 } else {
-                    info!("   • Table creation disabled: Will fail if tables don't exist");
+                    info!("   Table creation disabled: Will fail if tables don't exist");
                 }
                 let dynamodb_storage = DynamoDbSessionStorage::with_config(config)
                     .await
@@ -737,8 +524,7 @@ async fn main() -> Result<()> {
                 let storage_arc = Arc::new(dynamodb_storage);
                 let boxed_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
                     storage_arc.clone();
-                let (session_data_tool, session_events_tool, table_info_tool) =
-                    create_session_inspection_tools(boxed_storage)?;
+                SESSION_STORAGE.set(boxed_storage).ok();
 
                 McpServer::builder()
                     .name("client-initialise-server")
@@ -746,10 +532,10 @@ async fn main() -> Result<()> {
                     .title("MCP Initialize Test Server")
                     .bind_address(bind_address)
                     .with_session_storage(storage_arc)
-                    .tool(create_echo_sse_tool()?)
-                    .tool(session_data_tool)
-                    .tool(session_events_tool)
-                    .tool(table_info_tool)
+                    .tool(EchoSseTool::default())
+                    .tool(GetSessionDataTool::default())
+                    .tool(GetSessionEventsTool::default())
+                    .tool(GetTableInfoTool::default())
                     .build()?
             }
             #[cfg(not(feature = "dynamodb"))]
@@ -760,14 +546,13 @@ async fn main() -> Result<()> {
             }
         }
         "inmemory" => {
-            info!("   • Using InMemory session storage");
+            info!("   Using InMemory session storage");
             let inmemory_storage = InMemorySessionStorage::new();
 
             let storage_arc = Arc::new(inmemory_storage);
             let boxed_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
                 storage_arc.clone();
-            let (session_data_tool, session_events_tool, table_info_tool) =
-                create_session_inspection_tools(boxed_storage)?;
+            SESSION_STORAGE.set(boxed_storage).ok();
 
             McpServer::builder()
                 .name("client-initialise-server")
@@ -775,10 +560,10 @@ async fn main() -> Result<()> {
                 .title("MCP Initialize Test Server")
                 .bind_address(bind_address)
                 .with_session_storage(storage_arc)
-                .tool(create_echo_sse_tool()?)
-                .tool(session_data_tool)
-                .tool(session_events_tool)
-                .tool(table_info_tool)
+                .tool(EchoSseTool::default())
+                .tool(GetSessionDataTool::default())
+                .tool(GetSessionEventsTool::default())
+                .tool(GetTableInfoTool::default())
                 .build()?
         }
         _ => {
@@ -789,42 +574,42 @@ async fn main() -> Result<()> {
         }
     };
 
-    info!("✅ Server configured with proper session management");
-    info!("📡 Ready to accept initialize requests");
+    info!("Server configured with proper session management");
+    info!("Ready to accept initialize requests");
     info!("");
-    info!("🧪 Test with client:");
+    info!("Test with client:");
     info!(
         "   cargo run --package client-initialise-report -- --url http://127.0.0.1:{}/mcp",
         port
     );
     info!("");
-    info!("🗄️  Storage backends:");
+    info!("Storage backends:");
     info!(
-        "   • InMemory (default): cargo run --package client-initialise-server -- --port {} --storage-backend inmemory",
+        "   InMemory (default): cargo run --package client-initialise-server -- --port {} --storage-backend inmemory",
         port
     );
     info!(
-        "   • SQLite (persistent): cargo run --package client-initialise-server -- --port {} --storage-backend sqlite",
+        "   SQLite (persistent): cargo run --package client-initialise-server -- --port {} --storage-backend sqlite",
         port
     );
     info!(
-        "   • PostgreSQL (enterprise): cargo run --features postgres --example client-initialise-server -- --port {} --storage-backend postgres",
+        "   PostgreSQL (enterprise): cargo run --features postgres --example client-initialise-server -- --port {} --storage-backend postgres",
         port
     );
     info!(
-        "   • DynamoDB (AWS cloud): cargo run --features dynamodb --example client-initialise-server -- --port {} --storage-backend dynamodb",
+        "   DynamoDB (AWS cloud): cargo run --features dynamodb --example client-initialise-server -- --port {} --storage-backend dynamodb",
         port
     );
     info!("");
-    info!("🔧 Additional flags:");
+    info!("Additional flags:");
     info!(
-        "   • --create-tables: Enable table creation if tables don't exist (required for DynamoDB first run)"
+        "   --create-tables: Enable table creation if tables don't exist (required for DynamoDB first run)"
     );
-    info!("📋 Manual curl test:");
+    info!("Manual curl test:");
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("     -H \"Content-Type: application/json\" \\");
     info!(
-        "     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}' \\"
+        "     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}' \\"
     );
     info!("     -i");
     info!("");

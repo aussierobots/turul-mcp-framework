@@ -22,7 +22,6 @@ async-trait.workspace = true
 
 # Internal dependencies
 turul-mcp-protocol.workspace = true
-turul-mcp-protocol-2025-06-18.workspace = true
 schemars.workspace = true
 
 [dev-dependencies]

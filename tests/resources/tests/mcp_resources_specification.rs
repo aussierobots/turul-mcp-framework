@@ -1,6 +1,6 @@
 //! MCP Resources Specification Compliance Tests
 //!
-//! This test suite validates complete MCP 2025-06-18 Resources specification compliance.
+//! This test suite validates complete MCP 2025-11-25 Resources specification compliance.
 //! Tests all required traits, fields, behaviors, and protocol requirements for Resources.
 
 use turul_mcp_protocol::resources::{Resource, ResourceContent, ResourceTemplate};
@@ -225,6 +225,7 @@ async fn test_resource_template_mcp_specification() {
         description: Some("User profile information and preferences".to_string()),
         mime_type: Some("application/json".to_string()), // Expected content type
         annotations: None,                               // Optional
+        icons: None,                                     // Optional (MCP 2025-11-25)
         meta: None,                                      // Optional
     };
 

@@ -401,6 +401,9 @@ mod initialization_tests {
             name: "test_client".to_string(),
             version: "1.0.0".to_string(),
             title: None,
+            icons: None,
+            description: None,
+            website_url: None,
         };
         let client_capabilities = ClientCapabilities::default();
 
@@ -426,6 +429,9 @@ mod initialization_tests {
             name: "test_client".to_string(),
             version: "1.0.0".to_string(),
             title: None,
+            icons: None,
+            description: None,
+            website_url: None,
         };
         let client_capabilities = ClientCapabilities::default();
 
@@ -451,6 +457,9 @@ mod initialization_tests {
             name: "test_client".to_string(),
             version: "1.0.0".to_string(),
             title: None,
+            icons: None,
+            description: None,
+            website_url: None,
         };
         let client_capabilities = ClientCapabilities::default();
 

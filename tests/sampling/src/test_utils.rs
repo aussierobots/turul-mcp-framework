@@ -11,13 +11,14 @@ pub fn sampling_capabilities() -> Value {
 }
 
 /// Helper to extract sampling message content from response
+///
+/// MCP 2025-11-25 flattened CreateMessageResult: role and content are at the top level
+/// (no nested "message" wrapper).
 pub fn extract_sampling_message(response: &HashMap<String, Value>) -> Option<String> {
     response
         .get("result")
         .and_then(|r| r.as_object())
-        .and_then(|obj| obj.get("message"))
-        .and_then(|msg| msg.as_object())
-        .and_then(|msg_obj| msg_obj.get("content"))
+        .and_then(|obj| obj.get("content"))
         .and_then(|content| content.as_object())
         .and_then(|content_obj| content_obj.get("text"))
         .and_then(|text| text.as_str())

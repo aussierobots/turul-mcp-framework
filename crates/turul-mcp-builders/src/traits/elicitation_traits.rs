@@ -96,6 +96,7 @@ pub trait HasElicitationHandling {
 ///             schema_type: "number".to_string(),
 ///             title: None,
 ///             description: Some("Maximum items to display".to_string()),
+///             default: None,
 ///             minimum: Some(1.0),
 ///             maximum: Some(100.0),
 ///         }));
@@ -153,7 +154,7 @@ pub trait HasElicitationHandling {
 /// - **Type Safety**: Schema validation happens at the protocol level
 /// - **Automatic Implementation**: Just implement the three component traits
 /// - **Flexible Processing**: Handle and transform user input as needed
-/// - **MCP Compliant**: Fully compatible with MCP 2025-06-18 specification
+/// - **MCP Compliant**: Fully compatible with MCP 2025-11-25 specification
 ///
 /// # Common Use Cases
 ///

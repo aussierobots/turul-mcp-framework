@@ -97,13 +97,13 @@ async fn initialize_session(client: &reqwest::Client, server_url: &str) -> Strin
     let init_response = client
         .post(server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",
             "id": 1,
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "experimental": {},
                     "sampling": {}
@@ -144,7 +144,7 @@ async fn test_meta_propagation_preserves_pagination() {
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -192,7 +192,7 @@ async fn test_tools_list_pagination() {
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -233,7 +233,7 @@ async fn test_cursor_based_navigation() {
     let response1 = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -254,7 +254,7 @@ async fn test_cursor_based_navigation() {
         let response2 = client
             .post(&server_url)
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-11-25")
             .header("Mcp-Session-Id", &session_id)
             .json(&json!({
                 "jsonrpc": "2.0",
@@ -293,7 +293,7 @@ async fn test_limit_parameter_honored() {
         let response = client
             .post(&server_url)
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-11-25")
             .header("Mcp-Session-Id", &session_id)
             .json(&json!({
                 "jsonrpc": "2.0",
@@ -335,7 +335,7 @@ async fn test_all_handlers_meta_merge() {
         let response = client
             .post(&server_url)
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-11-25")
             .header("Mcp-Session-Id", &session_id)
             .json(&json!({
                 "jsonrpc": "2.0",
@@ -394,7 +394,7 @@ async fn test_no_meta_request_still_has_pagination() {
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -428,7 +428,7 @@ async fn test_zero_limit_returns_error() {
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -469,7 +469,7 @@ async fn test_post_streaming_delivers_progress_before_result() {
     let streaming_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .header("Accept", "text/event-stream, application/json") // Request SSE streaming with JSON fallback
         .json(&json!({
@@ -520,7 +520,7 @@ async fn test_limit_boundary_values() {
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -556,13 +556,13 @@ async fn test_strict_lifecycle_rejects_before_initialized() {
     let init_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",
             "id": 1,
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "experimental": {},
                     "sampling": {}
@@ -589,7 +589,7 @@ async fn test_strict_lifecycle_rejects_before_initialized() {
     let list_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -627,13 +627,13 @@ async fn test_strict_lifecycle_allows_after_initialized() {
     let init_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",
             "id": 1,
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "experimental": {},
                     "sampling": {}
@@ -660,7 +660,7 @@ async fn test_strict_lifecycle_allows_after_initialized() {
     let initialized_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -678,7 +678,7 @@ async fn test_strict_lifecycle_allows_after_initialized() {
     let list_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -714,13 +714,13 @@ async fn test_strict_lifecycle_rejects_tool_calls_before_initialized() {
     let init_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",
             "id": 1,
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "experimental": {},
                     "sampling": {}
@@ -747,7 +747,7 @@ async fn test_strict_lifecycle_rejects_tool_calls_before_initialized() {
     let tool_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -797,7 +797,7 @@ async fn test_limit_dos_protection_clamping() {
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -838,7 +838,7 @@ async fn test_no_limit_uses_default() {
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -879,11 +879,11 @@ async fn test_version_negotiation_future_client() {
     let server_url = start_test_server_with_tools().await;
     let client = reqwest::Client::new();
 
-    // Test client requesting future version gets latest supported (2025-06-18)
+    // Test client requesting future version gets latest supported (2025-11-25)
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",
@@ -912,11 +912,11 @@ async fn test_version_negotiation_future_client() {
         serde_json::to_string_pretty(&body).unwrap()
     );
 
-    // Should succeed and negotiate back to 2025-06-18 (highest supported)
+    // Should succeed and negotiate back to 2025-11-25 (highest supported)
     if !body["result"].is_object() {
         panic!("Expected result object, got: {}", body);
     }
-    assert_eq!(body["result"]["protocolVersion"], "2025-06-18");
+    assert_eq!(body["result"]["protocolVersion"], "2025-11-25");
 }
 
 #[tokio::test]
@@ -928,13 +928,13 @@ async fn test_version_negotiation_exact_match() {
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",
             "id": 1,
             "params": {
-                "protocolVersion": "2025-06-18",  // Exact supported version
+                "protocolVersion": "2025-11-25",  // Exact supported version
                 "capabilities": {
                     "experimental": {},
                     "sampling": {}
@@ -955,7 +955,7 @@ async fn test_version_negotiation_exact_match() {
 
     // Should succeed with exact version match
     assert!(body["result"].is_object());
-    assert_eq!(body["result"]["protocolVersion"], "2025-06-18");
+    assert_eq!(body["result"]["protocolVersion"], "2025-11-25");
 }
 
 #[tokio::test]
@@ -967,7 +967,7 @@ async fn test_version_negotiation_ancient_client_error() {
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",

@@ -8,20 +8,28 @@
 use std::collections::HashMap;
 use std::fs;
 use std::net::SocketAddr;
-use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, from_str, json};
 use tracing::info;
-use turul_mcp_builders::prelude::*;
-use turul_mcp_protocol::prompts::{PromptAnnotations, PromptArgument, PromptMessage};
+use turul_mcp_derive::{McpResource, McpTool};
+use turul_mcp_protocol::prompts::PromptMessage;
 use turul_mcp_protocol::resources::ResourceContent;
-use turul_mcp_protocol::tools::{CallToolResult, ToolAnnotations};
-use turul_mcp_protocol::{McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema};
-use turul_mcp_server::handlers::McpPrompt;
-use turul_mcp_server::{McpResource, McpServer, McpTool, SessionContext};
+use turul_mcp_protocol::{McpError, McpResult};
+use turul_mcp_server::handlers::McpPrompt as McpPromptTrait;
+use turul_mcp_server::prelude::*;
+use turul_mcp_server::{McpResource as McpResourceTrait, McpServer, SessionContext};
+
+// Module-level static for shared platform state
+static PLATFORM: OnceLock<Arc<PlatformState>> = OnceLock::new();
+
+fn get_platform() -> McpResult<&'static Arc<PlatformState>> {
+    PLATFORM
+        .get()
+        .ok_or_else(|| McpError::tool_execution("Platform not initialized"))
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 struct PlatformConfig {
@@ -174,10 +182,10 @@ pub struct PlatformState {
 
 impl PlatformState {
     pub fn new() -> McpResult<Self> {
-        let config_path = Path::new("data/platform_config.json");
-        let workflows_path = Path::new("data/workflow_templates.yaml");
-        let resources_path = Path::new("data/project_resources.json");
-        let templates_path = Path::new("data/code_templates.md");
+        let config_path = std::path::Path::new("data/platform_config.json");
+        let workflows_path = std::path::Path::new("data/workflow_templates.yaml");
+        let resources_path = std::path::Path::new("data/project_resources.json");
+        let templates_path = std::path::Path::new("data/code_templates.md");
 
         let config = match fs::read_to_string(config_path) {
             Ok(content) => from_str::<PlatformConfig>(&content).map_err(|e| {
@@ -254,104 +262,30 @@ impl PlatformState {
 }
 
 /// Team management tool for handling team operations and member information
-struct TeamManagementTool {
-    state: Arc<PlatformState>,
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "manage_teams",
+    description = "Manage development teams, members, and team information including skills, projects, and on-call rotations"
+)]
+pub struct TeamManagementTool {
+    #[param(description = "Team management action: list_teams, get_team_details, get_team_members, get_on_call_rotation, team_workload")]
+    pub action: String,
+
+    #[param(description = "Team ID for team-specific operations", optional)]
+    pub team_id: Option<String>,
+
+    #[param(description = "Include project assignments in team details", optional)]
+    pub include_projects: Option<bool>,
 }
 
 impl TeamManagementTool {
-    fn new(state: Arc<PlatformState>) -> Self {
-        Self { state }
-    }
-}
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Value> {
+        let state = get_platform()?;
+        let include_projects = self.include_projects.unwrap_or(false);
 
-// Fine-grained trait implementations for TeamManagementTool
-impl HasBaseMetadata for TeamManagementTool {
-    fn name(&self) -> &str {
-        "manage_teams"
-    }
-}
-
-impl HasDescription for TeamManagementTool {
-    fn description(&self) -> Option<&str> {
-        Some(
-            "Manage development teams, members, and team information including skills, projects, and on-call rotations",
-        )
-    }
-}
-
-impl HasInputSchema for TeamManagementTool {
-    fn input_schema(&self) -> &ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object()
-                .with_properties(HashMap::from([
-                    (
-                        "action".to_string(),
-                        JsonSchema::string_enum(vec![
-                            "list_teams".to_string(),
-                            "get_team_details".to_string(),
-                            "get_team_members".to_string(),
-                            "get_on_call_rotation".to_string(),
-                            "team_workload".to_string(),
-                        ])
-                        .with_description("Team management action to perform"),
-                    ),
-                    (
-                        "team_id".to_string(),
-                        JsonSchema::string()
-                            .with_description("Team ID for team-specific operations"),
-                    ),
-                    (
-                        "include_projects".to_string(),
-                        JsonSchema::boolean()
-                            .with_description("Include project assignments in team details"),
-                    ),
-                ]))
-                .with_required(vec!["action".to_string()])
-        })
-    }
-}
-
-impl HasOutputSchema for TeamManagementTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for TeamManagementTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for TeamManagementTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
-}
-
-#[async_trait]
-impl McpTool for TeamManagementTool {
-    async fn call(
-        &self,
-        args: Value,
-        _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let action = args
-            .get("action")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_param("action"))?;
-
-        let team_id = args.get("team_id").and_then(|v| v.as_str());
-        let include_projects = args
-            .get("include_projects")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        let result = match action {
+        let result = match self.action.as_str() {
             "list_teams" => {
-                let teams_summary = self
-                    .state
+                let teams_summary = state
                     .config
                     .team_configuration
                     .organization
@@ -371,21 +305,23 @@ impl McpTool for TeamManagementTool {
                     .collect::<Vec<_>>();
 
                 json!({
-                    "organization": self.state.config.team_configuration.organization.name,
+                    "organization": state.config.team_configuration.organization.name,
                     "total_teams": teams_summary.len(),
                     "teams": teams_summary,
                     "platform_info": {
-                        "name": self.state.config.platform_info.name,
-                        "environment": self.state.config.platform_info.environment,
-                        "last_updated": self.state.config.platform_info.last_updated
+                        "name": state.config.platform_info.name,
+                        "environment": state.config.platform_info.environment,
+                        "last_updated": state.config.platform_info.last_updated
                     }
                 })
             }
             "get_team_details" => {
-                let team_id = team_id.ok_or_else(|| McpError::missing_param("team_id"))?;
+                let team_id = self
+                    .team_id
+                    .as_deref()
+                    .ok_or_else(|| McpError::missing_param("team_id"))?;
 
-                if let Some(team) = self
-                    .state
+                if let Some(team) = state
                     .config
                     .team_configuration
                     .organization
@@ -405,8 +341,7 @@ impl McpTool for TeamManagementTool {
                             "focus_areas": team.focus_areas,
                             "tech_stack": team.tech_stack,
                             "repositories": team.repositories.iter().map(|repo| {
-                                // Find additional repository info from resources
-                                self.state.resources.development_resources.code_repositories
+                                state.resources.development_resources.code_repositories
                                     .iter()
                                     .find(|r| r.name == *repo)
                                     .map(|r| json!({
@@ -427,8 +362,7 @@ impl McpTool for TeamManagementTool {
                     });
 
                     if include_projects {
-                        let team_projects = self
-                            .state
+                        let team_projects = state
                             .config
                             .team_configuration
                             .projects
@@ -467,8 +401,7 @@ impl McpTool for TeamManagementTool {
                 }
             }
             "get_on_call_rotation" => {
-                let on_call_teams = self
-                    .state
+                let on_call_teams = state
                     .config
                     .team_configuration
                     .organization
@@ -506,16 +439,14 @@ impl McpTool for TeamManagementTool {
                 })
             }
             "team_workload" => {
-                let workload_analysis = self
-                    .state
+                let workload_analysis = state
                     .config
                     .team_configuration
                     .organization
                     .teams
                     .iter()
                     .map(|team| {
-                        let assigned_projects = self
-                            .state
+                        let assigned_projects = state
                             .config
                             .team_configuration
                             .projects
@@ -576,128 +507,49 @@ impl McpTool for TeamManagementTool {
                 return Err(McpError::invalid_param_type(
                     "action",
                     "supported team management action",
-                    action,
+                    &self.action,
                 ));
             }
         };
 
-        Ok(CallToolResult::success(vec![ToolResult::text(
-            serde_json::to_string_pretty(&result)?,
-        )]))
+        Ok(result)
     }
 }
 
 /// Project management tool for handling project lifecycle and tracking
-struct ProjectManagementTool {
-    state: Arc<PlatformState>,
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "manage_projects",
+    description = "Manage development projects including status tracking, milestone management, and resource allocation"
+)]
+pub struct ProjectManagementTool {
+    #[param(description = "Project management action: list_projects, get_project_details, project_status_summary, milestone_tracking, resource_allocation, project_timeline")]
+    pub action: String,
+
+    #[param(description = "Project ID for project-specific operations", optional)]
+    pub project_id: Option<String>,
+
+    #[param(description = "Filter projects by status (in_progress, planning, completed, etc.)", optional)]
+    pub status_filter: Option<String>,
+
+    #[param(description = "Filter projects by priority (critical, high, medium, low)", optional)]
+    pub priority_filter: Option<String>,
 }
 
 impl ProjectManagementTool {
-    fn new(state: Arc<PlatformState>) -> Self {
-        Self { state }
-    }
-}
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Value> {
+        let state = get_platform()?;
 
-// Fine-grained trait implementations for ProjectManagementTool
-impl HasBaseMetadata for ProjectManagementTool {
-    fn name(&self) -> &str {
-        "manage_projects"
-    }
-}
-
-impl HasDescription for ProjectManagementTool {
-    fn description(&self) -> Option<&str> {
-        Some(
-            "Manage development projects including status tracking, milestone management, and resource allocation",
-        )
-    }
-}
-
-impl HasInputSchema for ProjectManagementTool {
-    fn input_schema(&self) -> &ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object()
-                .with_properties(HashMap::from([
-                    (
-                        "action".to_string(),
-                        JsonSchema::string_enum(vec![
-                            "list_projects".to_string(),
-                            "get_project_details".to_string(),
-                            "project_status_summary".to_string(),
-                            "milestone_tracking".to_string(),
-                            "resource_allocation".to_string(),
-                            "project_timeline".to_string(),
-                        ])
-                        .with_description("Project management action to perform"),
-                    ),
-                    (
-                        "project_id".to_string(),
-                        JsonSchema::string()
-                            .with_description("Project ID for project-specific operations"),
-                    ),
-                    (
-                        "status_filter".to_string(),
-                        JsonSchema::string().with_description(
-                            "Filter projects by status (in_progress, planning, completed, etc.)",
-                        ),
-                    ),
-                    (
-                        "priority_filter".to_string(),
-                        JsonSchema::string().with_description(
-                            "Filter projects by priority (critical, high, medium, low)",
-                        ),
-                    ),
-                ]))
-                .with_required(vec!["action".to_string()])
-        })
-    }
-}
-
-impl HasOutputSchema for ProjectManagementTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for ProjectManagementTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for ProjectManagementTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
-}
-
-#[async_trait]
-impl McpTool for ProjectManagementTool {
-    async fn call(
-        &self,
-        args: Value,
-        _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let action = args
-            .get("action")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_param("action"))?;
-
-        let project_id = args.get("project_id").and_then(|v| v.as_str());
-        let status_filter = args.get("status_filter").and_then(|v| v.as_str());
-        let priority_filter = args.get("priority_filter").and_then(|v| v.as_str());
-
-        let result = match action {
+        let result = match self.action.as_str() {
             "list_projects" => {
-                let mut projects = self.state.config.team_configuration.projects.clone();
+                let mut projects = state.config.team_configuration.projects.clone();
 
-                if let Some(status) = status_filter {
-                    projects.retain(|p| p.status == status);
+                if let Some(status) = &self.status_filter {
+                    projects.retain(|p| p.status == *status);
                 }
 
-                if let Some(priority) = priority_filter {
-                    projects.retain(|p| p.priority == priority);
+                if let Some(priority) = &self.priority_filter {
+                    projects.retain(|p| p.priority == *priority);
                 }
 
                 let project_summaries = projects
@@ -717,7 +569,7 @@ impl McpTool for ProjectManagementTool {
                                     .filter(|m| m.status == "completed")
                                     .count(),
                                 "overdue": project.milestones.iter()
-                                    .filter(|m| m.status != "completed" && m.date.as_str() < "2025-01-19") // Simplified date comparison
+                                    .filter(|m| m.status != "completed" && m.date.as_str() < "2025-01-19")
                                     .count()
                             }
                         })
@@ -742,16 +594,18 @@ impl McpTool for ProjectManagementTool {
                         }
                     },
                     "filters_applied": {
-                        "status": status_filter,
-                        "priority": priority_filter
+                        "status": self.status_filter,
+                        "priority": self.priority_filter
                     }
                 })
             }
             "get_project_details" => {
-                let project_id = project_id.ok_or_else(|| McpError::missing_param("project_id"))?;
+                let project_id = self
+                    .project_id
+                    .as_deref()
+                    .ok_or_else(|| McpError::missing_param("project_id"))?;
 
-                if let Some(project) = self
-                    .state
+                if let Some(project) = state
                     .config
                     .team_configuration
                     .projects
@@ -762,7 +616,7 @@ impl McpTool for ProjectManagementTool {
                         .teams
                         .iter()
                         .filter_map(|team_id| {
-                            self.state
+                            state
                                 .config
                                 .team_configuration
                                 .organization
@@ -839,8 +693,7 @@ impl McpTool for ProjectManagementTool {
                 }
             }
             "milestone_tracking" => {
-                let all_milestones = self
-                    .state
+                let all_milestones = state
                     .config
                     .team_configuration
                     .projects
@@ -914,29 +767,19 @@ impl McpTool for ProjectManagementTool {
                 return Err(McpError::invalid_param_type(
                     "action",
                     "supported project management action",
-                    action,
+                    &self.action,
                 ));
             }
         };
 
-        Ok(CallToolResult::success(vec![ToolResult::text(
-            serde_json::to_string_pretty(&result)?,
-        )]))
+        Ok(result)
     }
 }
 
 /// Development workflow generator prompt for creating standardized workflows
-struct WorkflowGeneratorPrompt {
-    state: Arc<PlatformState>,
-}
+#[derive(Clone)]
+pub struct WorkflowGeneratorPrompt;
 
-impl WorkflowGeneratorPrompt {
-    fn new(state: Arc<PlatformState>) -> Self {
-        Self { state }
-    }
-}
-
-// Fine-grained trait implementations for WorkflowGeneratorPrompt
 impl HasPromptMetadata for WorkflowGeneratorPrompt {
     fn name(&self) -> &str {
         "generate_workflow"
@@ -945,33 +788,34 @@ impl HasPromptMetadata for WorkflowGeneratorPrompt {
 
 impl HasPromptDescription for WorkflowGeneratorPrompt {
     fn description(&self) -> Option<&str> {
-        Some(
-            "Generate standardized development workflows based on team practices and project requirements",
-        )
+        Some("Generate standardized development workflows based on team practices and project requirements")
     }
 }
 
 impl HasPromptArguments for WorkflowGeneratorPrompt {
-    fn arguments(&self) -> Option<&Vec<PromptArgument>> {
+    fn arguments(&self) -> Option<&Vec<turul_mcp_protocol::prompts::PromptArgument>> {
         None
     }
 }
 
 impl HasPromptAnnotations for WorkflowGeneratorPrompt {
-    fn annotations(&self) -> Option<&PromptAnnotations> {
+    fn annotations(&self) -> Option<&turul_mcp_protocol::prompts::PromptAnnotations> {
         None
     }
 }
 
 impl HasPromptMeta for WorkflowGeneratorPrompt {
-    fn prompt_meta(&self) -> Option<&HashMap<String, Value>> {
+    fn prompt_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
         None
     }
 }
 
+impl HasIcons for WorkflowGeneratorPrompt {}
+
 #[async_trait]
-impl McpPrompt for WorkflowGeneratorPrompt {
+impl McpPromptTrait for WorkflowGeneratorPrompt {
     async fn render(&self, args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
+        let state = get_platform()?;
         let args = args.unwrap_or_default();
         let workflow_type = args
             .get("workflow_type")
@@ -984,8 +828,7 @@ impl McpPrompt for WorkflowGeneratorPrompt {
         let team_size = args.get("team_size").and_then(|v| v.as_u64()).unwrap_or(5);
 
         // Get workflow template from external data
-        let workflow_details = if let Some(dev_workflows) = self
-            .state
+        let workflow_details = if let Some(dev_workflows) = state
             .workflows
             .workflow_templates
             .get("development_workflows")
@@ -1045,71 +888,30 @@ Consider our organization's focus on:
 }
 
 /// Project resources handler for accessing development resources and documentation
-struct ProjectResourcesHandler {
-    state: Arc<PlatformState>,
-}
-
-impl ProjectResourcesHandler {
-    fn new(state: Arc<PlatformState>) -> Self {
-        Self { state }
-    }
-}
-
-// Fine-grained trait implementations for ProjectResourcesHandler
-impl HasResourceMetadata for ProjectResourcesHandler {
-    fn name(&self) -> &str {
-        "Development Resources"
-    }
-}
-
-impl HasResourceDescription for ProjectResourcesHandler {
-    fn description(&self) -> Option<&str> {
-        Some(
-            "Access to development team resources including repositories, APIs, documentation, and tools",
-        )
-    }
-}
-
-impl HasResourceUri for ProjectResourcesHandler {
-    fn uri(&self) -> &str {
-        "platform://development-resources"
-    }
-}
-
-impl HasResourceMimeType for ProjectResourcesHandler {
-    fn mime_type(&self) -> Option<&str> {
-        Some("text/plain")
-    }
-}
-
-impl HasResourceSize for ProjectResourcesHandler {
-    fn size(&self) -> Option<u64> {
-        None
-    }
-}
-
-impl HasResourceAnnotations for ProjectResourcesHandler {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
-        None
-    }
-}
-
-impl HasResourceMeta for ProjectResourcesHandler {
-    fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
-}
+#[derive(McpResource, Clone)]
+#[resource(
+    uri = "platform://development-resources",
+    name = "Development Resources",
+    description = "Access to development team resources including repositories, APIs, documentation, and tools",
+    mime_type = "text/plain"
+)]
+pub struct ProjectResourcesHandler;
 
 #[async_trait]
-impl McpResource for ProjectResourcesHandler {
-    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+impl McpResourceTrait for ProjectResourcesHandler {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
+        let state = get_platform()?;
         let mut content = Vec::new();
 
         // Repository information
         let repos_content = format!(
             "# Code Repositories\n\n{}\n",
             serde_json::to_string_pretty(
-                &self.state.resources.development_resources.code_repositories
+                &state.resources.development_resources.code_repositories
             )?
         );
         content.push(ResourceContent::text("repos", repos_content));
@@ -1118,7 +920,7 @@ impl McpResource for ProjectResourcesHandler {
         let api_content = format!(
             "# API Documentation\n\n{}\n",
             serde_json::to_string_pretty(
-                &self.state.resources.development_resources.api_documentation
+                &state.resources.development_resources.api_documentation
             )?
         );
         content.push(ResourceContent::text("api", api_content));
@@ -1127,7 +929,7 @@ impl McpResource for ProjectResourcesHandler {
         let db_content = format!(
             "# Database Schemas\n\n{}\n",
             serde_json::to_string_pretty(
-                &self.state.resources.development_resources.database_schemas
+                &state.resources.development_resources.database_schemas
             )?
         );
         content.push(ResourceContent::text("database", db_content));
@@ -1135,505 +937,20 @@ impl McpResource for ProjectResourcesHandler {
         // Team tools and integrations
         let tools_content = format!(
             "# Team Tools and Integrations\n\n{}\n",
-            serde_json::to_string_pretty(&self.state.resources.team_tools_and_integrations)?
+            serde_json::to_string_pretty(&state.resources.team_tools_and_integrations)?
         );
         content.push(ResourceContent::text("tools", tools_content));
 
         // Learning resources
         let learning_content = format!(
             "# Learning Resources\n\n{}\n",
-            serde_json::to_string_pretty(&self.state.resources.learning_resources)?
+            serde_json::to_string_pretty(&state.resources.learning_resources)?
         );
         content.push(ResourceContent::text("learning", learning_content));
 
         Ok(content)
     }
 }
-
-/// Code template generator for creating standardized code structures
-#[allow(dead_code)] // TODO: Integrate code template generation
-struct CodeTemplateGenerator {
-    state: Arc<PlatformState>,
-}
-
-impl CodeTemplateGenerator {
-    #[allow(dead_code)] // TODO: Use in template generation
-    fn new(state: Arc<PlatformState>) -> Self {
-        Self { state }
-    }
-}
-
-// NOTE: CodeTemplateGenerator McpTemplate implementation removed
-// as McpTemplate trait was removed for MCP spec compliance
-/*
-impl CodeTemplateGenerator {
-    fn name(&self) -> &str {
-        "code_template"
-    }
-
-    fn description(&self) -> &str {
-        "Generate code templates based on team standards and best practices"
-    }
-
-    async fn generate(&self, args: HashMap<String, Value>) -> McpResult<String> {
-        let template_type = args
-            .get("template_type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("api_service");
-        let language = args
-            .get("language")
-            .and_then(|v| v.as_str())
-            .unwrap_or("typescript");
-        let name = args
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("example_service");
-
-        match template_type {
-            "api_service" => {
-                Ok(format!(
-                    r#"// {} - Generated API Service Template
-// Generated by Development Team Integration Platform
-// Language: {}
-
-import {{ Express }} from 'express';
-import {{ Router }} from 'express';
-import {{ validateRequest }} from '../middleware/validation';
-import {{ authenticate }} from '../middleware/auth';
-import {{ rateLimit }} from '../middleware/rateLimit';
-import {{ logger }} from '../utils/logger';
-
-export class {}Controller {{
-    private router: Router;
-
-    constructor() {{
-        this.router = Router();
-        this.setupRoutes();
-    }}
-
-    private setupRoutes(): void {{
-        // Health check endpoint
-        this.router.get('/health', this.healthCheck.bind(this));
-
-        // Protected endpoints with authentication and rate limiting
-        this.router.use(authenticate);
-        this.router.use(rateLimit({{ windowMs: 15 * 60 * 1000, max: 100 }}));
-
-        // CRUD operations
-        this.router.get('/', this.list.bind(this));
-        this.router.get('/:id', validateRequest('get{}'), this.getById.bind(this));
-        this.router.post('/', validateRequest('create{}'), this.create.bind(this));
-        this.router.put('/:id', validateRequest('update{}'), this.update.bind(this));
-        this.router.delete('/:id', validateRequest('delete{}'), this.delete.bind(this));
-    }}
-
-    private async healthCheck(req: Express.Request, res: Express.Response): Promise<void> {{
-        res.status(200).json({{
-            status: 'healthy',
-            service: '{}',
-            timestamp: new Date().toISOString(),
-            version: process.env.SERVICE_VERSION || '1.0.0'
-        }});
-    }}
-
-    private async list(req: Express.Request, res: Express.Response): Promise<void> {{
-        try {{
-            // TODO: Implement list functionality
-            logger.info('Listing {} items', {{ requestId: req.id }});
-
-            res.status(200).json({{
-                success: true,
-                data: [],
-                message: 'Items retrieved successfully'
-            }});
-        }} catch (error) {{
-            logger.error('Error listing {} items', error, {{ requestId: req.id }});
-            res.status(500).json({{
-                success: false,
-                error: 'Internal server error',
-                requestId: req.id
-            }});
-        }}
-    }}
-
-    private async getById(req: Express.Request, res: Express.Response): Promise<void> {{
-        try {{
-            const {{ id }} = req.params;
-            logger.info('Getting {} by ID: {{}}', id, {{ requestId: req.id }});
-
-            // TODO: Implement get by ID functionality
-
-            res.status(200).json({{
-                success: true,
-                data: {{ id }},
-                message: 'Item retrieved successfully'
-            }});
-        }} catch (error) {{
-            logger.error('Error getting {} by ID', error, {{ requestId: req.id }});
-            res.status(500).json({{
-                success: false,
-                error: 'Internal server error',
-                requestId: req.id
-            }});
-        }}
-    }}
-
-    private async create(req: Express.Request, res: Express.Response): Promise<void> {{
-        try {{
-            const data = req.body;
-            logger.info('Creating new {}', {{ data, requestId: req.id }});
-
-            // TODO: Implement create functionality
-
-            res.status(201).json({{
-                success: true,
-                data: {{ id: 'generated-id', ...data }},
-                message: 'Item created successfully'
-            }});
-        }} catch (error) {{
-            logger.error('Error creating {}', error, {{ requestId: req.id }});
-            res.status(500).json({{
-                success: false,
-                error: 'Internal server error',
-                requestId: req.id
-            }});
-        }}
-    }}
-
-    private async update(req: Express.Request, res: Express.Response): Promise<void> {{
-        try {{
-            const {{ id }} = req.params;
-            const updateData = req.body;
-            logger.info('Updating {} with ID: {{}}', id, {{ updateData, requestId: req.id }});
-
-            // TODO: Implement update functionality
-
-            res.status(200).json({{
-                success: true,
-                data: {{ id, ...updateData }},
-                message: 'Item updated successfully'
-            }});
-        }} catch (error) {{
-            logger.error('Error updating {}', error, {{ requestId: req.id }});
-            res.status(500).json({{
-                success: false,
-                error: 'Internal server error',
-                requestId: req.id
-            }});
-        }}
-    }}
-
-    private async delete(req: Express.Request, res: Express.Response): Promise<void> {{
-        try {{
-            const {{ id }} = req.params;
-            logger.info('Deleting {} with ID: {{}}', id, {{ requestId: req.id }});
-
-            // TODO: Implement delete functionality
-
-            res.status(200).json({{
-                success: true,
-                message: 'Item deleted successfully'
-            }});
-        }} catch (error) {{
-            logger.error('Error deleting {}', error, {{ requestId: req.id }});
-            res.status(500).json({{
-                success: false,
-                error: 'Internal server error',
-                requestId: req.id
-            }});
-        }}
-    }}
-
-    public getRouter(): Router {{
-        return this.router;
-    }}
-}}
-
-// Export for use in main application
-export default new {}Controller().getRouter();"#,
-                    name, language,
-                    name.replace("_", "").replace("-", ""), // PascalCase for class name
-                    name, name, name, name, name,
-                    name, name, name, name, name, name, name, name, name, name,
-                    name.replace("_", "").replace("-", "") // PascalCase for export
-                ))
-            },
-            "react_component" => {
-                Ok(format!(
-                    r#"// {} - Generated React Component Template
-// Generated by Development Team Integration Platform
-// Language: {}
-
-import React, {{ useState, useEffect, useCallback }} from 'react';
-import {{ logger }} from '../utils/logger';
-import {{ api }} from '../services/api';
-import styles from './{}.module.css';
-
-interface {}Props {{
-    id?: string;
-    onUpdate?: (data: any) => void;
-    className?: string;
-}}
-
-interface {}State {{
-    data: any | null;
-    loading: boolean;
-    error: string | null;
-}}
-
-export const {}: React.FC<{}Props> = ({{
-    id,
-    onUpdate,
-    className = ''
-}}) => {{
-    const [state, setState] = useState<{}State>({{
-        data: null,
-        loading: false,
-        error: null
-    }});
-
-    const fetchData = useCallback(async () => {{
-        if (!id) return;
-
-        setState(prev => ({{ ...prev, loading: true, error: null }}));
-
-        try {{
-            const response = await api.get(`/{}/${{id}}`);
-            setState(prev => ({{ ...prev, data: response.data, loading: false }}));
-            logger.info('Data fetched successfully for {} component', {{ id }});
-        }} catch (error) {{
-            const errorMessage = error instanceof Error ? error.message : 'Failed to fetch data';
-            setState(prev => ({{ ...prev, error: errorMessage, loading: false }}));
-            logger.error('Error fetching data for {} component', error, {{ id }});
-        }}
-    }}, [id]);
-
-    const handleUpdate = async (updateData: Partial<any>) => {{
-        if (!id) return;
-
-        setState(prev => ({{ ...prev, loading: true, error: null }}));
-
-        try {{
-            const response = await api.put(`/{}/${{id}}`, updateData);
-            setState(prev => ({{ ...prev, data: response.data, loading: false }}));
-            onUpdate?.(response.data);
-            logger.info('Data updated successfully for {} component', {{ id, updateData }});
-        }} catch (error) {{
-            const errorMessage = error instanceof Error ? error.message : 'Failed to update data';
-            setState(prev => ({{ ...prev, error: errorMessage, loading: false }}));
-            logger.error('Error updating data for {} component', error, {{ id }});
-        }}
-    }};
-
-    useEffect(() => {{
-        fetchData();
-    }}, [fetchData]);
-
-    if (state.loading) {{
-        return (
-            <div className={{`${{styles.container}} ${{styles.loading}} ${{className}}`}}>
-                <div className={{styles.spinner}}></div>
-                <span>Loading...</span>
-            </div>
-        );
-    }}
-
-    if (state.error) {{
-        return (
-            <div className={{`${{styles.container}} ${{styles.error}} ${{className}}`}}>
-                <div className={{styles.errorMessage}}>
-                    <h3>Error</h3>
-                    <p>{{state.error}}</p>
-                    <button onClick={{fetchData}} className={{styles.retryButton}}>
-                        Retry
-                    </button>
-                </div>
-            </div>
-        );
-    }}
-
-    if (!state.data && id) {{
-        return (
-            <div className={{`${{styles.container}} ${{styles.empty}} ${{className}}`}}>
-                <p>No data available</p>
-            </div>
-        );
-    }}
-
-    return (
-        <div className={{`${{styles.container}} ${{className}}`}}>
-            <div className={{styles.header}}>
-                <h2>{} Component</h2>
-                <div className={{styles.actions}}>
-                    <button onClick={{fetchData}} className={{styles.refreshButton}}>
-                        Refresh
-                    </button>
-                </div>
-            </div>
-
-            <div className={{styles.content}}>
-                {{state.data ? (
-                    <div className={{styles.dataDisplay}}>
-                        {{/* TODO: Implement data display */
-}}
-                        <pre>{{JSON.stringify(state.data, null, 2)}}</pre>
-                    </div>
-                ) : (
-                    <div className={{styles.emptyState}}>
-                        <p>Ready to display data</p>
-                    </div>
-                )}}
-            </div>
-        </div>
-    );
-}};
-
-export default {};"#,
-                    name, language, name,
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name, name, name, name, name, name,
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", "") // PascalCase
-                ))
-            },
-            "database_model" => {
-                Ok(format!(
-r#" // {} - Generated Database Model Template
-    // Generated by Development Team Integration Platform
-    // Language: {}
-
-import {{ DataTypes, Model, Optional }} from 'sequelize';
-import {{ sequelize }} from '../config/database';
-
-// Model attributes interface
-interface {}Attributes {{
-    id: string;
-    createdAt: Date;
-    updatedAt: Date;
-// TODO: Add specific model attributes
-}}
-
-// Optional attributes for model creation
-interface {}CreationAttributes extends Optional<{}Attributes, 'id' | 'createdAt' | 'updatedAt'> {{}}
-
-// Model class
-class {} extends Model<{}Attributes, {}CreationAttributes> implements {}Attributes {{
-    public id!: string;
-    public createdAt!: Date;
-    public updatedAt!: Date;
-
-// TODO: Add specific model properties
-
-// Static methods
-    public static findByCustomField(value: string): Promise<{} | null> {{
-        return this.findOne({{
-            where: {{
-// TODO: Implement custom field search
-            }}
-        }});
-    }}
-
-// Instance methods
-    public toJSON(): object {{
-        const values = super.toJSON() as any;
-// TODO: Add any custom JSON transformation
-        return values;
-    }}
-}}
-
-// Model definition
-{}.init(
-    {{
-        id: {{
-            type: DataTypes.UUID,
-            defaultValue: DataTypes.UUIDV4,
-            primaryKey: true,
-        }},
-// TODO: Add specific model fields
-// Example:
-// name: {{
-//     type: DataTypes.STRING,
-//     allowNull: false,
-//     validate: {{
-//         len: [2, 100]
-//     }}
-// }},
-    }},
-    {{
-        sequelize,
-        tableName: '{}',
-        timestamps: true,
-paranoid: true, // Soft deletes
-        indexes: [
-// TODO: Add database indexes
-// {{
-//     fields: ['name']
-// }},
-        ],
-        hooks: {{
-            beforeCreate: async (instance: {}) => {{
-// TODO: Add pre-creation hooks
-            }},
-            afterCreate: async (instance: {}) => {{
-// TODO: Add post-creation hooks
-            }},
-            beforeUpdate: async (instance: {}) => {{
-// TODO: Add pre-update hooks
-            }},
-            afterUpdate: async (instance: {}) => {{
-// TODO: Add post-update hooks
-            }}
-        }}
-    }}
-);
-
-// Model associations (to be defined after all models are loaded)
-export const associate = () => {{
-// TODO: Define model associations
-// Example:
-// {}.belongsTo(OtherModel, {{ foreignKey: 'otherId', as: 'other' }});
-// {}.hasMany(RelatedModel, {{ foreignKey: '{}Id', as: 'relatedItems' }});
-}};
-
-export default {};
-export {{ {}Attributes, {}CreationAttributes }};"#,
-                    name, language,
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.to_lowercase().replace("_", "_"), // snake_case for table name
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.to_lowercase().replace("-", "_"), // snake_case
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", ""), // PascalCase
-                    name.replace("_", "").replace("-", "") // PascalCase
-                ))
-            },
-            _ => {
-                Ok(format!(
-" // {} Template\n// Generated by Development Team Integration Platform\n// Language: {}\n\n// TODO: Implement {} template\n// Template type '{}' is not yet implemented\n// Available templates: api_service, react_component, database_model",
-                    name, language, name, template_type
-                ))
-            }
-        }
-    }
-}
-*/
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -1644,8 +961,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Starting Development Team Integration Platform");
 
-    // Load platform state with external data
+    // Load platform state with external data and store in global static
     let platform_state = Arc::new(PlatformState::new()?);
+    PLATFORM
+        .set(platform_state.clone())
+        .expect("Platform already initialized");
 
     // Parse command line arguments for bind address
     let bind_address: SocketAddr = std::env::args()
@@ -1663,14 +983,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .bind_address(bind_address)
 
         // Add comprehensive business tools
-        .tool(TeamManagementTool::new(platform_state.clone()))
-        .tool(ProjectManagementTool::new(platform_state.clone()))
+        .tool(TeamManagementTool::default())
+        .tool(ProjectManagementTool::default())
 
         // Add prompts
-        .prompt(WorkflowGeneratorPrompt::new(platform_state.clone()))
+        .prompt(WorkflowGeneratorPrompt)
 
         // Add resources
-        .resource(ProjectResourcesHandler::new(platform_state.clone()))
+        .resource(ProjectResourcesHandler)
 
         // Enable all MCP handlers with real-world implementations
         .with_completion()

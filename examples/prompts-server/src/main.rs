@@ -138,6 +138,7 @@ impl HasPromptAnnotations for CodeGenerationPrompt {
 }
 
 impl HasPromptMeta for CodeGenerationPrompt {}
+impl HasIcons for CodeGenerationPrompt {}
 
 // PromptDefinition automatically implemented via blanket impl
 
@@ -339,6 +340,7 @@ impl HasPromptAnnotations for CodeReviewPrompt {
 }
 
 impl HasPromptMeta for CodeReviewPrompt {}
+impl HasIcons for CodeReviewPrompt {}
 
 #[async_trait]
 impl McpPrompt for CodeReviewPrompt {
@@ -448,6 +450,7 @@ impl HasPromptAnnotations for ArchitecturePrompt {
 }
 
 impl HasPromptMeta for ArchitecturePrompt {}
+impl HasIcons for ArchitecturePrompt {}
 
 #[async_trait]
 impl McpPrompt for ArchitecturePrompt {

@@ -50,7 +50,7 @@ impl ValidatedTestPrompt {
 
 // Required trait implementations
 use turul_mcp_builders::prelude::{
-    HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
+    HasIcons, HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
     HasPromptMetadata,
 };
 
@@ -79,6 +79,8 @@ impl HasPromptArguments for ValidatedTestPrompt {
 impl HasPromptAnnotations for ValidatedTestPrompt {}
 
 impl HasPromptMeta for ValidatedTestPrompt {}
+
+impl HasIcons for ValidatedTestPrompt {}
 
 #[async_trait::async_trait]
 impl McpPrompt for ValidatedTestPrompt {

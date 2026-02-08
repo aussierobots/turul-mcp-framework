@@ -1,4 +1,4 @@
-//! # MCP 2025-06-18 Streamable HTTP Client Example
+//! # MCP 2025-11-25 Streamable HTTP Client Example
 //!
 //! This example demonstrates the CORRECT implementation of MCP Streamable HTTP
 //! using the turul-mcp-client crate with:
@@ -42,7 +42,7 @@ use turul_mcp_client::{ClientConfig, transport::TransportFactory};
 #[derive(Parser)]
 #[command(
     name = "streamable-http-client",
-    about = "MCP 2025-06-18 Streamable HTTP Client Example"
+    about = "MCP 2025-11-25 Streamable HTTP Client Example"
 )]
 struct Args {
     /// MCP server URL
@@ -155,13 +155,13 @@ impl StreamableHttpMcpClient {
 
         info!("📤 Sending streamable HTTP request...");
 
-        // Send request with CORRECT Accept header for MCP 2025-06-18
+        // Send request with CORRECT Accept header for MCP 2025-11-25
         let response = self
             .http_client
             .post(&self.base_url)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json, text/event-stream") // ✅ CRITICAL: Both formats
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-11-25")
             // Note: Session ID handling should be done by transport layer
             .json(&request)
             .send()
@@ -376,7 +376,7 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    info!("🚀 MCP 2025-06-18 Streamable HTTP Client Example");
+    info!("🚀 MCP 2025-11-25 Streamable HTTP Client Example");
     info!("═══════════════════════════════════════════════════");
     info!("📡 Target URL: {}", args.url);
     info!("🔧 Tool to test: {}", args.tool);
@@ -444,7 +444,7 @@ async fn main() -> Result<()> {
 
             info!("");
             if result.total_events > 0 && !result.progress_updates.is_empty() {
-                info!("🎉 SUCCESS: MCP 2025-06-18 Streamable HTTP working perfectly!");
+                info!("🎉 SUCCESS: MCP 2025-11-25 Streamable HTTP working perfectly!");
                 info!("✅ Multi-threaded SSE processing verified");
                 info!("✅ Progress notifications received");
                 info!("✅ Final result delivered");

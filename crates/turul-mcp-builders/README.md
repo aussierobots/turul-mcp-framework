@@ -24,8 +24,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-builders = "0.2.0"
-turul-mcp-server = "0.2.0"
+turul-mcp-builders = "0.2"
+turul-mcp-server = "0.2"
 serde_json = "1.0"
 ```
 

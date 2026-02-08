@@ -213,6 +213,8 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
             }
         }
 
+        impl turul_mcp_builders::traits::HasIcons for #struct_name {}
+
         // Implement McpResource trait with session-aware signature
         #[async_trait::async_trait]
         impl turul_mcp_server::McpResource for #struct_name {

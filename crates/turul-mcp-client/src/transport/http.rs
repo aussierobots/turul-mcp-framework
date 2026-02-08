@@ -450,7 +450,7 @@ impl Transport for HttpTransport {
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18");
+            .header("MCP-Protocol-Version", "2025-11-25");
 
         // Include session ID if we have one
         if let Some(ref session_id) = *self.session_id.lock() {
@@ -516,7 +516,7 @@ impl Transport for HttpTransport {
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18");
+            .header("MCP-Protocol-Version", "2025-11-25");
 
         // Include session ID if we have one
         if let Some(ref session_id) = *self.session_id.lock() {
@@ -570,7 +570,7 @@ impl Transport for HttpTransport {
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18");
+            .header("MCP-Protocol-Version", "2025-11-25");
 
         // Include session ID if we have one
         if let Some(ref session_id) = *self.session_id.lock() {
@@ -622,7 +622,7 @@ impl Transport for HttpTransport {
             .client
             .delete(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-11-25")
             .header("Mcp-Session-Id", session_id)
             .send()
             .await
@@ -710,7 +710,7 @@ impl Transport for HttpTransport {
                 let mut request_builder = client
                     .get(url.as_str())
                     .header("Accept", "text/event-stream")
-                    .header("MCP-Protocol-Version", "2025-06-18");
+                    .header("MCP-Protocol-Version", "2025-11-25");
 
                 // Include session ID if available (read fresh value each time)
                 if let Some(ref current_session_id) = *session_id.lock() {

@@ -1,7 +1,7 @@
 //! E2E Integration Tests for MCP Prompts
 //!
 //! Tests real HTTP/SSE transport using prompts-test-server
-//! Validates complete MCP 2025-06-18 specification compliance
+//! Validates complete MCP 2025-11-25 specification compliance
 
 use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 use tracing::info;

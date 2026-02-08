@@ -219,6 +219,9 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
             fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> { None }
         }
 
+        #[automatically_derived]
+        impl turul_mcp_builders::traits::HasIcons for #struct_name {}
+
         // ToolDefinition automatically implemented via blanket impl!
 
         #[automatically_derived]

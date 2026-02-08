@@ -4,7 +4,7 @@
 //! 1. The outputSchema reported in tools/list
 //! 2. The actual structuredContent returned in tools/call
 //!
-//! CRITICAL: This validates the MCP 2025-06-18 specification requirement that
+//! CRITICAL: This validates the MCP specification requirement that
 //! tools with outputSchema MUST provide matching structuredContent structure.
 //!
 //! Tests specifically cover the CountAnnouncements scenario where derive macros

@@ -328,6 +328,8 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
+        impl turul_mcp_builders::traits::HasIcons for #name {}
+
         // ToolDefinition automatically implemented via trait composition!
 
         #[automatically_derived]

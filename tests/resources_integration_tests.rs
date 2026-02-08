@@ -1,6 +1,6 @@
 //! MCP Resources Integration Tests
 //!
-//! Comprehensive integration tests for all MCP 2025-06-18 resources features
+//! Comprehensive integration tests for all MCP 2025-11-25 resources features
 //! including pagination, security, URI templates, and notification integration.
 
 use turul_mcp_server::prelude::*;

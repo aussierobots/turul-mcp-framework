@@ -1,11 +1,11 @@
 # MCP E2E Compliance Test Plan
-## Model Context Protocol 2025-06-18 Specification Compliance
+## Model Context Protocol 2025-11-25 Specification Compliance
 
 **Version**: 1.0  
 **Last Updated**: 2025-09-12  
-**Status**: 🟢 **PRODUCTION READY** - Complete MCP 2025-06-18 compliance achieved, URI validation conflicts resolved with test mode  
+**Status**: 🟢 **PRODUCTION READY** - Complete MCP 2025-11-25 compliance achieved, URI validation conflicts resolved with test mode  
 **Framework**: turul-mcp-framework  
-**Specification**: [MCP 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18)
+**Specification**: [MCP 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25)
 
 ---
 
@@ -15,14 +15,14 @@
 
 | Protocol Area | Specification Coverage | Test Server | E2E Tests | Status |
 |---------------|----------------------|-------------|-----------|---------|
-| **Core Protocol** | [JSON-RPC 2.0](https://modelcontextprotocol.io/specification/2025-06-18#protocol) | ✅ All servers | ✅ Complete | 🟢 **COMPLIANT** |
-| **Initialize** | [Lifecycle](https://modelcontextprotocol.io/specification/2025-06-18#initialize) | ✅ All servers | ✅ Complete | 🟢 **COMPLIANT** |
-| **Tools** | [Tools Protocol](https://modelcontextprotocol.io/specification/2025-06-18#tools) | ✅ Complete | ✅ Complete | 🟢 **COMPLIANT** |
-| **Resources** | [Resources Protocol](https://modelcontextprotocol.io/specification/2025-06-18#resources) | ✅ Complete | ✅ Complete | 🟢 **COMPLIANT** |
-| **Prompts** | [Prompts Protocol](https://modelcontextprotocol.io/specification/2025-06-18#prompts) | ✅ Complete | ✅ Complete | 🟢 **COMPLIANT** |
-| **Notifications** | [Notifications](https://modelcontextprotocol.io/specification/2025-06-18#notifications) | ✅ Partial | ✅ Partial | 🟡 **PARTIAL** |
-| **Logging** | [Logging](https://modelcontextprotocol.io/specification/2025-06-18#logging) | ✅ Complete | ✅ Complete | 🟢 **COMPLIANT** |
-| **Capabilities** | [Capabilities](https://modelcontextprotocol.io/specification/2025-06-18#capabilities) | ✅ Complete | ✅ Complete | 🟢 **COMPLIANT** |
+| **Core Protocol** | [JSON-RPC 2.0](https://modelcontextprotocol.io/specification/2025-11-25#protocol) | ✅ All servers | ✅ Complete | 🟢 **COMPLIANT** |
+| **Initialize** | [Lifecycle](https://modelcontextprotocol.io/specification/2025-11-25#initialize) | ✅ All servers | ✅ Complete | 🟢 **COMPLIANT** |
+| **Tools** | [Tools Protocol](https://modelcontextprotocol.io/specification/2025-11-25#tools) | ✅ Complete | ✅ Complete | 🟢 **COMPLIANT** |
+| **Resources** | [Resources Protocol](https://modelcontextprotocol.io/specification/2025-11-25#resources) | ✅ Complete | ✅ Complete | 🟢 **COMPLIANT** |
+| **Prompts** | [Prompts Protocol](https://modelcontextprotocol.io/specification/2025-11-25#prompts) | ✅ Complete | ✅ Complete | 🟢 **COMPLIANT** |
+| **Notifications** | [Notifications](https://modelcontextprotocol.io/specification/2025-11-25#notifications) | ✅ Partial | ✅ Partial | 🟡 **PARTIAL** |
+| **Logging** | [Logging](https://modelcontextprotocol.io/specification/2025-11-25#logging) | ✅ Complete | ✅ Complete | 🟢 **COMPLIANT** |
+| **Capabilities** | [Capabilities](https://modelcontextprotocol.io/specification/2025-11-25#capabilities) | ✅ Complete | ✅ Complete | 🟢 **COMPLIANT** |
 
 **Overall Compliance**: 🟢 **PRODUCTION READY** - 34/34 MCP compliance tests pass, 14/15 E2E integration tests pass (94% success rate), URI validation conflicts resolved via test mode configuration
 
@@ -31,7 +31,7 @@
 ## 🎯 MCP Specification Coverage Matrix
 
 ### 1. Core Protocol Compliance
-**Specification**: [JSON-RPC 2.0 Protocol](https://modelcontextprotocol.io/specification/2025-06-18#protocol)
+**Specification**: [JSON-RPC 2.0 Protocol](https://modelcontextprotocol.io/specification/2025-11-25#protocol)
 
 #### Test Coverage:
 - ✅ **JSON-RPC 2.0 Format**: All requests/responses use correct structure
@@ -44,10 +44,10 @@
 **Test Servers**: All test servers validate JSON-RPC compliance
 
 ### 2. Initialize Protocol
-**Specification**: [Initialize Handshake](https://modelcontextprotocol.io/specification/2025-06-18#initialize)
+**Specification**: [Initialize Handshake](https://modelcontextprotocol.io/specification/2025-11-25#initialize)
 
 #### Test Coverage:
-- ✅ **Protocol Version**: "2025-06-18" version string validation
+- ✅ **Protocol Version**: "2025-11-25" version string validation
 - ✅ **Client Info**: Required clientInfo with name and version
 - ✅ **Server Info**: Proper serverInfo response with implementation details
 - ✅ **Capabilities Exchange**: Truthful capability advertising
@@ -57,7 +57,7 @@
 **Test Servers**: All test servers implement initialize handshake
 
 ### 3. Tools Protocol
-**Specification**: [Tools](https://modelcontextprotocol.io/specification/2025-06-18#tools)
+**Specification**: [Tools](https://modelcontextprotocol.io/specification/2025-11-25#tools)
 
 #### Test Coverage:
 - ✅ **tools/list**: List available tools with JSON Schema validation
@@ -71,7 +71,7 @@
 **Test Server**: ✅ **COMPLETE** - `examples/tools-test-server/`
 
 ### 4. Resources Protocol ✅ COMPLETE
-**Specification**: [Resources](https://modelcontextprotocol.io/specification/2025-06-18#resources)
+**Specification**: [Resources](https://modelcontextprotocol.io/specification/2025-11-25#resources)
 
 #### Test Coverage:
 - ✅ **resources/list**: List available resources with cursor pagination
@@ -88,7 +88,7 @@
 **Test Server**: ✅ **COMPLETE** - `examples/resource-test-server/`
 
 ### 5. Prompts Protocol ✅ COMPLETE
-**Specification**: [Prompts](https://modelcontextprotocol.io/specification/2025-06-18#prompts)
+**Specification**: [Prompts](https://modelcontextprotocol.io/specification/2025-11-25#prompts)
 
 #### Test Coverage:
 - ✅ **prompts/list**: List available prompts with cursor pagination
@@ -103,7 +103,7 @@
 **Test Server**: ✅ **COMPLETE** - `examples/prompts-test-server/`
 
 ### 6. Notifications Protocol
-**Specification**: [Notifications](https://modelcontextprotocol.io/specification/2025-06-18#notifications)
+**Specification**: [Notifications](https://modelcontextprotocol.io/specification/2025-11-25#notifications)
 
 #### Test Coverage:
 - ✅ **notifications/message**: Logging and debug messages
@@ -120,7 +120,7 @@
 **Test Servers**: ✅ **PARTIAL** - All servers support some notifications
 
 ### 7. Logging Protocol ✅ COMPLETE
-**Specification**: [Logging](https://modelcontextprotocol.io/specification/2025-06-18#logging)
+**Specification**: [Logging](https://modelcontextprotocol.io/specification/2025-11-25#logging)
 
 #### Test Coverage:
 - ✅ **logging/setLevel**: Set per-session logging levels
@@ -133,7 +133,7 @@
 **Test Server**: ✅ **COMPLETE** - `examples/logging-test-server/`
 
 ### 8. Capabilities Protocol ✅ COMPLETE
-**Specification**: [Capabilities](https://modelcontextprotocol.io/specification/2025-06-18#capabilities)
+**Specification**: [Capabilities](https://modelcontextprotocol.io/specification/2025-11-25#capabilities)
 
 #### Test Coverage:
 - ✅ **Truthful Advertising**: Only advertise implemented capabilities
@@ -499,7 +499,7 @@ cargo test --test mcp_specification_compliance
 # Test initialize handshake
 curl -X POST http://127.0.0.1:52941/mcp \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 
 # Test resources/list
 curl -X POST http://127.0.0.1:52941/mcp \
@@ -550,4 +550,4 @@ curl -N -H "Accept: text/event-stream" \
 
 **Next Update Due**: After minor notifications gap resolution (optional)
 **Document Owner**: turul-mcp-framework team
-**Specification Reference**: https://modelcontextprotocol.io/specification/2025-06-18
+**Specification Reference**: https://modelcontextprotocol.io/specification/2025-11-25

@@ -1,6 +1,6 @@
 [package]
 name = "calculator-add-manual-server"
-version = "0.2.0"
+version = "0.2.2"
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -12,7 +12,6 @@ description = "Example MCP calculator server using fully manual implementation (
 turul-mcp-server = { workspace = true }
 turul-mcp-protocol = { workspace = true }
 turul-mcp-builders = { workspace = true }
-turul-mcp-protocol-2025-06-18 = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }

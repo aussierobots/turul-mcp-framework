@@ -12,7 +12,7 @@ AWS Lambda integration for the turul-mcp-framework, enabling serverless deployme
 ## Features
 
 - ✅ **Zero-Cold-Start Architecture** - Optimized Lambda integration
-- ✅ **MCP 2025-06-18 Compliance** - Full protocol support with SSE (snapshots or streaming)
+- ✅ **MCP 2025-11-25 Compliance** - Full protocol support with SSE (snapshots or streaming)
 - ✅ **DynamoDB Session Storage** - Persistent session management across invocations
 - ✅ **CORS Support** - Automatic CORS header injection for browser clients
 - ✅ **Type Conversion Layer** - Clean `lambda_http` ↔ `hyper` conversion
@@ -92,7 +92,7 @@ For real-time SSE streaming, enable the `streaming` feature and use `handle_stre
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.2.0", features = ["streaming"] }
+turul-mcp-aws-lambda = { version = "0.2", features = ["streaming"] }
 ```
 
 ```rust
@@ -334,8 +334,8 @@ cargo test --package turul-mcp-aws-lambda streaming
 cargo lambda watch &
 curl -X POST http://localhost:9000/lambda-url/test \
   -H "Content-Type: application/json" \
-  -H "MCP-Protocol-Version: 2025-06-18" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+  -H "MCP-Protocol-Version: 2025-11-25" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 ```
 
 ## Performance Optimization
@@ -368,7 +368,7 @@ let server = LambdaMcpServerBuilder::new()
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = { version = "0.2.0", features = ["cors", "sse", "dynamodb"] }
+turul-mcp-aws-lambda = { version = "0.2", features = ["cors", "sse", "dynamodb"] }
 ```
 
 - `default` - Includes `cors` and `sse`

@@ -10,6 +10,7 @@ use turul_mcp_server::{McpServer, McpTool};
 use turul_mcp_protocol::{ToolSchema, ToolResult, version::McpVersion, schema::JsonSchema, McpError, McpResult};
 use turul_mcp_protocol::tools::CallToolResult;
 use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
+use turul_mcp_builders::prelude::HasIcon;
 use serde_json::Value;
 use tracing::info;
 
@@ -62,6 +63,8 @@ impl HasToolMeta for VersionInfoTool {
         None // Use default
     }
 }
+
+impl HasIcons for VersionInfoTool {}
 
 // ToolDefinition is automatically implemented via blanket impl!
 
@@ -174,6 +177,8 @@ impl HasToolMeta for VersionTestTool {
     }
 }
 
+impl HasIcons for VersionTestTool {}
+
 // ToolDefinition is automatically implemented via blanket impl!
 
 #[async_trait]
@@ -195,6 +200,7 @@ impl McpTool for VersionTestTool {
                     McpVersion::V2024_11_05,
                     McpVersion::V2025_03_26,
                     McpVersion::V2025_06_18,
+                    McpVersion::V2025_11_25,
                 ];
 
                 if supported_versions.contains(&requested) {
@@ -211,7 +217,7 @@ impl McpTool for VersionTestTool {
                 "Version Negotiation Test\n\
                 Client Requested: {}\n\
                 Server Response: {}\n\
-                Server Supports: 2024-11-05, 2025-03-26, 2025-06-18",
+                Server Supports: 2024-11-05, 2025-03-26, 2025-06-18, 2025-11-25",
                 client_version,
                 negotiation_result
             )),
@@ -233,7 +239,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .name("version-negotiation-server")
         .version("1.0.0")
         .title("MCP Protocol Version Negotiation Example")
-        .instructions("This server demonstrates automatic MCP protocol version negotiation. The server supports versions 2024-11-05, 2025-03-26, and 2025-06-18, and will negotiate the best compatible version during initialization.")
+        .instructions("This server demonstrates automatic MCP protocol version negotiation. The server supports versions 2024-11-05, 2025-03-26, 2025-06-18, and 2025-11-25, and will negotiate the best compatible version during initialization.")
         .tool(VersionInfoTool::new())
         .tool(VersionTestTool::new())
         .bind_address("127.0.0.1:8049".parse()?)
@@ -255,11 +261,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("  • 2024-11-05 - Base protocol");
     info!("  • 2025-03-26 - Added streamable HTTP/SSE");
     info!("  • 2025-06-18 - Added _meta fields, progress tokens, cursors");
+    info!("  • 2025-11-25 - Added icons, tasks, elicitation, sampling tools");
     info!("");
     info!("💡 Test version negotiation:");
     info!("  curl -X POST http://127.0.0.1:8049/mcp \\");
     info!("    -H 'Content-Type: application/json' \\");
-    info!("    -d '{{\"method\": \"initialize\", \"params\": {{\"protocol_version\": \"2025-06-18\", \"capabilities\": {{}}, \"client_info\": {{\"name\": \"test-client\", \"version\": \"1.0.0\"}}}}}}'");
+    info!("    -d '{{\"method\": \"initialize\", \"params\": {{\"protocol_version\": \"2025-11-25\", \"capabilities\": {{}}, \"client_info\": {{\"name\": \"test-client\", \"version\": \"1.0.0\"}}}}}}'");
 
     server.run().await?;
     Ok(())

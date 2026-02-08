@@ -202,6 +202,10 @@ pub fn prompt_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 fn prompt_meta(&self) -> Option<&HashMap<String, Value>> { None }
             }
 
+            impl turul_mcp_builders::HasIcons for GeneratedPrompt {}
+
+            // PromptDefinition automatically implemented via blanket impl!
+
             #[async_trait::async_trait]
             impl McpPrompt for GeneratedPrompt {
                 async fn render(&self, arguments: Option<HashMap<String, Value>>)

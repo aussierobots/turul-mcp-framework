@@ -2,7 +2,7 @@
 
 A **cost-optimized** serverless Model Context Protocol (MCP) server built with Rust for standard Lambda deployments. This implementation showcases:
 
-- 🚀 **MCP 2025-06-18 Compliance**: POST JSON-RPC + SSE snapshots (not real-time streaming), session management
+- 🚀 **MCP 2025-11-25 Compliance**: POST JSON-RPC + SSE snapshots (not real-time streaming), session management
 - ⚠️ **SSE Mode**: Returns recent events when requested, then closes connection (snapshot mode)
 - 🔄 **Clean Notification Architecture**: tokio broadcast channels for internal events, SNS for external events
 - 📡 **True Fan-out**: Multiple SSE connections share events via tokio broadcast - no competition
@@ -110,7 +110,7 @@ aws sns publish \
 
 ## 🎯 Features
 
-### **🚀 MCP 2025-06-18 Streamable HTTP Compliance**
+### **🚀 MCP 2025-11-25 Streamable HTTP Compliance**
 - **✅ JSON-RPC via POST**: All MCP methods sent via HTTP POST with JSON-RPC 2.0
 - **✅ SSE Streaming**: Server can respond with Server-Sent Events stream for notifications
 - **✅ Session Management**: `Mcp-Session-Id` header support for stateful sessions
@@ -192,7 +192,7 @@ cargo run -- connect --url http://127.0.0.1:9000 --debug
 
 #### **SSE Streaming Tests**
 ```bash
-# Test basic SSE streaming (MCP 2025-06-18 compliance)
+# Test basic SSE streaming (MCP 2025-11-25 compliance)
 cargo run -- test --url http://127.0.0.1:9000 --suite streaming
 
 # What this tests:
@@ -250,7 +250,7 @@ sam deploy --guided
 ## 📖 Documentation
 
 ### **📚 Architecture & Implementation**
-- **[Transport Architecture](docs/transport.md)**: MCP 2025-06-18 Streamable HTTP compliance and notification system
+- **[Transport Architecture](docs/transport.md)**: MCP 2025-11-25 Streamable HTTP compliance and notification system
 - **[Infrastructure Scripts](scripts/)**: Automated AWS resource setup and cleanup
 - **[Session Management](docs/sessions.md)**: DynamoDB-backed session persistence and lifecycle
 
@@ -292,7 +292,7 @@ curl -X POST https://your-api-gateway-url/mcp \
     "id": 1,
     "method": "initialize",
     "params": {
-      "protocolVersion": "2025-06-18",
+      "protocolVersion": "2025-11-25",
       "capabilities": {
         "tools": {},
         "resources": {},
@@ -381,7 +381,7 @@ aws sns publish \
 
 ### **🎯 MCP Streamable HTTP Architecture**
 
-Our implementation follows the **MCP 2025-06-18 Streamable HTTP specification** perfectly:
+Our implementation follows the **MCP 2025-11-25 Streamable HTTP specification** perfectly:
 
 1. **📮 Client Request**: All MCP communication via HTTP POST with JSON-RPC 2.0
 2. **🔄 Server Response Options**:
@@ -404,7 +404,7 @@ This **Lambda MCP Server** demonstrates a **production-ready** clean notificatio
 ### **🎯 MCP Specification Compliance**
 - **Single Endpoint**: All communication through `/mcp` via HTTP POST/GET
 - **JSON-RPC 2.0**: Proper message formatting and response handling  
-- **SSE Response Format**: Correct SSE headers and event formatting per MCP 2025-06-18
+- **SSE Response Format**: Correct SSE headers and event formatting per MCP 2025-11-25
 - **Session Management**: `Mcp-Session-Id` header support with session targeting
 - **Multi-Client Support**: Multiple concurrent connections sharing events via tokio broadcast
 
@@ -424,7 +424,7 @@ External SNS → Lambda Trigger → tokio::broadcast → All SSE Connections
 - **Instant Event Distribution**: No polling delays, direct tokio broadcast
 - **Multi-Client Architecture**: Perfect event sharing within same Lambda instance
 - **Optional External Events**: SNS integration when needed, tokio-only when not
-- **MCP Compliant**: Full adherence to MCP 2025-06-18 Streamable HTTP specification
+- **MCP Compliant**: Full adherence to MCP 2025-11-25 Streamable HTTP specification
 
 ## 🔧 Testing & Development
 
@@ -465,7 +465,7 @@ cargo run -- test --url http://127.0.0.1:9000 --test-sse-streaming
 ```
 
 **⭐ What This Achieves:**
-- ✅ **MCP 2025-06-18 Compliance**: Full Streamable HTTP specification support
+- ✅ **MCP 2025-11-25 Compliance**: Full Streamable HTTP specification support
 - ✅ **True Multi-Client**: ALL connected clients receive ALL events via tokio broadcast  
 - ✅ **No Message Competition**: Eliminates SQS polling loops and message competition
 - ✅ **Clean Architecture**: Internal tokio channels + optional external SNS integration

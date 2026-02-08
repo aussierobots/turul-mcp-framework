@@ -166,6 +166,10 @@ pub fn sampling_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 fn metadata(&self) -> Option<&serde_json::Value> { None }
             }
 
+            impl turul_mcp_builders::HasSamplingTools for #struct_name {}
+
+            // SamplingDefinition automatically implemented via blanket impl!
+
             #[async_trait::async_trait]
             impl McpSampling for #struct_name {
                 async fn sample(&self, request: turul_mcp_protocol::sampling::CreateMessageRequest)

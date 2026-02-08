@@ -2,7 +2,7 @@
 //!
 //! Comprehensive test server providing various types of resources for E2E testing.
 //! This server implements all MCP resource patterns and edge cases to validate
-//! framework compliance with the MCP 2025-06-18 specification.
+//! framework compliance with the MCP 2025-11-25 specification.
 //!
 //! ## Test Resources Available:
 //!
@@ -37,7 +37,7 @@
 //! # Test with curl
 //! curl -X POST http://127.0.0.1:PORT/mcp \
 //!   -H "Content-Type: application/json" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 //!
 //! curl -X POST http://127.0.0.1:PORT/mcp \
 //!   -H "Content-Type: application/json" \
@@ -150,6 +150,7 @@ impl HasResourceAnnotations for FileResource {
     }
 }
 impl HasResourceMeta for FileResource {}
+impl HasIcons for FileResource {}
 
 #[async_trait]
 impl McpResource for FileResource {
@@ -206,6 +207,7 @@ impl HasResourceAnnotations for MemoryResource {
     }
 }
 impl HasResourceMeta for MemoryResource {}
+impl HasIcons for MemoryResource {}
 
 #[async_trait]
 impl McpResource for MemoryResource {
@@ -269,6 +271,7 @@ impl HasResourceAnnotations for ErrorResource {
     }
 }
 impl HasResourceMeta for ErrorResource {}
+impl HasIcons for ErrorResource {}
 
 #[async_trait]
 impl McpResource for ErrorResource {
@@ -314,6 +317,7 @@ impl HasResourceAnnotations for SlowResource {
     }
 }
 impl HasResourceMeta for SlowResource {}
+impl HasIcons for SlowResource {}
 
 #[async_trait]
 impl McpResource for SlowResource {
@@ -380,6 +384,7 @@ impl HasResourceAnnotations for TemplateResource {
     }
 }
 impl HasResourceMeta for TemplateResource {}
+impl HasIcons for TemplateResource {}
 
 #[async_trait]
 impl McpResource for TemplateResource {
@@ -451,6 +456,7 @@ impl HasResourceAnnotations for EmptyResource {
     }
 }
 impl HasResourceMeta for EmptyResource {}
+impl HasIcons for EmptyResource {}
 
 #[async_trait]
 impl McpResource for EmptyResource {
@@ -499,6 +505,7 @@ impl HasResourceAnnotations for LargeResource {
     }
 }
 impl HasResourceMeta for LargeResource {}
+impl HasIcons for LargeResource {}
 
 #[async_trait]
 impl McpResource for LargeResource {
@@ -577,6 +584,7 @@ impl HasResourceAnnotations for BinaryResource {
     }
 }
 impl HasResourceMeta for BinaryResource {}
+impl HasIcons for BinaryResource {}
 
 #[async_trait]
 impl McpResource for BinaryResource {
@@ -645,6 +653,7 @@ impl HasResourceAnnotations for SessionResource {
     }
 }
 impl HasResourceMeta for SessionResource {}
+impl HasIcons for SessionResource {}
 
 #[async_trait]
 impl McpResource for SessionResource {
@@ -726,6 +735,7 @@ impl HasResourceAnnotations for SubscribableResource {
     }
 }
 impl HasResourceMeta for SubscribableResource {}
+impl HasIcons for SubscribableResource {}
 
 #[async_trait]
 impl McpResource for SubscribableResource {
@@ -786,6 +796,7 @@ impl HasResourceAnnotations for NotifyingResource {
     }
 }
 impl HasResourceMeta for NotifyingResource {}
+impl HasIcons for NotifyingResource {}
 
 #[async_trait]
 impl McpResource for NotifyingResource {
@@ -809,7 +820,7 @@ impl McpResource for NotifyingResource {
         // Demonstrate the exact JSON-RPC notification that WOULD be emitted
         let simulated_notification = json!({
             "jsonrpc": "2.0",
-            "method": "notifications/resources/listChanged",
+            "method": "notifications/resources/list_changed",
             "params": {
                 "_meta": {
                     "event_id": notification_id,
@@ -830,10 +841,10 @@ impl McpResource for NotifyingResource {
                 "read_count": 1
             },
             "notification_emitted": {
-                "method": "notifications/resources/listChanged",
+                "method": "notifications/resources/list_changed",
                 "target": "all_connected_sse_clients",
                 "reason": "resource_list_changed_due_to_read_operation",
-                "compliance": "MCP_2025_06_18",
+                "compliance": "MCP_2025_11_25",
                 "transport": "SSE_streaming"
             },
             "sse_event_structure": simulated_notification,
@@ -882,6 +893,7 @@ impl HasResourceAnnotations for MultiContentResource {
     }
 }
 impl HasResourceMeta for MultiContentResource {}
+impl HasIcons for MultiContentResource {}
 
 #[async_trait]
 impl McpResource for MultiContentResource {
@@ -951,6 +963,7 @@ impl HasResourceAnnotations for PaginatedResource {
     }
 }
 impl HasResourceMeta for PaginatedResource {}
+impl HasIcons for PaginatedResource {}
 
 #[async_trait]
 impl McpResource for PaginatedResource {
@@ -1042,6 +1055,7 @@ impl HasResourceAnnotations for InvalidUriResource {
     }
 }
 impl HasResourceMeta for InvalidUriResource {}
+impl HasIcons for InvalidUriResource {}
 
 #[async_trait]
 impl McpResource for InvalidUriResource {
@@ -1099,6 +1113,7 @@ impl HasResourceAnnotations for LongUriResource {
     }
 }
 impl HasResourceMeta for LongUriResource {}
+impl HasIcons for LongUriResource {}
 
 #[async_trait]
 impl McpResource for LongUriResource {
@@ -1149,6 +1164,7 @@ impl HasResourceAnnotations for MetaDynamicResource {
     }
 }
 impl HasResourceMeta for MetaDynamicResource {}
+impl HasIcons for MetaDynamicResource {}
 
 #[async_trait]
 impl McpResource for MetaDynamicResource {
@@ -1234,6 +1250,7 @@ impl HasResourceAnnotations for UserTemplateResource {
     }
 }
 impl HasResourceMeta for UserTemplateResource {}
+impl HasIcons for UserTemplateResource {}
 
 #[async_trait]
 impl McpResource for UserTemplateResource {
@@ -1312,6 +1329,7 @@ impl HasResourceAnnotations for FileTemplateResource {
     }
 }
 impl HasResourceMeta for FileTemplateResource {}
+impl HasIcons for FileTemplateResource {}
 
 #[async_trait]
 impl McpResource for FileTemplateResource {
@@ -1380,7 +1398,9 @@ struct CompleteResource {
 impl Default for CompleteResource {
     fn default() -> Self {
         let annotations = Annotations {
-            title: Some("Complete Test Resource".to_string()),
+            audience: Some(vec!["user".to_string()]),
+            priority: Some(0.9),
+            last_modified: None,
         };
 
         let mut meta = HashMap::new();
@@ -1398,7 +1418,7 @@ impl HasResourceMetadata for CompleteResource {
         "complete_resource"
     }
     fn title(&self) -> Option<&str> {
-        self.annotations.title.as_deref()
+        Some("Complete Test Resource")
     }
 }
 
@@ -1437,6 +1457,8 @@ impl HasResourceMeta for CompleteResource {
         Some(&self.meta)
     }
 }
+
+impl HasIcons for CompleteResource {}
 
 #[async_trait]
 impl McpResource for CompleteResource {
@@ -1505,7 +1527,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .instructions(
             "Comprehensive test server providing various types of resources for E2E testing.\n\
             This server implements all MCP resource patterns and edge cases to validate\n\
-            framework compliance with the MCP 2025-06-18 specification.\n\n\
+            framework compliance with the MCP 2025-11-25 specification.\n\n\
             Available test resources:\n\
             • Basic: file:///tmp/, file:///memory/, file:///error/, file:///slow/, file:///empty/, file:///large/, file:///binary/\n\
             • Templates: file:///template/items/{id}.json, file:///template/users/{user_id}.json, file:///template/files/{path}\n\
@@ -1577,7 +1599,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("💡 Quick Test Commands:");
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("     -H 'Content-Type: application/json' \\");
-    info!("     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'");
+    info!("     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'");
     info!("");
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("     -H 'Content-Type: application/json' \\");

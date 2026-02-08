@@ -127,7 +127,7 @@ async fn test_roots_list_with_pagination() {
         );
     }
 
-    // Check for _meta field if present (MCP 2025-06-18 supports _meta)
+    // Check for _meta field if present (MCP supports _meta)
     if result.contains_key("_meta") {
         let meta = result.get("_meta").unwrap().as_object().unwrap();
         info!("✅ Meta information present: {:?}", meta);

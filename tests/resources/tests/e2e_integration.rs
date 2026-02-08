@@ -1,7 +1,7 @@
 //! E2E Integration Tests for MCP Resources
 //!
 //! Tests real HTTP/SSE transport using resource-test-server
-//! Validates complete MCP 2025-06-18 specification compliance
+//! Validates complete MCP 2025-11-25 specification compliance
 
 use mcp_e2e_shared::{McpTestClient, TestServerManager, TestFixtures};
 use serial_test::serial;
@@ -31,7 +31,7 @@ async fn test_mcp_initialize_session() {
     assert!(result_data.contains_key("serverInfo"));
 
     // Verify protocol version
-    assert_eq!(result_data["protocolVersion"], "2025-06-18");
+    assert_eq!(result_data["protocolVersion"], "2025-11-25");
 
     // Verify session ID was provided
     assert!(client.session_id().is_some());

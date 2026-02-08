@@ -11,7 +11,6 @@ description = "Comprehensive MCP client library with multi-transport support"
 [dependencies]
 # MCP framework dependencies
 turul-mcp-protocol = { workspace = true }
-turul-mcp-protocol-2025-06-18 = { workspace = true }
 turul-mcp-json-rpc-server = { workspace = true }
 
 # Async runtime

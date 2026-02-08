@@ -173,7 +173,7 @@ impl SseTransport {
                     .get(sse_endpoint.clone())
                     .header("Accept", "text/event-stream")
                     .header("Cache-Control", "no-cache")
-                    .header("MCP-Protocol-Version", "2025-06-18")
+                    .header("MCP-Protocol-Version", "2025-11-25")
                     .send()
                     .await
                 {
@@ -410,7 +410,7 @@ impl Transport for SseTransport {
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18");
+            .header("MCP-Protocol-Version", "2025-11-25");
 
         // Add session ID header if available
         if let Some(ref session_id) = self.session_id {
@@ -462,7 +462,7 @@ impl Transport for SseTransport {
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18");
+            .header("MCP-Protocol-Version", "2025-11-25");
 
         // Add session ID header if available
         if let Some(ref session_id) = self.session_id {
@@ -510,7 +510,7 @@ impl Transport for SseTransport {
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18");
+            .header("MCP-Protocol-Version", "2025-11-25");
 
         // Add session ID header if available
         if let Some(ref session_id) = self.session_id {
@@ -558,7 +558,7 @@ impl Transport for SseTransport {
             .client
             .delete(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-11-25")
             .header("Mcp-Session-Id", session_id)
             .send()
             .await

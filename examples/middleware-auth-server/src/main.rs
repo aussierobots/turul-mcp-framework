@@ -18,7 +18,7 @@
 //!   -H "Content-Type: application/json" \
 //!   -H "Accept: application/json" \
 //!   -H "X-API-Key: secret-key-123" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 //! ```
 
 use async_trait::async_trait;
@@ -179,7 +179,7 @@ async fn main() -> McpResult<()> {
     tracing::info!("    -H 'Content-Type: application/json' \\");
     tracing::info!("    -H 'Accept: application/json' \\");
     tracing::info!("    -H 'X-API-Key: secret-key-123' \\");
-    tracing::info!("    -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'");
+    tracing::info!("    -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'");
 
     server.run().await
 }

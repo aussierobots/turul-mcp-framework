@@ -1,6 +1,6 @@
 //! Pagination Integration Tests
 //!
-//! Tests for MCP 2025-06-18 pagination features.
+//! Tests for MCP pagination features (current spec: 2025-11-25).
 
 use crate::handlers::{McpHandler, ResourcesListHandler};
 use async_trait::async_trait;
@@ -64,6 +64,7 @@ impl HasResourceMimeType for TestResource {}
 impl HasResourceSize for TestResource {}
 impl HasResourceAnnotations for TestResource {}
 impl HasResourceMeta for TestResource {}
+impl HasIcons for TestResource {}
 
 #[tokio::test]
 async fn test_resources_list_pagination() {

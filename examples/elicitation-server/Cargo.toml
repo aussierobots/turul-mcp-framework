@@ -1,6 +1,6 @@
 [package]
 name = "elicitation-server"
-version = "0.2.0"
+version = "0.2.2"
 edition.workspace = true
 
 [dependencies]
@@ -11,8 +11,9 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 serde_json = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 serde_yml = { workspace = true }
+turul-mcp-derive = { workspace = true }
 async-trait = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }

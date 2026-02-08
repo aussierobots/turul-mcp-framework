@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-This is a comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients. It is fully compliant with the MCP 2025-06-18 specification. The framework provides a complete ecosystem with a core framework, a client library, and serverless support. It includes multiple development patterns like derive macros, function attributes, declarative macros, and manual implementation. It supports various transports like HTTP/1.1, HTTP/2, WebSocket, SSE, and stdio. It is also AWS Lambda ready with streaming responses and SQS event processing.
+This is a comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients. It is fully compliant with the MCP 2025-11-25 specification. The framework provides a complete ecosystem with a core framework, a client library, and serverless support. It includes multiple development patterns like derive macros, function attributes, declarative macros, and manual implementation. It supports various transports like HTTP/1.1, HTTP/2, WebSocket, SSE, and stdio. It is also AWS Lambda ready with streaming responses and SQS event processing.
 
 The project is structured as a Rust workspace with 10 crates, including the core framework, a client library, and 42 examples. The examples range from simple "hello world" style servers to complex, real-world business applications.
 
@@ -71,7 +71,7 @@ This modular approach, with its separation of concerns, allows developers to cho
 
 ### Testing and Validation Strategy: A Critical Review
 
-The framework's testing strategy is its most mature and impressive feature, providing a high degree of confidence in its compliance, correctness, and robustness. The strategy is not just a collection of unit tests, but a multi-layered approach that validates the framework from the protocol level all the way to end-to-end user scenarios. The `E2E_TEST_IMPLEMENTATION_STATUS.md` file serves as a living document that tracks the claim of 100% E2E test coverage for the MCP 2025-06-18 specification.
+The framework's testing strategy is its most mature and impressive feature, providing a high degree of confidence in its compliance, correctness, and robustness. The strategy is not just a collection of unit tests, but a multi-layered approach that validates the framework from the protocol level all the way to end-to-end user scenarios. The `E2E_TEST_IMPLEMENTATION_STATUS.md` file serves as a living document that tracks the claim of 100% E2E test coverage for the MCP 2025-11-25 specification.
 
 A critical review of the test suite reveals several key strengths:
 

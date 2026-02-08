@@ -27,7 +27,7 @@ async fn test_runtime_initialize_capabilities_truthfulness() {
         "id": 1,
         "method": "initialize",
         "params": {
-            "protocolVersion": "2025-06-18",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {
                 "name": "mcp-runtime-test",
@@ -86,7 +86,7 @@ async fn test_runtime_initialize_capabilities_truthfulness() {
     );
 
     // Verify server info
-    assert_eq!(body["result"]["protocolVersion"], "2025-06-18");
+    assert_eq!(body["result"]["protocolVersion"], "2025-11-25");
     assert!(body["result"]["serverInfo"].is_object());
 
     println!("✅ RUNTIME VALIDATION PASSED: All capabilities are truthfully advertised");

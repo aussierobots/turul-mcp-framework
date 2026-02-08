@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Features
 
-- ✅ **MCP 2025-06-18 Streamable HTTP** - Full protocol compliance with SSE streaming
+- ✅ **MCP 2025-11-25 Streamable HTTP** - Full protocol compliance with SSE streaming
 - ✅ **Session Management** - UUID v7 session IDs with automatic cleanup
 - ✅ **SSE Resumability** - Last-Event-ID support with event replay
 - ✅ **CORS Support** - Browser client compatibility with configurable origins
@@ -353,7 +353,7 @@ let stream = stream_manager.create_stream(
 The transport layer automatically handles MCP-specific headers:
 
 ```rust
-// Client sends: MCP-Protocol-Version: 2025-06-18
+// Client sends: MCP-Protocol-Version: 2025-11-25
 // Server returns: mcp-session-id: <uuid-v7>
 
 // The transport layer extracts and processes these headers automatically
@@ -424,8 +424,8 @@ use turul_http_mcp_server::{ServerStats, StreamStats};
 # Test session creation
 curl -X POST http://localhost:3000/mcp \
   -H "Content-Type: application/json" \
-  -H "MCP-Protocol-Version: 2025-06-18" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' \
+  -H "MCP-Protocol-Version: 2025-11-25" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}' \
   -v  # Note the Mcp-Session-Id header in response
 
 # Test SSE streaming
@@ -499,7 +499,7 @@ let transport = HttpMcpServerBuilder::new()
 
 ```toml
 [dependencies]
-turul-http-mcp-server = { version = "0.2.0", features = ["sse"] }
+turul-http-mcp-server = { version = "0.2", features = ["sse"] }
 ```
 
 Available features:

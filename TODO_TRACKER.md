@@ -1,6 +1,6 @@
 # TODO Tracker
 
-**Last Updated**: 2025-10-09
+**Last Updated**: 2025-10-21
 **Purpose**: Track active tasks and priorities for turul-mcp-framework development
 
 **For completed work history, see `HISTORY.md`**
@@ -9,8 +9,8 @@
 
 ## Current Status
 
-**Framework Version**: v0.2.1
-**Branch**: 0.2.1 (stable)
+**Framework Version**: v0.2.2
+**Branch**: 0.2.2
 **Test Status**: ✅ 450+ tests passing, zero warnings
 **Build Status**: ✅ All 40+ crates compile cleanly
 
@@ -139,7 +139,46 @@ These edge cases are **documented but not blocking**:
 
 ---
 
-## 📋 P2: Future Work (Not Blocking v0.2.1)
+## 🔧 P1: README Testing with Skeptic (v0.2.2)
+
+**Status**: 🚧 IN PROGRESS
+**Branch**: 0.2.2
+**Impact**: Documentation quality and crates.io reliability
+**Estimated**: 1-2 days
+
+**Context**: During v0.2.1 release preparation, discovered that README.md files are not tested by `cargo test --doc`. The turul-mcp-protocol-2025-06-18 README contains outdated version numbers and architectural misrepresentations that could mislead users.
+
+**Goals**:
+1. Add skeptic crate for markdown code block testing
+2. Configure skeptic for all published crate READMEs
+3. Fix turul-mcp-protocol-2025-06-18/README.md accuracy issues
+4. Prevent future documentation drift
+
+**Tasks**:
+- [ ] Add skeptic to workspace dependencies
+- [ ] Configure skeptic build.rs for protocol crate
+- [ ] Add skeptic test runner to protocol crate tests
+- [ ] Fix README.md version numbers (0.2.0 → 0.2.1, lines 28 and 619)
+- [ ] Rewrite README.md architectural narrative:
+  - [ ] Remove "trait-based architecture" marketing (lines 6, 10, 15, 69-92, 629-635)
+  - [ ] Emphasize "spec-pure concrete types" as main value
+  - [ ] Clarify that framework traits are in turul-mcp-builders
+  - [ ] Update "Why Choose This Crate" section to reflect actual design
+- [ ] Verify all 20+ README code examples compile with skeptic
+- [ ] Run full test suite to confirm no regressions
+- [ ] Update CHANGELOG.md with documentation fixes
+- [ ] Create PR for v0.2.2
+
+**Success Criteria**:
+- ✅ `cargo test` includes README.md code block validation
+- ✅ All README examples compile and run
+- ✅ Version numbers accurate across all documentation
+- ✅ Architectural descriptions match actual implementation
+- ✅ Zero warnings from skeptic
+
+---
+
+## 📋 P2: Future Work (Not Blocking v0.2.2)
 
 ### Session-Aware Resources
 
@@ -214,9 +253,10 @@ Features defined in spec but not yet implemented:
 ## 🎯 Next Priorities
 
 1. ✅ Schemars Integration & Testing (P0 - **COMPLETE** 2025-10-09)
-2. ⏸️ Middleware Completion (P1 - blocked on Phase 1.5 SessionView abstraction)
-3. 📝 Session-Aware Resources (P2 - design phase, breaking change)
-4. 📝 Advanced MCP 2025-06-18 Features (P2 - spec tracking)
+2. ✅ Middleware Completion (P1 - **COMPLETE** 2025-10-10)
+3. 🚧 README Testing with Skeptic (P1 - **IN PROGRESS** 2025-10-21)
+4. 📝 Session-Aware Resources (P2 - design phase, breaking change)
+5. 📝 Advanced MCP 2025-06-18 Features (P2 - spec tracking)
 
 ---
 

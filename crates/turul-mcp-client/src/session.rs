@@ -316,6 +316,7 @@ impl SessionManager {
             sampling: None,
             elicitation: None,
             roots: None,
+            tasks: None,
         }
     }
 
@@ -324,12 +325,15 @@ impl SessionManager {
         let client_info = &self.config.client_info;
 
         InitializeRequest {
-            protocol_version: "2025-06-18".to_string(),
+            protocol_version: "2025-11-25".to_string(),
             capabilities: self.create_client_capabilities(),
             client_info: Implementation {
                 name: client_info.name.clone(),
                 version: client_info.version.clone(),
                 title: None,
+                description: None,
+                website_url: None,
+                icons: None,
             },
         }
     }
@@ -424,11 +428,11 @@ mod tests {
             resources: None,
             tools: None,
             completions: None,
-            elicitation: None,
+            tasks: None,
         };
 
         manager
-            .initialize(client_caps, server_caps, "2025-06-18".to_string())
+            .initialize(client_caps, server_caps, "2025-11-25".to_string())
             .await
             .unwrap();
         assert_eq!(manager.state().await, SessionState::Active);

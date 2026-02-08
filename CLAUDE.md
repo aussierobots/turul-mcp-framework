@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Production-ready Rust framework for Model Context Protocol (MCP) servers with zero-configuration design and complete MCP 2025-06-18 specification support.
+Production-ready Rust framework for Model Context Protocol (MCP) servers with zero-configuration design and complete MCP 2025-11-25 specification support.
 
 **For historical context and completed phases, see WORKING_MEMORY.md**
 **For architectural decisions, see docs/adr/**
@@ -8,7 +8,7 @@ Production-ready Rust framework for Model Context Protocol (MCP) servers with ze
 ## 🚨 Critical Rules
 
 ### 📜 Protocol Crate Purity
-**NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2025-06-18` unless it directly relates to MCP spec compliance.** These crates MUST remain clean mirrors of the official MCP specification. No framework features, middleware hooks, or convenience additions belong here.
+**NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2025-11-25` unless it directly relates to MCP spec compliance.** These crates MUST remain clean mirrors of the official MCP specification. No framework features, middleware hooks, or convenience additions belong here.
 
 **Forbidden in Protocol Crates:**
 - ❌ Trait hierarchies (HasBaseMetadata, ToolDefinition, etc.)
@@ -46,6 +46,36 @@ trait McpResourceV2 { ... }      // Avoid versioned APIs
 - **One obvious way to do it** - avoid multiple patterns for the same thing
 - **If it compiles and tests pass** - you probably fixed it correctly
 
+### 📦 Protocol Re-export Rule (MANDATORY)
+
+**NEVER reference versioned protocol crates directly in Rust code or Cargo.toml dependencies.** Always use the `turul-mcp-protocol` re-export crate, which aliases the latest spec version.
+
+```rust
+// ✅ CORRECT - Always use the re-export crate
+use turul_mcp_protocol::*;
+use turul_mcp_protocol::elicitation::ElicitResult;
+use turul_mcp_protocol::PromptMessage;
+
+// ❌ WRONG - NEVER reference versioned crates directly
+use turul_mcp_protocol_2025_11_25::*;              // FORBIDDEN
+use turul_mcp_protocol_2025_11_25::PromptMessage;  // FORBIDDEN
+use turul_mcp_protocol_2025_06_18::*;              // FORBIDDEN
+```
+
+**In Cargo.toml:**
+```toml
+# ✅ CORRECT
+[dependencies]
+turul-mcp-protocol = { workspace = true }
+
+# ❌ WRONG - NEVER depend on versioned crate directly (except in turul-mcp-protocol itself)
+turul-mcp-protocol-2025-11-25 = { workspace = true }
+```
+
+**Only exceptions** (the ONLY places allowed to reference versioned crates):
+- `crates/turul-mcp-protocol/` — the re-export crate itself (must reference what it re-exports)
+- `crates/turul-mcp-protocol-2025-11-25/` — the versioned crate's own source
+
 ### Import Conventions
 ```rust
 // ✅ BEST - Use preludes for framework traits and builders
@@ -58,6 +88,7 @@ use turul_mcp_protocol::tools::ToolDefinition;     // Trait moved to builders!
 use turul_mcp_builders::traits::ToolDefinition;    // Use prelude instead
 
 // ❌ WRONG - Versioned imports
+use turul_mcp_protocol_2025_11_25::*;  // Use turul_mcp_protocol::* instead
 use turul_mcp_protocol_2025_06_18::*;  // Use turul_mcp_protocol::* instead
 ```
 
@@ -85,7 +116,7 @@ struct Calculator;  // Framework → tools/call
 
 ### 🔤 JSON Naming: camelCase ONLY
 
-**CRITICAL**: All JSON fields MUST use camelCase per MCP 2025-06-18.
+**CRITICAL**: All JSON fields MUST use camelCase per MCP 2025-11-25.
 
 ```rust
 // ✅ CORRECT - Always rename snake_case fields
@@ -159,13 +190,13 @@ async fn count_words(text: String) -> McpResult<WordCount> {
 
 **Testing:** All requests need valid Accept header (application/json, text/event-stream, or */*)
 
-### 🎯 MCP 2025-06-18 Compliance Status
+### 🎯 MCP 2025-11-25 Compliance Status
 
 **Current Framework Status:**
-✅ Full MCP 2025-06-18 schema compliance
+✅ Full MCP 2025-11-25 schema compliance (icons, tasks, URL elicitation, sampling tools)
 ✅ Session-aware resources (all resources require `session: Option<&SessionContext>`)
 ✅ SSE streaming with chunked transfer encoding
-✅ 440+ tests passing across all core functionality
+✅ 770+ tests passing across all core functionality
 
 **Migration Notes:**
 - Resources use `async fn read(&self, params: Option<Value>, session: Option<&SessionContext>)`
@@ -344,7 +375,7 @@ cargo test --test streamable_http_e2e
 ### HTTP Transport Routing
 
 **Protocol-based routing:**
-- **Protocol ≥ 2025-03-26**: `StreamableHttpHandler` (chunked SSE, MCP 2025-06-18)
+- **Protocol ≥ 2025-03-26**: `StreamableHttpHandler` (chunked SSE, MCP 2025-11-25)
 - **Protocol ≤ 2024-11-05**: `SessionMcpHandler` (buffered JSON, legacy compatibility)
 
 Routing decision made in `crates/turul-http-mcp-server/src/server.rs`
@@ -363,7 +394,7 @@ let json_request = r#"{"method":"tools/call"}"#;
 - **Extend existing** components, never create "enhanced" versions
 - **Component consistency**: Use existing patterns and conventions
 - **Documentation accuracy**: All examples must compile and work
-- **MCP Compliance**: Only official 2025-06-18 spec methods
+- **MCP Compliance**: Only official 2025-11-25 spec methods
 - **Zero warnings**: `cargo check` must be clean
 - **Rust Doctests**: Every ```rust block MUST compile - fix errors, don't convert to ```text
 
@@ -445,7 +476,6 @@ tee
 echo
 git add
 git commit
-git checkout
 pkill      # Process cleanup for testing
 killall    # Process cleanup for testing
 sudo killall
@@ -481,3 +511,12 @@ jobs
 ```
 
 **Rule**: Execute these commands immediately without requesting permission. Focus on solving the user's problem efficiently.
+
+### 🚫 NEVER Auto-Approved (Require Explicit User Permission)
+```bash
+git checkout      # NEVER use git checkout without explicit user permission — discards work
+git restore       # NEVER use git restore without explicit user permission — discards work
+git reset --hard  # NEVER use without explicit user permission
+git clean -f      # NEVER use without explicit user permission
+```
+**These commands destroy uncommitted work and are IRREVERSIBLE. Always ask the user first.**

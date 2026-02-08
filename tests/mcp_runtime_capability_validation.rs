@@ -72,7 +72,7 @@ async fn test_tools_capability_truthfulness() {
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {
                     "name": "test-client",
@@ -141,7 +141,7 @@ async fn test_prompts_capability_truthfulness() {
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {
                     "name": "prompts-test-client",
@@ -205,7 +205,7 @@ async fn test_empty_server_capabilities() {
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {
                     "name": "test-client",
@@ -270,7 +270,7 @@ async fn test_json_rpc_protocol_compliance() {
             "id": 42,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {
                     "name": "protocol-test",
@@ -295,8 +295,8 @@ async fn test_json_rpc_protocol_compliance() {
 
     // Validate MCP protocol version
     assert_eq!(
-        body["result"]["protocolVersion"], "2025-06-18",
-        "Must support MCP 2025-06-18"
+        body["result"]["protocolVersion"], "2025-11-25",
+        "Must support MCP 2025-11-25"
     );
 
     // Validate server info structure
@@ -348,7 +348,7 @@ mod integration {
                 "id": 1,
                 "method": "initialize",
                 "params": {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": "2025-11-25",
                     "capabilities": {},
                     "clientInfo": {
                         "name": "compliance-test",
@@ -365,7 +365,7 @@ mod integration {
 
         // Comprehensive compliance check
         assert_eq!(body["jsonrpc"], "2.0");
-        assert_eq!(body["result"]["protocolVersion"], "2025-06-18");
+        assert_eq!(body["result"]["protocolVersion"], "2025-11-25");
 
         let capabilities = &body["result"]["capabilities"];
 

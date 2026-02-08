@@ -81,6 +81,8 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 }
             }
 
+            impl turul_mcp_builders::HasIcons for #resource_name_ident {}
+
             // ResourceDefinition automatically implemented via blanket impl!
 
             #[async_trait::async_trait]

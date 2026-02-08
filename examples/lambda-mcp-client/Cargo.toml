@@ -1,6 +1,6 @@
 [package]
 name = "lambda-turul-mcp-client"
-version = "0.2.0"
+version = "0.2.2"
 edition.workspace = true
 description = "Comprehensive test client for lambda-turul-mcp-server validation and end-to-end testing"
 license = "MIT"

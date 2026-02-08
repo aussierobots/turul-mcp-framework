@@ -4,21 +4,19 @@
 //! for realistic large dataset handling. It shows proper database pagination patterns,
 //! connection management, and setup/teardown lifecycle.
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rand::Rng;
+use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::{Row, SqlitePool, query_as};
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tempfile::TempDir;
 use tracing::{error, info};
+use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::meta::{Cursor, Meta};
-use turul_mcp_protocol::schema::JsonSchema;
-use turul_mcp_protocol::tools::CallToolResult;
-use turul_mcp_protocol::{McpError, McpResult, ResourceContents, ToolResult, ToolSchema};
-use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
-use turul_mcp_server::{McpServer, McpTool, SessionContext};
+use turul_mcp_protocol::{McpError, McpResult};
+use turul_mcp_server::prelude::*;
+use turul_mcp_server::{McpServer, SessionContext};
 use clap::Parser;
 
 #[derive(Parser)]
@@ -30,8 +28,16 @@ struct Args {
     port: u16,
 }
 
+// Module-level static for shared database manager
+static DB: OnceLock<DatabaseManager> = OnceLock::new();
+
+fn get_db() -> McpResult<&'static DatabaseManager> {
+    DB.get()
+        .ok_or_else(|| McpError::tool_execution("Database not initialized"))
+}
+
 /// Database pool wrapper for sharing across tools
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct DatabaseManager {
     pool: SqlitePool,
     _temp_dir: Arc<TempDir>, // Keep temp directory alive
@@ -379,15 +385,13 @@ impl DatabaseManager {
 
     /// Update user activity status (for refresh operations)
     async fn refresh_user_activity(&self) -> Result<i64, sqlx::Error> {
-        // Simulate activity updates - randomly activate some inactive users
-        // and occasionally deactivate some active users
         let activated = sqlx::query(
             "UPDATE users SET is_active = 1, last_login = CURRENT_TIMESTAMP
              WHERE is_active = 0 AND id IN (
                  SELECT id FROM users WHERE is_active = 0 ORDER BY RANDOM() LIMIT ?
              )",
         )
-        .bind(50) // Activate up to 50 users
+        .bind(50)
         .execute(&self.pool)
         .await?
         .rows_affected();
@@ -399,12 +403,37 @@ impl DatabaseManager {
                  ORDER BY RANDOM() LIMIT ?
              )"
         )
-        .bind(10) // Deactivate up to 10 old users
+        .bind(10)
         .execute(&self.pool)
         .await?
         .rows_affected();
 
         Ok(activated as i64 + deactivated as i64)
+    }
+
+    async fn get_database_stats(&self) -> Result<Value, sqlx::Error> {
+        let total: (i64,) = query_as("SELECT COUNT(*) FROM users")
+            .fetch_one(&self.pool)
+            .await?;
+        let active: (i64,) = query_as("SELECT COUNT(*) FROM users WHERE is_active = 1")
+            .fetch_one(&self.pool)
+            .await?;
+        let recent: (i64,) =
+            query_as("SELECT COUNT(*) FROM users WHERE last_login > datetime('now', '-30 days')")
+                .fetch_one(&self.pool)
+                .await?;
+        let departments: (i64,) = query_as("SELECT COUNT(DISTINCT department) FROM users")
+            .fetch_one(&self.pool)
+            .await?;
+
+        Ok(json!({
+            "total_users": total.0,
+            "active_users": active.0,
+            "inactive_users": total.0 - active.0,
+            "recent_activity": recent.0,
+            "departments": departments.0,
+            "last_updated": Utc::now().to_rfc3339()
+        }))
     }
 }
 
@@ -422,128 +451,33 @@ struct User {
 }
 
 /// Tool for listing users with database pagination
-struct ListUsersTool {
-    db: DatabaseManager,
-    input_schema: ToolSchema,
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "list_users",
+    description = "List users with SQLite-based cursor pagination, filtering, and department selection"
+)]
+pub struct ListUsersTool {
+    #[param(description = "Pagination cursor (offset) for next page", optional)]
+    pub cursor: Option<String>,
+
+    #[param(description = "Number of users per page (1-100)", optional)]
+    pub limit: Option<i64>,
+
+    #[param(description = "Filter users by name or email", optional)]
+    pub filter: Option<String>,
+
+    #[param(description = "Filter by department", optional)]
+    pub department: Option<String>,
+
+    #[param(description = "Show only active users", optional)]
+    pub active_only: Option<bool>,
 }
 
 impl ListUsersTool {
-    fn new(db: DatabaseManager) -> Self {
-        let input_schema = ToolSchema::object().with_properties(HashMap::from([
-            (
-                "cursor".to_string(),
-                JsonSchema::String {
-                    description: Some("Pagination cursor (offset) for next page".to_string()),
-                    pattern: None,
-                    min_length: None,
-                    max_length: None,
-                    enum_values: None,
-                },
-            ),
-            (
-                "limit".to_string(),
-                JsonSchema::Integer {
-                    description: Some("Number of users per page (1-100)".to_string()),
-                    minimum: Some(1),
-                    maximum: Some(100),
-                },
-            ),
-            (
-                "filter".to_string(),
-                JsonSchema::String {
-                    description: Some("Filter users by name or email".to_string()),
-                    pattern: None,
-                    min_length: None,
-                    max_length: None,
-                    enum_values: None,
-                },
-            ),
-            (
-                "department".to_string(),
-                JsonSchema::String {
-                    description: Some("Filter by department".to_string()),
-                    pattern: None,
-                    min_length: None,
-                    max_length: None,
-                    enum_values: Some(vec![
-                        "Engineering".to_string(),
-                        "Marketing".to_string(),
-                        "Sales".to_string(),
-                        "HR".to_string(),
-                        "Finance".to_string(),
-                        "Operations".to_string(),
-                        "Support".to_string(),
-                        "Legal".to_string(),
-                    ]),
-                },
-            ),
-            (
-                "active_only".to_string(),
-                JsonSchema::Boolean {
-                    description: Some("Show only active users".to_string()),
-                },
-            ),
-        ]));
-
-        Self { db, input_schema }
-    }
-}
-
-// Implement fine-grained traits for ListUsersTool
-impl HasBaseMetadata for ListUsersTool {
-    fn name(&self) -> &str {
-        "list_users"
-    }
-    fn title(&self) -> Option<&str> {
-        Some("List Users")
-    }
-}
-
-impl HasDescription for ListUsersTool {
-    fn description(&self) -> Option<&str> {
-        Some("List users with SQLite-based cursor pagination, filtering, and department selection")
-    }
-}
-
-impl HasInputSchema for ListUsersTool {
-    fn input_schema(&self) -> &ToolSchema {
-        &self.input_schema
-    }
-}
-
-impl HasOutputSchema for ListUsersTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for ListUsersTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for ListUsersTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
-}
-
-#[async_trait]
-impl McpTool for ListUsersTool {
-    async fn call(
-        &self,
-        args: Value,
-        _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let cursor = args.get("cursor").and_then(|v| v.as_str());
-        let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(25);
-        let filter = args.get("filter").and_then(|v| v.as_str());
-        let department = args.get("department").and_then(|v| v.as_str());
-        let active_only = args
-            .get("active_only")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Value> {
+        let db = get_db()?;
+        let limit = self.limit.unwrap_or(25);
+        let active_only = self.active_only.unwrap_or(false);
 
         if limit > 100 {
             return Err(McpError::param_out_of_range(
@@ -553,9 +487,14 @@ impl McpTool for ListUsersTool {
             ));
         }
 
-        match self
-            .db
-            .get_users_page(cursor, limit, filter, department, active_only)
+        match db
+            .get_users_page(
+                self.cursor.as_deref(),
+                limit,
+                self.filter.as_deref(),
+                self.department.as_deref(),
+                active_only,
+            )
             .await
         {
             Ok((users, next_cursor, total)) => {
@@ -586,8 +525,8 @@ impl McpTool for ListUsersTool {
                         "total": total,
                         "current_page_size": users.len(),
                         "query_info": {
-                            "filter": filter,
-                            "department": department,
+                            "filter": self.filter,
+                            "department": self.department,
                             "active_only": active_only
                         }
                     }
@@ -598,21 +537,18 @@ impl McpTool for ListUsersTool {
                     users.len(),
                     users.len(),
                     total,
-                    filter.unwrap_or("None"),
-                    department.unwrap_or("All"),
+                    self.filter.as_deref().unwrap_or("None"),
+                    self.department.as_deref().unwrap_or("All"),
                     active_only,
                     meta.has_more.unwrap_or(false),
                     next_cursor.unwrap_or_else(|| "None".to_string()),
                     total
                 );
 
-                Ok(CallToolResult::success(vec![
-                    ToolResult::text(result_text),
-                    ToolResult::resource(ResourceContents::text(
-                        "file:///pagination/results.json",
-                        serde_json::to_string_pretty(&pagination_info).unwrap(),
-                    )),
-                ]))
+                Ok(json!({
+                    "text": result_text,
+                    "data": pagination_info
+                }))
             }
             Err(e) => {
                 error!("Database error in list_users: {}", e);
@@ -623,89 +559,26 @@ impl McpTool for ListUsersTool {
 }
 
 /// Tool for searching users with database queries
-struct SearchUsersTool {
-    db: DatabaseManager,
-    input_schema: ToolSchema,
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "search_users",
+    description = "Search users by name, email, or department with SQLite full-text capabilities"
+)]
+pub struct SearchUsersTool {
+    #[param(description = "Search query for name, email, or department")]
+    pub query: String,
+
+    #[param(description = "Pagination cursor for next page", optional)]
+    pub cursor: Option<String>,
+
+    #[param(description = "Number of results per page (1-50)", optional)]
+    pub limit: Option<i64>,
 }
 
 impl SearchUsersTool {
-    fn new(db: DatabaseManager) -> Self {
-        let input_schema = ToolSchema::object()
-            .with_properties(HashMap::from([
-                (
-                    "query".to_string(),
-                    JsonSchema::String {
-                        description: Some(
-                            "Search query for name, email, or department".to_string(),
-                        ),
-                        pattern: None,
-                        min_length: Some(1),
-                        max_length: None,
-                        enum_values: None,
-                    },
-                ),
-                (
-                    "cursor".to_string(),
-                    JsonSchema::String {
-                        description: Some("Pagination cursor for next page".to_string()),
-                        pattern: None,
-                        min_length: None,
-                        max_length: None,
-                        enum_values: None,
-                    },
-                ),
-                (
-                    "limit".to_string(),
-                    JsonSchema::Integer {
-                        description: Some("Number of results per page (1-50)".to_string()),
-                        minimum: Some(1),
-                        maximum: Some(50),
-                    },
-                ),
-            ]))
-            .with_required(vec!["query".to_string()]);
-
-        Self { db, input_schema }
-    }
-}
-
-// Implement fine-grained traits for SearchUsersTool
-impl HasBaseMetadata for SearchUsersTool {
-    fn name(&self) -> &str {
-        "search_users"
-    }
-}
-
-impl HasDescription for SearchUsersTool {
-    fn description(&self) -> Option<&str> {
-        Some("Search users by name, email, or department with SQLite full-text capabilities")
-    }
-}
-
-impl HasInputSchema for SearchUsersTool {
-    fn input_schema(&self) -> &ToolSchema {
-        &self.input_schema
-    }
-}
-
-impl HasOutputSchema for SearchUsersTool {}
-impl HasAnnotations for SearchUsersTool {}
-impl HasToolMeta for SearchUsersTool {}
-
-#[async_trait]
-impl McpTool for SearchUsersTool {
-    async fn call(
-        &self,
-        args: Value,
-        _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let query = args
-            .get("query")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_param("query"))?;
-
-        let cursor = args.get("cursor").and_then(|v| v.as_str());
-        let limit = args.get("limit").and_then(|v| v.as_i64()).unwrap_or(20);
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Value> {
+        let db = get_db()?;
+        let limit = self.limit.unwrap_or(20);
 
         if limit > 50 {
             return Err(McpError::param_out_of_range(
@@ -715,7 +588,7 @@ impl McpTool for SearchUsersTool {
             ));
         }
 
-        match self.db.search_users(query, cursor, limit).await {
+        match db.search_users(&self.query, self.cursor.as_deref(), limit).await {
             Ok((users, next_cursor, total)) => {
                 let search_results: Vec<_> = users.iter().map(|user| {
                     json!({
@@ -726,7 +599,7 @@ impl McpTool for SearchUsersTool {
                         "is_active": user.is_active,
                         "department": user.department,
                         "last_login": user.last_login.map(|dt| dt.to_rfc3339()),
-                        "relevance_score": calculate_relevance_score(&user.name, &user.email, &user.department, query)
+                        "relevance_score": calculate_relevance_score(&user.name, &user.email, &user.department, &self.query)
                     })
                 }).collect();
 
@@ -737,7 +610,7 @@ impl McpTool for SearchUsersTool {
                 );
 
                 let response_data = json!({
-                    "query": query,
+                    "query": self.query,
                     "results": search_results,
                     "pagination": {
                         "has_more": meta.has_more,
@@ -749,7 +622,7 @@ impl McpTool for SearchUsersTool {
 
                 let result_text = format!(
                     "Search Results for '{}': {} matches (showing {} of {})\n\nTop results:\n{}\n\nPagination:\n- Has more: {}\n- Next cursor: {}",
-                    query,
+                    self.query,
                     total,
                     users.len(),
                     total,
@@ -761,13 +634,10 @@ impl McpTool for SearchUsersTool {
                     next_cursor.unwrap_or_else(|| "None".to_string())
                 );
 
-                Ok(CallToolResult::success(vec![
-                    ToolResult::text(result_text),
-                    ToolResult::resource(ResourceContents::text(
-                        "file:///search/results.json",
-                        serde_json::to_string_pretty(&response_data).unwrap(),
-                    )),
-                ]))
+                Ok(json!({
+                    "text": result_text,
+                    "data": response_data
+                }))
             }
             Err(e) => {
                 error!("Database error in search_users: {}", e);
@@ -778,82 +648,30 @@ impl McpTool for SearchUsersTool {
 }
 
 /// Tool for refreshing database data (demonstrates dynamic operations)
-struct RefreshDataTool {
-    db: DatabaseManager,
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "refresh_data",
+    description = "Refresh database by updating user activity status and generating new data"
+)]
+pub struct RefreshDataTool {
+    #[param(description = "Type of refresh operation: update_activity, full_stats", optional)]
+    pub operation: Option<String>,
 }
 
 impl RefreshDataTool {
-    fn new(db: DatabaseManager) -> Self {
-        Self { db }
-    }
-}
-
-// Implement fine-grained traits for RefreshDataTool
-impl HasBaseMetadata for RefreshDataTool {
-    fn name(&self) -> &str {
-        "refresh_data"
-    }
-}
-
-impl HasDescription for RefreshDataTool {
-    fn description(&self) -> Option<&str> {
-        Some("Refresh database by updating user activity status and generating new data")
-    }
-}
-
-impl HasInputSchema for RefreshDataTool {
-    fn input_schema(&self) -> &ToolSchema {
-        // This needs a stored schema field - will fix differently
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object().with_properties(HashMap::from([(
-                "operation".to_string(),
-                JsonSchema::string_enum(vec![
-                    "update_activity".to_string(),
-                    "full_stats".to_string(),
-                ])
-                .with_description("Type of refresh operation"),
-            )]))
-        })
-    }
-}
-
-impl HasOutputSchema for RefreshDataTool {}
-impl HasAnnotations for RefreshDataTool {}
-impl HasToolMeta for RefreshDataTool {}
-
-#[async_trait]
-impl McpTool for RefreshDataTool {
-    async fn call(
-        &self,
-        args: Value,
-        _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let operation = args
-            .get("operation")
-            .and_then(|v| v.as_str())
-            .unwrap_or("update_activity");
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Value> {
+        let db = get_db()?;
+        let operation = self.operation.as_deref().unwrap_or("update_activity");
 
         match operation {
-            "update_activity" => match self.db.refresh_user_activity().await {
+            "update_activity" => match db.refresh_user_activity().await {
                 Ok(updated_count) => {
-                    let result = json!({
+                    Ok(json!({
                         "operation": "update_activity",
                         "updated_users": updated_count,
                         "timestamp": Utc::now().to_rfc3339(),
                         "message": format!("Successfully updated activity status for {} users", updated_count)
-                    });
-
-                    Ok(CallToolResult::success(vec![
-                        ToolResult::text(format!(
-                            "Data refresh completed: {} users updated",
-                            updated_count
-                        )),
-                        ToolResult::resource(ResourceContents::text(
-                            "file:///operation/refresh_result.json",
-                            serde_json::to_string_pretty(&result).unwrap(),
-                        )),
-                    ]))
+                    }))
                 }
                 Err(e) => {
                     error!("Failed to refresh user activity: {}", e);
@@ -864,26 +682,8 @@ impl McpTool for RefreshDataTool {
                 }
             },
             "full_stats" => {
-                // Get comprehensive database statistics
-                match self.get_database_stats().await {
-                    Ok(stats) => {
-                        let result_text = format!(
-                            "Database Statistics:\n- Total users: {}\n- Active users: {}\n- Inactive users: {}\n- Departments: {}\n- Recent activity: {} users in last 30 days",
-                            stats["total_users"],
-                            stats["active_users"],
-                            stats["inactive_users"],
-                            stats["departments"],
-                            stats["recent_activity"]
-                        );
-
-                        Ok(CallToolResult::success(vec![
-                            ToolResult::text(result_text),
-                            ToolResult::resource(ResourceContents::text(
-                                "file:///stats/database_stats.json",
-                                serde_json::to_string_pretty(&stats).unwrap(),
-                            )),
-                        ]))
-                    }
+                match db.get_database_stats().await {
+                    Ok(stats) => Ok(stats),
                     Err(e) => {
                         error!("Failed to get database stats: {}", e);
                         Err(McpError::tool_execution(&format!("Database error: {}", e)))
@@ -896,33 +696,6 @@ impl McpTool for RefreshDataTool {
                 operation,
             )),
         }
-    }
-}
-
-impl RefreshDataTool {
-    async fn get_database_stats(&self) -> Result<Value, sqlx::Error> {
-        let total: (i64,) = query_as("SELECT COUNT(*) FROM users")
-            .fetch_one(&self.db.pool)
-            .await?;
-        let active: (i64,) = query_as("SELECT COUNT(*) FROM users WHERE is_active = 1")
-            .fetch_one(&self.db.pool)
-            .await?;
-        let recent: (i64,) =
-            query_as("SELECT COUNT(*) FROM users WHERE last_login > datetime('now', '-30 days')")
-                .fetch_one(&self.db.pool)
-                .await?;
-        let departments: (i64,) = query_as("SELECT COUNT(DISTINCT department) FROM users")
-            .fetch_one(&self.db.pool)
-            .await?;
-
-        Ok(json!({
-            "total_users": total.0,
-            "active_users": active.0,
-            "inactive_users": total.0 - active.0,
-            "recent_activity": recent.0,
-            "departments": departments.0,
-            "last_updated": Utc::now().to_rfc3339()
-        }))
     }
 }
 
@@ -974,14 +747,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Setup database with lifecycle management
     let db = match DatabaseManager::new().await {
         Ok(db) => {
-            info!("✅ Database setup completed successfully");
+            info!("Database setup completed successfully");
             db
         }
         Err(e) => {
-            error!("❌ Failed to setup database: {}", e);
+            error!("Failed to setup database: {}", e);
             return Err(e);
         }
     };
+
+    // Store in global static
+    DB.set(db).expect("Database already initialized");
 
     // Dynamic port binding
     let port = if args.port == 0 {
@@ -998,28 +774,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .version("2.0.0")
         .title("SQLite MCP Pagination Server")
         .instructions("This server demonstrates comprehensive MCP pagination functionality using SQLite database with realistic large dataset handling, connection management, and dynamic operations.")
-        .tool(ListUsersTool::new(db.clone()))
-        .tool(SearchUsersTool::new(db.clone()))
-        .tool(RefreshDataTool::new(db.clone()))
+        .tool(ListUsersTool::default())
+        .tool(SearchUsersTool::default())
+        .tool(RefreshDataTool::default())
         .bind_address(format!("127.0.0.1:{}", port).parse()?)
         .build()?;
 
-    info!("🚀 SQLite Pagination server running at: http://127.0.0.1:{}/mcp", port);
-    info!("📊 Database contains 10,000 sample users across 8 departments");
+    info!("SQLite Pagination server running at: http://127.0.0.1:{}/mcp", port);
+    info!("Database contains 10,000 sample users across 8 departments");
     info!("");
     info!("Available tools:");
-    info!("  📋 list_users: SQLite-based pagination with filtering and department selection");
-    info!("  🔍 search_users: Full-text search with relevance scoring and pagination");
-    info!("  🔄 refresh_data: Dynamic database operations and statistics");
-    info!("");
-    info!("Key improvements:");
-    info!("  ✅ SQLite database with proper indexing");
-    info!("  ✅ Real database pagination (LIMIT/OFFSET)");
-    info!("  ✅ Dynamic data refresh capabilities");
-    info!("  ✅ Connection pool management");
-    info!("  ✅ Setup/teardown lifecycle");
-    info!("  ✅ Realistic large dataset (10,000 users)");
-    info!("  ✅ Performance optimized queries");
+    info!("  list_users: SQLite-based pagination with filtering and department selection");
+    info!("  search_users: Full-text search with relevance scoring and pagination");
+    info!("  refresh_data: Dynamic database operations and statistics");
 
     // Run server with graceful shutdown
     match server.run().await {

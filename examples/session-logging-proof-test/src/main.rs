@@ -12,18 +12,13 @@
 //! ```
 
 use anyhow::Result;
-use async_trait::async_trait;
+use serde::Deserialize;
 use serde_json::json;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tokio::time::sleep;
-use turul_mcp_protocol::{
-    ToolResult,
-    logging::LoggingLevel,
-    schema::JsonSchema,
-    tools::{CallToolResult, ToolAnnotations, ToolSchema},
-};
-use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
-use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
+use turul_mcp_derive::McpTool;
+use turul_mcp_protocol::logging::LoggingLevel;
+use turul_mcp_server::prelude::*;
 use turul_mcp_session_storage::InMemorySessionStorage;
 
 /// Helper function to convert string level to LoggingLevel enum
@@ -42,25 +37,26 @@ fn str_to_logging_level(level: &str) -> LoggingLevel {
 }
 
 /// Test tool that sends log messages at different levels to verify filtering
-#[derive(Clone)]
-struct LogProofTool;
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "log_proof",
+    description = "Send test log messages to prove session-aware filtering works"
+)]
+pub struct LogProofTool {
+    #[param(
+        description = "Test scenario: basic, debug_flood, level_cascade, session_isolation",
+        optional
+    )]
+    pub scenario: Option<String>,
+}
 
-#[async_trait]
-impl McpTool for LogProofTool {
-    async fn call(
-        &self,
-        args: serde_json::Value,
-        session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let session = session.ok_or("Session context required")?;
+impl LogProofTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
+        let session = session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
 
-        // Extract test scenario parameter
-        let scenario = args
-            .get("scenario")
-            .and_then(|v| v.as_str())
-            .unwrap_or("basic");
+        let scenario = self.scenario.as_deref().unwrap_or("basic");
 
-        tracing::info!("🧪 LogProofTool executing scenario: '{}'", scenario);
+        tracing::info!("LogProofTool executing scenario: '{}'", scenario);
 
         match scenario {
             "debug_flood" => {
@@ -74,23 +70,20 @@ impl McpTool for LogProofTool {
                     ).await;
                 }
 
-                Ok(CallToolResult::success(vec![ToolResult::text(
-                    json!({
-                        "test": "debug_flood",
-                        "messages_sent": 5,
-                        "level": "debug",
-                        "session_level": format!("{:?}", session.get_logging_level().await),
-                        "should_see_messages": session.should_log(LoggingLevel::Debug).await
-                    })
-                    .to_string(),
-                )]))
+                Ok(json!({
+                    "test": "debug_flood",
+                    "messages_sent": 5,
+                    "level": "debug",
+                    "session_level": format!("{:?}", session.get_logging_level().await),
+                    "should_see_messages": session.should_log(LoggingLevel::Debug).await
+                }))
             }
             "level_cascade" => {
                 // Send one message at each level
                 session
                     .notify_log(
                         str_to_logging_level("debug"),
-                        serde_json::json!("🐛 DEBUG: Should only appear if session=DEBUG"),
+                        serde_json::json!("DEBUG: Should only appear if session=DEBUG"),
                         Some("test".to_string()),
                         None,
                     )
@@ -98,7 +91,7 @@ impl McpTool for LogProofTool {
                 session
                     .notify_log(
                         str_to_logging_level("info"),
-                        serde_json::json!("ℹ️ INFO: Should appear if session≤INFO"),
+                        serde_json::json!("INFO: Should appear if session<=INFO"),
                         Some("test".to_string()),
                         None,
                     )
@@ -106,7 +99,7 @@ impl McpTool for LogProofTool {
                 session
                     .notify_log(
                         str_to_logging_level("notice"),
-                        serde_json::json!("📢 NOTICE: Should appear if session≤NOTICE"),
+                        serde_json::json!("NOTICE: Should appear if session<=NOTICE"),
                         Some("test".to_string()),
                         None,
                     )
@@ -114,7 +107,7 @@ impl McpTool for LogProofTool {
                 session
                     .notify_log(
                         str_to_logging_level("warning"),
-                        serde_json::json!("⚠️ WARNING: Should appear if session≤WARNING"),
+                        serde_json::json!("WARNING: Should appear if session<=WARNING"),
                         Some("test".to_string()),
                         None,
                     )
@@ -122,7 +115,7 @@ impl McpTool for LogProofTool {
                 session
                     .notify_log(
                         str_to_logging_level("error"),
-                        serde_json::json!("❌ ERROR: Should appear if session≤ERROR"),
+                        serde_json::json!("ERROR: Should appear if session<=ERROR"),
                         Some("test".to_string()),
                         None,
                     )
@@ -130,7 +123,7 @@ impl McpTool for LogProofTool {
                 session
                     .notify_log(
                         str_to_logging_level("critical"),
-                        serde_json::json!("🔥 CRITICAL: Should appear if session≤CRITICAL"),
+                        serde_json::json!("CRITICAL: Should appear if session<=CRITICAL"),
                         Some("test".to_string()),
                         None,
                     )
@@ -151,17 +144,14 @@ impl McpTool for LogProofTool {
                     }
                 }
 
-                Ok(CallToolResult::success(vec![ToolResult::text(
-                    json!({
-                        "test": "level_cascade",
-                        "messages_sent": 6,
-                        "session_level": format!("{:?}", current_level),
-                        "session_priority": current_level.priority(),
-                        "levels_that_should_appear": levels_that_should_appear,
-                        "expected_message_count": levels_that_should_appear.len()
-                    })
-                    .to_string(),
-                )]))
+                Ok(json!({
+                    "test": "level_cascade",
+                    "messages_sent": 6,
+                    "session_level": format!("{:?}", current_level),
+                    "session_priority": current_level.priority(),
+                    "levels_that_should_appear": levels_that_should_appear,
+                    "expected_message_count": levels_that_should_appear.len()
+                }))
             }
             "session_isolation" => {
                 // Test that this session's level doesn't affect other sessions
@@ -172,7 +162,7 @@ impl McpTool for LogProofTool {
                     .notify_log(
                         LoggingLevel::Info,
                         serde_json::json!(format!(
-                            "🏷️ SESSION ISOLATION TEST: Session {} at level {:?}",
+                            "SESSION ISOLATION TEST: Session {} at level {:?}",
                             session_id, current_level
                         )),
                         Some("proof-test".to_string()),
@@ -181,33 +171,31 @@ impl McpTool for LogProofTool {
                     .await;
                 session.notify_log(
                     LoggingLevel::Debug,
-                    serde_json::json!(format!("🔍 DEBUG from session {}: Should only appear if this session allows debug", session_id)),
+                    serde_json::json!(format!("DEBUG from session {}: Should only appear if this session allows debug", session_id)),
                     Some("proof-test".to_string()),
                     None
                 ).await;
                 session.notify_log(
                     LoggingLevel::Error,
-                    serde_json::json!(format!("❌ ERROR from session {}: Should always appear regardless of other sessions", session_id)),
+                    serde_json::json!(format!("ERROR from session {}: Should always appear regardless of other sessions", session_id)),
                     Some("proof-test".to_string()),
                     None
                 ).await;
 
-                Ok(CallToolResult::success(vec![
-                    ToolResult::text(json!({
-                        "test": "session_isolation",
-                        "session_id": session_id,
-                        "session_level": format!("{:?}", current_level),
-                        "messages_sent": 3,
-                        "note": "Each session should only see messages based on ITS OWN logging level"
-                    }).to_string())
-                ]))
+                Ok(json!({
+                    "test": "session_isolation",
+                    "session_id": session_id,
+                    "session_level": format!("{:?}", current_level),
+                    "messages_sent": 3,
+                    "note": "Each session should only see messages based on ITS OWN logging level"
+                }))
             }
             _ => {
                 // Basic test - send one message at each common level
                 session
                     .notify_log(
                         str_to_logging_level("debug"),
-                        serde_json::json!("🧪 BASIC TEST: Debug message"),
+                        serde_json::json!("BASIC TEST: Debug message"),
                         Some("test".to_string()),
                         None,
                     )
@@ -215,7 +203,7 @@ impl McpTool for LogProofTool {
                 session
                     .notify_log(
                         str_to_logging_level("info"),
-                        serde_json::json!("🧪 BASIC TEST: Info message"),
+                        serde_json::json!("BASIC TEST: Info message"),
                         Some("test".to_string()),
                         None,
                     )
@@ -223,7 +211,7 @@ impl McpTool for LogProofTool {
                 session
                     .notify_log(
                         str_to_logging_level("warning"),
-                        serde_json::json!("🧪 BASIC TEST: Warning message"),
+                        serde_json::json!("BASIC TEST: Warning message"),
                         Some("test".to_string()),
                         None,
                     )
@@ -231,90 +219,39 @@ impl McpTool for LogProofTool {
                 session
                     .notify_log(
                         str_to_logging_level("error"),
-                        serde_json::json!("🧪 BASIC TEST: Error message"),
+                        serde_json::json!("BASIC TEST: Error message"),
                         Some("test".to_string()),
                         None,
                     )
                     .await;
 
-                Ok(CallToolResult::success(vec![ToolResult::text(
-                    json!({
-                        "test": "basic",
-                        "messages_sent": 4,
-                        "session_level": format!("{:?}", session.get_logging_level().await),
-                        "note": "Basic test completed - check SSE stream for filtered messages"
-                    })
-                    .to_string(),
-                )]))
+                Ok(json!({
+                    "test": "basic",
+                    "messages_sent": 4,
+                    "session_level": format!("{:?}", session.get_logging_level().await),
+                    "note": "Basic test completed - check SSE stream for filtered messages"
+                }))
             }
         }
     }
 }
 
-// Manual trait implementations
-impl HasBaseMetadata for LogProofTool {
-    fn name(&self) -> &str {
-        "log_proof"
-    }
-}
-
-impl HasDescription for LogProofTool {
-    fn description(&self) -> Option<&str> {
-        Some("Send test log messages to prove session-aware filtering works")
-    }
-}
-
-impl HasInputSchema for LogProofTool {
-    fn input_schema(&self) -> &ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object().with_properties(HashMap::from([(
-                "scenario".to_string(),
-                JsonSchema::string().with_description(
-                    "Test scenario: basic, debug_flood, level_cascade, session_isolation",
-                ),
-            )]))
-        })
-    }
-}
-
-impl HasOutputSchema for LogProofTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for LogProofTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for LogProofTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> {
-        None
-    }
-}
-
 /// Tool to change session logging level
-#[derive(Clone)]
-struct SetLevelTool;
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "set_level",
+    description = "Set the logging level for this session"
+)]
+pub struct SetLevelTool {
+    #[param(description = "debug, info, notice, warning, error, critical, alert, emergency")]
+    pub level: String,
+}
 
-#[async_trait]
-impl McpTool for SetLevelTool {
-    async fn call(
-        &self,
-        args: serde_json::Value,
-        session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let session = session.ok_or("Session context required")?;
+impl SetLevelTool {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
+        let session = session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
 
-        let level_str = args
-            .get("level")
-            .and_then(|v| v.as_str())
-            .ok_or("Missing 'level' parameter")?;
-
-        let new_level = match level_str.to_lowercase().as_str() {
+        let new_level = match self.level.to_lowercase().as_str() {
             "debug" => LoggingLevel::Debug,
             "info" => LoggingLevel::Info,
             "notice" => LoggingLevel::Notice,
@@ -324,10 +261,9 @@ impl McpTool for SetLevelTool {
             "alert" => LoggingLevel::Alert,
             "emergency" => LoggingLevel::Emergency,
             _ => {
-                return Ok(CallToolResult::success(vec![ToolResult::text(format!(
-                    "❌ Invalid level: {}",
-                    level_str
-                ))]));
+                return Ok(json!({
+                    "error": format!("Invalid level: {}", self.level)
+                }));
             }
         };
 
@@ -335,7 +271,7 @@ impl McpTool for SetLevelTool {
         session.set_logging_level(new_level).await;
 
         tracing::info!(
-            "🎯 Session {} logging level: {:?} -> {:?}",
+            "Session {} logging level: {:?} -> {:?}",
             session.session_id,
             old_level,
             new_level
@@ -345,68 +281,19 @@ impl McpTool for SetLevelTool {
         session
             .notify_log(
                 LoggingLevel::Info,
-                serde_json::json!(format!("✅ Logging level changed to {:?}", new_level)),
+                serde_json::json!(format!("Logging level changed to {:?}", new_level)),
                 Some("proof-test".to_string()),
                 None,
             )
             .await;
 
-        Ok(CallToolResult::success(vec![ToolResult::text(
-            json!({
-                "success": true,
-                "session_id": session.session_id,
-                "old_level": format!("{:?}", old_level),
-                "new_level": format!("{:?}", new_level),
-                "confirmation_sent": true
-            })
-            .to_string(),
-        )]))
-    }
-}
-
-impl HasBaseMetadata for SetLevelTool {
-    fn name(&self) -> &str {
-        "set_level"
-    }
-}
-
-impl HasDescription for SetLevelTool {
-    fn description(&self) -> Option<&str> {
-        Some("Set the logging level for this session")
-    }
-}
-
-impl HasInputSchema for SetLevelTool {
-    fn input_schema(&self) -> &ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object()
-                .with_properties(HashMap::from([(
-                    "level".to_string(),
-                    JsonSchema::string().with_description(
-                        "debug, info, notice, warning, error, critical, alert, emergency",
-                    ),
-                )]))
-                .with_required(vec!["level".to_string()])
-        })
-    }
-}
-
-impl HasOutputSchema for SetLevelTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for SetLevelTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for SetLevelTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> {
-        None
+        Ok(json!({
+            "success": true,
+            "session_id": session.session_id,
+            "old_level": format!("{:?}", old_level),
+            "new_level": format!("{:?}", new_level),
+            "confirmation_sent": true
+        }))
     }
 }
 
@@ -431,13 +318,14 @@ impl ProofTestClient {
             .client
             .post(&self.base_url)
             .header("Content-Type", "application/json")
+            // Intentional: testing backward compatibility with MCP 2025-06-18
             .header("MCP-Protocol-Version", "2025-06-18")
             .json(&json!({
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "initialize",
                 "params": {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": "2025-06-18", // Intentional: testing backward compatibility with MCP 2025-06-18
                     "capabilities": {},
                     "clientInfo": {"name": "proof-client", "version": "1.0"}
                 }
@@ -448,7 +336,7 @@ impl ProofTestClient {
         if let Some(session_header) = response.headers().get("Mcp-Session-Id") {
             let session_id = session_header.to_str()?.to_string();
             self.session_id = Some(session_id.clone());
-            println!("✅ Session initialized: {}", session_id);
+            println!("Session initialized: {}", session_id);
             Ok(session_id)
         } else {
             anyhow::bail!("No session ID received")
@@ -481,7 +369,7 @@ impl ProofTestClient {
             anyhow::bail!("Error setting level: {}", result);
         }
 
-        println!("✅ Set logging level to: {}", level);
+        println!("Set logging level to: {}", level);
         Ok(())
     }
 
@@ -524,15 +412,11 @@ async fn main() -> Result<()> {
         .without_time()
         .init();
 
-    println!("🧪 SESSION-AWARE LOGGING PROOF TEST");
+    println!("SESSION-AWARE LOGGING PROOF TEST");
     println!("=====================================");
 
     let port = 8001; // Use different port to avoid conflicts
     let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", port).parse()?;
-
-    // Create tools as instances
-    let log_proof_tool = LogProofTool;
-    let set_level_tool = SetLevelTool;
 
     // Create server
     let storage = Arc::new(InMemorySessionStorage::new());
@@ -542,16 +426,16 @@ async fn main() -> Result<()> {
         .title("Session-Aware Logging Proof Test")
         .bind_address(bind_address)
         .with_session_storage(storage)
-        .tool(log_proof_tool)
-        .tool(set_level_tool)
+        .tool(LogProofTool::default())
+        .tool(SetLevelTool::default())
         .build()?;
 
-    println!("🚀 Starting server at http://{}/mcp", bind_address);
+    println!("Starting server at http://{}/mcp", bind_address);
 
     // Start server in background
     let server_handle = tokio::spawn(async move {
         if let Err(e) = server.run().await {
-            eprintln!("❌ Server error: {}", e);
+            eprintln!("Server error: {}", e);
         }
     });
 
@@ -559,10 +443,10 @@ async fn main() -> Result<()> {
     sleep(Duration::from_millis(1000)).await;
 
     // Run comprehensive tests
-    println!("\n🧪 RUNNING PROOF TESTS...\n");
+    println!("\nRUNNING PROOF TESTS...\n");
 
     // Test 1: DEBUG level session should see all messages
-    println!("📋 TEST 1: DEBUG level session (should see ALL messages)");
+    println!("TEST 1: DEBUG level session (should see ALL messages)");
     let mut client1 = ProofTestClient::new(port);
     let session1_id = client1.initialize().await?;
     client1.set_logging_level("debug").await?;
@@ -570,14 +454,14 @@ async fn main() -> Result<()> {
     let result1 = client1.run_log_test("level_cascade").await?;
     println!("   Result: {}", serde_json::to_string_pretty(&result1)?);
     println!(
-        "   💡 Check SSE stream: curl -N -H \"Accept: text/event-stream\" -H \"Mcp-Session-Id: {}\" http://127.0.0.1:{}/mcp",
+        "   Check SSE stream: curl -N -H \"Accept: text/event-stream\" -H \"Mcp-Session-Id: {}\" http://127.0.0.1:{}/mcp",
         session1_id, port
     );
 
     sleep(Duration::from_millis(500)).await;
 
     // Test 2: WARNING level session should only see WARNING+ messages
-    println!("\n📋 TEST 2: WARNING level session (should only see WARNING, ERROR, CRITICAL)");
+    println!("\nTEST 2: WARNING level session (should only see WARNING, ERROR, CRITICAL)");
     let mut client2 = ProofTestClient::new(port);
     let session2_id = client2.initialize().await?;
     client2.set_logging_level("warning").await?;
@@ -585,14 +469,14 @@ async fn main() -> Result<()> {
     let result2 = client2.run_log_test("level_cascade").await?;
     println!("   Result: {}", serde_json::to_string_pretty(&result2)?);
     println!(
-        "   💡 Check SSE stream: curl -N -H \"Accept: text/event-stream\" -H \"Mcp-Session-Id: {}\" http://127.0.0.1:{}/mcp",
+        "   Check SSE stream: curl -N -H \"Accept: text/event-stream\" -H \"Mcp-Session-Id: {}\" http://127.0.0.1:{}/mcp",
         session2_id, port
     );
 
     sleep(Duration::from_millis(500)).await;
 
     // Test 3: ERROR level session should only see ERROR+ messages
-    println!("\n📋 TEST 3: ERROR level session (should only see ERROR, CRITICAL)");
+    println!("\nTEST 3: ERROR level session (should only see ERROR, CRITICAL)");
     let mut client3 = ProofTestClient::new(port);
     let session3_id = client3.initialize().await?;
     client3.set_logging_level("error").await?;
@@ -600,20 +484,20 @@ async fn main() -> Result<()> {
     let result3 = client3.run_log_test("level_cascade").await?;
     println!("   Result: {}", serde_json::to_string_pretty(&result3)?);
     println!(
-        "   💡 Check SSE stream: curl -N -H \"Accept: text/event-stream\" -H \"Mcp-Session-Id: {}\" http://127.0.0.1:{}/mcp",
+        "   Check SSE stream: curl -N -H \"Accept: text/event-stream\" -H \"Mcp-Session-Id: {}\" http://127.0.0.1:{}/mcp",
         session3_id, port
     );
 
     sleep(Duration::from_millis(500)).await;
 
     // Test 4: Session isolation test
-    println!("\n📋 TEST 4: Session isolation (each session should filter independently)");
+    println!("\nTEST 4: Session isolation (each session should filter independently)");
     client1.run_log_test("session_isolation").await?;
     client2.run_log_test("session_isolation").await?;
     client3.run_log_test("session_isolation").await?;
 
-    println!("\n✅ ALL TESTS COMPLETED!");
-    println!("\n🔍 VERIFICATION INSTRUCTIONS:");
+    println!("\nALL TESTS COMPLETED!");
+    println!("\nVERIFICATION INSTRUCTIONS:");
     println!("1. Open 3 separate terminals");
     println!("2. Run the SSE curl commands shown above for each session");
     println!("3. Verify that:");
@@ -622,10 +506,10 @@ async fn main() -> Result<()> {
     println!("   - Session 3 (ERROR) sees only ERROR, CRITICAL messages");
     println!("4. Each session should ONLY see messages based on ITS OWN logging level");
     println!(
-        "\n⚠️  If filtering is working correctly, you should see DIFFERENT messages in each SSE stream!"
+        "\nIf filtering is working correctly, you should see DIFFERENT messages in each SSE stream!"
     );
 
-    println!("\n🔄 Server will keep running for manual verification...");
+    println!("\nServer will keep running for manual verification...");
     println!("Press Ctrl+C to stop when done verifying.");
 
     // Keep server running for manual verification

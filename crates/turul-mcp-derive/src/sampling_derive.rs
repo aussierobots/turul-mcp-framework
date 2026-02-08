@@ -109,6 +109,9 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
+        #[automatically_derived]
+        impl turul_mcp_builders::HasSamplingTools for #struct_name {}
+
         // SamplingDefinition is automatically implemented via blanket impl
 
         #[automatically_derived]
@@ -137,7 +140,7 @@ pub fn derive_mcp_sampling_impl(input: DeriveInput) -> Result<TokenStream> {
                 };
 
                 let model_name = #model_name_impl;
-                Ok(turul_mcp_protocol::sampling::CreateMessageResult::new(response_message, model_name))
+                Ok(turul_mcp_protocol::sampling::CreateMessageResult::new(response_message.role, response_message.content, model_name))
             }
         }
     };

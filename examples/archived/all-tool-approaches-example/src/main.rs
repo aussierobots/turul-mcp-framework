@@ -11,6 +11,7 @@
 use async_trait::async_trait;
 use turul_mcp_derive::{mcp_tool, tool, McpTool};
 use turul_mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, tools::*};
+use turul_mcp_builders::prelude::HasIcon;
 use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -138,6 +139,8 @@ impl HasToolMeta for DivideTool {
         None
     }
 }
+
+impl HasIcons for DivideTool {}
 
 #[async_trait]
 impl McpTool for DivideTool {

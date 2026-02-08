@@ -30,7 +30,7 @@ pub async fn lambda_adapter(
                 "jsonrpc": "2.0",
                 "id": 1,
                 "result": {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": "2025-11-25",
                     "capabilities": {
                         "tools": {
                             "dynamodb_query": {},

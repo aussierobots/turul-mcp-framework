@@ -1,8 +1,8 @@
-//! MCP 2025-06-18 Specification Compliance Tests
+//! MCP Specification Compliance Tests
 //!
 //! This module contains comprehensive tests to validate that our MCP framework
-//! implementation fully complies with the Model Context Protocol specification
-//! version 2025-06-18.
+//! implementation fully complies with the Model Context Protocol specification.
+//! Tests use protocol version 2025-11-25 for specification compliance validation.
 //!
 //! Tests cover:
 //! - JSON-RPC 2.0 compliance
@@ -34,7 +34,7 @@ mod json_rpc_compliance {
             "jsonrpc": "2.0",
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {
                     "name": "test-client",
@@ -58,7 +58,7 @@ mod json_rpc_compliance {
     async fn test_json_rpc_response_structure() {
         // Test successful response
         let mut data = HashMap::new();
-        data.insert("protocolVersion".to_string(), json!("2025-06-18"));
+        data.insert("protocolVersion".to_string(), json!("2025-11-25"));
         data.insert("capabilities".to_string(), json!({}));
         data.insert(
             "serverInfo".to_string(),
@@ -129,7 +129,7 @@ mod initialization_compliance {
             "jsonrpc": "2.0",
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "roots": {
                         "listChanged": false  // MCP compliance: static framework
@@ -151,7 +151,7 @@ mod initialization_compliance {
         let params = request.params.unwrap();
         assert_eq!(
             params.other.get("protocolVersion"),
-            Some(&json!("2025-06-18"))
+            Some(&json!("2025-11-25"))
         );
         assert!(params.other.get("capabilities").unwrap().is_object());
         assert!(params.other.get("clientInfo").unwrap().is_object());
@@ -160,7 +160,7 @@ mod initialization_compliance {
         let initialize_response = json!({
             "jsonrpc": "2.0",
             "result": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "logging": {},
                     "prompts": {
@@ -188,7 +188,7 @@ mod initialization_compliance {
         let result = response.result.unwrap();
         assert_eq!(
             result.data.get("protocolVersion"),
-            Some(&json!("2025-06-18"))
+            Some(&json!("2025-11-25"))
         );
         assert!(result.data.get("capabilities").unwrap().is_object());
         assert!(result.data.get("serverInfo").unwrap().is_object());
@@ -206,7 +206,7 @@ mod initialization_compliance {
 
     #[tokio::test]
     async fn test_protocol_version_validation() {
-        let supported_versions = vec!["2025-06-18"];
+        let supported_versions = vec!["2025-11-25"];
         let _unsupported_versions = ["2024-11-05", "invalid", ""];
 
         for version in supported_versions {
@@ -278,7 +278,7 @@ mod message_structure_compliance {
 
     #[tokio::test]
     async fn test_tool_call_message_structure() {
-        // MCP 2025-06-18 tool call structure
+        // MCP tool call structure
         let tool_call = json!({
             "jsonrpc": "2.0",
             "method": "tools/call",
@@ -311,7 +311,7 @@ mod message_structure_compliance {
 
     #[tokio::test]
     async fn test_tool_response_structure() {
-        // MCP 2025-06-18 tool response structure
+        // MCP tool response structure
         let tool_response = json!({
             "jsonrpc": "2.0",
             "result": {
@@ -479,11 +479,11 @@ mod notification_compliance {
         // Resource list changed notification
         let resource_changed = json!({
             "jsonrpc": "2.0",
-            "method": "notifications/resources/listChanged"
+            "method": "notifications/resources/list_changed"
         });
 
         let notification: JsonRpcNotification = serde_json::from_value(resource_changed).unwrap();
-        assert_eq!(notification.method, "notifications/resources/listChanged");
+        assert_eq!(notification.method, "notifications/resources/list_changed");
 
         // Resource updated notification
         let resource_updated = json!({
@@ -506,11 +506,11 @@ mod notification_compliance {
         // Tools list changed notification
         let tools_changed = json!({
             "jsonrpc": "2.0",
-            "method": "notifications/tools/listChanged"
+            "method": "notifications/tools/list_changed"
         });
 
         let notification: JsonRpcNotification = serde_json::from_value(tools_changed).unwrap();
-        assert_eq!(notification.method, "notifications/tools/listChanged");
+        assert_eq!(notification.method, "notifications/tools/list_changed");
     }
 
     #[tokio::test]
@@ -918,7 +918,7 @@ mod framework_integration_compliance {
     async fn test_framework_json_rpc_compliance() {
         // Test that our framework produces compliant JSON-RPC
         let mut params_map = HashMap::new();
-        params_map.insert("protocolVersion".to_string(), json!("2025-06-18"));
+        params_map.insert("protocolVersion".to_string(), json!("2025-11-25"));
         params_map.insert("capabilities".to_string(), json!({}));
         params_map.insert(
             "clientInfo".to_string(),
@@ -953,7 +953,7 @@ mod framework_integration_compliance {
         let response = JsonRpcResponse::success(
             json!("test-id"),
             ResultWithMeta::from_value(json!({
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "tools": { "listChanged": false },  // MCP compliance: static framework
                     "resources": { "listChanged": false }  // MCP compliance: static framework
@@ -974,7 +974,7 @@ mod framework_integration_compliance {
         assert!(serialized.get("error").is_none());
 
         let result = &serialized["result"];
-        assert_eq!(result.get("protocolVersion"), Some(&json!("2025-06-18")));
+        assert_eq!(result.get("protocolVersion"), Some(&json!("2025-11-25")));
         assert!(result.get("capabilities").unwrap().is_object());
         assert!(result.get("serverInfo").unwrap().is_object());
     }
@@ -982,26 +982,26 @@ mod framework_integration_compliance {
     #[tokio::test]
     async fn test_notification_compliance() {
         // Test framework notification generation
-        let notification = JsonRpcNotification::new("notifications/tools/listChanged".to_string());
+        let notification = JsonRpcNotification::new("notifications/tools/list_changed".to_string());
 
         let serialized = serde_json::to_value(&notification).unwrap();
 
         assert_eq!(serialized["jsonrpc"], "2.0");
-        assert_eq!(serialized["method"], "notifications/tools/listChanged");
+        assert_eq!(serialized["method"], "notifications/tools/list_changed");
         assert!(serialized.get("id").is_none()); // Notifications must not have id
 
         println!("Framework notification compliance verified");
     }
 }
 
-/// Test MCP 2025-06-18 specific features
+/// Test MCP 2025-11-25 specific features (structured _meta)
 #[cfg(test)]
-mod mcp_2025_06_18_features {
+mod mcp_2025_11_25_features {
     use super::*;
 
     #[tokio::test]
     async fn test_structured_meta_support() {
-        // Test that our implementation supports the structured _meta fields introduced in 2025-06-18
+        // Test that our implementation supports the structured _meta fields
         let request_with_structured_meta = json!({
             "jsonrpc": "2.0",
             "method": "tools/call",
@@ -1052,7 +1052,7 @@ mod mcp_2025_06_18_features {
         let cursor = meta.extra.get("customCursor").unwrap();
         assert_eq!(cursor.get("page"), Some(&json!(2)));
 
-        println!("MCP 2025-06-18 structured _meta support verified");
+        println!("MCP structured _meta support verified");
     }
 
     #[tokio::test]
@@ -1100,7 +1100,7 @@ mod mcp_2025_06_18_features {
 
     #[tokio::test]
     async fn test_content_type_extensions() {
-        // Test support for extended content types in 2025-06-18
+        // Test support for extended content types
         let extended_content = json!([
             {
                 "type": "text",

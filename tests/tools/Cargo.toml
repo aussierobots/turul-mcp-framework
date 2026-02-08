@@ -1,6 +1,6 @@
 [package]
 name = "mcp-tools-tests"
-version = "0.2.0"
+version = "0.2.2"
 edition = "2024"
 authors = ["Nick <nick@aussierobots.com.au>"]
 description = "MCP Tools Protocol Integration Tests"

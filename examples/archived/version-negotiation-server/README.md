@@ -17,6 +17,7 @@ The MCP framework supports multiple protocol versions and implements backward co
 - **2024-11-05** - Base MCP protocol
 - **2025-03-26** - Added streamable HTTP/SSE support
 - **2025-06-18** - Added _meta fields, progress tokens, cursors, and elicitation
+- **2025-11-25** - Added icons, tasks, URL elicitation, sampling tools
 
 ### 🧪 **Demonstration Tools**
 - **`version_info`** - Get negotiated version and session information
@@ -39,14 +40,14 @@ The server will start on `http://127.0.0.1:8049/mcp`
 
 ### 2. Test Version Negotiation
 
-#### Initialize with Latest Version (2025-06-18)
+#### Initialize with Latest Version (2025-11-25)
 ```bash
 curl -X POST http://127.0.0.1:8049/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "method": "initialize", 
     "params": {
-      "protocol_version": "2025-06-18",
+      "protocol_version": "2025-11-25",
       "capabilities": {},
       "client_info": {
         "name": "test-client",
@@ -93,7 +94,7 @@ curl -X POST http://127.0.0.1:8049/mcp \
 
 | Client Requests | Server Response | Features Available |
 |----------------|----------------|-------------------|
-| `2025-06-18` | ✅ `2025-06-18` | All features (meta fields, progress, cursors, elicitation) |
+| `2025-11-25` | ✅ `2025-11-25` | All features (meta fields, progress, cursors, elicitation, icons, tasks) |
 | `2025-03-26` | ✅ `2025-03-26` | Streamable HTTP/SSE support |
 | `2024-11-05` | ✅ `2024-11-05` | Base protocol only |
 | `invalid` | ❌ Error | Version not supported |
@@ -108,8 +109,9 @@ fn negotiate_version(&self, client_version: &str) -> Result<McpVersion, String> 
         McpVersion::V2024_11_05,
         McpVersion::V2025_03_26, 
         McpVersion::V2025_06_18,
+        McpVersion::V2025_11_25,
     ];
-    
+
     // Strategy 1: Use client's version if supported
     if supported_versions.contains(&requested_version) {
         return Ok(requested_version);
@@ -138,10 +140,10 @@ Get detailed information about the negotiated version:
 
 **Example Response:**
 ```
-Protocol Version: 2025-06-18
+Protocol Version: 2025-11-25
 Session ID: 550e8400-e29b-41d4-a716-446655440000
 
-Supported Features: streamable-http, _meta-fields, progress-token, cursor, elicitation
+Supported Features: streamable-http, _meta-fields, progress-token, cursor, elicitation, icons, tasks
 
 Version Capabilities:
 - Streamable HTTP: true
@@ -171,7 +173,7 @@ Test negotiation logic with different client versions:
 Version Negotiation Test
 Client Requested: 2024-11-05
 Server Response: ✅ Version 2024-11-05 accepted as requested
-Server Supports: 2024-11-05, 2025-03-26, 2025-06-18
+Server Supports: 2024-11-05, 2025-03-26, 2025-06-18, 2025-11-25
 ```
 
 ## Session Integration
@@ -268,6 +270,7 @@ Test how different client implementations handle version negotiation.
 - **2024-11-05**: Initial MCP protocol specification
 - **2025-03-26**: Added streamable HTTP transport and SSE notifications
 - **2025-06-18**: Added _meta fields, progress tokens, cursors, and structured user elicitation
+- **2025-11-25**: Added icons, tasks, URL elicitation, sampling tools, and enhanced capabilities
 
 ### Future Compatibility
 

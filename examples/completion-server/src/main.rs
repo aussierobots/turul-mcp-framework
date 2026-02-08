@@ -5,233 +5,89 @@
 //! The server provides context-aware suggestions for programming languages,
 //! frameworks, file extensions, and development commands.
 
-use async_trait::async_trait;
+use serde::Deserialize;
 use serde_json::{Value, json};
-use std::collections::HashMap;
 use tracing::info;
-use turul_mcp_protocol::{
-    McpError,
-    schema::JsonSchema,
-    tools::{CallToolResult, ToolResult, ToolSchema},
-};
-use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
-use turul_mcp_server::{McpResult, McpServer, McpTool, SessionContext};
+use turul_mcp_derive::McpTool;
+use turul_mcp_server::prelude::*;
 
 /// IDE Auto-Completion Tool that provides intelligent suggestions
-#[derive(Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "ide_completion",
+    description = "Provides intelligent auto-completion suggestions for programming languages, frameworks, commands, and file extensions"
+)]
 pub struct IdeCompletionTool {
-    input_schema: ToolSchema,
-    languages: Vec<String>,
-    frameworks: Vec<String>,
-    commands: Vec<String>,
-    file_extensions: Vec<String>,
-}
+    #[param(description = "Category of completions to get (language, framework, command, extension, all)")]
+    pub category: String,
 
-impl Default for IdeCompletionTool {
-    fn default() -> Self {
-        Self::new()
-    }
+    #[param(description = "Prefix to filter completions", optional)]
+    pub prefix: Option<String>,
 }
 
 impl IdeCompletionTool {
-    /// Create a new IDE completion tool with predefined data
-    pub fn new() -> Self {
-        let languages = vec![
-            "rust".to_string(),
-            "python".to_string(),
-            "javascript".to_string(),
-            "typescript".to_string(),
-            "java".to_string(),
-            "go".to_string(),
-            "cpp".to_string(),
-            "c".to_string(),
-            "kotlin".to_string(),
-            "swift".to_string(),
-            "php".to_string(),
-            "ruby".to_string(),
-            "csharp".to_string(),
-        ];
-
-        let frameworks = vec![
-            "react".to_string(),
-            "vue".to_string(),
-            "angular".to_string(),
-            "express".to_string(),
-            "django".to_string(),
-            "flask".to_string(),
-            "spring".to_string(),
-            "rails".to_string(),
-            "laravel".to_string(),
-            "tokio".to_string(),
-            "actix".to_string(),
-            "axum".to_string(),
-        ];
-
-        let commands = vec![
-            "build".to_string(),
-            "test".to_string(),
-            "run".to_string(),
-            "deploy".to_string(),
-            "install".to_string(),
-            "update".to_string(),
-            "lint".to_string(),
-            "format".to_string(),
-            "check".to_string(),
-            "clean".to_string(),
-            "serve".to_string(),
-        ];
-
-        let file_extensions = vec![
-            ".rs".to_string(),
-            ".py".to_string(),
-            ".js".to_string(),
-            ".ts".to_string(),
-            ".java".to_string(),
-            ".go".to_string(),
-            ".cpp".to_string(),
-            ".c".to_string(),
-            ".json".to_string(),
-            ".yaml".to_string(),
-            ".toml".to_string(),
-            ".md".to_string(),
-        ];
-
-        let input_schema = ToolSchema::object()
-            .with_properties(HashMap::from([
-                (
-                    "category".to_string(),
-                    JsonSchema::string_enum(vec![
-                        "language".to_string(),
-                        "framework".to_string(),
-                        "command".to_string(),
-                        "extension".to_string(),
-                        "all".to_string(),
-                    ])
-                    .with_description("Category of completions to get"),
-                ),
-                (
-                    "prefix".to_string(),
-                    JsonSchema::string().with_description("Prefix to filter completions"),
-                ),
-            ]))
-            .with_required(vec!["category".to_string()]);
-
-        Self {
-            input_schema,
-            languages,
-            frameworks,
-            commands,
-            file_extensions,
-        }
-    }
-
     fn get_completions(&self, category: &str, prefix: &str) -> Vec<String> {
+        let languages = vec![
+            "rust", "python", "javascript", "typescript", "java", "go", "cpp", "c",
+            "kotlin", "swift", "php", "ruby", "csharp",
+        ];
+        let frameworks = vec![
+            "react", "vue", "angular", "express", "django", "flask", "spring", "rails",
+            "laravel", "tokio", "actix", "axum",
+        ];
+        let commands = vec![
+            "build", "test", "run", "deploy", "install", "update", "lint", "format",
+            "check", "clean", "serve",
+        ];
+        let file_extensions = vec![
+            ".rs", ".py", ".js", ".ts", ".java", ".go", ".cpp", ".c", ".json", ".yaml",
+            ".toml", ".md",
+        ];
+
         let prefix = prefix.to_lowercase();
 
-        let source: &Vec<String> = match category {
-            "language" => &self.languages,
-            "framework" => &self.frameworks,
-            "command" => &self.commands,
-            "extension" => &self.file_extensions,
+        let source: Vec<&str> = match category {
+            "language" => languages,
+            "framework" => frameworks,
+            "command" => commands,
+            "extension" => file_extensions,
             "all" => {
-                // Combine all categories
                 let mut all = Vec::new();
-                all.extend(self.languages.iter().cloned());
-                all.extend(self.frameworks.iter().cloned());
-                all.extend(self.commands.iter().cloned());
-                all.extend(self.file_extensions.iter().cloned());
+                all.extend(languages);
+                all.extend(frameworks);
+                all.extend(commands);
+                all.extend(file_extensions);
                 return all
                     .into_iter()
                     .filter(|item| item.to_lowercase().starts_with(&prefix))
                     .take(20)
+                    .map(|s| s.to_string())
                     .collect();
             }
-            _ => return vec![], // Invalid category
+            _ => return vec![],
         };
 
         source
             .iter()
             .filter(|item| prefix.is_empty() || item.to_lowercase().starts_with(&prefix))
             .take(10)
-            .cloned()
+            .map(|s| s.to_string())
             .collect()
     }
-}
 
-// Implement fine-grained traits for ToolDefinition
-impl HasBaseMetadata for IdeCompletionTool {
-    fn name(&self) -> &str {
-        "ide_completion"
-    }
-    fn title(&self) -> Option<&str> {
-        Some("IDE Auto-Completion")
-    }
-}
-
-impl HasDescription for IdeCompletionTool {
-    fn description(&self) -> Option<&str> {
-        Some(
-            "Provides intelligent auto-completion suggestions for programming languages, frameworks, commands, and file extensions",
-        )
-    }
-}
-
-impl HasInputSchema for IdeCompletionTool {
-    fn input_schema(&self) -> &ToolSchema {
-        &self.input_schema
-    }
-}
-
-impl HasOutputSchema for IdeCompletionTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for IdeCompletionTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for IdeCompletionTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
-}
-
-#[async_trait]
-impl McpTool for IdeCompletionTool {
-    async fn call(
-        &self,
-        args: Value,
-        _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let category = args
-            .get("category")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_param("category"))?;
-
-        let prefix = args.get("prefix").and_then(|v| v.as_str()).unwrap_or("");
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Value> {
+        let category = &self.category;
+        let prefix = self.prefix.as_deref().unwrap_or("");
 
         let completions = self.get_completions(category, prefix);
+        let count = completions.len();
 
-        let result = json!({
+        Ok(json!({
             "category": category,
             "prefix": prefix,
             "completions": completions,
-            "count": completions.len()
-        });
-
-        Ok(CallToolResult::success(vec![
-            ToolResult::text(format!(
-                "Found {} completions for '{}' in category '{}'",
-                completions.len(),
-                prefix,
-                category
-            )),
-            ToolResult::text(result.to_string()),
-        ]))
+            "count": count
+        }))
     }
 }
 
@@ -243,7 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Starting IDE Auto-Completion Server Example");
 
-    let completion_tool = IdeCompletionTool::new();
+    let completion_tool = IdeCompletionTool::default();
 
     let server = McpServer::builder()
         .name("ide-completion-server")

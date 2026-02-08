@@ -11,10 +11,11 @@ use std::pin::Pin;
 
 // Import traits from local traits module
 use crate::traits::{
-    HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
+    HasIcons, HasResourceAnnotations, HasResourceDescription, HasResourceMeta, HasResourceMetadata,
     HasResourceMimeType, HasResourceSize, HasResourceUri,
 };
 // Import protocol types
+use turul_mcp_protocol::icons::Icon;
 use turul_mcp_protocol::meta::Annotations;
 use turul_mcp_protocol::resources::ResourceContent;
 
@@ -35,6 +36,7 @@ pub struct ResourceBuilder {
     size: Option<u64>,
     content: Option<ResourceContent>,
     annotations: Option<Annotations>,
+    icons: Option<Vec<Icon>>,
     meta: Option<HashMap<String, Value>>,
     read_fn: Option<DynamicResourceFn>,
 }
@@ -55,6 +57,7 @@ impl ResourceBuilder {
             size: None,
             content: None,
             annotations: None,
+            icons: None,
             meta: None,
             read_fn: None,
         }
@@ -128,10 +131,24 @@ impl ResourceBuilder {
         self
     }
 
-    /// Add annotation title (only field currently supported in Annotations)
-    pub fn annotation_title(mut self, title: impl Into<String>) -> Self {
+    /// Set the resource icons (display hints)
+    pub fn icons(mut self, icons: Vec<Icon>) -> Self {
+        self.icons = Some(icons);
+        self
+    }
+
+    /// Add annotation audience
+    pub fn annotation_audience(mut self, audience: Vec<String>) -> Self {
         let mut annotations = self.annotations.unwrap_or_default();
-        annotations.title = Some(title.into());
+        annotations = annotations.with_audience(audience);
+        self.annotations = Some(annotations);
+        self
+    }
+
+    /// Add annotation priority (0.0 to 1.0)
+    pub fn annotation_priority(mut self, priority: f64) -> Self {
+        let mut annotations = self.annotations.unwrap_or_default();
+        annotations = annotations.with_priority(priority);
         self.annotations = Some(annotations);
         self
     }
@@ -180,6 +197,7 @@ impl ResourceBuilder {
             size: self.size,
             content: self.content,
             annotations: self.annotations,
+            icons: self.icons,
             meta: self.meta,
             read_fn: self.read_fn,
         })
@@ -196,6 +214,7 @@ pub struct DynamicResource {
     size: Option<u64>,
     content: Option<ResourceContent>,
     annotations: Option<Annotations>,
+    icons: Option<Vec<Icon>>,
     meta: Option<HashMap<String, Value>>,
     read_fn: Option<DynamicResourceFn>,
 }
@@ -266,6 +285,13 @@ impl HasResourceAnnotations for DynamicResource {
 impl HasResourceMeta for DynamicResource {
     fn resource_meta(&self) -> Option<&HashMap<String, Value>> {
         self.meta.as_ref()
+    }
+}
+
+/// Implements HasIcons for DynamicResource providing optional icons
+impl HasIcons for DynamicResource {
+    fn icons(&self) -> Option<&Vec<Icon>> {
+        self.icons.as_ref()
     }
 }
 
@@ -340,12 +366,14 @@ mod tests {
     fn test_resource_builder_annotations() {
         let resource = ResourceBuilder::new("file:///important.txt")
             .description("Important resource")
-            .annotation_title("Important File")
+            .annotation_audience(vec!["user".to_string()])
+            .annotation_priority(0.8)
             .build()
             .expect("Failed to build resource");
 
         let annotations = resource.annotations().expect("Expected annotations");
-        assert_eq!(annotations.title, Some("Important File".to_string()));
+        assert_eq!(annotations.audience, Some(vec!["user".to_string()]));
+        assert_eq!(annotations.priority, Some(0.8));
     }
 
     #[test]

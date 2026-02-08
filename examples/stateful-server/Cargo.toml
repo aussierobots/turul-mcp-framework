@@ -1,6 +1,6 @@
 [package]
 name = "stateful-server"
-version = "0.2.0"
+version = "0.2.2"
 edition.workspace = true
 
 [dependencies]
@@ -10,6 +10,7 @@ turul-mcp-builders = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+turul-mcp-derive = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

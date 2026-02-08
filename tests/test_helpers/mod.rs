@@ -158,7 +158,7 @@ impl NotificationBroadcaster for TestNotificationBroadcaster {
     ) -> Result<(), BroadcastError> {
         let json_rpc = JsonRpcNotification {
             version: JsonRpcVersion::V2_0,
-            method: "notifications/resources/listChanged".to_string(),
+            method: "notifications/resources/list_changed".to_string(),
             params: Some(RequestParams::Object({
                 let val = serde_json::to_value(notification)?;
                 match val {
@@ -178,7 +178,7 @@ impl NotificationBroadcaster for TestNotificationBroadcaster {
     ) -> Result<(), BroadcastError> {
         let json_rpc = JsonRpcNotification {
             version: JsonRpcVersion::V2_0,
-            method: "notifications/tools/listChanged".to_string(),
+            method: "notifications/tools/list_changed".to_string(),
             params: Some(RequestParams::Object({
                 let val = serde_json::to_value(notification)?;
                 match val {
@@ -198,7 +198,7 @@ impl NotificationBroadcaster for TestNotificationBroadcaster {
     ) -> Result<(), BroadcastError> {
         let json_rpc = JsonRpcNotification {
             version: JsonRpcVersion::V2_0,
-            method: "notifications/prompts/listChanged".to_string(),
+            method: "notifications/prompts/list_changed".to_string(),
             params: Some(RequestParams::Object({
                 let val = serde_json::to_value(notification)?;
                 match val {

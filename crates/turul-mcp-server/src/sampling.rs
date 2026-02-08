@@ -98,6 +98,10 @@ mod tests {
 
     impl HasModelPreferences for TestSampling {}
 
+    impl HasIcons for TestSampling {}
+
+    impl HasSamplingTools for TestSampling {}
+
     // SamplingDefinition automatically implemented via blanket impl!
 
     #[async_trait]
@@ -113,7 +117,7 @@ mod tests {
                 },
             };
 
-            Ok(CreateMessageResult::new(response_message, "test-model"))
+            Ok(CreateMessageResult::new(response_message.role, response_message.content, "test-model"))
         }
     }
 

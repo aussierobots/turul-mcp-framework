@@ -105,6 +105,8 @@ mod tests {
         }
     }
 
+    impl HasIcons for TestResource {}
+
     // ResourceDefinition automatically implemented via blanket impl!
 
     #[async_trait]

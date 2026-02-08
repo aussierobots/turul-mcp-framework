@@ -215,6 +215,7 @@ pub trait ResourceDefinition:
     HasResourceSize +          // size
     HasResourceAnnotations +   // annotations
     HasResourceMeta +          // _meta (resource-specific)
+    super::icon_traits::HasIcons + // icons (MCP 2025-11-25)
     Send +
     Sync
 {
@@ -233,6 +234,7 @@ pub trait ResourceDefinition:
             mime_type: self.mime_type().map(String::from),
             size: self.size(),
             annotations: self.annotations().cloned(),
+            icons: self.icons().cloned(),
             meta: self.resource_meta().cloned(),
         }
     }
@@ -245,6 +247,7 @@ impl<T> ResourceDefinition for T where
         + HasResourceSize
         + HasResourceAnnotations
         + HasResourceMeta
+        + super::icon_traits::HasIcons
         + Send
         + Sync
 {

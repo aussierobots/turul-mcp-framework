@@ -81,7 +81,7 @@ async fn test_session_id_generation(client: &Client, url: &str) -> Result<()> {
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {"name": "session-test", "version": "1.0.0"}
             }
@@ -141,7 +141,7 @@ async fn test_session_persistence(client: &Client, url: &str) -> Result<()> {
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {"name": "session-test", "version": "1.0.0"}
             }
@@ -233,7 +233,7 @@ async fn test_session_expiry(client: &Client, url: &str) -> Result<()> {
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {"name": "session-expiry-test", "version": "1.0.0"}
             }
@@ -358,7 +358,7 @@ async fn test_client_reinitialize_on_404(client: &Client, url: &str) -> Result<(
                 "id": 2,
                 "method": "initialize",
                 "params": {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": "2025-11-25",
                     "capabilities": {},
                     "clientInfo": {"name": "reinit-test", "version": "1.0.0"}
                 }
@@ -431,7 +431,7 @@ async fn test_delete_session_termination(client: &Client, url: &str) -> Result<(
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {"name": "delete-test", "version": "1.0.0"}
             }
@@ -520,7 +520,7 @@ async fn test_session_isolation(client: &Client, url: &str) -> Result<()> {
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {"name": "isolation-test-1", "version": "1.0.0"}
             }
@@ -542,7 +542,7 @@ async fn test_session_isolation(client: &Client, url: &str) -> Result<()> {
             "id": 2,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {"name": "isolation-test-2", "version": "1.0.0"}
             }
@@ -623,7 +623,7 @@ async fn test_session_isolation(client: &Client, url: &str) -> Result<()> {
             "id": 7,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {"name": "delete-test", "version": "1.0.0"}
             }
@@ -643,7 +643,7 @@ async fn test_session_isolation(client: &Client, url: &str) -> Result<()> {
     let delete_response = client
         .delete(url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", delete_session_id)
         .send()
         .await?;

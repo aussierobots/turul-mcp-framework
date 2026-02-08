@@ -109,7 +109,7 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
 |---------|------|--------|-------------|---------|
 | **client-initialise-server** | Server | ✅ VALIDATED | Client connectivity test server | MCP session initialization testing |
 | **client-initialise-report** | Client | ✅ VALIDATED | MCP client implementation | Tests server initialization |
-| **streamable-http-client** | Client | ✅ VALIDATED | Streamable HTTP client | MCP 2025-06-18 streaming demo |
+| **streamable-http-client** | Client | ✅ VALIDATED | Streamable HTTP client | MCP 2025-11-25 streaming demo |
 | **logging-test-client** | Client | ✅ VALIDATED | Logging client | Tests logging functionality |
 | **session-management-compliance-test** | Combined | ✅ VALIDATED | Session compliance testing | MCP session spec compliance |
 
@@ -143,7 +143,7 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
 
 ### 🎯 **KEY ACHIEVEMENTS**
 - **Phase 6 Session-Aware Resources**: All resources now support SessionContext
-- **Full MCP 2025-06-18 Compliance**: Complete specification implementation
+- **Full MCP 2025-11-25 Compliance**: Complete specification implementation
 - **Zero Breaking Changes**: All existing examples continue to work
 - **Production-Grade Validation**: 4-step testing (Compile → Start → Initialize → Execute)
 
@@ -181,4 +181,4 @@ cargo run --features dynamodb --example simple-dynamodb-session
 
 **🎯 Success Criteria ACHIEVED**: All 45+ examples validated with accurate ports, verified functionality, and comprehensive testing results.
 
-**📋 Framework Status**: Comprehensive validation complete - Phase 6 session-aware resources implementation successful with full MCP 2025-06-18 compliance.
+**📋 Framework Status**: Comprehensive validation complete - Phase 6 session-aware resources implementation successful with full MCP 2025-11-25 compliance.

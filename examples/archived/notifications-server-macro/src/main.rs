@@ -3,7 +3,7 @@
 //! This demonstrates the RECOMMENDED way to implement MCP notifications using types.
 //! Framework automatically maps notification types to official MCP notification methods.
 //!
-//! **CRITICAL**: Uses ONLY official MCP 2025-06-18 specification methods:
+//! **CRITICAL**: Uses ONLY official MCP 2025-11-25 specification methods:
 //! - notifications/progress
 //! - notifications/message
 //! - notifications/initialized
@@ -23,7 +23,7 @@ use tokio::sync::RwLock;
 #[derive(Debug, Clone)]
 pub struct ProgressNotification {
     // Framework automatically maps to "notifications/progress"
-    // This is an OFFICIAL MCP method from 2025-06-18 specification
+    // This is an OFFICIAL MCP method from 2025-11-25 specification
     stage: String,
     completed: u64,
     total: u64,
@@ -83,7 +83,7 @@ impl ProgressNotification {
 #[derive(Debug, Clone)]
 pub struct MessageNotification {
     // Framework automatically maps to "notifications/message"
-    // This is an OFFICIAL MCP method from 2025-06-18 specification
+    // This is an OFFICIAL MCP method from 2025-11-25 specification
     content: String,
     level: MessageLevel,
     timestamp: chrono::DateTime<chrono::Utc>,
@@ -157,7 +157,7 @@ impl MessageNotification {
 #[derive(Debug, Clone)]
 pub struct InitializedNotification {
     // Framework automatically maps to "notifications/initialized"
-    // This is an OFFICIAL MCP method from 2025-06-18 specification
+    // This is an OFFICIAL MCP method from 2025-11-25 specification
     server_name: String,
     capabilities: Vec<String>,
     ready_time: chrono::DateTime<chrono::Utc>,
@@ -321,7 +321,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("🚀 Starting Notifications Server - Macro-Based Example");
     info!("======================================================");
     info!("💡 Framework automatically maps notification types to OFFICIAL MCP methods");
-    info!("💡 Uses ONLY MCP 2025-06-18 specification methods - zero custom methods!");
+    info!("💡 Uses ONLY MCP 2025-11-25 specification methods - zero custom methods!");
 
     let service = NotificationService::new("notifications-server-macro");
 
@@ -343,7 +343,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .title("Notifications Server - Macro-Based Example")
         .instructions(
             "This server demonstrates zero-configuration notification implementation using \
-             ONLY official MCP 2025-06-18 specification methods. Framework automatically maps \
+             ONLY official MCP 2025-11-25 specification methods. Framework automatically maps \
              ProgressNotification → notifications/progress, MessageNotification → notifications/message, \
              and InitializedNotification → notifications/initialized. All notifications stream via SSE."
         )

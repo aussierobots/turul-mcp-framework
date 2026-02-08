@@ -44,10 +44,10 @@ pub fn jsonrpc_error_response(
         .unwrap())
 }
 
-/// Build an HTTP response for JSON-RPC notifications (202 Accepted per MCP 2025-06-18).
+/// Build an HTTP response for JSON-RPC notifications (202 Accepted per MCP 2025-11-25).
 pub fn jsonrpc_notification_response() -> Result<Response<JsonRpcBody>, hyper::Error> {
     Ok(Response::builder()
-        .status(StatusCode::ACCEPTED) // MCP 2025-06-18: 202 Accepted for notifications
+        .status(StatusCode::ACCEPTED) // MCP 2025-11-25: 202 Accepted for notifications
         .header(header::CONTENT_TYPE, "application/json")
         .body(Full::new(Bytes::new()))
         .unwrap())

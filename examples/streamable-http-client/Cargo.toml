@@ -1,8 +1,8 @@
 [package]
 name = "streamable-http-client"
-version = "0.2.0"
+version = "0.2.2"
 edition.workspace = true
-description = "MCP 2025-06-18 Streamable HTTP client example with multi-threaded SSE processing"
+description = "MCP 2025-11-25 Streamable HTTP client example with multi-threaded SSE processing"
 
 [dependencies]
 turul-mcp-client = { workspace = true }

@@ -2,7 +2,7 @@
 //!
 //! Comprehensive test server providing various types of prompts for E2E testing.
 //! This server implements all MCP prompt patterns and edge cases to validate
-//! framework compliance with the MCP 2025-06-18 specification.
+//! framework compliance with the MCP 2025-11-25 specification.
 
 use std::collections::HashMap;
 
@@ -59,6 +59,7 @@ impl HasPromptAnnotations for SimplePrompt {
 }
 
 impl HasPromptMeta for SimplePrompt {}
+impl HasIcons for SimplePrompt {}
 
 #[async_trait]
 impl McpPrompt for SimplePrompt {
@@ -120,6 +121,7 @@ impl HasPromptAnnotations for StringArgsPrompt {
 }
 
 impl HasPromptMeta for StringArgsPrompt {}
+impl HasIcons for StringArgsPrompt {}
 
 #[async_trait]
 impl McpPrompt for StringArgsPrompt {
@@ -197,6 +199,7 @@ impl HasPromptAnnotations for NumberArgsPrompt {
 }
 
 impl HasPromptMeta for NumberArgsPrompt {}
+impl HasIcons for NumberArgsPrompt {}
 
 #[async_trait]
 impl McpPrompt for NumberArgsPrompt {
@@ -292,6 +295,7 @@ impl HasPromptAnnotations for BooleanArgsPrompt {
 }
 
 impl HasPromptMeta for BooleanArgsPrompt {}
+impl HasIcons for BooleanArgsPrompt {}
 
 #[async_trait]
 impl McpPrompt for BooleanArgsPrompt {
@@ -388,6 +392,7 @@ impl HasPromptAnnotations for TemplatePrompt {
 }
 
 impl HasPromptMeta for TemplatePrompt {}
+impl HasIcons for TemplatePrompt {}
 
 #[async_trait]
 impl McpPrompt for TemplatePrompt {
@@ -473,6 +478,7 @@ impl HasPromptAnnotations for MultiMessagePrompt {
 }
 
 impl HasPromptMeta for MultiMessagePrompt {}
+impl HasIcons for MultiMessagePrompt {}
 
 #[async_trait]
 impl McpPrompt for MultiMessagePrompt {
@@ -531,6 +537,7 @@ impl HasPromptAnnotations for SessionAwarePrompt {
 }
 
 impl HasPromptMeta for SessionAwarePrompt {}
+impl HasIcons for SessionAwarePrompt {}
 
 #[async_trait]
 impl McpPrompt for SessionAwarePrompt {
@@ -603,6 +610,7 @@ impl HasPromptAnnotations for ValidationPrompt {
 }
 
 impl HasPromptMeta for ValidationPrompt {}
+impl HasIcons for ValidationPrompt {}
 
 #[async_trait]
 impl McpPrompt for ValidationPrompt {
@@ -701,6 +709,7 @@ impl HasPromptAnnotations for DynamicPrompt {
 }
 
 impl HasPromptMeta for DynamicPrompt {}
+impl HasIcons for DynamicPrompt {}
 
 #[async_trait]
 impl McpPrompt for DynamicPrompt {
@@ -781,6 +790,7 @@ impl HasPromptAnnotations for EmptyMessagesPrompt {
 }
 
 impl HasPromptMeta for EmptyMessagesPrompt {}
+impl HasIcons for EmptyMessagesPrompt {}
 
 #[async_trait]
 impl McpPrompt for EmptyMessagesPrompt {
@@ -832,6 +842,7 @@ impl HasPromptAnnotations for ValidationFailurePrompt {
 }
 
 impl HasPromptMeta for ValidationFailurePrompt {}
+impl HasIcons for ValidationFailurePrompt {}
 
 #[async_trait]
 impl McpPrompt for ValidationFailurePrompt {
@@ -880,7 +891,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .instructions(
             "Comprehensive test server providing various types of prompts for E2E testing.\n\
             This server implements all MCP prompt patterns and edge cases to validate\n\
-            framework compliance with the MCP 2025-06-18 specification.\n\n\
+            framework compliance with the MCP 2025-11-25 specification.\n\n\
             Available test prompts:\n\
             • Basic: simple, string_args, number_args, boolean_args, template, multi_message\n\
             • Advanced: session_aware, validation, dynamic\n\
@@ -929,7 +940,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("💡 Quick Test Commands:");
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("     -H 'Content-Type: application/json' \\");
-    info!("     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'");
+    info!("     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'");
     info!("");
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("     -H 'Content-Type: application/json' \\");

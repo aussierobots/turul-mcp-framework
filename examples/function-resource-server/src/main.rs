@@ -55,6 +55,8 @@ impl HasResourceMeta for ConfigResource {
     }
 }
 
+impl HasIcons for ConfigResource {}
+
 #[async_trait]
 impl McpResource for ConfigResource {
     async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
@@ -122,6 +124,8 @@ impl HasResourceMeta for UserProfileResource {
         None
     }
 }
+
+impl HasIcons for UserProfileResource {}
 
 #[async_trait]
 impl McpResource for UserProfileResource {
@@ -217,6 +221,8 @@ impl HasResourceMeta for SystemStatusResource {
         None
     }
 }
+
+impl HasIcons for SystemStatusResource {}
 
 #[async_trait]
 impl McpResource for SystemStatusResource {

@@ -80,6 +80,7 @@ pub fn lambda_to_hyper_request(
         LambdaBody::Empty => Bytes::new(),
         LambdaBody::Text(s) => Bytes::from(s),
         LambdaBody::Binary(b) => Bytes::from(b),
+        _ => Bytes::new(),
     };
 
     // Create Full<Bytes> body and map error type to hyper::Error
@@ -387,7 +388,7 @@ mod tests {
         );
         headers.insert(
             "mcp-protocol-version",
-            HeaderValue::from_static("2025-06-18"),
+            HeaderValue::from_static("2025-11-25"),
         );
 
         // Test the conversion
@@ -408,7 +409,7 @@ mod tests {
         );
         assert_eq!(
             hyper_req.headers().get("mcp-protocol-version").unwrap(),
-            "2025-06-18"
+            "2025-11-25"
         );
     }
 
@@ -536,7 +537,7 @@ mod tests {
         headers.insert("mcp-session-id", HeaderValue::from_static("sess-123"));
         headers.insert(
             "mcp-protocol-version",
-            HeaderValue::from_static("2025-06-18"),
+            HeaderValue::from_static("2025-11-25"),
         );
         headers.insert("last-event-id", HeaderValue::from_static("event-456"));
 
@@ -548,7 +549,7 @@ mod tests {
         );
         assert_eq!(
             mcp_headers.get("mcp-protocol-version"),
-            Some(&"2025-06-18".to_string())
+            Some(&"2025-11-25".to_string())
         );
         assert_eq!(
             mcp_headers.get("last-event-id"),
@@ -567,7 +568,7 @@ mod tests {
 
         let mut headers = HashMap::new();
         headers.insert("mcp-session-id".to_string(), "sess-789".to_string());
-        headers.insert("mcp-protocol-version".to_string(), "2025-06-18".to_string());
+        headers.insert("mcp-protocol-version".to_string(), "2025-11-25".to_string());
 
         inject_mcp_headers(&mut lambda_resp, headers);
 
@@ -577,7 +578,7 @@ mod tests {
         );
         assert_eq!(
             lambda_resp.headers().get("mcp-protocol-version").unwrap(),
-            "2025-06-18"
+            "2025-11-25"
         );
     }
 

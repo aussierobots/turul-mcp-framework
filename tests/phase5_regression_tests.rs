@@ -41,7 +41,7 @@ async fn test_progress_frames_forwarded_from_tools() {
         reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .json(&request)
             .send()
     ).await.expect("Request timeout").expect("Request failed");
@@ -67,7 +67,7 @@ async fn test_sse_framing_for_streaming_clients() {
         reqwest::Client::new()
             .get(&url)
             .header("Accept", "text/event-stream")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .send()
     ).await.expect("Request timeout").expect("Request failed");
 
@@ -95,7 +95,7 @@ async fn test_json_response_for_non_streaming_clients() {
         reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .json(&request)
             .send()
     ).await.expect("Request timeout").expect("Request failed");
@@ -128,7 +128,7 @@ async fn test_lifecycle_enforcement_over_streamable_http() {
         reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .json(&request)
             .send()
     ).await.expect("Request timeout").expect("Request failed");
@@ -150,7 +150,7 @@ async fn test_pagination_limit_bounds() {
         "id": 1,
         "method": "initialize",
         "params": {
-            "protocolVersion": "2025-06-18",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
@@ -160,7 +160,7 @@ async fn test_pagination_limit_bounds() {
         reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .json(&init_request)
             .send()
     ).await.expect("Request timeout").expect("Request failed");
@@ -181,7 +181,7 @@ async fn test_pagination_limit_bounds() {
         reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .header("Mcp-Session-Id", session_id)
             .json(&request)
             .send()
@@ -206,7 +206,7 @@ async fn test_client_meta_round_tripping() {
         "id": 1,
         "method": "initialize",
         "params": {
-            "protocolVersion": "2025-06-18",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
@@ -216,7 +216,7 @@ async fn test_client_meta_round_tripping() {
         reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .json(&init_request)
             .send()
     ).await.expect("Request timeout").expect("Request failed");
@@ -240,7 +240,7 @@ async fn test_client_meta_round_tripping() {
         reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .header("Mcp-Session-Id", session_id)
             .json(&request)
             .send()
@@ -269,7 +269,7 @@ async fn test_notification_delivery_over_sse() {
         "id": 1,
         "method": "initialize",
         "params": {
-            "protocolVersion": "2025-06-18",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
@@ -279,7 +279,7 @@ async fn test_notification_delivery_over_sse() {
         reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .json(&init_request)
             .send()
     ).await.expect("Request timeout").expect("Request failed");
@@ -291,7 +291,7 @@ async fn test_notification_delivery_over_sse() {
         reqwest::Client::new()
             .get(&url)
             .header("Accept", "text/event-stream")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .header("Mcp-Session-Id", session_id)
             .send()
     ).await.expect("Request timeout").expect("Request failed");
@@ -314,7 +314,7 @@ async fn test_zero_limit_returns_error() {
         "id": 1,
         "method": "initialize",
         "params": {
-            "protocolVersion": "2025-06-18",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
@@ -324,7 +324,7 @@ async fn test_zero_limit_returns_error() {
         reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .json(&init_request)
             .send()
     ).await.expect("Request timeout").expect("Request failed");
@@ -345,7 +345,7 @@ async fn test_zero_limit_returns_error() {
         reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .header("Mcp-Session-Id", session_id)
             .json(&request)
             .send()
@@ -372,7 +372,7 @@ async fn test_no_limit_uses_default() {
         "id": 1,
         "method": "initialize",
         "params": {
-            "protocolVersion": "2025-06-18",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {"name": "test-client", "version": "1.0.0"}
         }
@@ -382,7 +382,7 @@ async fn test_no_limit_uses_default() {
         reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .json(&init_request)
             .send()
     ).await.expect("Request timeout").expect("Request failed");
@@ -401,7 +401,7 @@ async fn test_no_limit_uses_default() {
         reqwest::Client::new()
             .post(&url)
             .header("Content-Type", "application/json")
-            .header("Mcp-Protocol-Version", "2025-06-18")
+            .header("Mcp-Protocol-Version", "2025-11-25")
             .header("Mcp-Session-Id", session_id)
             .json(&request)
             .send()

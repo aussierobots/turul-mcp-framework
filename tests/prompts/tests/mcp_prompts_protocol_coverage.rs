@@ -1,7 +1,7 @@
 //! Comprehensive MCP Prompts Protocol Coverage Tests
 //!
-//! This test file covers ALL structs and enums from turul-mcp-protocol-2025-06-18/src/prompts.rs
-//! ensuring complete MCP 2025-06-18 specification compliance.
+//! This test file covers ALL structs and enums from turul-mcp-protocol/src/prompts.rs
+//! ensuring complete MCP 2025-11-25 specification compliance.
 
 use serde_json::json;
 use std::collections::HashMap;
@@ -96,7 +96,9 @@ async fn test_content_block_resource_embedded_variant() {
     let resource_block = ContentBlock::Resource {
         resource: embedded_resource,
         annotations: Some(Annotations {
-            title: Some("config".to_string()),
+            audience: Some(vec!["user".to_string()]),
+            priority: None,
+            last_modified: None,
         }),
         meta: Some(meta),
     };
@@ -615,7 +617,9 @@ async fn test_complex_content_block_combinations() {
                     meta: None,
                 }),
                 annotations: Some(Annotations {
-                    title: Some("analysis_result".to_string()),
+                    audience: Some(vec!["user".to_string()]),
+                    priority: None,
+                    last_modified: None,
                 }),
                 meta: None,
             },

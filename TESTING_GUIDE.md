@@ -1,6 +1,6 @@
 # MCP Framework Testing & Verification Guide
 
-Complete guide for running and verifying MCP 2025-06-18 compliance in the turul-mcp-framework.
+Complete guide for running and verifying MCP 2025-11-25 compliance in the turul-mcp-framework.
 
 ## Quick Start - Verify Everything Works
 
@@ -34,7 +34,7 @@ cargo run --package minimal-server
 # In another terminal, verify it responds
 curl -X POST http://127.0.0.1:PORT/mcp \
   -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}'
 
 # Should return valid JSON-RPC response with server info
 ```
@@ -140,7 +140,7 @@ curl -X POST http://127.0.0.1:PORT/mcp \
     "jsonrpc": "2.0",
     "method": "initialize", 
     "params": {
-      "protocolVersion": "2025-06-18",
+      "protocolVersion": "2025-11-25",
       "capabilities": {
         "tools": {"listChanged": true},
         "resources": {"subscribe": true, "listChanged": true},
@@ -161,7 +161,7 @@ curl -X POST http://127.0.0.1:PORT/mcp \
   "jsonrpc": "2.0",
   "id": "init-1", 
   "result": {
-    "protocolVersion": "2025-06-18",
+    "protocolVersion": "2025-11-25",
     "serverInfo": {
       "name": "server-name",
       "version": "0.2.0"
@@ -176,7 +176,7 @@ curl -X POST http://127.0.0.1:PORT/mcp \
 ```
 
 **🔍 Compliance Checks**:
-- ✅ `protocolVersion` must be `"2025-06-18"`
+- ✅ `protocolVersion` must be `"2025-11-25"`
 - ✅ `capabilities.tools.listChanged` should be `false` (static framework)
 - ✅ Response includes `serverInfo` with `name` and `version`
 - ✅ No extra fields or non-spec extensions
@@ -329,11 +329,11 @@ echo "🧪 Testing MCP server on port $PORT"
 echo "1. Testing initialize..."
 INIT_RESPONSE=$(curl -s -X POST http://127.0.0.1:$PORT/mcp \
   -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
+  -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
 
 echo $INIT_RESPONSE | jq '.result.protocolVersion'
 
-if [[ $(echo $INIT_RESPONSE | jq -r '.result.protocolVersion') == "2025-06-18" ]]; then
+if [[ $(echo $INIT_RESPONSE | jq -r '.result.protocolVersion') == "2025-11-25" ]]; then
     echo "✅ Protocol version correct"
 else
     echo "❌ Protocol version incorrect"
@@ -513,4 +513,4 @@ for example in examples/*/; do
 done
 ```
 
-This guide provides comprehensive instructions for running and manually verifying MCP 2025-06-18 compliance across the entire framework with complete protocol coverage including Tools, Resources, Prompts, Sampling, Roots, and Elicitation.
+This guide provides comprehensive instructions for running and manually verifying MCP 2025-11-25 compliance across the entire framework with complete protocol coverage including Tools, Resources, Prompts, Sampling, Roots, and Elicitation.
