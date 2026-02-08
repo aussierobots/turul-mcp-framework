@@ -21,7 +21,7 @@ I will **not** directly modify the code or create files myself. My role is to pr
 
 ### Executive Summary
 
-The Turul MCP Framework is a production-ready, comprehensively tested implementation of the Model Context Protocol (MCP) 2025-06-18 specification. It provides a robust and idiomatic Rust solution for building MCP servers and clients. A full schema-level compliance review confirms that the framework's data structures are a meticulous match for the official specification. The testing strategy is mature, with E2E tests covering all major protocol areas, including advanced concurrency and state-management scenarios. The `0.2.0` release introduced a powerful, transport-agnostic middleware architecture, and the `0.2.1` release further refines the framework with improved schema generation and protocol purity.
+The Turul MCP Framework is a production-ready, comprehensively tested implementation of the Model Context Protocol (MCP) 2025-11-25 specification. It provides a robust and idiomatic Rust solution for building MCP servers and clients. A full schema-level compliance review confirms that the framework's data structures are a meticulous match for the official specification. The testing strategy is mature, with E2E tests covering all major protocol areas, including advanced concurrency and state-management scenarios. The `0.2.0` release introduced a powerful, transport-agnostic middleware architecture, and the `0.2.1` release further refines the framework with improved schema generation and protocol purity.
 
 ### From TypeScript Inheritance to Rust Traits: A Critical Analysis
 
@@ -65,7 +65,7 @@ This middleware system provides a robust mechanism for adding custom logic to th
 
 ### Capability-by-Capability Compliance
 
-A detailed analysis of all major capabilities (`Tools`, `Resources`, `Prompts`, `Completion`, `Logging`, `Notifications`, `Elicitation`, and `Sampling`) reveals a robust and spec-compliant implementation. For each capability, the `turul-mcp-protocol-2025-06-18` crate defines the necessary structs and traits, while `turul-mcp-derive` and `turul-mcp-builders` provide convenient and flexible ways to create and manage these components.
+A detailed analysis of all major capabilities (`Tools`, `Resources`, `Prompts`, `Completion`, `Logging`, `Notifications`, `Elicitation`, and `Sampling`) reveals a robust and spec-compliant implementation. For each capability, the `turul-mcp-protocol-2025-11-25` crate defines the necessary structs and traits, while `turul-mcp-derive` and `turul-mcp-builders` provide convenient and flexible ways to create and manage these components.
 
 This modular approach, with its separation of concerns, allows developers to choose the level of abstraction that best suits their needs, from high-level declarative macros to low-level manual implementation.
 
