@@ -122,7 +122,7 @@ impl LoggingTestClient {
             .client
             .post(&self.base_url)
             .header("Content-Type", "application/json")
-            .header("MCP-Protocol-Version", "2025-06-18")
+            .header("MCP-Protocol-Version", "2025-11-25")
             .json(&json_rpc_request)
             .send()
             .await?;
