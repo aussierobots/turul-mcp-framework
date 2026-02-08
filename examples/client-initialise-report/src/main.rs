@@ -26,7 +26,7 @@
 //! ```bash
 //! curl -X POST http://127.0.0.1:8001/mcp \
 //!   -H "Content-Type: application/json" \
-//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0.0"}}}' \
+//!   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test-client","version":"1.0.0"}}}' \
 //!   -i
 //! ```
 //!
@@ -371,7 +371,7 @@ async fn test_mcp_initialize(
         "id": 1,
         "method": "initialize",
         "params": {
-            "protocolVersion": "2025-06-18",
+            "protocolVersion": "2025-11-25",
             "capabilities": {
                 "roots": {
                     "listChanged": false
@@ -1127,7 +1127,7 @@ async fn test_delete_request(
     let delete_response = client
         .delete(base_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", session_id)
         .timeout(Duration::from_secs(timeout))
         .send()
