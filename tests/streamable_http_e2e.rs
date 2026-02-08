@@ -6,7 +6,7 @@
 //! - Streaming POST with JSON-RPC processing
 //! - Legacy POST fallback for non-streaming clients
 //! - Session DELETE with proper cleanup
-//! - MCP 2025-06-18 specification compliance
+//! - MCP 2025-11-25 specification compliance
 
 use futures::stream::StreamExt;
 use http_body_util::{BodyExt, Full};
