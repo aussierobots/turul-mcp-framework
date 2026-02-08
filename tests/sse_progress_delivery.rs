@@ -117,13 +117,13 @@ async fn test_post_streaming_delivers_progress_before_result() {
     let init_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",
             "id": 1,
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "experimental": {},
                     "sampling": {}
@@ -150,7 +150,7 @@ async fn test_post_streaming_delivers_progress_before_result() {
     let streaming_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", session_id)
         .header("Accept", "text/event-stream, application/json") // Request SSE streaming with JSON fallback
         .json(&json!({
