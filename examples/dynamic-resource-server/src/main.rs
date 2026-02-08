@@ -5,20 +5,27 @@
 //! It demonstrates real-world patterns for API orchestration, data transformation,
 //! and enterprise system integration.
 
-use async_trait::async_trait;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::OnceLock;
 use tracing::{info, warn};
-use turul_mcp_builders::prelude::*;
-use turul_mcp_protocol::tools::ToolAnnotations;
-use turul_mcp_protocol::{
-    CallToolResult, McpError, McpResult, ToolResult, ToolSchema, schema::JsonSchema,
-};
-use turul_mcp_server::{McpServer, McpTool, SessionContext};
+use turul_mcp_derive::McpTool;
+use turul_mcp_protocol::{McpError, McpResult};
+use turul_mcp_server::prelude::*;
+use turul_mcp_server::{McpServer, SessionContext};
+
+// Module-level static for shared gateway state
+static GATEWAY: OnceLock<EnterpriseApiGateway> = OnceLock::new();
+
+fn get_gateway() -> McpResult<&'static EnterpriseApiGateway> {
+    GATEWAY
+        .get()
+        .ok_or_else(|| McpError::tool_execution("Gateway not initialized"))
+}
 
 /// Configuration for enterprise API endpoints loaded from external files
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -108,15 +115,15 @@ struct DataSourceConfig {
     databases: HashMap<String, DatabaseConfig>,
     data_warehouses: HashMap<String, DataWarehouseConfig>,
     streaming_sources: HashMap<String, StreamingConfig>,
-    #[allow(dead_code)] // TODO: Implement file system integration
+    #[allow(dead_code)]
     file_systems: HashMap<String, FileSystemConfig>,
-    #[allow(dead_code)] // TODO: Implement monitoring system integration
+    #[allow(dead_code)]
     monitoring_systems: HashMap<String, MonitoringConfig>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 struct DatabaseConfig {
-    #[allow(dead_code)] // TODO: Use name in resource identification
+    #[allow(dead_code)]
     name: String,
     #[serde(rename = "type")]
     db_type: String,
@@ -126,11 +133,11 @@ struct DatabaseConfig {
 
 #[derive(Debug, Deserialize, Clone)]
 struct DataWarehouseConfig {
-    #[allow(dead_code)] // TODO: Use name in resource identification
+    #[allow(dead_code)]
     name: String,
     #[serde(rename = "type")]
     dwh_type: String,
-    #[allow(dead_code)] // TODO: Implement data warehouse connections
+    #[allow(dead_code)]
     connection: Value,
     fact_tables: HashMap<String, TableConfig>,
     dimension_tables: HashMap<String, TableConfig>,
@@ -139,37 +146,37 @@ struct DataWarehouseConfig {
 #[derive(Debug, Deserialize, Clone)]
 struct StreamingConfig {
     name: String,
-    #[allow(dead_code)] // TODO: Implement streaming connections
+    #[allow(dead_code)]
     connection: Value,
-    #[allow(dead_code)] // TODO: Use config for streaming setup
+    #[allow(dead_code)]
     #[serde(flatten)]
     config: Value,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 struct FileSystemConfig {
-    #[allow(dead_code)] // TODO: Use name in file system identification
+    #[allow(dead_code)]
     name: String,
-    #[allow(dead_code)] // TODO: Use fs_type for file system type detection
+    #[allow(dead_code)]
     #[serde(rename = "type")]
     fs_type: String,
-    #[allow(dead_code)] // TODO: Implement file system connections
+    #[allow(dead_code)]
     connection: Value,
-    #[allow(dead_code)] // TODO: Use config for file system setup
+    #[allow(dead_code)]
     #[serde(flatten)]
     config: Value,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 struct MonitoringConfig {
-    #[allow(dead_code)] // TODO: Use name in monitoring system identification
+    #[allow(dead_code)]
     name: String,
-    #[allow(dead_code)] // TODO: Use monitoring_type for system type detection
+    #[allow(dead_code)]
     #[serde(rename = "type")]
     monitoring_type: String,
-    #[allow(dead_code)] // TODO: Implement monitoring connections
+    #[allow(dead_code)]
     connection: Value,
-    #[allow(dead_code)] // TODO: Use config for monitoring setup
+    #[allow(dead_code)]
     #[serde(flatten)]
     config: Value,
 }
@@ -177,33 +184,33 @@ struct MonitoringConfig {
 #[derive(Debug, Deserialize, Clone)]
 struct ConnectionConfig {
     host: String,
-    #[allow(dead_code)] // TODO: Use port in connection establishment
+    #[allow(dead_code)]
     port: u16,
     database: String,
     ssl: bool,
-    #[allow(dead_code)] // TODO: Use extra connection parameters
+    #[allow(dead_code)]
     #[serde(flatten)]
     extra: Value,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 struct SchemaConfig {
-    #[allow(dead_code)] // TODO: Use table name in schema operations
+    #[allow(dead_code)]
     table: String,
-    #[allow(dead_code)] // TODO: Use primary_key for key constraints
+    #[allow(dead_code)]
     primary_key: Value,
-    #[allow(dead_code)] // TODO: Use fields for schema validation
+    #[allow(dead_code)]
     fields: HashMap<String, String>,
-    #[allow(dead_code)] // TODO: Use indexes for query optimization
+    #[allow(dead_code)]
     #[serde(default)]
     indexes: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 struct TableConfig {
-    #[allow(dead_code)] // TODO: Use description in table documentation
+    #[allow(dead_code)]
     description: String,
-    #[allow(dead_code)] // TODO: Use config for table-specific settings
+    #[allow(dead_code)]
     #[serde(flatten)]
     config: Value,
 }
@@ -212,7 +219,7 @@ struct TableConfig {
 struct AccessPatterns {
     data_governance: DataGovernance,
     security_controls: SecurityControls,
-    #[allow(dead_code)] // TODO: Implement performance optimization features
+    #[allow(dead_code)]
     performance_optimization: PerformanceOptimization,
 }
 
@@ -232,77 +239,76 @@ struct SecurityControls {
 
 #[derive(Debug, Deserialize, Clone)]
 struct EncryptionConfig {
-    #[allow(dead_code)] // TODO: Implement at-rest encryption
+    #[allow(dead_code)]
     at_rest: String,
-    #[allow(dead_code)] // TODO: Implement in-transit encryption
+    #[allow(dead_code)]
     in_transit: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct AccessControlConfig {
-    #[allow(dead_code)] // TODO: Implement authentication system
+    #[allow(dead_code)]
     authentication: String,
-    #[allow(dead_code)] // TODO: Implement authorization system
+    #[allow(dead_code)]
     authorization: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct AuditingConfig {
-    #[allow(dead_code)] // TODO: Implement data access auditing
+    #[allow(dead_code)]
     all_data_access: bool,
-    #[allow(dead_code)] // TODO: Implement privileged operation auditing
+    #[allow(dead_code)]
     privileged_operations: bool,
-    #[allow(dead_code)] // TODO: Implement compliance reporting
+    #[allow(dead_code)]
     compliance_reporting: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 struct PerformanceOptimization {
-    #[allow(dead_code)] // TODO: Implement caching system
+    #[allow(dead_code)]
     caching: CachingConfig,
-    #[allow(dead_code)] // TODO: Implement query optimization
+    #[allow(dead_code)]
     query_optimization: QueryOptimizationConfig,
-    #[allow(dead_code)] // TODO: Implement connection pooling
+    #[allow(dead_code)]
     connection_pooling: ConnectionPoolingConfig,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 struct CachingConfig {
-    #[allow(dead_code)] // TODO: Use strategy for cache configuration
+    #[allow(dead_code)]
     strategy: String,
-    #[allow(dead_code)] // TODO: Use config for cache setup
+    #[allow(dead_code)]
     #[serde(flatten)]
     config: Value,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 struct QueryOptimizationConfig {
-    #[allow(dead_code)] // TODO: Implement automatic indexing
+    #[allow(dead_code)]
     automatic_indexing: bool,
-    #[allow(dead_code)] // TODO: Implement query plan analysis
+    #[allow(dead_code)]
     query_plan_analysis: bool,
-    #[allow(dead_code)] // TODO: Implement slow query alerts
+    #[allow(dead_code)]
     slow_query_alerts: bool,
 }
 
 #[derive(Debug, Deserialize, Clone)]
 struct ConnectionPoolingConfig {
-    #[allow(dead_code)] // TODO: Use enabled flag for pool configuration
+    #[allow(dead_code)]
     enabled: bool,
-    #[allow(dead_code)] // TODO: Use max_connections_per_pool for pool sizing
+    #[allow(dead_code)]
     max_connections_per_pool: u32,
-    #[allow(dead_code)] // TODO: Use idle_timeout for connection management
+    #[allow(dead_code)]
     idle_timeout: String,
 }
 
 /// Enterprise API Gateway handler that manages all data source integrations
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct EnterpriseApiGateway {
     api_config: EnterpriseApiConfig,
     data_sources: DataSources,
-    // In a real implementation, this would contain connection pools and clients
-    #[allow(dead_code)] // TODO: Implement connection pooling and caching
-    connection_cache: HashMap<String, String>, // Simplified for example
+    #[allow(dead_code)]
+    connection_cache: HashMap<String, String>,
 }
 
 impl EnterpriseApiGateway {
@@ -380,23 +386,11 @@ impl EnterpriseApiGateway {
                     "category": "Electronics",
                     "price": 299.99,
                     "inventory_levels": [
-                        {
-                            "warehouse_id": "WH-EAST",
-                            "quantity": 150,
-                            "reserved": 25
-                        },
-                        {
-                            "warehouse_id": "WH-WEST",
-                            "quantity": 89,
-                            "reserved": 12
-                        }
+                        { "warehouse_id": "WH-EAST", "quantity": 150, "reserved": 25 },
+                        { "warehouse_id": "WH-WEST", "quantity": 89, "reserved": 12 }
                     ],
                     "suppliers": [
-                        {
-                            "supplier_id": "SUP-001",
-                            "name": "Primary Electronics Supplier",
-                            "lead_time": "14 days"
-                        }
+                        { "supplier_id": "SUP-001", "name": "Primary Electronics Supplier", "lead_time": "14 days" }
                     ]
                 }))
             }
@@ -464,7 +458,6 @@ impl EnterpriseApiGateway {
 
         info!("Applying transformation: {}", transformation.name);
 
-        // Simplified transformation logic
         match transformation_name {
             "customer_360" => Ok(json!({
                 "customer_360_view": {
@@ -579,202 +572,97 @@ impl EnterpriseApiGateway {
 }
 
 /// Tool for calling enterprise API endpoints
-#[derive(Clone)]
-struct EnterpriseApiTool {
-    gateway: EnterpriseApiGateway,
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "call_enterprise_api",
+    description = "Call enterprise API endpoints with parameter validation and response transformation"
+)]
+pub struct EnterpriseApiTool {
+    #[param(description = "Enterprise service name")]
+    pub service: String,
+
+    #[param(description = "Endpoint ID to call")]
+    pub endpoint_id: String,
+
+    #[param(description = "Request parameters", optional)]
+    pub parameters: Option<Value>,
+
+    #[param(description = "Apply data transformation to response", optional)]
+    pub apply_transformation: Option<bool>,
 }
 
-impl HasBaseMetadata for EnterpriseApiTool {
-    fn name(&self) -> &str {
-        "call_enterprise_api"
-    }
-}
-
-impl HasDescription for EnterpriseApiTool {
-    fn description(&self) -> Option<&str> {
-        Some("Call enterprise API endpoints with parameter validation and response transformation")
-    }
-}
-
-impl HasInputSchema for EnterpriseApiTool {
-    fn input_schema(&self) -> &ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object()
-                .with_properties(HashMap::from([
-                    ("service".to_string(), JsonSchema::string()),
-                    ("endpoint_id".to_string(), JsonSchema::string()),
-                    ("parameters".to_string(), JsonSchema::object()),
-                    ("apply_transformation".to_string(), JsonSchema::boolean()),
-                ]))
-                .with_required(vec!["service".to_string(), "endpoint_id".to_string()])
-        })
-    }
-}
-
-impl HasOutputSchema for EnterpriseApiTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for EnterpriseApiTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for EnterpriseApiTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
-}
-
-#[async_trait]
-impl McpTool for EnterpriseApiTool {
-    async fn call(
-        &self,
-        args: Value,
-        _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let service = args
-            .get("service")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_param("service"))?;
-
-        let endpoint_id = args
-            .get("endpoint_id")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_param("endpoint_id"))?;
-
+impl EnterpriseApiTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Value> {
+        let gateway = get_gateway()?;
         let default_params = json!({});
-        let parameters = args.get("parameters").unwrap_or(&default_params);
-        let apply_transformation = args
-            .get("apply_transformation")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        let parameters = self.parameters.as_ref().unwrap_or(&default_params);
+        let apply_transformation = self.apply_transformation.unwrap_or(false);
 
         // Call the enterprise API
-        let mut response = self
-            .gateway
-            .call_enterprise_api(service, endpoint_id, parameters)?;
+        let mut response = gateway.call_enterprise_api(&self.service, &self.endpoint_id, parameters)?;
 
         // Apply transformation if requested
         if apply_transformation {
-            match service {
+            match self.service.as_str() {
                 "customer_management" => {
-                    response = self
-                        .gateway
-                        .apply_transformation("customer_360", &response)?;
+                    response = gateway.apply_transformation("customer_360", &response)?;
                 }
                 "financial_reporting" => {
-                    response = self
-                        .gateway
-                        .apply_transformation("financial_consolidation", &response)?;
+                    response = gateway.apply_transformation("financial_consolidation", &response)?;
                 }
                 _ => {}
             }
         }
 
-        let result = json!({
-            "service": service,
-            "endpoint": endpoint_id,
+        Ok(json!({
+            "service": self.service,
+            "endpoint": self.endpoint_id,
             "response": response,
             "transformation_applied": apply_transformation,
             "timestamp": Utc::now().to_rfc3339()
-        });
-
-        Ok(CallToolResult::success(vec![ToolResult::text(
-            serde_json::to_string_pretty(&result)?,
-        )]))
+        }))
     }
 }
 
 /// Tool for querying data sources and connections
-#[derive(Clone)]
-struct DataSourceQueryTool {
-    gateway: EnterpriseApiGateway,
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "query_data_sources",
+    description = "Query information about available data sources, connections, and schemas"
+)]
+pub struct DataSourceQueryTool {
+    #[param(description = "Type of data source: databases, data_warehouses, streaming")]
+    pub source_type: String,
+
+    #[param(description = "Include schema details and governance info", optional)]
+    pub include_schema_details: Option<bool>,
+
+    #[param(description = "Filter by data classification level", optional)]
+    pub filter_by_classification: Option<String>,
 }
 
-impl HasBaseMetadata for DataSourceQueryTool {
-    fn name(&self) -> &str {
-        "query_data_sources"
-    }
-}
+impl DataSourceQueryTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Value> {
+        let gateway = get_gateway()?;
+        let include_details = self.include_schema_details.unwrap_or(false);
 
-impl HasDescription for DataSourceQueryTool {
-    fn description(&self) -> Option<&str> {
-        Some("Query information about available data sources, connections, and schemas")
-    }
-}
-
-impl HasInputSchema for DataSourceQueryTool {
-    fn input_schema(&self) -> &ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object()
-                .with_properties(HashMap::from([
-                    ("source_type".to_string(), JsonSchema::string()),
-                    ("include_schema_details".to_string(), JsonSchema::boolean()),
-                    ("filter_by_classification".to_string(), JsonSchema::string()),
-                ]))
-                .with_required(vec!["source_type".to_string()])
-        })
-    }
-}
-
-impl HasOutputSchema for DataSourceQueryTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for DataSourceQueryTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for DataSourceQueryTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
-}
-
-#[async_trait]
-impl McpTool for DataSourceQueryTool {
-    async fn call(
-        &self,
-        args: Value,
-        _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let source_type = args
-            .get("source_type")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| McpError::missing_param("source_type"))?;
-
-        let include_details = args
-            .get("include_schema_details")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        let mut response = self.gateway.get_data_source_info(source_type)?;
+        let mut response = gateway.get_data_source_info(&self.source_type)?;
 
         // Add governance and security information
         if include_details {
             let governance_info = json!({
                 "data_governance": {
-                    "classification_levels": self.gateway.data_sources.access_patterns.data_governance.classification_levels,
-                    "lineage_tracking": self.gateway.data_sources.access_patterns.data_governance.data_lineage_tracking,
-                    "retention_policies": self.gateway.data_sources.access_patterns.data_governance.retention_policies
+                    "classification_levels": gateway.data_sources.access_patterns.data_governance.classification_levels,
+                    "lineage_tracking": gateway.data_sources.access_patterns.data_governance.data_lineage_tracking,
+                    "retention_policies": gateway.data_sources.access_patterns.data_governance.retention_policies
                 },
                 "security_controls": {
                     "encryption": {
-                        "at_rest": self.gateway.data_sources.access_patterns.security_controls.encryption.at_rest,
-                        "in_transit": self.gateway.data_sources.access_patterns.security_controls.encryption.in_transit
+                        "at_rest": gateway.data_sources.access_patterns.security_controls.encryption.at_rest,
+                        "in_transit": gateway.data_sources.access_patterns.security_controls.encryption.in_transit
                     },
-                    "access_control": self.gateway.data_sources.access_patterns.security_controls.access_control,
-                    "auditing": self.gateway.data_sources.access_patterns.security_controls.auditing
+                    "access_control": gateway.data_sources.access_patterns.security_controls.access_control,
+                    "auditing": gateway.data_sources.access_patterns.security_controls.auditing
                 }
             });
 
@@ -783,84 +671,33 @@ impl McpTool for DataSourceQueryTool {
             }
         }
 
-        Ok(CallToolResult::success(vec![ToolResult::text(
-            serde_json::to_string_pretty(&response)?,
-        )]))
+        Ok(response)
     }
 }
 
 /// Tool for listing available APIs and integrations
-#[derive(Clone)]
-struct ApiDiscoveryTool {
-    gateway: EnterpriseApiGateway,
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "discover_apis",
+    description = "Discover available enterprise APIs and third-party integrations with their capabilities"
+)]
+pub struct ApiDiscoveryTool {
+    #[param(description = "Category filter: all, enterprise, third_party, transformations", optional)]
+    pub category: Option<String>,
+
+    #[param(description = "Include endpoint details", optional)]
+    pub include_endpoints: Option<bool>,
+
+    #[param(description = "Include authentication information", optional)]
+    pub include_auth_info: Option<bool>,
 }
 
-impl HasBaseMetadata for ApiDiscoveryTool {
-    fn name(&self) -> &str {
-        "discover_apis"
-    }
-}
-
-impl HasDescription for ApiDiscoveryTool {
-    fn description(&self) -> Option<&str> {
-        Some(
-            "Discover available enterprise APIs and third-party integrations with their capabilities",
-        )
-    }
-}
-
-impl HasInputSchema for ApiDiscoveryTool {
-    fn input_schema(&self) -> &ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object().with_properties(HashMap::from([
-                ("category".to_string(), JsonSchema::string()),
-                ("include_endpoints".to_string(), JsonSchema::boolean()),
-                ("include_auth_info".to_string(), JsonSchema::boolean()),
-            ]))
-        })
-    }
-}
-
-impl HasOutputSchema for ApiDiscoveryTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for ApiDiscoveryTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for ApiDiscoveryTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
-}
-
-#[async_trait]
-impl McpTool for ApiDiscoveryTool {
-    async fn call(
-        &self,
-        args: Value,
-        _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let category = args
-            .get("category")
-            .and_then(|v| v.as_str())
-            .unwrap_or("all");
-
-        let include_endpoints = args
-            .get("include_endpoints")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(true);
-
-        let include_auth = args
-            .get("include_auth_info")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+impl ApiDiscoveryTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Value> {
+        let gateway = get_gateway()?;
+        let category = self.category.as_deref().unwrap_or("all");
+        let include_endpoints = self.include_endpoints.unwrap_or(true);
+        let include_auth = self.include_auth_info.unwrap_or(false);
 
         let mut result = json!({
             "discovery_timestamp": Utc::now().to_rfc3339(),
@@ -869,8 +706,7 @@ impl McpTool for ApiDiscoveryTool {
 
         match category {
             "all" | "enterprise" => {
-                let enterprise_apis = self
-                    .gateway
+                let enterprise_apis = gateway
                     .api_config
                     .enterprise_apis
                     .iter()
@@ -910,8 +746,7 @@ impl McpTool for ApiDiscoveryTool {
         }
 
         if category == "all" || category == "third_party" {
-            let third_party_apis = self
-                .gateway
+            let third_party_apis = gateway
                 .api_config
                 .third_party_integrations
                 .iter()
@@ -930,8 +765,7 @@ impl McpTool for ApiDiscoveryTool {
         }
 
         if category == "all" || category == "transformations" {
-            let transformations = self
-                .gateway
+            let transformations = gateway
                 .api_config
                 .data_transformations
                 .iter()
@@ -949,101 +783,48 @@ impl McpTool for ApiDiscoveryTool {
             result["data_transformations"] = json!(transformations);
         }
 
-        Ok(CallToolResult::success(vec![ToolResult::text(
-            serde_json::to_string_pretty(&result)?,
-        )]))
+        Ok(result)
     }
 }
 
 /// Tool for testing API connectivity and health
-#[derive(Clone)]
-struct ApiHealthCheckTool {
-    gateway: EnterpriseApiGateway,
+#[derive(McpTool, Clone, Default, Deserialize)]
+#[tool(
+    name = "check_api_health",
+    description = "Perform health checks on enterprise APIs and data source connections"
+)]
+pub struct ApiHealthCheckTool {
+    #[param(description = "List of service names to check", optional)]
+    pub services: Option<Vec<String>>,
+
+    #[param(description = "Include performance metrics", optional)]
+    pub include_performance_metrics: Option<bool>,
+
+    #[param(description = "Include detailed diagnostics", optional)]
+    pub detailed_diagnostics: Option<bool>,
 }
 
-impl HasBaseMetadata for ApiHealthCheckTool {
-    fn name(&self) -> &str {
-        "check_api_health"
-    }
-}
+impl ApiHealthCheckTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Value> {
+        let gateway = get_gateway()?;
 
-impl HasDescription for ApiHealthCheckTool {
-    fn description(&self) -> Option<&str> {
-        Some("Perform health checks on enterprise APIs and data source connections")
-    }
-}
+        let services: Vec<&str> = match &self.services {
+            Some(svc_list) => svc_list.iter().map(|s| s.as_str()).collect(),
+            None => gateway
+                .api_config
+                .enterprise_apis
+                .keys()
+                .map(|k| k.as_str())
+                .collect(),
+        };
 
-impl HasInputSchema for ApiHealthCheckTool {
-    fn input_schema(&self) -> &ToolSchema {
-        static INPUT_SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-        INPUT_SCHEMA.get_or_init(|| {
-            ToolSchema::object().with_properties(HashMap::from([
-                (
-                    "services".to_string(),
-                    JsonSchema::array(JsonSchema::string()),
-                ),
-                (
-                    "include_performance_metrics".to_string(),
-                    JsonSchema::boolean(),
-                ),
-                ("detailed_diagnostics".to_string(), JsonSchema::boolean()),
-            ]))
-        })
-    }
-}
-
-impl HasOutputSchema for ApiHealthCheckTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        None
-    }
-}
-
-impl HasAnnotations for ApiHealthCheckTool {
-    fn annotations(&self) -> Option<&ToolAnnotations> {
-        None
-    }
-}
-
-impl HasToolMeta for ApiHealthCheckTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
-        None
-    }
-}
-
-#[async_trait]
-impl McpTool for ApiHealthCheckTool {
-    async fn call(
-        &self,
-        args: Value,
-        _session: Option<SessionContext>,
-    ) -> McpResult<CallToolResult> {
-        let services = args
-            .get("services")
-            .and_then(|v| v.as_array())
-            .map(|arr| arr.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>())
-            .unwrap_or_else(|| {
-                self.gateway
-                    .api_config
-                    .enterprise_apis
-                    .keys()
-                    .map(|k| k.as_str())
-                    .collect()
-            });
-
-        let include_metrics = args
-            .get("include_performance_metrics")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        let detailed = args
-            .get("detailed_diagnostics")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
+        let include_metrics = self.include_performance_metrics.unwrap_or(false);
+        let detailed = self.detailed_diagnostics.unwrap_or(false);
 
         let mut health_results = Vec::new();
 
         for service_name in services {
-            if let Some(_service) = self.gateway.api_config.enterprise_apis.get(service_name) {
+            if let Some(_service) = gateway.api_config.enterprise_apis.get(service_name) {
                 // Simulate health check
                 let health_status = match service_name {
                     "customer_management" => {
@@ -1136,7 +917,7 @@ impl McpTool for ApiHealthCheckTool {
             }
         }
 
-        let summary = json!({
+        Ok(json!({
             "health_check_summary": {
                 "total_services": health_results.len(),
                 "healthy": health_results.iter().filter(|r| r["status"] == "healthy").count(),
@@ -1146,11 +927,7 @@ impl McpTool for ApiHealthCheckTool {
                 "check_timestamp": Utc::now().to_rfc3339()
             },
             "service_health_details": health_results
-        });
-
-        Ok(CallToolResult::success(vec![ToolResult::text(
-            serde_json::to_string_pretty(&summary)?,
-        )]))
+        }))
     }
 }
 
@@ -1178,7 +955,6 @@ fn load_data_sources() -> Result<DataSources, Box<dyn std::error::Error>> {
         Ok(serde_yaml::from_str(&content)?)
     } else {
         warn!("Data sources config file not found, using minimal fallback");
-        // Create minimal fallback structure
         Ok(DataSources {
             data_sources: DataSourceConfig {
                 databases: HashMap::new(),
@@ -1235,60 +1011,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_max_level(tracing::Level::INFO)
         .init();
 
-    info!("🏢 Starting Enterprise API Data Gateway Server");
+    info!("Starting Enterprise API Data Gateway Server");
 
-    // Create the enterprise gateway
+    // Create the enterprise gateway and store in global static
     let gateway = EnterpriseApiGateway::new()?;
 
-    info!("📊 Gateway configuration loaded:");
+    info!("Gateway configuration loaded:");
     info!(
-        "  🔧 {} enterprise APIs",
+        "  {} enterprise APIs",
         gateway.api_config.enterprise_apis.len()
     );
     info!(
-        "  🔗 {} third-party integrations",
+        "  {} third-party integrations",
         gateway.api_config.third_party_integrations.len()
     );
     info!(
-        "  🔄 {} data transformations",
+        "  {} data transformations",
         gateway.api_config.data_transformations.len()
     );
     info!(
-        "  💾 {} data sources configured",
+        "  {} data sources configured",
         gateway.data_sources.data_sources.databases.len()
             + gateway.data_sources.data_sources.data_warehouses.len()
             + gateway.data_sources.data_sources.streaming_sources.len()
     );
+
+    GATEWAY
+        .set(gateway)
+        .expect("Gateway already initialized");
 
     let server = McpServer::builder()
         .name("enterprise-api-gateway")
         .version("1.0.0")
         .title("Enterprise API Data Gateway Server")
         .instructions("This server provides unified access to enterprise APIs, data sources, and third-party integrations. Use the tools to call APIs, query data sources, discover available services, and monitor system health.")
-        .tool(EnterpriseApiTool { gateway: gateway.clone() })
-        .tool(DataSourceQueryTool { gateway: gateway.clone() })
-        .tool(ApiDiscoveryTool { gateway: gateway.clone() })
-        .tool(ApiHealthCheckTool { gateway })
+        .tool(EnterpriseApiTool::default())
+        .tool(DataSourceQueryTool::default())
+        .tool(ApiDiscoveryTool::default())
+        .tool(ApiHealthCheckTool::default())
         .bind_address("127.0.0.1:8048".parse()?)
         .build()?;
 
-    info!("🚀 Enterprise API Gateway running at: http://127.0.0.1:8048/mcp");
-    info!("");
-    info!("🛠️  Available tools:");
-    info!("  🔗 call_enterprise_api - Call enterprise API endpoints with transformations");
-    info!("  💾 query_data_sources - Query data source information and schemas");
-    info!("  🔍 discover_apis - Discover available APIs and integrations");
-    info!("  ❤️  check_api_health - Monitor API health and performance");
-    info!("");
-    info!("📁 External configuration files:");
-    info!("  📄 data/api_endpoints.json - Enterprise API configurations");
-    info!("  📄 data/data_sources.yaml - Data source definitions");
-    info!("  📄 data/integration_mappings.md - Integration documentation");
-    info!("");
-    info!("💡 Example usage:");
-    info!(
-        "  Call customer API: {{\"method\": \"tools/call\", \"params\": {{\"name\": \"call_enterprise_api\", \"arguments\": {{\"service\": \"customer_management\", \"endpoint_id\": \"get_customer\", \"parameters\": {{\"customer_id\": \"CUST-123456\"}}}}}}}}"
-    );
+    info!("Enterprise API Gateway running at: http://127.0.0.1:8048/mcp");
 
     server.run().await?;
     Ok(())
