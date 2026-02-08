@@ -92,7 +92,7 @@ impl LoggingTestClient {
 
         // Create proper MCP initialize request using protocol structs
         let initialize_request = InitializeRequest::new(
-            McpVersion::V2025_06_18,
+            McpVersion::V2025_11_25,
             ClientCapabilities::default(),
             Implementation::new("logging-test-client", "1.0.0"),
         );
