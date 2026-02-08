@@ -54,9 +54,9 @@ fn test_base_notification_without_params() {
 #[test]
 fn test_progress_notification_full_payload() {
     let mut params = ProgressNotificationParams {
-        progress_token: "test-token-456".to_string(),
-        progress: 50,
-        total: Some(100),
+        progress_token: "test-token-456".to_string().into(),
+        progress: 50.0,
+        total: Some(100.0),
         message: Some("Processing items...".to_string()),
         meta: None,
     };
@@ -80,13 +80,13 @@ fn test_progress_notification_full_payload() {
         "progressToken should be preserved"
     );
     assert_eq!(
-        payload_obj.get("progress").and_then(|v| v.as_u64()),
-        Some(50),
+        payload_obj.get("progress").and_then(|v| v.as_f64()),
+        Some(50.0),
         "progress should be preserved"
     );
     assert_eq!(
-        payload_obj.get("total").and_then(|v| v.as_u64()),
-        Some(100),
+        payload_obj.get("total").and_then(|v| v.as_f64()),
+        Some(100.0),
         "total should be preserved"
     );
     assert_eq!(
@@ -331,9 +331,9 @@ fn test_initialized_notification_without_params() {
 fn test_notification_definition_to_notification() {
     // Test that NotificationDefinition trait works correctly
     let mut params = ProgressNotificationParams {
-        progress_token: "token-999".to_string(),
-        progress: 75,
-        total: Some(100),
+        progress_token: "token-999".to_string().into(),
+        progress: 75.0,
+        total: Some(100.0),
         message: None,
         meta: None,
     };
@@ -355,9 +355,9 @@ fn test_notification_definition_to_notification() {
 #[test]
 fn test_serialize_payload_produces_valid_json() {
     let params = ProgressNotificationParams {
-        progress_token: "token-serialize".to_string(),
-        progress: 25,
-        total: Some(50),
+        progress_token: "token-serialize".to_string().into(),
+        progress: 25.0,
+        total: Some(50.0),
         message: Some("Serialization test".to_string()),
         meta: None,
     };
@@ -403,9 +403,9 @@ fn test_empty_params_serialization() {
 #[test]
 fn test_progress_notification_priority() {
     let params = ProgressNotificationParams {
-        progress_token: "token-priority".to_string(),
-        progress: 10,
-        total: Some(20),
+        progress_token: "token-priority".to_string().into(),
+        progress: 10.0,
+        total: Some(20.0),
         message: None,
         meta: None,
     };
