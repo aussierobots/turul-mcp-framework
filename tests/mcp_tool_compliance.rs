@@ -1,6 +1,6 @@
 //! MCP Tool Output Compliance Tests
 //!
-//! These tests validate that tool outputs strictly comply with the MCP 2025-06-18 specification:
+//! These tests validate that tool outputs strictly comply with the MCP 2025-11-25 specification:
 //! 1. Tools with outputSchema MUST provide structuredContent
 //! 2. structuredContent MUST match outputSchema structure exactly
 //! 3. Field names must match schema requirements
@@ -206,7 +206,7 @@ mod tests {
         if tool.output_schema().is_some() {
             assert!(
                 result.structured_content.is_some(),
-                "Tool with outputSchema MUST provide structuredContent (MCP 2025-06-18 spec violation)"
+                "Tool with outputSchema MUST provide structuredContent (MCP 2025-11-25 spec violation)"
             );
 
             let structured = result.structured_content.unwrap();
