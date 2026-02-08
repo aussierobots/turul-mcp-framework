@@ -1,7 +1,7 @@
 //! # Manual Tools Server Example
 //!
-//! This example demonstrates advanced manual implementation of MCP tools,
-//! including session state management, progress notifications, and complex schemas.
+//! This example demonstrates MCP tools with session state management,
+//! progress notifications, and complex schemas using `#[derive(McpTool)]` macros.
 
 use std::collections::HashMap;
 
@@ -417,13 +417,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     println!("Starting Manual Tools MCP Server");
-    println!("Demonstrating advanced manual tool implementations");
+    println!("Demonstrating derive macro tools with session state and progress notifications");
 
     let server = McpServer::builder()
         .name("manual-tools-server")
         .version("1.0.0")
         .title("Manual Tools Implementation Example")
-        .instructions("This server demonstrates advanced manual implementation of MCP tools with fine-grained trait composition, session state management, progress notifications, and complex schemas.")
+        .instructions("This server demonstrates MCP tools with session state management, progress notifications, and complex schemas using derive macros.")
         .tool(FileSystemTool::default())
         .tool(TaskManagerTool::default())
         .tool(WeatherTool::default())
@@ -436,10 +436,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  file_operations: Simulated file system with CRUD operations");
     println!("  task_manager: Task management with status tracking and priorities");
     println!("  weather: Weather information with session caching");
-    println!("\nAdvanced features demonstrated:");
+    println!("\nFeatures demonstrated:");
     println!("  - Session-based state persistence");
     println!("  - Progress notifications and status updates");
-    println!("  - Complex JSON schemas with enums and validation");
+    println!("  - Parameter validation with McpError types");
 
     println!("\nExample usage:");
     println!(
