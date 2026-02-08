@@ -13,7 +13,7 @@
 //! ## Features
 //!
 //! - **Multi-transport**: HTTP, Server-Sent Events (SSE), WebSocket (planned), stdio (planned)
-//! - **Full Protocol**: Complete MCP 2025-06-18 specification support
+//! - **Full Protocol**: Complete MCP 2025-11-25 specification support
 //! - **High Performance**: Built on Tokio with async/await throughout
 //! - **Session Management**: Automatic connection handling and recovery
 //! - **Real-time Streaming**: SSE support for progress and notifications

@@ -254,7 +254,7 @@ impl McpClient {
             )
             .await?;
 
-        // Send initialized notification per MCP 2025-06-18 spec
+        // Send initialized notification per MCP spec
         let initialized_notification = json!({
             "jsonrpc": "2.0",
             "method": "notifications/initialized",
@@ -543,7 +543,7 @@ impl McpClient {
     pub async fn read_resource(
         &self,
         uri: &str,
-    ) -> McpClientResult<Vec<turul_mcp_protocol_2025_06_18::ResourceContent>> {
+    ) -> McpClientResult<Vec<turul_mcp_protocol::ResourceContent>> {
         debug!(uri = uri, "Reading resource");
 
         let request = json!({
@@ -623,7 +623,7 @@ impl McpClient {
         &self,
         name: &str,
         arguments: Option<Value>,
-    ) -> McpClientResult<Vec<turul_mcp_protocol_2025_06_18::PromptMessage>> {
+    ) -> McpClientResult<Vec<turul_mcp_protocol::PromptMessage>> {
         debug!(prompt = name, "Getting prompt");
 
         let mut params = json!({

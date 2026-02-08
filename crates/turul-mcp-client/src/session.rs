@@ -316,6 +316,7 @@ impl SessionManager {
             sampling: None,
             elicitation: None,
             roots: None,
+            tasks: None,
         }
     }
 
@@ -330,6 +331,9 @@ impl SessionManager {
                 name: client_info.name.clone(),
                 version: client_info.version.clone(),
                 title: None,
+                description: None,
+                website_url: None,
+                icons: None,
             },
         }
     }
@@ -424,7 +428,7 @@ mod tests {
             resources: None,
             tools: None,
             completions: None,
-            elicitation: None,
+            tasks: None,
         };
 
         manager
