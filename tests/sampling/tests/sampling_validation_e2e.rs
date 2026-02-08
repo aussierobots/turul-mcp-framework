@@ -144,7 +144,8 @@ async fn test_sampling_system_message_handling() {
         .await
         .unwrap();
 
-    // Create request with system message
+    // MCP 2025-11-25: Role enum only supports "user" and "assistant" (no "system")
+    // A request with "system" role should be rejected as an invalid parameter
     let system_request = json!({
         "messages": [
             {
@@ -168,20 +169,15 @@ async fn test_sampling_system_message_handling() {
     let result = client
         .make_request("sampling/createMessage", system_request, 32)
         .await
-        .expect("System message request should succeed");
+        .expect("Request should complete (even with error response)");
 
+    // MCP 2025-11-25 only supports "user" and "assistant" roles — "system" should be rejected
     assert!(
-        result.contains_key("result"),
-        "Should handle system messages"
+        result.contains_key("error"),
+        "Should reject system role message per MCP 2025-11-25 (only user/assistant allowed)"
     );
 
-    let generated_text = extract_sampling_message(&result).expect("Should extract message text");
-
-    assert!(
-        !generated_text.is_empty(),
-        "Should generate response with system context"
-    );
-    info!("✅ System message handling working correctly");
+    info!("✅ System message correctly rejected per MCP 2025-11-25 spec");
 }
 
 #[tokio::test]
