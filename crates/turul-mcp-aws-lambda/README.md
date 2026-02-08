@@ -12,7 +12,7 @@ AWS Lambda integration for the turul-mcp-framework, enabling serverless deployme
 ## Features
 
 - ✅ **Zero-Cold-Start Architecture** - Optimized Lambda integration
-- ✅ **MCP 2025-06-18 Compliance** - Full protocol support with SSE (snapshots or streaming)
+- ✅ **MCP 2025-11-25 Compliance** - Full protocol support with SSE (snapshots or streaming)
 - ✅ **DynamoDB Session Storage** - Persistent session management across invocations
 - ✅ **CORS Support** - Automatic CORS header injection for browser clients
 - ✅ **Type Conversion Layer** - Clean `lambda_http` ↔ `hyper` conversion
