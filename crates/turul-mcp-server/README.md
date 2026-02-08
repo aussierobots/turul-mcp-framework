@@ -3,7 +3,7 @@
 [![Crates.io](https://img.shields.io/crates/v/turul-mcp-server.svg)](https://crates.io/crates/turul-mcp-server)
 [![Documentation](https://docs.rs/turul-mcp-server/badge.svg)](https://docs.rs/turul-mcp-server)
 
-High-level framework for building Model Context Protocol (MCP) servers with full MCP 2025-06-18 compliance.
+High-level framework for building Model Context Protocol (MCP) servers with full MCP 2025-11-25 compliance.
 
 ## Overview
 
@@ -11,7 +11,7 @@ High-level framework for building Model Context Protocol (MCP) servers with full
 
 ## Features
 
-- ✅ **MCP 2025-06-18 Compliance** - Full protocol compliance with latest features
+- ✅ **MCP 2025-11-25 Compliance** - Full protocol compliance with latest features
 - ✅ **Zero-Configuration** - Framework auto-determines ALL methods from types  
 - ✅ **Four Tool Creation Levels** - Function/derive/builder/manual approaches
 - ✅ **Real-time Notifications** - SSE streaming with JSON-RPC format
@@ -357,7 +357,7 @@ server.run().await
 
 ## Protocol Compliance
 
-### MCP 2025-06-18 Features
+### MCP 2025-11-25 Features
 
 - ✅ **Initialize/Initialized** - Capability negotiation
 - ✅ **Tools** - Dynamic tool calling with schema validation
