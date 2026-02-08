@@ -7,7 +7,6 @@ edition.workspace = true
 turul-mcp-derive = { workspace = true }
 turul-mcp-server = { workspace = true, features = ["test-utils"] }
 turul-mcp-protocol = { workspace = true }
-turul-mcp-protocol-2025-06-18 = { workspace = true }
 turul-mcp-builders = { workspace = true }
 turul-mcp-json-rpc-server = { workspace = true }
 turul-mcp-session-storage = { workspace = true }
@@ -218,3 +217,8 @@ path = "schemars_detailed_schema_test.rs"
 [[test]]
 name = "schemars_optional_fields_test"
 path = "schemars_optional_fields_test.rs"
+
+# MCP 2025-11-25 feature tests
+[[test]]
+name = "mcp_2025_11_25_features"
+path = "mcp_2025_11_25_features.rs"
