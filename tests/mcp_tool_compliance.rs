@@ -553,7 +553,7 @@ mod tests {
         // This test exists to document the MCP compliance requirements
         // It should always pass but serves as living documentation
 
-        println!("MCP Tool Output Compliance Requirements (2025-06-18):");
+        println!("MCP Tool Output Compliance Requirements (2025-11-25):");
         println!("1. If tool defines outputSchema, structuredContent MUST be provided");
         println!("2. structuredContent MUST match outputSchema structure exactly");
         println!("3. Field names in structuredContent MUST match outputSchema");
