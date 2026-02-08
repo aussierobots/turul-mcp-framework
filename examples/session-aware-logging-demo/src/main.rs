@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tokio::time::{Duration, sleep};
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::logging::LoggingLevel;
-use turul_mcp_server::{McpResult, McpServer, SessionContext};
+use turul_mcp_server::prelude::*;
 use turul_mcp_session_storage::InMemorySessionStorage;
 
 /// Simple logging test tool that sends a message at a specified logging level
@@ -35,7 +35,7 @@ pub struct LoggingTestTool {
 
 impl LoggingTestTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
-        let session = session.ok_or("Session context required")?;
+        let session = session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
 
         // Parse logging level
         let logging_level = match self.level.to_lowercase().as_str() {
@@ -114,7 +114,7 @@ pub struct SetLogLevelTool {
 
 impl SetLogLevelTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
-        let session = session.ok_or("Session context required")?;
+        let session = session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
 
         let new_level = match self.level.to_lowercase().as_str() {
             "debug" => LoggingLevel::Debug,
