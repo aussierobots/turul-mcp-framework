@@ -1,8 +1,8 @@
-//! MCP 2025-06-18 Specification Compliance Tests
+//! MCP Specification Compliance Tests
 //!
 //! This module contains comprehensive tests to validate that our MCP framework
-//! implementation fully complies with the Model Context Protocol specification
-//! version 2025-06-18.
+//! implementation fully complies with the Model Context Protocol specification.
+//! Tests use protocol version 2025-06-18 for backward compatibility validation.
 //!
 //! Tests cover:
 //! - JSON-RPC 2.0 compliance
@@ -278,7 +278,7 @@ mod message_structure_compliance {
 
     #[tokio::test]
     async fn test_tool_call_message_structure() {
-        // MCP 2025-06-18 tool call structure
+        // MCP tool call structure
         let tool_call = json!({
             "jsonrpc": "2.0",
             "method": "tools/call",
@@ -311,7 +311,7 @@ mod message_structure_compliance {
 
     #[tokio::test]
     async fn test_tool_response_structure() {
-        // MCP 2025-06-18 tool response structure
+        // MCP tool response structure
         let tool_response = json!({
             "jsonrpc": "2.0",
             "result": {
@@ -994,7 +994,7 @@ mod framework_integration_compliance {
     }
 }
 
-/// Test MCP 2025-06-18 specific features
+/// Test MCP 2025-06-18 specific features (structured _meta, introduced in 2025-06-18)
 #[cfg(test)]
 mod mcp_2025_06_18_features {
     use super::*;
@@ -1052,7 +1052,7 @@ mod mcp_2025_06_18_features {
         let cursor = meta.extra.get("customCursor").unwrap();
         assert_eq!(cursor.get("page"), Some(&json!(2)));
 
-        println!("MCP 2025-06-18 structured _meta support verified");
+        println!("MCP structured _meta support verified");
     }
 
     #[tokio::test]
