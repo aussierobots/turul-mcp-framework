@@ -221,7 +221,7 @@ async fn create_initialized_session(
     let init_request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json")
         .body(Full::new(
@@ -229,7 +229,7 @@ async fn create_initialized_session(
                 "jsonrpc": "2.0",
                 "method": "initialize",
                 "params": {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": "2025-11-25",
                     "capabilities": {},
                     "clientInfo": { "name": "test-client", "version": "1.0.0" }
                 },
@@ -256,7 +256,7 @@ async fn create_initialized_session(
     let initialized_request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json")
@@ -312,7 +312,7 @@ async fn test_protocol_version_detection() {
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json")
         .body(Full::new(
@@ -320,7 +320,7 @@ async fn test_protocol_version_detection() {
                 "jsonrpc": "2.0",
                 "method": "initialize",
                 "params": {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": "2025-11-25",
                     "capabilities": {},
                     "clientInfo": { "name": "test-client", "version": "1.0.0" }
                 },
@@ -383,7 +383,7 @@ async fn test_streaming_get_with_session() {
     let get_request = Request::builder()
         .method(Method::GET)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .header(ACCEPT, "application/json")
         .body(Full::new(bytes::Bytes::new()))
@@ -438,7 +438,7 @@ async fn test_streaming_post_json_rpc() {
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json") // Add Accept header
@@ -501,7 +501,7 @@ async fn test_session_delete_cleanup() {
     let delete_request = Request::builder()
         .method(Method::DELETE)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .header(ACCEPT, "application/json")
         .body(Full::new(bytes::Bytes::new()))
@@ -681,7 +681,7 @@ async fn test_post_actually_streams_chunked_response() {
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "text/event-stream") // Enable SSE streaming for chunked response
         .header("Mcp-Session-Id", &session_id)
@@ -730,7 +730,7 @@ async fn test_post_actually_streams_chunked_response() {
     // Verify MCP headers
     let protocol_header = response.headers().get("MCP-Protocol-Version");
     assert!(
-        protocol_header.is_some() && protocol_header.unwrap() == "2025-06-18",
+        protocol_header.is_some() && protocol_header.unwrap() == "2025-11-25",
         "Missing MCP-Protocol-Version header on POST response"
     );
 
@@ -838,7 +838,7 @@ async fn test_session_auto_creation_works() {
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         // Deliberately NO Mcp-Session-Id header
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json")
@@ -847,7 +847,7 @@ async fn test_session_auto_creation_works() {
                 "jsonrpc": "2.0",
                 "method": "initialize",
                 "params": {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": "2025-11-25",
                     "capabilities": {},
                     "clientInfo": { "name": "test-client", "version": "1.0.0" }
                 },
@@ -917,7 +917,7 @@ async fn test_get_stream_has_mcp_headers() {
     let get_request = Request::builder()
         .method(Method::GET)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .header(ACCEPT, "application/json")
         .body(Full::new(bytes::Bytes::new()))
@@ -936,7 +936,7 @@ async fn test_get_stream_has_mcp_headers() {
     let _capabilities_header = get_response.headers().get("MCP-Capabilities");
 
     assert!(
-        protocol_header.is_some() && protocol_header.unwrap() == "2025-06-18",
+        protocol_header.is_some() && protocol_header.unwrap() == "2025-11-25",
         "GET response missing MCP-Protocol-Version header - StreamManager doesn't add MCP headers!"
     );
 
@@ -950,7 +950,7 @@ async fn test_get_stream_has_mcp_headers() {
 
 #[tokio::test]
 #[serial]
-async fn test_accept_json_enables_streaming_for_2025_06_18() {
+async fn test_accept_json_enables_streaming_for_2025_11_25() {
     let _ = tracing_subscriber::fmt::try_init();
     println!("✅ Testing Accept header logic - checking if it already works");
 
@@ -973,14 +973,14 @@ async fn test_accept_json_enables_streaming_for_2025_06_18() {
         .expect("Failed to create initialized session");
 
     // Test with ONLY application/json Accept header (no text/event-stream)
-    // Per MCP spec, protocol 2025-06-18 should still stream with application/json
+    // Per MCP spec, protocol 2025-11-25 should still stream with application/json
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .header(CONTENT_TYPE, "application/json")
-        .header(ACCEPT, "application/json") // Only JSON, no SSE - should still stream for 2025-06-18
+        .header(ACCEPT, "application/json") // Only JSON, no SSE - should still stream for 2025-11-25
         .body(Full::new(
             json!({
                 "jsonrpc": "2.0",
@@ -998,7 +998,7 @@ async fn test_accept_json_enables_streaming_for_2025_06_18() {
     let transfer_encoding = response.headers().get("transfer-encoding");
     assert!(
         transfer_encoding.is_some() && transfer_encoding.unwrap() == "chunked",
-        "Accept application/json should enable streaming for protocol 2025-06-18 - is_streamable_compatible() logic wrong!"
+        "Accept application/json should enable streaming for protocol 2025-11-25 - is_streamable_compatible() logic wrong!"
     );
 
     println!("✅ Accept header logic test passed!");
@@ -1035,7 +1035,7 @@ async fn test_post_response_contains_progress_tokens() {
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "text/event-stream") // Enable SSE streaming for progress tokens
@@ -1132,7 +1132,7 @@ async fn test_sse_frame_structure_compliance() {
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "text/event-stream") // Enable SSE streaming
         .header("Mcp-Session-Id", &session_id)
@@ -1225,7 +1225,7 @@ async fn test_sse_get_with_proper_event_stream() {
     let request = Request::builder()
         .method(Method::GET)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header(ACCEPT, "text/event-stream") // Critical: proper SSE Accept header
         .header("Mcp-Session-Id", &session_id)
         .body(Full::new(bytes::Bytes::new()))
@@ -1252,7 +1252,7 @@ async fn test_sse_get_with_proper_event_stream() {
     // Verify MCP headers are present
     let protocol_header = response.headers().get("MCP-Protocol-Version");
     assert!(
-        protocol_header.is_some() && protocol_header.unwrap() == "2025-06-18",
+        protocol_header.is_some() && protocol_header.unwrap() == "2025-11-25",
         "SSE GET response must include MCP-Protocol-Version header"
     );
 
@@ -1361,7 +1361,7 @@ async fn test_negative_cases_missing_headers() {
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header(CONTENT_TYPE, "application/json")
         // Missing Accept header
         .header("Mcp-Session-Id", &session_id)
@@ -1402,7 +1402,7 @@ async fn test_negative_cases_missing_headers() {
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "text/event-stream")
         // Missing Mcp-Session-Id header
@@ -1449,7 +1449,7 @@ async fn test_negative_cases_missing_headers() {
     let request = Request::builder()
         .method(Method::GET)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header(ACCEPT, "text/event-stream")
         // Missing Mcp-Session-Id header
         .body(Full::new(bytes::Bytes::new()))
@@ -1498,7 +1498,7 @@ async fn test_last_event_id_resumption() {
     let request = Request::builder()
         .method(Method::GET)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header(ACCEPT, "text/event-stream")
         .header("Mcp-Session-Id", session_id.to_string())
         .body(Full::new(bytes::Bytes::new()))
@@ -1580,7 +1580,7 @@ async fn test_last_event_id_resumption() {
     let mut resumption_request = Request::builder()
         .method(Method::GET)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header(ACCEPT, "text/event-stream")
         .header("Mcp-Session-Id", session_id.to_string());
 
@@ -1697,7 +1697,7 @@ async fn test_strict_lifecycle_enforcement_over_streamable_http() {
     let unauthorized_request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", "non-existent-session-id")
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "text/event-stream, application/json")
@@ -1761,7 +1761,7 @@ async fn test_strict_mode_progress_notifications() {
     let request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json")
@@ -1802,7 +1802,7 @@ async fn test_strict_mode_progress_notifications() {
     let verify_request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", &session_id)
         .header(CONTENT_TYPE, "application/json")
         .header(ACCEPT, "application/json")
