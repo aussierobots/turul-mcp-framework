@@ -177,7 +177,7 @@ impl McpClient {
                     "framework": "turul-mcp-client",
                     "tools_available": tools_result.tools.len(),
                     "base_url": self.config.base_url,
-                    "protocol_version": "2025-06-18"
+                    "protocol_version": "2025-11-25"
                 });
                 info!("✅ Connection test successful");
                 Ok(test_result)
