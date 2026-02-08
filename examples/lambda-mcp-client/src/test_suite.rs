@@ -155,7 +155,7 @@ impl TestSuite {
                 test_type: "mcp_spec_initialization".to_string(),
                 expected_duration_secs: 5,
                 parameters: Some(json!({
-                    "validate_protocol_version": "2025-06-18",
+                    "validate_protocol_version": "2025-11-25",
                     "validate_capabilities_structure": true,
                     "validate_client_info_required": true,
                     "validate_initialized_notification": true
@@ -183,7 +183,7 @@ impl TestSuite {
                 test_type: "mcp_spec_version_negotiation".to_string(),
                 expected_duration_secs: 5,
                 parameters: Some(json!({
-                    "test_supported_versions": ["2025-06-18"],
+                    "test_supported_versions": ["2025-11-25"],
                     "test_unsupported_version_handling": true,
                     "validate_version_in_responses": true
                 })),
