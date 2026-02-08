@@ -249,11 +249,11 @@ fn use_version_specific_feature() {
     let current_version = McpVersion::from_str(CURRENT_VERSION).unwrap();
     
     match current_version {
-        McpVersion::V2025_06_18 => {
-            // Use current features like _meta support
-            println!("Using MCP 2025-06-18 features");
+        McpVersion::V2025_11_25 => {
+            // Use current features like tasks, icons, URL elicitation, sampling tools
+            println!("Using MCP 2025-11-25 features");
         }
-        // Future versions would be handled here
+        // Older versions still supported for backward compatibility
         _ => {
             println!("Using features from version: {}", CURRENT_VERSION);
         }
