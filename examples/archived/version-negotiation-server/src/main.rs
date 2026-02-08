@@ -10,6 +10,7 @@ use turul_mcp_server::{McpServer, McpTool};
 use turul_mcp_protocol::{ToolSchema, ToolResult, version::McpVersion, schema::JsonSchema, McpError, McpResult};
 use turul_mcp_protocol::tools::CallToolResult;
 use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
+use turul_mcp_builders::prelude::HasIcon;
 use serde_json::Value;
 use tracing::info;
 
@@ -62,6 +63,8 @@ impl HasToolMeta for VersionInfoTool {
         None // Use default
     }
 }
+
+impl HasIcons for VersionInfoTool {}
 
 // ToolDefinition is automatically implemented via blanket impl!
 
@@ -173,6 +176,8 @@ impl HasToolMeta for VersionTestTool {
         None // Use default
     }
 }
+
+impl HasIcons for VersionTestTool {}
 
 // ToolDefinition is automatically implemented via blanket impl!
 
