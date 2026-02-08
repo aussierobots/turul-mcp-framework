@@ -60,7 +60,7 @@ async fn test_tools_list_without_session_returns_401() {
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "tools/list",
@@ -91,7 +91,7 @@ async fn test_resources_list_without_session_returns_401() {
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "resources/list",
@@ -122,13 +122,13 @@ async fn test_initialize_without_session_creates_session() {
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",
             "id": 1,
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "experimental": {},
                     "sampling": {}
@@ -161,13 +161,13 @@ async fn test_discovery_methods_with_session_succeed() {
     let init_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",
             "id": 1,
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "experimental": {},
                     "sampling": {}
@@ -195,7 +195,7 @@ async fn test_discovery_methods_with_session_succeed() {
     let tools_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -224,7 +224,7 @@ async fn test_complete_session_flow() {
     let no_session_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "tools/list",
@@ -240,13 +240,13 @@ async fn test_complete_session_flow() {
     let init_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",
             "id": 2,
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "experimental": {},
                     "sampling": {}
@@ -274,7 +274,7 @@ async fn test_complete_session_flow() {
     let with_session_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", session_id)
         .json(&json!({
             "jsonrpc": "2.0",
@@ -300,13 +300,13 @@ async fn test_mcp_inspector_flow_with_combined_accept_header() {
         .post(&server_url)
         .header("Content-Type", "application/json")
         .header("Accept", "application/json, text/event-stream") // MCP Inspector header
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .json(&json!({
             "jsonrpc": "2.0",
             "method": "initialize",
             "id": 1,
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {},
                 "clientInfo": {
                     "name": "mcp-inspector",
@@ -339,7 +339,7 @@ async fn test_mcp_inspector_flow_with_combined_accept_header() {
         .post(&server_url)
         .header("Content-Type", "application/json")
         .header("Accept", "application/json, text/event-stream") // Test MCP Inspector header
-        .header("MCP-Protocol-Version", "2025-06-18")
+        .header("MCP-Protocol-Version", "2025-11-25")
         .header("Mcp-Session-Id", session_id)
         .json(&json!({
             "jsonrpc": "2.0",
