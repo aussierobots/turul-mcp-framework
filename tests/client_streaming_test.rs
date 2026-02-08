@@ -1,4 +1,4 @@
-//! Tests for client streaming functionality with MCP 2025-06-18 Streamable HTTP
+//! Tests for client streaming functionality with MCP Streamable HTTP
 
 use anyhow::Result;
 use futures::Stream;
