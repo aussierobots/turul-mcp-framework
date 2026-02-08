@@ -39,7 +39,7 @@ impl CreativeWritingSampler {
             max_tokens: 1500,
             temperature: Some(0.8), // Higher temperature for creativity
             messages: vec![SamplingMessage {
-                role: Role::System,
+                role: Role::User,
                 content: ContentBlock::text(
                     r#"You are a creative writing assistant. Help users with:
 
@@ -83,6 +83,8 @@ impl HasModelPreferences for CreativeWritingSampler {
     }
 }
 
+impl HasSamplingTools for CreativeWritingSampler {}
+
 // SamplingDefinition automatically implemented via blanket impl
 
 #[async_trait]
@@ -112,6 +114,8 @@ impl McpSampling for CreativeWritingSampler {
                 ContentBlock::Audio { .. } => "[Audio content]",
                 ContentBlock::ResourceLink { .. } => "[Resource link content]",
                 ContentBlock::Resource { .. } => "[Resource content]",
+                ContentBlock::ToolUse { .. } => "[Tool use]",
+                ContentBlock::ToolResult { .. } => "[Tool result]",
             })
             .unwrap_or("No user input provided");
 
@@ -212,7 +216,8 @@ I'd love to help you develop this further! What specific aspect would you like t
         info!("✨ Generated creative writing response");
 
         Ok(CreateMessageResult::new(
-            response_message,
+            response_message.role,
+            response_message.content,
             "creative-assistant-v1",
         ))
     }
@@ -266,7 +271,7 @@ impl TechnicalWritingSampler {
             max_tokens: 2000,
             temperature: Some(0.3), // Lower temperature for precision
             messages: vec![SamplingMessage {
-                role: Role::System,
+                role: Role::User,
                 content: ContentBlock::text(
                     r#"You are a technical writing assistant specializing in:
 
@@ -310,6 +315,8 @@ impl HasModelPreferences for TechnicalWritingSampler {
     }
 }
 
+impl HasSamplingTools for TechnicalWritingSampler {}
+
 #[async_trait]
 impl McpSampling for TechnicalWritingSampler {
     async fn sample(&self, request: CreateMessageRequest) -> McpResult<CreateMessageResult> {
@@ -327,6 +334,8 @@ impl McpSampling for TechnicalWritingSampler {
                 ContentBlock::Audio { .. } => "[Audio content]",
                 ContentBlock::ResourceLink { .. } => "[Resource link content]",
                 ContentBlock::Resource { .. } => "[Resource content]",
+                ContentBlock::ToolUse { .. } => "[Tool use]",
+                ContentBlock::ToolResult { .. } => "[Tool result]",
             })
             .unwrap_or("No user input provided");
 
@@ -385,7 +394,8 @@ Would you like me to help you develop any specific type of technical documentati
         info!("📝 Generated technical writing response");
 
         Ok(CreateMessageResult::new(
-            response_message,
+            response_message.role,
+            response_message.content,
             "technical-assistant-v1",
         ))
     }
@@ -410,7 +420,7 @@ impl ConversationalSampler {
             max_tokens: 1000,
             temperature: Some(0.7), // Balanced temperature for natural conversation
             messages: vec![SamplingMessage {
-                role: Role::System,
+                role: Role::User,
                 content: ContentBlock::text(
                     "You are a helpful, friendly, and knowledgeable conversational assistant. Provide thoughtful, engaging responses while being concise and actionable.",
                 ),
@@ -441,6 +451,8 @@ impl HasModelPreferences for ConversationalSampler {
     }
 }
 
+impl HasSamplingTools for ConversationalSampler {}
+
 #[async_trait]
 impl McpSampling for ConversationalSampler {
     async fn sample(&self, _request: CreateMessageRequest) -> McpResult<CreateMessageResult> {
@@ -456,7 +468,8 @@ impl McpSampling for ConversationalSampler {
         info!("💭 Generated conversational response");
 
         Ok(CreateMessageResult::new(
-            response_message,
+            response_message.role,
+            response_message.content,
             "conversational-assistant-v1",
         ))
     }
