@@ -307,7 +307,7 @@ impl McpServerBuilder {
     ///     fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
-    /// impl turul_mcp_builders::traits::HasIcon for AddTool {}
+    /// impl turul_mcp_builders::traits::HasIcons for AddTool {}
     ///
     /// #[async_trait]
     /// impl McpTool for AddTool {
@@ -487,7 +487,7 @@ impl McpServerBuilder {
     ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
-    /// impl turul_mcp_builders::traits::HasIcon for ConfigResource {}
+    /// impl turul_mcp_builders::traits::HasIcons for ConfigResource {}
     ///
     /// #[async_trait]
     /// impl McpResource for ConfigResource {
@@ -598,7 +598,7 @@ impl McpServerBuilder {
     ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
-    /// impl turul_mcp_builders::traits::HasIcon for DataResource {}
+    /// impl turul_mcp_builders::traits::HasIcons for DataResource {}
     ///
     /// #[async_trait]
     /// impl McpResource for DataResource {
@@ -689,7 +689,7 @@ impl McpServerBuilder {
     ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
-    /// impl turul_mcp_builders::traits::HasIcon for TemplateResource {}
+    /// impl turul_mcp_builders::traits::HasIcons for TemplateResource {}
     ///
     /// #[async_trait]
     /// impl McpResource for TemplateResource {
