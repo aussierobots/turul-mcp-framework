@@ -60,6 +60,7 @@ impl HasResourceMimeType for SimpleJsonRpcTestResource {}
 impl HasResourceSize for SimpleJsonRpcTestResource {}
 impl HasResourceAnnotations for SimpleJsonRpcTestResource {}
 impl HasResourceMeta for SimpleJsonRpcTestResource {}
+impl HasIcons for SimpleJsonRpcTestResource {}
 
 #[tokio::test]
 async fn test_resources_list_handler_json_structure() {

@@ -225,6 +225,7 @@ async fn test_resource_template_mcp_specification() {
         description: Some("User profile information and preferences".to_string()),
         mime_type: Some("application/json".to_string()), // Expected content type
         annotations: None,                               // Optional
+        icons: None,                                     // Optional (MCP 2025-11-25)
         meta: None,                                      // Optional
     };
 

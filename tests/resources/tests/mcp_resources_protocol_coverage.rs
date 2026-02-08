@@ -136,7 +136,7 @@ async fn test_resource_template_rfc_6570_compliance() {
         "file:///projects/{project_id}/files/{file_name}.{ext}",
     )
     .with_description("Project files with multiple parameters")
-    .with_annotations(Annotations::new().with_title("Project Files"));
+    .with_annotations(Annotations::new().with_audience(vec!["user".to_string()]));
 
     assert_eq!(
         template.uri_template,
@@ -151,7 +151,7 @@ async fn test_resource_template_rfc_6570_compliance() {
 #[tokio::test]
 async fn test_resource_struct_complete_fields() {
     // Test Resource struct with all optional fields populated
-    let annotations = Annotations::new().with_title("Complete Resource");
+    let annotations = Annotations::new().with_audience(vec!["user".to_string()]);
 
     let mut meta = HashMap::new();
     meta.insert("created_by".to_string(), json!("system"));
