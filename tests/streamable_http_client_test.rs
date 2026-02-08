@@ -71,7 +71,7 @@ impl StreamableHttpClient {
             "id": 1,
             "method": "initialize",
             "params": {
-                "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-11-25",
                 "capabilities": {
                     "roots": { "listChanged": false },
                     "sampling": {}
@@ -552,7 +552,7 @@ async fn test_accept_header_variations() -> Result<()> {
                 "id": 1,
                 "method": "initialize",
                 "params": {
-                    "protocolVersion": "2025-06-18",
+                    "protocolVersion": "2025-11-25",
                     "capabilities": {},
                     "clientInfo": {"name": "test", "version": "1.0"}
                 }
