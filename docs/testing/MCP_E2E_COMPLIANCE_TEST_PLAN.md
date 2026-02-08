@@ -3,9 +3,9 @@
 
 **Version**: 1.0  
 **Last Updated**: 2025-09-12  
-**Status**: 🟢 **PRODUCTION READY** - Complete MCP 2025-06-18 compliance achieved, URI validation conflicts resolved with test mode  
+**Status**: 🟢 **PRODUCTION READY** - Complete MCP 2025-11-25 compliance achieved, URI validation conflicts resolved with test mode  
 **Framework**: turul-mcp-framework  
-**Specification**: [MCP 2025-06-18](https://modelcontextprotocol.io/specification/2025-06-18)
+**Specification**: [MCP 2025-11-25](https://modelcontextprotocol.io/specification/2025-06-18)
 
 ---
 

@@ -1,6 +1,6 @@
 # MCP Framework Testing & Verification Guide
 
-Complete guide for running and verifying MCP 2025-06-18 compliance in the turul-mcp-framework.
+Complete guide for running and verifying MCP 2025-11-25 compliance in the turul-mcp-framework.
 
 ## Quick Start - Verify Everything Works
 
@@ -513,4 +513,4 @@ for example in examples/*/; do
 done
 ```
 
-This guide provides comprehensive instructions for running and manually verifying MCP 2025-06-18 compliance across the entire framework with complete protocol coverage including Tools, Resources, Prompts, Sampling, Roots, and Elicitation.
+This guide provides comprehensive instructions for running and manually verifying MCP 2025-11-25 compliance across the entire framework with complete protocol coverage including Tools, Resources, Prompts, Sampling, Roots, and Elicitation.

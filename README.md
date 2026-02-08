@@ -1,6 +1,6 @@
 # Turul MCP Framework - Beta Rust Implementation
 
-A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-06-18 specification**.
+A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-11-25 specification**.
 
 ⚠️ **Beta Status** - Active development with ongoing feature enhancements. Phase 6 session-aware resources completed. Suitable for development and testing.
 
@@ -270,7 +270,7 @@ For detailed testing instructions, server running guides, and compliance verific
 
 This guide includes:
 - ✅ All server running instructions with expected outputs
-- ✅ Manual MCP 2025-06-18 compliance verification  
+- ✅ Manual MCP 2025-11-25 compliance verification  
 - ✅ SSE event stream testing procedures
 - ✅ Performance testing and troubleshooting
 - ✅ CI/CD integration examples
@@ -289,7 +289,7 @@ INIT_RESPONSE=$(curl -s -X POST http://127.0.0.1:$PORT/mcp \
   -d '{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}},"id":1}')
 
 if [[ $(echo $INIT_RESPONSE | jq -r '.result.protocolVersion') == "2025-06-18" ]]; then
-    echo "✅ MCP 2025-06-18 compliant"
+    echo "✅ MCP 2025-11-25 compliant"
 else
     echo "❌ Not compliant"
     exit 1
@@ -913,7 +913,7 @@ let content = client.read_resource("config://app.json").await?;
 
 ## 🔍 MCP Protocol Compliance
 
-**Full MCP 2025-06-18 specification support:**
+**Full MCP 2025-11-25 specification support:**
 
 - ✅ **JSON-RPC 2.0** - Complete request/response with `_meta` fields
 - ✅ **Protocol Negotiation** - Version compatibility and capability exchange
@@ -1173,7 +1173,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 ## 📋 Development Status & Current Limitations
 
 ### 🎯 Current Framework State
-- **Phase 6 Complete**: Session-aware resources implemented with full MCP 2025-06-18 compliance
+- **Phase 6 Complete**: Session-aware resources implemented with full MCP 2025-11-25 compliance
 - **45+ Examples Validated**: Comprehensive testing campaign completed across all framework areas
 - **SSE Streaming Verified**: Real-time notifications and session-aware logging working correctly
 - **Beta Status**: Active development with API stability considerations before 1.0.0
