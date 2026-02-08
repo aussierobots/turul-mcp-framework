@@ -23,7 +23,7 @@ use turul_mcp_protocol::notifications::{
 
 /// MCP-compliant notification broadcaster trait for sending ALL notification types over SSE
 ///
-/// ALL methods send proper JSON-RPC notifications per MCP 2025-06-18 specification
+/// ALL methods send proper JSON-RPC notifications per MCP 2025-11-25 specification
 #[async_trait]
 pub trait NotificationBroadcaster: Send + Sync {
     // ================== SERVER-TO-CLIENT NOTIFICATIONS ==================
@@ -52,7 +52,7 @@ pub trait NotificationBroadcaster: Send + Sync {
         notification: ResourceUpdatedNotification,
     ) -> Result<(), BroadcastError>;
 
-    /// Send resource list changed notification (notifications/resources/listChanged)
+    /// Send resource list changed notification (notifications/resources/list_changed)
     /// Notifies that the resource list has changed (added/removed resources)
     async fn send_resource_list_changed_notification(
         &self,
@@ -60,7 +60,7 @@ pub trait NotificationBroadcaster: Send + Sync {
         notification: ResourceListChangedNotification,
     ) -> Result<(), BroadcastError>;
 
-    /// Send tool list changed notification (notifications/tools/listChanged)
+    /// Send tool list changed notification (notifications/tools/list_changed)
     /// Notifies that the tool list has changed (added/removed tools)
     async fn send_tool_list_changed_notification(
         &self,
@@ -68,7 +68,7 @@ pub trait NotificationBroadcaster: Send + Sync {
         notification: ToolListChangedNotification,
     ) -> Result<(), BroadcastError>;
 
-    /// Send prompt list changed notification (notifications/prompts/listChanged)
+    /// Send prompt list changed notification (notifications/prompts/list_changed)
     /// Notifies that the prompt list has changed (added/removed prompts)
     async fn send_prompt_list_changed_notification(
         &self,

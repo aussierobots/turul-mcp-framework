@@ -1,6 +1,6 @@
 //! HTTP MCP Server with SessionStorage integration
 //!
-//! This server provides MCP 2025-06-18 compliant HTTP transport with
+//! This server provides MCP 2025-11-25 compliant HTTP transport with
 //! pluggable session storage backends and proper SSE resumability.
 
 use bytes::Bytes;
@@ -202,7 +202,7 @@ impl HttpMcpServerBuilder {
         // Use middleware stack from builder
         let middleware_stack = self.middleware_stack;
 
-        // Create StreamableHttpHandler for MCP 2025-06-18 support
+        // Create StreamableHttpHandler for MCP 2025-11-25 support
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(self.config.clone()),
             Arc::clone(&dispatcher),
@@ -238,7 +238,7 @@ pub struct HttpMcpServer {
     stream_config: StreamConfig,
     // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance
     stream_manager: Arc<StreamManager>,
-    // StreamableHttpHandler for MCP 2025-06-18 clients
+    // StreamableHttpHandler for MCP 2025-11-25 clients
     streamable_handler: StreamableHttpHandler,
 }
 
@@ -353,7 +353,7 @@ impl HttpMcpServer {
     }
 }
 
-/// Handle requests with MCP 2025-06-18 compliance
+/// Handle requests with MCP 2025-11-25 compliance
 /// Combined handler that routes based on MCP protocol version
 #[derive(Clone)]
 struct McpRequestHandler {
@@ -386,11 +386,11 @@ async fn handle_request(
             .headers()
             .get("MCP-Protocol-Version")
             .and_then(|h| h.to_str().ok())
-            .unwrap_or("2025-06-18"); // Default to latest version (we only support the latest protocol)
+            .unwrap_or("2025-11-25"); // Default to latest version (we only support the latest protocol)
         debug!("Protocol version: {}", protocol_version_str);
 
         let protocol_version = McpProtocolVersion::parse_version(protocol_version_str)
-            .unwrap_or(McpProtocolVersion::V2025_06_18);
+            .unwrap_or(McpProtocolVersion::V2025_11_25);
 
         debug!(
             "MCP request: protocol_version={}, method={}",
@@ -398,7 +398,7 @@ async fn handle_request(
             method
         );
 
-        // Route based on protocol version - MCP 2025-06-18 uses Streamable HTTP, older versions use SessionMcpHandler
+        // Route based on protocol version - MCP 2025-11-25 uses Streamable HTTP, older versions use SessionMcpHandler
         debug!(
             "Routing decision: protocol_version={}, method={}, supports_streamable={}, handler={}",
             protocol_version.as_str(),
@@ -412,7 +412,7 @@ async fn handle_request(
         );
 
         if protocol_version.supports_streamable_http() {
-            // Use StreamableHttpHandler for MCP 2025-06-18 clients
+            // Use StreamableHttpHandler for MCP 2025-11-25 clients
             debug!(
                 "Calling streamable handler for protocol {}",
                 protocol_version.as_str()

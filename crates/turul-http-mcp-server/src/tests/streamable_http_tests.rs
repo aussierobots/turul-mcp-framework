@@ -1,6 +1,6 @@
 //! Streamable HTTP Tests
 //!
-//! This module tests the Streamable HTTP transport implementation per MCP 2025-06-18 specification including:
+//! This module tests the Streamable HTTP transport implementation per MCP 2025-11-25 specification including:
 //! - HTTP/1.1 and HTTP/2 support
 //! - JSON-RPC request/response streaming
 //! - Connection management and upgrades
@@ -340,14 +340,14 @@ mod connection_management_tests {
     }
 }
 
-/// Test MCP 2025-06-18 specification compliance
+/// Test MCP 2025-11-25 specification compliance
 #[cfg(test)]
 mod mcp_compliance_tests {
     use super::*;
 
     #[tokio::test]
     async fn test_mcp_request_format_compliance() {
-        // Test that requests follow MCP 2025-06-18 format
+        // Test that requests follow MCP 2025-11-25 format
         let mcp_request = json!({
             "jsonrpc": "2.0",
             "method": "tools/call",
@@ -365,12 +365,12 @@ mod mcp_compliance_tests {
         assert!(mcp_request["params"]["_meta"].is_object());
         assert_eq!(mcp_request["params"]["_meta"]["progressToken"], "progress-123");
 
-        println!("MCP 2025-06-18 request format validated");
+        println!("MCP 2025-11-25 request format validated");
     }
 
     #[tokio::test]
     async fn test_mcp_response_format_compliance() {
-        // Test that responses follow MCP 2025-06-18 format
+        // Test that responses follow MCP 2025-11-25 format
         let mcp_response = json!({
             "jsonrpc": "2.0",
             "result": {
@@ -394,7 +394,7 @@ mod mcp_compliance_tests {
         assert!(mcp_response["result"]["_meta"].is_object());
         assert!(mcp_response["result"]["_meta"]["usage"].is_object());
 
-        println!("MCP 2025-06-18 response format validated");
+        println!("MCP 2025-11-25 response format validated");
     }
 
     #[tokio::test]
@@ -419,7 +419,7 @@ mod mcp_compliance_tests {
         assert_eq!(mcp_error_response["error"]["code"], -32602);
         assert!(mcp_error_response["error"]["data"]["_meta"].is_object());
 
-        println!("MCP 2025-06-18 error format validated");
+        println!("MCP 2025-11-25 error format validated");
     }
 
     #[tokio::test]

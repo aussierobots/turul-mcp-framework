@@ -1,7 +1,7 @@
 //! JSON-RPC 2.0 over HTTP handler for MCP requests with SessionStorage integration
 //!
 //! This handler implements proper JSON-RPC 2.0 server over HTTP transport with
-//! MCP 2025-06-18 compliance, including:
+//! MCP 2025-11-25 compliance, including:
 //! - SessionStorage trait integration (defaults to InMemory)
 //! - StreamManager for SSE with resumability
 //! - 202 Accepted for notifications
@@ -227,7 +227,7 @@ impl SessionMcpHandler {
         &self.stream_manager
     }
 
-    /// Handle MCP HTTP requests with full MCP 2025-06-18 compliance
+    /// Handle MCP HTTP requests with full MCP 2025-11-25 compliance
     pub async fn handle_mcp_request<B>(&self, req: Request<B>) -> Result<Response<UnifiedMcpBody>>
     where
         B: http_body::Body<Data = bytes::Bytes, Error = hyper::Error> + Send + 'static,

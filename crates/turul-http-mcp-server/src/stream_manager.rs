@@ -1,4 +1,4 @@
-//! Enhanced Stream Manager with MCP 2025-06-18 Resumability
+//! Enhanced Stream Manager with MCP 2025-11-25 Resumability
 //!
 //! This module provides proper SSE stream management with:
 //! - Event IDs for resumability
