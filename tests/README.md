@@ -1,6 +1,6 @@
 # MCP Framework E2E Testing Suite
 
-This directory contains comprehensive End-to-End (E2E) testing infrastructure for the MCP Framework, validating complete MCP 2025-06-18 specification compliance with real HTTP/SSE transport.
+This directory contains comprehensive End-to-End (E2E) testing infrastructure for the MCP Framework, validating complete MCP 2025-11-25 specification compliance with real HTTP/SSE transport.
 
 ## Overview
 
@@ -399,7 +399,7 @@ See individual README files in each test directory for specific guidelines.
 The E2E testing architecture provides:
 
 - **Real Transport**: Actual HTTP/SSE communication (not mocks)
-- **Specification Compliance**: Full MCP 2025-06-18 protocol validation
+- **Specification Compliance**: Full MCP 2025-11-25 protocol validation
 - **Production Readiness**: Testing conditions mirror real-world usage
 - **Comprehensive Coverage**: All MCP features and edge cases tested
 - **Developer Experience**: Clear feedback and debugging capabilities
