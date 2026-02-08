@@ -404,8 +404,8 @@ impl {{component_name}} {
     println!("────────────────────────────────────────────────");
 
     // Progress notification
-    let progress_notification = NotificationBuilder::progress("build-task-123", 45)
-        .total(100)
+    let progress_notification = NotificationBuilder::progress("build-task-123", 45.0)
+        .total(100.0)
         .message("Compiling source code...")
         .meta_value("task_type", json!("build"))
         .meta_value("eta_seconds", json!(30))
