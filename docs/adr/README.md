@@ -28,6 +28,7 @@ Each ADR follows the standard format:
 | [012](./012-middleware-architecture.md) | Middleware Architecture | Accepted | 2025-10-05 | Before/after hooks for auth, logging, and custom logic |
 | [013](./013-lambda-authorizer-integration.md) | Lambda Authorizer Integration | Accepted | 2025-10-06 | Lambda authorizer pattern for API Gateway authentication |
 | [014](./014-schemars-schema-generation.md) | Schemars Schema Generation | Accepted | 2025-10-09 | Optional schemars integration for automatic tool output schemas |
+| [015](./015-mcp-2025-11-25-protocol-crate.md) | MCP 2025-11-25 Protocol Crate | Accepted | 2026-02-07 | Separate crate strategy for 2025-11-25 spec support |
 
 ## Adding New ADRs
 
