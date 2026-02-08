@@ -83,6 +83,9 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
+        #[automatically_derived]
+        impl turul_mcp_builders::traits::HasIcons for #struct_name {}
+
         // ResourceDefinition automatically implemented via blanket impl in resources.rs
         // No need for explicit impl - blanket impl handles it
 

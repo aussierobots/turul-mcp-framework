@@ -71,6 +71,9 @@ pub fn derive_mcp_prompt_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
+        #[automatically_derived]
+        impl turul_mcp_builders::traits::HasIcons for #struct_name {}
+
         // PromptDefinition automatically implemented via blanket impl in prompts.rs
         // No need for explicit impl - blanket impl handles it
 

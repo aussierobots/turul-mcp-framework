@@ -288,6 +288,8 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 }
             }
 
+            impl turul_mcp_builders::HasIcons for #tool_name_ident {}
+
             // ToolDefinition automatically implemented via blanket impl!
 
             #[async_trait::async_trait]
@@ -303,7 +305,7 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                     match execute_fn(#(#param_names),*).await {
                         Ok(result) => {
                             // Use smart response builder that automatically adds structured content
-                            // when outputSchema is defined (MCP 2025-06-18 compliance)
+                            // when outputSchema is defined (MCP 2025-11-25 compliance)
                             turul_mcp_protocol::tools::CallToolResult::from_result_with_schema(&result, self.output_schema())
                         }
                         Err(e) => Err(turul_mcp_protocol::McpError::tool_execution(&e.to_string()))
