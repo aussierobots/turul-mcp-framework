@@ -9,8 +9,7 @@ use std::collections::HashMap;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::{McpError, McpResult};
-use turul_mcp_server::{McpServer, SessionContext};
+use turul_mcp_server::prelude::*;
 
 /// Shopping cart tool that maintains state across requests
 #[derive(McpTool, Clone, Default, Deserialize)]
