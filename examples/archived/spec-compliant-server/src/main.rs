@@ -1,7 +1,7 @@
 //! # MCP 2025-11-25 Specification Compliant Server
 //!
 //! This example demonstrates a fully compliant MCP server that adheres to the
-//! 2025-06-18 specification, including proper _meta field handling, progress tokens,
+//! 2025-11-25 specification, including proper _meta field handling, progress tokens,
 //! and structured JSON-RPC responses.
 
 use std::collections::HashMap;
@@ -131,7 +131,7 @@ impl McpTool for SessionAwareTool {
         // Create a proper MCP 2025-11-25 compliant result with _meta
         let mut meta_data = HashMap::new();
         meta_data.insert("processing_time_ms".to_string(), json!(50));
-        meta_data.insert("api_version".to_string(), json!("2025-06-18"));
+        meta_data.insert("api_version".to_string(), json!("2025-11-25"));
 
         let result_with_meta = ResultWithMeta::new(response_data).with_meta(meta_data);
 
@@ -155,7 +155,7 @@ async fn create_status_resource() -> impl McpResource {
                 "uptime_seconds": 12345,
                 "active_sessions": 3,
                 "memory_usage_mb": 128,
-                "mcp_version": "2025-06-18"
+                "mcp_version": "2025-11-25"
             });
 
             // Create proper content with _meta
