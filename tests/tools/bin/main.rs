@@ -727,6 +727,8 @@ impl HasAnnotations for LegacyCalculatorTool {
 
 impl HasToolMeta for LegacyCalculatorTool {}
 
+impl HasIcons for LegacyCalculatorTool {}
+
 #[async_trait::async_trait]
 impl McpTool for LegacyCalculatorTool {
     async fn call(

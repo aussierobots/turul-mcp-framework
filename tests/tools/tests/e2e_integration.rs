@@ -831,10 +831,10 @@ async fn test_notifications_tools_list_changed_compliance() {
                         if !text.trim().is_empty() {
                             debug!("📨 SSE event received: {}", text);
 
-                            // Look for tools listChanged notifications
-                            if text.contains("\"method\":\"notifications/tools/listChanged\"") {
+                            // Look for tools list_changed notifications (MCP 2025-11-25: underscore)
+                            if text.contains("\"method\":\"notifications/tools/list_changed\"") {
                                 list_changed_events.push(text);
-                                info!("✅ tools/listChanged notification received via SSE");
+                                info!("✅ tools/list_changed notification received via SSE");
                             }
                         }
                     }
@@ -905,7 +905,7 @@ async fn test_notifications_tools_list_changed_compliance() {
 
         for (i, event) in list_changed_events.iter().enumerate() {
             assert!(
-                event.contains("\"method\":\"notifications/tools/listChanged\""),
+                event.contains("\"method\":\"notifications/tools/list_changed\""),
                 "Event {} has incorrect method format: {}",
                 i,
                 event
