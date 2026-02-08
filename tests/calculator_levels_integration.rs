@@ -139,8 +139,8 @@ async fn test_level3_builder_pattern() {
 use async_trait::async_trait;
 use turul_mcp_protocol::schema::JsonSchema;
 use turul_mcp_builders::prelude::{
-    HasAnnotations, HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasToolMeta,
-    ToolSchema,
+    HasAnnotations, HasBaseMetadata, HasDescription, HasIcons, HasInputSchema, HasOutputSchema,
+    HasToolMeta, ToolSchema,
 };
 
 #[derive(Clone)]
@@ -192,6 +192,8 @@ impl HasToolMeta for CalculatorAddManualTool {
         None
     }
 }
+
+impl HasIcons for CalculatorAddManualTool {}
 
 #[async_trait]
 impl McpTool for CalculatorAddManualTool {
