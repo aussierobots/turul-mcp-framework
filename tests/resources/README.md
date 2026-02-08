@@ -387,4 +387,4 @@ SSE Event Stream        Full MCP Compliance
 Protocol Validation     Error Simulation
 ```
 
-This provides real-world testing conditions that mirror production usage while validating complete MCP 2025-06-18 specification compliance.
+This provides real-world testing conditions that mirror production usage while validating complete MCP 2025-11-25 specification compliance.

@@ -1,7 +1,7 @@
 //! E2E Integration Tests for MCP Resources
 //!
 //! Tests real HTTP/SSE transport using resource-test-server
-//! Validates complete MCP 2025-06-18 specification compliance
+//! Validates complete MCP 2025-11-25 specification compliance
 
 use mcp_e2e_shared::{McpTestClient, TestServerManager, TestFixtures};
 use serial_test::serial;

@@ -1,6 +1,6 @@
 //! MCP Prompts Specification Compliance Tests
 //!
-//! This test suite validates complete MCP 2025-06-18 Prompts specification compliance.
+//! This test suite validates complete MCP 2025-11-25 Prompts specification compliance.
 //! Tests all required traits, fields, behaviors, and protocol requirements for Prompts.
 
 use mcp_prompts_tests::{

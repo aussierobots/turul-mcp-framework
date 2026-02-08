@@ -1,6 +1,6 @@
 //! MCP Resources Specification Compliance Tests
 //!
-//! This test suite validates complete MCP 2025-06-18 Resources specification compliance.
+//! This test suite validates complete MCP 2025-11-25 Resources specification compliance.
 //! Tests all required traits, fields, behaviors, and protocol requirements for Resources.
 
 use turul_mcp_protocol::resources::{Resource, ResourceContent, ResourceTemplate};

@@ -1,7 +1,7 @@
 //! Comprehensive MCP Prompts Protocol Coverage Tests
 //!
 //! This test file covers ALL structs and enums from turul-mcp-protocol-2025-06-18/src/prompts.rs
-//! ensuring complete MCP 2025-06-18 specification compliance.
+//! ensuring complete MCP 2025-11-25 specification compliance.
 
 use serde_json::json;
 use std::collections::HashMap;
