@@ -1,4 +1,4 @@
-//! MCP 2025-06-18 Specification Compliance Tests
+//! MCP 2025-11-25 Specification Compliance Tests
 //!
 //! Comprehensive validation against the official Model Context Protocol specification
 //! to prevent compliance regressions like the ones identified by Codex review.
@@ -352,41 +352,61 @@ async fn test_endpoint_naming_compliance() {
     }
 }
 
-/// Test notification naming compliance
+/// MCP 2025-11-25 compliance: notification methods MUST use underscore form
 #[tokio::test]
-async fn test_notification_naming_compliance() {
-    // Test that notifications use camelCase per MCP spec
-
-    let compliant_notifications = vec![
-        "notifications/resources/listChanged", // ✅ CORRECT: camelCase
-        "notifications/tools/listChanged",     // ✅ CORRECT: camelCase
-        "notifications/prompts/listChanged",   // ✅ CORRECT: camelCase
+async fn test_notification_naming_compliance_2025_11_25() {
+    let spec_compliant = vec![
+        "notifications/resources/list_changed",
+        "notifications/tools/list_changed",
+        "notifications/prompts/list_changed",
+        "notifications/roots/list_changed",
         "notifications/resources/updated",
         "notifications/message",
         "notifications/progress",
     ];
 
-    let non_compliant_notifications = vec![
-        "notifications/resources/list_changed", // ❌ WRONG: snake_case
-        "notifications/tools/list_changed",     // ❌ WRONG: snake_case
-        "notifications/prompts/list_changed",   // ❌ WRONG: snake_case
+    for method in &spec_compliant {
+        assert!(
+            is_spec_compliant_notification(method),
+            "MCP 2025-11-25 requires underscore form: {}",
+            method
+        );
+    }
+
+    // camelCase is NOT spec-compliant (accepted for backward compat only)
+    assert!(!is_spec_compliant_notification(
+        "notifications/resources/listChanged"
+    ));
+    assert!(!is_spec_compliant_notification(
+        "notifications/tools/listChanged"
+    ));
+}
+
+/// Backward compatibility: server ACCEPTS camelCase form from older clients
+#[tokio::test]
+async fn test_notification_backward_compat_acceptance() {
+    let legacy_accepted = vec![
+        "notifications/resources/listChanged",
+        "notifications/tools/listChanged",
+        "notifications/prompts/listChanged",
+        "notifications/roots/listChanged",
     ];
 
-    for notification in compliant_notifications {
+    for method in &legacy_accepted {
         assert!(
-            is_compliant_notification_name(notification),
-            "Should use camelCase: {}",
-            notification
+            is_accepted_notification(method),
+            "Server must accept legacy camelCase: {}",
+            method
         );
     }
 
-    for notification in non_compliant_notifications {
-        assert!(
-            !is_compliant_notification_name(notification),
-            "Should NOT use snake_case: {}",
-            notification
-        );
-    }
+    // Spec-compliant forms are also accepted
+    assert!(is_accepted_notification(
+        "notifications/resources/list_changed"
+    ));
+    assert!(is_accepted_notification(
+        "notifications/tools/list_changed"
+    ));
 }
 
 // Helper functions for validation
@@ -420,7 +440,7 @@ fn is_valid_mcp_uri(uri: &str) -> bool {
 }
 
 fn is_mcp_spec_endpoint(endpoint: &str) -> bool {
-    // List of official MCP 2025-06-18 specification endpoints
+    // List of official MCP 2025-11-25 specification endpoints
     matches!(
         endpoint,
         "initialize"
@@ -437,17 +457,40 @@ fn is_mcp_spec_endpoint(endpoint: &str) -> bool {
             | "notifications/initialized"
             | "notifications/message"
             | "notifications/progress"
-            | "notifications/resources/listChanged"
+            | "notifications/resources/list_changed"
             | "notifications/resources/updated"
-            | "notifications/tools/listChanged"
-            | "notifications/prompts/listChanged"
+            | "notifications/tools/list_changed"
+            | "notifications/prompts/list_changed"
+            | "notifications/roots/list_changed"
     )
 }
 
-fn is_compliant_notification_name(name: &str) -> bool {
-    // MCP spec requires camelCase for notification names
-    // Should contain "listChanged" not "list_changed"
-    !name.contains("list_changed") && (name.contains("listChanged") || !name.contains("list"))
+/// Returns true if the notification uses MCP 2025-11-25 spec-compliant form
+fn is_spec_compliant_notification(name: &str) -> bool {
+    matches!(
+        name,
+        "notifications/resources/list_changed"
+            | "notifications/tools/list_changed"
+            | "notifications/prompts/list_changed"
+            | "notifications/roots/list_changed"
+            | "notifications/resources/updated"
+            | "notifications/message"
+            | "notifications/progress"
+            | "notifications/initialized"
+            | "notifications/cancelled"
+    )
+}
+
+/// Returns true if accepted (spec-compliant OR legacy compat)
+fn is_accepted_notification(name: &str) -> bool {
+    is_spec_compliant_notification(name)
+        || matches!(
+            name,
+            "notifications/resources/listChanged"
+                | "notifications/tools/listChanged"
+                | "notifications/prompts/listChanged"
+                | "notifications/roots/listChanged"
+        )
 }
 
 #[cfg(test)]
@@ -511,6 +554,63 @@ mod regression_tests {
                 "Should NOT be in spec: {}",
                 endpoint
             );
+        }
+    }
+
+    /// Live runtime test: server accepts legacy camelCase notifications without error
+    #[tokio::test]
+    async fn test_live_legacy_camelcase_notification_accepted() {
+        let server = match TestServerManager::start_tools_server().await {
+            Ok(s) => s,
+            Err(e) => {
+                println!(
+                    "Skipping live compat test - server start failed: {}",
+                    e
+                );
+                return;
+            }
+        };
+
+        let mut client = McpTestClient::new(server.port());
+        if let Err(e) = client.initialize_with_capabilities(json!({})).await {
+            println!("Skipping live compat test - initialize failed: {}", e);
+            return;
+        }
+        let _ = client.send_initialized_notification().await;
+
+        // Send all legacy camelCase notification forms
+        let legacy_methods = [
+            "notifications/resources/listChanged",
+            "notifications/tools/listChanged",
+            "notifications/prompts/listChanged",
+            "notifications/roots/listChanged",
+        ];
+
+        for method in legacy_methods {
+            let notification = json!({
+                "jsonrpc": "2.0",
+                "method": method
+            });
+
+            let response = client.send_notification(notification).await;
+            assert!(
+                response.is_ok(),
+                "Server should accept legacy notification: {}",
+                method
+            );
+
+            // If server returns a response body, ensure it's not -32601
+            if let Ok(ref resp) = response {
+                if let Some(error) = resp.get("error") {
+                    let code = error.get("code").and_then(|c| c.as_i64());
+                    assert_ne!(
+                        code,
+                        Some(-32601),
+                        "Server must not return 'Method not found' for legacy notification: {}",
+                        method
+                    );
+                }
+            }
         }
     }
 }
