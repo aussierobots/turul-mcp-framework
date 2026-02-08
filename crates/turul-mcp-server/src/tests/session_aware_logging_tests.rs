@@ -257,6 +257,9 @@ mod logging_handler_tests {
             name: "test-client".to_string(),
             version: "1.0.0".to_string(),
             title: Some("Test Client".to_string()),
+            icons: None,
+            description: None,
+            website_url: None,
         };
         let client_capabilities = turul_mcp_protocol::ClientCapabilities::default();
         manager
@@ -327,6 +330,9 @@ mod logging_handler_tests {
             name: "test-client".to_string(),
             version: "1.0.0".to_string(),
             title: Some("Test Client".to_string()),
+            icons: None,
+            description: None,
+            website_url: None,
         };
         let client_capabilities = turul_mcp_protocol::ClientCapabilities::default();
         manager

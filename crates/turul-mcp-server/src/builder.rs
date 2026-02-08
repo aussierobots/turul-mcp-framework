@@ -101,7 +101,7 @@ impl McpServerBuilder {
         let tools = HashMap::new();
         let mut handlers: HashMap<String, Arc<dyn McpHandler>> = HashMap::new();
 
-        // Add all standard MCP 2025-06-18 handlers by default
+        // Add all standard MCP 2025-11-25 handlers by default
         handlers.insert("ping".to_string(), Arc::new(PingHandler));
         handlers.insert(
             "completion/complete".to_string(),
@@ -145,12 +145,30 @@ impl McpServerBuilder {
             "notifications/progress".to_string(),
             notifications_handler.clone(),
         );
+        // MCP 2025-11-25 spec-correct underscore form
         handlers.insert(
-            "notifications/resources/listChanged".to_string(),
+            "notifications/resources/list_changed".to_string(),
             notifications_handler.clone(),
         );
         handlers.insert(
             "notifications/resources/updated".to_string(),
+            notifications_handler.clone(),
+        );
+        handlers.insert(
+            "notifications/tools/list_changed".to_string(),
+            notifications_handler.clone(),
+        );
+        handlers.insert(
+            "notifications/prompts/list_changed".to_string(),
+            notifications_handler.clone(),
+        );
+        handlers.insert(
+            "notifications/roots/list_changed".to_string(),
+            notifications_handler.clone(),
+        );
+        // Legacy compat: accept camelCase from older clients
+        handlers.insert(
+            "notifications/resources/listChanged".to_string(),
             notifications_handler.clone(),
         );
         handlers.insert(
@@ -288,6 +306,8 @@ impl McpServerBuilder {
     /// impl turul_mcp_builders::traits::HasToolMeta for AddTool {
     ///     fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
+    ///
+    /// impl turul_mcp_builders::traits::HasIcon for AddTool {}
     ///
     /// #[async_trait]
     /// impl McpTool for AddTool {
@@ -467,6 +487,8 @@ impl McpServerBuilder {
     ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
+    /// impl turul_mcp_builders::traits::HasIcon for ConfigResource {}
+    ///
     /// #[async_trait]
     /// impl McpResource for ConfigResource {
     ///     async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>)
@@ -576,6 +598,8 @@ impl McpServerBuilder {
     ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
+    /// impl turul_mcp_builders::traits::HasIcon for DataResource {}
+    ///
     /// #[async_trait]
     /// impl McpResource for DataResource {
     ///     async fn read(&self, _params: Option<serde_json::Value>, _session: Option<&SessionContext>)
@@ -665,6 +689,8 @@ impl McpServerBuilder {
     ///     fn resource_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
     /// }
     ///
+    /// impl turul_mcp_builders::traits::HasIcon for TemplateResource {}
+    ///
     /// #[async_trait]
     /// impl McpResource for TemplateResource {
     ///     async fn read(&self, params: Option<serde_json::Value>, _session: Option<&SessionContext>)
@@ -703,7 +729,7 @@ impl McpServerBuilder {
         template: crate::uri_template::UriTemplate,
         resource: R,
     ) -> Self {
-        // Validate template pattern is well-formed (MCP 2025-06-18 compliance)
+        // Validate template pattern is well-formed (MCP 2025-11-25 compliance)
         if let Err(e) = self.validate_uri_template(template.pattern()) {
             self.validation_errors.push(format!(
                 "Invalid resource template URI '{}': {}",
@@ -1033,21 +1059,21 @@ impl McpServerBuilder {
     }
 
     /// Add elicitation support with default mock provider
-    pub fn with_elicitation(mut self) -> Self {
-        self.capabilities.elicitation = Some(ElicitationCapabilities {
-            enabled: Some(true),
-        });
+    ///
+    /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
+    /// The server requests elicitation from the client; it doesn't advertise it.
+    pub fn with_elicitation(self) -> Self {
         self.handler(ElicitationHandler::with_mock_provider())
     }
 
     /// Add elicitation support with custom provider
+    ///
+    /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
+    /// The server requests elicitation from the client; it doesn't advertise it.
     pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(
-        mut self,
+        self,
         provider: P,
     ) -> Self {
-        self.capabilities.elicitation = Some(ElicitationCapabilities {
-            enabled: Some(true),
-        });
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
 
@@ -1394,12 +1420,9 @@ impl McpServerBuilder {
             });
         }
 
-        // Elicitation capabilities - enable if elicitation handlers are registered
-        if has_elicitations {
-            self.capabilities.elicitation = Some(ElicitationCapabilities {
-                enabled: Some(true),
-            });
-        }
+        // Elicitation is a client-side capability per MCP 2025-11-25.
+        // The server doesn't advertise elicitation support; it requests it from the client.
+        let _ = has_elicitations; // suppress unused warning
 
         // Completion capabilities - enable if completion handlers are registered
         if has_completions {
@@ -1572,6 +1595,8 @@ mod tests {
         }
     }
 
+    impl HasIcons for TestTool {}
+
     #[async_trait]
     impl McpTool for TestTool {
         async fn call(
@@ -1593,7 +1618,7 @@ mod tests {
         assert!(builder.title.is_none());
         assert!(builder.instructions.is_none());
         assert!(builder.tools.is_empty());
-        assert_eq!(builder.handlers.len(), 17); // Default MCP 2025-06-18 handlers
+        assert_eq!(builder.handlers.len(), 21); // MCP 2025-11-25 handlers (spec + legacy compat)
         assert!(builder.handlers.contains_key("ping"));
     }
 
@@ -1686,6 +1711,8 @@ mod tests {
         }
     }
 
+    impl HasIcons for StaticTestResource {}
+
     #[async_trait]
     impl crate::McpResource for StaticTestResource {
         async fn read(&self, _params: Option<Value>, _session: Option<&crate::SessionContext>) -> crate::McpResult<Vec<ResourceContent>> {
@@ -1739,6 +1766,8 @@ mod tests {
             None
         }
     }
+
+    impl HasIcons for TemplateTestResource {}
 
     #[async_trait]
     impl crate::McpResource for TemplateTestResource {
@@ -1878,6 +1907,8 @@ mod tests {
                 None
             }
         }
+
+        impl HasIcons for InvalidTemplateResource {}
 
         #[async_trait]
         impl crate::McpResource for InvalidTemplateResource {

@@ -62,6 +62,7 @@ impl HasResourceMimeType for SimpleTestResource {}
 impl HasResourceSize for SimpleTestResource {}
 impl HasResourceAnnotations for SimpleTestResource {}
 impl HasResourceMeta for SimpleTestResource {}
+impl HasIcons for SimpleTestResource {}
 
 #[tokio::test]
 async fn test_security_middleware_setup() {

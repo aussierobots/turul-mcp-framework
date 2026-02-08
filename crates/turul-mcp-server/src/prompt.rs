@@ -160,6 +160,8 @@ mod tests {
         }
     }
 
+    impl HasIcons for TestPrompt {}
+
     // PromptDefinition automatically implemented via blanket impl!
 
     impl TestPrompt {

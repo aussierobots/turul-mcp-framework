@@ -78,6 +78,8 @@ mod tests {
         }
     }
 
+    impl HasIcons for SecureTestResource {}
+
     #[async_trait]
     impl crate::McpResource for SecureTestResource {
         async fn read(&self, params: Option<Value>, _session: Option<&crate::SessionContext>) -> McpResult<Vec<ResourceContent>> {
@@ -361,6 +363,8 @@ mod tests {
                 None
             }
         }
+
+        impl HasIcons for LargeContentResource {}
 
         #[async_trait]
         impl crate::McpResource for LargeContentResource {

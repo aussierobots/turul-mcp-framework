@@ -69,6 +69,8 @@ mod tests {
         }
     }
 
+    impl HasIcons for UserProfileResource {}
+
     // ResourceDefinition automatically implemented via blanket impl
 
     #[async_trait]

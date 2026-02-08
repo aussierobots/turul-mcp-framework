@@ -1,7 +1,7 @@
 //! # MCP Server Framework
 //!
 //! A production-ready Rust framework for building Model Context Protocol (MCP) servers.
-//! Provides zero-configuration setup, comprehensive MCP 2025-06-18 specification support,
+//! Provides zero-configuration setup, comprehensive MCP 2025-11-25 specification support,
 //! and multiple deployment targets including HTTP, AWS Lambda, and local development.
 //!
 //! [![Crates.io](https://img.shields.io/crates/v/turul-mcp-server.svg)](https://crates.io/crates/turul-mcp-server)
