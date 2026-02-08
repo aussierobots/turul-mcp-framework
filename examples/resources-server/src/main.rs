@@ -52,6 +52,7 @@ impl HasResourceAnnotations for ProjectDocumentationResource {
     }
 }
 impl HasResourceMeta for ProjectDocumentationResource {}
+impl HasIcons for ProjectDocumentationResource {}
 
 // ResourceDefinition is automatically implemented via blanket impl
 // Now implement the execution trait
@@ -163,6 +164,7 @@ impl HasResourceAnnotations for ApiDocumentationResource {
     }
 }
 impl HasResourceMeta for ApiDocumentationResource {}
+impl HasIcons for ApiDocumentationResource {}
 
 #[async_trait]
 impl McpResource for ApiDocumentationResource {
@@ -231,6 +233,7 @@ impl HasResourceAnnotations for ConfigurationResource {
     }
 }
 impl HasResourceMeta for ConfigurationResource {}
+impl HasIcons for ConfigurationResource {}
 
 #[async_trait]
 impl McpResource for ConfigurationResource {
@@ -348,6 +351,7 @@ impl HasResourceAnnotations for DatabaseSchemaResource {
     }
 }
 impl HasResourceMeta for DatabaseSchemaResource {}
+impl HasIcons for DatabaseSchemaResource {}
 
 #[async_trait]
 impl McpResource for DatabaseSchemaResource {
@@ -458,6 +462,7 @@ impl HasResourceAnnotations for SystemStatusResource {
     }
 }
 impl HasResourceMeta for SystemStatusResource {}
+impl HasIcons for SystemStatusResource {}
 
 #[async_trait]
 impl McpResource for SystemStatusResource {
