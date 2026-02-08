@@ -9,8 +9,7 @@ use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::{McpError, McpResult};
-use turul_mcp_server::{McpServer, SessionContext};
+use turul_mcp_server::prelude::*;
 use uuid::Uuid;
 
 /// File system tool that demonstrates complex schemas and state management
@@ -30,7 +29,7 @@ pub struct FileSystemTool {
 
 impl FileSystemTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.unwrap_or_else(|| panic!("Session required"));
+        let session = session.ok_or_else(|| McpError::tool_execution("Session required"))?;
 
         // Get or create file system state
         let mut files: HashMap<String, String> = session
@@ -197,7 +196,7 @@ struct Task {
 
 impl TaskManagerTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<Value> {
-        let session = session.unwrap_or_else(|| panic!("Session required"));
+        let session = session.ok_or_else(|| McpError::tool_execution("Session required"))?;
 
         // Get or create tasks state
         let mut tasks: HashMap<String, Task> =
