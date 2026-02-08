@@ -1,4 +1,4 @@
-//! Integration tests for MCP 2025-06-18 session ID compliance
+//! Integration tests for MCP session ID compliance
 //!
 //! Verifies that:
 //! - Only `initialize` works without session ID
