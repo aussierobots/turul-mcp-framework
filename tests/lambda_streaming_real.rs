@@ -85,7 +85,7 @@ async fn test_lambda_streaming_handler_execution() {
     //     "id": 1,
     //     "method": "initialize",
     //     "params": {
-    //         "protocolVersion": "2025-06-18",
+    //         "protocolVersion": "2025-11-25",
     //         "capabilities": {},
     //         "clientInfo": {
     //             "name": "test-client",
@@ -127,7 +127,7 @@ async fn test_lambda_notifications_in_sse_frames() {
     let init_request = create_mcp_request(
         "initialize",
         serde_json::json!({
-            "protocolVersion": "2025-06-18",
+            "protocolVersion": "2025-11-25",
             "capabilities": {},
             "clientInfo": {
                 "name": "test-client",
