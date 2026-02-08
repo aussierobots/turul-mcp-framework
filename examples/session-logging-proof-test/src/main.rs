@@ -18,7 +18,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::time::sleep;
 use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::logging::LoggingLevel;
-use turul_mcp_server::{McpResult, McpServer, SessionContext};
+use turul_mcp_server::prelude::*;
 use turul_mcp_session_storage::InMemorySessionStorage;
 
 /// Helper function to convert string level to LoggingLevel enum
@@ -52,7 +52,7 @@ pub struct LogProofTool {
 
 impl LogProofTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
-        let session = session.ok_or("Session context required")?;
+        let session = session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
 
         let scenario = self.scenario.as_deref().unwrap_or("basic");
 
@@ -249,7 +249,7 @@ pub struct SetLevelTool {
 
 impl SetLevelTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
-        let session = session.ok_or("Session context required")?;
+        let session = session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
 
         let new_level = match self.level.to_lowercase().as_str() {
             "debug" => LoggingLevel::Debug,
