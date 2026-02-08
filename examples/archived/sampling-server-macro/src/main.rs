@@ -15,7 +15,7 @@ use turul_mcp_server::{McpServer, McpResult};
 #[derive(Debug)]
 pub struct CreativeSampler {
     // Framework automatically maps to "sampling/createMessage"
-    // This is the OFFICIAL MCP method from 2025-06-18 specification
+    // This is the OFFICIAL MCP method from 2025-11-25 specification
     temperature: f64,
     max_tokens: u32,
     model_type: String,
