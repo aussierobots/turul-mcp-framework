@@ -1,6 +1,6 @@
 [package]
 name = "middleware-auth-lambda"
-version = "0.2.2"
+version.workspace = true
 edition = "2021"
 publish = false
 description = "AWS Lambda MCP server with authentication middleware"

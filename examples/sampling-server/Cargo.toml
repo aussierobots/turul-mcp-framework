@@ -1,6 +1,6 @@
 [package]
 name = "sampling-server"
-version = "1.0.0"
+version.workspace = true
 edition.workspace = true
 
 [dependencies]

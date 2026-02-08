@@ -1,6 +1,6 @@
 [package]
 name = "tools-test-server"
-version = "0.2.2"
+version.workspace = true
 edition = "2021"
 authors = ["Nick <nick@aussierobots.com.au>"]
 description = "MCP Tools Test Server - Comprehensive test tools for E2E validation"

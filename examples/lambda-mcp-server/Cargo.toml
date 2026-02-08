@@ -1,6 +1,6 @@
 [package]
 name = "lambda-turul-mcp-server"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 description = "AWS Lambda MCP server with SSE snapshots (non-streaming)"
 license = "MIT"
