@@ -104,8 +104,8 @@
 //!     .build();
 //!
 //! // Create notifications for server events
-//! let progress_notification = NotificationBuilder::progress("task-123", 75)
-//!     .total(100)
+//! let progress_notification = NotificationBuilder::progress("task-123", 75.0)
+//!     .total(100.0)
 //!     .message("Processing files...")
 //!     .build();
 //!

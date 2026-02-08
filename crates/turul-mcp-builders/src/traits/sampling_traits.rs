@@ -136,6 +136,8 @@ pub trait HasSamplingTools {
 ///     }
 /// }
 ///
+/// impl HasSamplingTools for CodeReviewSampling {}
+///
 /// // Now you can use it with the server:
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// let sampling = CodeReviewSampling {

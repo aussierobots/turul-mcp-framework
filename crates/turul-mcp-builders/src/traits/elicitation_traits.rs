@@ -96,6 +96,7 @@ pub trait HasElicitationHandling {
 ///             schema_type: "number".to_string(),
 ///             title: None,
 ///             description: Some("Maximum items to display".to_string()),
+///             default: None,
 ///             minimum: Some(1.0),
 ///             maximum: Some(100.0),
 ///         }));
