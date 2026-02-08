@@ -46,7 +46,7 @@ impl AppConfig {
             "features": {
                 "sse_enabled": true,
                 "session_storage": "InMemory",
-                "protocol_version": "2025-06-18"
+                "protocol_version": "2025-11-25"
             },
             "resources": {
                 "total_count": 2,
