@@ -4,7 +4,7 @@
 //! - SSE client receives the actual notification data
 //! - Session isolation is maintained
 //!
-//! Uses streamable HTTP (POST with Accept: text/event-stream) per MCP 2025-06-18 spec
+//! Uses streamable HTTP (POST with Accept: text/event-stream) per MCP spec
 
 use mcp_e2e_shared::{McpTestClient, TestServerManager};
 use serde_json::json;
