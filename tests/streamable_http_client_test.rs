@@ -28,7 +28,7 @@ struct StreamEvent {
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 struct ProgressNotification {
-    progress: Option<u64>,
+    progress: Option<f64>,
     token: Option<String>,
     message: Option<String>,
 }
@@ -254,7 +254,7 @@ impl StreamableHttpClient {
                                                 let progress = ProgressNotification {
                                                     progress: params
                                                         .get("progress")
-                                                        .and_then(|p| p.as_u64()),
+                                                        .and_then(|p| p.as_f64()),
                                                     token: params
                                                         .get("progressToken")
                                                         .and_then(|t| t.as_str())
