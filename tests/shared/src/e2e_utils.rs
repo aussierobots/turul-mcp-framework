@@ -578,7 +578,7 @@ impl TestFixtures {
         })
     }
 
-    /// Verify standard MCP initialization response structure
+    /// Verify standard MCP initialization response structure (expects 2025-11-25)
     pub fn verify_initialization_response(result: &HashMap<String, Value>) {
         assert!(result.contains_key("result"));
         let result_data = result["result"].as_object().unwrap();
@@ -587,7 +587,26 @@ impl TestFixtures {
         assert!(result_data.contains_key("capabilities"));
         assert!(result_data.contains_key("serverInfo"));
 
-        // Verify protocol version — server negotiates to client-requested version
+        // Verify protocol version — default is MCP 2025-11-25
+        let version = result_data["protocolVersion"].as_str().unwrap();
+        assert_eq!(
+            version, "2025-11-25",
+            "Expected protocol version 2025-11-25, got: {}",
+            version
+        );
+    }
+
+    /// Verify MCP initialization response for legacy backward-compat tests
+    // Intentional: testing backward compatibility with MCP 2025-06-18
+    pub fn verify_initialization_response_legacy(result: &HashMap<String, Value>) {
+        assert!(result.contains_key("result"));
+        let result_data = result["result"].as_object().unwrap();
+
+        assert!(result_data.contains_key("protocolVersion"));
+        assert!(result_data.contains_key("capabilities"));
+        assert!(result_data.contains_key("serverInfo"));
+
+        // Legacy tests may negotiate to either version
         let version = result_data["protocolVersion"].as_str().unwrap();
         assert!(
             version == "2025-11-25" || version == "2025-06-18",
