@@ -2,9 +2,9 @@
 
 ## Project Overview
 
-This is a comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients. It is fully compliant with the MCP 2025-11-25 specification. The framework provides a complete ecosystem with a core framework, a client library, and serverless support. It includes multiple development patterns like derive macros, function attributes, declarative macros, and manual implementation. It supports various transports like HTTP/1.1, HTTP/2, WebSocket, SSE, and stdio. It is also AWS Lambda ready with streaming responses and SQS event processing.
+This is a comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients. It is fully compliant with the MCP 2025-11-25 specification. The framework provides a complete ecosystem with a core framework, a client library, and serverless support. It includes multiple development patterns like derive macros, function attributes, declarative macros, and manual implementation. It supports HTTP-based transports, including SSE, and AWS Lambda integrations. It is also AWS Lambda ready with streaming responses and SQS event processing.
 
-The project is structured as a Rust workspace with 10 crates, including the core framework, a client library, and 42 examples. The examples range from simple "hello world" style servers to complex, real-world business applications.
+The project is structured as a Rust workspace with 11 crates, including the core framework, a client library, and serverless integration layers. It currently includes 54 non-archived examples ranging from simple "hello world" style servers to complex, real-world business applications.
 
 ## My Role: Critical Analyst and Planner
 
@@ -21,7 +21,7 @@ I will **not** directly modify the code or create files myself. My role is to pr
 
 ### Executive Summary
 
-The Turul MCP Framework is a production-ready, comprehensively tested implementation of the Model Context Protocol (MCP) 2025-11-25 specification. It provides a robust and idiomatic Rust solution for building MCP servers and clients. A full schema-level compliance review confirms that the framework's data structures are a meticulous match for the official specification. The testing strategy is mature, with E2E tests covering all major protocol areas, including advanced concurrency and state-management scenarios. The `0.2.0` release introduced a powerful, transport-agnostic middleware architecture, and the `0.2.1` release further refines the framework with improved schema generation and protocol purity.
+The Turul MCP Framework is a production-ready, comprehensively tested implementation of the Model Context Protocol (MCP) 2025-11-25 specification. It provides a robust and idiomatic Rust solution for building MCP servers and clients. A full schema-level compliance review confirms that the framework's data structures are a meticulous match for the official specification. The testing strategy is mature, with E2E tests covering all major protocol areas, including advanced concurrency and state-management scenarios. The framework now tracks the `0.3.0` line with 2025-11-25 as the default protocol baseline.
 
 ### From TypeScript Inheritance to Rust Traits: A Critical Analysis
 
@@ -32,7 +32,7 @@ The core of the framework's success lies in its elegant solution to the "inherit
 3.  **Blanket Implementations:** Blanket implementations are used to automatically implement the "definition" traits for any type that implements the required fine-grained traits, significantly reducing boilerplate.
 4.  **Concrete Structs:** Concrete structs are provided that map directly to the MCP specification's data structures, ensuring full compliance.
 
-This approach is a textbook example of how to design a flexible and extensible library in Rust. It empowers developers to choose their desired level of abstraction, from high-level macros to low-level manual implementation, while ensuring that the framework can handle all implementations uniformly. The `0.2.1` release reinforced this design by moving all framework-specific traits out of the protocol crate and into the builders crate, achieving "protocol crate purity" and further clarifying the separation between the MCP specification and the framework's implementation.
+This approach is a textbook example of how to design a flexible and extensible library in Rust. It empowers developers to choose their desired level of abstraction, from high-level macros to low-level manual implementation, while ensuring that the framework can handle all implementations uniformly. Recent releases reinforced this design by moving framework-specific traits out of the protocol crate and into the builders crate, achieving "protocol crate purity" and further clarifying the separation between the MCP specification and the framework's implementation.
 
 #### A Critical Perspective on the Trait-Based Design
 
@@ -48,7 +48,7 @@ In summary, the framework's core design makes a deliberate trade-off in favor of
 
 ### Middleware Architecture
 
-The `0.2.0` release introduced a powerful and flexible middleware architecture, designed to handle cross-cutting concerns in a clean and transport-agnostic manner. The same middleware can be used for both HTTP and AWS Lambda transports, ensuring consistent behavior across different deployment environments.
+The middleware architecture provides a powerful and flexible mechanism to handle cross-cutting concerns in a clean and transport-agnostic manner. The same middleware can be used for both HTTP and AWS Lambda transports, ensuring consistent behavior across different deployment environments.
 
 The core of the middleware system is the `McpMiddleware` trait, which defines two key methods:
 
@@ -88,29 +88,29 @@ A critical review of the test suite reveals several key strengths:
 
 *   **Negative Testing:** The test suite includes a comprehensive set of negative tests that verify the framework's resilience to invalid inputs and error conditions. This includes everything from invalid URI formats to incorrect protocol usage.
 
-The `0.2.1` release significantly improved the verification infrastructure, with 30 out of 31 examples now passing a comprehensive verification suite. This demonstrates a commitment to quality and provides a high degree of confidence in the framework's stability.
+Verification infrastructure has been significantly improved with deterministic polling, pre-built binaries, and better diagnosis during example validation. This demonstrates a commitment to quality and provides a high degree of confidence in the framework's stability.
 
-### Compliance vs. Behavioral Completeness: The Next Step for 0.2.1 and Beyond
+### Compliance vs. Behavioral Completeness: Current Perspective
 
 A key insight from the latest round of reviews is the distinction between protocol compliance and behavioral completeness. My analysis confirms that the framework is **fully compliant at the protocol level**—it correctly implements the data structures and rules defined in the MCP `schema.ts`.
 
-However, for the `0.2.1` release, it is important to note this is different from being **fully behavior-complete**. As detailed in the `MCP_E2E_COMPLIANCE_TEST_PLAN.md`, several advanced capabilities, while defined, are not yet fully implemented. These represent the next frontier of development for the framework. Key examples include:
+However, it is important to note this is different from being **fully behavior-complete**. As detailed in the `MCP_E2E_COMPLIANCE_TEST_PLAN.md`, several advanced capabilities, while defined, are not yet fully implemented. These represent the next frontier of development for the framework. Key examples include:
 
 *   **Resource Subscriptions:** The framework does not provide a first-class implementation for the `resources/subscribe` method. It correctly advertises this capability as `false` in the `initialize` handshake, adhering to the protocol's truthfulness requirement. The necessary hooks exist for developers to implement this logic themselves.
 *   **Advanced List Endpoint Features:** Some list-based endpoints, such as `tools/list`, do not yet support advanced features like stable sorting, pagination, or the propagation of the `_meta` field from request to response.
 *   **Session-Aware Resources:** The `McpResource::read` trait currently lacks access to the session context, meaning resources cannot dynamically change their content based on the session state. The `session://` resource in examples is therefore a simulation of this capability.
 
-These are not compliance bugs but rather represent the current scope of the framework's maturity. They are documented as the immediate focus for future releases. The `0.2.1` release focused on shoring up the existing features and improving the overall stability of the framework, laying a solid foundation for tackling these larger features in the future.
+These are not compliance bugs but rather represent the current scope of the framework's maturity. They remain documented as focus areas for ongoing releases, including the `0.3.0` line.
 
-## Release 0.2.1 Highlights
+## Recent Release Highlights
 
-The `0.2.1` release focused on stability, bug fixing, and improving the developer experience. Key highlights include:
+Recent releases focused on stability, bug fixing, and improving developer experience. Key highlights include:
 
 *   **Schemars Integration**: A breaking change now requires tool output types to derive `schemars::JsonSchema`, enabling the generation of detailed, accurate schemas for all tools in the `tools/list` endpoint.
 *   **Protocol Crate Purity**: All framework-specific traits have been moved from `turul-mcp-protocol` to `turul-mcp-builders`. This breaking change ensures the protocol crate is a pure, 1-to-1 implementation of the MCP specification.
 *   **Notification Payloads Fixed**: A critical regression where notification payloads were not being serialized correctly has been fixed, and 18 new tests have been added to prevent future regressions.
 *   **Improved SSE Resumability:** Ensured that SSE keepalive events preserve the `Last-Event-ID`, allowing for proper reconnection.
-*   **Enhanced Verification:** The verification infrastructure was significantly improved, with deterministic polling, pre-built binaries, and better error diagnosis. 30 out of 31 examples are now verified.
+*   **Enhanced Verification:** The verification infrastructure was significantly improved, with deterministic polling, pre-built binaries, and better error diagnosis.
 *   **Code Quality:** Fixed 156 clippy warnings, resulting in a 100% clean codebase.
 
 ## Building and Running
