@@ -479,11 +479,11 @@ mod notification_compliance {
         // Resource list changed notification
         let resource_changed = json!({
             "jsonrpc": "2.0",
-            "method": "notifications/resources/listChanged"
+            "method": "notifications/resources/list_changed"
         });
 
         let notification: JsonRpcNotification = serde_json::from_value(resource_changed).unwrap();
-        assert_eq!(notification.method, "notifications/resources/listChanged");
+        assert_eq!(notification.method, "notifications/resources/list_changed");
 
         // Resource updated notification
         let resource_updated = json!({
@@ -506,11 +506,11 @@ mod notification_compliance {
         // Tools list changed notification
         let tools_changed = json!({
             "jsonrpc": "2.0",
-            "method": "notifications/tools/listChanged"
+            "method": "notifications/tools/list_changed"
         });
 
         let notification: JsonRpcNotification = serde_json::from_value(tools_changed).unwrap();
-        assert_eq!(notification.method, "notifications/tools/listChanged");
+        assert_eq!(notification.method, "notifications/tools/list_changed");
     }
 
     #[tokio::test]
@@ -982,12 +982,12 @@ mod framework_integration_compliance {
     #[tokio::test]
     async fn test_notification_compliance() {
         // Test framework notification generation
-        let notification = JsonRpcNotification::new("notifications/tools/listChanged".to_string());
+        let notification = JsonRpcNotification::new("notifications/tools/list_changed".to_string());
 
         let serialized = serde_json::to_value(&notification).unwrap();
 
         assert_eq!(serialized["jsonrpc"], "2.0");
-        assert_eq!(serialized["method"], "notifications/tools/listChanged");
+        assert_eq!(serialized["method"], "notifications/tools/list_changed");
         assert!(serialized.get("id").is_none()); // Notifications must not have id
 
         println!("Framework notification compliance verified");
