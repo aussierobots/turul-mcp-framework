@@ -791,7 +791,7 @@ mod tests {
             transport_type: crate::transport::TransportType::Http,
             endpoint: "http://localhost:8080/mcp".to_string(),
             session_id: Some("session123".to_string()),
-            protocol_version: Some("2025-06-18".to_string()),
+            protocol_version: Some("2025-11-25".to_string()),
         };
 
         assert!(status.is_ready());

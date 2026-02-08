@@ -138,7 +138,7 @@ cargo test test_sse_prompts_session_isolation -- --nocapture
 
 ### MCP Protocol Compliance
 - ✅ **JSON-RPC 2.0**: Proper request/response structure
-- ✅ **Protocol Version**: 2025-06-18 specification compliance
+- ✅ **Protocol Version**: 2025-11-25 specification compliance
 - ✅ **HTTP Headers**: Correct Content-Type and session headers
 - ✅ **Session Management**: UUID v7 session IDs with proper isolation
 - ✅ **Capability Truthfulness**: Server capabilities accurately reflect functionality
@@ -194,7 +194,7 @@ curl -X POST http://127.0.0.1:8081/mcp \
     "id": 1,
     "method": "initialize",
     "params": {
-      "protocolVersion": "2025-06-18",
+      "protocolVersion": "2025-11-25",
       "capabilities": {
         "prompts": {
           "listChanged": true

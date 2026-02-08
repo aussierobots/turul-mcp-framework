@@ -9,7 +9,7 @@ Model Context Protocol (MCP) specification implementation - Current version alia
 
 `turul-mcp-protocol` is a version alias crate that re-exports the current stable version of the Model Context Protocol implementation. This provides future-proofing and consistency across the turul-mcp-framework ecosystem.
 
-**Currently aliases:** `turul-mcp-protocol-2025-06-18`
+**Currently aliases:** `turul-mcp-protocol-2025-11-25`
 
 ## Features
 
@@ -42,7 +42,7 @@ use turul_mcp_protocol::{
 **❌ NEVER import the versioned crate directly:**
 ```rust
 // DON'T DO THIS
-use turul_mcp_protocol_2025_06_18::{Tool, CallToolRequest};
+use turul_mcp_protocol_2025_11_25::{Tool, CallToolRequest};
 ```
 
 ## Protocol Version Abstraction
@@ -53,11 +53,11 @@ use turul_mcp_protocol_2025_06_18::{Tool, CallToolRequest};
 use turul_mcp_protocol::{CURRENT_VERSION, MCP_VERSION, McpVersion};
 
 fn check_protocol_version() {
-    println!("Current MCP version: {}", CURRENT_VERSION);  // "2025-06-18"
-    println!("Protocol constant: {}", MCP_VERSION);        // "2025-06-18"
-    
+    println!("Current MCP version: {}", CURRENT_VERSION);  // "2025-11-25"
+    println!("Protocol constant: {}", MCP_VERSION);        // "2025-11-25"
+
     let version = McpVersion::from_str(CURRENT_VERSION).unwrap();
-    assert_eq!(version, McpVersion::V2025_06_18);
+    assert_eq!(version, McpVersion::V2025_11_25);
 }
 ```
 
@@ -77,7 +77,11 @@ fn check_feature_support(version: McpVersion) -> bool {
             true
         }
         McpVersion::V2025_06_18 => {
-            // Full feature set with _meta, cursor, progressToken
+            // _meta, cursor, progressToken, elicitation
+            true
+        }
+        McpVersion::V2025_11_25 => {
+            // Full feature set: icons, tasks, URL elicitation, sampling tools
             true
         }
     }
@@ -293,8 +297,8 @@ mod tests {
         assert!(capabilities.roots.is_none());
         
         // Test version constants
-        assert_eq!(CURRENT_VERSION, "2025-06-18");
-        assert_eq!(MCP_VERSION, "2025-06-18");
+        assert_eq!(CURRENT_VERSION, "2025-11-25");
+        assert_eq!(MCP_VERSION, "2025-11-25");
     }
     
     #[test]

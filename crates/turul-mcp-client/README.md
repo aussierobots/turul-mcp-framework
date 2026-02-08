@@ -300,7 +300,7 @@ let stream_handler = client.stream_handler().await;
 The client automatically sends the appropriate protocol version header:
 
 ```rust
-// Client automatically sends: MCP-Protocol-Version: 2025-06-18
+// Client automatically sends: MCP-Protocol-Version: 2025-11-25
 // Server responds with: mcp-session-id: <session-uuid>
 
 // Access session ID from connection status

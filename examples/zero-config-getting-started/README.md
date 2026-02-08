@@ -75,7 +75,7 @@ cargo run --package zero-config-getting-started
 # Initialize connection
 curl -X POST http://127.0.0.1:8000/mcp \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 
 # Call calculator tool (framework auto-determined method)  
 curl -X POST http://127.0.0.1:8000/mcp \

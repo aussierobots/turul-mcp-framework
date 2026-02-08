@@ -234,7 +234,7 @@ cargo run --package prompts-test-server
 # Initialize session
 curl -X POST http://127.0.0.1:8080/mcp \
   -H 'Content-Type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 
 # List resources (use session ID from above)
 curl -X POST http://127.0.0.1:8080/mcp \
@@ -246,7 +246,7 @@ curl -X POST http://127.0.0.1:8080/mcp \
 ## Test Features Validated
 
 ### MCP Protocol Compliance
-- ✅ **Protocol Version Negotiation**: 2025-06-18 specification compliance
+- ✅ **Protocol Version Negotiation**: 2025-11-25 specification compliance
 - ✅ **JSON-RPC 2.0**: Proper request/response structure validation
 - ✅ **HTTP Transport**: Real HTTP client/server communication
 - ✅ **Session Management**: UUID v7 session IDs with proper isolation

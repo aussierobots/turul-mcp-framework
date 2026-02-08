@@ -91,7 +91,7 @@ sleep 3
 SESSION_ID=$(curl -i -s -X POST "http://127.0.0.1:8641/mcp" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}' \
   | grep -i 'mcp-session-id:' | sed 's/.*: //' | tr -d '\r\n ')
 
 echo "Session ID: $SESSION_ID"

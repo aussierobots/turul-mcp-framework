@@ -432,7 +432,7 @@ mod mcp_compliance_tests {
                 "data": "test",
                 "_meta": {
                     "transport": "streamable_http",
-                    "version": "2025-06-18",
+                    "version": "2025-11-25",
                     "capabilities": ["streaming", "batching"]
                 }
             },
@@ -441,7 +441,7 @@ mod mcp_compliance_tests {
 
         let meta = &request_with_transport_meta["params"]["_meta"];
         assert_eq!(meta["transport"], "streamable_http");
-        assert_eq!(meta["version"], "2025-06-18");
+        assert_eq!(meta["version"], "2025-11-25");
         assert!(meta["capabilities"].is_array());
 
         println!("Transport metadata handling validated");
