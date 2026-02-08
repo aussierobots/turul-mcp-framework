@@ -154,6 +154,8 @@ async fn test_vec_result_actual_return_value() {
         turul_mcp_protocol::ContentBlock::Resource { .. } => panic!("Expected text content"),
         turul_mcp_protocol::ContentBlock::Audio { .. } => panic!("Expected text content"),
         turul_mcp_protocol::ContentBlock::ResourceLink { .. } => panic!("Expected text content"),
+        turul_mcp_protocol::ContentBlock::ToolUse { .. } => panic!("Expected text content"),
+        turul_mcp_protocol::ContentBlock::ToolResult { .. } => panic!("Expected text content"),
     };
     let content_json: serde_json::Value =
         serde_json::from_str(content_text).expect("Content should be valid JSON");
