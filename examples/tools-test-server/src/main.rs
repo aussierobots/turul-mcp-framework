@@ -83,7 +83,7 @@ impl JsonSchemaGenerator for CalculatorResult {
 }
 
 /// Basic calculator tool for testing arithmetic operations with parameter validation
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "calculator",
     description = "Performs basic arithmetic operations (add, subtract, multiply, divide) with validation",
@@ -159,7 +159,7 @@ impl JsonSchemaGenerator for StringResult {
 }
 
 /// String processing tool for text manipulation operations
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "string_processor",
     description = "Processes text with operations like uppercase, lowercase, reverse, length",
@@ -235,7 +235,7 @@ impl JsonSchemaGenerator for DataResult {
 }
 
 /// Data transformation tool for JSON operations
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "data_transformer",
     description = "Transforms JSON data with operations like extract, merge, validate",
@@ -344,7 +344,7 @@ impl JsonSchemaGenerator for CounterResult {
 }
 
 /// Session-aware counter tool that maintains state per session using proper SessionStorage integration
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "session_counter",
     description = "Maintains a counter per session, demonstrating proper SessionStorage integration",
@@ -445,7 +445,7 @@ impl JsonSchemaGenerator for ProgressResult {
 }
 
 /// Progress tracking tool for long-running operations with progress notifications
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "progress_tracker",
     description = "Simulates long-running operation with progress notifications",
@@ -528,7 +528,7 @@ impl JsonSchemaGenerator for ErrorResult {
 }
 
 /// Error generator tool for testing error handling
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "error_generator",
     description = "Generates specific types of errors for testing error handling",
@@ -604,7 +604,7 @@ impl JsonSchemaGenerator for ValidationResult {
 }
 
 /// Parameter validator tool for complex schema validation
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "parameter_validator",
     description = "Tests complex parameter validation scenarios",
@@ -763,7 +763,7 @@ struct CountAnnouncementsResult {
 }
 
 /// Test tool that reproduces the output_field schema bug
-#[derive(McpTool, Clone)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 #[tool(
     name = "count_announcements_struct",
     description = "Count announcements using struct macro with custom output field",
@@ -792,7 +792,7 @@ pub struct CountResult {
 }
 
 /// Simple tool like user's example - no #tool attribute, just derive
-#[derive(McpTool, Default)]
+#[derive(McpTool, Clone, Default, Deserialize)]
 pub struct CountWords {
     #[param(description = "Optional word to count (e.g. 'hello')")]
     word: Option<String>,
@@ -860,45 +860,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .instructions("Comprehensive test tools for E2E validation")
         .with_strict_lifecycle() // Enable strict lifecycle enforcement for E2E testing
         // Basic tools
-        .tool(CalculatorTool {
-            operation: "add".to_string(),
-            a: 0.0,
-            b: 0.0,
-        })
-        .tool(StringProcessorTool {
-            text: "".to_string(),
-            operation: "uppercase".to_string(),
-        })
-        .tool(DataTransformerTool {
-            data: serde_json::json!({}),
-            operation: "validate".to_string(),
-        })
+        .tool(CalculatorTool::default())
+        .tool(StringProcessorTool::default())
+        .tool(DataTransformerTool::default())
         // Advanced tools
-        .tool(SessionCounterTool {
-            operation: "get".to_string(),
-            amount: None,
-        })
-        .tool(ProgressTrackerTool {
-            duration: 1.0,
-            steps: Some(3),
-        })
+        .tool(SessionCounterTool::default())
+        .tool(ProgressTrackerTool::default())
         // Error testing tools
-        .tool(ErrorGeneratorTool {
-            error_type: "tool_execution".to_string(),
-            message: None,
-        })
-        .tool(ParameterValidatorTool {
-            email: "test@example.com".to_string(),
-            age: 25,
-            config: serde_json::json!({}),
-            tags: None,
-        })
+        .tool(ErrorGeneratorTool::default())
+        .tool(ParameterValidatorTool::default())
         // Deprecated tool for testing deprecation annotations
         .tool(LegacyCalculatorTool::default())
         // Bug reproduction tool - demonstrates output_field schema mismatch
-        .tool(CountAnnouncementsTool {
-            text: "".to_string(),
-        })
+        .tool(CountAnnouncementsTool::default())
         .tool(CountWords::default())
         // Custom output field tools for MCP compliance testing
         .tool_fn(word_count_analyzer)
