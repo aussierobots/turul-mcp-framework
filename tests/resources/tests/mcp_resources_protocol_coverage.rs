@@ -1,6 +1,6 @@
 //! Comprehensive MCP Resources Protocol Coverage Tests
 //!
-//! This test file covers ALL structs from turul-mcp-protocol-2025-06-18/src/resources.rs
+//! This test file covers ALL structs from turul-mcp-protocol/src/resources.rs
 //! ensuring complete MCP 2025-11-25 specification compliance.
 
 use serde_json::json;
