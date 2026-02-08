@@ -107,7 +107,7 @@ impl McpResource for ProjectDocumentationResource {
         contents.push(ResourceContent::text("file:///docs/project.md",
             "# Architecture Overview\n\n\
              ## MCP Protocol Implementation\n\
-             The framework implements the Model Context Protocol (MCP) 2025-06-18 specification:\n\n\
+             The framework implements the Model Context Protocol (MCP) 2025-11-25 specification:\n\n\
              - **Tools**: Server-side functions that clients can invoke\n\
              - **Resources**: Structured data and files that clients can access\n\
              - **Prompts**: AI prompt templates for language model interactions\n\
