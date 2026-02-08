@@ -80,6 +80,7 @@ pub fn lambda_to_hyper_request(
         LambdaBody::Empty => Bytes::new(),
         LambdaBody::Text(s) => Bytes::from(s),
         LambdaBody::Binary(b) => Bytes::from(b),
+        _ => Bytes::new(),
     };
 
     // Create Full<Bytes> body and map error type to hyper::Error

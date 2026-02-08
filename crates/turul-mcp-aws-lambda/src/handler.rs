@@ -35,7 +35,7 @@ pub struct LambdaMcpHandler {
     /// SessionMcpHandler for legacy protocol support
     session_handler: SessionMcpHandler,
 
-    /// StreamableHttpHandler for MCP 2025-06-18 with proper headers
+    /// StreamableHttpHandler for MCP 2025-11-25 with proper headers
     streamable_handler: StreamableHttpHandler,
 
     /// Whether SSE is enabled (used for testing and debugging)
@@ -76,7 +76,7 @@ impl LambdaMcpHandler {
             middleware_stack.clone(),
         );
 
-        // Create StreamableHttpHandler for MCP 2025-06-18 support
+        // Create StreamableHttpHandler for MCP 2025-11-25 support
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(config.clone()),
             dispatcher.clone(),
@@ -120,7 +120,7 @@ impl LambdaMcpHandler {
             middleware_stack.clone(),
         );
 
-        // Create StreamableHttpHandler for MCP 2025-06-18 support
+        // Create StreamableHttpHandler for MCP 2025-11-25 support
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(config),
             dispatcher,
@@ -301,7 +301,7 @@ impl LambdaMcpHandler {
 
         // Route based on protocol version
         let hyper_resp = if protocol_version.supports_streamable_http() {
-            // Use StreamableHttpHandler for MCP 2025-06-18 (proper headers, chunked SSE)
+            // Use StreamableHttpHandler for MCP 2025-11-25 (proper headers, chunked SSE)
             debug!(
                 "Using StreamableHttpHandler for protocol {}",
                 protocol_version.to_string()
@@ -349,6 +349,7 @@ impl LambdaMcpHandler {
             LambdaBody::Empty => Bytes::new(),
             LambdaBody::Text(text) => Bytes::from(text),
             LambdaBody::Binary(bytes) => Bytes::from(bytes),
+            _ => Bytes::new(),
         };
 
         // Map error type from Infallible to hyper::Error

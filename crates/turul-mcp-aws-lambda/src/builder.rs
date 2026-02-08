@@ -186,12 +186,30 @@ impl LambdaMcpServerBuilder {
             "notifications/progress".to_string(),
             notifications_handler.clone(),
         );
+        // MCP 2025-11-25 spec-correct underscore form
         handlers.insert(
-            "notifications/resources/listChanged".to_string(),
+            "notifications/resources/list_changed".to_string(),
             notifications_handler.clone(),
         );
         handlers.insert(
             "notifications/resources/updated".to_string(),
+            notifications_handler.clone(),
+        );
+        handlers.insert(
+            "notifications/tools/list_changed".to_string(),
+            notifications_handler.clone(),
+        );
+        handlers.insert(
+            "notifications/prompts/list_changed".to_string(),
+            notifications_handler.clone(),
+        );
+        handlers.insert(
+            "notifications/roots/list_changed".to_string(),
+            notifications_handler.clone(),
+        );
+        // Legacy compat: accept camelCase from older clients
+        handlers.insert(
+            "notifications/resources/listChanged".to_string(),
             notifications_handler.clone(),
         );
         handlers.insert(
@@ -545,23 +563,18 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Add elicitation support with default mock provider
-    pub fn with_elicitation(mut self) -> Self {
-        use turul_mcp_protocol::initialize::ElicitationCapabilities;
-        self.capabilities.elicitation = Some(ElicitationCapabilities {
-            enabled: Some(true),
-        });
+    pub fn with_elicitation(self) -> Self {
+        // Elicitation is a client-side capability per MCP 2025-11-25
+        // Server just registers the handler, no capability advertisement needed
         self.handler(ElicitationHandler::with_mock_provider())
     }
 
     /// Add elicitation support with custom provider
     pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(
-        mut self,
+        self,
         provider: P,
     ) -> Self {
-        use turul_mcp_protocol::initialize::ElicitationCapabilities;
-        self.capabilities.elicitation = Some(ElicitationCapabilities {
-            enabled: Some(true),
-        });
+        // Elicitation is a client-side capability per MCP 2025-11-25
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
 
@@ -839,13 +852,9 @@ impl LambdaMcpServerBuilder {
             });
         }
 
-        // Elicitation capabilities - truthful reporting (only set if elicitations are registered)
-        if has_elicitations {
-            capabilities.elicitation =
-                Some(turul_mcp_protocol::initialize::ElicitationCapabilities {
-                    enabled: Some(true),
-                });
-        }
+        // Elicitation is a client-side capability per MCP 2025-11-25
+        // Server does NOT advertise elicitation capabilities
+        let _ = has_elicitations; // Acknowledge the variable without using it
 
         // Completion capabilities - truthful reporting (only set if completions are registered)
         if has_completions {
@@ -1021,6 +1030,8 @@ mod tests {
             None
         }
     }
+
+    impl HasIcons for TestTool {}
 
     #[async_trait::async_trait]
     impl McpTool for TestTool {
