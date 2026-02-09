@@ -389,7 +389,7 @@ turul-mcp-aws-lambda = { version = "0.2", features = ["cors", "sse", "dynamodb"]
 
 - Lambda streaming responses have size and time limits
 - Long-running SSE connections may be terminated by Lambda
-- Consider using API Gateway WebSocket for persistent connections
+- Consider API Gateway + SSE patterns for persistent-style client updates
 
 ## Error Handling
 

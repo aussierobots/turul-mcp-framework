@@ -13,7 +13,7 @@ A comprehensive Rust framework for building Model Context Protocol (MCP) servers
 - **📚 45+ Comprehensive Examples**: Real-world business applications and framework demonstration examples (all validated through comprehensive testing campaign)
 - **🧪 300+ Development Tests**: Comprehensive test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
-- **🌐 Transport Flexibility**: HTTP/1.1 and SSE streaming via SessionMcpHandler (WebSocket and stdio planned)
+- **🌐 Transport Flexibility**: HTTP/1.1 and SSE streaming via SessionMcpHandler (stdio planned)
 - **☁️ Serverless Support**: AWS Lambda integration with streaming responses and SQS event processing
 - **🔧 Development Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
 - **⚡ Performance Optimized**: Comprehensive benchmarking suite with >1000 RPS throughput, <100ms response times, and extensive stress testing
@@ -1182,7 +1182,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 **Transport & Streaming:**
 - **Lambda SSE**: Snapshot-based responses work reliably; real-time streaming requires `run_with_streaming_response`
-- **WebSocket Transport**: Planned but not yet available (HTTP/1.1 and SSE currently supported)
+- **Additional transport variants**: HTTP/1.1 and SSE are currently supported; stdio remains planned
 - **CI Environment Testing**: SSE tests require port binding capabilities (graceful fallbacks implemented)
 
 **Features & Integration:**
