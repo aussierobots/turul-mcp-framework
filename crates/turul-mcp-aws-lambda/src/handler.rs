@@ -267,7 +267,7 @@ impl LambdaMcpHandler {
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
 
-        info!(
+        debug!(
             "🌊 Lambda streaming MCP request: {} {} (origin: {:?})",
             method, uri, request_origin
         );
