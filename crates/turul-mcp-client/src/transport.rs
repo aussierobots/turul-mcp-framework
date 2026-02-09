@@ -10,9 +10,7 @@ use crate::error::{McpClientResult, TransportError};
 pub mod http;
 pub mod sse;
 
-// WebSocket and Stdio transports are planned for future implementation
-// #[cfg(feature = "websocket")]
-// pub mod websocket;
+// Stdio transport is planned for future implementation
 
 // #[cfg(feature = "stdio")]
 // pub mod stdio;
@@ -22,9 +20,6 @@ pub use http::HttpTransport;
 pub use sse::SseTransport;
 
 // Re-exports for future transport implementations
-// #[cfg(feature = "websocket")]
-// pub use websocket::WebSocketTransport;
-
 // #[cfg(feature = "stdio")]
 // pub use stdio::StdioTransport;
 
@@ -36,7 +31,6 @@ pub enum TransportType {
     /// Server-Sent Events transport (HTTP+SSE)
     Sse,
     // Future transport types:
-    // WebSocket,
     // Stdio,
 }
 
@@ -221,10 +215,6 @@ pub fn detect_transport_type(url_str: &str) -> McpClientResult<TransportType> {
                 Ok(TransportType::Http)
             }
         }
-        "ws" | "wss" => Err(TransportError::Unsupported(
-            "WebSocket transport not yet implemented".to_string(),
-        )
-        .into()),
         "stdio" | "file" => Err(TransportError::Unsupported(
             "Stdio transport not yet implemented".to_string(),
         )
@@ -280,8 +270,8 @@ mod tests {
             TransportType::Sse
         );
 
-        // WebSocket transport not yet implemented
-        assert!(detect_transport_type("ws://localhost:8080/mcp").is_err());
+        // Non-HTTP schemes are rejected
+        assert!(detect_transport_type("ftp://localhost:8080/mcp").is_err());
 
         assert!(detect_transport_type("invalid://localhost").is_err());
     }

@@ -12,7 +12,7 @@
 //!
 //! ## Features
 //!
-//! - **Multi-transport**: HTTP, Server-Sent Events (SSE), WebSocket (planned), stdio (planned)
+//! - **Multi-transport**: HTTP and Server-Sent Events (SSE), with stdio planned
 //! - **Full Protocol**: Complete MCP 2025-11-25 specification support
 //! - **High Performance**: Built on Tokio with async/await throughout
 //! - **Session Management**: Automatic connection handling and recovery
@@ -24,7 +24,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! turul-mcp-client = "0.2"
+//! turul-mcp-client = "0.3"
 //! tokio = { version = "1.0", features = ["full"] }
 //! ```
 //!
@@ -86,11 +86,10 @@
 //!
 //! ### Future Transports
 //!
-//! WebSocket and Stdio transports are planned for future releases:
+//! Stdio transports are planned for future releases:
 //!
 //! ```text
 //! // Coming soon:
-//! // WebSocketTransport::new("ws://localhost:8080/mcp")
 //! // StdioTransport::new("./mcp-server-executable")
 //! ```
 //!

@@ -95,7 +95,7 @@ let client = McpClientBuilder::new()
 
 ### Future Transport Support
 
-Additional transport implementations (WebSocket, stdio) are planned for future releases.
+Additional transport implementations (stdio) are planned for future releases.
 
 ## Client Configuration
 
@@ -458,7 +458,6 @@ Available features:
 - `default` = `["http", "sse"]` - HTTP and SSE transport
 - `http` - HTTP transport support (included by default)
 - `sse` - Server-Sent Events transport (included by default)
-- `websocket` - *(Planned)* WebSocket transport support
 - `stdio` - *(Planned)* Standard I/O transport for executable servers
 
 ## Error Reference
@@ -517,7 +516,6 @@ The client automatically adapts to server capabilities:
 
 - **HTTP**: Works with all MCP servers
 - **SSE**: Requires server-sent events support
-- **WebSocket**: *(Planned)* WebSocket endpoint support
 - **Stdio**: *(Planned)* Executable MCP server support
 
 ## Related Crates
