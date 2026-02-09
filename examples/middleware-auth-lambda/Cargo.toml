@@ -1,7 +1,7 @@
 [package]
 name = "middleware-auth-lambda"
 version.workspace = true
-edition = "2021"
+edition.workspace = true
 publish = false
 description = "AWS Lambda MCP server with authentication middleware"
 
@@ -19,12 +19,12 @@ aws-config = { workspace = true }
 aws-sdk-dynamodb = { workspace = true }
 
 # MCP framework
-turul-mcp-server = { path = "../../crates/turul-mcp-server" }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
-turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage", features = ["dynamodb"] }
-turul-mcp-aws-lambda = { path = "../../crates/turul-mcp-aws-lambda" }
-turul-http-mcp-server = { path = "../../crates/turul-http-mcp-server" }
-turul-mcp-json-rpc-server = { path = "../../crates/turul-mcp-json-rpc-server" }
+turul-mcp-server = { workspace = true }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-session-storage = { workspace = true, features = ["dynamodb"] }
+turul-mcp-aws-lambda = { workspace = true }
+turul-http-mcp-server = { workspace = true }
+turul-mcp-json-rpc-server = { workspace = true }
 
 # Core dependencies
 tokio = { version = "1.47", features = ["full"] }

@@ -1,7 +1,7 @@
 [package]
 name = "tools-test-server"
 version.workspace = true
-edition = "2021"
+edition.workspace = true
 authors = ["Nick <nick@aussierobots.com.au>"]
 description = "MCP Tools Test Server - Comprehensive test tools for E2E validation"
 license = "MIT OR Apache-2.0"
@@ -12,10 +12,10 @@ path = "src/main.rs"
 
 [dependencies]
 # Framework dependencies
-turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http"] }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
-turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
+turul-mcp-server = { workspace = true, features = ["http"] }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-derive = { workspace = true }
+turul-mcp-builders = { workspace = true }
 
 # Async runtime
 tokio.workspace = true

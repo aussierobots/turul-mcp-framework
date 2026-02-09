@@ -27,7 +27,7 @@ path = "src/memory_benchmark.rs"
 [dependencies]
 turul-mcp-server = { workspace = true }
 turul-mcp-derive = { workspace = true }  
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
+turul-mcp-builders = { workspace = true }
 turul-http-mcp-server = { workspace = true }
 turul-mcp-protocol = { workspace = true }
 turul-mcp-client = { workspace = true }

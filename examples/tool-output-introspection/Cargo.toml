@@ -1,15 +1,15 @@
 [package]
 name = "tool-output-introspection"
 version.workspace = true
-edition = "2024"
+edition.workspace = true
 publish = false
 
 # This example doesn't use schemars - demonstrates introspection only
 [dependencies]
-turul-mcp-server = { path = "../../crates/turul-mcp-server" }
-turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
+turul-mcp-server = { workspace = true }
+turul-mcp-derive = { workspace = true }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-builders = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }

@@ -1,7 +1,7 @@
 [package]
 name = "mcp-tools-tests"
-version = "0.2.2"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 authors = ["Nick <nick@aussierobots.com.au>"]
 description = "MCP Tools Protocol Integration Tests"
 license = "MIT OR Apache-2.0"

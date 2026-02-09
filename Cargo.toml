@@ -140,6 +140,7 @@ turul-mcp-server = { version = "0.3.0", path = "crates/turul-mcp-server" }
 turul-mcp-derive = { version = "0.3.0", path = "crates/turul-mcp-derive" }
 turul-mcp-client = { version = "0.3.0", path = "crates/turul-mcp-client" }
 turul-mcp-builders = { version = "0.3.0", path = "crates/turul-mcp-builders" }
+turul-mcp-aws-lambda = { version = "0.3.0", path = "crates/turul-mcp-aws-lambda" }
 
 # Additional dependencies for examples and tests
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -171,13 +172,13 @@ aws-sdk-sns = "1"
 # AWS Lambda dependencies
 lambda_runtime = "1"
 lambda_http = "1"
-lambda-web = "1"
+lambda-web = "0.2"
 aws_lambda_events = "1"
 
 # Other dependencies
 url = "2.5"
 parking_lot = "0.12"
-rand = "0.9"
+rand = { version = "0.10", features = ["thread_rng"] }
 tracing-test = "0.2"
 pin-project = "1.1"
 proc-macro2 = "1.0"
@@ -185,6 +186,7 @@ quote = "1.0"
 syn = "2.0"
 serial_test = "3.3"
 tokio-test = "0.4"
+md5 = "0.8"
 
 # YAML processing
 serde_yaml = "0.9"

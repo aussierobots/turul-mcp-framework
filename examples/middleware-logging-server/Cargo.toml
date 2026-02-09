@@ -1,13 +1,13 @@
 [package]
 name = "middleware-logging-server"
 version.workspace = true
-edition = "2021"
+edition.workspace = true
 publish = false
 
 [dependencies]
-turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http"] }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
-turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage" }
+turul-mcp-server = { workspace = true, features = ["http"] }
+turul-mcp-builders = { workspace = true }
+turul-mcp-session-storage = { workspace = true }
 tokio = { version = "1.47", features = ["full"] }
 async-trait = "0.1"
 serde_json = "1.0"

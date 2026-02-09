@@ -7,8 +7,8 @@ license.workspace = true
 
 [dependencies]
 # Core MCP dependencies
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
+turul-mcp-builders.workspace = true
+turul-mcp-protocol.workspace = true
 
 # Standard dependencies
 tokio.workspace = true

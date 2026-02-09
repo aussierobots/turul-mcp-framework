@@ -5,11 +5,11 @@ edition.workspace = true
 publish = false
 
 [dependencies]
-turul-mcp-server = { path = "../../crates/turul-mcp-server" }
-turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
-turul-http-mcp-server = { path = "../../crates/turul-http-mcp-server" }
+turul-mcp-server.workspace = true
+turul-mcp-derive.workspace = true
+turul-mcp-builders.workspace = true
+turul-mcp-protocol.workspace = true
+turul-http-mcp-server.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true

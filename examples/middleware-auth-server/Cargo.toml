@@ -1,15 +1,15 @@
 [package]
 name = "middleware-auth-server"
 version.workspace = true
-edition = "2021"
+edition.workspace = true
 publish = false
 
 [dependencies]
-turul-mcp-server = { path = "../../crates/turul-mcp-server", features = ["http", "sse"] }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
-turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage" }
-turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
+turul-mcp-server = { workspace = true, features = ["http", "sse"] }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-session-storage = { workspace = true }
+turul-mcp-derive = { workspace = true }
+turul-mcp-builders = { workspace = true }
 tokio = { version = "1.47", features = ["full"] }
 async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
