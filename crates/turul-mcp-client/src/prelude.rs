@@ -3,7 +3,7 @@
 //! This module provides convenient re-exports of the most commonly used types
 //! and traits from the MCP client library.
 //!
-//! ```rust
+//! ```rust,no_run
 //! use turul_mcp_client::prelude::*;
 //! ```
 

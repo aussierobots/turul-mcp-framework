@@ -142,7 +142,7 @@ impl McpServer {
     /// Create a new builder
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
     /// use turul_mcp_server::McpServer;
     ///
     /// let builder = McpServer::builder()

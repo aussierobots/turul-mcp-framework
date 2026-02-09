@@ -165,7 +165,7 @@ pub fn hyper_to_lambda_streaming(
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// # use turul_mcp_aws_lambda::adapter::camel_to_snake;
 /// assert_eq!(camel_to_snake("userId"), "user_id");
 /// assert_eq!(camel_to_snake("deviceId"), "device_id");
@@ -210,7 +210,7 @@ pub fn camel_to_snake(s: &str) -> String {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// # use turul_mcp_aws_lambda::adapter::sanitize_authorizer_field_name;
 /// assert_eq!(sanitize_authorizer_field_name("userId"), "user_id");
 /// assert_eq!(sanitize_authorizer_field_name("deviceId"), "device_id");

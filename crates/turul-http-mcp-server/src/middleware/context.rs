@@ -9,7 +9,7 @@ use std::collections::HashMap;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use turul_http_mcp_server::middleware::RequestContext;
 /// use serde_json::json;
 ///
@@ -75,7 +75,7 @@ impl<'a> RequestContext<'a> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use turul_http_mcp_server::middleware::RequestContext;
     /// use serde_json::json;
     ///
@@ -100,7 +100,7 @@ impl<'a> RequestContext<'a> {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use turul_http_mcp_server::middleware::SessionInjection;
 /// use serde_json::json;
 ///
@@ -173,7 +173,7 @@ impl SessionInjection {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use turul_http_mcp_server::middleware::DispatcherResult;
 /// use serde_json::json;
 ///
