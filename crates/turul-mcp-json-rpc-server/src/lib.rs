@@ -7,7 +7,7 @@
 //! - **JSON-RPC 2.0 Compliance**: Full specification support with proper error handling
 //! - **Type-Safe Error Handling**: Domain errors with automatic protocol conversion
 //! - **Clean Architecture**: Handlers return domain errors, dispatcher owns protocol
-//! - **Transport Agnostic**: Works with HTTP, WebSocket, TCP, etc.
+//! - **Transport Agnostic**: Works with HTTP, TCP, and other transport layers.
 //! - **Async/Await Support**: Full async support with session context
 //! - **Zero Double-Wrapping**: Clean error handling without intermediate wrappers
 //!
