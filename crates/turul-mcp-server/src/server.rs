@@ -50,6 +50,8 @@ pub struct McpServer {
     enable_cors: bool,
     #[cfg(feature = "http")]
     enable_sse: bool,
+    #[cfg(feature = "http")]
+    allow_unauthenticated_ping: Option<bool>,
 }
 
 impl McpServer {
@@ -70,6 +72,7 @@ impl McpServer {
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
         #[cfg(feature = "http")] enable_sse: bool,
+        #[cfg(feature = "http")] allow_unauthenticated_ping: Option<bool>,
     ) -> Self {
         // Create session manager with server capabilities, custom timeouts, and storage
         let session_manager = match &session_storage {
@@ -136,6 +139,8 @@ impl McpServer {
             enable_cors,
             #[cfg(feature = "http")]
             enable_sse,
+            #[cfg(feature = "http")]
+            allow_unauthenticated_ping,
         }
     }
 
@@ -227,6 +232,11 @@ impl McpServer {
                     ),
                 )
                 .register_handler(vec!["tools/call".to_string()], tool_handler);
+
+        // Pass allow_unauthenticated_ping config to HTTP layer
+        if let Some(allow) = self.allow_unauthenticated_ping {
+            builder = builder.allow_unauthenticated_ping(allow);
+        }
 
         // Register all MCP handlers with session awareness
         for (method, handler) in &self.handlers {
@@ -390,6 +400,11 @@ impl McpServer {
                     ),
                 )
                 .register_handler(vec!["tools/call".to_string()], tool_handler);
+
+        // Pass allow_unauthenticated_ping config to HTTP layer
+        if let Some(allow) = self.allow_unauthenticated_ping {
+            builder = builder.allow_unauthenticated_ping(allow);
+        }
 
         // TODO investigate if this also adds the tools/list and tools/call handlers
         // Register all MCP handlers with session awareness

@@ -90,6 +90,8 @@ pub struct McpServerBuilder {
     enable_cors: bool,
     #[cfg(feature = "http")]
     enable_sse: bool,
+    #[cfg(feature = "http")]
+    allow_unauthenticated_ping: Option<bool>,
 
     /// Validation errors collected during builder configuration
     validation_errors: Vec<String>,
@@ -218,6 +220,8 @@ impl McpServerBuilder {
             enable_cors: true,
             #[cfg(feature = "http")]
             enable_sse: cfg!(feature = "sse"),
+            #[cfg(feature = "http")]
+            allow_unauthenticated_ping: None, // Default: use ServerConfig default (true)
             validation_errors: Vec::new(),
         }
     }
@@ -1209,6 +1213,16 @@ impl McpServerBuilder {
         self
     }
 
+    /// Allow or disallow ping requests without Mcp-Session-Id header (requires "http" feature)
+    ///
+    /// Default: `true` (sessionless pings allowed per MCP spec).
+    /// Set to `false` for hardened deployments requiring session for all methods.
+    #[cfg(feature = "http")]
+    pub fn allow_unauthenticated_ping(mut self, allow: bool) -> Self {
+        self.allow_unauthenticated_ping = Some(allow);
+        self
+    }
+
     /// Auto-generate security configuration based on registered resources
     fn build_resource_security(&self) -> crate::security::SecurityMiddleware {
         use crate::security::{AccessLevel, ResourceAccessControl, SecurityMiddleware};
@@ -1522,6 +1536,8 @@ impl McpServerBuilder {
             self.enable_cors,
             #[cfg(feature = "http")]
             self.enable_sse,
+            #[cfg(feature = "http")]
+            self.allow_unauthenticated_ping,
         ))
     }
 }

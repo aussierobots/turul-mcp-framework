@@ -105,9 +105,9 @@ impl McpMiddleware for AuthMiddleware {
         _session: Option<&dyn turul_mcp_session_storage::SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Skip authentication for initialize method (required for session creation)
-        if ctx.method() == "initialize" {
-            debug!("Skipping auth for initialize method");
+        // Skip authentication for initialize (session creation) and ping (pre-init health check)
+        if ctx.method() == "initialize" || ctx.method() == "ping" {
+            debug!("Skipping auth for {} method", ctx.method());
             return Ok(());
         }
 

@@ -37,7 +37,7 @@ use crate::{
     Result, ServerConfig, StreamConfig, StreamManager,
     json_rpc_responses::*,
     notification_bridge::{SharedNotificationBroadcaster, StreamManagerNotificationBroadcaster},
-    protocol::{extract_last_event_id, extract_protocol_version, extract_session_id},
+    protocol::{extract_last_event_id, extract_protocol_version, extract_session_id, normalize_header_value},
 };
 use std::collections::HashMap;
 
@@ -284,7 +284,8 @@ impl SessionMcpHandler {
             .headers()
             .get(CONTENT_TYPE)
             .and_then(|ct| ct.to_str().ok())
-            .unwrap_or("");
+            .map(normalize_header_value)
+            .unwrap_or_default();
 
         if !content_type.starts_with("application/json") {
             warn!("Invalid content type: {}", content_type);
@@ -299,9 +300,10 @@ impl SessionMcpHandler {
             .headers()
             .get(ACCEPT)
             .and_then(|accept| accept.to_str().ok())
-            .unwrap_or("application/json");
+            .map(|v| normalize_header_value(v))
+            .unwrap_or_else(|| "application/json".to_string());
 
-        let (accept_mode, accepts_sse) = parse_mcp_accept_header(accept_header);
+        let (accept_mode, accepts_sse) = parse_mcp_accept_header(&accept_header);
         debug!(
             "POST request Accept header: '{}', mode: {:?}, will use SSE for tool calls: {}",
             accept_header, accept_mode, accepts_sse
@@ -602,7 +604,8 @@ impl SessionMcpHandler {
         let accept = headers
             .get(ACCEPT)
             .and_then(|accept| accept.to_str().ok())
-            .unwrap_or("");
+            .map(normalize_header_value)
+            .unwrap_or_default();
 
         if !accept.contains("text/event-stream") {
             warn!(
