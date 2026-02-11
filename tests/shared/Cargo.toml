@@ -3,6 +3,7 @@ name = "mcp-e2e-shared"
 version.workspace = true
 edition.workspace = true
 publish = false
+autotests = false
 
 [dependencies]
 reqwest = { workspace = true, features = ["json", "stream"] }
@@ -17,5 +18,5 @@ name = "mcp_e2e_shared"
 path = "src/lib.rs"
 
 [[test]]
-name = "concurrent_session_advanced"
-path = "tests/concurrent_session_advanced.rs"
+name = "all"
+path = "tests/all.rs"
