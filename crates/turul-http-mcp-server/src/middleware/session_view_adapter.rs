@@ -166,10 +166,7 @@ mod tests {
         assert_eq!(view.get_state("key1").await.unwrap(), None);
 
         view.set_state("key1", json!("value1")).await.unwrap();
-        assert_eq!(
-            view.get_state("key1").await.unwrap(),
-            Some(json!("value1"))
-        );
+        assert_eq!(view.get_state("key1").await.unwrap(), Some(json!("value1")));
 
         view.set_state("key2", json!({"nested": "object"}))
             .await
@@ -219,10 +216,8 @@ mod tests {
             .await
             .unwrap();
 
-        let view = StorageBackedSessionView::new(
-            session_info.session_id.clone(),
-            Arc::clone(&storage),
-        );
+        let view =
+            StorageBackedSessionView::new(session_info.session_id.clone(), Arc::clone(&storage));
 
         assert_eq!(view.session_id(), &session_info.session_id);
     }

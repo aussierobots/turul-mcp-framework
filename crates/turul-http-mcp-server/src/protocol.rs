@@ -211,14 +211,26 @@ mod tests {
 
     #[test]
     fn test_normalize_header_value() {
-        assert_eq!(normalize_header_value("application/json"), "application/json");
-        assert_eq!(normalize_header_value("  application/json  "), "application/json");
-        assert_eq!(normalize_header_value("Application/JSON"), "application/json");
+        assert_eq!(
+            normalize_header_value("application/json"),
+            "application/json"
+        );
+        assert_eq!(
+            normalize_header_value("  application/json  "),
+            "application/json"
+        );
+        assert_eq!(
+            normalize_header_value("Application/JSON"),
+            "application/json"
+        );
         assert_eq!(
             normalize_header_value("Application/Json; Charset=UTF-8"),
             "application/json; charset=utf-8"
         );
-        assert_eq!(normalize_header_value("  TEXT/EVENT-STREAM "), "text/event-stream");
+        assert_eq!(
+            normalize_header_value("  TEXT/EVENT-STREAM "),
+            "text/event-stream"
+        );
         assert_eq!(normalize_header_value(""), "");
     }
 

@@ -36,15 +36,15 @@
 //! }
 //! ```
 
-pub mod traits;
+pub mod builtins;
 pub mod context;
 pub mod error;
-pub mod stack;
-pub mod builtins;
 pub mod session_view_adapter;
+pub mod stack;
+pub mod traits;
 
-pub use traits::McpMiddleware;
-pub use context::{RequestContext, SessionInjection, DispatcherResult};
+pub use context::{DispatcherResult, RequestContext, SessionInjection};
 pub use error::{MiddlewareError, error_codes};
-pub use stack::MiddlewareStack;
 pub use session_view_adapter::StorageBackedSessionView;
+pub use stack::MiddlewareStack;
+pub use traits::McpMiddleware;

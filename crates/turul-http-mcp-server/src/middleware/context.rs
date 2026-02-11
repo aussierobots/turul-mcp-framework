@@ -1,6 +1,6 @@
 //! Request context and session injection types
 
-use serde_json::{Value, Map};
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 
 /// Normalized request context across all transports (HTTP, Lambda, etc.)

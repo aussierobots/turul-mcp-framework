@@ -37,7 +37,9 @@ use crate::{
     Result, ServerConfig, StreamConfig, StreamManager,
     json_rpc_responses::*,
     notification_bridge::{SharedNotificationBroadcaster, StreamManagerNotificationBroadcaster},
-    protocol::{extract_last_event_id, extract_protocol_version, extract_session_id, normalize_header_value},
+    protocol::{
+        extract_last_event_id, extract_protocol_version, extract_session_id, normalize_header_value,
+    },
 };
 use std::collections::HashMap;
 
@@ -267,7 +269,11 @@ impl SessionMcpHandler {
         let headers: HashMap<String, String> = req
             .headers()
             .iter()
-            .filter_map(|(k, v)| v.to_str().ok().map(|s| (k.as_str().to_string(), s.to_string())))
+            .filter_map(|(k, v)| {
+                v.to_str()
+                    .ok()
+                    .map(|s| (k.as_str().to_string(), s.to_string()))
+            })
             .collect();
 
         // Extract protocol version and session ID from headers
@@ -401,7 +407,11 @@ impl SessionMcpHandler {
                             // Run middleware pipeline and dispatch
                             // Injection is applied immediately inside run_middleware_and_dispatch
                             let (response, _) = self
-                                .run_middleware_and_dispatch(request, headers.clone(), session_context)
+                                .run_middleware_and_dispatch(
+                                    request,
+                                    headers.clone(),
+                                    session_context,
+                                )
                                 .await;
 
                             // Return the session ID created by session storage for the HTTP header
@@ -444,7 +454,8 @@ impl SessionMcpHandler {
 
                     // Run middleware pipeline and dispatch
                     let (response, _stashed_injection) = if let Some(ctx) = session_context {
-                        self.run_middleware_and_dispatch(request, headers.clone(), ctx).await
+                        self.run_middleware_and_dispatch(request, headers.clone(), ctx)
+                            .await
                     } else {
                         // No session - fast path (no middleware, just dispatch)
                         (self.dispatcher.handle_request(request).await, None)
@@ -846,10 +857,14 @@ impl SessionMcpHandler {
         request: turul_mcp_json_rpc_server::JsonRpcRequest,
         headers: HashMap<String, String>,
         session: turul_mcp_json_rpc_server::SessionContext,
-    ) -> (turul_mcp_json_rpc_server::JsonRpcMessage, Option<crate::middleware::SessionInjection>) {
+    ) -> (
+        turul_mcp_json_rpc_server::JsonRpcMessage,
+        Option<crate::middleware::SessionInjection>,
+    ) {
         // Fast path: if middleware stack is empty, dispatch directly
         if self.middleware_stack.is_empty() {
-            let result = self.dispatcher
+            let result = self
+                .dispatcher
                 .handle_request_with_context(request, session)
                 .await;
             return (result, None);
@@ -886,7 +901,11 @@ impl SessionMcpHandler {
         );
 
         // Execute before_dispatch with SessionView
-        let injection = match self.middleware_stack.execute_before(&mut ctx, Some(&session_view)).await {
+        let injection = match self
+            .middleware_stack
+            .execute_before(&mut ctx, Some(&session_view))
+            .await
+        {
             Ok(inj) => inj,
             Err(err) => {
                 // Map middleware error to proper JSON-RPC error code
@@ -909,30 +928,32 @@ impl SessionMcpHandler {
         }
 
         // Dispatch the request
-        let result = self.dispatcher
+        let result = self
+            .dispatcher
             .handle_request_with_context(request, session)
             .await;
 
         // Execute after_dispatch
         // Convert JsonRpcMessage to DispatcherResult for middleware
         let mut dispatcher_result = match &result {
-            turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
-                match &resp.result {
-                    turul_mcp_json_rpc_server::response::ResponseResult::Success(val) => {
-                        crate::middleware::DispatcherResult::Success(val.clone())
-                    }
-                    turul_mcp_json_rpc_server::response::ResponseResult::Null => {
-                        crate::middleware::DispatcherResult::Success(serde_json::Value::Null)
-                    }
+            turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => match &resp.result {
+                turul_mcp_json_rpc_server::response::ResponseResult::Success(val) => {
+                    crate::middleware::DispatcherResult::Success(val.clone())
                 }
-            }
+                turul_mcp_json_rpc_server::response::ResponseResult::Null => {
+                    crate::middleware::DispatcherResult::Success(serde_json::Value::Null)
+                }
+            },
             turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
                 crate::middleware::DispatcherResult::Error(err.error.message.clone())
             }
         };
 
         // Ignore errors from after_dispatch (they shouldn't prevent returning the result)
-        let _ = self.middleware_stack.execute_after(&ctx, &mut dispatcher_result).await;
+        let _ = self
+            .middleware_stack
+            .execute_after(&ctx, &mut dispatcher_result)
+            .await;
 
         (result, None) // Injection already applied, no need to return it
     }
@@ -942,8 +963,8 @@ impl SessionMcpHandler {
         err: crate::middleware::MiddlewareError,
         request_id: turul_mcp_json_rpc_server::RequestId,
     ) -> turul_mcp_json_rpc_server::JsonRpcMessage {
-        use crate::middleware::error::error_codes;
         use crate::middleware::MiddlewareError;
+        use crate::middleware::error::error_codes;
 
         let (code, message, data) = match err {
             MiddlewareError::Unauthenticated(msg) => (error_codes::UNAUTHENTICATED, msg, None),
@@ -961,7 +982,11 @@ impl SessionMcpHandler {
         };
 
         let error_obj = if let Some(d) = data {
-            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(code, &message, Some(d))
+            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
+                code,
+                &message,
+                Some(d),
+            )
         } else {
             turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
                 code,
@@ -970,9 +995,8 @@ impl SessionMcpHandler {
             )
         };
 
-        turul_mcp_json_rpc_server::JsonRpcMessage::Error(turul_mcp_json_rpc_server::JsonRpcError::new(
-            Some(request_id),
-            error_obj,
-        ))
+        turul_mcp_json_rpc_server::JsonRpcMessage::Error(
+            turul_mcp_json_rpc_server::JsonRpcError::new(Some(request_id), error_obj),
+        )
     }
 }

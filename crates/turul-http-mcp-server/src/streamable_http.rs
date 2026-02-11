@@ -1025,7 +1025,8 @@ impl StreamableHttpHandler {
         let is_sessionless_ping = match &message {
             JsonRpcMessage::Request(req) => req.method == "ping",
             JsonRpcMessage::Notification(notif) => notif.method == "ping",
-        } && context.session_id.is_none() && self.config.allow_unauthenticated_ping;
+        } && context.session_id.is_none()
+            && self.config.allow_unauthenticated_ping;
 
         if is_sessionless_ping {
             return match message {
@@ -1642,11 +1643,16 @@ impl StreamableHttpHandler {
         request: turul_mcp_json_rpc_server::JsonRpcRequest,
         headers: HashMap<String, String>,
         session: Option<turul_mcp_json_rpc_server::SessionContext>,
-    ) -> (turul_mcp_json_rpc_server::JsonRpcMessage, Option<crate::middleware::SessionInjection>) {
+    ) -> (
+        turul_mcp_json_rpc_server::JsonRpcMessage,
+        Option<crate::middleware::SessionInjection>,
+    ) {
         // Fast path: if middleware stack is empty, dispatch directly
         if self.middleware_stack.is_empty() {
             let result = if let Some(session_ctx) = session {
-                self.dispatcher.handle_request_with_context(request, session_ctx).await
+                self.dispatcher
+                    .handle_request_with_context(request, session_ctx)
+                    .await
             } else {
                 self.dispatcher.handle_request(request).await
             };
@@ -1684,10 +1690,14 @@ impl StreamableHttpHandler {
         });
 
         // Execute before_dispatch with SessionView (None if sessionless)
-        let injection = match self.middleware_stack.execute_before(
-            &mut ctx,
-            session_view.as_ref().map(|v| v as &dyn SessionView),
-        ).await {
+        let injection = match self
+            .middleware_stack
+            .execute_before(
+                &mut ctx,
+                session_view.as_ref().map(|v| v as &dyn SessionView),
+            )
+            .await
+        {
             Ok(inj) => inj,
             Err(err) => {
                 return (Self::map_middleware_error_to_jsonrpc(err, request.id), None);
@@ -1712,29 +1722,32 @@ impl StreamableHttpHandler {
 
         // Dispatch the request
         let result = if let Some(session_ctx) = session {
-            self.dispatcher.handle_request_with_context(request, session_ctx).await
+            self.dispatcher
+                .handle_request_with_context(request, session_ctx)
+                .await
         } else {
             self.dispatcher.handle_request(request).await
         };
 
         // Execute after_dispatch
         let mut dispatcher_result = match &result {
-            turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
-                match &resp.result {
-                    turul_mcp_json_rpc_server::response::ResponseResult::Success(val) => {
-                        crate::middleware::DispatcherResult::Success(val.clone())
-                    }
-                    turul_mcp_json_rpc_server::response::ResponseResult::Null => {
-                        crate::middleware::DispatcherResult::Success(serde_json::Value::Null)
-                    }
+            turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => match &resp.result {
+                turul_mcp_json_rpc_server::response::ResponseResult::Success(val) => {
+                    crate::middleware::DispatcherResult::Success(val.clone())
                 }
-            }
+                turul_mcp_json_rpc_server::response::ResponseResult::Null => {
+                    crate::middleware::DispatcherResult::Success(serde_json::Value::Null)
+                }
+            },
             turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
                 crate::middleware::DispatcherResult::Error(err.error.message.clone())
             }
         };
 
-        let _ = self.middleware_stack.execute_after(&ctx, &mut dispatcher_result).await;
+        let _ = self
+            .middleware_stack
+            .execute_after(&ctx, &mut dispatcher_result)
+            .await;
 
         (result, None)
     }
@@ -1744,8 +1757,8 @@ impl StreamableHttpHandler {
         err: crate::middleware::MiddlewareError,
         request_id: turul_mcp_json_rpc_server::RequestId,
     ) -> turul_mcp_json_rpc_server::JsonRpcMessage {
-        use crate::middleware::error::error_codes;
         use crate::middleware::MiddlewareError;
+        use crate::middleware::error::error_codes;
 
         let (code, message, data) = match err {
             MiddlewareError::Unauthenticated(msg) => (error_codes::UNAUTHENTICATED, msg, None),
@@ -1763,7 +1776,11 @@ impl StreamableHttpHandler {
         };
 
         let error_obj = if let Some(d) = data {
-            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(code, &message, Some(d))
+            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
+                code,
+                &message,
+                Some(d),
+            )
         } else {
             turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
                 code,
@@ -1772,10 +1789,9 @@ impl StreamableHttpHandler {
             )
         };
 
-        turul_mcp_json_rpc_server::JsonRpcMessage::Error(turul_mcp_json_rpc_server::JsonRpcError::new(
-            Some(request_id),
-            error_obj,
-        ))
+        turul_mcp_json_rpc_server::JsonRpcMessage::Error(
+            turul_mcp_json_rpc_server::JsonRpcError::new(Some(request_id), error_obj),
+        )
     }
 }
 

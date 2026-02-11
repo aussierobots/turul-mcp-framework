@@ -1,7 +1,7 @@
 //! Core middleware trait definitions
 
+use super::{DispatcherResult, MiddlewareError, RequestContext, SessionInjection};
 use async_trait::async_trait;
-use super::{RequestContext, SessionInjection, DispatcherResult, MiddlewareError};
 use turul_mcp_session_storage::SessionView;
 
 /// Core middleware trait for intercepting MCP requests and responses

@@ -110,7 +110,10 @@ impl fmt::Display for MiddlewareError {
         match self {
             Self::Unauthenticated(msg) => write!(f, "Authentication required: {}", msg),
             Self::Unauthorized(msg) => write!(f, "Unauthorized: {}", msg),
-            Self::RateLimitExceeded { message, retry_after } => {
+            Self::RateLimitExceeded {
+                message,
+                retry_after,
+            } => {
                 if let Some(seconds) = retry_after {
                     write!(f, "{} (retry after {} seconds)", message, seconds)
                 } else {
@@ -177,7 +180,10 @@ mod tests {
         assert_eq!(err.to_string(), "Unauthorized: Insufficient permissions");
 
         let err = MiddlewareError::rate_limit("Too many requests", Some(60));
-        assert_eq!(err.to_string(), "Too many requests (retry after 60 seconds)");
+        assert_eq!(
+            err.to_string(),
+            "Too many requests (retry after 60 seconds)"
+        );
 
         let err = MiddlewareError::rate_limit("Too many requests", None);
         assert_eq!(err.to_string(), "Too many requests");
@@ -186,7 +192,10 @@ mod tests {
         assert_eq!(err.to_string(), "Invalid request: Malformed params");
 
         let err = MiddlewareError::internal("Database connection failed");
-        assert_eq!(err.to_string(), "Internal middleware error: Database connection failed");
+        assert_eq!(
+            err.to_string(),
+            "Internal middleware error: Database connection failed"
+        );
 
         let err = MiddlewareError::custom("CUSTOM_ERROR", "Something went wrong");
         assert_eq!(err.to_string(), "CUSTOM_ERROR: Something went wrong");

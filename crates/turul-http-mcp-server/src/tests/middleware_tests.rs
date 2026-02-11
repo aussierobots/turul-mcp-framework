@@ -25,7 +25,11 @@ struct SessionAccessMiddleware {
 }
 
 impl SessionAccessMiddleware {
-    fn new() -> (Self, Arc<Mutex<Vec<String>>>, Arc<Mutex<Vec<(String, String)>>>) {
+    fn new() -> (
+        Self,
+        Arc<Mutex<Vec<String>>>,
+        Arc<Mutex<Vec<(String, String)>>>,
+    ) {
         let reads = Arc::new(Mutex::new(Vec::new()));
         let writes = Arc::new(Mutex::new(Vec::new()));
 
@@ -176,12 +180,16 @@ async fn test_middleware_can_read_write_session_state() {
     // Verify middleware wrote via injection
     let write_values = writes.lock().unwrap();
     assert_eq!(write_values.len(), 2);
-    assert!(write_values
-        .iter()
-        .any(|(k, v)| k == "middleware_wrote" && v == "test_value"));
-    assert!(write_values
-        .iter()
-        .any(|(k, v)| k == "request_id" && v == "req-123"));
+    assert!(
+        write_values
+            .iter()
+            .any(|(k, v)| k == "middleware_wrote" && v == "test_value")
+    );
+    assert!(
+        write_values
+            .iter()
+            .any(|(k, v)| k == "request_id" && v == "req-123")
+    );
 
     // Verify injection contains the writes
     assert_eq!(
@@ -198,10 +206,7 @@ async fn test_middleware_can_read_write_session_state() {
         session_view.set_state(key, value.clone()).await.unwrap();
     }
     for (key, value) in injection.metadata() {
-        session_view
-            .set_metadata(key, value.clone())
-            .await
-            .unwrap();
+        session_view.set_metadata(key, value.clone()).await.unwrap();
     }
 
     // Verify state persisted to storage
@@ -246,10 +251,7 @@ async fn test_middleware_can_inject_during_initialize() {
         session_view.set_state(key, value.clone()).await.unwrap();
     }
     for (key, value) in injection.metadata() {
-        session_view
-            .set_metadata(key, value.clone())
-            .await
-            .unwrap();
+        session_view.set_metadata(key, value.clone()).await.unwrap();
     }
 
     // 5. Verify middleware wrote to the session
@@ -268,7 +270,10 @@ async fn test_middleware_can_inject_during_initialize() {
 
     // 7. Verify we can read it back from storage
     let session = storage.get_session(&session_id).await.unwrap().unwrap();
-    assert_eq!(session.state.get("middleware_wrote"), Some(&json!("test_value")));
+    assert_eq!(
+        session.state.get("middleware_wrote"),
+        Some(&json!("test_value"))
+    );
 
     // Metadata stored with __meta__: prefix
     assert_eq!(
