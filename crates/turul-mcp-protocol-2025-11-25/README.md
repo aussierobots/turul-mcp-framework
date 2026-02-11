@@ -15,30 +15,19 @@ For the 2025-06-18 spec, see `turul-mcp-protocol-2025-06-18`.
 
 ### Icons
 
-Tools, resources, prompts, resource templates, and server implementations can now include an icon for display. Icons are represented as `IconUrl` values that must be either a `data:` URI (RFC 2397) or an `https://` URL.
+Tools, resources, prompts, resource templates, and server implementations can now include icons for display. Icons are represented as `Icon` structs with `src`, `mime_type`, `sizes`, and `theme` fields. The `src` field must be either a `data:` URI (RFC 2397) or an `https://` URL.
 
 ```rust
-use turul_mcp_protocol_2025_11_25::{Tool, ToolSchema, IconUrl};
+use turul_mcp_protocol_2025_11_25::icons::Icon;
 
 // Icon from an HTTPS URL
-let tool = Tool::new("search", ToolSchema::object())
-    .with_description("Search the web")
-    .with_icon(IconUrl::https("https://example.com/search-icon.png"));
+let icon = Icon::new("https://example.com/search-icon.png");
 
 // Icon from a data URI
-let tool = Tool::new("calculator", ToolSchema::object())
-    .with_icon(IconUrl::data_uri("image/png", "iVBORw0KGgo="));
+let icon = Icon::data_uri("image/png", "iVBORw0KGgo=");
 
-// Icons on resources
-use turul_mcp_protocol_2025_11_25::Resource;
-let resource = Resource::new("file:///config.json", "app_config")
-    .with_icon(IconUrl::https("https://example.com/config-icon.png"));
-
-// Icons on server implementation
-use turul_mcp_protocol_2025_11_25::Implementation;
-let server = Implementation::new("my-server", "1.0.0")
-    .with_title("My MCP Server")
-    .with_icon(IconUrl::https("https://example.com/server-icon.png"));
+// Icons are optional arrays on tools, resources, prompts, and implementations
+// icons: Option<Vec<Icon>>
 ```
 
 ### URL Elicitation
@@ -88,52 +77,69 @@ let request = CreateMessageRequest::new(
 ).with_tools(tools);
 ```
 
-### Tasks (Experimental)
+### Tasks
 
-The task system enables tracking of long-running operations. Tasks have a lifecycle defined by `TaskStatus` and support progress reporting.
+The task system enables tracking of long-running operations. Tasks have a lifecycle defined by `TaskStatus` with full storage, handler, and E2E support.
+
+**Key design**: There is no `tasks/create` method. Tasks are created implicitly when a client sends a task-augmented request (e.g., `tools/call` with a `task` field). The server returns a `CreateTaskResult` instead of the operation's direct result.
 
 ```rust
-use turul_mcp_protocol_2025_11_25::{
-    TaskInfo, TaskStatus, TaskProgress,
-    CreateTaskRequest, GetTaskRequest,
-    CancelTaskRequest, ListTasksRequest,
+use turul_mcp_protocol_2025_11_25::tasks::{
+    Task, TaskStatus, TaskMetadata,
+    GetTaskParams, CancelTaskParams, ListTasksParams,
+    GetTaskPayloadParams, CreateTaskResult,
 };
 
-// Create a task
-let request = CreateTaskRequest::new()
-    .with_message("Processing large dataset");
+// Task struct — the core task representation
+let task = Task::new(
+    "task-123",
+    TaskStatus::Working,
+    "2024-01-01T00:00:00Z",  // created_at (required)
+    "2024-01-01T00:00:00Z",  // last_updated_at (required)
+);
 
-// Task with progress tracking
-let task = TaskInfo::new("task-123", TaskStatus::Running)
-    .with_message("Processing batch 3 of 10")
-    .with_progress(TaskProgress::new(30).with_total(100));
+// Task-augmented request — add task field to CallToolParams
+// task: Some(TaskMetadata { ttl: Some(60000) })
 
 // Get task status
-let get_request = GetTaskRequest::new("task-123");
+let get_params = GetTaskParams { task_id: "task-123".into(), meta: None };
 
-// Cancel a running task
-let cancel_request = CancelTaskRequest::new("task-123");
+// Cancel a working task
+let cancel_params = CancelTaskParams { task_id: "task-123".into(), meta: None };
 
-// List all tasks with pagination
-let list_request = ListTasksRequest::new().with_limit(25);
+// Retrieve the original operation's result
+let payload_params = GetTaskPayloadParams { task_id: "task-123".into(), meta: None };
 ```
 
 #### Task Status Lifecycle
 
 ```
-Running -> Completed   (success)
-Running -> Failed      (error)
-Running -> Cancelled   (user/system cancellation)
+Working -> InputRequired  (needs user input)
+Working -> Completed      (success)
+Working -> Failed         (error)
+Working -> Cancelled      (user/system cancellation)
+InputRequired -> Working  (input provided)
+InputRequired -> Completed | Failed | Cancelled
 ```
 
-#### Task CRUD Operations
+#### Task Operations
 
-| Method | Request Type | Result Type |
-|--------|-------------|-------------|
-| `tasks/create` | `CreateTaskRequest` | `CreateTaskResult` |
-| `tasks/get` | `GetTaskRequest` | `GetTaskResult` |
-| `tasks/cancel` | `CancelTaskRequest` | `CancelTaskResult` |
-| `tasks/list` | `ListTasksRequest` | `ListTasksResult` |
+| Method | Params Type | Result Type | Notes |
+|--------|------------|-------------|-------|
+| `tasks/get` | `GetTaskParams` | `GetTaskResult` | Get current task status |
+| `tasks/cancel` | `CancelTaskParams` | `CancelTaskResult` | Cancel a working task |
+| `tasks/list` | `ListTasksParams` | `ListTasksResult` | Paginated task listing |
+| `tasks/result` | `GetTaskPayloadParams` | Original result | Blocks until terminal; returns original operation's result |
+
+#### Task Support on Tools
+
+Tools declare their task support via `ToolExecution.task_support`:
+
+| Value | Meaning |
+|-------|---------|
+| `TaskSupport::Required` | Clients MUST use task augmentation |
+| `TaskSupport::Optional` | Clients MAY use task augmentation |
+| `TaskSupport::Forbidden` | Clients MUST NOT use task augmentation |
 
 ## Quick Start
 
@@ -141,7 +147,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-protocol-2025-11-25 = "0.2"
+turul-mcp-protocol-2025-11-25 = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 ```
@@ -150,14 +156,15 @@ serde_json = "1.0"
 
 ```rust
 use turul_mcp_protocol_2025_11_25::{
-    Tool, ToolSchema, JsonSchema, IconUrl,
+    Tool, ToolSchema, JsonSchema,
     InitializeRequest, InitializeResult,
     Implementation, ClientCapabilities, ServerCapabilities,
     McpVersion,
 };
+use turul_mcp_protocol_2025_11_25::icons::Icon;
 use std::collections::HashMap;
 
-// Create a tool with icon
+// Create a tool (icons are optional — most tools don't need them)
 let tool = Tool::new("calculator", ToolSchema::object()
     .with_properties(HashMap::from([
         ("a".to_string(), JsonSchema::number()),
@@ -165,8 +172,7 @@ let tool = Tool::new("calculator", ToolSchema::object()
     ]))
     .with_required(vec!["a".to_string(), "b".to_string()])
 )
-.with_description("Add two numbers")
-.with_icon(IconUrl::https("https://example.com/calc.png"));
+.with_description("Add two numbers");
 
 // Initialize with 2025-11-25 protocol version
 let init_request = InitializeRequest::new(
@@ -176,7 +182,6 @@ let init_request = InitializeRequest::new(
 );
 
 println!("Protocol version: {}", McpVersion::V2025_11_25);
-println!("Tool: {} (icon: {})", tool.name, tool.icon.is_some());
 ```
 
 ## Version Capability Detection
@@ -216,10 +221,10 @@ let features = version.supported_features();
 | `resources/unsubscribe` | `UnsubscribeRequest` | `resources.rs` |
 | `prompts/list` | `ListPromptsRequest` | `prompts.rs` |
 | `prompts/get` | `GetPromptRequest` | `prompts.rs` |
-| `tasks/create` | `CreateTaskRequest` | `tasks.rs` |
 | `tasks/get` | `GetTaskRequest` | `tasks.rs` |
 | `tasks/cancel` | `CancelTaskRequest` | `tasks.rs` |
 | `tasks/list` | `ListTasksRequest` | `tasks.rs` |
+| `tasks/result` | `GetTaskPayloadRequest` | `tasks.rs` |
 | `completion/complete` | `CompleteRequest` | `completion.rs` |
 | `logging/setLevel` | `SetLevelRequest` | `logging.rs` |
 
@@ -267,7 +272,7 @@ This crate follows the same spec-pure design as `turul-mcp-protocol-2025-06-18`:
 - Zero framework features -- only official MCP 2025-11-25 types
 - Identical module structure for cross-version familiarity
 - Same trait hierarchy (HasMethod, HasParams, HasData, HasMeta, RpcResult)
-- Independent test suite (121+ tests)
+- Independent test suite (150+ tests)
 
 For the design rationale behind having separate crates per spec version, see
 [ADR 015: MCP 2025-11-25 Protocol Crate Strategy](../../docs/adr/015-mcp-2025-11-25-protocol-crate.md).

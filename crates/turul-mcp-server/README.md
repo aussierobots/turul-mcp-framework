@@ -17,6 +17,7 @@ High-level framework for building Model Context Protocol (MCP) servers with full
 - ✅ **Real-time Notifications** - SSE streaming with JSON-RPC format
 - ✅ **Session Management** - UUID v7 sessions with automatic cleanup
 - ✅ **Pluggable Storage** - InMemory, SQLite, PostgreSQL, DynamoDB backends
+- ✅ **Task Support** - MCP 2025-11-25 long-running task lifecycle with pluggable storage
 - ✅ **Type Safety** - Compile-time schema generation and validation
 
 ## Architectural Patterns
@@ -35,8 +36,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-server = "0.2.0"
-turul-mcp-derive = "0.2.0"  # Required for function macros and derive macros
+turul-mcp-server = "0.3.0"
+turul-mcp-derive = "0.3.0"  # Required for function macros and derive macros
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -68,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ### Level 2: Derive Macros (Struct-Based)
-*Requires: `turul-mcp-derive = "0.2.0"` dependency*
+*Requires: `turul-mcp-derive = "0.3.0"` dependency*
 
 ```rust
 use turul_mcp_derive::McpTool;
@@ -427,11 +428,32 @@ All MCP components use consistent trait patterns from `turul-mcp-builders`:
 
 See [`turul-mcp-builders`](../turul-mcp-builders/README.md) for trait documentation.
 
+## Task Storage (MCP 2025-11-25)
+
+Enable long-running task support by adding a `TaskStorage` backend:
+
+```rust
+use turul_mcp_server::prelude::*;
+use turul_mcp_task_storage::InMemoryTaskStorage;
+use std::sync::Arc;
+
+let server = McpServer::builder()
+    .name("my-task-server")
+    .version("0.3.0")
+    .with_task_storage(Arc::new(InMemoryTaskStorage::new()))
+    .tool(MyLongRunningTool::default())
+    .build()?;
+```
+
+This auto-advertises `tasks` in the server capabilities and enables `tasks/get`, `tasks/list`, `tasks/cancel`, and `tasks/result` handlers.
+
+See `turul-mcp-task-storage` for backend options and the task storage trait.
+
 ## Feature Flags
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.2", features = ["sqlite", "postgres"] }
+turul-mcp-server = { version = "0.3", features = ["sqlite", "postgres"] }
 ```
 
 - `default` - All features enabled

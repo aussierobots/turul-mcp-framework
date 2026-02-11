@@ -16,7 +16,7 @@ Runtime construction library providing building blocks for MCP components. For s
 - ✅ **Type Safety** - Full parameter validation and schema generation
 - ✅ **Configuration-Driven** - Perfect for config-file-based systems
 - ✅ **Trait Integration** - All builders produce framework-compatible types
-- ✅ **70+ Tests** - Comprehensive test coverage with zero warnings
+- ✅ **85+ Tests** - Comprehensive test coverage with zero warnings
 
 ## Quick Start
 
@@ -24,8 +24,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-builders = "0.2"
-turul-mcp-server = "0.2"
+turul-mcp-builders = "0.3"
+turul-mcp-server = "0.3"
 serde_json = "1.0"
 ```
 

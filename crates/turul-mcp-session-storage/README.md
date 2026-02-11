@@ -34,8 +34,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-session-storage = { version = "0.2", features = ["sqlite"] }
-turul-mcp-server = "0.2"
+turul-mcp-session-storage = { version = "0.3", features = ["sqlite"] }
+turul-mcp-server = "0.3"
 ```
 
 ### In-Memory (Development)
@@ -470,7 +470,7 @@ cargo test --package turul-mcp-session-storage --features postgres -- --ignored
 
 ```toml
 [dependencies]
-turul-mcp-session-storage = { version = "0.1.1", features = ["sqlite", "postgres"] }
+turul-mcp-session-storage = { version = "0.3", features = ["sqlite", "postgres"] }
 ```
 
 - `default` - Only InMemory backend

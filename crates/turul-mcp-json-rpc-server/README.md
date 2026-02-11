@@ -8,9 +8,9 @@ A generic JSON-RPC 2.0 server implementation that provides the foundation for th
 - **Type-Safe Error Handling**: Domain errors with automatic protocol conversion
 - **Session Support**: Optional session context for stateful operations
 - **Generic Handler Interface**: Flexible handler registration system
-- **Unified Error Architecture**: Clean domain/protocol separation (0.2.0+)
+- **Unified Error Architecture**: Clean domain/protocol separation
 
-## Key Architecture (0.2.0+)
+## Key Architecture
 
 The framework uses a **clean domain/protocol separation** where:
 
