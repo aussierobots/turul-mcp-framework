@@ -8,7 +8,7 @@
 //! ```
 
 // Core client types
-pub use crate::client::{McpClient, McpClientBuilder};
+pub use crate::client::{McpClient, McpClientBuilder, ToolCallResponse};
 pub use crate::config::{ClientConfig, RetryConfig, TimeoutConfig};
 pub use crate::error::{McpClientError, McpClientResult};
 pub use crate::session::{SessionInfo, SessionManager, SessionState};

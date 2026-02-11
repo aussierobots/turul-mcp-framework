@@ -13,6 +13,9 @@ use crate::transport::{BoxedTransport, TransportFactory};
 
 // Re-export protocol types for convenience
 use turul_mcp_protocol::meta::Cursor;
+use turul_mcp_protocol::tasks::{
+    CancelTaskResult, CreateTaskResult, GetTaskResult, ListTasksResult, Task,
+};
 use turul_mcp_protocol::{
     CallToolResult, GetPromptResult, InitializeResult, ListPromptsResult, ListResourcesResult,
     ListToolsResult, Prompt, ReadResourceResult, Resource, Tool, ToolResult,
@@ -669,6 +672,183 @@ impl McpClient {
         Ok(())
     }
 
+    // === Task Operations ===
+
+    /// Get a task by ID
+    pub async fn get_task(&self, task_id: &str) -> McpClientResult<Task> {
+        debug!(task_id = task_id, "Getting task");
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "tasks/get",
+            "id": self.next_request_id(),
+            "params": {
+                "taskId": task_id
+            }
+        });
+
+        let response = self.send_request_internal(request).await?;
+        let task_response: GetTaskResult =
+            serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
+
+        debug!(task_id = task_id, status = ?task_response.task.status, "Task retrieved");
+        Ok(task_response.task)
+    }
+
+    /// List tasks
+    pub async fn list_tasks(&self) -> McpClientResult<Vec<Task>> {
+        debug!("Listing tasks");
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "tasks/list",
+            "id": self.next_request_id(),
+            "params": {}
+        });
+
+        let response = self.send_request_internal(request).await?;
+        let tasks_response: ListTasksResult =
+            serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
+
+        debug!(count = tasks_response.tasks.len(), "Retrieved tasks");
+        Ok(tasks_response.tasks)
+    }
+
+    /// List tasks with pagination support
+    pub async fn list_tasks_paginated(
+        &self,
+        cursor: Option<Cursor>,
+    ) -> McpClientResult<ListTasksResult> {
+        debug!("Listing tasks with pagination");
+
+        let request_params = if let Some(cursor) = cursor {
+            json!({ "cursor": cursor.as_str() })
+        } else {
+            json!({})
+        };
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "tasks/list",
+            "id": self.next_request_id(),
+            "params": request_params
+        });
+
+        let response = self.send_request_internal(request).await?;
+        let tasks_response: ListTasksResult =
+            serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
+
+        debug!(
+            count = tasks_response.tasks.len(),
+            has_cursor = tasks_response.next_cursor.is_some(),
+            "Retrieved tasks with pagination"
+        );
+        Ok(tasks_response)
+    }
+
+    /// Cancel a task
+    pub async fn cancel_task(&self, task_id: &str) -> McpClientResult<Task> {
+        debug!(task_id = task_id, "Cancelling task");
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "tasks/cancel",
+            "id": self.next_request_id(),
+            "params": {
+                "taskId": task_id
+            }
+        });
+
+        let response = self.send_request_internal(request).await?;
+        let cancel_response: CancelTaskResult =
+            serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
+
+        debug!(task_id = task_id, status = ?cancel_response.task.status, "Task cancelled");
+        Ok(cancel_response.task)
+    }
+
+    /// Get a task's result (blocks until the task reaches terminal status)
+    ///
+    /// Per MCP spec, if the task is still in progress the server will hold the
+    /// response until it completes. Use a longer timeout for this operation.
+    pub async fn get_task_result(&self, task_id: &str) -> McpClientResult<Value> {
+        debug!(task_id = task_id, "Getting task result");
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "tasks/result",
+            "id": self.next_request_id(),
+            "params": {
+                "taskId": task_id
+            }
+        });
+
+        // Use long_operation timeout since tasks/result blocks until terminal
+        let response = timeout(
+            self.config.timeouts.long_operation,
+            self.send_request_internal(request),
+        )
+        .await
+        .map_err(|_| McpClientError::Timeout)??;
+
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+        debug!(task_id = task_id, "Task result retrieved");
+        Ok(result)
+    }
+
+    /// Call a tool with task augmentation
+    ///
+    /// If the server supports tasks for this tool, it returns a `Task` (the tool
+    /// executes asynchronously). Otherwise, it returns the normal `CallToolResult`.
+    pub async fn call_tool_with_task(
+        &self,
+        name: &str,
+        arguments: Value,
+        ttl_ms: Option<i64>,
+    ) -> McpClientResult<ToolCallResponse> {
+        debug!(tool = name, "Calling tool with task augmentation");
+
+        let mut params = json!({
+            "name": name,
+            "arguments": arguments,
+            "task": {}
+        });
+
+        if let Some(ttl) = ttl_ms {
+            params["task"]["ttl"] = json!(ttl);
+        }
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "id": self.next_request_id(),
+            "params": params
+        });
+
+        let response = self.send_request_internal(request).await?;
+        let result = response.get("result").cloned().unwrap_or(Value::Null);
+
+        // Distinguish response type: CreateTaskResult has a "task" field,
+        // CallToolResult has a "content" field
+        if result.get("task").is_some() {
+            let task_result: CreateTaskResult = serde_json::from_value(result)?;
+            debug!(
+                tool = name,
+                task_id = task_result.task.task_id,
+                "Tool call created task"
+            );
+            Ok(ToolCallResponse::TaskCreated(task_result.task))
+        } else {
+            let call_result: CallToolResult = serde_json::from_value(result)?;
+            debug!(
+                tool = name,
+                is_error = call_result.is_error,
+                "Tool call completed synchronously"
+            );
+            Ok(ToolCallResponse::Immediate(call_result))
+        }
+    }
+
     /// Get stream handler for event callbacks
     pub async fn stream_handler(&self) -> tokio::sync::MutexGuard<'_, StreamHandler> {
         self.stream_handler.lock().await
@@ -713,6 +893,42 @@ impl ConnectionStatus {
             "{} transport to {} - Session {} ({})",
             self.transport_type, self.endpoint, session_display, self.session_state
         )
+    }
+}
+
+/// Response from a task-augmented tool call
+///
+/// When calling a tool with task augmentation, the server may either:
+/// - Create a task and return it immediately (tool runs async)
+/// - Execute the tool synchronously (if tasks not supported for this tool)
+#[derive(Debug)]
+pub enum ToolCallResponse {
+    /// The tool executed synchronously and returned its result directly
+    Immediate(CallToolResult),
+    /// The server created a task — poll with `get_task()` or await with `get_task_result()`
+    TaskCreated(Task),
+}
+
+impl ToolCallResponse {
+    /// Returns `true` if the server created a task for this call
+    pub fn is_task(&self) -> bool {
+        matches!(self, ToolCallResponse::TaskCreated(_))
+    }
+
+    /// Returns the task if one was created
+    pub fn task(&self) -> Option<&Task> {
+        match self {
+            ToolCallResponse::TaskCreated(task) => Some(task),
+            _ => None,
+        }
+    }
+
+    /// Returns the immediate result if the tool executed synchronously
+    pub fn immediate_result(&self) -> Option<&CallToolResult> {
+        match self {
+            ToolCallResponse::Immediate(result) => Some(result),
+            _ => None,
+        }
     }
 }
 
