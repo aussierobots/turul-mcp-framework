@@ -22,10 +22,10 @@
 //!     .expect("Valid schema");
 //! ```
 
-use turul_mcp_protocol::ToolSchema;
-use turul_mcp_protocol::schema::JsonSchema;
 use serde_json::Value;
 use std::collections::HashMap;
+use turul_mcp_protocol::ToolSchema;
+use turul_mcp_protocol::schema::JsonSchema;
 
 /// Convert a serde_json::Value from schemars to MCP's JsonSchema enum
 ///
@@ -89,7 +89,8 @@ pub fn convert_value_to_json_schema_with_defs(
     // Handle $ref - resolve from definitions
     if let Some(ref_path) = obj.get("$ref").and_then(|v| v.as_str()) {
         // Extract definition name from "#/definitions/TypeName" or "#/$defs/TypeName"
-        let def_name = ref_path.strip_prefix("#/definitions/")
+        let def_name = ref_path
+            .strip_prefix("#/definitions/")
             .or_else(|| ref_path.strip_prefix("#/$defs/"));
 
         if let Some(name) = def_name
@@ -100,7 +101,10 @@ pub fn convert_value_to_json_schema_with_defs(
         }
         // Couldn't resolve reference - fall back to generic object
         return JsonSchema::Object {
-            description: obj.get("description").and_then(|v| v.as_str()).map(String::from),
+            description: obj
+                .get("description")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             properties: None,
             required: None,
             additional_properties: None,
@@ -124,7 +128,10 @@ pub fn convert_value_to_json_schema_with_defs(
         }
         // All schemas were null or couldn't parse - fall back to generic object
         return JsonSchema::Object {
-            description: obj.get("description").and_then(|v| v.as_str()).map(String::from),
+            description: obj
+                .get("description")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             properties: None,
             required: None,
             additional_properties: None,
@@ -132,7 +139,8 @@ pub fn convert_value_to_json_schema_with_defs(
     }
 
     // Get the type field - can be string or array of strings
-    let schema_type = obj.get("type")
+    let schema_type = obj
+        .get("type")
         .and_then(|v| {
             if let Some(s) = v.as_str() {
                 // Single type as string
@@ -167,8 +175,14 @@ pub fn convert_value_to_json_schema_with_defs(
     // Convert based on type
     match schema_type {
         Some("string") => JsonSchema::String {
-            description: obj.get("description").and_then(|v| v.as_str()).map(String::from),
-            pattern: obj.get("pattern").and_then(|v| v.as_str()).map(String::from),
+            description: obj
+                .get("description")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            pattern: obj
+                .get("pattern")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             min_length: obj.get("minLength").and_then(|v| v.as_u64()),
             max_length: obj.get("maxLength").and_then(|v| v.as_u64()),
             enum_values: obj.get("enum").and_then(|v| {
@@ -181,68 +195,90 @@ pub fn convert_value_to_json_schema_with_defs(
         },
 
         Some("number") => JsonSchema::Number {
-            description: obj.get("description").and_then(|v| v.as_str()).map(String::from),
+            description: obj
+                .get("description")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             minimum: obj.get("minimum").and_then(|v| v.as_f64()),
             maximum: obj.get("maximum").and_then(|v| v.as_f64()),
         },
 
         Some("integer") => JsonSchema::Integer {
-            description: obj.get("description").and_then(|v| v.as_str()).map(String::from),
+            description: obj
+                .get("description")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             minimum: obj.get("minimum").and_then(|v| v.as_i64()),
             maximum: obj.get("maximum").and_then(|v| v.as_i64()),
         },
 
         Some("boolean") => JsonSchema::Boolean {
-            description: obj.get("description").and_then(|v| v.as_str()).map(String::from),
+            description: obj
+                .get("description")
+                .and_then(|v| v.as_str())
+                .map(String::from),
         },
 
         Some("array") => {
             // Recursively convert array items
-            let items = obj.get("items")
+            let items = obj
+                .get("items")
                 .map(|v| Box::new(convert_value_to_json_schema_with_defs(v, definitions)));
 
             JsonSchema::Array {
-                description: obj.get("description").and_then(|v| v.as_str()).map(String::from),
+                description: obj
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
                 items,
                 min_items: obj.get("minItems").and_then(|v| v.as_u64()),
                 max_items: obj.get("maxItems").and_then(|v| v.as_u64()),
             }
-        },
+        }
 
         Some("object") => {
             // Recursively convert properties
-            let properties = obj.get("properties")
+            let properties = obj
+                .get("properties")
                 .and_then(|v| v.as_object())
                 .map(|props| {
-                    props.iter()
+                    props
+                        .iter()
                         .map(|(k, v)| {
-                            (k.clone(), convert_value_to_json_schema_with_defs(v, definitions))
+                            (
+                                k.clone(),
+                                convert_value_to_json_schema_with_defs(v, definitions),
+                            )
                         })
                         .collect::<HashMap<_, _>>()
                 });
 
             // Get required fields
-            let required = obj.get("required")
-                .and_then(|v| v.as_array())
-                .map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(String::from))
-                        .collect()
-                });
+            let required = obj.get("required").and_then(|v| v.as_array()).map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            });
 
             JsonSchema::Object {
-                description: obj.get("description").and_then(|v| v.as_str()).map(String::from),
+                description: obj
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
                 properties,
                 required,
                 additional_properties: obj.get("additionalProperties").and_then(|v| v.as_bool()),
             }
-        },
+        }
 
         _ => {
             // Unknown type, $ref, anyOf, oneOf, allOf, etc.
             // Return generic object (lossy but safe)
             JsonSchema::Object {
-                description: obj.get("description").and_then(|v| v.as_str()).map(String::from),
+                description: obj
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
                 properties: None,
                 required: None,
                 additional_properties: None,
@@ -350,12 +386,18 @@ mod tests {
         // This is expected behavior - the test just verifies the conversion doesn't panic
         match result {
             Ok(schema) => {
-                assert_eq!(schema.schema_type, "object", "Should convert to object schema");
-            },
+                assert_eq!(
+                    schema.schema_type, "object",
+                    "Should convert to object schema"
+                );
+            }
             Err(e) => {
                 // This is acceptable - complex schemas with anyOf/oneOf may not convert
                 // Users should use simpler schema patterns for tool outputs
-                eprintln!("Schema conversion failed (expected for complex optional patterns): {}", e);
+                eprintln!(
+                    "Schema conversion failed (expected for complex optional patterns): {}",
+                    e
+                );
             }
         }
     }

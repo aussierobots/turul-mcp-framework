@@ -11,14 +11,12 @@ use std::pin::Pin;
 
 // Import traits from local traits module
 use crate::traits::{
-    HasIcons, HasPromptAnnotations, HasPromptArguments, HasPromptDescription,
-    HasPromptMeta, HasPromptMetadata,
+    HasIcons, HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
+    HasPromptMetadata,
 };
 // Import protocol types
 use turul_mcp_protocol::icons::Icon;
-use turul_mcp_protocol::prompts::{
-    ContentBlock, GetPromptResult, PromptArgument, PromptMessage,
-};
+use turul_mcp_protocol::prompts::{ContentBlock, GetPromptResult, PromptArgument, PromptMessage};
 
 /// Type alias for dynamic prompt generation function
 pub type DynamicPromptFn = Box<

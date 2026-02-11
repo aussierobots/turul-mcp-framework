@@ -2,8 +2,8 @@
 //!
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 
-use turul_mcp_protocol::logging::{LoggingLevel, LoggingMessageNotification, SetLevelRequest};
 use serde_json::Value;
+use turul_mcp_protocol::logging::{LoggingLevel, LoggingMessageNotification, SetLevelRequest};
 
 /// Trait for logging metadata (method, logger name)
 pub trait HasLoggingMetadata {

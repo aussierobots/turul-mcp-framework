@@ -8,18 +8,20 @@
 //! implementations here. Missing implementations break the trait hierarchy and cause
 //! compilation failures in user code.
 
-use turul_mcp_protocol::{Resource, Prompt, Tool, ToolSchema};
-use turul_mcp_protocol::roots::Root;
-use turul_mcp_protocol::sampling::{CreateMessageParams, SamplingMessage, ModelPreferences};
-use turul_mcp_protocol::logging::{LoggingMessageNotification, LoggingLevel};
-use turul_mcp_protocol::completion::{CompleteRequest, CompletionReference, CompleteArgument, CompletionContext};
-use turul_mcp_protocol::elicitation::{ElicitCreateRequest, ElicitationSchema};
-use turul_mcp_protocol::notifications::{
-    ResourceListChangedNotification, ToolListChangedNotification, PromptListChangedNotification,
-    RootsListChangedNotification, ProgressNotification, ResourceUpdatedNotification,
-    CancelledNotification, InitializedNotification, Notification,
-};
 use crate::traits::*;
+use turul_mcp_protocol::completion::{
+    CompleteArgument, CompleteRequest, CompletionContext, CompletionReference,
+};
+use turul_mcp_protocol::elicitation::{ElicitCreateRequest, ElicitationSchema};
+use turul_mcp_protocol::logging::{LoggingLevel, LoggingMessageNotification};
+use turul_mcp_protocol::notifications::{
+    CancelledNotification, InitializedNotification, Notification, ProgressNotification,
+    PromptListChangedNotification, ResourceListChangedNotification, ResourceUpdatedNotification,
+    RootsListChangedNotification, ToolListChangedNotification,
+};
+use turul_mcp_protocol::roots::Root;
+use turul_mcp_protocol::sampling::{CreateMessageParams, ModelPreferences, SamplingMessage};
+use turul_mcp_protocol::{Prompt, Resource, Tool, ToolSchema};
 
 // ============================================================================
 // Resource trait implementations
@@ -399,7 +401,9 @@ impl HasNotificationMetadata for ResourceListChangedNotification {
 impl HasNotificationPayload for ResourceListChangedNotification {
     fn payload(&self) -> Option<serde_json::Value> {
         // Serialize params if present (includes _meta)
-        self.params.as_ref().and_then(|p| serde_json::to_value(p).ok())
+        self.params
+            .as_ref()
+            .and_then(|p| serde_json::to_value(p).ok())
     }
 }
 
@@ -415,7 +419,9 @@ impl HasNotificationMetadata for ToolListChangedNotification {
 impl HasNotificationPayload for ToolListChangedNotification {
     fn payload(&self) -> Option<serde_json::Value> {
         // Serialize params if present (includes _meta)
-        self.params.as_ref().and_then(|p| serde_json::to_value(p).ok())
+        self.params
+            .as_ref()
+            .and_then(|p| serde_json::to_value(p).ok())
     }
 }
 
@@ -431,7 +437,9 @@ impl HasNotificationMetadata for PromptListChangedNotification {
 impl HasNotificationPayload for PromptListChangedNotification {
     fn payload(&self) -> Option<serde_json::Value> {
         // Serialize params if present (includes _meta)
-        self.params.as_ref().and_then(|p| serde_json::to_value(p).ok())
+        self.params
+            .as_ref()
+            .and_then(|p| serde_json::to_value(p).ok())
     }
 }
 
@@ -447,7 +455,9 @@ impl HasNotificationMetadata for RootsListChangedNotification {
 impl HasNotificationPayload for RootsListChangedNotification {
     fn payload(&self) -> Option<serde_json::Value> {
         // Serialize params if present (includes _meta)
-        self.params.as_ref().and_then(|p| serde_json::to_value(p).ok())
+        self.params
+            .as_ref()
+            .and_then(|p| serde_json::to_value(p).ok())
     }
 }
 
@@ -519,7 +529,9 @@ impl HasNotificationMetadata for InitializedNotification {
 impl HasNotificationPayload for InitializedNotification {
     fn payload(&self) -> Option<serde_json::Value> {
         // Serialize params if present (includes _meta)
-        self.params.as_ref().and_then(|p| serde_json::to_value(p).ok())
+        self.params
+            .as_ref()
+            .and_then(|p| serde_json::to_value(p).ok())
     }
 }
 
