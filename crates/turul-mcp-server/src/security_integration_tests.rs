@@ -5,21 +5,21 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{McpResult, SessionContext};
     use crate::handlers::{McpHandler, ResourcesReadHandler};
     use crate::security::{
         AccessLevel, InputValidator, RateLimitConfig, ResourceAccessControl, SecurityMiddleware,
     };
     use crate::uri_template::{UriTemplate, VariableValidator};
+    use crate::{McpResult, SessionContext};
     use async_trait::async_trait;
     use regex::Regex;
     use serde_json::{Value, json};
     use std::collections::HashMap;
     use std::sync::Arc;
     use std::time::Duration;
+    use turul_mcp_builders::prelude::*;
     use turul_mcp_protocol::meta;
-    use turul_mcp_protocol::resources::ResourceContent;
-    use turul_mcp_builders::prelude::*;  // HasResourceMetadata, HasResourceDescription, etc.
+    use turul_mcp_protocol::resources::ResourceContent; // HasResourceMetadata, HasResourceDescription, etc.
 
     /// Test resource for security integration testing
     #[derive(Clone)]
@@ -82,7 +82,11 @@ mod tests {
 
     #[async_trait]
     impl crate::McpResource for SecureTestResource {
-        async fn read(&self, params: Option<Value>, _session: Option<&crate::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+        async fn read(
+            &self,
+            params: Option<Value>,
+            _session: Option<&crate::SessionContext>,
+        ) -> McpResult<Vec<ResourceContent>> {
             let params = params.unwrap_or(json!({}));
 
             if let Some(template_vars) = params.get("template_variables")
@@ -368,7 +372,11 @@ mod tests {
 
         #[async_trait]
         impl crate::McpResource for LargeContentResource {
-            async fn read(&self, _params: Option<Value>, _session: Option<&crate::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+            async fn read(
+                &self,
+                _params: Option<Value>,
+                _session: Option<&crate::SessionContext>,
+            ) -> McpResult<Vec<ResourceContent>> {
                 // Return content with disallowed MIME type
                 let mut content =
                     ResourceContent::text("file:///large.bin", "x".repeat(1000).as_str());

@@ -120,7 +120,7 @@ mod tests {
     use serde_json::{Value, json};
     use std::collections::HashMap;
     use turul_mcp_protocol::prompts::{PromptAnnotations, PromptArgument};
-      // HasPromptMetadata, HasPromptDescription, etc.
+    // HasPromptMetadata, HasPromptDescription, etc.
 
     struct TestPrompt {
         name: String,

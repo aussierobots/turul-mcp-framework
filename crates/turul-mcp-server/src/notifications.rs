@@ -146,7 +146,7 @@ pub fn notification_to_protocol(
 mod tests {
     use super::*;
     use serde_json::json;
-      // HasNotificationMetadata, etc.
+    // HasNotificationMetadata, etc.
 
     struct TestNotification {
         method: String,

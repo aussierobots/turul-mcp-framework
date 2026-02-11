@@ -173,7 +173,7 @@ pub fn root_to_list_request(_root: &dyn McpRoot) -> ListRootsRequest {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-      // HasRootMetadata, HasRootPermissions, etc.
+    // HasRootMetadata, HasRootPermissions, etc.
 
     struct TestRoot {
         uri: String,

@@ -1233,10 +1233,7 @@ pub trait ElicitationProvider: Send + Sync {
     ) -> McpResult<turul_mcp_protocol::elicitation::ElicitResult>;
 
     /// Check if this provider can handle a specific elicitation schema
-    fn can_handle(
-        &self,
-        _request: &turul_mcp_protocol::elicitation::ElicitCreateRequest,
-    ) -> bool {
+    fn can_handle(&self, _request: &turul_mcp_protocol::elicitation::ElicitCreateRequest) -> bool {
         // Default implementation accepts all requests
         true
     }
@@ -1273,10 +1270,7 @@ impl ElicitationProvider for MockElicitationProvider {
         }
     }
 
-    fn can_handle(
-        &self,
-        _request: &turul_mcp_protocol::elicitation::ElicitCreateRequest,
-    ) -> bool {
+    fn can_handle(&self, _request: &turul_mcp_protocol::elicitation::ElicitCreateRequest) -> bool {
         true // Mock provider handles all requests
     }
 }
@@ -1315,8 +1309,7 @@ impl McpHandler for ElicitationHandler {
 
             // Check if provider can handle this request
             if !self.provider.can_handle(&create_request) {
-                let error_response =
-                    turul_mcp_protocol::elicitation::ElicitResult::cancel();
+                let error_response = turul_mcp_protocol::elicitation::ElicitResult::cancel();
                 return serde_json::to_value(error_response).map_err(McpError::from);
             }
 

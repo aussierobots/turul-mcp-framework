@@ -303,9 +303,8 @@ impl SessionContext {
 
         let is_initialized = Arc::new(|| -> BoxFuture<bool> { Box::pin(async { true }) });
 
-        let send_notification = Arc::new(|_event: SessionEvent| -> BoxFuture<()> {
-            Box::pin(async {})
-        });
+        let send_notification =
+            Arc::new(|_event: SessionEvent| -> BoxFuture<()> { Box::pin(async {}) });
 
         SessionContext {
             session_id: Uuid::now_v7().to_string(),
@@ -712,7 +711,10 @@ async fn parse_and_send_notification_with_broadcaster(
                         debug!("📊 Progress notification detected: token={}", token);
 
                         // Get progress value
-                        let progress = params.get("progress").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                        let progress = params
+                            .get("progress")
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0);
 
                         // Create proper ProgressNotification using the struct from notifications.rs
                         let notification = ProgressNotification {

@@ -76,7 +76,7 @@ mod tests {
     use serde_json::json;
     use std::collections::HashMap;
     use turul_mcp_protocol::elicitation::{ElicitationSchema, PrimitiveSchemaDefinition};
-      // HasElicitationMetadata, etc.
+    // HasElicitationMetadata, etc.
 
     struct TestElicitation {
         message: String,

@@ -2,15 +2,15 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{McpResult, McpServer};
     use crate::handlers::McpHandler;
     use crate::uri_template::{UriTemplate, VariableValidator};
+    use crate::{McpResult, McpServer};
     use async_trait::async_trait;
     use serde_json::{Value, json};
     use std::collections::HashMap;
+    use turul_mcp_builders::prelude::*;
     use turul_mcp_protocol::meta;
-    use turul_mcp_protocol::resources::ResourceContent;
-    use turul_mcp_builders::prelude::*;  // HasResourceMetadata, HasResourceDescription, etc.
+    use turul_mcp_protocol::resources::ResourceContent; // HasResourceMetadata, HasResourceDescription, etc.
 
     /// Test resource that supports URI templates
     #[derive(Clone)]
@@ -75,7 +75,11 @@ mod tests {
 
     #[async_trait]
     impl crate::McpResource for UserProfileResource {
-        async fn read(&self, params: Option<Value>, _session: Option<&crate::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+        async fn read(
+            &self,
+            params: Option<Value>,
+            _session: Option<&crate::SessionContext>,
+        ) -> McpResult<Vec<ResourceContent>> {
             // Extract template variables from params
             let params = params.unwrap_or(json!({}));
 

@@ -2,11 +2,11 @@
 //!
 //! This module defines the high-level trait for implementing MCP resources.
 
+use crate::SessionContext;
 use async_trait::async_trait;
 use serde_json::Value;
 use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{McpResult, resources::ResourceContent};
-use crate::SessionContext;
 
 /// High-level trait for implementing MCP resources
 ///
@@ -20,7 +20,11 @@ pub trait McpResource: ResourceDefinition + Send + Sync {
     /// The params parameter can contain read-specific parameters like file paths,
     /// query filters, or other resource-specific options. The session parameter
     /// provides access to session-specific data and state for personalized content.
-    async fn read(&self, params: Option<Value>, session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>>;
+    async fn read(
+        &self,
+        params: Option<Value>,
+        session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>>;
 
     /// Optional: Subscribe to resource changes
     ///
@@ -54,7 +58,7 @@ pub fn resource_to_descriptor(
 mod tests {
     use super::*;
     use turul_mcp_protocol::meta;
-      // HasResourceMetadata, HasResourceDescription, etc.
+    // HasResourceMetadata, HasResourceDescription, etc.
 
     struct TestResource {
         uri: String,
@@ -111,7 +115,11 @@ mod tests {
 
     #[async_trait]
     impl McpResource for TestResource {
-        async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+        async fn read(
+            &self,
+            _params: Option<Value>,
+            _session: Option<&SessionContext>,
+        ) -> McpResult<Vec<ResourceContent>> {
             Ok(vec![ResourceContent::text(&self.uri, &self.content)])
         }
     }

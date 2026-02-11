@@ -108,7 +108,7 @@ pub fn logger_to_notification(
 mod tests {
     use super::*;
     use serde_json::json;
-      // HasLoggingMetadata, HasLogLevel, etc.
+    // HasLoggingMetadata, HasLogLevel, etc.
 
     struct TestLogger {
         logger_name: String,

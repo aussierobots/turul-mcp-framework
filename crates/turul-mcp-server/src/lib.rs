@@ -116,6 +116,7 @@
 //! ```
 
 pub mod builder;
+pub mod cancellation;
 pub mod completion;
 pub mod elicitation;
 pub mod handlers;
@@ -128,9 +129,15 @@ pub mod roots;
 pub mod sampling;
 pub mod server;
 pub mod session;
+pub mod task_executor;
+pub mod task_handlers;
+pub mod task_runtime;
+pub mod tokio_executor;
 pub mod tool;
 // Re-export session storage from separate crate (breaks circular dependency)
 pub use turul_mcp_session_storage as session_storage;
+// Re-export task storage from separate crate
+pub use turul_mcp_task_storage as task_storage;
 pub mod dispatch;
 pub mod prelude;
 pub mod security;
@@ -151,6 +158,8 @@ mod security_integration_tests;
 // Re-export main types
 /// Builder for creating MCP servers with fluent API
 pub use builder::McpServerBuilder;
+/// Cancellation handle for cooperative task cancellation
+pub use cancellation::CancellationHandle;
 /// Completion provider for text generation requests
 pub use completion::McpCompletion;
 /// Request dispatching and middleware support for MCP operations
@@ -182,10 +191,20 @@ pub use server::{
 };
 /// Session management and context for stateful operations
 pub use session::{SessionContext, SessionEvent, SessionManager};
-/// SessionView trait for middleware - re-exported from turul-mcp-session-storage
-pub use turul_mcp_session_storage::SessionView;
+/// Task executor abstraction for pluggable execution backends
+pub use task_executor::{TaskExecutor, TaskHandle};
+/// Task handlers for tasks/get, tasks/list, tasks/cancel, tasks/result
+pub use task_handlers::{
+    TasksCancelHandler, TasksGetHandler, TasksListHandler, TasksResultHandler,
+};
+/// Task runtime for managing long-running operations
+pub use task_runtime::TaskRuntime;
+/// Default Tokio-based task executor
+pub use tokio_executor::TokioTaskExecutor;
 /// Tool trait for executable MCP functions
 pub use tool::McpTool;
+/// SessionView trait for middleware - re-exported from turul-mcp-session-storage
+pub use turul_mcp_session_storage::SessionView;
 
 // Re-export foundational types
 /// JSON-RPC 2.0 request dispatcher and handler trait for protocol operations
@@ -226,8 +245,8 @@ impl McpTool for DynamicTool {
         args: serde_json::Value,
         _session: Option<SessionContext>,
     ) -> McpResult<turul_mcp_protocol::tools::CallToolResult> {
-        use turul_mcp_protocol::tools::CallToolResult;
         use turul_mcp_builders::prelude::HasOutputSchema;
+        use turul_mcp_protocol::tools::CallToolResult;
 
         match self.execute(args).await {
             Ok(result) => {
