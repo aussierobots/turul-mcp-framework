@@ -370,7 +370,8 @@ async fn test_unicode_and_special_characters() {
         .unwrap();
 
     // Create text with various Unicode characters and special cases
-    let complex_text = format!("{}{}{}{}{}{}{}",
+    let complex_text = format!(
+        "{}{}{}{}{}{}{}",
         "Basic ASCII: Hello World! ",
         "Accented: café, naïve, résumé ",
         "Symbols: ★☆♠♣♥♦◆◇ ",

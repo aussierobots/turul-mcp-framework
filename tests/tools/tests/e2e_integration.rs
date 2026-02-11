@@ -256,12 +256,14 @@ async fn test_string_processor_tool() {
     let parsed_result =
         TestFixtures::extract_tool_result_object(&result).expect("No tool result found");
 
-    assert!(parsed_result
-        .get("result")
-        .unwrap()
-        .as_str()
-        .unwrap()
-        .contains("4 characters"));
+    assert!(
+        parsed_result
+            .get("result")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains("4 characters")
+    );
 
     info!("✅ String processor tool validation complete");
 }
@@ -525,8 +527,10 @@ async fn test_progress_tracker_with_notifications() {
     let progress_events = sse_handle.await.expect("SSE task failed");
 
     // STRICT ASSERTION: Progress notifications MUST be received for protocol compliance
-    assert!(!progress_events.is_empty(),
-           "❌ CRITICAL: No progress notifications received via SSE. This is a protocol compliance failure for tools with progressToken support. Expected at least 1 notification for 3-step progress tracker.");
+    assert!(
+        !progress_events.is_empty(),
+        "❌ CRITICAL: No progress notifications received via SSE. This is a protocol compliance failure for tools with progressToken support. Expected at least 1 notification for 3-step progress tracker."
+    );
 
     info!(
         "✅ SSE client-side verification complete: {} progress notifications received",
@@ -1435,5 +1439,7 @@ async fn test_session_storage_integration() {
         "Client 2 should be unaffected by client 1 reset"
     );
 
-    info!("✅ SessionStorage integration validation complete - proper session isolation and state persistence verified");
+    info!(
+        "✅ SessionStorage integration validation complete - proper session isolation and state persistence verified"
+    );
 }

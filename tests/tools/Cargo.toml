@@ -2,6 +2,7 @@
 name = "mcp-tools-tests"
 version.workspace = true
 edition.workspace = true
+autotests = false
 authors = ["Nick <nick@aussierobots.com.au>"]
 description = "MCP Tools Protocol Integration Tests"
 license = "MIT OR Apache-2.0"
@@ -58,13 +59,5 @@ name = "tools-test-server-e2e"
 path = "bin/main.rs"
 
 [[test]]
-name = "e2e_integration"
-path = "tests/e2e_integration.rs"
-
-[[test]]
-name = "large_message_handling"
-path = "tests/large_message_handling.rs"
-
-[[test]]
-name = "mcp_error_code_coverage"
-path = "tests/mcp_error_code_coverage.rs"
+name = "all"
+path = "tests/all.rs"

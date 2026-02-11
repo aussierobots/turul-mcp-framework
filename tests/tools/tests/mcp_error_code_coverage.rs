@@ -4,7 +4,7 @@
 //! Validates error handling, JSON-RPC error structure, and client recovery
 
 use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use serial_test::serial;
 use tracing::{debug, info};
 
