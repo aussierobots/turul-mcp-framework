@@ -1083,7 +1083,10 @@ async fn test_sessionless_ping_request_allowed() {
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["jsonrpc"], "2.0");
     assert_eq!(body["id"], 1);
-    assert!(body["result"].is_object(), "Ping result should be an empty object");
+    assert!(
+        body["result"].is_object(),
+        "Ping result should be an empty object"
+    );
     assert!(body["error"].is_null(), "Ping should not return an error");
 }
 
@@ -1117,7 +1120,10 @@ async fn test_sessionless_ping_notification_returns_202() {
     );
 
     let body = response.text().await.unwrap();
-    assert!(body.is_empty(), "Notification response body should be empty");
+    assert!(
+        body.is_empty(),
+        "Notification response body should be empty"
+    );
 }
 
 /// T3: Pre-init non-ping request rejected
@@ -1242,12 +1248,19 @@ async fn test_legacy_handler_sessionless_ping_works() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), 200, "Legacy handler sessionless ping should succeed");
+    assert_eq!(
+        response.status(),
+        200,
+        "Legacy handler sessionless ping should succeed"
+    );
 
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["jsonrpc"], "2.0");
     assert_eq!(body["id"], 1);
-    assert!(body["result"].is_object(), "Legacy ping should return empty result object");
+    assert!(
+        body["result"].is_object(),
+        "Legacy ping should return empty result object"
+    );
 }
 
 /// T8: Legacy handler — sessionless non-ping request handled at app level
@@ -1496,7 +1509,10 @@ async fn test_rate_limiting_enforced_for_sessionless_ping() {
     assert_eq!(response1.status(), 200, "First ping should succeed");
 
     let body1: Value = response1.json().await.unwrap();
-    assert!(body1["result"].is_object(), "First ping should return result");
+    assert!(
+        body1["result"].is_object(),
+        "First ping should return result"
+    );
 
     // Second ping should be rate-limited
     let response2 = client
@@ -1513,7 +1529,11 @@ async fn test_rate_limiting_enforced_for_sessionless_ping() {
         .await
         .unwrap();
 
-    assert_eq!(response2.status(), 200, "Rate-limited response is JSON-RPC error in 200");
+    assert_eq!(
+        response2.status(),
+        200,
+        "Rate-limited response is JSON-RPC error in 200"
+    );
 
     let body2: Value = response2.json().await.unwrap();
     assert!(

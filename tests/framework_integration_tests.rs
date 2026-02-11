@@ -136,6 +136,7 @@ mod integration_tests {
             params: CallToolParams {
                 name: "calculator".to_string(),
                 arguments: Some(args_map),
+                task: None,
                 meta: None,
             },
         };

@@ -56,33 +56,55 @@ mod tests {
         let schema = schema.unwrap();
 
         // Verify it has properties (not generic object!)
-        assert!(schema.properties.is_some(),
-            "Schema must have properties (not just generic object)");
+        assert!(
+            schema.properties.is_some(),
+            "Schema must have properties (not just generic object)"
+        );
 
         let properties = schema.properties.as_ref().unwrap();
 
         // Should have wrapped field (default "result")
-        assert!(!properties.is_empty(), "Schema should have at least one property");
+        assert!(
+            !properties.is_empty(),
+            "Schema should have at least one property"
+        );
 
         // Get the wrapped output schema
         let output_schema = properties.values().next().unwrap();
 
         // CRITICAL: Verify the output schema has detailed properties
         match output_schema {
-            turul_mcp_protocol::schema::JsonSchema::Object { properties: Some(props), .. } => {
+            turul_mcp_protocol::schema::JsonSchema::Object {
+                properties: Some(props),
+                ..
+            } => {
                 // Verify TestOutput fields are present
-                assert!(props.contains_key("value"),
+                assert!(
+                    props.contains_key("value"),
                     "Schema should include 'value' field from TestOutput. Got: {:?}",
-                    props.keys().collect::<Vec<_>>());
-                assert!(props.contains_key("message"),
+                    props.keys().collect::<Vec<_>>()
+                );
+                assert!(
+                    props.contains_key("message"),
                     "Schema should include 'message' field from TestOutput. Got: {:?}",
-                    props.keys().collect::<Vec<_>>());
+                    props.keys().collect::<Vec<_>>()
+                );
 
                 // Verify field types are detailed
-                assert!(matches!(&props["value"], turul_mcp_protocol::schema::JsonSchema::Number { .. }),
-                    "'value' should be Number type, not generic object");
-                assert!(matches!(&props["message"], turul_mcp_protocol::schema::JsonSchema::String { .. }),
-                    "'message' should be String type, not generic object");
+                assert!(
+                    matches!(
+                        &props["value"],
+                        turul_mcp_protocol::schema::JsonSchema::Number { .. }
+                    ),
+                    "'value' should be Number type, not generic object"
+                );
+                assert!(
+                    matches!(
+                        &props["message"],
+                        turul_mcp_protocol::schema::JsonSchema::String { .. }
+                    ),
+                    "'message' should be String type, not generic object"
+                );
 
                 println!("✓ Schema has detailed field definitions!");
             }

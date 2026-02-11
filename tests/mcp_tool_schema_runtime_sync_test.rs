@@ -12,8 +12,8 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use turul_mcp_derive::{McpTool, mcp_tool};
 use turul_mcp_builders::prelude::{HasOutputSchema, ToolDefinition};
+use turul_mcp_derive::{McpTool, mcp_tool};
 use turul_mcp_server::{McpResult, McpTool, SessionContext};
 
 /// Test struct that simulates the CountAnnouncements scenario
@@ -310,20 +310,22 @@ async fn test_tools_list_metadata_consistency() {
 
     // Verify metadata output schemas match what we expect
     if let Some(count_schema) = &count_metadata.output_schema
-        && let Some(properties) = &count_schema.properties {
-            assert!(
-                properties.contains_key("countResult"),
-                "tools/list metadata should show 'countResult' field"
-            );
-        }
+        && let Some(properties) = &count_schema.properties
+    {
+        assert!(
+            properties.contains_key("countResult"),
+            "tools/list metadata should show 'countResult' field"
+        );
+    }
 
     if let Some(calc_schema) = &calc_metadata.output_schema
-        && let Some(properties) = &calc_schema.properties {
-            assert!(
-                properties.contains_key("calculationResult"),
-                "tools/list metadata should show 'calculationResult' field"
-            );
-        }
+        && let Some(properties) = &calc_schema.properties
+    {
+        assert!(
+            properties.contains_key("calculationResult"),
+            "tools/list metadata should show 'calculationResult' field"
+        );
+    }
 
     // Now verify actual tool calls match the metadata
     let count_args = json!({"text": "announcement test"});
@@ -334,20 +336,22 @@ async fn test_tools_list_metadata_consistency() {
 
     // Structured content must match the schema from tools/list
     if let Some(structured) = count_result.structured_content
-        && let Some(structured_obj) = structured.as_object() {
-            assert!(
-                structured_obj.contains_key("countResult"),
-                "tools/call output must match tools/list schema field names"
-            );
-        }
+        && let Some(structured_obj) = structured.as_object()
+    {
+        assert!(
+            structured_obj.contains_key("countResult"),
+            "tools/call output must match tools/list schema field names"
+        );
+    }
 
     if let Some(structured) = calc_result.structured_content
-        && let Some(structured_obj) = structured.as_object() {
-            assert!(
-                structured_obj.contains_key("calculationResult"),
-                "tools/call output must match tools/list schema field names"
-            );
-        }
+        && let Some(structured_obj) = structured.as_object()
+    {
+        assert!(
+            structured_obj.contains_key("calculationResult"),
+            "tools/call output must match tools/list schema field names"
+        );
+    }
 }
 
 /// This test validates the exact scenario you showed with CountAnnouncements
@@ -375,33 +379,34 @@ async fn test_specific_count_announcements_scenario() {
     // The outputSchema from tools/list should match structuredContent from tools/call
     if let Some(output_schema) = &tool_definition.output_schema
         && let Some(schema_properties) = &output_schema.properties
-            && let Some(structured_content) = &call_result.structured_content {
-                // Every field in the schema should exist in the structured content
-                if let Some(content_obj) = structured_content.as_object() {
-                    for schema_field in schema_properties.keys() {
-                        assert!(
-                            content_obj.contains_key(schema_field),
-                            "Schema field '{}' not found in structured content. Schema has: {:?}, Content has: {:?}",
-                            schema_field,
-                            schema_properties.keys().collect::<Vec<_>>(),
-                            content_obj.keys().collect::<Vec<_>>()
-                        );
-                    }
-                }
-
-                // Every field in structured content should be defined in schema
-                if let Some(content_obj) = structured_content.as_object() {
-                    for content_field in content_obj.keys() {
-                        assert!(
-                            schema_properties.contains_key(content_field),
-                            "Structured content field '{}' not found in schema. Content has: {:?}, Schema has: {:?}",
-                            content_field,
-                            content_obj.keys().collect::<Vec<_>>(),
-                            schema_properties.keys().collect::<Vec<_>>()
-                        );
-                    }
-                }
+        && let Some(structured_content) = &call_result.structured_content
+    {
+        // Every field in the schema should exist in the structured content
+        if let Some(content_obj) = structured_content.as_object() {
+            for schema_field in schema_properties.keys() {
+                assert!(
+                    content_obj.contains_key(schema_field),
+                    "Schema field '{}' not found in structured content. Schema has: {:?}, Content has: {:?}",
+                    schema_field,
+                    schema_properties.keys().collect::<Vec<_>>(),
+                    content_obj.keys().collect::<Vec<_>>()
+                );
             }
+        }
+
+        // Every field in structured content should be defined in schema
+        if let Some(content_obj) = structured_content.as_object() {
+            for content_field in content_obj.keys() {
+                assert!(
+                    schema_properties.contains_key(content_field),
+                    "Structured content field '{}' not found in schema. Content has: {:?}, Schema has: {:?}",
+                    content_field,
+                    content_obj.keys().collect::<Vec<_>>(),
+                    schema_properties.keys().collect::<Vec<_>>()
+                );
+            }
+        }
+    }
 }
 
 /// Zero-configuration tool without #[tool(...)] attribute - for testing schema/runtime consistency

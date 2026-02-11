@@ -4,8 +4,8 @@
 //! generate detailed output schemas with all fields properly exposed in tools/list
 
 use serde::{Deserialize, Serialize};
-use turul_mcp_server::prelude::*;
 use turul_mcp_derive::McpTool;
+use turul_mcp_server::prelude::*;
 
 /// Accuracy record for testing nested structures
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
@@ -142,58 +142,119 @@ async fn test_detailed_schema_generation() {
     let properties = schema.properties.as_ref().unwrap();
 
     // Should have the "detailedOutput" field (default output field name)
-    assert!(properties.contains_key("detailedOutput"),
+    assert!(
+        properties.contains_key("detailedOutput"),
         "Schema should have 'detailedOutput' field. Found keys: {:?}",
-        properties.keys().collect::<Vec<_>>());
+        properties.keys().collect::<Vec<_>>()
+    );
 
     // Get the inner schema
     let inner_schema = &properties["detailedOutput"];
 
     // Verify it's an object with nested properties (NOT a generic object!)
-    if let turul_mcp_protocol::schema::JsonSchema::Object { properties: inner_props, .. } = inner_schema {
-        assert!(inner_props.is_some(),
+    if let turul_mcp_protocol::schema::JsonSchema::Object {
+        properties: inner_props,
+        ..
+    } = inner_schema
+    {
+        assert!(
+            inner_props.is_some(),
             "Inner schema should have properties (not generic object). \
-             If this fails, schemars conversion is not working!");
+             If this fails, schemars conversion is not working!"
+        );
 
         let inner_props = inner_props.as_ref().unwrap();
 
         // ✅ Check for expected top-level fields
-        assert!(inner_props.contains_key("device_id"), "Should have device_id field");
-        assert!(inner_props.contains_key("start_time"), "Should have start_time field");
-        assert!(inner_props.contains_key("end_time"), "Should have end_time field");
-        assert!(inner_props.contains_key("record_count"), "Should have record_count field");
-        assert!(inner_props.contains_key("statistics"), "Should have statistics field");
-        assert!(inner_props.contains_key("accuracy_records"), "Should have accuracy_records field");
+        assert!(
+            inner_props.contains_key("device_id"),
+            "Should have device_id field"
+        );
+        assert!(
+            inner_props.contains_key("start_time"),
+            "Should have start_time field"
+        );
+        assert!(
+            inner_props.contains_key("end_time"),
+            "Should have end_time field"
+        );
+        assert!(
+            inner_props.contains_key("record_count"),
+            "Should have record_count field"
+        );
+        assert!(
+            inner_props.contains_key("statistics"),
+            "Should have statistics field"
+        );
+        assert!(
+            inner_props.contains_key("accuracy_records"),
+            "Should have accuracy_records field"
+        );
 
         println!("✓ Top-level fields present in schema");
 
         // ✅ Verify statistics is a nested object with detailed fields
-        if let turul_mcp_protocol::schema::JsonSchema::Object { properties: stats_props, .. } = &inner_props["statistics"] {
-            assert!(stats_props.is_some(),
-                "Statistics should have detailed properties, not be generic object!");
+        if let turul_mcp_protocol::schema::JsonSchema::Object {
+            properties: stats_props,
+            ..
+        } = &inner_props["statistics"]
+        {
+            assert!(
+                stats_props.is_some(),
+                "Statistics should have detailed properties, not be generic object!"
+            );
             let stats = stats_props.as_ref().unwrap();
-            assert!(stats.contains_key("h_acc_min"), "Statistics should have h_acc_min");
-            assert!(stats.contains_key("h_acc_max"), "Statistics should have h_acc_max");
-            assert!(stats.contains_key("h_acc_avg"), "Statistics should have h_acc_avg");
-            assert!(stats.contains_key("v_acc_min"), "Statistics should have v_acc_min");
-            assert!(stats.contains_key("v_acc_max"), "Statistics should have v_acc_max");
-            assert!(stats.contains_key("v_acc_avg"), "Statistics should have v_acc_avg");
+            assert!(
+                stats.contains_key("h_acc_min"),
+                "Statistics should have h_acc_min"
+            );
+            assert!(
+                stats.contains_key("h_acc_max"),
+                "Statistics should have h_acc_max"
+            );
+            assert!(
+                stats.contains_key("h_acc_avg"),
+                "Statistics should have h_acc_avg"
+            );
+            assert!(
+                stats.contains_key("v_acc_min"),
+                "Statistics should have v_acc_min"
+            );
+            assert!(
+                stats.contains_key("v_acc_max"),
+                "Statistics should have v_acc_max"
+            );
+            assert!(
+                stats.contains_key("v_acc_avg"),
+                "Statistics should have v_acc_avg"
+            );
             println!("✓ Nested statistics object has all 6 detail fields");
         } else {
             panic!("Statistics field should be detailed Object with properties, not generic");
         }
 
         // ✅ Verify accuracy_records is an array of detailed objects
-        if let turul_mcp_protocol::schema::JsonSchema::Array { items, .. } = &inner_props["accuracy_records"] {
+        if let turul_mcp_protocol::schema::JsonSchema::Array { items, .. } =
+            &inner_props["accuracy_records"]
+        {
             assert!(items.is_some(), "Array should have items schema");
 
             // Verify the array items are objects with detailed fields
             if let Some(boxed_items) = items {
-                if let turul_mcp_protocol::schema::JsonSchema::Object { properties: record_props, .. } = boxed_items.as_ref() {
-                    assert!(record_props.is_some(),
-                        "Array items should have detailed properties, not be generic objects!");
+                if let turul_mcp_protocol::schema::JsonSchema::Object {
+                    properties: record_props,
+                    ..
+                } = boxed_items.as_ref()
+                {
+                    assert!(
+                        record_props.is_some(),
+                        "Array items should have detailed properties, not be generic objects!"
+                    );
                     let record = record_props.as_ref().unwrap();
-                    assert!(record.contains_key("timestamp"), "Record should have timestamp");
+                    assert!(
+                        record.contains_key("timestamp"),
+                        "Record should have timestamp"
+                    );
                     assert!(record.contains_key("h_acc"), "Record should have h_acc");
                     assert!(record.contains_key("v_acc"), "Record should have v_acc");
                     assert!(record.contains_key("lon"), "Record should have lon");
@@ -212,7 +273,10 @@ async fn test_detailed_schema_generation() {
         println!("   - Nested object (statistics): 6 fields");
         println!("   - Array items (accuracy_records): 5 fields each");
     } else {
-        panic!("detailedOutput field should be detailed Object with properties, got: {:?}", inner_schema);
+        panic!(
+            "detailedOutput field should be detailed Object with properties, got: {:?}",
+            inner_schema
+        );
     }
 }
 
@@ -230,8 +294,10 @@ async fn test_tool_execution_returns_detailed_data() {
     assert!(result.is_ok(), "Tool execution should succeed");
 
     let call_result = result.unwrap();
-    assert!(call_result.is_error.is_none() || !call_result.is_error.unwrap(),
-        "Result should not be an error");
+    assert!(
+        call_result.is_error.is_none() || !call_result.is_error.unwrap(),
+        "Result should not be an error"
+    );
 
     // Verify we got structured content
     assert!(!call_result.content.is_empty(), "Should have content");
@@ -239,6 +305,8 @@ async fn test_tool_execution_returns_detailed_data() {
     // The content should include text and potentially structured data
     // Check if we got the device_id back
     let content_str = format!("{:?}", call_result.content);
-    assert!(content_str.contains("test-123") || content_str.contains("device_id"),
-        "Content should reference the device_id");
+    assert!(
+        content_str.contains("test-123") || content_str.contains("device_id"),
+        "Content should reference the device_id"
+    );
 }

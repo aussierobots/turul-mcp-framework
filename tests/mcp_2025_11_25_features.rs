@@ -3,7 +3,7 @@
 //! Tests cover: Icons, URL Elicitation, Sampling Tools, Tasks, camelCase compliance,
 //! and McpVersion feature detection.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use turul_mcp_protocol::*;
 
@@ -20,8 +20,7 @@ mod icons {
     fn test_icon_data_uri_creation() {
         let icon = Icon::data_uri("image/png", "iVBORw0KGgo=");
         assert_eq!(
-            icon.src,
-            "data:image/png;base64,iVBORw0KGgo=",
+            icon.src, "data:image/png;base64,iVBORw0KGgo=",
             "data URI should have correct format"
         );
     }
@@ -36,8 +35,7 @@ mod icons {
     fn test_icon_display_via_src() {
         let icon = Icon::new("https://cdn.example.com/logo.svg");
         assert_eq!(
-            icon.src,
-            "https://cdn.example.com/logo.svg",
+            icon.src, "https://cdn.example.com/logo.svg",
             "src should contain the raw URL"
         );
     }
@@ -157,7 +155,10 @@ mod icons {
             .with_icons(vec![Icon::new("https://example.com/prompt.png")]);
 
         let json_val = serde_json::to_value(&prompt).unwrap();
-        assert_eq!(json_val["icons"][0]["src"], "https://example.com/prompt.png");
+        assert_eq!(
+            json_val["icons"][0]["src"],
+            "https://example.com/prompt.png"
+        );
     }
 
     #[test]
@@ -175,7 +176,10 @@ mod icons {
             .with_icons(vec![Icon::new("https://example.com/server.png")]);
 
         let json_val = serde_json::to_value(&impl_info).unwrap();
-        assert_eq!(json_val["icons"][0]["src"], "https://example.com/server.png");
+        assert_eq!(
+            json_val["icons"][0]["src"],
+            "https://example.com/server.png"
+        );
     }
 
     #[test]
@@ -215,7 +219,11 @@ mod url_elicitation {
     fn test_string_format_uri_variant_exists() {
         let format = elicitation::StringFormat::Uri;
         let json_val = serde_json::to_value(&format).unwrap();
-        assert_eq!(json_val, json!("uri"), "StringFormat::Uri should serialize as \"uri\"");
+        assert_eq!(
+            json_val,
+            json!("uri"),
+            "StringFormat::Uri should serialize as \"uri\""
+        );
     }
 
     #[test]
@@ -276,7 +284,10 @@ mod url_elicitation {
         assert_eq!(request.params.message, "Enter your website URL");
 
         let props = &request.params.requested_schema.properties;
-        assert!(props.contains_key("website"), "Should have 'website' property");
+        assert!(
+            props.contains_key("website"),
+            "Should have 'website' property"
+        );
 
         let required = request.params.requested_schema.required.as_ref().unwrap();
         assert!(required.contains(&"website".to_string()));
@@ -377,10 +388,10 @@ mod sampling_tools {
 
     #[test]
     fn test_create_message_params_with_tools_roundtrip() {
-        let tool1 = tools::Tool::new("tool-a", tools::ToolSchema::object())
-            .with_description("First tool");
-        let tool2 = tools::Tool::new("tool-b", tools::ToolSchema::object())
-            .with_description("Second tool");
+        let tool1 =
+            tools::Tool::new("tool-a", tools::ToolSchema::object()).with_description("First tool");
+        let tool2 =
+            tools::Tool::new("tool-b", tools::ToolSchema::object()).with_description("Second tool");
 
         let msg = SamplingMessage::user_text("Use tools");
         let params = CreateMessageParams::new(vec![msg], 300).with_tools(vec![tool1, tool2]);
@@ -398,8 +409,7 @@ mod sampling_tools {
     fn test_create_message_request_with_tools() {
         let tool = tools::Tool::new("echo", tools::ToolSchema::object());
         let msg = SamplingMessage::user_text("Echo this");
-        let request =
-            CreateMessageRequest::new(vec![msg], 100).with_tools(vec![tool]);
+        let request = CreateMessageRequest::new(vec![msg], 100).with_tools(vec![tool]);
 
         assert_eq!(request.method, "sampling/createMessage");
         assert!(request.params.tools.is_some());
@@ -473,7 +483,11 @@ mod task_tests {
         ] {
             let json = serde_json::to_string(&status).unwrap();
             let parsed: TaskStatus = serde_json::from_str(&json).unwrap();
-            assert_eq!(status, parsed, "TaskStatus round-trip failed for {:?}", status);
+            assert_eq!(
+                status, parsed,
+                "TaskStatus round-trip failed for {:?}",
+                status
+            );
         }
     }
 
@@ -500,10 +514,7 @@ mod task_tests {
         assert_eq!(task.task_id, "task-002");
         assert_eq!(task.status, TaskStatus::Completed);
         assert_eq!(task.status_message, Some("Calculation done".to_string()));
-        assert_eq!(
-            task.meta.as_ref().unwrap()["tool"],
-            json!("calculator")
-        );
+        assert_eq!(task.meta.as_ref().unwrap()["tool"], json!("calculator"));
     }
 
     #[test]
@@ -528,7 +539,10 @@ mod task_tests {
         assert!(json_val.get("status").is_some());
         assert!(json_val.get("createdAt").is_some());
         assert!(json_val.get("lastUpdatedAt").is_some());
-        assert!(json_val.get("statusMessage").is_none(), "statusMessage should be omitted");
+        assert!(
+            json_val.get("statusMessage").is_none(),
+            "statusMessage should be omitted"
+        );
         assert!(json_val.get("_meta").is_none(), "_meta should be omitted");
     }
 
@@ -541,8 +555,9 @@ mod task_tests {
         assert_eq!(get_req.method, "tasks/get");
         assert_eq!(get_req.params.task_id, "task-lifecycle");
 
-        let in_progress_task = Task::new("task-lifecycle", TaskStatus::Working, TIMESTAMP, TIMESTAMP)
-            .with_status_message("Processing data");
+        let in_progress_task =
+            Task::new("task-lifecycle", TaskStatus::Working, TIMESTAMP, TIMESTAMP)
+                .with_status_message("Processing data");
         let get_result = GetTaskResult::new(in_progress_task);
         assert_eq!(get_result.task.task_id, "task-lifecycle");
         assert_eq!(get_result.task.status, TaskStatus::Working);
@@ -551,8 +566,13 @@ mod task_tests {
         let cancel_req = CancelTaskRequest::new("task-lifecycle");
         assert_eq!(cancel_req.method, "tasks/cancel");
 
-        let cancelled_task = Task::new("task-lifecycle", TaskStatus::Cancelled, TIMESTAMP, TIMESTAMP)
-            .with_status_message("User cancelled");
+        let cancelled_task = Task::new(
+            "task-lifecycle",
+            TaskStatus::Cancelled,
+            TIMESTAMP,
+            TIMESTAMP,
+        )
+        .with_status_message("User cancelled");
         let cancel_result = CancelTaskResult::new(cancelled_task);
         assert_eq!(cancel_result.task.status, TaskStatus::Cancelled);
     }
@@ -598,9 +618,12 @@ mod task_tests {
 
     #[test]
     fn test_list_tasks_result_without_cursor() {
-        let result = ListTasksResult::new(vec![
-            Task::new("t1", TaskStatus::Completed, TIMESTAMP, TIMESTAMP),
-        ]);
+        let result = ListTasksResult::new(vec![Task::new(
+            "t1",
+            TaskStatus::Completed,
+            TIMESTAMP,
+            TIMESTAMP,
+        )]);
 
         let json_val = serde_json::to_value(&result).unwrap();
         assert!(
@@ -678,7 +701,12 @@ mod task_tests {
 
     #[test]
     fn test_cancel_task_result_serialization() {
-        let task = Task::new("cancelled-task", TaskStatus::Cancelled, TIMESTAMP, TIMESTAMP);
+        let task = Task::new(
+            "cancelled-task",
+            TaskStatus::Cancelled,
+            TIMESTAMP,
+            TIMESTAMP,
+        );
         let result = CancelTaskResult::new(task);
 
         let json_val = serde_json::to_value(&result).unwrap();
@@ -715,8 +743,7 @@ mod task_tests {
         let mut meta = HashMap::new();
         meta.insert("timing".to_string(), json!(42));
 
-        let task = Task::new("t1", TaskStatus::Completed, TIMESTAMP, TIMESTAMP)
-            .with_meta(meta);
+        let task = Task::new("t1", TaskStatus::Completed, TIMESTAMP, TIMESTAMP).with_meta(meta);
 
         let json_val = serde_json::to_value(&task).unwrap();
         assert_eq!(json_val["_meta"]["timing"], 42);
@@ -738,8 +765,7 @@ mod task_tests {
 
     #[test]
     fn test_progress_notification_with_total() {
-        let notification = ProgressNotification::new("token-2".to_string(), 75.0)
-            .with_total(100.0);
+        let notification = ProgressNotification::new("token-2".to_string(), 75.0).with_total(100.0);
         let json_val = serde_json::to_value(&notification).unwrap();
 
         assert_eq!(json_val["params"]["progress"], 75.0);
@@ -748,8 +774,7 @@ mod task_tests {
 
     #[test]
     fn test_progress_notification_roundtrip() {
-        let original = ProgressNotification::new("token-3".to_string(), 50.0)
-            .with_total(200.0);
+        let original = ProgressNotification::new("token-3".to_string(), 50.0).with_total(200.0);
         let json = serde_json::to_string(&original).unwrap();
         let parsed: ProgressNotification = serde_json::from_str(&json).unwrap();
 
@@ -816,8 +841,14 @@ mod camel_case_verification {
         assert_no_snake_case_keys(&json_val, "ListTasksResult");
 
         // Explicitly check the most important camelCase field
-        assert!(json_val.get("nextCursor").is_some(), "Should use nextCursor (camelCase)");
-        assert!(json_val.get("next_cursor").is_none(), "Should NOT have next_cursor");
+        assert!(
+            json_val.get("nextCursor").is_some(),
+            "Should use nextCursor (camelCase)"
+        );
+        assert!(
+            json_val.get("next_cursor").is_none(),
+            "Should NOT have next_cursor"
+        );
     }
 
     #[test]
@@ -957,7 +988,10 @@ mod version_detection {
     #[test]
     fn test_v2025_11_25_inherits_previous_features() {
         let v = McpVersion::V2025_11_25;
-        assert!(v.supports_streamable_http(), "Should inherit streamable HTTP");
+        assert!(
+            v.supports_streamable_http(),
+            "Should inherit streamable HTTP"
+        );
         assert!(v.supports_meta_fields(), "Should inherit _meta fields");
         assert!(
             v.supports_progress_and_cursor(),
@@ -1082,13 +1116,15 @@ mod cross_feature {
             .with_icons(vec![Icon::data_uri("image/png", "XXXX")]);
 
         let msg = sampling::SamplingMessage::user_text("Search for Rust");
-        let params = sampling::CreateMessageParams::new(vec![msg], 500)
-            .with_tools(vec![tool]);
+        let params = sampling::CreateMessageParams::new(vec![msg], 500).with_tools(vec![tool]);
 
         let json_val = serde_json::to_value(&params).unwrap();
 
         // Tool in sampling should preserve icons
-        assert_eq!(json_val["tools"][0]["icons"][0]["src"], "data:image/png;base64,XXXX");
+        assert_eq!(
+            json_val["tools"][0]["icons"][0]["src"],
+            "data:image/png;base64,XXXX"
+        );
         assert_eq!(json_val["tools"][0]["name"], "search");
     }
 

@@ -1,7 +1,7 @@
 // Integration test to verify README examples work
-use turul_mcp_derive::{mcp_tool, mcp_resource};
-use turul_mcp_server::prelude::*;
+use turul_mcp_derive::{mcp_resource, mcp_tool};
 use turul_mcp_protocol::resources::ResourceContent;
+use turul_mcp_server::prelude::*;
 
 // Function tool from README
 #[mcp_tool(name = "add", description = "Add two numbers")]
@@ -27,7 +27,7 @@ async fn get_config() -> McpResult<Vec<ResourceContent>> {
     Ok(vec![ResourceContent::blob(
         "file:///config.json",
         serde_json::to_string_pretty(&config).unwrap(),
-        "application/json".to_string()
+        "application/json".to_string(),
     )])
 }
 
@@ -42,5 +42,8 @@ fn test_readme_examples_compile() {
         .bind_address("127.0.0.1:9999".parse().unwrap())
         .build();
 
-    assert!(server.is_ok(), "Server should build successfully with README examples");
+    assert!(
+        server.is_ok(),
+        "Server should build successfully with README examples"
+    );
 }
