@@ -46,8 +46,9 @@ of `turul-mcp-protocol-2025-06-18` but includes all 2025-11-25 additions.
 2. **Same trait hierarchy** - Both crates implement the same protocol traits (HasMethod,
    HasParams, HasData, HasMeta, RpcResult, Params) ensuring framework compatibility.
 
-3. **IconUrl in tools.rs** - The `IconUrl` type lives in `tools.rs` (not a separate module)
-   and is referenced by other modules via `crate::tools::IconUrl`.
+3. **Icon in tools.rs** - The `Icon` type (with `src`, `mime_type`, `sizes`, `theme` fields)
+   lives in `tools.rs` (not a separate module) and is referenced by other modules via
+   `crate::tools::Icon`.
 
 4. **Tasks as a new module** - `tasks.rs` follows the same Request/Params/Result pattern
    as tools, resources, and prompts.
@@ -101,10 +102,10 @@ crates/turul-mcp-protocol-2025-11-25/
   README.md
   src/
     lib.rs          # Re-exports, McpError, McpResult
-    tools.rs        # Tool, IconUrl, ToolSchema, CallTool*, ListTools*
+    tools.rs        # Tool, Icon, ToolSchema, CallTool*, ListTools*
     resources.rs    # Resource, ResourceTemplate (with icon field)
     prompts.rs      # Prompt (with icon field)
-    tasks.rs        # TaskStatus, TaskInfo, TaskProgress, CRUD types
+    tasks.rs        # TaskStatus, Task, TaskMetadata, query/result types
     sampling.rs     # CreateMessageParams (with tools field)
     elicitation.rs  # StringFormat::Uri, ElicitationBuilder::url_input()
     initialize.rs   # Implementation (with icon field)
@@ -117,9 +118,9 @@ crates/turul-mcp-protocol-2025-11-25/
 
 | Module | New Types | Purpose |
 |--------|-----------|---------|
-| tools.rs | `IconUrl` | Icon URLs (data: URI or https://) |
-| tasks.rs | `TaskStatus`, `TaskInfo`, `TaskProgress` | Task lifecycle |
-| tasks.rs | `CreateTask*`, `GetTask*`, `CancelTask*`, `ListTasks*` | Task CRUD |
+| tools.rs | `Icon` | Icon with src, mime_type, sizes, theme |
+| tasks.rs | `TaskStatus`, `Task`, `TaskMetadata` | Task lifecycle |
+| tasks.rs | `GetTask*`, `CancelTask*`, `ListTasks*`, `GetTaskPayload*`, `CreateTaskResult` | Task queries and result reporting |
 | elicitation.rs | `StringFormat::Uri` | URL format constraint |
 | sampling.rs | `tools` field on `CreateMessageParams` | Sampling tools |
 
