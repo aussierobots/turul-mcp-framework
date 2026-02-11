@@ -405,6 +405,15 @@ impl McpMiddleware for AuthMiddleware {
 - **`turul-mcp-task-storage`** - Task storage for long-running operations (InMemory, with pluggable backends)
 - **`turul-mcp-aws-lambda`** - AWS Lambda integration for serverless deployment
 
+### Tasks Architecture ADRs
+
+Tasks are an experimental MCP 2025-11-25 capability. The framework provides full implementation support (protocol types, storage, runtime, handlers, and tests). See the architecture decision records for design rationale:
+
+- [ADR-015: Protocol Crate Strategy](docs/adr/015-mcp-2025-11-25-protocol-crate.md) — separate crate for 2025-11-25 spec types including Tasks
+- [ADR-016: Task Storage Architecture](docs/adr/016-task-storage-architecture.md) — `TaskStorage` trait, 4 backends, state machine, parity test suite
+- [ADR-017: Task Runtime-Executor Boundary](docs/adr/017-task-runtime-executor-boundary.md) — three-layer split: storage / executor / runtime
+- [ADR-018: Task Pagination Cursor Contract](docs/adr/018-task-pagination-cursor-contract.md) — deterministic cursor-based pagination across backends
+
 ### Fine-Grained Trait Architecture
 **Modern composable design pattern for all MCP areas:**
 

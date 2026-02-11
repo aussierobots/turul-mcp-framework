@@ -10,7 +10,7 @@ The MCP specification released version 2025-11-25 with several new features:
 - **Icons** on tools, resources, prompts, resource templates, and implementations
 - **URL Elicitation** via `StringFormat::Uri` and builder conveniences
 - **Sampling Tools** allowing tools in `CreateMessageParams`
-- **Tasks** (experimental) for long-running operation tracking
+- **Tasks** (experimental) for long-running operation tracking. Tasks are an experimental MCP 2025-11-25 capability; this framework provides full implementation support (protocol types, storage, runtime, handlers, and tests).
 
 We needed to decide how to support the new spec version alongside the existing
 2025-06-18 implementation. Three options were considered:
@@ -136,6 +136,9 @@ Client sends initialize request with protocolVersion
 
 ## See Also
 
-- [ADR 009: Protocol-Based Handler Routing](./009-protocol-based-handler-routing.md)
-- [ADR 014: Schemars Schema Generation](./014-schemars-schema-generation.md)
+- [ADR-009: Protocol-Based Handler Routing](./009-protocol-based-handler-routing.md)
+- [ADR-014: Schemars Schema Generation](./014-schemars-schema-generation.md)
+- [ADR-016: Task Storage Architecture](./016-task-storage-architecture.md) -- storage trait, 4 backends, parity test suite
+- [ADR-017: Task Runtime-Executor Boundary](./017-task-runtime-executor-boundary.md) -- three-layer split: storage / executor / runtime
+- [ADR-018: Task Pagination Cursor Contract](./018-task-pagination-cursor-contract.md) -- deterministic cursor-based pagination
 - [WORKING_MEMORY.md](../../WORKING_MEMORY.md) - Current migration status

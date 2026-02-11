@@ -39,6 +39,17 @@ Each ADR follows the standard format:
 | [017](./017-task-runtime-executor-boundary.md) | Task Runtime-Executor Boundary | Accepted | 2026-02-11 | Three-layer split: storage / executor / runtime |
 | [018](./018-task-pagination-cursor-contract.md) | Task Pagination Cursor Contract | Accepted | 2026-02-11 | Deterministic cursor-based pagination across backends |
 
+## Tasks Architecture ADRs
+
+ADRs 015–018 form a cohesive cluster documenting the Tasks subsystem (an experimental MCP 2025-11-25 capability with full framework implementation support):
+
+| ADR | Focus |
+|-----|-------|
+| [015](./015-mcp-2025-11-25-protocol-crate.md) | Protocol crate strategy — separate crate for 2025-11-25 spec types including Tasks |
+| [016](./016-task-storage-architecture.md) | Storage — `TaskStorage` trait, 4 backends, state machine, parity test suite |
+| [017](./017-task-runtime-executor-boundary.md) | Runtime — three-layer split: storage / executor / runtime coordination |
+| [018](./018-task-pagination-cursor-contract.md) | Pagination — deterministic cursor contract across backends, DynamoDB exception |
+
 ## Adding New ADRs
 
 When adding a new ADR:

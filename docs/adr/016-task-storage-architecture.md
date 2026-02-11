@@ -6,10 +6,12 @@
 
 ## Context
 
-MCP 2025-11-25 introduces Tasks as an experimental feature for tracking long-running
-operations. A tool call that cannot complete synchronously returns a `Task` object
-instead of a direct result; the client then polls for status updates and eventually
-retrieves the outcome via `tasks/result`.
+MCP 2025-11-25 introduces Tasks as an experimental capability for tracking long-running
+operations. Tasks are an experimental MCP 2025-11-25 capability; this framework provides
+full implementation support (protocol types, storage, runtime, handlers, and tests).
+A tool call that cannot complete synchronously returns a `Task` object instead of a
+direct result; the client then polls for status updates and eventually retrieves the
+outcome via `tasks/result`.
 
 The framework already has a session storage layer (ADR-001) for session state and SSE
 events, but tasks have fundamentally different requirements:
@@ -146,7 +148,7 @@ keeping the trait usable from any async runtime.
   developers already know.
 - **Centralized state machine** -- transition logic lives in one place. Backends
   cannot diverge on which transitions are legal.
-- **Parity test suite** -- 10 shared test functions verify that all backends
+- **Parity test suite** -- 11 shared test functions verify that all backends
   produce identical behavior for the same operations, catching subtle differences
   in SQL semantics or eventual consistency.
 - **Zero-config default** -- `InMemoryTaskStorage` is enabled by the `default`
@@ -203,7 +205,7 @@ crates/turul-mcp-task-storage/
     sqlite.rs           # SqliteTaskStorage (sqlite feature)
     postgres.rs         # PostgresTaskStorage (postgres feature)
     dynamodb.rs         # DynamoDbTaskStorage (dynamodb feature)
-    parity_tests.rs     # 10 shared test functions for cross-backend verification
+    parity_tests.rs     # 11 shared test functions for cross-backend verification
 ```
 
 ### Feature Flags
@@ -264,7 +266,7 @@ is configured via the builder.
 
 ## See Also
 
-- [ADR-001: Session Storage Architecture](./001-session-storage-architecture.md)
-- [ADR-015: MCP 2025-11-25 Protocol Crate Strategy](./015-mcp-2025-11-25-protocol-crate.md)
-- ADR-017 (planned): Task Executor Architecture
-- ADR-018 (planned): Task Cancellation and Progress Reporting
+- [ADR-001: Session Storage Architecture](./001-session-storage-architecture.md) -- pluggable session storage (same backend pattern)
+- [ADR-015: MCP 2025-11-25 Protocol Crate Strategy](./015-mcp-2025-11-25-protocol-crate.md) -- protocol types that define `TaskStatus`, `Task`
+- [ADR-017: Task Runtime-Executor Boundary](./017-task-runtime-executor-boundary.md) -- three-layer split: storage / executor / runtime
+- [ADR-018: Task Pagination Cursor Contract](./018-task-pagination-cursor-contract.md) -- deterministic cursor-based pagination across backends

@@ -198,5 +198,5 @@ API.
 ## See Also
 
 - [ADR-015: MCP 2025-11-25 Protocol Crate Strategy](./015-mcp-2025-11-25-protocol-crate.md) -- protocol types that define `TaskStatus`, `Task`
-- ADR-016: Task Storage Architecture -- storage trait design, backend parity testing, state machine enforcement
-- ADR-018: Task Handler Protocol Compliance -- `tasks/get`, `tasks/cancel`, `tasks/result` handler behavior
+- [ADR-016: Task Storage Architecture](./016-task-storage-architecture.md) -- storage trait design, backend parity testing, state machine enforcement
+- [ADR-018: Task Pagination Cursor Contract](./018-task-pagination-cursor-contract.md) -- deterministic cursor-based pagination across backends
