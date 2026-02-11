@@ -2,6 +2,7 @@
 name = "mcp-elicitation-tests"
 version.workspace = true
 edition.workspace = true
+autotests = false
 
 [dependencies]
 # Core framework
