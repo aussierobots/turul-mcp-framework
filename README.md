@@ -2,16 +2,16 @@
 
 A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-11-25 specification**.
 
-⚠️ **Beta Status** - Active development with ongoing feature enhancements. Phase 6 session-aware resources completed. Suitable for development and testing.
+⚠️ **Beta Status** - Active development with ongoing feature enhancements. Full MCP 2025-11-25 compliance including task storage and runtime. Suitable for development and testing.
 
 ## 🧪 **Active Development** - Comprehensive Test Coverage
-**300+ passing tests across workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
+**1300+ passing tests across workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
 
 ## ✨ Key Highlights
 
-- **🏗️ 10 Framework Crates**: Complete MCP ecosystem with core framework, client library, and serverless support
-- **📚 45+ Comprehensive Examples**: Real-world business applications and framework demonstration examples (all validated through comprehensive testing campaign)
-- **🧪 300+ Development Tests**: Comprehensive test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
+- **🏗️ 12 Framework Crates**: Complete MCP ecosystem with core framework, client library, task storage, and serverless support
+- **📚 57 Comprehensive Examples**: Real-world business applications and framework demonstration examples (all validated through comprehensive testing campaign)
+- **🧪 1300+ Development Tests**: Comprehensive test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
 - **🌐 Transport Flexibility**: HTTP/1.1 and SSE streaming via SessionMcpHandler (stdio planned)
 - **☁️ Serverless Support**: AWS Lambda integration with streaming responses and SQS event processing
@@ -238,7 +238,7 @@ curl -X POST http://127.0.0.1:$PORT/mcp \
   "id": 1,
   "result": {
     "protocolVersion": "2025-11-25",
-    "serverInfo": {"name": "server-name", "version": "0.2.0"},
+    "serverInfo": {"name": "server-name", "version": "0.3.0"},
     "capabilities": {"tools": {"listChanged": false}}
   }
 }
@@ -391,16 +391,18 @@ impl McpMiddleware for AuthMiddleware {
 - `examples/middleware-auth-lambda` - Full authorizer extraction pattern
 - Test events: `test-events/apigw-v1-with-authorizer.json`, `apigw-v2-with-authorizer.json`
 
-### Core Framework (10 Crates)
-- **`turul-mcp-server`** - High-level server builder with session management
+### Core Framework (12 Crates)
+- **`turul-mcp-server`** - High-level server builder with session management and task runtime
 - **`turul-mcp-client`** - Comprehensive client library with HTTP transport support
 - **`turul-http-mcp-server`** - HTTP/SSE transport with CORS and streaming
 - **`turul-mcp-protocol`** - Current MCP specification (alias to 2025-11-25)
-- **`turul-mcp-protocol-2025-11-25`** - Complete MCP specification implementation
+- **`turul-mcp-protocol-2025-11-25`** - Complete MCP 2025-11-25 specification implementation
+- **`turul-mcp-protocol-2025-06-18`** - Legacy MCP specification (backward compatibility)
 - **`turul-mcp-derive`** - Procedural macros for all MCP areas
 - **`turul-mcp-builders`** - Runtime builder patterns for dynamic MCP components
 - **`turul-mcp-json-rpc-server`** - Transport-agnostic JSON-RPC 2.0 foundation
 - **`turul-mcp-session-storage`** - Session storage backends (SQLite, PostgreSQL, DynamoDB)
+- **`turul-mcp-task-storage`** - Task storage for long-running operations (InMemory, with pluggable backends)
 - **`turul-mcp-aws-lambda`** - AWS Lambda integration for serverless deployment
 
 ### Fine-Grained Trait Architecture
@@ -542,10 +544,10 @@ Development servers for actual business problems:
 
 ### 🔧 Framework Demonstrations
 Educational examples showcasing framework patterns:
-- **Basic Patterns**: minimal-server, manual-tools-server, spec-compliant-server
-- **Advanced Features**: stateful-server, pagination-server, version-negotiation-server
-- **Macro System**: tool-macro-example, resource-macro-example, enhanced-tool-macro-test
-- **Serverless**: lambda-turul-mcp-server (AWS Lambda with SQS integration)
+- **Basic Patterns**: minimal-server, manual-tools-server, zero-config-getting-started
+- **Advanced Features**: stateful-server, pagination-server, tasks-e2e-inmemory-server
+- **Macro System**: derive-macro-server, function-macro-server, function-resource-server
+- **Serverless**: lambda-mcp-server (AWS Lambda with SQS integration)
 - **Testing**: performance-testing (comprehensive benchmarking suite)
 
 ## ☁️ Serverless Support
@@ -554,7 +556,7 @@ Educational examples showcasing framework patterns:
 Full serverless implementation with advanced AWS integration:
 
 ```bash
-cd examples/lambda-turul-mcp-server
+cd examples/lambda-mcp-server
 
 # Local development
 cargo lambda watch
