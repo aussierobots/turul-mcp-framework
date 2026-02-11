@@ -1,6 +1,6 @@
 # MCP Framework Examples
 
-This document provides a comprehensive overview of all **45+ validated examples** in the MCP Framework, organized by learning progression from basic concepts to advanced implementations.
+This document provides a comprehensive overview of all **57 validated examples** in the MCP Framework, organized by learning progression from basic concepts to advanced implementations.
 
 **✅ All examples validated through comprehensive testing campaign completed 2025-09-28**
 
@@ -69,7 +69,7 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
 | **dynamic-resource-server** | 8048 | ✅ VALIDATED | Runtime resources | Dynamic resource creation |
 | **session-aware-resource-server** | 8008 | ✅ VALIDATED | Session-aware resources | Phase 6 session context integration |
 
-## 🟢 **FEATURE-SPECIFIC SERVERS** (7 examples) - Specialized MCP Features
+## 🟢 **FEATURE-SPECIFIC SERVERS** (8 examples) - Specialized MCP Features
 
 | Example | Port | Status | Description | Key Features |
 |---------|------|--------|-------------|--------------|
@@ -80,6 +80,7 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
 | **elicitation-server** | 8047 | ✅ VALIDATED | Information gathering | User input elicitation patterns |
 | **pagination-server** | 8044 | ✅ VALIDATED | Result pagination | Large dataset pagination support |
 | **notification-server** | 8005 | ✅ VALIDATED | SSE notifications | Real-time notification patterns |
+| **roots-server** | 8050 | ✅ VALIDATED | Root directories | MCP roots/list endpoint demonstration |
 
 ## 🔵 **ADVANCED/COMPOSITE SERVERS** (5 examples) - Complex Functionality
 
@@ -121,6 +122,54 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
 | **lambda-mcp-server-streaming** | Lambda | ✅ VALIDATED | Streaming Lambda server | Lambda with streaming support |
 | **lambda-mcp-client** | Lambda Client | ✅ VALIDATED | Lambda MCP client | AWS Lambda client integration |
 
+## 🟣 **TOOL CREATION & OUTPUT SCHEMAS** (6 examples) - Tool Patterns
+
+| Example | Port | Status | Description | Key Features |
+|---------|------|--------|-------------|--------------|
+| **derive-macro-server** | 8765 | ✅ VALIDATED | Derive macro tools | `#[derive(McpTool)]` with code generation tools |
+| **function-macro-server** | 8003 | ✅ VALIDATED | Function macro tools | `#[mcp_tool]` attribute macro patterns |
+| **manual-tools-server** | 8007 | ✅ VALIDATED | Manual tool impl | Session state, progress notifications, complex schemas |
+| **tools-test-server** | random | ✅ VALIDATED | Comprehensive tool testing | All MCP tool patterns and edge cases |
+| **tool-output-introspection** | 8641 | ✅ VALIDATED | Output schema via introspection | Automatic field-level output schema generation |
+| **tool-output-schemas** | 8641 | ✅ VALIDATED | Output schema via schemars | `schemars` attribute for JSON Schema output |
+
+## 🛡️ **MIDDLEWARE** (4 examples) - Request Processing Pipelines
+
+| Example | Port | Status | Description | Middleware Pattern |
+|---------|------|--------|-------------|-------------------|
+| **middleware-auth-server** | 8080 | ✅ VALIDATED | API key authentication | `before_dispatch` header extraction |
+| **middleware-logging-server** | 8670 | ✅ VALIDATED | Request timing/tracing | Request duration logging in `after_dispatch` |
+| **middleware-rate-limit-server** | 8671 | ✅ VALIDATED | Rate limiting | Per-session request counting |
+| **middleware-auth-lambda** | Lambda | ✅ VALIDATED | Lambda auth middleware | API Gateway authorizer context integration |
+
+## 🔄 **TASKS (MCP 2025-11-25)** (3 examples) - Long-Running Operations
+
+| Example | Type | Status | Description | Task Features |
+|---------|------|--------|-------------|---------------|
+| **tasks-e2e-inmemory-server** | Server | ✅ VALIDATED | Task-enabled MCP server | `slow_add` tool with configurable delay, InMemory storage |
+| **tasks-e2e-inmemory-client** | Client | ✅ VALIDATED | Task lifecycle client | Full task lifecycle: create, poll, cancel, result |
+| **client-task-lifecycle** | Client | ✅ VALIDATED | Task API demonstration | `call_tool_with_task`, `get_task`, `cancel_task` |
+
+**Task E2E Testing**:
+```bash
+# Start the task-enabled server
+cargo run --example tasks-e2e-inmemory-server
+
+# Run the client test suite (in another terminal)
+cargo run --example tasks-e2e-inmemory-client -- --url http://127.0.0.1:8080/mcp
+```
+
+## 📖 **TYPE SHOWCASES** (4 examples) - Print-Only Demonstrations
+
+These examples demonstrate MCP 2025-11-25 type construction without starting a server:
+
+| Example | Type | Status | Description | Types Demonstrated |
+|---------|------|--------|-------------|-------------------|
+| **builders-showcase** | Demo | ✅ VALIDATED | All 9 MCP builders | Tool, Resource, Prompt, Completion builders |
+| **icon-showcase** | Demo | ✅ VALIDATED | Icon support | `Icon` struct on tools, resources, prompts |
+| **sampling-with-tools-showcase** | Demo | ✅ VALIDATED | Sampling with tools | `tools` field on `CreateMessageParams` |
+| **task-types-showcase** | Demo | ✅ VALIDATED | Task type system | `Task`, `TaskStatus`, `TaskMetadata`, CRUD types |
+
 ## 📚 **PERFORMANCE TESTING** (1 example) - Benchmarks
 
 | Example | Type | Status | Description | Purpose |
@@ -129,17 +178,21 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
 
 ## 🚨 **COMPREHENSIVE VALIDATION RESULTS**
 
-### ✅ **ALL EXAMPLES VALIDATED (45+ total)**
+### ✅ **ALL EXAMPLES VALIDATED (57 total)**
 **Comprehensive Testing Campaign Completed 2025-09-28**
 
 - **Phase 1: Getting Started** - 5/5 examples (all tool creation levels)
 - **Phase 2: Resource Servers** - 6/6 examples (session-aware resources validated)
-- **Phase 3: Feature-Specific** - 7/7 examples (specialized MCP features)
+- **Phase 3: Feature-Specific** - 8/8 examples (specialized MCP features + roots)
 - **Phase 4: Advanced/Composite** - 5/5 examples (complex functionality)
 - **Phase 5: Session Management** - 7/7 examples (all storage backends)
 - **Phase 6: Client Examples** - 5/5 examples (client-server communication)
 - **Phase 7: AWS Lambda** - 3/3 examples (serverless integration)
-- **Phase 8: Performance Testing** - 1/1 example (benchmarks)
+- **Phase 8: Tool Creation & Schemas** - 6/6 examples (macro patterns + output schemas)
+- **Phase 9: Middleware** - 4/4 examples (auth, logging, rate-limiting)
+- **Phase 10: Tasks** - 3/3 examples (MCP 2025-11-25 task lifecycle)
+- **Phase 11: Type Showcases** - 4/4 examples (print-only type demonstrations)
+- **Phase 12: Performance Testing** - 1/1 example (benchmarks)
 
 ### 🎯 **KEY ACHIEVEMENTS**
 - **Phase 6 Session-Aware Resources**: All resources now support SessionContext
@@ -148,9 +201,11 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
 - **Production-Grade Validation**: 4-step testing (Compile → Start → Initialize → Execute)
 
 ### 📊 **Final Statistics**
-- **Total Examples Validated**: 45+ examples (100% success rate)
-- **Session-Aware Resources**: 6 examples demonstrating Phase 6 functionality
+- **Total Examples Validated**: 57 examples (100% success rate)
+- **Session-Aware Resources**: 6 examples demonstrating session context integration
 - **Client-Server Pairs**: 5 examples validating communication patterns
+- **Task Support**: 3 examples demonstrating MCP 2025-11-25 task lifecycle
+- **Middleware**: 4 examples (HTTP auth, logging, rate-limiting, Lambda auth)
 - **Storage Backends**: All 4 backends (InMemory, SQLite, PostgreSQL, DynamoDB) working
 - **AWS Lambda Integration**: Complete serverless deployment support
 
@@ -179,6 +234,6 @@ cargo run --features dynamodb --example simple-dynamodb-session
 
 ---
 
-**🎯 Success Criteria ACHIEVED**: All 45+ examples validated with accurate ports, verified functionality, and comprehensive testing results.
+**🎯 Success Criteria ACHIEVED**: All 57 examples validated with accurate ports, verified functionality, and comprehensive testing results.
 
 **📋 Framework Status**: Comprehensive validation complete - Phase 6 session-aware resources implementation successful with full MCP 2025-11-25 compliance.
