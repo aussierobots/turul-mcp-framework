@@ -174,23 +174,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if multi_messages.len() > 1
         && let turul_mcp_protocol::prompts::ContentBlock::ResourceLink { resource, .. } =
             &multi_messages[1].content
-        {
-            info!("🔗 ResourceLink ContentBlock example:");
-            info!("   URI: {}", resource.uri);
-            info!("   Name: {}", resource.name);
-            info!("   MIME Type: {:?}", resource.mime_type);
-        }
+    {
+        info!("🔗 ResourceLink ContentBlock example:");
+        info!("   URI: {}", resource.uri);
+        info!("   Name: {}", resource.name);
+        info!("   MIME Type: {:?}", resource.mime_type);
+    }
 
     // Show Image ContentBlock (if chart is included)
     if multi_messages.len() > 2
         && let turul_mcp_protocol::prompts::ContentBlock::Image {
             data, mime_type, ..
         } = &multi_messages[2].content
-        {
-            info!("🖼️ Image ContentBlock example:");
-            info!("   MIME Type: {}", mime_type);
-            info!("   Base64 length: {} characters", data.len());
-        }
+    {
+        info!("🖼️ Image ContentBlock example:");
+        info!("   MIME Type: {}", mime_type);
+        info!("   Base64 length: {} characters", data.len());
+    }
 
     // Show embedded Resource ContentBlock
     if let Some(resource_msg) = multi_messages.iter().find(|msg| {
@@ -198,27 +198,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             msg.content,
             turul_mcp_protocol::prompts::ContentBlock::Resource { .. }
         )
-    })
-        && let turul_mcp_protocol::prompts::ContentBlock::Resource {
-            resource,
-            annotations,
-            meta,
-        } = &resource_msg.content
-        {
-            info!("📦 Embedded Resource ContentBlock example:");
-            match resource {
-                turul_mcp_protocol::prompts::ResourceContents::Text(text_contents) => {
-                    info!("   Resource URI: {}", text_contents.uri);
-                    info!("   Text length: {} characters", text_contents.text.len());
-                }
-                turul_mcp_protocol::prompts::ResourceContents::Blob(blob_contents) => {
-                    info!("   Resource URI: {}", blob_contents.uri);
-                    info!("   Blob length: {} characters", blob_contents.blob.len());
-                }
+    }) && let turul_mcp_protocol::prompts::ContentBlock::Resource {
+        resource,
+        annotations,
+        meta,
+    } = &resource_msg.content
+    {
+        info!("📦 Embedded Resource ContentBlock example:");
+        match resource {
+            turul_mcp_protocol::prompts::ResourceContents::Text(text_contents) => {
+                info!("   Resource URI: {}", text_contents.uri);
+                info!("   Text length: {} characters", text_contents.text.len());
             }
-            info!("   Has annotations: {}", annotations.is_some());
-            info!("   Has meta: {}", meta.is_some());
+            turul_mcp_protocol::prompts::ResourceContents::Blob(blob_contents) => {
+                info!("   Resource URI: {}", blob_contents.uri);
+                info!("   Blob length: {} characters", blob_contents.blob.len());
+            }
         }
+        info!("   Has annotations: {}", annotations.is_some());
+        info!("   Has meta: {}", meta.is_some());
+    }
 
     // Build MCP server with all prompts
     let _server = McpServer::builder()
@@ -233,7 +232,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     info!("🎉 MCP Prompts Example completed successfully!");
-    info!("✨ All prompt patterns working: Derive Macros ✅ | Message Rendering ✅ | ContentBlock Types ✅ | Variable Substitution ✅");
+    info!(
+        "✨ All prompt patterns working: Derive Macros ✅ | Message Rendering ✅ | ContentBlock Types ✅ | Variable Substitution ✅"
+    );
 
     Ok(())
 }

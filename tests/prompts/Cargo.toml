@@ -3,6 +3,7 @@ name = "mcp-prompts-tests"
 version.workspace = true
 edition.workspace = true
 publish = false
+autotests = false
 
 [dependencies]
 turul-mcp-server = { path = "../../crates/turul-mcp-server" }
@@ -40,3 +41,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "prompts-test-server-e2e"
 path = "bin/main.rs"
+
+[[test]]
+name = "all"
+path = "tests/all.rs"

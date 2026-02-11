@@ -11,10 +11,7 @@ async fn test_prompt_list_changed_notification_structure() {
     let notification = PromptListChangedNotification::new();
 
     // Verify method name uses underscore convention (MCP 2025-11-25 compliance)
-    assert_eq!(
-        notification.method,
-        "notifications/prompts/list_changed"
-    );
+    assert_eq!(notification.method, "notifications/prompts/list_changed");
     assert!(notification.method.contains("list_changed"));
 
     // Verify notification structure
@@ -49,10 +46,7 @@ async fn test_prompt_list_changed_json_rpc_format() {
 
     // Verify it has method field with correct underscore convention
     assert!(json_value.get("method").is_some());
-    assert_eq!(
-        json_value["method"],
-        "notifications/prompts/list_changed"
-    );
+    assert_eq!(json_value["method"], "notifications/prompts/list_changed");
 
     // Verify params field behavior (can be null/missing for empty notifications)
     if json_value.get("params").is_some() {
@@ -65,10 +59,7 @@ async fn test_prompt_notification_direct_fields() {
     let notification = PromptListChangedNotification::new();
 
     // Test direct method field access
-    assert_eq!(
-        notification.method,
-        "notifications/prompts/list_changed"
-    );
+    assert_eq!(notification.method, "notifications/prompts/list_changed");
 
     // Test params field behavior
     assert!(notification.params.is_none());
@@ -131,10 +122,7 @@ async fn test_multiple_prompt_notifications_batch() {
 
     // Verify all have consistent method names
     for notification in &notifications {
-        assert_eq!(
-            notification.method,
-            "notifications/prompts/list_changed"
-        );
+        assert_eq!(notification.method, "notifications/prompts/list_changed");
     }
 
     // Test batch serialization
@@ -147,10 +135,7 @@ async fn test_multiple_prompt_notifications_batch() {
     assert_eq!(deserialized.len(), 3);
 
     for notification in deserialized {
-        assert_eq!(
-            notification.method,
-            "notifications/prompts/list_changed"
-        );
+        assert_eq!(notification.method, "notifications/prompts/list_changed");
     }
 }
 
@@ -160,10 +145,7 @@ async fn test_prompt_notification_method_string_compliance() {
     let notification = PromptListChangedNotification::new();
 
     // Method name MUST use underscore convention as per MCP 2025-11-25 spec
-    assert_eq!(
-        notification.method,
-        "notifications/prompts/list_changed"
-    );
+    assert_eq!(notification.method, "notifications/prompts/list_changed");
 
     // Test that we're using the correct underscore convention
     let json_str = serde_json::to_string_pretty(&notification).unwrap();

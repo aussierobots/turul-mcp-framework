@@ -54,7 +54,6 @@ async fn test_sse_prompts_connection_establishment() {
 #[tokio::test]
 #[serial]
 async fn test_sse_prompts_list_changed_notification() {
-    
     let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
@@ -102,7 +101,6 @@ async fn test_sse_prompts_list_changed_notification() {
 #[tokio::test]
 #[serial]
 async fn test_sse_prompt_operations_notifications() {
-    
     let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
@@ -117,9 +115,7 @@ async fn test_sse_prompt_operations_notifications() {
 
     // Perform prompt operations that might generate notifications
     let _list_result = client.list_prompts().await;
-    let _get_result = client
-        .get_prompt("simple_prompt", None)
-        .await;
+    let _get_result = client.get_prompt("simple_prompt", None).await;
 
     // Check for operation-related SSE events
     let events = client
@@ -148,7 +144,6 @@ async fn test_sse_prompt_operations_notifications() {
 #[tokio::test]
 #[serial]
 async fn test_sse_prompts_session_isolation() {
-    
     let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
@@ -209,7 +204,6 @@ async fn test_sse_prompts_session_isolation() {
 #[tokio::test]
 #[serial]
 async fn test_sse_prompts_notification_format_compliance() {
-    
     let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
@@ -247,8 +241,8 @@ async fn test_sse_prompts_notification_format_compliance() {
 
             // MCP notification fields
             if event.contains("method") {
-                let is_prompt_notification = event.contains("prompts/")
-                    || event.contains("notification");
+                let is_prompt_notification =
+                    event.contains("prompts/") || event.contains("notification");
 
                 if is_prompt_notification {
                     info!("✅ Detected MCP prompt notification");
@@ -262,7 +256,6 @@ async fn test_sse_prompts_notification_format_compliance() {
 #[tokio::test]
 #[serial]
 async fn test_sse_prompts_error_handling_notifications() {
-    
     let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
@@ -276,9 +269,7 @@ async fn test_sse_prompts_error_handling_notifications() {
         .expect("Failed to initialize");
 
     // Trigger operations that might cause notifications
-    let _error_result = client
-        .get_prompt("nonexistent_prompt", None)
-        .await;
+    let _error_result = client.get_prompt("nonexistent_prompt", None).await;
 
     // Check for error-related notifications
     let events = client
@@ -302,7 +293,6 @@ async fn test_sse_prompts_error_handling_notifications() {
 #[tokio::test]
 #[serial]
 async fn test_sse_prompts_with_session_aware_operations() {
-    
     let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
@@ -318,12 +308,7 @@ async fn test_sse_prompts_with_session_aware_operations() {
     // Perform session-aware prompt operations
     let mut args = std::collections::HashMap::new();
     args.insert("user_id".to_string(), json!("test-user-123"));
-    let _result = client
-        .get_prompt(
-            "session_aware_prompt",
-            Some(args),
-        )
-        .await;
+    let _result = client.get_prompt("session_aware_prompt", Some(args)).await;
 
     // Test SSE notifications during session-aware operations
     let events = client
@@ -350,7 +335,6 @@ async fn test_sse_prompts_with_session_aware_operations() {
 #[tokio::test]
 #[serial]
 async fn test_sse_prompts_concurrent_operations() {
-    
     let _ = tracing_subscriber::fmt::try_init();
 
     let server = TestServerManager::start_prompts_server()
