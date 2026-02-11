@@ -10,11 +10,11 @@ use serde_json::Value;
 use tracing::info;
 use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::{
+    McpError,
     prompts::ContentBlock,
     sampling::{
         CreateMessageRequest, CreateMessageResult, ModelPreferences, Role, SamplingMessage,
     },
-    McpError,
 };
 use turul_mcp_server::sampling::McpSampling;
 use turul_mcp_server::{McpResult, McpServer};
@@ -242,11 +242,12 @@ I'd love to help you develop this further! What specific aspect would you like t
 
         // Validate temperature if provided
         if let Some(temp) = request.params.temperature
-            && !(0.0..=2.0).contains(&temp) {
-                return Err(McpError::validation(
-                    "temperature must be between 0.0 and 2.0",
-                ));
-            }
+            && !(0.0..=2.0).contains(&temp)
+        {
+            return Err(McpError::validation(
+                "temperature must be between 0.0 and 2.0",
+            ));
+        }
 
         Ok(())
     }

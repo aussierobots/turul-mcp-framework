@@ -2,6 +2,7 @@
 name = "mcp-sampling-tests"
 version.workspace = true
 edition.workspace = true
+autotests = false
 
 [dependencies]
 # Core framework
@@ -35,9 +36,5 @@ name = "mcp_sampling_tests"
 path = "src/lib.rs"
 
 [[test]]
-name = "sampling_protocol_e2e"
-path = "tests/sampling_protocol_e2e.rs"
-
-[[test]]
-name = "sampling_validation_e2e"
-path = "tests/sampling_validation_e2e.rs"
+name = "all"
+path = "tests/all.rs"

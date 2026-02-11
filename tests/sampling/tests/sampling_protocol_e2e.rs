@@ -6,7 +6,7 @@
 use mcp_sampling_tests::test_utils::{
     create_message_request, extract_sampling_message, sampling_capabilities,
 };
-use mcp_sampling_tests::{debug, info, json, McpTestClient, TestServerManager};
+use mcp_sampling_tests::{McpTestClient, TestServerManager, debug, info, json};
 
 #[tokio::test]
 async fn test_sampling_create_message_endpoint() {
