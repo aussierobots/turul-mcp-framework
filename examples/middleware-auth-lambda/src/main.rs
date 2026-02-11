@@ -69,7 +69,7 @@
 //! ```
 
 use async_trait::async_trait;
-use lambda_http::{run, service_fn, Body, Error, Request, Response};
+use lambda_http::{Body, Error, Request, Response, run, service_fn};
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
@@ -137,13 +137,17 @@ impl McpMiddleware for AuthMiddleware {
                         if let Some(field_name) = key.strip_prefix("x-authorizer-") {
                             if let Some(value_str) = value.as_str() {
                                 debug!("📋 Authorizer context: {} = {}", field_name, value_str);
-                                authorizer_context.insert(field_name.to_string(), value_str.to_string());
+                                authorizer_context
+                                    .insert(field_name.to_string(), value_str.to_string());
                             }
                         }
                     }
 
                     if !authorizer_context.is_empty() {
-                        debug!("✅ Extracted {} authorizer fields", authorizer_context.len());
+                        debug!(
+                            "✅ Extracted {} authorizer fields",
+                            authorizer_context.len()
+                        );
                         injection.set_state("authorizer", json!(authorizer_context));
                     }
 

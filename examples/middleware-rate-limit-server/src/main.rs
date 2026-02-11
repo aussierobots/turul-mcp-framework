@@ -104,7 +104,10 @@ async fn main() -> McpResult<()> {
         .with_env_filter("middleware_rate_limit_server=info,turul_mcp_server=info")
         .init();
 
-    tracing::info!("Starting middleware-rate-limit-server example on port {}", args.port);
+    tracing::info!(
+        "Starting middleware-rate-limit-server example on port {}",
+        args.port
+    );
     tracing::info!("Rate limit: 5 requests per session");
     tracing::info!("After 5 requests, you'll receive error -32003 (RateLimitExceeded)");
 
@@ -116,7 +119,9 @@ async fn main() -> McpResult<()> {
         .name("middleware-rate-limit-server")
         .version("1.0.0")
         .title("Rate Limiting Middleware Example")
-        .instructions("Demonstrates rate limiting. Max 5 requests per session before hitting rate limit.")
+        .instructions(
+            "Demonstrates rate limiting. Max 5 requests per session before hitting rate limit.",
+        )
         // Register rate limiting middleware (5 requests per session)
         .middleware(Arc::new(RateLimitMiddleware::new(5, 60)))
         .bind_address(bind_address)

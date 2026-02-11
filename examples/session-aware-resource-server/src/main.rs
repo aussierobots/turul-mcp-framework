@@ -6,9 +6,9 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use turul_mcp_builders::prelude::*; // HasResourceUri, etc.
 use turul_mcp_derive::McpResource;
 use turul_mcp_protocol::resources::ResourceContent;
-use turul_mcp_builders::prelude::*;  // HasResourceUri, etc.
 use turul_mcp_server::{McpResource, McpResult, McpServer, SessionContext};
 
 /// Session-aware user profile resource that returns different content based on session
@@ -22,11 +22,17 @@ struct SessionAwareProfileResource;
 
 #[async_trait]
 impl McpResource for SessionAwareProfileResource {
-    async fn read(&self, _params: Option<Value>, session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         let content = if let Some(session_ctx) = session {
             // Access session-specific data
             let session_id = &session_ctx.session_id;
-            let user_data = session_ctx.get_typed_state::<UserData>("user_data").await
+            let user_data = session_ctx
+                .get_typed_state::<UserData>("user_data")
+                .await
                 .unwrap_or_else(UserData::default);
 
             let profile = serde_json::json!({
@@ -91,19 +97,30 @@ struct SessionActivityResource;
 
 #[async_trait]
 impl McpResource for SessionActivityResource {
-    async fn read(&self, _params: Option<Value>, session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         let activities = if let Some(session_ctx) = session {
             let session_id = &session_ctx.session_id;
 
             // Get or initialize activity log from session storage
-            let mut activities = session_ctx.get_typed_state::<Vec<String>>("activities").await
-                .unwrap_or_else(|| vec![
-                    format!("Session {} started", session_id),
-                    "User accessed session-aware profile".to_string(),
-                ]);
+            let mut activities = session_ctx
+                .get_typed_state::<Vec<String>>("activities")
+                .await
+                .unwrap_or_else(|| {
+                    vec![
+                        format!("Session {} started", session_id),
+                        "User accessed session-aware profile".to_string(),
+                    ]
+                });
 
             // Add current access to the log
-            activities.push(format!("Activity log accessed at {}", chrono::Utc::now().to_rfc3339()));
+            activities.push(format!(
+                "Activity log accessed at {}",
+                chrono::Utc::now().to_rfc3339()
+            ));
 
             // Update session storage
             let _ = session_ctx.set_typed_state("activities", &activities).await;
@@ -115,10 +132,7 @@ impl McpResource for SessionActivityResource {
 
         let content = activities.join("\n");
 
-        Ok(vec![ResourceContent::text(
-            self.uri().to_string(),
-            content,
-        )])
+        Ok(vec![ResourceContent::text(self.uri().to_string(), content)])
     }
 }
 

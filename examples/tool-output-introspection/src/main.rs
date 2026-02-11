@@ -66,7 +66,7 @@ impl Calculator {
             _ => {
                 return Err(turul_mcp_protocol::McpError::tool_execution(
                     "Invalid operation. Use: add, subtract, multiply, divide",
-                ))
+                ));
             }
         };
 
@@ -75,7 +75,10 @@ impl Calculator {
             b: self.b,
             operation: self.operation.clone(),
             result,
-            message: Some(format!("{} {} {} = {}", self.a, self.operation, self.b, result)),
+            message: Some(format!(
+                "{} {} {} = {}",
+                self.a, self.operation, self.b, result
+            )),
         })
     }
 }
@@ -113,7 +116,7 @@ impl TempConverter {
             _ => {
                 return Err(turul_mcp_protocol::McpError::tool_execution(
                     "Invalid unit. Use 'C' or 'F'",
-                ))
+                ));
             }
         };
 

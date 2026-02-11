@@ -8,11 +8,8 @@
 //! in their params (e.g., CallToolParams, CreateMessageParams).
 
 use turul_mcp_protocol::{
-    Task, TaskMetadata, TaskStatus,
-    GetTaskRequest, GetTaskResult,
-    CancelTaskRequest, CancelTaskResult,
-    ListTasksRequest, ListTasksResult,
-    meta::Cursor,
+    CancelTaskRequest, CancelTaskResult, GetTaskRequest, GetTaskResult, ListTasksRequest,
+    ListTasksResult, Task, TaskMetadata, TaskStatus, meta::Cursor,
 };
 
 fn main() {
@@ -61,7 +58,10 @@ fn main() {
     .with_status_message("All records processed successfully");
 
     println!("4. Task (completed):");
-    println!("{}\n", serde_json::to_string_pretty(&completed_task).unwrap());
+    println!(
+        "{}\n",
+        serde_json::to_string_pretty(&completed_task).unwrap()
+    );
 
     // --- Task: a failed task ---
     let failed_task = Task::new(
@@ -110,7 +110,10 @@ fn main() {
     let cancel_request = CancelTaskRequest::new("task-abc-123");
 
     println!("9. tasks/cancel request:");
-    println!("{}\n", serde_json::to_string_pretty(&cancel_request).unwrap());
+    println!(
+        "{}\n",
+        serde_json::to_string_pretty(&cancel_request).unwrap()
+    );
 
     let cancel_result = CancelTaskResult::new(
         Task::new(
@@ -123,7 +126,10 @@ fn main() {
     );
 
     println!("10. tasks/cancel result:");
-    println!("{}\n", serde_json::to_string_pretty(&cancel_result).unwrap());
+    println!(
+        "{}\n",
+        serde_json::to_string_pretty(&cancel_result).unwrap()
+    );
 
     // --- tasks/list request and result ---
     let list_request = ListTasksRequest::new().with_limit(10);

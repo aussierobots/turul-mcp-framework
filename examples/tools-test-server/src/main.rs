@@ -119,7 +119,7 @@ impl CalculatorTool {
                 return Err(McpError::tool_execution(&format!(
                     "Invalid operation: {}",
                     self.operation
-                )))
+                )));
             }
         };
 
@@ -195,7 +195,7 @@ impl StringProcessorTool {
                 return Err(McpError::tool_execution(&format!(
                     "Invalid operation: {}",
                     self.operation
-                )))
+                )));
             }
         };
 
@@ -302,7 +302,7 @@ impl DataTransformerTool {
                 return Err(McpError::tool_execution(&format!(
                     "Invalid operation: {}",
                     self.operation
-                )))
+                )));
             }
         };
 
@@ -394,7 +394,7 @@ impl SessionCounterTool {
                 return Err(McpError::tool_execution(&format!(
                     "Invalid operation: {}",
                     self.operation
-                )))
+                )));
             }
         };
 
@@ -881,7 +881,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     info!("🚀 Tools Test Server running on port {}", args.port);
-    info!("📋 Available tools: calculator, string_processor, data_transformer, session_counter, progress_tracker, error_generator, parameter_validator, legacy_calculator (deprecated), word_count_analyzer (custom output: analysisResult), custom_calculator (custom output: calculationResult)");
+    info!(
+        "📋 Available tools: calculator, string_processor, data_transformer, session_counter, progress_tracker, error_generator, parameter_validator, legacy_calculator (deprecated), word_count_analyzer (custom output: analysisResult), custom_calculator (custom output: calculationResult)"
+    );
 
     server.run().await?;
     Ok(())

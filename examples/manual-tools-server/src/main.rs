@@ -56,7 +56,9 @@ impl FileSystemTool {
                     .set_typed_state("virtual_files", &files)
                     .await
                     .unwrap();
-                session.notify_progress(format!("create_{}", self.path), 1).await;
+                session
+                    .notify_progress(format!("create_{}", self.path), 1)
+                    .await;
 
                 json!({
                     "operation": "create",
@@ -100,7 +102,9 @@ impl FileSystemTool {
                     .set_typed_state("virtual_files", &files)
                     .await
                     .unwrap();
-                session.notify_progress(format!("update_{}", self.path), 1).await;
+                session
+                    .notify_progress(format!("update_{}", self.path), 1)
+                    .await;
 
                 json!({
                     "operation": "update",
@@ -116,7 +120,9 @@ impl FileSystemTool {
                         .set_typed_state("virtual_files", &files)
                         .await
                         .unwrap();
-                    session.notify_progress(format!("delete_{}", self.path), 1).await;
+                    session
+                        .notify_progress(format!("delete_{}", self.path), 1)
+                        .await;
 
                     json!({
                         "operation": "delete",
@@ -169,15 +175,23 @@ impl FileSystemTool {
     description = "Manage tasks with status tracking and progress notifications"
 )]
 pub struct TaskManagerTool {
-    #[param(description = "Task action to perform (create, list, complete, delete, update_status)")]
+    #[param(
+        description = "Task action to perform (create, list, complete, delete, update_status)"
+    )]
     pub action: String,
     #[param(description = "Task title (required for create)", optional)]
     pub title: Option<String>,
     #[param(description = "Task description", optional)]
     pub description: Option<String>,
-    #[param(description = "Task ID (required for complete/delete/update_status)", optional)]
+    #[param(
+        description = "Task ID (required for complete/delete/update_status)",
+        optional
+    )]
     pub task_id: Option<String>,
-    #[param(description = "Task status: todo, in_progress, completed (for update_status)", optional)]
+    #[param(
+        description = "Task status: todo, in_progress, completed (for update_status)",
+        optional
+    )]
     pub status: Option<String>,
     #[param(description = "Task priority: low, medium, high", optional)]
     pub priority: Option<String>,
@@ -360,7 +374,10 @@ impl TaskManagerTool {
 pub struct WeatherTool {
     #[param(description = "Location to get weather for")]
     pub location: String,
-    #[param(description = "Temperature units: celsius or fahrenheit (default: celsius)", optional)]
+    #[param(
+        description = "Temperature units: celsius or fahrenheit (default: celsius)",
+        optional
+    )]
     pub units: Option<String>,
 }
 

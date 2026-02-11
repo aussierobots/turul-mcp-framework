@@ -11,9 +11,9 @@ use chrono::Utc;
 use clap::Parser;
 use serde_json::Value;
 use tracing::info;
-use turul_mcp_protocol::prompts::{PromptAnnotations, PromptArgument, PromptMessage};
+use turul_mcp_builders::prelude::*; // HasPromptMetadata, HasPromptDescription, etc.
 use turul_mcp_protocol::McpError;
-use turul_mcp_builders::prelude::*;  // HasPromptMetadata, HasPromptDescription, etc.
+use turul_mcp_protocol::prompts::{PromptAnnotations, PromptArgument, PromptMessage};
 use turul_mcp_server::prompt::McpPrompt;
 use turul_mcp_server::{McpResult, McpServer};
 
@@ -64,9 +64,9 @@ impl HasIcons for SimplePrompt {}
 #[async_trait]
 impl McpPrompt for SimplePrompt {
     async fn render(&self, _args: Option<HashMap<String, Value>>) -> McpResult<Vec<PromptMessage>> {
-        Ok(vec![
-            PromptMessage::user_text("This is a simple prompt with no arguments. Please respond as a helpful AI assistant for testing purposes."),
-        ])
+        Ok(vec![PromptMessage::user_text(
+            "This is a simple prompt with no arguments. Please respond as a helpful AI assistant for testing purposes.",
+        )])
     }
 }
 
@@ -139,12 +139,10 @@ impl McpPrompt for StringArgsPrompt {
             .and_then(|v| v.as_str())
             .unwrap_or("(not provided)");
 
-        Ok(vec![
-            PromptMessage::user_text(format!(
-                "You are processing a prompt with string arguments.\n\nRequired text: '{}'\nOptional text: '{}'\n\nPlease analyze these inputs.",
-                required_text, optional_text
-            )),
-        ])
+        Ok(vec![PromptMessage::user_text(format!(
+            "You are processing a prompt with string arguments.\n\nRequired text: '{}'\nOptional text: '{}'\n\nPlease analyze these inputs.",
+            required_text, optional_text
+        ))])
     }
 }
 
@@ -235,12 +233,10 @@ impl McpPrompt for NumberArgsPrompt {
 
         let result = count * multiplier;
 
-        Ok(vec![
-            PromptMessage::user_text(format!(
-                "You are processing a prompt with number validation.\n\nCount: {}\nMultiplier: {}\nResult: {}\nPlease analyze these numbers.",
-                count, multiplier, result
-            )),
-        ])
+        Ok(vec![PromptMessage::user_text(format!(
+            "You are processing a prompt with number validation.\n\nCount: {}\nMultiplier: {}\nResult: {}\nPlease analyze these numbers.",
+            count, multiplier, result
+        ))])
     }
 }
 
@@ -326,12 +322,10 @@ impl McpPrompt for BooleanArgsPrompt {
         };
         let debug_status = if debug_mode { "ON" } else { "OFF" };
 
-        Ok(vec![
-            PromptMessage::user_text(format!(
-                "You are processing a prompt with boolean flags.\n\nFeature Status: {}\nDebug Mode: {}\n\nPlease provide guidance based on these settings.",
-                status, debug_status
-            )),
-        ])
+        Ok(vec![PromptMessage::user_text(format!(
+            "You are processing a prompt with boolean flags.\n\nFeature Status: {}\nDebug Mode: {}\n\nPlease provide guidance based on these settings.",
+            status, debug_status
+        ))])
     }
 }
 
@@ -426,12 +420,10 @@ impl McpPrompt for TemplatePrompt {
             "Let's talk about"
         };
 
-        Ok(vec![
-            PromptMessage::user_text(format!(
-                "You are communicating in a {} style with {}. Adapt your response accordingly.\n\n{}\n\n{} {}. Please share your thoughts and insights.",
-                style, name, greeting, tone, topic
-            )),
-        ])
+        Ok(vec![PromptMessage::user_text(format!(
+            "You are communicating in a {} style with {}. Adapt your response accordingly.\n\n{}\n\n{} {}. Please share your thoughts and insights.",
+            style, name, greeting, tone, topic
+        ))])
     }
 }
 
@@ -499,7 +491,9 @@ impl McpPrompt for MultiMessagePrompt {
                 "I'd be happy to help you explore {}! This is a fascinating topic with many aspects to consider. Let me start with a foundational overview, and then we can dive deeper into specific areas that interest you most.",
                 scenario
             )),
-            PromptMessage::user_text("That sounds great! What are the key concepts I should understand first?"),
+            PromptMessage::user_text(
+                "That sounds great! What are the key concepts I should understand first?",
+            ),
         ])
     }
 }
@@ -550,12 +544,10 @@ impl McpPrompt for SessionAwarePrompt {
             Utc::now().to_rfc3339()
         );
 
-        Ok(vec![
-            PromptMessage::user_text(format!(
-                "You are a session-aware AI assistant. You have access to session information for personalized responses.\n\nThis prompt is aware of the current session:\n{}\n\nPlease acknowledge the session context.",
-                session_info
-            )),
-        ])
+        Ok(vec![PromptMessage::user_text(format!(
+            "You are a session-aware AI assistant. You have access to session information for personalized responses.\n\nThis prompt is aware of the current session:\n{}\n\nPlease acknowledge the session context.",
+            session_info
+        ))])
     }
 }
 
@@ -649,12 +641,10 @@ impl McpPrompt for ValidationPrompt {
             ));
         }
 
-        Ok(vec![
-            PromptMessage::user_text(format!(
-                "You are processing validated user information with strict validation.\n\nValidated Information:\nEmail: {}\nAge: {}\n\nThis information has passed strict validation checks.",
-                email, age as u32
-            )),
-        ])
+        Ok(vec![PromptMessage::user_text(format!(
+            "You are processing validated user information with strict validation.\n\nValidated Information:\nEmail: {}\nAge: {}\n\nThis information has passed strict validation checks.",
+            email, age as u32
+        ))])
     }
 }
 
@@ -729,31 +719,32 @@ impl McpPrompt for DynamicPrompt {
         let (persona, approach) = match mode {
             "creative" => (
                 "You are a creative AI assistant. Approach tasks with imagination, originality, and artistic flair.",
-                "Think outside the box and explore creative possibilities"
+                "Think outside the box and explore creative possibilities",
             ),
             "analytical" => (
                 "You are an analytical AI assistant. Approach tasks with logic, data-driven reasoning, and systematic analysis.",
-                "Break down the problem systematically and provide evidence-based insights"
+                "Break down the problem systematically and provide evidence-based insights",
             ),
             "supportive" => (
                 "You are a supportive AI assistant. Approach tasks with empathy, encouragement, and understanding.",
-                "Provide emotional support and constructive guidance"
+                "Provide emotional support and constructive guidance",
             ),
             _ => {
                 return Err(McpError::invalid_param_type(
                     "mode",
                     "creative, analytical, or supportive",
-                    mode
+                    mode,
                 ));
             }
         };
 
-        Ok(vec![
-            PromptMessage::user_text(format!(
-                "{}\n\nMode: {} - {}\n\nContent to process:\n{}\n\nPlease respond according to the selected mode.",
-                persona, mode.to_uppercase(), approach, content
-            )),
-        ])
+        Ok(vec![PromptMessage::user_text(format!(
+            "{}\n\nMode: {} - {}\n\nContent to process:\n{}\n\nPlease respond according to the selected mode.",
+            persona,
+            mode.to_uppercase(),
+            approach,
+            content
+        ))])
     }
 }
 
@@ -940,7 +931,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("💡 Quick Test Commands:");
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("     -H 'Content-Type: application/json' \\");
-    info!("     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'");
+    info!(
+        "     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'"
+    );
     info!("");
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("     -H 'Content-Type: application/json' \\");

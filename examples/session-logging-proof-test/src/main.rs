@@ -52,7 +52,8 @@ pub struct LogProofTool {
 
 impl LogProofTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
-        let session = session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
+        let session =
+            session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
 
         let scenario = self.scenario.as_deref().unwrap_or("basic");
 
@@ -249,7 +250,8 @@ pub struct SetLevelTool {
 
 impl SetLevelTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
-        let session = session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
+        let session =
+            session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
 
         let new_level = match self.level.to_lowercase().as_str() {
             "debug" => LoggingLevel::Debug,

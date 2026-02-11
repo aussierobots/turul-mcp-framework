@@ -13,17 +13,17 @@
 //! - Comprehensive validation with external reference data
 //! - Accessibility compliance and internationalization support
 
+use clap::Parser;
+use serde::Deserialize;
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
-use turul_mcp_derive::McpTool;
-use turul_mcp_protocol::{tools::ToolSchema, schema::JsonSchema};
-use turul_mcp_server::prelude::*;
-use clap::Parser;
-use serde::Deserialize;
-use serde_json::{Value, json};
 use tracing::{info, warn};
+use turul_mcp_derive::McpTool;
+use turul_mcp_protocol::{schema::JsonSchema, tools::ToolSchema};
+use turul_mcp_server::prelude::*;
 use uuid::Uuid;
 
 /// Shared platform instance accessible by tools via OnceLock
@@ -776,7 +776,10 @@ pub struct CustomerSurveyTool {
 impl CustomerSurveyTool {
     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<Value> {
         let platform = get_platform()?;
-        let customer_segment = self.customer_segment.as_deref().unwrap_or("existing_customer");
+        let customer_segment = self
+            .customer_segment
+            .as_deref()
+            .unwrap_or("existing_customer");
 
         if let Some(survey_template) = platform
             .onboarding_config

@@ -29,13 +29,16 @@ use turul_mcp_session_storage::InMemorySessionStorage;
 pub struct LoggingTestTool {
     #[param(description = "Test message to send")]
     pub message: String,
-    #[param(description = "Logging level (debug, info, notice, warning, error, critical, alert, emergency)")]
+    #[param(
+        description = "Logging level (debug, info, notice, warning, error, critical, alert, emergency)"
+    )]
     pub level: String,
 }
 
 impl LoggingTestTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
-        let session = session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
+        let session =
+            session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
 
         // Parse logging level
         let logging_level = match self.level.to_lowercase().as_str() {
@@ -108,13 +111,16 @@ impl LoggingTestTool {
     description = "Set the logging level for this session"
 )]
 pub struct SetLogLevelTool {
-    #[param(description = "Logging level (debug, info, notice, warning, error, critical, alert, emergency)")]
+    #[param(
+        description = "Logging level (debug, info, notice, warning, error, critical, alert, emergency)"
+    )]
     pub level: String,
 }
 
 impl SetLogLevelTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
-        let session = session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
+        let session =
+            session.ok_or_else(|| McpError::tool_execution("Session context required"))?;
 
         let new_level = match self.level.to_lowercase().as_str() {
             "debug" => LoggingLevel::Debug,
@@ -196,10 +202,7 @@ impl TestClient {
         // Extract session ID from headers
         if let Some(session_header) = response.headers().get("Mcp-Session-Id") {
             self.session_id = Some(session_header.to_str()?.to_string());
-            tracing::info!(
-                "Session initialized: {}",
-                self.session_id.as_ref().unwrap()
-            );
+            tracing::info!("Session initialized: {}", self.session_id.as_ref().unwrap());
         } else {
             return Err(anyhow::anyhow!("No Mcp-Session-Id header received"));
         }
@@ -318,9 +321,7 @@ async fn main() -> Result<()> {
     tracing::info!("Test 1: Set session to DEBUG level");
 
     // Test 2: Send messages at different levels - all should pass through
-    tracing::info!(
-        "Test 2: Send messages at different levels (DEBUG session should receive all)"
-    );
+    tracing::info!("Test 2: Send messages at different levels (DEBUG session should receive all)");
 
     let test_cases = [
         ("Debug message test", "debug", true),

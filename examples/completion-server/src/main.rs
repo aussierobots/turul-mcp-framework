@@ -18,7 +18,9 @@ use turul_mcp_server::prelude::*;
     description = "Provides intelligent auto-completion suggestions for programming languages, frameworks, commands, and file extensions"
 )]
 pub struct IdeCompletionTool {
-    #[param(description = "Category of completions to get (language, framework, command, extension, all)")]
+    #[param(
+        description = "Category of completions to get (language, framework, command, extension, all)"
+    )]
     pub category: String,
 
     #[param(description = "Prefix to filter completions", optional)]
@@ -28,20 +30,31 @@ pub struct IdeCompletionTool {
 impl IdeCompletionTool {
     fn get_completions(&self, category: &str, prefix: &str) -> Vec<String> {
         let languages = vec![
-            "rust", "python", "javascript", "typescript", "java", "go", "cpp", "c",
-            "kotlin", "swift", "php", "ruby", "csharp",
+            "rust",
+            "python",
+            "javascript",
+            "typescript",
+            "java",
+            "go",
+            "cpp",
+            "c",
+            "kotlin",
+            "swift",
+            "php",
+            "ruby",
+            "csharp",
         ];
         let frameworks = vec![
-            "react", "vue", "angular", "express", "django", "flask", "spring", "rails",
-            "laravel", "tokio", "actix", "axum",
+            "react", "vue", "angular", "express", "django", "flask", "spring", "rails", "laravel",
+            "tokio", "actix", "axum",
         ];
         let commands = vec![
-            "build", "test", "run", "deploy", "install", "update", "lint", "format",
-            "check", "clean", "serve",
+            "build", "test", "run", "deploy", "install", "update", "lint", "format", "check",
+            "clean", "serve",
         ];
         let file_extensions = vec![
-            ".rs", ".py", ".js", ".ts", ".java", ".go", ".cpp", ".c", ".json", ".yaml",
-            ".toml", ".md",
+            ".rs", ".py", ".js", ".ts", ".java", ".go", ".cpp", ".c", ".json", ".yaml", ".toml",
+            ".md",
         ];
 
         let prefix = prefix.to_lowercase();

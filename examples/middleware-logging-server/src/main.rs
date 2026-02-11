@@ -62,7 +62,10 @@ async fn main() -> McpResult<()> {
         .with_env_filter("middleware_logging_server=info,turul_mcp_server=info")
         .init();
 
-    tracing::info!("Starting middleware-logging-server example on port {}", args.port);
+    tracing::info!(
+        "Starting middleware-logging-server example on port {}",
+        args.port
+    );
     tracing::info!("All requests will be logged with timing information");
 
     let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", args.port)
@@ -80,7 +83,10 @@ async fn main() -> McpResult<()> {
         .build()?;
 
     tracing::info!("Server listening on http://localhost:{}/mcp", args.port);
-    tracing::info!("Try: curl -X POST http://localhost:{}/mcp -H 'Content-Type: application/json' -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{...}}}}'", args.port);
+    tracing::info!(
+        "Try: curl -X POST http://localhost:{}/mcp -H 'Content-Type: application/json' -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{...}}}}'",
+        args.port
+    );
 
     server.run().await
 }

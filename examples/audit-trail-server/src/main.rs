@@ -72,7 +72,9 @@ async fn init_database(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     description = "Log an immutable audit event for compliance tracking"
 )]
 pub struct LogAuditEventTool {
-    #[param(description = "Type of audit event (ACCESS, MODIFICATION, DELETION, AUTHENTICATION, AUTHORIZATION, SYSTEM)")]
+    #[param(
+        description = "Type of audit event (ACCESS, MODIFICATION, DELETION, AUTHENTICATION, AUTHORIZATION, SYSTEM)"
+    )]
     pub event_type: String,
 
     #[param(description = "Specific action performed")]
@@ -334,9 +336,7 @@ impl GenerateComplianceReportTool {
         let result_rows = sqlx::query(&result_counts_query)
             .fetch_all(&**db_pool)
             .await
-            .map_err(|e| {
-                McpError::tool_execution(&format!("Result counts query failed: {}", e))
-            })?;
+            .map_err(|e| McpError::tool_execution(&format!("Result counts query failed: {}", e)))?;
 
         let result_counts: HashMap<String, i32> = result_rows
             .iter()
@@ -351,9 +351,7 @@ impl GenerateComplianceReportTool {
         let stats_row = sqlx::query(&session_stats_query)
             .fetch_one(&**db_pool)
             .await
-            .map_err(|e| {
-                McpError::tool_execution(&format!("Session stats query failed: {}", e))
-            })?;
+            .map_err(|e| McpError::tool_execution(&format!("Session stats query failed: {}", e)))?;
 
         let unique_sessions: i32 = stats_row.get("unique_sessions");
         let total_events: i32 = stats_row.get("total_events");
