@@ -72,7 +72,10 @@ pub fn lambda_to_hyper_request(
         };
 
         parts.headers.insert(name, value);
-        trace!("Injected authorizer header: {} = {}", header_name, field_value);
+        trace!(
+            "Injected authorizer header: {} = {}",
+            header_name, field_value
+        );
     }
 
     // Convert LambdaBody to Bytes
@@ -639,7 +642,10 @@ mod tests {
             assert_eq!(sanitize_authorizer_field_name("deviceId"), "device_id");
             assert_eq!(sanitize_authorizer_field_name("userId"), "user_id");
             assert_eq!(sanitize_authorizer_field_name("tenantId"), "tenant_id");
-            assert_eq!(sanitize_authorizer_field_name("customClaim"), "custom_claim");
+            assert_eq!(
+                sanitize_authorizer_field_name("customClaim"),
+                "custom_claim"
+            );
         }
 
         #[test]
@@ -654,7 +660,10 @@ mod tests {
         fn test_sanitize_field_name_acronyms() {
             // Acronyms: treated as a single unit, underscore before transition to lowercase
             assert_eq!(sanitize_authorizer_field_name("APIKey"), "api_key");
-            assert_eq!(sanitize_authorizer_field_name("HTTPSEnabled"), "https_enabled");
+            assert_eq!(
+                sanitize_authorizer_field_name("HTTPSEnabled"),
+                "https_enabled"
+            );
             assert_eq!(sanitize_authorizer_field_name("XMLParser"), "xml_parser");
         }
 
@@ -668,10 +677,7 @@ mod tests {
         #[test]
         fn test_sanitize_field_name_special_chars() {
             assert_eq!(sanitize_authorizer_field_name("user@email"), "user-email");
-            assert_eq!(
-                sanitize_authorizer_field_name("test.field"),
-                "test-field"
-            );
+            assert_eq!(sanitize_authorizer_field_name("test.field"), "test-field");
             assert_eq!(sanitize_authorizer_field_name("a/b/c"), "a-b-c");
         }
 
@@ -748,9 +754,8 @@ mod tests {
             let mut v1_ctx = ApiGatewayProxyRequestContext::default();
             v1_ctx.authorizer = authorizer;
 
-            let req = request_with_context(
-                lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx),
-            );
+            let req =
+                request_with_context(lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx));
             let fields = extract_authorizer_context(&req);
 
             assert_eq!(fields.get("user_id"), Some(&"user-123".to_string()));
@@ -778,9 +783,8 @@ mod tests {
             let mut v1_ctx = ApiGatewayProxyRequestContext::default();
             v1_ctx.authorizer = authorizer;
 
-            let req = request_with_context(
-                lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx),
-            );
+            let req =
+                request_with_context(lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx));
             let fields = extract_authorizer_context(&req);
 
             assert_eq!(fields.get("user_id"), Some(&"user-123".to_string()));
@@ -798,13 +802,13 @@ mod tests {
             authorizer
                 .fields
                 .insert("userId".to_string(), serde_json::json!("user-123"));
+            authorizer.fields.insert(
+                "principalId".to_string(),
+                serde_json::json!("principal-abc"),
+            );
             authorizer
                 .fields
-                .insert("principalId".to_string(), serde_json::json!("principal-abc"));
-            authorizer.fields.insert(
-                "integrationLatency".to_string(),
-                serde_json::json!(42),
-            );
+                .insert("integrationLatency".to_string(), serde_json::json!(42));
             authorizer.fields.insert(
                 "usageIdentifierKey".to_string(),
                 serde_json::json!("api-key-xyz"),
@@ -813,13 +817,15 @@ mod tests {
             let mut v1_ctx = ApiGatewayProxyRequestContext::default();
             v1_ctx.authorizer = authorizer;
 
-            let req = request_with_context(
-                lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx),
-            );
+            let req =
+                request_with_context(lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx));
             let fields = extract_authorizer_context(&req);
 
             assert_eq!(fields.get("user_id"), Some(&"user-123".to_string()));
-            assert!(fields.get("principal_id").is_none(), "principalId should be skipped");
+            assert!(
+                fields.get("principal_id").is_none(),
+                "principalId should be skipped"
+            );
             assert!(
                 fields.get("integration_latency").is_none(),
                 "integrationLatency should be skipped"
@@ -848,9 +854,8 @@ mod tests {
             let mut v1_ctx = ApiGatewayProxyRequestContext::default();
             v1_ctx.authorizer = authorizer;
 
-            let req = request_with_context(
-                lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx),
-            );
+            let req =
+                request_with_context(lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx));
             let fields = extract_authorizer_context(&req);
 
             assert_eq!(fields.get("max_age"), Some(&"3600".to_string()));
@@ -864,9 +869,8 @@ mod tests {
 
             let v1_ctx = ApiGatewayProxyRequestContext::default();
 
-            let req = request_with_context(
-                lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx),
-            );
+            let req =
+                request_with_context(lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx));
             let fields = extract_authorizer_context(&req);
 
             assert!(fields.is_empty());
@@ -890,9 +894,8 @@ mod tests {
             let mut v2_ctx = ApiGatewayV2httpRequestContext::default();
             v2_ctx.authorizer = Some(authorizer);
 
-            let req = request_with_context(
-                lambda_http::request::RequestContext::ApiGatewayV2(v2_ctx),
-            );
+            let req =
+                request_with_context(lambda_http::request::RequestContext::ApiGatewayV2(v2_ctx));
             let fields = extract_authorizer_context(&req);
 
             assert_eq!(fields.get("user_id"), Some(&"user-v2".to_string()));

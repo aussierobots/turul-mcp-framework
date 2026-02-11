@@ -570,10 +570,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Add elicitation support with custom provider
-    pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(
-        self,
-        provider: P,
-    ) -> Self {
+    pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(self, provider: P) -> Self {
         // Elicitation is a client-side capability per MCP 2025-11-25
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
@@ -706,7 +703,10 @@ impl LambdaMcpServerBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn middleware(mut self, middleware: Arc<dyn turul_http_mcp_server::middleware::McpMiddleware>) -> Self {
+    pub fn middleware(
+        mut self,
+        middleware: Arc<dyn turul_http_mcp_server::middleware::McpMiddleware>,
+    ) -> Self {
         self.middleware_stack.push(middleware);
         self
     }
@@ -986,8 +986,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use turul_mcp_session_storage::InMemorySessionStorage;
-    use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
+    use turul_mcp_builders::prelude::*;
+    use turul_mcp_session_storage::InMemorySessionStorage; // HasBaseMetadata, HasDescription, etc.
 
     // Mock tool for testing
     #[derive(Clone, Default)]
