@@ -1,6 +1,6 @@
 //! Test utilities specific to roots protocol testing
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 
 /// Helper to create roots capabilities for initialize
@@ -46,9 +46,10 @@ pub fn validate_root_object(root: &Value) -> bool {
 
     // name field is optional but should be string if present
     if let Some(name) = root_obj.get("name")
-        && !name.is_string() {
-            return false;
-        }
+        && !name.is_string()
+    {
+        return false;
+    }
 
     true
 }

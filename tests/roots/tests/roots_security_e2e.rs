@@ -6,7 +6,7 @@
 use mcp_roots_tests::test_utils::{
     extract_roots_list, is_uri_in_allowed_roots, roots_capabilities,
 };
-use mcp_roots_tests::{info, json, warn, McpTestClient, TestFixtures, TestServerManager};
+use mcp_roots_tests::{McpTestClient, TestFixtures, TestServerManager, info, json, warn};
 
 #[tokio::test]
 async fn test_roots_access_control_boundaries() {

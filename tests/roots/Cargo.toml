@@ -2,6 +2,7 @@
 name = "mcp-roots-tests"
 version.workspace = true
 edition.workspace = true
+autotests = false
 
 [dependencies]
 # Core framework
@@ -31,9 +32,5 @@ name = "mcp_roots_tests"
 path = "src/lib.rs"
 
 [[test]]
-name = "roots_protocol_e2e"
-path = "tests/roots_protocol_e2e.rs"
-
-[[test]]
-name = "roots_security_e2e"
-path = "tests/roots_security_e2e.rs"
+name = "all"
+path = "tests/all.rs"
