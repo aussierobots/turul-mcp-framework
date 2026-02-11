@@ -7,6 +7,7 @@ members = [
   "crates/turul-mcp-protocol-2025-11-25",
   "crates/turul-mcp-protocol",
   "crates/turul-mcp-session-storage",
+  "crates/turul-mcp-task-storage",
   "crates/turul-http-mcp-server",
   "crates/turul-mcp-server",
   "crates/turul-mcp-derive",
@@ -62,9 +63,14 @@ members = [
   "examples/task-types-showcase",
   "examples/sampling-with-tools-showcase",
 
+  # Tasks E2E test examples
+  "examples/tasks-e2e-inmemory-server",
+  "examples/tasks-e2e-inmemory-client",
+
   # Moved from turul-mcp-server/examples
   "examples/client-initialise-server",
   "examples/client-initialise-report",
+  "examples/client-task-lifecycle",
   "examples/logging-test-client",
   "examples/logging-test-server",
   "examples/session-aware-logging-demo",
@@ -135,6 +141,7 @@ turul-mcp-protocol-2025-06-18 = { version = "0.3.0", path = "crates/turul-mcp-pr
 turul-mcp-protocol-2025-11-25 = { version = "0.3.0", path = "crates/turul-mcp-protocol-2025-11-25" }
 turul-mcp-protocol = { version = "0.3.0", path = "crates/turul-mcp-protocol" }
 turul-mcp-session-storage = { version = "0.3.0", path = "crates/turul-mcp-session-storage" }
+turul-mcp-task-storage = { version = "0.3.0", path = "crates/turul-mcp-task-storage" }
 turul-http-mcp-server = { version = "0.3.0", path = "crates/turul-http-mcp-server" }
 turul-mcp-server = { version = "0.3.0", path = "crates/turul-mcp-server" }
 turul-mcp-derive = { version = "0.3.0", path = "crates/turul-mcp-derive" }
