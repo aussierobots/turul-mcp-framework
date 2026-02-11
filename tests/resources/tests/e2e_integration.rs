@@ -3,7 +3,7 @@
 //! Tests real HTTP/SSE transport using resource-test-server
 //! Validates complete MCP 2025-11-25 specification compliance
 
-use mcp_e2e_shared::{McpTestClient, TestServerManager, TestFixtures};
+use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
 use serial_test::serial;
 use tracing::{debug, info};
 
@@ -20,7 +20,10 @@ async fn test_mcp_initialize_session() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    let result = client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    let result = client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
 
     // Verify response structure
     assert!(result.contains_key("result"));
@@ -47,7 +50,10 @@ async fn test_resources_list() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
     let result = client
         .list_resources()
         .await
@@ -115,7 +121,10 @@ async fn test_file_resource_read() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
     let result = client
         .read_resource("file:///tmp/test.txt")
         .await
@@ -144,7 +153,10 @@ async fn test_memory_resource_read() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
     let result = client
         .read_resource("file:///memory/data.json")
         .await
@@ -174,7 +186,10 @@ async fn test_error_resource_handling() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
     let result = client
         .read_resource("file:///error/not_found.txt")
         .await
@@ -198,7 +213,10 @@ async fn test_template_resource_with_variables() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
 
     // Template resource should handle URI variables
     let result = client
@@ -221,7 +239,10 @@ async fn test_binary_resource_read() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
     let result = client
         .read_resource("file:///binary/image.png")
         .await
@@ -250,7 +271,10 @@ async fn test_session_aware_resource() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
     let result = client
         .read_resource("file:///session/info.json")
         .await
@@ -279,7 +303,10 @@ async fn test_resource_subscription() {
     let mut client = McpTestClient::new(server.port());
 
     // First, verify server correctly advertises that subscription is not supported
-    let init_response = client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    let init_response = client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
     let server_capabilities = &init_response["result"]["capabilities"]["resources"];
     assert_eq!(
         server_capabilities["subscribe"], false,
@@ -318,7 +345,10 @@ async fn test_paginated_resource() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
     let result = client
         .read_resource("file:///paginated/items.json")
         .await
@@ -346,7 +376,10 @@ async fn test_large_resource_handling() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
     let result = client
         .read_resource("file:///large/dataset.json")
         .await
@@ -377,7 +410,10 @@ async fn test_resource_with_metadata() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
     let result = client
         .read_resource("file:///meta/dynamic.json")
         .await
@@ -404,7 +440,10 @@ async fn test_complete_resource_specification() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
     let result = client
         .read_resource("file:///complete/all-fields.json")
         .await
@@ -439,7 +478,10 @@ async fn test_sse_resource_notifications() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
 
     // Subscribe to notifications first
     let _subscribe_result = client
@@ -474,7 +516,10 @@ async fn test_multi_resource_collection() {
         .expect("Failed to start server");
     let mut client = McpTestClient::new(server.port());
 
-    client.initialize_with_capabilities(TestFixtures::resource_capabilities()).await.expect("Failed to initialize");
+    client
+        .initialize_with_capabilities(TestFixtures::resource_capabilities())
+        .await
+        .expect("Failed to initialize");
     let result = client
         .read_resource("file:///multi/contents.txt")
         .await

@@ -71,7 +71,11 @@ impl UserProfileResource {
 
 #[async_trait]
 impl McpResource for UserProfileResource {
-    async fn read(&self, params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        params: Option<Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         // Extract user_id from template variables
         let user_id = if let Some(params) = &params {
             if let Some(template_vars) = params.get("template_variables") {
@@ -177,7 +181,11 @@ impl AppConfigResource {
 
 #[async_trait]
 impl McpResource for AppConfigResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         self.fetch_config_data().await
     }
 }
@@ -230,7 +238,7 @@ impl LogFilesResource {
                 "2024-01-15T14:28:12Z ERROR Failed to validate user token: expired",
                 "2024-01-15T14:29:33Z ERROR API call failed: external service unavailable",
             ],
-            _ => vec!["ERROR: Unknown log type requested"]
+            _ => vec!["ERROR: Unknown log type requested"],
         };
 
         let log_content = sample_logs
@@ -253,7 +261,11 @@ impl LogFilesResource {
 
 #[async_trait]
 impl McpResource for LogFilesResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         self.fetch_log_data().await
     }
 }
@@ -303,7 +315,11 @@ impl FileUserResource {
 
 #[async_trait]
 impl McpResource for FileUserResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         self.fetch_user_data().await
     }
 }
@@ -328,9 +344,15 @@ impl UserAvatarResource {
 
     pub async fn fetch_avatar_data(&self) -> Result<Vec<ResourceContent>, McpError> {
         let base64_avatar = match self.user_id.as_str() {
-            "123" => "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
-            "456" => "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-            _ => "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChgGBfhzPMwAAAABJRU5ErkJggg=="
+            "123" => {
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
+            }
+            "456" => {
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+            }
+            _ => {
+                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChgGBfhzPMwAAAABJRU5ErkJggg=="
+            }
         };
 
         Ok(vec![ResourceContent::blob(
@@ -343,7 +365,11 @@ impl UserAvatarResource {
 
 #[async_trait]
 impl McpResource for UserAvatarResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         self.fetch_avatar_data().await
     }
 }
@@ -370,10 +396,22 @@ impl BinaryDataResource {
 
     pub async fn fetch_binary_data(&self) -> Result<Vec<ResourceContent>, McpError> {
         let (base64_data, mime_type) = match self.format.as_str() {
-            "pdf" => ("JVBERi0xLjQKJcfs9z8KMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPD4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKeHJlZgowIDQKMDAwMDAwMDAwMCA2NTUzNSBmCjAwMDAwMDAwMDkgMDAwMDAgbgowMDAwMDAwMDc0IDAwMDAwIG4KMDAwMDAwMDEyMCAwMDAwMCBuCnRyYWlsZXIKPDwKL1NpemUgNAovUm9vdCAxIDAgUgo+PgpzdGFydHhyZWYKMTc5CiUlRU9G", "application/pdf"),
-            "zip" => ("UEsDBAoAAAAAAIdF11QAAAAAAAAAAAAAAAAHAAAAdGVzdC50eHRQSwECFAAKAAAAAACHRddUAAAAAAAAAAAAAAAABwAAAAAAAAAAACAAAAAAAAAAdGVzdC50eHRQSwUGAAAAAAEAAQA1AAAAHwAAAAAA", "application/zip"),
-            "png" => ("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR42mNk+M9QwwAGIxFYAA6gAhHlqe7fAAAAAElFTkSuQmCC", "image/png"),
-            _ => ("VGhpcyBpcyBhIHRlc3QgYmluYXJ5IGZpbGU=", "application/octet-stream")
+            "pdf" => (
+                "JVBERi0xLjQKJcfs9z8KMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCjIgMCBvYmoKPDwKL1R5cGUgL1BhZ2VzCi9LaWRzIFszIDAgUl0KL0NvdW50IDEKPD4KZW5kb2JqCjMgMCBvYmoKPDwKL1R5cGUgL1BhZ2UKL1BhcmVudCAyIDAgUgovTWVkaWFCb3ggWzAgMCA2MTIgNzkyXQo+PgplbmRvYmoKeHJlZgowIDQKMDAwMDAwMDAwMCA2NTUzNSBmCjAwMDAwMDAwMDkgMDAwMDAgbgowMDAwMDAwMDc0IDAwMDAwIG4KMDAwMDAwMDEyMCAwMDAwMCBuCnRyYWlsZXIKPDwKL1NpemUgNAovUm9vdCAxIDAgUgo+PgpzdGFydHhyZWYKMTc5CiUlRU9G",
+                "application/pdf",
+            ),
+            "zip" => (
+                "UEsDBAoAAAAAAIdF11QAAAAAAAAAAAAAAAAHAAAAdGVzdC50eHRQSwECFAAKAAAAAACHRddUAAAAAAAAAAAAAAAABwAAAAAAAAAAACAAAAAAAAAAdGVzdC50eHRQSwUGAAAAAAEAAQA1AAAAHwAAAAAA",
+                "application/zip",
+            ),
+            "png" => (
+                "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAEklEQVR42mNk+M9QwwAGIxFYAA6gAhHlqe7fAAAAAElFTkSuQmCC",
+                "image/png",
+            ),
+            _ => (
+                "VGhpcyBpcyBhIHRlc3QgYmluYXJ5IGZpbGU=",
+                "application/octet-stream",
+            ),
         };
 
         Ok(vec![ResourceContent::blob(
@@ -386,7 +424,11 @@ impl BinaryDataResource {
 
 #[async_trait]
 impl McpResource for BinaryDataResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         self.fetch_binary_data().await
     }
 }

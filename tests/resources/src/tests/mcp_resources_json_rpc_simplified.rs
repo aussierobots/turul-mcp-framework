@@ -3,11 +3,11 @@
 //! End-to-end integration tests using direct handler calls to verify
 //! JSON-RPC compliance and MCP specification adherence.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use turul_mcp_protocol::meta::*;
 use turul_mcp_protocol::resources::*;
 use turul_mcp_server::handlers::{McpHandler, ResourcesListHandler, ResourcesReadHandler};
-use turul_mcp_server::prelude::*;  // Re-exports builders prelude + server types
+use turul_mcp_server::prelude::*; // Re-exports builders prelude + server types
 
 // Test resource for JSON-RPC integration
 #[derive(Clone)]
@@ -28,7 +28,11 @@ impl SimpleJsonRpcTestResource {
 
 #[async_trait::async_trait]
 impl McpResource for SimpleJsonRpcTestResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
             &self.uri,
             format!("JSON-RPC test content for {}", self.id),

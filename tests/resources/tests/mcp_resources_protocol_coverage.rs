@@ -5,9 +5,9 @@
 
 use serde_json::json;
 use std::collections::HashMap;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::meta::{Annotations, Cursor};
-use turul_mcp_protocol::resources::*;
-use turul_mcp_builders::prelude::*;  // ResourceDefinition and all framework traits
+use turul_mcp_protocol::resources::*; // ResourceDefinition and all framework traits
 
 #[tokio::test]
 async fn test_uri_template_file_user_json() {

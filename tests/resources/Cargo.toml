@@ -3,6 +3,7 @@ name = "mcp-resources-tests"
 version.workspace = true
 edition.workspace = true
 publish = false
+autotests = false
 
 [dependencies]
 turul-mcp-server = { path = "../../crates/turul-mcp-server" }
@@ -44,3 +45,7 @@ serial_test = "3"
 [[bin]]
 name = "resource-test-server-e2e"
 path = "bin/main.rs"
+
+[[test]]
+name = "all"
+path = "tests/all.rs"

@@ -47,23 +47,23 @@
 
 use std::collections::HashMap;
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
     Arc,
+    atomic::{AtomicU64, Ordering},
 };
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use base64::{engine::general_purpose, Engine as _};
+use base64::{Engine as _, engine::general_purpose};
 use chrono::Utc;
 use clap::Parser;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::io::Write;
 use tempfile::NamedTempFile;
 use tokio::time::sleep;
 use tracing::info;
 use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::resources::ResourceContent;
-use turul_mcp_protocol::{meta::Annotations, McpError};
+use turul_mcp_protocol::{McpError, meta::Annotations};
 use turul_mcp_server::McpResource;
 use turul_mcp_server::{McpResult, McpServer, SessionContext};
 
@@ -154,7 +154,11 @@ impl HasIcons for FileResource {}
 
 #[async_trait]
 impl McpResource for FileResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         if let Some(temp_file) = &self.temp_file {
             match std::fs::read_to_string(temp_file.path()) {
                 Ok(content) => Ok(vec![ResourceContent::text(
@@ -211,7 +215,11 @@ impl HasIcons for MemoryResource {}
 
 #[async_trait]
 impl McpResource for MemoryResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         let data = json!({
             "type": "memory",
             "timestamp": Utc::now().to_rfc3339(),
@@ -275,7 +283,11 @@ impl HasIcons for ErrorResource {}
 
 #[async_trait]
 impl McpResource for ErrorResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         Err(McpError::resource_execution(
             "This resource always returns NotFound for testing error paths",
         ))
@@ -321,7 +333,11 @@ impl HasIcons for SlowResource {}
 
 #[async_trait]
 impl McpResource for SlowResource {
-    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         let delay_ms = params
             .as_ref()
             .and_then(|p| p.get("delay_ms"))
@@ -388,7 +404,11 @@ impl HasIcons for TemplateResource {}
 
 #[async_trait]
 impl McpResource for TemplateResource {
-    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         // Extract template variables from params
         let template_vars = params
             .as_ref()
@@ -460,7 +480,11 @@ impl HasIcons for EmptyResource {}
 
 #[async_trait]
 impl McpResource for EmptyResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text("file:///empty/content.txt", "")])
     }
 }
@@ -509,7 +533,11 @@ impl HasIcons for LargeResource {}
 
 #[async_trait]
 impl McpResource for LargeResource {
-    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         let size = params
             .as_ref()
             .and_then(|p| p.get("size"))
@@ -588,7 +616,11 @@ impl HasIcons for BinaryResource {}
 
 #[async_trait]
 impl McpResource for BinaryResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         // Create fake PNG header + data (simplified for testing)
         let mut fake_png = Vec::new();
         fake_png.extend_from_slice(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]); // PNG signature
@@ -657,7 +689,11 @@ impl HasIcons for SessionResource {}
 
 #[async_trait]
 impl McpResource for SessionResource {
-    async fn read(&self, _params: Option<Value>, session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         // This resource demonstrates session-aware behavior
         let session_data = if let Some(ctx) = session {
             json!({
@@ -739,7 +775,11 @@ impl HasIcons for SubscribableResource {}
 
 #[async_trait]
 impl McpResource for SubscribableResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         let count = self.counter.fetch_add(1, Ordering::SeqCst);
 
         let subscription_data = json!({
@@ -800,7 +840,11 @@ impl HasIcons for NotifyingResource {}
 
 #[async_trait]
 impl McpResource for NotifyingResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         // DEMONSTRATION: This resource simulates notification emission during read operations
         //
         // PRODUCTION LIMITATION: The current McpResource trait doesn't provide access to
@@ -897,7 +941,11 @@ impl HasIcons for MultiContentResource {}
 
 #[async_trait]
 impl McpResource for MultiContentResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![
             ResourceContent::text(
                 "file:///multi/contents/part1.json",
@@ -906,7 +954,8 @@ impl McpResource for MultiContentResource {
                     "type": "metadata",
                     "description": "This is the first part of a multi-content resource",
                     "timestamp": Utc::now().to_rfc3339()
-                }).to_string()
+                })
+                .to_string(),
             ),
             ResourceContent::text(
                 "file:///multi/contents/part2.json",
@@ -918,12 +967,13 @@ impl McpResource for MultiContentResource {
                         {"id": 2, "name": "Item 2"},
                         {"id": 3, "name": "Item 3"}
                     ]
-                }).to_string()
+                })
+                .to_string(),
             ),
             ResourceContent::text(
                 "file:///multi/contents/part3.txt",
-                "Part 3: Plain text content\nThis demonstrates that ResourceContent can contain different types of data\nincluding JSON, plain text, and other formats."
-            )
+                "Part 3: Plain text content\nThis demonstrates that ResourceContent can contain different types of data\nincluding JSON, plain text, and other formats.",
+            ),
         ])
     }
 }
@@ -967,7 +1017,11 @@ impl HasIcons for PaginatedResource {}
 
 #[async_trait]
 impl McpResource for PaginatedResource {
-    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         let page_size = params
             .as_ref()
             .and_then(|p| p.get("page_size"))
@@ -1059,10 +1113,14 @@ impl HasIcons for InvalidUriResource {}
 
 #[async_trait]
 impl McpResource for InvalidUriResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
             "file:///invalid/bad-chars-and-spaces.txt",
-            "This resource has an intentionally invalid URI with hyphens and special characters for testing"
+            "This resource has an intentionally invalid URI with hyphens and special characters for testing",
         )])
     }
 }
@@ -1077,7 +1135,10 @@ impl Default for LongUriResource {
     fn default() -> Self {
         let long_part = "very-long-path-component-".repeat(20); // ~500 chars
         Self {
-            long_uri: format!("file:///long/{}/with/many/nested/path/segments/that/make/the/uri/extremely/long.txt", long_part)
+            long_uri: format!(
+                "file:///long/{}/with/many/nested/path/segments/that/make/the/uri/extremely/long.txt",
+                long_part
+            ),
         }
     }
 }
@@ -1117,7 +1178,11 @@ impl HasIcons for LongUriResource {}
 
 #[async_trait]
 impl McpResource for LongUriResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::text(
             &self.long_uri,
             format!(
@@ -1168,7 +1233,11 @@ impl HasIcons for MetaDynamicResource {}
 
 #[async_trait]
 impl McpResource for MetaDynamicResource {
-    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         let meta_fields = params
             .as_ref()
             .and_then(|p| p.get("_meta"))
@@ -1254,7 +1323,11 @@ impl HasIcons for UserTemplateResource {}
 
 #[async_trait]
 impl McpResource for UserTemplateResource {
-    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         // Extract template variables from params
         let template_vars = params
             .as_ref()
@@ -1333,7 +1406,11 @@ impl HasIcons for FileTemplateResource {}
 
 #[async_trait]
 impl McpResource for FileTemplateResource {
-    async fn read(&self, params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         // Extract template variables from params
         let template_vars = params
             .as_ref()
@@ -1462,7 +1539,11 @@ impl HasIcons for CompleteResource {}
 
 #[async_trait]
 impl McpResource for CompleteResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&turul_mcp_server::SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&turul_mcp_server::SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         let complete_data = json!({
             "type": "complete",
             "message": "This resource demonstrates all optional MCP resource fields",
@@ -1585,13 +1666,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("");
     info!("   🚀 Advanced Resources (Features):");
     info!("      • file:///session/info.json - Session-aware resource");
-    info!("      • file:///subscribe/updates.json - Test subscription resource (returns MethodNotFound)");
+    info!(
+        "      • file:///subscribe/updates.json - Test subscription resource (returns MethodNotFound)"
+    );
     info!("      • file:///notify/trigger.json - SSE notification triggers");
     info!("      • file:///multi/contents.txt - Multiple ResourceContent items");
     info!("      • file:///paginated/items.json - Cursor-based pagination");
     info!("");
     info!("   ⚠️  Edge Case Resources:");
-    info!("      • file:///invalid/bad-chars-and-spaces.txt - Intentionally non-compliant URI for error testing");
+    info!(
+        "      • file:///invalid/bad-chars-and-spaces.txt - Intentionally non-compliant URI for error testing"
+    );
     info!("      • file:///long/very-long-path... - Very long URI testing");
     info!("      • file:///meta/dynamic.json - _meta field behavior changes");
     info!("      • file:///complete/all-fields.json - All optional fields populated");
@@ -1599,7 +1684,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("💡 Quick Test Commands:");
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("     -H 'Content-Type: application/json' \\");
-    info!("     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'");
+    info!(
+        "     -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'"
+    );
     info!("");
     info!("   curl -X POST http://127.0.0.1:{}/mcp \\", port);
     info!("     -H 'Content-Type: application/json' \\");

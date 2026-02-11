@@ -1,4 +1,3 @@
-
 //! SSE Notifications Tests for MCP Resources
 //!
 //! Tests Server-Sent Events functionality for resources/list changes

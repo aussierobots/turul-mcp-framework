@@ -201,8 +201,8 @@ async fn test_resource_business_logic_methods_coverage() {
     match &log_data[0] {
         ResourceContent::Text(text_content) => {
             assert!(text_content.text.to_uppercase().contains("ERROR")); // log type or level
-                                                                         // Should contain either "error" (log type) or "ERROR" (log level)
-                                                                         // Should respect lines limit
+            // Should contain either "error" (log type) or "ERROR" (log level)
+            // Should respect lines limit
             let line_count = text_content.text.lines().count();
             assert!(line_count <= 25); // Respects with_lines(25)
         }
@@ -312,7 +312,7 @@ async fn test_resource_serialization_round_trip_mcp_compliance() {
     assert!(serialized.contains("\"name\":")); // name field
     assert!(serialized.contains("\"uri\":")); // uri field
     assert!(serialized.contains("\"description\":")); // description field
-                                                      // Should NOT contain snake_case (Rust style)
+    // Should NOT contain snake_case (Rust style)
     assert!(!serialized.contains("mime_type")); // Should be camelCase in JSON
 
     // Test deserialization maintains data integrity

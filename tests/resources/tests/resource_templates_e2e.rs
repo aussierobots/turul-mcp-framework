@@ -1,4 +1,3 @@
-
 //! Resource Templates E2E Testing
 //!
 //! Comprehensive testing for resources/templates/list endpoint
@@ -57,7 +56,10 @@ async fn test_resource_templates_list_endpoint() {
         warn!("⚠️  'resourceTemplates' not found, using 'resources' field");
         result.get("resources").unwrap().as_array().unwrap()
     } else {
-        panic!("Result should contain 'resourceTemplates', 'templates', or 'resources'. Found keys: {:?}", result.keys().collect::<Vec<_>>());
+        panic!(
+            "Result should contain 'resourceTemplates', 'templates', or 'resources'. Found keys: {:?}",
+            result.keys().collect::<Vec<_>>()
+        );
     };
 
     info!("✅ Found {} resource templates", templates.len());
