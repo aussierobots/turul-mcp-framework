@@ -80,8 +80,8 @@ of `turul-mcp-protocol-2025-06-18` but includes all 2025-11-25 additions.
 - **Code duplication** - Common types (JsonRpcRequest, ContentBlock, etc.) exist in both
   crates. Changes to shared patterns must be applied in both places.
 - **Workspace size** - An additional crate adds to build times and workspace complexity.
-- **Version alias complexity** - `turul-mcp-protocol` currently aliases to 2025-06-18.
-  When 2025-11-25 becomes the default, this alias must be updated carefully.
+- **Version alias complexity** - `turul-mcp-protocol` now aliases to 2025-11-25 (updated from 2025-06-18).
+  Future spec versions will require the same alias update.
 
 ### Risks
 

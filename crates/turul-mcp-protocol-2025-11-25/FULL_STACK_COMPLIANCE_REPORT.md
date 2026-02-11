@@ -1,5 +1,7 @@
 # MCP 2025-11-25 Full Server Stack Compliance Report
 
+> **HISTORICAL**: This report was generated on 2026-02-07 during the initial 2025-11-25 compliance audit. All CRITICAL, WARNING, and INFO issues listed below have since been resolved (Phases 1-7 complete, 1500+ workspace tests passing). This document is retained for audit trail purposes.
+
 **Date**: 2026-02-07
 **Reviewer**: spec-compliance agent
 **Scope**: Full MCP server stack (protocol, server, handlers, builders, HTTP transport, client, examples)
@@ -9,9 +11,9 @@
 
 ## Executive Summary
 
-This report extends the protocol-only compliance review to cover the entire Turul MCP Framework stack. The protocol crate issues from the original COMPLIANCE_REPORT.md remain valid and are referenced here. This report adds findings for the server layer, handler dispatch, builder traits, HTTP transport, client crate, error codes, and examples.
+The issues below were identified during the initial full-stack compliance audit and have all been resolved. See WORKING_MEMORY.md for the resolution timeline across Phases 1-7.
 
-**New findings**: 5 CRITICAL, 6 WARNING, 4 INFO
+**Original findings**: 5 CRITICAL, 6 WARNING, 4 INFO — **all resolved**
 
 ---
 
@@ -120,11 +122,11 @@ While not strictly wrong (these are in the server error range -32000 to -32099),
 The `NotificationsHandler::supported_methods()` lists:
 - `notifications/message`
 - `notifications/progress`
-- `notifications/resources/listChanged`
+- `notifications/resources/list_changed`
 - `notifications/resources/updated`
-- `notifications/tools/listChanged`
-- `notifications/prompts/listChanged`
-- `notifications/roots/listChanged`
+- `notifications/tools/list_changed`
+- `notifications/prompts/list_changed`
+- `notifications/roots/list_changed`
 
 Missing: `notifications/tasks/status` (required by MCP 2025-11-25 for task lifecycle).
 
@@ -183,9 +185,9 @@ Despite the icon hardcoding issue (C3), the builder trait `to_*()` methods produ
 
 ---
 
-## Cross-Reference: Protocol Crate Issues Still Open
+## Cross-Reference: Protocol Crate Issues (At Time of Audit)
 
-The following issues from the original COMPLIANCE_REPORT.md remain unresolved and affect the full stack:
+The following issues from the original COMPLIANCE_REPORT.md were open at the time of this audit and have since been resolved:
 
 | ID | Severity | Summary |
 |----|----------|---------|

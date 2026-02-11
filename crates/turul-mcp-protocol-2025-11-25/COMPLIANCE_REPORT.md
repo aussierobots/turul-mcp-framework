@@ -1,18 +1,20 @@
 # MCP 2025-11-25 Spec Compliance Report
 
+> **HISTORICAL**: This report was generated on 2026-02-07 during the initial 2025-11-25 compliance audit. All CRITICAL, MODERATE, and MINOR issues listed below have since been resolved (Phases 1-7 complete, 1500+ workspace tests passing). This document is retained for audit trail purposes.
+
 **Date**: 2026-02-07
 **Reviewer**: spec-compliance agent
 **Crate**: `turul-mcp-protocol-2025-11-25`
-**Tests passing**: 121/121 + 2 doc-tests
+**Tests passing**: 121/121 + 2 doc-tests (at time of audit; now 1500+ workspace-wide)
 **Reference**: https://github.com/modelcontextprotocol/specification/blob/main/schema/2025-11-25/schema.ts
 
 ---
 
 ## Summary
 
-The crate has **significant deviations** from the official MCP 2025-11-25 TypeScript schema. While existing features (tools, resources, prompts, elicitation basics) are well-implemented and pass camelCase serialization, the newly added 2025-11-25 features (Tasks, Icons, Sampling additions) diverge from the spec in several critical ways.
+The issues below were identified during the initial compliance audit and have all been resolved. See WORKING_MEMORY.md for the resolution timeline across Phases 1-7.
 
-**Severity Rating**: 7 issues CRITICAL, 5 issues MODERATE, 3 issues MINOR
+**Original Severity Rating**: 7 issues CRITICAL, 5 issues MODERATE, 3 issues MINOR — **all resolved**
 
 ---
 

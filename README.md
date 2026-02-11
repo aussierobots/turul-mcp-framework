@@ -5,13 +5,13 @@ A comprehensive Rust framework for building Model Context Protocol (MCP) servers
 ⚠️ **Beta Status** - Active development with ongoing feature enhancements. Full MCP 2025-11-25 compliance including task storage and runtime. Suitable for development and testing.
 
 ## 🧪 **Active Development** - Comprehensive Test Coverage
-**1300+ passing tests across workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
+**1500+ passing tests across workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
 
 ## ✨ Key Highlights
 
 - **🏗️ 12 Framework Crates**: Complete MCP ecosystem with core framework, client library, task storage, and serverless support
 - **📚 57 Comprehensive Examples**: Real-world business applications and framework demonstration examples (all validated through comprehensive testing campaign)
-- **🧪 1300+ Development Tests**: Comprehensive test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
+- **🧪 1500+ Development Tests**: Comprehensive test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
 - **🌐 Transport Flexibility**: HTTP/1.1 and SSE streaming via SessionMcpHandler (stdio planned)
 - **☁️ Serverless Support**: AWS Lambda integration with streaming responses and SQS event processing
@@ -188,7 +188,7 @@ curl -X POST http://127.0.0.1:8641/mcp \
 **Core Test Servers:**
 ```bash
 # Comprehensive server (all MCP features)
-cargo run --package comprehensive-server -- --port 8082
+cargo run --package comprehensive-server -- --port 8002
 
 # Resource server (17 test resources)  
 cargo run --package resource-test-server -- --port 8080
@@ -300,7 +300,7 @@ chmod +x quick_check.sh
 
 # Test any server
 cargo run -p minimal-server &
-./quick_check.sh 8000
+./quick_check.sh 8641
 ```
 
 ## 🏛️ Architecture Overview

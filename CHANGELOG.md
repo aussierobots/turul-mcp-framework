@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   // After
   use turul_mcp_builders::prelude::*;  // or turul_mcp_server::prelude::*
   ```
-- **Migration Guide**: See [MIGRATION_0.2.1.md](MIGRATION_0.2.1.md) for complete step-by-step migration instructions
+- **Migration Guide**: See the breaking changes listed above for step-by-step migration instructions
 
 ### Fixed
 
@@ -88,6 +88,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**MCP 2025-06-18 Specification:**
+- Full compliance with MCP 2025-06-18 spec
+- Session-Aware Resources: All resources now support `session: Option<&SessionContext>` parameter
+- Sampling Validation Framework: `ProvidedSamplingHandler` for request validation
+- SSE Streaming: Chunked transfer encoding with real-time notifications
+- CLI Support: All test servers now support `--port` argument with dynamic binding
+- Path Normalization: Traversal attack detection in roots validation
+- Strict Lifecycle Mode: Optional strict session initialization enforcement
+
 **Middleware System:**
 - Complete middleware architecture for HTTP and Lambda transports
 - `.middleware()` builder method on `McpServer` and `LambdaMcpServerBuilder`
@@ -107,6 +116,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive example verification suite (5 phases, 31 servers)
 - Session lifecycle compliance: `notifications/initialized` in all e2e tests
 
+### Changed
+
+- **Resource Trait**: Updated `read()` signature to include session parameter
+- **Tool Output**: Tools with `outputSchema` automatically include `structuredContent`
+- **Error Handling**: Session lifecycle violations use `SessionError` type
+- **Pagination**: Reject `limit=0` to prevent stalls
+- **HTTP Transport**: Protocol-based routing (≥2025-03-26 uses streaming, ≤2024-11-05 uses buffered)
+- SSE keepalives use comment syntax for better client compatibility
+- DynamoDB queries use strongly consistent reads
+- Lambda `LambdaMcpHandler` now cached globally (preserves DynamoDB client, StreamManager, middleware instances)
+- Test packages updated to Rust edition 2024 and tokio version "1"
+- Middleware stack execution order documented (FIFO/LIFO)
+
 ### Fixed
 
 **Examples (4 bugs fixed):**
@@ -123,6 +145,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tool output: Schema and runtime field names now consistent
 - CamelCase: Proper acronym handling (GPS → gps, HTTPServer → httpServer)
 - Lambda compilation: Fixed `LambdaError::Config` reference
+- **TestServerManager**: Blocking wait for process termination, prevents zombie processes
+- **Session Tests**: Correct response structure (`output` vs `value`)
+- **Prompt Arguments**: Fix argument name mismatches in test expectations
+- **MCP Inspector**: Enable compatibility with MCP Inspector and FastMCP clients
+- **Zero-Config**: Correct output field expectations for derived tools
+- **Borrow Checker**: Resolve errors in `roots_derive` macro
 
 **Code Quality:**
 - Fixed 14 collapsible_if clippy warnings using Rust 2024 let-chain syntax
@@ -136,13 +164,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SKIPPED tracked separately from PASSED (no hidden failures)
 - Build errors properly diagnosed with detailed logs
 
-### Changed
-
-- SSE keepalives use comment syntax for better client compatibility
-- DynamoDB queries use strongly consistent reads
-- Lambda `LambdaMcpHandler` now cached globally (preserves DynamoDB client, StreamManager, middleware instances)
-- Test packages updated to Rust edition 2024 and tokio version "1"
-- Middleware stack execution order documented (FIFO/LIFO)
+### Examples
+- Restored `roots-server` with clap CLI (108 lines, down from 512)
+- Updated `elicitation-server` with multi-path data loading
+- Updated `sampling-server` with dynamic port binding
+- Updated `pagination-server` with proper SQLite URI (`?mode=rwc`)
+- All 31 core examples verified and working
 
 ### Documentation
 
@@ -151,58 +178,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Doctests passing: turul-mcp-derive (25/25), turul-mcp-protocol (7/7)
 - Complete verification run documented with bug fixes and runbook
 - Middleware testing scripts: `test_middleware_live.sh` and Lambda examples
-
-### Tests
-
-- Fixed 9 integration test failures
-- All 161 integration tests passing across 20 test suites
-- 30/31 examples verified (Phases 1-5: 100% passing)
-- Middleware parity tests verify HTTP/Lambda consistency
-
-## [0.2.0] - 2025-10-01
-
-### Added
-- **MCP 2025-06-18 Specification**: Full compliance with latest MCP spec
-- **Session-Aware Resources**: All resources now support `session: Option<&SessionContext>` parameter
-- **Sampling Validation Framework**: `ProvidedSamplingHandler` for request validation
-- **SSE Streaming**: Chunked transfer encoding with real-time notifications
-- **CLI Support**: All test servers now support `--port` argument with dynamic binding
-- **Path Normalization**: Traversal attack detection in roots validation
-- **Strict Lifecycle Mode**: Optional strict session initialization enforcement
-
-### Changed
-- **Resource Trait**: Updated `read()` signature to include session parameter
-- **Tool Output**: Tools with `outputSchema` automatically include `structuredContent`
-- **Error Handling**: Session lifecycle violations use `SessionError` type
-- **Pagination**: Reject `limit=0` to prevent stalls
-- **HTTP Transport**: Protocol-based routing (≥2025-03-26 uses streaming, ≤2024-11-05 uses buffered)
-
-### Fixed
-- **TestServerManager**: Blocking wait for process termination, prevents zombie processes
-- **Session Tests**: Correct response structure (`output` vs `value`)
-- **Prompt Arguments**: Fix argument name mismatches in test expectations
-- **MCP Inspector**: Enable compatibility with MCP Inspector and FastMCP clients
-- **Zero-Config**: Correct output field expectations for derived tools
-- **Borrow Checker**: Resolve errors in `roots_derive` macro
-
-### Examples
-- Restored `roots-server` with clap CLI (108 lines, down from 512)
-- Updated `elicitation-server` with multi-path data loading
-- Updated `sampling-server` with dynamic port binding
-- Updated `pagination-server` with proper SQLite URI (`?mode=rwc`)
-- All 31 core examples verified and working
-
-### Tests
-- 440+ unit tests passing
-- 31/35 examples verified (89%)
-- Phase 1-4, 6, 8 verification: 100% passing
-- All critical functionality validated
-
-### Documentation
 - Updated CLAUDE.md with session-aware patterns
 - Updated EXAMPLES.md with validation results
 - Added curl and jq to auto-approved commands
 - Comprehensive test coverage documentation
+
+### Tests
+
+- 440+ unit tests passing (161 integration tests across 20 test suites)
+- 30/31 examples verified (Phases 1-5: 100% passing)
+- Middleware parity tests verify HTTP/Lambda consistency
+- All critical functionality validated
 
 ## [0.1.0] - Initial Release
 

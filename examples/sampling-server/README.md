@@ -17,7 +17,7 @@ MCP sampling allows servers to request AI model generation from clients through 
 ### 💬 **Conversational AI**
 - **Multi-turn conversations** with message history
 - **Context preservation** across sampling requests
-- **Role-based messaging** (user, assistant, system)
+- **Role-based messaging** (user, assistant)
 - **Conversation metadata** tracking and management
 
 ### 💻 **Specialized Sampling**
@@ -179,25 +179,26 @@ curl -X POST http://127.0.0.1:8051/mcp \
   "params": {
     "messages": [
       {
-        "role": "user|assistant|system",
+        "role": "user|assistant",
         "content": {
           "type": "text",
           "text": "Message content here"
         }
       }
     ],
-    "model_preferences": {
-      "hints": ["conversational", "helpful"],
-      "cost_budget": 0.05,
-      "latency_priority": "balanced"
+    "modelPreferences": {
+      "hints": [{"name": "conversational"}, {"name": "helpful"}],
+      "costPriority": 0.5,
+      "speedPriority": 0.5,
+      "intelligencePriority": 0.8
     },
-    "system_prompt": "You are a helpful AI assistant...",
+    "systemPrompt": "You are a helpful AI assistant...",
     "temperature": 0.7,
-    "max_tokens": 500,
-    "stop_sequences": ["```", "END"],
+    "maxTokens": 500,
+    "stopSequences": ["```", "END"],
     "metadata": {
-      "session_id": "uuid-here",
-      "task_type": "generation"
+      "sessionId": "uuid-here",
+      "taskType": "generation"
     }
   }
 }
@@ -207,17 +208,18 @@ curl -X POST http://127.0.0.1:8051/mcp \
 
 | Field | Description | Example Values |
 |-------|-------------|----------------|
-| `hints` | Model selection hints | `["conversational", "technical"]` |
-| `cost_budget` | Maximum cost per request | `0.05` (5 cents) |
-| `latency_priority` | Speed vs quality trade-off | `"fast", "balanced", "quality"` |
+| `hints` | Model selection hints (objects with `name` field) | `[{"name": "conversational"}]` |
+| `costPriority` | Cost optimization priority | `0.0` - `1.0` |
+| `speedPriority` | Speed optimization priority | `0.0` - `1.0` |
+| `intelligencePriority` | Intelligence optimization priority | `0.0` - `1.0` |
 
 ### Generation Parameters
 
 | Parameter | Purpose | Range | Default |
 |-----------|---------|-------|---------|
 | `temperature` | Creativity vs precision | 0.0 - 1.0 | 0.7 |
-| `max_tokens` | Response length limit | 1 - 4000 | 500 |
-| `stop_sequences` | Generation stop triggers | Array of strings | `[]` |
+| `maxTokens` | Response length limit | 1 - 4000 | 500 |
+| `stopSequences` | Generation stop triggers | Array of strings | `[]` |
 
 ## Use Cases
 
@@ -283,7 +285,7 @@ let system_prompt = format!(
 let request = CreateMessageRequest {
     messages: vec![user_message],
     model_preferences: Some(ModelPreferences {
-        hints: Some(vec!["code_generation".to_string(), language.to_lowercase()]),
+        hints: Some(vec![ModelHint { name: Some("code_generation".to_string()) }, ModelHint { name: Some(language.to_lowercase()) }]),
         ..Default::default()
     }),
     system_prompt: Some(system_prompt),
@@ -299,13 +301,13 @@ let request = CreateMessageRequest {
 // Build conversation history
 let mut messages = vec![
     SamplingMessage {
-        role: "assistant".to_string(),
+        role: Role::Assistant,
         content: MessageContent::Text {
             text: "Hello! I'm ready to help.".to_string(),
         },
     },
     SamplingMessage {
-        role: "user".to_string(),
+        role: Role::User,
         content: MessageContent::Text {
             text: user_message.to_string(),
         },
@@ -314,7 +316,7 @@ let mut messages = vec![
 
 let request = CreateMessageRequest {
     messages,
-    include_context: Some("conversation_history".to_string()),
+    include_context: Some(IncludeContext::ThisServer),
     metadata: Some(serde_json::json!({
         "conversation_id": uuid,
         "context_type": "educational"
@@ -328,9 +330,10 @@ let request = CreateMessageRequest {
 ```rust
 let request = CreateMessageRequest {
     model_preferences: Some(ModelPreferences {
-        hints: Some(vec!["analytical", "structured"]),
-        cost_budget: Some(0.05),          // 5 cents max
-        latency_priority: Some("balanced".to_string()),
+        hints: Some(vec![ModelHint { name: Some("analytical".to_string()) }]),
+        cost_priority: Some(0.5),
+        speed_priority: Some(0.5),
+        intelligence_priority: Some(0.8),
         ..Default::default()
     }),
     temperature: Some(0.4),               // Precise analysis

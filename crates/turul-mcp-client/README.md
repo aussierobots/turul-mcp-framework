@@ -534,8 +534,9 @@ match error {
 The client automatically adapts to server capabilities:
 
 - **2024-11-05**: Basic MCP without streamable HTTP
-- **2025-03-26**: Streamable HTTP with SSE support  
+- **2025-03-26**: Streamable HTTP with SSE support
 - **2025-06-18**: Full feature set with meta fields and enhanced capabilities
+- **2025-11-25**: Icons, tasks, sampling tools, URL elicitation (current default)
 
 ### Transport Compatibility
 

@@ -114,7 +114,7 @@ This file contains historical context for completed work, archived from WORKING_
 
 **Migration Support**:
 - `CHANGELOG.md` - Updated v0.2.1 section with breaking changes
-- `MIGRATION_0.2.1.md` - Comprehensive migration guide
+- `CHANGELOG.md` (v0.2.1 section) - Migration details and breaking changes
 
 ---
 

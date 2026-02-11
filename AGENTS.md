@@ -63,7 +63,7 @@
 - Resources: `Resource`, `ResourceTemplate`, and results (`List*Result`, `ReadResourceResult`) follow TS names, including `nextCursor` and `_meta`.
 - `CallToolResult.structuredContent` is an optional field in the MCP 2025-11-25 schema. Keep it optional and ensure clients/tests handle its absence correctly.
 - Tool output schemas:
-  - External output structs **must** derive `schemars::JsonSchema` so the derive macros can emit detailed schemas via `schema_for!(T)`. Missing derives now produce compile-time errors (see `MIGRATION_0.2.1.md`).
+  - External output structs **must** derive `schemars::JsonSchema` so the derive macros can emit detailed schemas via `schema_for!(T)`. Missing derives now produce compile-time errors (see CHANGELOG.md v0.2.1 breaking changes).
   - Zero-config (`output` omitted) heuristics still target `Self`; use `#[tool(output = Type)]` for accurate schemas on complex responses.
   - Array outputs (`Vec<T>`) are validated by `mcp_vec_result_schema_test` to ensure `tools/list` advertises `"type": "array"` and the runtime result matches.
 

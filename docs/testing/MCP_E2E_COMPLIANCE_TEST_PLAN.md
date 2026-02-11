@@ -110,10 +110,10 @@
 - ✅ **notifications/progress**: Progress tracking with progressToken
 - ✅ **notifications/cancelled**: Request cancellation notifications
 - 🚧 **notifications/initialized**: Server initialization complete
-- ✅ **notifications/resources/listChanged**: Resource list updates
+- ✅ **notifications/resources/list_changed**: Resource list updates
 - ✅ **notifications/resources/updated**: Individual resource changes
-- 🚧 **notifications/tools/listChanged**: Tool list updates
-- ✅ **notifications/prompts/listChanged**: Prompt list updates
+- 🚧 **notifications/tools/list_changed**: Tool list updates
+- ✅ **notifications/prompts/list_changed**: Prompt list updates
 - ✅ **Server-Sent Events**: SSE transport for real-time notifications
 
 **Test Implementation**: ✅ **PARTIAL** - SSE tests in multiple test files  
@@ -315,7 +315,7 @@ Reviewer Checklist delta (Resources & Prompts)
 - Endpoints: Handlers and tests use spec names (`resources/templates/list`, not `templates/list`). Keep this enforced via the existing naming tests.
 - Types and shapes: Results include required fields (`contents[].uri`, `mimeType` when applicable). Add a negative test for missing/relative URIs and for bad `mimeType`.
 - Messages (Prompts): Roles and content arrays look correct. Add a test that rejects ad‑hoc message shapes to guard regressions.
-- Notifications: Method casing matches spec. Coverage gaps remain for `notifications/initialized` and `notifications/tools/listChanged` (acceptable for static servers). Documented as partial.
+- Notifications: Method casing matches spec. Coverage gaps remain for `notifications/initialized` and `notifications/tools/list_changed` (acceptable for static servers). Documented as partial.
 - Pagination: Happy-path pagination covered; add boundary tests (empty page, stable ordering, `nextCursor` rollover) for both prompts and resources.
 
 Additional Checklist (Other Protocol Areas)
@@ -419,7 +419,7 @@ Risk Analysis:
 - [x] Session isolation for notifications
 - [x] Event replay and resumability
 - [ ] notifications/initialized properly sent
-- [ ] notifications/tools/listChanged implemented
+- [ ] notifications/tools/list_changed implemented
 - [x] Progress notifications with progressToken
 
 ### Capabilities Protocol Verification ✅ COMPLETE
@@ -445,7 +445,7 @@ Risk Analysis:
 1. ~~**Tools E2E Testing**: Complete tools protocol E2E test suite needed~~ ✅ **COMPLETED**
 2. ~~**Tools Test Server**: Comprehensive tools test server implementation~~ ✅ **COMPLETED**
 3. **notifications/initialized**: Not consistently tested across servers
-4. **notifications/tools/listChanged**: Missing from some test scenarios
+4. **notifications/tools/list_changed**: Missing from some test scenarios
 
 ### MEDIUM PRIORITY GAPS
 1. ~~**SessionStorage Integration**: Tools test server uses global Mutex instead of framework's SessionStorage trait~~ ✅ **RESOLVED**

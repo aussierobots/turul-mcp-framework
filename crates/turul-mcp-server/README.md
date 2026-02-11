@@ -393,7 +393,7 @@ let server = McpServer::builder()
 
 ## Examples
 
-The [turul-mcp-framework repository](https://github.com/anthropics/turul-mcp-framework) contains 25+ comprehensive examples:
+The [turul-mcp-framework repository](https://github.com/aussierobots/turul-mcp-framework) contains 25+ comprehensive examples:
 
 - **minimal-server** - Simplest possible server
 - **stateful-server** - Session management patterns
