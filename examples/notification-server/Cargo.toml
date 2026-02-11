@@ -17,3 +17,7 @@ serde_json.workspace = true
 serde.workspace = true
 uuid.workspace = true
 chrono.workspace = true
+[[bin]]
+name = "notification-server"
+path = "src/main.rs"
+test = false

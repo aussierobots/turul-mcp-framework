@@ -19,3 +19,7 @@ serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid = { workspace = true, features = ["v7", "serde"] }
+[[bin]]
+name = "builders-showcase"
+path = "src/main.rs"
+test = false

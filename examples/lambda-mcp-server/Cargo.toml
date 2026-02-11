@@ -6,6 +6,7 @@ description = "AWS Lambda MCP server with SSE snapshots (non-streaming)"
 license = "MIT"
 
 [[bin]]
+test = false
 name = "lambda-turul-mcp-server"
 path = "src/main.rs"
 

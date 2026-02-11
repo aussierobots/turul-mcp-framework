@@ -15,3 +15,7 @@ tracing-subscriber = { workspace = true }
 clap = { workspace = true }
 reqwest = { workspace = true }
 futures = { workspace = true }
+[[bin]]
+name = "streamable-http-client"
+path = "src/main.rs"
+test = false

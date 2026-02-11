@@ -8,10 +8,12 @@ repository.workspace = true
 homepage.workspace = true
 
 [[bin]]
+test = false
 name = "load_test_server"
 path = "src/load_test_server.rs"
 
 [[bin]]
+test = false
 name = "performance_client"
 path = "src/performance_client.rs"
 
@@ -21,6 +23,7 @@ path = "src/performance_client.rs"
 # TODO: Needs turul-mcp-client migration - complex reqwest patterns
 
 [[bin]]
+test = false
 name = "memory_benchmark"
 path = "src/memory_benchmark.rs"
 

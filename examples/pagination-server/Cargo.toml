@@ -20,3 +20,7 @@ rand = { workspace = true }
 sqlx = { workspace = true }
 tempfile = { workspace = true }
 clap = { workspace = true }
+[[bin]]
+name = "pagination-server"
+path = "src/main.rs"
+test = false

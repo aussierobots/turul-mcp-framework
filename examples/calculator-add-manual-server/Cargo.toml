@@ -18,3 +18,7 @@ tokio = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+[[bin]]
+name = "calculator-add-manual-server"
+path = "src/main.rs"
+test = false

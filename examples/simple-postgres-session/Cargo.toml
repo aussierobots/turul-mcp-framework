@@ -6,14 +6,17 @@ authors.workspace = true
 license.workspace = true
 
 [[bin]]
+test = false
 name = "simple-postgres-session"
 path = "src/main.rs"
 
 [[bin]]
+test = false
 name = "postgres-setup"
 path = "src/bin/postgres-setup.rs"
 
 [[bin]]
+test = false
 name = "postgres-teardown"
 path = "src/bin/postgres-teardown.rs"
 

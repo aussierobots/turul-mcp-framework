@@ -19,5 +19,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive"] }
 
 [[bin]]
+test = false
 name = "middleware-auth-server"
 path = "src/main.rs"

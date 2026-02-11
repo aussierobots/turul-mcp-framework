@@ -19,3 +19,7 @@ serde_json = { workspace = true }
 serde = { workspace = true }
 serde_yml = { workspace = true }
 async-trait = { workspace = true }
+[[bin]]
+name = "comprehensive-server"
+path = "src/main.rs"
+test = false

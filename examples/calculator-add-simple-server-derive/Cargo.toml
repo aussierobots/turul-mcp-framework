@@ -20,3 +20,8 @@ async-trait = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 schemars = { workspace = true }
+
+[[bin]]
+name = "calculator-add-simple-server-derive"
+path = "src/main.rs"
+test = false

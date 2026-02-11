@@ -15,3 +15,7 @@ tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
+[[bin]]
+name = "logging-test-client"
+path = "src/main.rs"
+test = false

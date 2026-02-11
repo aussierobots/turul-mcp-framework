@@ -19,3 +19,7 @@ serde = { workspace = true }
 serde_yml = { workspace = true }
 toml = { workspace = true }
 regex = { workspace = true }
+[[bin]]
+name = "derive-macro-server"
+path = "src/main.rs"
+test = false

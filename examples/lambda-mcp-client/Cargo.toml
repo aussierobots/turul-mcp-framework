@@ -6,6 +6,7 @@ description = "Comprehensive test client for lambda-turul-mcp-server validation 
 license = "MIT"
 
 [[bin]]
+test = false
 name = "lambda-turul-mcp-client"
 path = "src/main.rs"
 

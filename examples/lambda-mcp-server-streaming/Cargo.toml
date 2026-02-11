@@ -6,6 +6,7 @@ description = "AWS Lambda MCP server with real-time SSE streaming using turul-mc
 license = "MIT"
 
 [[bin]]
+test = false
 name = "lambda-turul-mcp-server-streaming"
 path = "src/main.rs"
 

@@ -7,6 +7,7 @@ description = "MCP Prompts Test Server - Comprehensive test prompts for E2E vali
 license = "MIT OR Apache-2.0"
 
 [[bin]]
+test = false
 name = "prompts-test-server"
 path = "src/main.rs"
 

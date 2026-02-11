@@ -19,3 +19,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 rand = { workspace = true }
 clap = { workspace = true }
+[[bin]]
+name = "elicitation-server"
+path = "src/main.rs"
+test = false

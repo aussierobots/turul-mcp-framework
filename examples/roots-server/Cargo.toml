@@ -12,3 +12,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 async-trait.workspace = true
 clap.workspace = true
+[[bin]]
+name = "roots-server"
+path = "src/main.rs"
+test = false

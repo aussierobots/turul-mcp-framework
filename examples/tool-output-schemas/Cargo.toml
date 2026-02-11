@@ -20,5 +20,6 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 
 [[bin]]
+test = false
 name = "tool-output-schemas"
 path = "src/main.rs"

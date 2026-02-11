@@ -7,6 +7,7 @@ description = "MCP Tools Test Server - Comprehensive test tools for E2E validati
 license = "MIT OR Apache-2.0"
 
 [[bin]]
+test = false
 name = "tools-test-server"
 path = "src/main.rs"
 

@@ -6,14 +6,17 @@ authors.workspace = true
 license.workspace = true
 
 [[bin]]
+test = false
 name = "simple-dynamodb-session"
 path = "src/main.rs"
 
 [[bin]]
+test = false
 name = "dynamodb-setup"
 path = "src/bin/dynamodb-setup.rs"
 
 [[bin]]
+test = false
 name = "dynamodb-teardown"
 path = "src/bin/dynamodb-teardown.rs"
 

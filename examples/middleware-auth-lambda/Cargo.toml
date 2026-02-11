@@ -6,6 +6,7 @@ publish = false
 description = "AWS Lambda MCP server with authentication middleware"
 
 [[bin]]
+test = false
 name = "middleware-auth-lambda"
 path = "src/main.rs"
 

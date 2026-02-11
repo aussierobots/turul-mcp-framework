@@ -12,3 +12,8 @@ description = "Example showcasing MCP 2025-11-25 icon support on tools, resource
 turul-mcp-protocol = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
+
+[[bin]]
+name = "icon-showcase"
+path = "src/main.rs"
+test = false
