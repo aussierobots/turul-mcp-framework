@@ -388,8 +388,8 @@ impl McpMiddleware for AuthMiddleware {
 - ✅ Session state integration
 
 **Example:**
-- `examples/middleware-auth-lambda` - Full authorizer extraction pattern
-- Test events: `test-events/apigw-v1-with-authorizer.json`, `apigw-v2-with-authorizer.json`
+- `examples/middleware-auth-lambda` - Full authorizer extraction pattern (V1 nested, V1 flat, V2)
+- Test events: V1 nested, V1 flat, V2 authorizer shapes (`test-events/`)
 
 ### Core Framework (12 Crates)
 - **`turul-mcp-server`** - High-level server builder with session management and task runtime

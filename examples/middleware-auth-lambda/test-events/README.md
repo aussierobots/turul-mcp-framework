@@ -4,12 +4,33 @@ Test events for validating API Gateway authorizer context extraction.
 
 ## Files
 
-- `apigw-v1-with-authorizer.json` - API Gateway REST API (V1) format with Lambda authorizer context
-- `apigw-v2-with-authorizer.json` - API Gateway HTTP API (V2) format with authorizer context
+- `apigw-v1-with-authorizer.json` - API Gateway REST API (V1) format with nested Lambda authorizer context (`authorizer.lambda.{field}`)
+- `apigw-v1-flat-authorizer.json` - API Gateway REST API (V1) format with flat authorizer context (`authorizer.{field}`); internal fields (`principalId`, `integrationLatency`) are filtered out automatically
+- `apigw-v2-with-authorizer.json` - API Gateway HTTP API (V2) format with authorizer context (`authorizer.{field}`)
+
+## Three Authorizer Shapes
+
+API Gateway produces three distinct authorizer context shapes. The adapter handles all three:
+
+**V1 Nested** (`apigw-v1-with-authorizer.json`):
+```json
+{ "requestContext": { "authorizer": { "lambda": { "userId": "user-123" } } } }
+```
+
+**V1 Flat** (`apigw-v1-flat-authorizer.json`):
+```json
+{ "requestContext": { "authorizer": { "userId": "user-123", "principalId": "...", "integrationLatency": 42 } } }
+```
+The flat shape includes API Gateway internal fields that are **not** user context. The adapter filters out `principalId`, `integrationLatency`, and `usageIdentifierKey` automatically.
+
+**V2** (`apigw-v2-with-authorizer.json`):
+```json
+{ "requestContext": { "authorizer": { "userId": "user-123" } } }
+```
 
 ## Authorizer Fields
 
-Both events include common authorizer context fields (as set by API Gateway authorizer):
+All three events include common authorizer context fields (as set by API Gateway authorizer):
 
 - `userId`: user-123 (stored in session as `user_id`)
 - `tenantId`: tenant-456 (stored in session as `tenant_id`)
@@ -24,8 +45,11 @@ Both events include common authorizer context fields (as set by API Gateway auth
 ### With cargo lambda CLI
 
 ```bash
-# Test V1 format
+# Test V1 nested format
 cargo lambda invoke middleware-auth-lambda --data-file test-events/apigw-v1-with-authorizer.json
+
+# Test V1 flat format
+cargo lambda invoke middleware-auth-lambda --data-file test-events/apigw-v1-flat-authorizer.json
 
 # Test V2 format
 cargo lambda invoke middleware-auth-lambda --data-file test-events/apigw-v2-with-authorizer.json
@@ -73,3 +97,9 @@ Examples:
 - `HTTPSEnabled` → `https_enabled`
 - `user@email` → `user-email`
 - `subscription_tier` → `subscription_tier`
+
+## Transport
+
+This example uses MCP 2025-11-25 **Streamable HTTP** transport via REST API (V1). REST API supports standard HTTP POST with full request/response control, making it compatible with Streamable HTTP.
+
+**Note**: All three authorizer shapes (V1 nested, V1 flat, V2) are supported for context extraction. However, Streamable HTTP transport requires REST API (V1).

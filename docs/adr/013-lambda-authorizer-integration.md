@@ -95,28 +95,33 @@ Tool Implementation
 
        match request_context {
            RequestContext::ApiGatewayV2(ctx) => {
-               // V2: HashMap format
+               // V2 (HTTP API): fields already deserialized from "lambda" key
                if let Some(ref authorizer) = ctx.authorizer {
                    for (key, value) in &authorizer.fields {
-                       let sanitized_key = sanitize_authorizer_field_name(key);
-                       let value_str = match value {
-                           serde_json::Value::String(s) => s.clone(),
-                           other => other.to_string(),
-                       };
-                       fields.insert(sanitized_key, value_str);
+                       // ... sanitize + insert
                    }
                }
            }
            RequestContext::ApiGatewayV1(ctx) => {
-               // V1: Map in fields["lambda"]
-               if let Some(serde_json::Value::Object(auth_map)) = ctx.authorizer.fields.get("lambda") {
+               // V1 (REST API) — two shapes:
+               //   1. Nested: { "lambda": { "userId": "...", ... } }
+               //   2. Flat:   { "userId": "...", "principalId": "..." }
+               if let Some(Value::Object(auth_map)) = ctx.authorizer.fields.get("lambda") {
+                   // V1 Nested — iterate fields inside "lambda"
                    for (key, value) in auth_map {
-                       let sanitized_key = sanitize_authorizer_field_name(key);
-                       let value_str = match value {
-                           serde_json::Value::String(s) => s.clone(),
-                           other => other.to_string(),
-                       };
-                       fields.insert(sanitized_key, value_str);
+                       // ... sanitize + insert
+                   }
+               } else {
+                   // V1 Flat — iterate all fields, skip API Gateway internals:
+                   //   principalId, integrationLatency, usageIdentifierKey
+                   for (key, value) in &ctx.authorizer.fields {
+                       if key == "principalId"
+                           || key == "integrationLatency"
+                           || key == "usageIdentifierKey"
+                       {
+                           continue;
+                       }
+                       // ... sanitize + insert
                    }
                }
            }
@@ -219,12 +224,13 @@ Tool Implementation
 
 ### API Gateway Format Differences
 
-| Aspect | V1 (REST API) | V2 (HTTP API) |
-|--------|---------------|----------------|
-| Context Type | `RequestContext::ApiGatewayV1` | `RequestContext::ApiGatewayV2` |
-| Authorizer Location | `ctx.authorizer.fields.get("lambda")` | `ctx.authorizer.fields` |
-| Data Structure | `serde_json::Map` | `HashMap<String, Value>` |
-| Example | `{"lambda": {"userId": "..."}}` | `{"userId": "..."}` |
+| Aspect | V1 Nested (REST API) | V1 Flat (REST API) | V2 (HTTP API) |
+|--------|----------------------|--------------------|----------------|
+| Context Type | `RequestContext::ApiGatewayV1` | `RequestContext::ApiGatewayV1` | `RequestContext::ApiGatewayV2` |
+| Authorizer Location | `ctx.authorizer.fields["lambda"]` | `ctx.authorizer.fields` (top-level) | `ctx.authorizer.fields` |
+| Internal Filtering | None needed | Skips `principalId`, `integrationLatency`, `usageIdentifierKey` | None needed |
+| Data Structure | `serde_json::Map` | `HashMap<String, Value>` | `HashMap<String, Value>` |
+| Example | `{"lambda": {"userId": "..."}}` | `{"userId": "...", "principalId": "..."}` | `{"userId": "..."}` |
 
 ### Testing
 
@@ -234,8 +240,9 @@ Tool Implementation
 - Header injection without breaking existing headers
 
 **Integration Tests** (test events):
-- `apigw-v1-with-authorizer.json` - REST API format
-- `apigw-v2-with-authorizer.json` - HTTP API format
+- `apigw-v1-with-authorizer.json` - REST API format (V1 nested, `authorizer.lambda.{field}`)
+- `apigw-v1-flat-authorizer.json` - REST API format (V1 flat, `authorizer.{field}` with internal field filtering)
+- `apigw-v2-with-authorizer.json` - HTTP API format (V2)
 
 **Verification Command:**
 ```bash
@@ -261,9 +268,10 @@ cargo lambda invoke middleware-auth-lambda \
 2. **Middleware Reusable**: Same middleware pattern as HTTP transport
 3. **Type Safe**: Field names sanitized for HTTP header compatibility
 4. **Defensive**: Never fails requests due to authorizer data
-5. **API Gateway Parity**: Works with both V1 (REST) and V2 (HTTP) formats
-6. **Session Integration**: Uses existing session state patterns
-7. **Tool Access**: Clean `session.get_typed_state("authorizer")` API
+5. **API Gateway Parity**: Works with V1 nested, V1 flat, and V2 (HTTP) authorizer formats
+6. **Streamable HTTP**: REST API (V1) supports Streamable HTTP transport for MCP 2025-11-25
+7. **Session Integration**: Uses existing session state patterns
+8. **Tool Access**: Clean `session.get_typed_state("authorizer")` API
 
 ### Negative
 

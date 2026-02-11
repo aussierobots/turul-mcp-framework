@@ -36,6 +36,14 @@ cargo test --package turul-mcp-aws-lambda --lib adapter::tests::authorizer_tests
 
 **Expected**: `test result: ok. 6 passed; 0 failed`
 
+### Authorizer Context Shapes
+
+| Shape | Context Path | When |
+|-------|-------------|------|
+| V1 Nested | `requestContext.authorizer.lambda.{field}` | REST API with Lambda proxy integration |
+| V1 Flat | `requestContext.authorizer.{field}` | REST API with simple Lambda authorizer (filters `principalId`, `integrationLatency`, `usageIdentifierKey`) |
+| V2 | `requestContext.authorizer.{field}` | HTTP API authorizer |
+
 ---
 
 ## Phase 2: Compile Verification ✅
@@ -64,9 +72,10 @@ cargo build --package turul-mcp-aws-lambda
 2. Builds example
 3. Starts Lambda locally (background)
 4. Tests API Gateway V2 event
-5. Tests API Gateway V1 event
-6. Checks logs for authorizer extraction
-7. Cleanup
+5. Tests API Gateway V1 nested event
+6. Tests API Gateway V1 flat event
+7. Checks logs for authorizer extraction
+8. Cleanup
 
 **Expected output**:
 ```
@@ -117,7 +126,7 @@ cargo lambda invoke middleware-auth-lambda \
   "jsonrpc": "2.0",
   "id": 1,
   "result": {
-    "protocolVersion": "2024-11-05",
+    "protocolVersion": "2025-11-25",
     "capabilities": {},
     "serverInfo": {
       "name": "middleware-auth-lambda",
@@ -147,6 +156,16 @@ cargo lambda invoke middleware-auth-lambda \
 
 **Expected**: Same response and logs as V2 (proves format independence!)
 
+#### Step 3b: Test API Gateway V1 Flat (REST API, simple authorizer)
+
+```bash
+cargo lambda invoke middleware-auth-lambda \
+  --data-file test-events/apigw-v1-flat-authorizer.json \
+  --output-format json | jq .
+```
+
+**Expected**: Same authorizer fields extracted as V1 nested. Internal fields (`principalId`, `integrationLatency`) are filtered out automatically — only `userId`, `tenantId`, `role`, `permissions`, and `customClaim` appear in logs.
+
 ---
 
 ## Phase 4: Session State Testing 🧪
@@ -167,8 +186,9 @@ Both test events include:
 
 **Format Differences**:
 
+- **V1 Nested** (REST API, proxy integration): `requestContext.authorizer.lambda.{field}`
+- **V1 Flat** (REST API, simple authorizer): `requestContext.authorizer.{field}` (filters `principalId`, `integrationLatency`, `usageIdentifierKey`)
 - **V2** (HTTP API): `requestContext.authorizer.{field}`
-- **V1** (REST API): `requestContext.authorizer.lambda.{field}`
 
 ---
 
@@ -180,7 +200,8 @@ Both test events include:
 - [x] **Compiles cleanly**: No errors or warnings
 - [ ] **Lambda starts**: Handler ready message appears
 - [ ] **V2 extraction works**: Debug logs show 5 authorizer fields
-- [ ] **V1 extraction works**: Same fields extracted as V2
+- [ ] **V1 nested extraction works**: Same fields extracted as V2
+- [ ] **V1 flat extraction works**: Same fields as V1 nested (internal fields filtered)
 - [ ] **Field sanitization**: camelCase → snake_case (`userId` → `user_id`)
 - [ ] **Defensive behavior**: No crashes on missing/invalid data
 - [ ] **Initialize succeeds**: Returns valid MCP initialize response
@@ -251,12 +272,21 @@ After running `./test_authorizer.sh`:
 
 - `/tmp/lambda-output.log` - Full Lambda logs with debug info
 - `/tmp/v2-response.json` - API Gateway V2 response
-- `/tmp/v1-response.json` - API Gateway V1 response
+- `/tmp/v1-response.json` - API Gateway V1 (nested) response
+- `/tmp/v1-flat-response.json` - API Gateway V1 (flat) response
 
 **View authorizer extraction**:
 ```bash
 cat /tmp/lambda-output.log | grep "Authorizer context"
 ```
+
+---
+
+## Streamable HTTP Compatibility
+
+This example uses the MCP 2025-11-25 **Streamable HTTP** transport via REST API (V1). REST API supports standard HTTP POST with full request/response control, making it compatible with Streamable HTTP. The Lambda adapter converts the API Gateway event into a standard `hyper::Request`, which the framework's `StreamableHttpHandler` processes normally.
+
+**Note**: All three authorizer context shapes (V1 nested, V1 flat, V2) are supported for extraction. However, Streamable HTTP transport requires REST API (V1).
 
 ---
 

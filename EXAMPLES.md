@@ -140,7 +140,7 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:8641/mcp
 | **middleware-auth-server** | 8080 | ✅ VALIDATED | API key authentication | `before_dispatch` header extraction |
 | **middleware-logging-server** | 8670 | ✅ VALIDATED | Request timing/tracing | Request duration logging in `after_dispatch` |
 | **middleware-rate-limit-server** | 8671 | ✅ VALIDATED | Rate limiting | Per-session request counting |
-| **middleware-auth-lambda** | Lambda | ✅ VALIDATED | Lambda auth middleware | API Gateway authorizer context integration |
+| **middleware-auth-lambda** | Lambda | ✅ VALIDATED | Lambda auth middleware | API Gateway authorizer context (V1 nested, V1 flat, V2) with Streamable HTTP (REST API V1) |
 
 ## 🔄 **TASKS (MCP 2025-11-25)** (3 examples) - Long-Running Operations
 
