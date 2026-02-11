@@ -1933,7 +1933,8 @@ mod tests {
         let config = DynamoDbConfig::default();
         assert_eq!(config.table_name, "mcp-sessions");
         // Region from AWS_REGION env var or default "us-east-1"
-        let expected_region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+        let expected_region =
+            std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
         assert_eq!(config.region, expected_region);
         assert_eq!(config.session_ttl_minutes, 5);
     }
