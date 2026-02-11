@@ -1,14 +1,15 @@
 # TODO Tracker
 
-**Last Updated**: 2026-02-11
+**Last Updated**: 2026-02-12
 **Version**: v0.3.0 (branch: `0.3.0`)
-**Tests**: ~1,400+ passing, 43 test binaries, zero warnings
+**Tests**: ~1,500+ passing, 43 test binaries, zero warnings
 
 ---
 
 ## v0.3.0 Release
 
-- [ ] **CHANGELOG.md** — Document MCP 2025-11-25 protocol support, task storage (4 backends), task executor/runtime, test optimization
+- [x] **CHANGELOG.md** — Document MCP 2025-11-25 protocol support, task storage (4 backends), task executor/runtime, test optimization
+- [ ] **CHANGELOG.md** — Expand [0.3.0] section with full 2025-11-25 feature list (protocol phases, task stack, durable backends)
 - [ ] **crates.io publish preparation** — Version bumps, dependency audit, dry-run publish
 
 ---
@@ -22,8 +23,8 @@
 
 ### P2: Framework Enhancements
 
-- [ ] **Session-aware resources** — Add `SessionContext` parameter to `McpResource::read()` for personalized content (breaking change)
-- [ ] **README testing** — Validate code examples in published crate READMEs compile (skeptic or similar)
+- [x] **Session-aware resources** — Add `SessionContext` parameter to `McpResource::read()` for personalized content *(done in v0.2.0)*
+- [x] **README testing** — Validate code examples in published crate READMEs compile via skeptic *(done in v0.3.0)*
 
 ---
 

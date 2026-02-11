@@ -1,8 +1,14 @@
 # Example Verification Log
 
-**Status**: All 45 active examples build successfully
-**Last Verified**: 2025-10-04
-**Verification**: `cargo build --examples`
+> **HISTORICAL LOG**: This file contains build verification history. For the current examples catalog, see [EXAMPLES.md](EXAMPLES.md).
+
+## Current Snapshot (v0.3.0)
+
+- **Active examples**: 57
+- **Archived examples**: 24
+- **Top-level dirs under `examples/`**: 58 (includes `archived/`)
+- **Protocol**: MCP 2025-11-25
+- **Verification command**: `cargo build --examples`
 
 ## Quick Reference
 
@@ -17,7 +23,13 @@ cargo run --example <name>
 # Example: cargo run --example minimal-server
 ```
 
-## Active Examples (45)
+---
+
+## Archived Historical Runs
+
+### Build Log — 2025-10-04 (v0.2.x, 45 active examples)
+
+#### Active Examples (45)
 
 ### Core Servers (11)
 | Example | Purpose | Command |
@@ -111,7 +123,7 @@ Auto-built by test infrastructure in `/tests/*/bin/`:
 - `roots-test-server`
 - `elicitation-test-server`
 
-## Archived Examples (26)
+#### Archived Examples (26 at time of run)
 Historical examples in `/examples/archived/` - not verified
 
 ## Common Testing Patterns
@@ -193,28 +205,17 @@ If tests timeout during compilation:
 cargo build --workspace --examples
 ```
 
-## Summary
+#### Summary (2025-10-04)
 
-- ✅ **45 Active Examples** - All build successfully
+- ✅ **45 Active Examples** - All built successfully at time of this run
 - 📦 **26 Archived Examples** - Historical reference
 - 🧪 **6 Test Binaries** - Auto-built for tests
-- **Total**: 77 examples
 
-### Requirements
+#### Requirements (at time of run)
 - **No deps**: 40 examples work out of box
 - **cargo-lambda**: 3 Lambda examples
 - **PostgreSQL**: 1 example
 - **AWS Credentials**: 1 example
-
-## Verification Status
-
-**Last Full Build**: 2025-10-04
-```bash
-cargo build --examples
-# Result: All 45 examples compiled successfully
-```
-
-**Test Suite**: All integration tests passing with `#[serial]` attribute for test server management.
 
 ---
 

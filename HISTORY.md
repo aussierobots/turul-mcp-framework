@@ -4,6 +4,49 @@ This file contains historical context for completed work, archived from WORKING_
 
 ---
 
+## ✅ COMPLETE: v0.3.0 Full MCP 2025-11-25 + Tasks Stack (2026-02)
+
+**Status**: ✅ **ALL PHASES COMPLETE** - Full MCP 2025-11-25 protocol, task storage, and runtime
+**Scope**: Protocol types, server handlers, storage backends, executor, documentation
+**Timeline**: 2026-02 (Phases 1–7 protocol, Phases A–F tasks/infra)
+
+### What Was Delivered
+
+**Protocol Compliance (Phases 1–7)**:
+- Phase 1: Icons (`Icon` struct), annotations, notification method strings (`list_changed`)
+- Phase 2: Tasks (`Task`, `TaskStatus::Working`), `ToolUse`/`ToolResult` content blocks, `ToolExecution`/`ToolChoice`
+- Phase 3: Sampling fixes (`ModelHint { name }`, no `Role::System`, flattened `CreateMessageResult`)
+- Phase 4: Restructured capabilities (`TasksCapabilities`, `Implementation.description`/`website_url`)
+- Phase 5: URL elicitation mode, `$schema` on `ElicitationSchema`
+- Phase 6: Framework trait updates (`HasIcons`, `HasSamplingTools`, derive/declarative macros)
+- Phase 7: All 1500+ workspace tests passing, notification/sampling/progress type fixes
+
+**Task Storage & Runtime (Phases A–F)**:
+- Phase A: Protocol types (`GetTaskPayloadParams`, `CreateTaskResult`, `TaskSupport`)
+- Phase B: `turul-mcp-task-storage` crate — `TaskStorage` trait, `InMemoryTaskStorage`, state machine enforcement
+- Phase C: Server handlers for `tasks/get`, `tasks/list`, `tasks/cancel`, `tasks/result`
+- Phase D: Durable backends — SQLite, PostgreSQL, DynamoDB with 11-function parity test suite
+- Phase E: `TaskExecutor` trait, `TokioTaskExecutor`, `CancellationHandle`, `TaskRuntime`
+- Phase F: Test compilation optimization — 155 → 43 test binaries
+
+**Documentation Waves (2026-02)**:
+- Wave 1: Repo URL, session storage config drift, notification method strings, compliance report banners
+- Wave 2: Sampling README MCP alignment, test counts, port numbers, ADR version updates, CHANGELOG merge
+
+### Key Architecture Decisions
+- Separate `turul-mcp-protocol-2025-11-25` crate (ADR-015), aliased via `turul-mcp-protocol`
+- Three-layer task split: storage / executor / runtime (ADR-016, ADR-017)
+- Deterministic cursor-based pagination for task listing (ADR-018)
+- Storage crate builds without Tokio (`cargo check -p turul-mcp-task-storage --no-default-features`)
+
+---
+
+## v0.2.x Era (2025-09 to 2025-10)
+
+The entries below cover v0.2.0 through v0.2.1 development work.
+
+---
+
 ## ✅ COMPLETE: Schemars Schema Generation Integration (2025-10-09)
 
 **Status**: ✅ **INTEGRATION COMPLETE** - Automatic tool output schemas with schemars

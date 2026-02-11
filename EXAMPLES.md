@@ -2,7 +2,8 @@
 
 This document provides a comprehensive overview of all **57 validated examples** in the MCP Framework, organized by learning progression from basic concepts to advanced implementations.
 
-**✅ All examples validated through comprehensive testing campaign completed 2025-09-28**
+**✅ All examples validated through comprehensive testing campaign**
+**Last verified**: 2026-02-12 (v0.3.0, MCP 2025-11-25)
 
 **Legend**:
 - ✅ **Verified Working** - Tested and confirmed functional
@@ -179,7 +180,7 @@ These examples demonstrate MCP 2025-11-25 type construction without starting a s
 ## 🚨 **COMPREHENSIVE VALIDATION RESULTS**
 
 ### ✅ **ALL EXAMPLES VALIDATED (57 total)**
-**Comprehensive Testing Campaign Completed 2025-09-28**
+**Comprehensive Testing Campaign — v0.3.0 (MCP 2025-11-25)**
 
 - **Phase 1: Getting Started** - 5/5 examples (all tool creation levels)
 - **Phase 2: Resource Servers** - 6/6 examples (session-aware resources validated)
@@ -236,4 +237,4 @@ cargo run --features dynamodb --example simple-dynamodb-session
 
 **🎯 Success Criteria ACHIEVED**: All 57 examples validated with accurate ports, verified functionality, and comprehensive testing results.
 
-**📋 Framework Status**: Comprehensive validation complete - Phase 6 session-aware resources implementation successful with full MCP 2025-11-25 compliance.
+**📋 Framework Status**: v0.3.0 — Full MCP 2025-11-25 compliance including tasks, icons, sampling tools, and URL elicitation.

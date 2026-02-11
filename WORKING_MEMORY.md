@@ -1,8 +1,8 @@
 # Working Memory
 
-**Last Updated**: 2026-02-11
+**Last Updated**: 2026-02-12
 **Version**: v0.3.0 (branch: `0.3.0`)
-**Tests**: ~1,400+ workspace tests, 43 test binaries, zero warnings
+**Tests**: ~1,500+ workspace tests, 43 test binaries, zero warnings
 
 ---
 
@@ -35,13 +35,13 @@ All major v0.3.0 work is complete. The framework fully supports MCP 2025-11-25.
 
 ### v0.3.0 Release
 
-1. **CHANGELOG.md** - Update with 2025-11-25 protocol + task storage + durable backends
-2. **crates.io publish preparation** - Version bumps, dependency audit
+1. ~~**CHANGELOG.md** - Update with 2025-11-25 protocol + task storage + durable backends~~ ✅ [0.3.0] section created
+2. **CHANGELOG.md** - Expand [0.3.0] with full feature list (protocol phases, task stack, durable backends)
+3. **crates.io publish preparation** - Version bumps, dependency audit
 
 ### Future Work (Post v0.3.0)
 
 - resources/subscribe - Real-time resource update notifications
-- Session-aware resources - `SessionContext` parameter on `McpResource::read()`
 - roots/list enhancements - Advanced filtering and permissions
 
 ### Known Issues
@@ -53,7 +53,7 @@ All major v0.3.0 work is complete. The framework fully supports MCP 2025-11-25.
 ## Quick Reference
 
 ```bash
-cargo test --workspace                                    # Full suite (~1,400 tests)
+cargo test --workspace                                    # Full suite (~1,500 tests)
 cargo test -p turul-mcp-task-storage --all-features       # Task storage (62 pass, 31 ignored)
 cargo test -p turul-mcp-task-storage --features sqlite    # SQLite backend (57 tests)
 cargo check -p turul-mcp-task-storage --no-default-features  # Verify zero-Tokio public API

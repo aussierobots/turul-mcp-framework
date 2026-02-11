@@ -7,29 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.2] - TBD
+## [0.3.0] - TBD
 
 ### Added
 
+**MCP 2025-11-25 Protocol Support:**
+- `turul-mcp-protocol-2025-11-25` crate with full spec compliance (127+ protocol tests)
+- `turul-mcp-protocol` alias now re-exports 2025-11-25 types (ADR-015)
+- `Icon` struct (`src`, `mime_type`, `sizes`, `theme`) on tools, resources, prompts, resource templates, and implementations
+- `Task` struct with `task_id`, `TaskStatus` (`Working`/`InputRequired`/`Completed`/`Failed`/`Cancelled`), `created_at`/`last_updated_at`, `ttl`, `poll_interval`
+- `ToolUse` and `ToolResult` content block variants
+- `ToolExecution`, `ToolChoice`, `ToolChoiceMode` (`Auto`/`None`/`Required`)
+- `TaskStatusNotification` and `ElicitationCompleteNotification`
+- URL elicitation mode (`ElicitRequestURLParams`) alongside existing form mode
+- `$schema` field on `ElicitationSchema`
+- `tools` field on `CreateMessageParams` for sampling with tools
+- `ModelHint { name }` struct (replaces closed enum)
+- `Implementation` gains `description` and `website_url` fields
+- Structured `TasksCapabilities` with `list`, `cancel`, `requests` sub-fields
+
+**Task Storage (`turul-mcp-task-storage` crate):**
+- `TaskStorage` trait with zero-Tokio public API
+- `InMemoryTaskStorage` with state machine enforcement
+- SQLite backend (`SqliteTaskStorage`) — optimistic locking, `julianday()` TTL, background cleanup
+- PostgreSQL backend (`PostgresTaskStorage`) — `version` column optimistic locking, JSONB, partial index for stuck tasks
+- DynamoDB backend (`DynamoDbTaskStorage`) — conditional writes, GSIs, native TTL, base64 cursors
+- 11-function parity test suite shared across all backends
+- Feature flags: `sqlite`, `postgres`, `dynamodb` (each opt-in with Tokio)
+
+**Task Runtime & Executor:**
+- `TaskExecutor` trait and `TokioTaskExecutor` in `turul-mcp-server`
+- `CancellationHandle` for cooperative task cancellation
+- `TaskRuntime` with `::new(storage, executor)`, `::with_default_executor(storage)`, `::in_memory()` constructors
+- Server handlers for `tasks/get`, `tasks/list`, `tasks/cancel`, `tasks/result` (blocks until terminal per spec)
+- Auto-capability advertisement via `McpServer::builder().with_task_runtime()`
+
+**Task E2E Examples:**
+- `tasks-e2e-inmemory-server` — task-enabled MCP server with `slow_add` tool
+- `tasks-e2e-inmemory-client` — full task lifecycle client (create, poll, cancel, result)
+- `client-task-lifecycle` — task API demonstration
+
 **README Testing Infrastructure:**
-- Added `skeptic` crate for automated markdown code block testing
-- README.md files now validated as part of `cargo test` suite
-- Prevents documentation drift and ensures all code examples compile
-
-### Fixed
-
-**Documentation Accuracy (turul-mcp-protocol-2025-06-18):**
-- Fixed version numbers in README.md (0.2.0 → 0.2.1)
-- Corrected architectural descriptions to reflect spec-purity design
-- Removed outdated "trait-based architecture" marketing
-- Clarified that framework traits live in `turul-mcp-builders` crate
-- Updated "Why Choose This Crate" section to emphasize concrete MCP types
-- All 20+ README code examples now tested and verified
+- `skeptic` crate for automated markdown code block testing
+- README.md files validated as part of `cargo test` suite
 
 ### Changed
 
-- README narrative now accurately describes crate as "spec-pure protocol implementation"
-- Documentation emphasizes concrete types (Tool, Resource, Prompt) over trait abstraction
+**Protocol Types (Breaking):**
+- `CreateMessageResult` flattened — `role` and `content` at top level (no `message` wrapper)
+- `Role` enum: only `User` and `Assistant` (removed `System` variant; system prompts use `systemPrompt` field)
+- `ProgressNotificationParams.progress`: `f64` (was `u64`)
+- `icon` fields renamed to `icons: Option<Vec<Icon>>` (singular string → plural object array)
+- `HasIcon` trait renamed to `HasIcons`; `HasSamplingTools` trait added
+- Notification method strings use underscores (`notifications/tools/list_changed`) per spec; JSON capability keys remain camelCase (`listChanged`)
+- Default protocol version is 2025-11-25 everywhere; backward-compat 2025-06-18 paths annotated with `// Intentional`
+
+**Test Infrastructure:**
+- Test binaries reduced from 155 to 43 via consolidation (Phase F)
+- Root integration tests: 39 → 8 binaries (5 consolidated in `tests/consolidated/` + 3 standalone)
+- Sub-crate integration tests: 24 → 7 binaries (`tests/*/tests/all.rs` with `#[path]` imports)
+- Derive crate integration tests moved to workspace root (2 binaries eliminated)
+
+**Documentation:**
+- README narrative updated to reflect spec-pure protocol crate design
+- All 20+ protocol crate README code examples tested and verified
+- Documentation accuracy fixes across READMEs, ADRs, and compliance reports (repo URL, config field names, notification method strings, version references, port numbers)
+- CHANGELOG duplicate `[0.2.0]` sections merged
+- ADR-009 updated with `V2025_03_26` and `V2025_11_25` protocol versions
+- ADR-004 status updated from CRITICAL to Accepted (Implemented)
+- Stale MIGRATION_0.2.1.md references removed workspace-wide
+
+### Fixed
+
+- Sampling server README: removed `System` role, fixed `ModelHint` to object form, corrected snake_case JSON fields to camelCase
+- Session storage README: corrected config field names (`session_timeout_minutes`, `database_url`, `PostgresConfig`)
+- Compliance reports marked as historical with accurate resolution status
+- Client README compatibility list now includes 2025-11-25
+- Protocol alias ADR updated from 2025-06-18 to 2025-11-25
+- Notification method strings in ADR-005 and E2E test plan corrected to `list_changed`
 
 ## [0.2.1] - 2025-10-08
 
@@ -204,6 +259,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/aussierobots/turul-mcp-framework/releases/tag/v0.1.0
