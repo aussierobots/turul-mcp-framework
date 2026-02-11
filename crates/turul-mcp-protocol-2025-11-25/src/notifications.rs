@@ -651,7 +651,12 @@ mod tests {
     fn test_task_status_notification() {
         use crate::tasks::{Task, TaskStatus};
 
-        let task = Task::new("task-abc", TaskStatus::Working, "2025-01-01T00:00:00Z", "2025-01-01T00:00:00Z");
+        let task = Task::new(
+            "task-abc",
+            TaskStatus::Working,
+            "2025-01-01T00:00:00Z",
+            "2025-01-01T00:00:00Z",
+        );
         let notification = TaskStatusNotification::new(task);
 
         assert_eq!(notification.method, "notifications/tasks/status");

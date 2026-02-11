@@ -17,9 +17,7 @@ pub use crate::resources::{
 };
 
 // Prompt types (spec-pure structs only)
-pub use crate::prompts::{
-    ContentBlock, GetPromptParams, Prompt, PromptArgument, PromptMessage,
-};
+pub use crate::prompts::{ContentBlock, GetPromptParams, Prompt, PromptArgument, PromptMessage};
 
 // Tool types (spec-pure structs only)
 pub use crate::tools::{
@@ -34,19 +32,13 @@ pub use crate::notifications::{
 };
 
 // Root types (spec-pure structs only)
-pub use crate::roots::{
-    ListRootsParams, Root,
-};
+pub use crate::roots::{ListRootsParams, Root};
 
 // Sampling types (spec-pure structs only)
-pub use crate::sampling::{
-    CreateMessageResult, SamplingMessage,
-};
+pub use crate::sampling::{CreateMessageResult, SamplingMessage};
 
 // Completion types (spec-pure structs only)
-pub use crate::completion::{
-    CompleteParams, CompleteResult, CompletionReference,
-};
+pub use crate::completion::{CompleteParams, CompleteResult, CompletionReference};
 
 // Initialize types
 pub use crate::McpVersion;

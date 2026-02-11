@@ -74,8 +74,11 @@ pub use meta::{Annotations, Meta};
 mod compliance_test;
 
 // Re-export main types
+pub use icons::{Icon, IconTheme};
 pub use initialize::{
     ClientCapabilities, Implementation, InitializeRequest, InitializeResult, ServerCapabilities,
+    TasksCancelCapabilities, TasksCapabilities, TasksListCapabilities, TasksRequestCapabilities,
+    TasksToolCallCapabilities, TasksToolCapabilities,
 };
 pub use prompts::{
     GetPromptRequest, GetPromptResult, ListPromptsRequest, ListPromptsResult, Prompt,
@@ -86,11 +89,10 @@ pub use resources::{
     ResourceContent, ResourceSubscription, SubscribeRequest, UnsubscribeRequest,
 };
 pub use tasks::{
-    CancelTaskParams, CancelTaskRequest, CancelTaskResult, GetTaskParams, GetTaskRequest,
-    GetTaskResult, ListTasksParams, ListTasksRequest, ListTasksResult, Task, TaskMetadata,
-    TaskStatus,
+    CancelTaskParams, CancelTaskRequest, CancelTaskResult, CreateTaskResult, GetTaskParams,
+    GetTaskPayloadParams, GetTaskPayloadRequest, GetTaskRequest, GetTaskResult, ListTasksParams,
+    ListTasksRequest, ListTasksResult, Task, TaskMetadata, TaskStatus,
 };
-pub use icons::{Icon, IconTheme};
 pub use tools::{
     CallToolRequest, CallToolResult, ListToolsRequest, ListToolsResult, TaskSupport, Tool,
     ToolExecution, ToolResult, ToolSchema,
@@ -208,6 +210,17 @@ pub enum McpError {
 
     #[error("JSON-RPC protocol error: {0}")]
     JsonRpcProtocolError(String),
+
+    /// A JSON-RPC error with preserved code, message, and optional data.
+    ///
+    /// Used by `tasks/result` to reproduce the original error verbatim, as
+    /// required by the MCP spec: "tasks/result MUST return that same JSON-RPC error."
+    #[error("JSON-RPC error {code}: {message}")]
+    JsonRpcError {
+        code: i64,
+        message: String,
+        data: Option<serde_json::Value>,
+    },
 }
 
 impl From<String> for McpError {
@@ -279,6 +292,21 @@ impl McpError {
     /// Create a JSON-RPC protocol error
     pub fn json_rpc_protocol(message: &str) -> Self {
         Self::JsonRpcProtocolError(message.to_string())
+    }
+
+    /// Create a JSON-RPC error with preserved code, message, and optional data.
+    ///
+    /// Used by `tasks/result` to reproduce original errors verbatim.
+    pub fn json_rpc_error(
+        code: i64,
+        message: impl Into<String>,
+        data: Option<serde_json::Value>,
+    ) -> Self {
+        Self::JsonRpcError {
+            code,
+            message: message.into(),
+            data,
+        }
     }
 
     /// Convert to a JsonRpcErrorObject for JSON-RPC 2.0 responses
@@ -396,6 +424,13 @@ impl McpError {
             McpError::SerializationError(err) => {
                 JsonRpcErrorObject::internal_error(Some(format!("Serialization error: {}", err)))
             }
+
+            // Pass-through: preserves original code/message/data verbatim
+            McpError::JsonRpcError {
+                code,
+                message,
+                data,
+            } => JsonRpcErrorObject::server_error(*code, message, data.clone()),
         }
     }
 

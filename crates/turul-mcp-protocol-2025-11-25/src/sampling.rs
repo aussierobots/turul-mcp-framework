@@ -179,6 +179,9 @@ pub struct CreateMessageParams {
     /// Optional tool choice configuration (MCP 2025-11-25)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
+    /// Task metadata for task-augmented requests (MCP 2025-11-25)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task: Option<crate::tasks::TaskMetadata>,
     /// Meta information (optional _meta field inside params)
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<std::collections::HashMap<String, Value>>,
@@ -232,8 +235,14 @@ impl CreateMessageParams {
             metadata: None,
             tools: None,
             tool_choice: None,
+            task: None,
             meta: None,
         }
+    }
+
+    pub fn with_task(mut self, task: crate::tasks::TaskMetadata) -> Self {
+        self.task = Some(task);
+        self
     }
 
     pub fn with_tools(mut self, tools: Vec<crate::tools::Tool>) -> Self {
