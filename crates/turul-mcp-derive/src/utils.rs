@@ -1070,7 +1070,6 @@ fn extract_schema_content(
     generate_basic_type_schema_content(ty, field_name)
 }
 
-
 /// Extract schema content for struct (without function wrapper) - used by extract_schema_content
 fn extract_struct_schema_content(
     fields: &syn::FieldsNamed,
@@ -1144,8 +1143,19 @@ fn is_basic_type(ty: &syn::Type) -> bool {
         if let Some(ident) = type_path.path.get_ident() {
             matches!(
                 ident.to_string().as_str(),
-                "f64" | "f32" | "i64" | "i32" | "i16" | "i8" |
-                "u64" | "u32" | "u16" | "u8" | "String" | "str" | "bool"
+                "f64"
+                    | "f32"
+                    | "i64"
+                    | "i32"
+                    | "i16"
+                    | "i8"
+                    | "u64"
+                    | "u32"
+                    | "u16"
+                    | "u8"
+                    | "String"
+                    | "str"
+                    | "bool"
             )
         } else {
             false

@@ -32,15 +32,11 @@ fn auto_determine_notification_method(struct_name: String) -> String {
         "resources_list_changed" | "resources_changed" => {
             "notifications/resources/list_changed".to_string()
         }
-        "roots_list_changed" | "roots_changed" => {
-            "notifications/roots/list_changed".to_string()
-        }
+        "roots_list_changed" | "roots_changed" => "notifications/roots/list_changed".to_string(),
         "prompts_list_changed" | "prompts_changed" => {
             "notifications/prompts/list_changed".to_string()
         }
-        "tools_list_changed" | "tools_changed" => {
-            "notifications/tools/list_changed".to_string()
-        }
+        "tools_list_changed" | "tools_changed" => "notifications/tools/list_changed".to_string(),
         _ => {
             // For custom notifications, use notifications/{snake_case}
             format!("notifications/{}", snake_case)
