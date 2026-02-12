@@ -11,7 +11,7 @@ use turul_mcp_protocol::TaskStatus;
 use turul_mcp_task_storage::{TaskOutcome, TaskStorageError};
 
 use crate::cancellation::CancellationHandle;
-use crate::task_executor::{BoxedTaskWork, TaskExecutor, TaskHandle};
+use crate::task::executor::{BoxedTaskWork, TaskExecutor, TaskHandle};
 
 struct TokioTaskEntry {
     cancellation: CancellationHandle,

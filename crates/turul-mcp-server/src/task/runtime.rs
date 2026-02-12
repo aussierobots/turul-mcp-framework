@@ -12,8 +12,8 @@ use turul_mcp_task_storage::{
     InMemoryTaskStorage, TaskOutcome, TaskRecord, TaskStorage, TaskStorageError,
 };
 
-use crate::task_executor::TaskExecutor;
-use crate::tokio_executor::TokioTaskExecutor;
+use crate::task::executor::TaskExecutor;
+use crate::task::tokio_executor::TokioTaskExecutor;
 
 /// Bridges task storage with runtime execution state.
 ///

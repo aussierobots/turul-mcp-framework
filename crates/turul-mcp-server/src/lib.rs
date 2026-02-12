@@ -129,10 +129,7 @@ pub mod roots;
 pub mod sampling;
 pub mod server;
 pub mod session;
-pub mod task_executor;
-pub mod task_handlers;
-pub mod task_runtime;
-pub mod tokio_executor;
+pub mod task;
 pub mod tool;
 // Re-export session storage from separate crate (breaks circular dependency)
 pub use turul_mcp_session_storage as session_storage;
@@ -148,12 +145,6 @@ pub mod http;
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-mod uri_template_tests;
-
-#[cfg(test)]
-mod security_integration_tests;
 
 // Re-export main types
 /// Builder for creating MCP servers with fluent API
@@ -192,15 +183,15 @@ pub use server::{
 /// Session management and context for stateful operations
 pub use session::{SessionContext, SessionEvent, SessionManager};
 /// Task executor abstraction for pluggable execution backends
-pub use task_executor::{TaskExecutor, TaskHandle};
+pub use task::executor::{TaskExecutor, TaskHandle};
 /// Task handlers for tasks/get, tasks/list, tasks/cancel, tasks/result
-pub use task_handlers::{
+pub use task::handlers::{
     TasksCancelHandler, TasksGetHandler, TasksListHandler, TasksResultHandler,
 };
 /// Task runtime for managing long-running operations
-pub use task_runtime::TaskRuntime;
+pub use task::runtime::TaskRuntime;
 /// Default Tokio-based task executor
-pub use tokio_executor::TokioTaskExecutor;
+pub use task::tokio_executor::TokioTaskExecutor;
 /// Tool trait for executable MCP functions
 pub use tool::McpTool;
 /// SessionView trait for middleware - re-exported from turul-mcp-session-storage

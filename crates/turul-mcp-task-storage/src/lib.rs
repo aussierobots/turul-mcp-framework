@@ -58,12 +58,12 @@ pub mod state_machine;
 pub mod traits;
 
 // Durable storage backends
-#[cfg(feature = "sqlite")]
-pub mod sqlite;
-#[cfg(feature = "postgres")]
-pub mod postgres;
 #[cfg(feature = "dynamodb")]
 pub mod dynamodb;
+#[cfg(feature = "postgres")]
+pub mod postgres;
+#[cfg(feature = "sqlite")]
+pub mod sqlite;
 
 // Parity test suite (shared across all backends)
 #[cfg(test)]
@@ -77,12 +77,12 @@ pub use in_memory::{InMemoryTaskConfig, InMemoryTaskStorage};
 pub use state_machine::{is_terminal, validate_transition};
 pub use traits::{TaskListPage, TaskOutcome, TaskRecord, TaskStorage};
 
-#[cfg(feature = "sqlite")]
-pub use sqlite::{SqliteTaskConfig, SqliteTaskStorage};
-#[cfg(feature = "postgres")]
-pub use postgres::{PostgresTaskConfig, PostgresTaskStorage};
 #[cfg(feature = "dynamodb")]
 pub use dynamodb::{DynamoDbTaskConfig, DynamoDbTaskStorage};
+#[cfg(feature = "postgres")]
+pub use postgres::{PostgresTaskConfig, PostgresTaskStorage};
+#[cfg(feature = "sqlite")]
+pub use sqlite::{SqliteTaskConfig, SqliteTaskStorage};
 
 /// Create a default in-memory task storage instance for development and testing.
 #[cfg(feature = "in-memory")]

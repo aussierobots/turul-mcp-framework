@@ -11,7 +11,7 @@ use tracing::{debug, warn};
 
 use crate::handlers::McpHandler;
 use crate::session::SessionContext;
-use crate::task_runtime::TaskRuntime;
+use crate::task::runtime::TaskRuntime;
 use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::tasks::*;
 
@@ -36,14 +36,14 @@ async fn get_task_with_session_check(
     // If session context is provided, enforce isolation
     if let Some(session_ctx) = session {
         let session_id_str = session_ctx.session_id.to_string();
-        if let Some(ref task_session) = task_record.session_id {
-            if task_session != &session_id_str {
-                // Don't leak that the task exists — return "not found"
-                return Err(McpError::InvalidParameters(format!(
-                    "Task not found: {}",
-                    task_id
-                )));
-            }
+        if let Some(ref task_session) = task_record.session_id
+            && task_session != &session_id_str
+        {
+            // Don't leak that the task exists — return "not found"
+            return Err(McpError::InvalidParameters(format!(
+                "Task not found: {}",
+                task_id
+            )));
         }
     }
 
@@ -383,7 +383,7 @@ impl McpHandler for TasksResultHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::task_runtime::TaskRuntime;
+    use crate::task::runtime::TaskRuntime;
     use turul_mcp_protocol::TaskStatus;
     use turul_mcp_task_storage::{InMemoryTaskStorage, TaskOutcome, TaskRecord};
 

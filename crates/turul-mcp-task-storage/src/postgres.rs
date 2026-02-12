@@ -176,9 +176,8 @@ impl PostgresTaskStorage {
         let interval_minutes = self.config.cleanup_interval_minutes;
 
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval(std::time::Duration::from_secs(
-                interval_minutes as u64 * 60,
-            ));
+            let mut interval =
+                tokio::time::interval(std::time::Duration::from_secs(interval_minutes as u64 * 60));
 
             loop {
                 interval.tick().await;
@@ -464,12 +463,11 @@ impl TaskStorage for PostgresTaskStorage {
 
         let rows = if let Some(cursor_id) = cursor {
             // Two-step cursor: resolve cursor → (created_at, task_id), then paginate
-            let cursor_row = sqlx::query(
-                "SELECT created_at, task_id FROM tasks WHERE task_id = $1",
-            )
-            .bind(cursor_id)
-            .fetch_optional(&self.pool)
-            .await?;
+            let cursor_row =
+                sqlx::query("SELECT created_at, task_id FROM tasks WHERE task_id = $1")
+                    .bind(cursor_id)
+                    .fetch_optional(&self.pool)
+                    .await?;
 
             match cursor_row {
                 Some(ref cr) => {
@@ -548,13 +546,11 @@ impl TaskStorage for PostgresTaskStorage {
         status_message: Option<String>,
     ) -> Result<TaskRecord, TaskStorageError> {
         // Step 1: Read current status + version
-        let current_row = sqlx::query(
-            "SELECT status, version FROM tasks WHERE task_id = $1",
-        )
-        .bind(task_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| TaskStorageError::TaskNotFound(task_id.to_string()))?;
+        let current_row = sqlx::query("SELECT status, version FROM tasks WHERE task_id = $1")
+            .bind(task_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| TaskStorageError::TaskNotFound(task_id.to_string()))?;
 
         let current_status_str: String = current_row.get("status");
         let current_status = str_to_status(&current_status_str)?;
@@ -634,13 +630,11 @@ impl TaskStorage for PostgresTaskStorage {
         &self,
         task_id: &str,
     ) -> Result<Option<TaskOutcome>, TaskStorageError> {
-        let row = sqlx::query(
-            "SELECT result FROM tasks WHERE task_id = $1",
-        )
-        .bind(task_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| TaskStorageError::TaskNotFound(task_id.to_string()))?;
+        let row = sqlx::query("SELECT result FROM tasks WHERE task_id = $1")
+            .bind(task_id)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or_else(|| TaskStorageError::TaskNotFound(task_id.to_string()))?;
 
         let result_json: Option<Value> = row.get("result");
         match result_json {
@@ -683,9 +677,7 @@ impl TaskStorage for PostgresTaskStorage {
         self.expire_tasks().await?;
 
         // Analyze the table so the query planner has up-to-date statistics
-        sqlx::query("ANALYZE tasks")
-            .execute(&self.pool)
-            .await?;
+        sqlx::query("ANALYZE tasks").execute(&self.pool).await?;
 
         debug!("PostgreSQL task maintenance completed");
         Ok(())
@@ -700,12 +692,11 @@ impl TaskStorage for PostgresTaskStorage {
         let limit = limit.unwrap_or(self.config.default_page_size) as i64;
 
         let rows = if let Some(cursor_id) = cursor {
-            let cursor_row = sqlx::query(
-                "SELECT created_at, task_id FROM tasks WHERE task_id = $1",
-            )
-            .bind(cursor_id)
-            .fetch_optional(&self.pool)
-            .await?;
+            let cursor_row =
+                sqlx::query("SELECT created_at, task_id FROM tasks WHERE task_id = $1")
+                    .bind(cursor_id)
+                    .fetch_optional(&self.pool)
+                    .await?;
 
             match cursor_row {
                 Some(ref cr) => {
@@ -890,7 +881,11 @@ mod tests {
 
         // Valid: Working -> Completed
         let updated = storage
-            .update_task_status("pg-test-sm-1", TaskStatus::Completed, Some("Done".to_string()))
+            .update_task_status(
+                "pg-test-sm-1",
+                TaskStatus::Completed,
+                Some("Done".to_string()),
+            )
             .await
             .unwrap();
         assert_eq!(updated.status, TaskStatus::Completed);
@@ -1054,11 +1049,13 @@ mod tests {
         // Verify expired task is gone
         assert!(storage.get_task("pg-test-ttl-1").await.unwrap().is_none());
         // Verify other task still exists
-        assert!(storage
-            .get_task("pg-test-ttl-keep")
-            .await
-            .unwrap()
-            .is_some());
+        assert!(
+            storage
+                .get_task("pg-test-ttl-keep")
+                .await
+                .unwrap()
+                .is_some()
+        );
 
         // Cleanup
         storage.delete_task("pg-test-ttl-keep").await.unwrap();
@@ -1073,17 +1070,13 @@ mod tests {
         storage.create_task(task).await.unwrap();
 
         // Store a success outcome
-        let outcome =
-            TaskOutcome::Success(json!({"content": [{"type": "text", "text": "hello"}]}));
+        let outcome = TaskOutcome::Success(json!({"content": [{"type": "text", "text": "hello"}]}));
         storage
             .store_task_result("pg-test-result-1", outcome)
             .await
             .unwrap();
 
-        let result = storage
-            .get_task_result("pg-test-result-1")
-            .await
-            .unwrap();
+        let result = storage.get_task_result("pg-test-result-1").await.unwrap();
         assert!(result.is_some());
         match result.unwrap() {
             TaskOutcome::Success(v) => {

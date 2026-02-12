@@ -41,7 +41,7 @@ pub struct McpServer {
     /// Middleware stack for request/response processing
     middleware_stack: crate::middleware::MiddlewareStack,
     /// Task runtime for long-running operations (None = tasks not supported)
-    task_runtime: Option<Arc<crate::task_runtime::TaskRuntime>>,
+    task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
 
     // HTTP configuration (if enabled)
     #[cfg(feature = "http")]
@@ -68,7 +68,7 @@ impl McpServer {
         session_timeout_minutes: Option<u64>,
         session_cleanup_interval_seconds: Option<u64>,
         session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
-        task_runtime: Option<Arc<crate::task_runtime::TaskRuntime>>,
+        task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
         strict_lifecycle: bool,
         middleware_stack: crate::middleware::MiddlewareStack,
         #[cfg(feature = "http")] bind_address: SocketAddr,
@@ -168,7 +168,7 @@ impl McpServer {
     }
 
     /// Get the task runtime, if task support is configured.
-    pub fn task_runtime(&self) -> Option<&Arc<crate::task_runtime::TaskRuntime>> {
+    pub fn task_runtime(&self) -> Option<&Arc<crate::task::runtime::TaskRuntime>> {
         self.task_runtime.as_ref()
     }
 
@@ -1203,7 +1203,7 @@ pub struct SessionAwareToolHandler {
     strict_lifecycle: bool,
     /// Optional task runtime — when present AND request has `params.task`,
     /// the handler creates a task and executes asynchronously.
-    task_runtime: Option<Arc<crate::task_runtime::TaskRuntime>>,
+    task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
 }
 
 impl SessionAwareToolHandler {
@@ -1220,7 +1220,7 @@ impl SessionAwareToolHandler {
         }
     }
 
-    pub fn with_task_runtime(mut self, runtime: Arc<crate::task_runtime::TaskRuntime>) -> Self {
+    pub fn with_task_runtime(mut self, runtime: Arc<crate::task::runtime::TaskRuntime>) -> Self {
         self.task_runtime = Some(runtime);
         self
     }
@@ -1379,7 +1379,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             let runtime_for_work = Arc::clone(runtime);
             let task_id_for_work = task_id.clone();
 
-            let work: crate::task_executor::BoxedTaskWork = Box::new(move || {
+            let work: crate::task::executor::BoxedTaskWork = Box::new(move || {
                 Box::pin(async move {
                     let outcome = match tool.call(args, mcp_session_context).await {
                         Ok(result) => match serde_json::to_value(&result) {

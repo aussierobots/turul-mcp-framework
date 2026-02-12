@@ -92,14 +92,22 @@ pub async fn test_state_machine_enforcement(storage: &dyn TaskStorage) {
     let t1 = make_task("parity-sm-1", None, "2025-06-01T00:00:00Z");
     storage.create_task(t1).await.unwrap();
     let updated = storage
-        .update_task_status("parity-sm-1", TaskStatus::InputRequired, Some("Need input".to_string()))
+        .update_task_status(
+            "parity-sm-1",
+            TaskStatus::InputRequired,
+            Some("Need input".to_string()),
+        )
         .await
         .unwrap();
     assert_eq!(updated.status, TaskStatus::InputRequired);
 
     // InputRequired -> Working
     let updated = storage
-        .update_task_status("parity-sm-1", TaskStatus::Working, Some("Resuming".to_string()))
+        .update_task_status(
+            "parity-sm-1",
+            TaskStatus::Working,
+            Some("Resuming".to_string()),
+        )
         .await
         .unwrap();
     assert_eq!(updated.status, TaskStatus::Working);
@@ -139,9 +147,13 @@ pub async fn test_state_machine_enforcement(storage: &dyn TaskStorage) {
 
 /// Terminal states (Completed, Failed, Cancelled) reject ALL transitions.
 pub async fn test_terminal_state_rejection(storage: &dyn TaskStorage) {
-    for (i, terminal) in [TaskStatus::Completed, TaskStatus::Failed, TaskStatus::Cancelled]
-        .iter()
-        .enumerate()
+    for (i, terminal) in [
+        TaskStatus::Completed,
+        TaskStatus::Failed,
+        TaskStatus::Cancelled,
+    ]
+    .iter()
+    .enumerate()
     {
         let task_id = format!("parity-term-{}", i);
         let task = make_task(&task_id, None, &format!("2025-06-01T00:00:0{}Z", i));
@@ -215,14 +227,29 @@ pub async fn test_cursor_determinism(storage: &dyn TaskStorage) {
         cursor = page.next_cursor;
     }
 
-    assert_eq!(collected, ids, "Tasks should be in deterministic (created_at, task_id) order");
+    assert_eq!(
+        collected, ids,
+        "Tasks should be in deterministic (created_at, task_id) order"
+    );
 }
 
 /// Tasks from session A never appear in session B listing.
 pub async fn test_session_scoping(storage: &dyn TaskStorage) {
-    let t1 = make_task("parity-scope-a1", Some("scope-sess-A"), "2025-06-01T00:00:00Z");
-    let t2 = make_task("parity-scope-a2", Some("scope-sess-A"), "2025-06-01T00:00:01Z");
-    let t3 = make_task("parity-scope-b1", Some("scope-sess-B"), "2025-06-01T00:00:02Z");
+    let t1 = make_task(
+        "parity-scope-a1",
+        Some("scope-sess-A"),
+        "2025-06-01T00:00:00Z",
+    );
+    let t2 = make_task(
+        "parity-scope-a2",
+        Some("scope-sess-A"),
+        "2025-06-01T00:00:01Z",
+    );
+    let t3 = make_task(
+        "parity-scope-b1",
+        Some("scope-sess-B"),
+        "2025-06-01T00:00:02Z",
+    );
 
     storage.create_task(t1).await.unwrap();
     storage.create_task(t2).await.unwrap();
@@ -233,7 +260,12 @@ pub async fn test_session_scoping(storage: &dyn TaskStorage) {
         .await
         .unwrap();
     assert_eq!(page_a.tasks.len(), 2);
-    assert!(page_a.tasks.iter().all(|t| t.session_id.as_deref() == Some("scope-sess-A")));
+    assert!(
+        page_a
+            .tasks
+            .iter()
+            .all(|t| t.session_id.as_deref() == Some("scope-sess-A"))
+    );
 
     let page_b = storage
         .list_tasks_for_session("scope-sess-B", None, None)
@@ -280,10 +312,22 @@ pub async fn test_ttl_expiry(storage: &dyn TaskStorage) {
     );
 
     // Verify expired task is gone
-    assert!(storage.get_task("parity-ttl-expired").await.unwrap().is_none());
+    assert!(
+        storage
+            .get_task("parity-ttl-expired")
+            .await
+            .unwrap()
+            .is_none()
+    );
     // Verify others still exist
     assert!(storage.get_task("parity-ttl-keep").await.unwrap().is_some());
-    assert!(storage.get_task("parity-ttl-future").await.unwrap().is_some());
+    assert!(
+        storage
+            .get_task("parity-ttl-future")
+            .await
+            .unwrap()
+            .is_some()
+    );
 }
 
 /// `TaskOutcome::Success` and `TaskOutcome::Error` survive store → retrieve.
@@ -348,10 +392,7 @@ pub async fn test_task_result_round_trip(storage: &dyn TaskStorage) {
     }
 
     // Nonexistent task result should error
-    let err = storage
-        .get_task_result("nonexistent")
-        .await
-        .unwrap_err();
+    let err = storage.get_task_result("nonexistent").await.unwrap_err();
     match err {
         TaskStorageError::TaskNotFound(id) => assert_eq!(id, "nonexistent"),
         other => panic!("Expected TaskNotFound, got: {:?}", other),

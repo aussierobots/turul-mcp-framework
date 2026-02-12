@@ -227,12 +227,12 @@ impl TaskStorage for InMemoryTaskStorage {
         let to_expire: Vec<String> = tasks
             .values()
             .filter(|t| {
-                if let Some(ttl) = t.ttl {
-                    if let Ok(created) = chrono::DateTime::parse_from_rfc3339(&t.created_at) {
-                        let expiry =
-                            created.with_timezone(&Utc) + chrono::Duration::milliseconds(ttl);
-                        return now > expiry;
-                    }
+                if let Some(ttl) = t.ttl
+                    && let Ok(created) = chrono::DateTime::parse_from_rfc3339(&t.created_at)
+                {
+                    let expiry =
+                        created.with_timezone(&Utc) + chrono::Duration::milliseconds(ttl);
+                    return now > expiry;
                 }
                 false
             })

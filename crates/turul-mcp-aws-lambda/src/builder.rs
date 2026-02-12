@@ -130,6 +130,11 @@ pub struct LambdaMcpServerBuilder {
     /// Middleware stack for request/response interception
     middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
 
+    /// Optional task runtime for MCP task support
+    task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
+    /// Recovery timeout for stuck tasks (milliseconds)
+    task_recovery_timeout_ms: u64,
+
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
     cors_config: Option<CorsConfig>,
@@ -250,6 +255,8 @@ impl LambdaMcpServerBuilder {
             server_config: ServerConfig::default(),
             stream_config: StreamConfig::default(),
             middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack::new(),
+            task_runtime: None,
+            task_recovery_timeout_ms: 300_000, // 5 minutes
             #[cfg(feature = "cors")]
             cors_config: None,
         }
@@ -581,6 +588,47 @@ impl LambdaMcpServerBuilder {
     }
 
     // =============================================================================
+    // TASK SUPPORT METHODS
+    // =============================================================================
+
+    /// Configure task storage to enable MCP task support for long-running operations.
+    ///
+    /// When task storage is configured, the server will:
+    /// - Advertise `tasks` capabilities in the initialize response
+    /// - Register handlers for `tasks/get`, `tasks/list`, `tasks/cancel`, `tasks/result`
+    /// - Wire task-augmented `tools/call` for `CreateTaskResult` returns
+    /// - Recover stuck tasks on cold start
+    ///
+    /// **Lambda note**: Use a durable backend (DynamoDB recommended) since Lambda
+    /// invocations are stateless. `InMemoryTaskStorage` will lose state between invocations.
+    pub fn with_task_storage(
+        mut self,
+        storage: Arc<dyn turul_mcp_server::task_storage::TaskStorage>,
+    ) -> Self {
+        let runtime = turul_mcp_server::TaskRuntime::with_default_executor(storage)
+            .with_recovery_timeout(self.task_recovery_timeout_ms);
+        self.task_runtime = Some(Arc::new(runtime));
+        self
+    }
+
+    /// Configure task support with a pre-built `TaskRuntime`.
+    ///
+    /// Use this when you need fine-grained control over the task runtime configuration.
+    pub fn with_task_runtime(mut self, runtime: Arc<turul_mcp_server::TaskRuntime>) -> Self {
+        self.task_runtime = Some(runtime);
+        self
+    }
+
+    /// Set the recovery timeout for stuck tasks (in milliseconds).
+    ///
+    /// On Lambda cold start, tasks in non-terminal states older than this timeout
+    /// will be marked as `Failed`. Default: 300,000 ms (5 minutes).
+    pub fn task_recovery_timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.task_recovery_timeout_ms = timeout_ms;
+        self
+    }
+
+    // =============================================================================
     // SESSION AND CONFIGURATION METHODS
     // =============================================================================
 
@@ -876,6 +924,23 @@ impl LambdaMcpServerBuilder {
             ]),
         });
 
+        // Tasks capabilities — auto-configure when task runtime is set
+        if self.task_runtime.is_some() {
+            use turul_mcp_protocol::initialize::*;
+            capabilities.tasks = Some(TasksCapabilities {
+                list: Some(TasksListCapabilities::default()),
+                cancel: Some(TasksCancelCapabilities::default()),
+                requests: Some(TasksRequestCapabilities {
+                    tools: Some(TasksToolCapabilities {
+                        call: Some(TasksToolCallCapabilities::default()),
+                        extra: Default::default(),
+                    }),
+                    extra: Default::default(),
+                }),
+                extra: Default::default(),
+            });
+        }
+
         // Add RootsHandler if roots were configured (same pattern as MCP server)
         let mut handlers = self.handlers;
         if !self.roots.is_empty() {
@@ -884,6 +949,29 @@ impl LambdaMcpServerBuilder {
                 roots_handler = roots_handler.add_root(root.clone());
             }
             handlers.insert("roots/list".to_string(), Arc::new(roots_handler));
+        }
+
+        // Add task handlers if task runtime is configured
+        if let Some(ref runtime) = self.task_runtime {
+            use turul_mcp_server::{
+                TasksCancelHandler, TasksGetHandler, TasksListHandler, TasksResultHandler,
+            };
+            handlers.insert(
+                "tasks/get".to_string(),
+                Arc::new(TasksGetHandler::new(Arc::clone(runtime))),
+            );
+            handlers.insert(
+                "tasks/list".to_string(),
+                Arc::new(TasksListHandler::new(Arc::clone(runtime))),
+            );
+            handlers.insert(
+                "tasks/cancel".to_string(),
+                Arc::new(TasksCancelHandler::new(Arc::clone(runtime))),
+            );
+            handlers.insert(
+                "tasks/result".to_string(),
+                Arc::new(TasksResultHandler::new(Arc::clone(runtime))),
+            );
         }
 
         // Create the Lambda server (stores all configuration like MCP server does)
@@ -910,6 +998,7 @@ impl LambdaMcpServerBuilder {
             #[cfg(feature = "cors")]
             self.cors_config,
             self.middleware_stack,
+            self.task_runtime,
         ))
     }
 }
@@ -1172,6 +1261,287 @@ mod tests {
         assert!(
             handler.get_stream_manager().as_ref() as *const _ as usize > 0,
             "Stream manager must be initialized"
+        );
+    }
+
+    // =========================================================================
+    // Task support tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_builder_without_tasks_no_capability() {
+        let server = LambdaMcpServerBuilder::new()
+            .name("no-tasks")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            server.capabilities().tasks.is_none(),
+            "Tasks capability should not be advertised without task storage"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_builder_with_task_storage_advertises_capability() {
+        use turul_mcp_server::task_storage::InMemoryTaskStorage;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("with-tasks")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .with_task_storage(Arc::new(InMemoryTaskStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        let tasks_cap = server
+            .capabilities()
+            .tasks
+            .as_ref()
+            .expect("Tasks capability should be advertised");
+        assert!(tasks_cap.list.is_some(), "list capability should be set");
+        assert!(tasks_cap.cancel.is_some(), "cancel capability should be set");
+        let requests = tasks_cap
+            .requests
+            .as_ref()
+            .expect("requests capability should be set");
+        let tools = requests
+            .tools
+            .as_ref()
+            .expect("tools capability should be set");
+        assert!(tools.call.is_some(), "tools.call capability should be set");
+    }
+
+    #[tokio::test]
+    async fn test_builder_with_task_runtime_advertises_capability() {
+        let runtime = Arc::new(turul_mcp_server::TaskRuntime::in_memory());
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("with-runtime")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .with_task_runtime(runtime)
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            server.capabilities().tasks.is_some(),
+            "Tasks capability should be advertised with task runtime"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_task_recovery_timeout_configuration() {
+        use turul_mcp_server::task_storage::InMemoryTaskStorage;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("custom-timeout")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .task_recovery_timeout_ms(60_000)
+            .with_task_storage(Arc::new(InMemoryTaskStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            server.capabilities().tasks.is_some(),
+            "Tasks should be enabled with custom timeout"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_backward_compatibility_no_tasks() {
+        // Existing builder pattern still works unchanged
+        let server = LambdaMcpServerBuilder::new()
+            .name("backward-compat")
+            .version("1.0.0")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        let handler = server.handler().await.unwrap();
+        assert!(
+            handler.get_stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
+        assert!(server.capabilities().tasks.is_none());
+    }
+
+    /// Slow tool that sleeps for 2 seconds — used to prove non-blocking behavior.
+    #[derive(Clone, Default)]
+    struct SlowTool;
+
+    impl HasBaseMetadata for SlowTool {
+        fn name(&self) -> &str {
+            "slow_tool"
+        }
+    }
+
+    impl HasDescription for SlowTool {
+        fn description(&self) -> Option<&str> {
+            Some("A slow tool for testing")
+        }
+    }
+
+    impl HasInputSchema for SlowTool {
+        fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
+            use turul_mcp_protocol::ToolSchema;
+            static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+            SCHEMA.get_or_init(ToolSchema::object)
+        }
+    }
+
+    impl HasOutputSchema for SlowTool {
+        fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> {
+            None
+        }
+    }
+
+    impl HasAnnotations for SlowTool {
+        fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
+            None
+        }
+    }
+
+    impl HasToolMeta for SlowTool {
+        fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+            None
+        }
+    }
+
+    impl HasIcons for SlowTool {}
+
+    #[async_trait::async_trait]
+    impl McpTool for SlowTool {
+        async fn call(
+            &self,
+            _args: serde_json::Value,
+            _session: Option<turul_mcp_server::SessionContext>,
+        ) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
+            use turul_mcp_protocol::tools::{CallToolResult, ToolResult};
+            // Sleep 2 seconds to prove the task path is non-blocking
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            Ok(CallToolResult::success(vec![ToolResult::text("slow done")]))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_nonblocking_tools_call_with_task() {
+        use turul_mcp_json_rpc_server::r#async::JsonRpcHandler;
+        use turul_mcp_server::task_storage::InMemoryTaskStorage;
+        use turul_mcp_server::SessionAwareToolHandler;
+
+        let task_storage = Arc::new(InMemoryTaskStorage::new());
+        let runtime = Arc::new(turul_mcp_server::TaskRuntime::with_default_executor(
+            task_storage,
+        ));
+
+        // Build tools map
+        let mut tools: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
+        tools.insert("slow_tool".to_string(), Arc::new(SlowTool));
+
+        // Create session manager
+        let session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
+            Arc::new(InMemorySessionStorage::new());
+        let session_manager = Arc::new(turul_mcp_server::session::SessionManager::with_storage(
+            session_storage,
+            turul_mcp_protocol::ServerCapabilities::default(),
+        ));
+
+        // Create tool handler with task runtime
+        let tool_handler = SessionAwareToolHandler::new(tools, session_manager, false)
+            .with_task_runtime(Arc::clone(&runtime));
+
+        // Build a tools/call request with task parameter
+        let params = serde_json::json!({
+            "name": "slow_tool",
+            "arguments": {},
+            "task": {}
+        });
+        let request_params = turul_mcp_json_rpc_server::RequestParams::Object(
+            params
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        );
+
+        // Time the call
+        let start = std::time::Instant::now();
+        let result = tool_handler
+            .handle("tools/call", Some(request_params), None)
+            .await;
+        let elapsed = start.elapsed();
+
+        // Should succeed with CreateTaskResult
+        let value = result.expect("tools/call with task should succeed");
+        assert!(
+            value.get("task").is_some(),
+            "Response should contain 'task' field (CreateTaskResult shape)"
+        );
+        let task = value.get("task").unwrap();
+        assert!(
+            task.get("taskId").is_some(),
+            "Task should have taskId field"
+        );
+        assert_eq!(
+            task.get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default(),
+            "working",
+            "Task status should be 'working'"
+        );
+
+        // Non-blocking proof: should return well under the 2s tool sleep.
+        // Threshold is 1s (not 500ms) to avoid flakes on slow CI runners —
+        // the 2s tool sleep vs 1s threshold still proves a clear 2x gap.
+        assert!(
+            elapsed < std::time::Duration::from_secs(1),
+            "tools/call with task should return immediately (took {:?}, expected < 1s)",
+            elapsed
+        );
+    }
+
+    #[tokio::test]
+    async fn test_tasks_get_route_registered() {
+        use turul_mcp_server::handlers::McpHandler;
+        use turul_mcp_server::task_storage::InMemoryTaskStorage;
+        use turul_mcp_server::TasksGetHandler;
+
+        let runtime = Arc::new(turul_mcp_server::TaskRuntime::with_default_executor(
+            Arc::new(InMemoryTaskStorage::new()),
+        ));
+        let handler = TasksGetHandler::new(runtime);
+
+        // Dispatch tasks/get with a non-existent task_id — should return MCP error
+        // (not "method not found"), proving the route is registered and responds
+        let params = serde_json::json!({ "taskId": "nonexistent-task-id" });
+
+        let result = handler.handle(Some(params)).await;
+
+        // Should be an error (task not found) — NOT a "method not found" error
+        assert!(
+            result.is_err(),
+            "tasks/get with unknown task should return error"
+        );
+        let err = result.unwrap_err();
+        let err_str = err.to_string();
+        assert!(
+            !err_str.contains("method not found"),
+            "Error should not be 'method not found' — handler should respond to tasks/get"
         );
     }
 }

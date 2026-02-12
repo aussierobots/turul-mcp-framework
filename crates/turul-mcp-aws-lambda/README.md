@@ -19,6 +19,7 @@ AWS Lambda integration for the turul-mcp-framework, enabling serverless deployme
 - ⚠️ **SSE Support** - Snapshots via `handle()` or real streaming via `handle_streaming()`
 - ✅ **Builder Pattern** - Familiar API matching `McpServer::builder()`
 - ✅ **Truthful Capabilities** - Framework advertises accurate server capabilities
+- ✅ **MCP Tasks Support** - Task-augmented `tools/call` with durable storage persistence
 
 ## Quick Start
 
@@ -129,9 +130,10 @@ The crate bridges AWS Lambda's HTTP execution model with the turul-mcp-framework
 ├─────────────────────────┤
 │  turul-mcp-aws-lambda   │  ← This crate
 │  ├─ Type Conversion     │  ← lambda_http ↔ hyper
-│  ├─ CORS Integration    │  ← Automatic header injection  
+│  ├─ CORS Integration    │  ← Automatic header injection
 │  ├─ SSE Adaptation      │  ← Lambda streaming responses
-│  └─ Session Management  │  ← DynamoDB persistence
+│  ├─ Session Management  │  ← DynamoDB persistence
+│  └─ Task Runtime        │  ← MCP Tasks with durable storage
 ├─────────────────────────┤
 │   turul-mcp-server      │  ← Core framework
 └─────────────────────────┘
@@ -188,6 +190,46 @@ impl CounterTool {
     }
 }
 ```
+
+## MCP Tasks Support
+
+Enable task-augmented `tools/call` for long-running operations. When a client sends `tools/call` with a `task` parameter, the server creates a task record, dispatches execution asynchronously, and returns a `CreateTaskResult` immediately.
+
+### Task Storage Configuration
+
+```rust
+use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
+use turul_mcp_server::task_storage::InMemoryTaskStorage;
+use std::sync::Arc;
+
+// For production: use DynamoDB task storage
+let task_storage = Arc::new(InMemoryTaskStorage::new());
+
+let server = LambdaMcpServerBuilder::new()
+    .name("my-lambda-server")
+    .tool(MyTool::default())
+    .with_task_storage(task_storage)       // Enables tasks/get, tasks/list, etc.
+    .task_recovery_timeout_ms(300_000)     // 5 min stuck-task recovery (default)
+    .build()
+    .await?;
+```
+
+### How It Works
+
+1. Client sends `tools/call` with `{ "task": {} }` parameter
+2. Server creates a task record in durable storage (status: `working`)
+3. Server returns `CreateTaskResult` immediately (non-blocking)
+4. Tool execution runs asynchronously via the task executor
+5. Client polls `tasks/get` or waits on `tasks/result` for completion
+
+### Lambda-Specific Considerations
+
+- **Durable storage required**: Use DynamoDB for task storage. `InMemoryTaskStorage` loses state between Lambda invocations.
+- **Post-response task completion is best-effort** (operational limitation): The `tools/call` request path is non-blocking and returns `CreateTaskResult` immediately. However, the background tool work (`tokio::spawn`) may not complete before Lambda freezes the execution environment. Short-lived tools that finish within the invocation work reliably. Long-running tools MUST use an external updater (Step Functions, callback Lambda) to drive task completion via durable storage. This is a Lambda platform constraint, not a framework bug.
+- **Stuck-task recovery**: On each Lambda cold start, `recover_stuck_tasks()` marks stale `Working` tasks as `Failed` (configurable via `task_recovery_timeout_ms`).
+- **Cross-invocation cancellation is best-effort**: `tasks/cancel` updates storage status, but cannot signal a frozen Lambda invocation. Work may complete after cancellation.
+- **`tasks/result` polling**: When the executor doesn't track a task (different invocation), the handler falls back to 500ms storage polling with a 5-minute timeout.
+- **Cost optimization**: Lambda billing is request + duration based; reducing invocation duration usually reduces cost. Non-blocking task dispatch returns `CreateTaskResult` fast and frees the invocation rather than holding it open waiting for tool completion.
 
 ## CORS Configuration
 

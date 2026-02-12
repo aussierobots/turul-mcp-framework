@@ -93,7 +93,10 @@ fn str_to_status(s: &str) -> Result<TaskStatus, TaskStorageError> {
 }
 
 #[cfg(feature = "dynamodb")]
-fn task_record_to_item(record: &TaskRecord, config: &DynamoDbTaskConfig) -> HashMap<String, AttributeValue> {
+fn task_record_to_item(
+    record: &TaskRecord,
+    config: &DynamoDbTaskConfig,
+) -> HashMap<String, AttributeValue> {
     let mut item = HashMap::new();
 
     item.insert(
@@ -133,10 +136,7 @@ fn task_record_to_item(record: &TaskRecord, config: &DynamoDbTaskConfig) -> Hash
     );
     if let Some(ref params) = record.original_params {
         if let Ok(json_str) = serde_json::to_string(params) {
-            item.insert(
-                "original_params".to_string(),
-                AttributeValue::S(json_str),
-            );
+            item.insert("original_params".to_string(), AttributeValue::S(json_str));
         }
     }
     if let Some(ref result) = record.result {
@@ -208,9 +208,7 @@ fn item_to_task_record(
     let last_updated_at = item
         .get("last_updated_at")
         .and_then(|v| v.as_s().ok())
-        .ok_or_else(|| {
-            TaskStorageError::SerializationError("Missing last_updated_at".to_string())
-        })?
+        .ok_or_else(|| TaskStorageError::SerializationError("Missing last_updated_at".to_string()))?
         .clone();
 
     let ttl = item
@@ -226,9 +224,7 @@ fn item_to_task_record(
     let original_method = item
         .get("original_method")
         .and_then(|v| v.as_s().ok())
-        .ok_or_else(|| {
-            TaskStorageError::SerializationError("Missing original_method".to_string())
-        })?
+        .ok_or_else(|| TaskStorageError::SerializationError("Missing original_method".to_string()))?
         .clone();
 
     let original_params = item
@@ -391,11 +387,13 @@ impl DynamoDbTaskStorage {
 
         info!("Creating DynamoDB table: {}", self.config.table_name);
 
-        let key_schema = vec![KeySchemaElement::builder()
-            .attribute_name("task_id")
-            .key_type(KeyType::Hash)
-            .build()
-            .map_err(|e| TaskStorageError::DatabaseError(e.to_string()))?];
+        let key_schema = vec![
+            KeySchemaElement::builder()
+                .attribute_name("task_id")
+                .key_type(KeyType::Hash)
+                .build()
+                .map_err(|e| TaskStorageError::DatabaseError(e.to_string()))?,
+        ];
 
         let attribute_definitions = vec![
             AttributeDefinition::builder()
@@ -804,10 +802,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                     let decoded = base64::engine::general_purpose::STANDARD
                         .decode(cursor_str)
                         .map_err(|e| {
-                            TaskStorageError::SerializationError(format!(
-                                "Invalid cursor: {}",
-                                e
-                            ))
+                            TaskStorageError::SerializationError(format!("Invalid cursor: {}", e))
                         })?;
                     let json_str = String::from_utf8(decoded).map_err(|e| {
                         TaskStorageError::SerializationError(format!(
@@ -815,8 +810,8 @@ impl TaskStorage for DynamoDbTaskStorage {
                             e
                         ))
                     })?;
-                    let key_map: HashMap<String, String> =
-                        serde_json::from_str(&json_str).map_err(|e| {
+                    let key_map: HashMap<String, String> = serde_json::from_str(&json_str)
+                        .map_err(|e| {
                             TaskStorageError::SerializationError(format!(
                                 "Invalid cursor JSON: {}",
                                 e
@@ -863,20 +858,18 @@ impl TaskStorage for DynamoDbTaskStorage {
                     });
 
                     // Encode next cursor from LastEvaluatedKey
-                    let next_cursor = output
-                        .last_evaluated_key()
-                        .map(|key| {
-                            let mut key_map = HashMap::new();
-                            for (k, v) in key {
-                                if let Ok(s) = v.as_s() {
-                                    key_map.insert(k.clone(), s.clone());
-                                } else if let Ok(n) = v.as_n() {
-                                    key_map.insert(k.clone(), n.clone());
-                                }
+                    let next_cursor = output.last_evaluated_key().map(|key| {
+                        let mut key_map = HashMap::new();
+                        for (k, v) in key {
+                            if let Ok(s) = v.as_s() {
+                                key_map.insert(k.clone(), s.clone());
+                            } else if let Ok(n) = v.as_n() {
+                                key_map.insert(k.clone(), n.clone());
                             }
-                            let json = serde_json::to_string(&key_map).unwrap_or_default();
-                            base64::engine::general_purpose::STANDARD.encode(json)
-                        });
+                        }
+                        let json = serde_json::to_string(&key_map).unwrap_or_default();
+                        base64::engine::general_purpose::STANDARD.encode(json)
+                    });
 
                     Ok(TaskListPage {
                         tasks: records,
@@ -924,8 +917,7 @@ impl TaskStorage for DynamoDbTaskStorage {
             let now = Self::now_iso8601();
 
             // Build update expression
-            let mut update_expr =
-                "SET #status = :new_status, #last_updated_at = :now".to_string();
+            let mut update_expr = "SET #status = :new_status, #last_updated_at = :now".to_string();
             let mut expr_names = HashMap::from([
                 ("#status".to_string(), "status".to_string()),
                 (
@@ -934,10 +926,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                 ),
             ]);
             let mut expr_values: HashMap<String, AttributeValue> = HashMap::from([
-                (
-                    ":new_status".to_string(),
-                    AttributeValue::S(new_status_str),
-                ),
+                (":new_status".to_string(), AttributeValue::S(new_status_str)),
                 (":now".to_string(), AttributeValue::S(now.clone())),
                 (
                     ":expected_status".to_string(),
@@ -989,9 +978,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                         let refreshed = self
                             .get_task(task_id)
                             .await?
-                            .ok_or_else(|| {
-                                TaskStorageError::TaskNotFound(task_id.to_string())
-                            })?;
+                            .ok_or_else(|| TaskStorageError::TaskNotFound(task_id.to_string()))?;
 
                         // Re-validate transition with fresh state
                         state_machine::validate_transition(refreshed.status, new_status)?;
@@ -1010,10 +997,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                             ),
                         ]);
                         let mut retry_values: HashMap<String, AttributeValue> = HashMap::from([
-                            (
-                                ":new_status".to_string(),
-                                AttributeValue::S(retry_new),
-                            ),
+                            (":new_status".to_string(), AttributeValue::S(retry_new)),
                             (":now".to_string(), AttributeValue::S(retry_now)),
                             (
                                 ":expected_status".to_string(),
@@ -1027,8 +1011,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                                 "#status_message".to_string(),
                                 "status_message".to_string(),
                             );
-                            retry_values
-                                .insert(":msg".to_string(), AttributeValue::S(msg.clone()));
+                            retry_values.insert(":msg".to_string(), AttributeValue::S(msg.clone()));
                         } else {
                             retry_update.push_str(" REMOVE #status_message");
                             retry_names.insert(
@@ -1130,10 +1113,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                 .await
             {
                 Ok(_) => {
-                    debug!(
-                        "Successfully stored task result in DynamoDB: {}",
-                        task_id
-                    );
+                    debug!("Successfully stored task result in DynamoDB: {}", task_id);
                     Ok(())
                 }
                 Err(err) => {
@@ -1181,12 +1161,10 @@ impl TaskStorage for DynamoDbTaskStorage {
             let mut expired = Vec::new();
 
             for status_str in &["working", "input_required"] {
-                let expr_values = HashMap::from([
-                    (
-                        ":status".to_string(),
-                        AttributeValue::S(status_str.to_string()),
-                    ),
-                ]);
+                let expr_values = HashMap::from([(
+                    ":status".to_string(),
+                    AttributeValue::S(status_str.to_string()),
+                )]);
 
                 let result = self
                     .client
@@ -1295,10 +1273,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                     let decoded = base64::engine::general_purpose::STANDARD
                         .decode(cursor_str)
                         .map_err(|e| {
-                            TaskStorageError::SerializationError(format!(
-                                "Invalid cursor: {}",
-                                e
-                            ))
+                            TaskStorageError::SerializationError(format!("Invalid cursor: {}", e))
                         })?;
                     let json_str = String::from_utf8(decoded).map_err(|e| {
                         TaskStorageError::SerializationError(format!(
@@ -1306,8 +1281,8 @@ impl TaskStorage for DynamoDbTaskStorage {
                             e
                         ))
                     })?;
-                    let key_map: HashMap<String, String> =
-                        serde_json::from_str(&json_str).map_err(|e| {
+                    let key_map: HashMap<String, String> = serde_json::from_str(&json_str)
+                        .map_err(|e| {
                             TaskStorageError::SerializationError(format!(
                                 "Invalid cursor JSON: {}",
                                 e
@@ -1360,20 +1335,18 @@ impl TaskStorage for DynamoDbTaskStorage {
                             .then_with(|| a.task_id.cmp(&b.task_id))
                     });
 
-                    let next_cursor = output
-                        .last_evaluated_key()
-                        .map(|key| {
-                            let mut key_map = HashMap::new();
-                            for (k, v) in key {
-                                if let Ok(s) = v.as_s() {
-                                    key_map.insert(k.clone(), s.clone());
-                                } else if let Ok(n) = v.as_n() {
-                                    key_map.insert(k.clone(), n.clone());
-                                }
+                    let next_cursor = output.last_evaluated_key().map(|key| {
+                        let mut key_map = HashMap::new();
+                        for (k, v) in key {
+                            if let Ok(s) = v.as_s() {
+                                key_map.insert(k.clone(), s.clone());
+                            } else if let Ok(n) = v.as_n() {
+                                key_map.insert(k.clone(), n.clone());
                             }
-                            let json = serde_json::to_string(&key_map).unwrap_or_default();
-                            base64::engine::general_purpose::STANDARD.encode(json)
-                        });
+                        }
+                        let json = serde_json::to_string(&key_map).unwrap_or_default();
+                        base64::engine::general_purpose::STANDARD.encode(json)
+                    });
 
                     Ok(TaskListPage {
                         tasks: records,
@@ -1410,12 +1383,10 @@ impl TaskStorage for DynamoDbTaskStorage {
 
             // Query for "working" and "input_required" statuses via StatusIndex GSI
             for status_str in &["working", "input_required"] {
-                let expr_values = HashMap::from([
-                    (
-                        ":status".to_string(),
-                        AttributeValue::S(status_str.to_string()),
-                    ),
-                ]);
+                let expr_values = HashMap::from([(
+                    ":status".to_string(),
+                    AttributeValue::S(status_str.to_string()),
+                )]);
 
                 let result = self
                     .client
@@ -1433,9 +1404,9 @@ impl TaskStorage for DynamoDbTaskStorage {
                         for item in output.items() {
                             if let Ok(record) = item_to_task_record(item) {
                                 // Check age based on last_updated_at
-                                if let Ok(updated) = chrono::DateTime::parse_from_rfc3339(
-                                    &record.last_updated_at,
-                                ) {
+                                if let Ok(updated) =
+                                    chrono::DateTime::parse_from_rfc3339(&record.last_updated_at)
+                                {
                                     let age_ms =
                                         (now - updated.with_timezone(&Utc)).num_milliseconds();
                                     if age_ms > max_age_ms as i64 {
@@ -1556,9 +1527,7 @@ mod tests {
             original_method: "tools/call".to_string(),
             original_params: Some(json!({"tool": "calculator", "args": {"a": 1, "b": 2}})),
             result: Some(TaskOutcome::Success(json!({"value": 3}))),
-            meta: Some(HashMap::from([
-                ("key".to_string(), json!("value")),
-            ])),
+            meta: Some(HashMap::from([("key".to_string(), json!("value"))])),
         };
 
         let config = DynamoDbTaskConfig::default();
@@ -1742,7 +1711,11 @@ mod tests {
 
         // Working -> Completed
         let updated = storage
-            .update_task_status(&task.task_id, TaskStatus::Completed, Some("Done".to_string()))
+            .update_task_status(
+                &task.task_id,
+                TaskStatus::Completed,
+                Some("Done".to_string()),
+            )
             .await
             .unwrap();
         assert_eq!(updated.status, TaskStatus::Completed);

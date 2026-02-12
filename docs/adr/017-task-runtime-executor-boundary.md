@@ -47,7 +47,7 @@ Backends: `InMemoryTaskStorage`, `SqliteTaskStorage` (feature `sqlite`),
 
 ### Layer 2: TaskExecutor (execution)
 
-**Crate**: `turul-mcp-server` (module `task_executor`)
+**Crate**: `turul-mcp-server` (module `task::executor`)
 
 A trait with 3 async methods:
 
@@ -63,7 +63,7 @@ Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = TaskOutcome> + Send>> + Send>
 `TaskHandle` is a sub-trait with two synchronous methods: `cancel()` and
 `is_cancelled()`.
 
-The default implementation is `TokioTaskExecutor` (module `tokio_executor`),
+The default implementation is `TokioTaskExecutor` (module `task::tokio_executor`),
 which uses:
 
 - `tokio::spawn` to run work on the Tokio runtime
@@ -74,7 +74,7 @@ which uses:
 
 ### Layer 3: TaskRuntime (coordination)
 
-**Crate**: `turul-mcp-server` (module `task_runtime`)
+**Crate**: `turul-mcp-server` (module `task::runtime`)
 
 A concrete struct that owns `Arc<dyn TaskStorage>` + `Arc<dyn TaskExecutor>` and
 provides the unified API consumed by MCP request handlers. Convenience constructors:
@@ -146,11 +146,11 @@ because `tokio::sync::watch` is a runtime-specific primitive.
 | DynamoDbTaskStorage | `crates/turul-mcp-task-storage/src/dynamodb.rs` |
 | State machine | `crates/turul-mcp-task-storage/src/state_machine.rs` |
 | Parity tests | `crates/turul-mcp-task-storage/src/parity_tests.rs` |
-| TaskExecutor trait | `crates/turul-mcp-server/src/task_executor.rs` |
-| TokioTaskExecutor | `crates/turul-mcp-server/src/tokio_executor.rs` |
+| TaskExecutor trait | `crates/turul-mcp-server/src/task/executor.rs` |
+| TokioTaskExecutor | `crates/turul-mcp-server/src/task/tokio_executor.rs` |
 | CancellationHandle | `crates/turul-mcp-server/src/cancellation.rs` |
-| TaskRuntime | `crates/turul-mcp-server/src/task_runtime.rs` |
-| Task handlers | `crates/turul-mcp-server/src/task_handlers.rs` |
+| TaskRuntime | `crates/turul-mcp-server/src/task/runtime.rs` |
+| Task handlers | `crates/turul-mcp-server/src/task/handlers.rs` |
 
 ### Dependency Direction
 

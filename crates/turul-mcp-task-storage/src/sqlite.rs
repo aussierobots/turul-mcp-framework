@@ -116,9 +116,7 @@ fn row_to_task_record(row: sqlx::sqlite::SqliteRow) -> Result<TaskRecord, TaskSt
         created_at: row.get("created_at"),
         last_updated_at: row.get("last_updated_at"),
         ttl: row.get::<Option<i64>, _>("ttl"),
-        poll_interval: row
-            .get::<Option<i64>, _>("poll_interval")
-            .map(|v| v as u64),
+        poll_interval: row.get::<Option<i64>, _>("poll_interval").map(|v| v as u64),
         original_method: row.get("original_method"),
         original_params,
         result,
@@ -205,11 +203,9 @@ impl SqliteTaskStorage {
         .execute(&self.pool)
         .await?;
 
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_tasks_list ON tasks (created_at, task_id)",
-        )
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_tasks_list ON tasks (created_at, task_id)")
+            .execute(&self.pool)
+            .await?;
 
         sqlx::query(
             "CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks (session_id, created_at, task_id)",
@@ -304,11 +300,7 @@ impl TaskStorage for SqliteTaskStorage {
             .as_ref()
             .map(serde_json::to_string)
             .transpose()?;
-        let meta_json = task
-            .meta
-            .as_ref()
-            .map(serde_json::to_string)
-            .transpose()?;
+        let meta_json = task.meta.as_ref().map(serde_json::to_string).transpose()?;
 
         sqlx::query(
             r#"
@@ -367,11 +359,7 @@ impl TaskStorage for SqliteTaskStorage {
             .as_ref()
             .map(serde_json::to_string)
             .transpose()?;
-        let meta_json = task
-            .meta
-            .as_ref()
-            .map(serde_json::to_string)
-            .transpose()?;
+        let meta_json = task.meta.as_ref().map(serde_json::to_string).transpose()?;
 
         let rows_affected = sqlx::query(
             r#"
@@ -427,12 +415,10 @@ impl TaskStorage for SqliteTaskStorage {
 
         let rows = if let Some(cursor_id) = cursor {
             // Two-step cursor resolution: look up the cursor task's (created_at, task_id)
-            let cursor_row = sqlx::query(
-                "SELECT created_at, task_id FROM tasks WHERE task_id = ?",
-            )
-            .bind(cursor_id)
-            .fetch_optional(&self.pool)
-            .await?;
+            let cursor_row = sqlx::query("SELECT created_at, task_id FROM tasks WHERE task_id = ?")
+                .bind(cursor_id)
+                .fetch_optional(&self.pool)
+                .await?;
 
             match cursor_row {
                 Some(crow) => {
@@ -637,12 +623,10 @@ impl TaskStorage for SqliteTaskStorage {
         let fetch_limit = limit + 1;
 
         let rows = if let Some(cursor_id) = cursor {
-            let cursor_row = sqlx::query(
-                "SELECT created_at, task_id FROM tasks WHERE task_id = ?",
-            )
-            .bind(cursor_id)
-            .fetch_optional(&self.pool)
-            .await?;
+            let cursor_row = sqlx::query("SELECT created_at, task_id FROM tasks WHERE task_id = ?")
+                .bind(cursor_id)
+                .fetch_optional(&self.pool)
+                .await?;
 
             match cursor_row {
                 Some(crow) => {
@@ -949,7 +933,10 @@ mod tests {
         assert!(page3.next_cursor.is_none());
 
         // Invalid cursor falls back to beginning
-        let fallback = storage.list_tasks(Some("no-such-id"), Some(2)).await.unwrap();
+        let fallback = storage
+            .list_tasks(Some("no-such-id"), Some(2))
+            .await
+            .unwrap();
         assert_eq!(fallback.tasks.len(), 2);
         assert_eq!(fallback.tasks[0].task_id, "task-0");
     }
@@ -1033,8 +1020,7 @@ mod tests {
             .unwrap();
 
         // Store a success outcome
-        let outcome =
-            TaskOutcome::Success(json!({"content": [{"type": "text", "text": "hello"}]}));
+        let outcome = TaskOutcome::Success(json!({"content": [{"type": "text", "text": "hello"}]}));
         storage
             .store_task_result("task-res", outcome)
             .await

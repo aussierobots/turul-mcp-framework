@@ -73,7 +73,7 @@ pub struct McpServerBuilder {
     session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
 
     /// Task storage / runtime (None = tasks not supported)
-    task_runtime: Option<Arc<crate::task_runtime::TaskRuntime>>,
+    task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
 
     /// Recovery timeout for stuck tasks (milliseconds), default 5 minutes
     task_recovery_timeout_ms: u64,
@@ -1215,7 +1215,7 @@ impl McpServerBuilder {
         mut self,
         storage: Arc<dyn turul_mcp_task_storage::TaskStorage>,
     ) -> Self {
-        let runtime = crate::task_runtime::TaskRuntime::with_default_executor(storage)
+        let runtime = crate::task::runtime::TaskRuntime::with_default_executor(storage)
             .with_recovery_timeout(self.task_recovery_timeout_ms);
         self.task_runtime = Some(Arc::new(runtime));
         self
@@ -1224,7 +1224,7 @@ impl McpServerBuilder {
     /// Configure task support with a pre-built `TaskRuntime`.
     ///
     /// Use this when you need fine-grained control over the task runtime configuration.
-    pub fn with_task_runtime(mut self, runtime: Arc<crate::task_runtime::TaskRuntime>) -> Self {
+    pub fn with_task_runtime(mut self, runtime: Arc<crate::task::runtime::TaskRuntime>) -> Self {
         self.task_runtime = Some(runtime);
         self
     }
@@ -1594,25 +1594,25 @@ impl McpServerBuilder {
         if let Some(ref runtime) = self.task_runtime {
             handlers.insert(
                 "tasks/get".to_string(),
-                Arc::new(crate::task_handlers::TasksGetHandler::new(Arc::clone(
+                Arc::new(crate::task::handlers::TasksGetHandler::new(Arc::clone(
                     runtime,
                 ))),
             );
             handlers.insert(
                 "tasks/list".to_string(),
-                Arc::new(crate::task_handlers::TasksListHandler::new(Arc::clone(
+                Arc::new(crate::task::handlers::TasksListHandler::new(Arc::clone(
                     runtime,
                 ))),
             );
             handlers.insert(
                 "tasks/cancel".to_string(),
-                Arc::new(crate::task_handlers::TasksCancelHandler::new(Arc::clone(
+                Arc::new(crate::task::handlers::TasksCancelHandler::new(Arc::clone(
                     runtime,
                 ))),
             );
             handlers.insert(
                 "tasks/result".to_string(),
-                Arc::new(crate::task_handlers::TasksResultHandler::new(Arc::clone(
+                Arc::new(crate::task::handlers::TasksResultHandler::new(Arc::clone(
                     runtime,
                 ))),
             );
