@@ -12,12 +12,12 @@
 //!
 //! ```toml
 //! [dependencies]
-//! turul-mcp-session-storage = "0.2"
+//! turul-mcp-session-storage = "0.3"
 //!
 //! # Optional features for different backends
-//! turul-mcp-session-storage = { version = "0.2", features = ["sqlite"] }
-//! turul-mcp-session-storage = { version = "0.2", features = ["postgres"] }
-//! turul-mcp-session-storage = { version = "0.2", features = ["dynamodb"] }
+//! turul-mcp-session-storage = { version = "0.3", features = ["sqlite"] }
+//! turul-mcp-session-storage = { version = "0.3", features = ["postgres"] }
+//! turul-mcp-session-storage = { version = "0.3", features = ["dynamodb"] }
 //! ```
 
 // Core trait and types

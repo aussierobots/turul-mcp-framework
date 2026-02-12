@@ -24,8 +24,8 @@
 //!
 //! ```toml
 //! [dependencies]
-//! turul-mcp-server = "0.2"
-//! turul-mcp-derive = "0.2"  # For macros
+//! turul-mcp-server = "0.3"
+//! turul-mcp-derive = "0.3"  # For macros
 //! tokio = { version = "1.0", features = ["full"] }
 //! ```
 //!
