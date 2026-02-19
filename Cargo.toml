@@ -78,6 +78,9 @@ members = [
   "examples/session-management-compliance-test",
   "examples/streamable-http-client",
 
+  # AWS/Lambda authorizer examples
+  "examples/lambda-authorizer",
+
   # Middleware examples
   "examples/middleware-auth-server",
   "examples/middleware-auth-lambda",
