@@ -16,6 +16,12 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
     let name = &resource_meta.name;
     let description = &resource_meta.description;
 
+    // Handle mime_type properly for quote! generation
+    let mime_type_expr = match &resource_meta.mime_type {
+        Some(mt) => quote! { Some(#mt).as_deref() },
+        None => quote! { None },
+    };
+
     // Check if it's a struct
     let _data = match &input.data {
         Data::Struct(data) => data,
@@ -58,7 +64,7 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
         #[automatically_derived]
         impl turul_mcp_builders::traits::HasResourceMimeType for #struct_name {
             fn mime_type(&self) -> Option<&str> {
-                None  // TODO: Support mime_type from attributes
+                #mime_type_expr
             }
         }
 
@@ -155,6 +161,26 @@ mod tests {
 
         let result = derive_mcp_resource_impl(input);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_mime_type_attribute() {
+        let input: DeriveInput = parse_quote! {
+            #[resource(
+                uri = "data://items/{item_id}",
+                name = "Item Data",
+                mime_type = "application/json",
+                description = "A JSON data resource"
+            )]
+            struct ItemResource;
+        };
+
+        let result = derive_mcp_resource_impl(input);
+        assert!(result.is_ok());
+
+        let generated = result.unwrap().to_string();
+        assert!(generated.contains("HasResourceMimeType"));
+        assert!(generated.contains("application/json"));
     }
 
     #[test]
