@@ -41,6 +41,7 @@ uuid = { workspace = true, features = ["v7"] }
 chrono = { workspace = true, features = ["serde"] }
 regex.workspace = true
 once_cell.workspace = true
+urlencoding.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

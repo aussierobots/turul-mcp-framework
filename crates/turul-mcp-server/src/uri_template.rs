@@ -206,9 +206,18 @@ impl UriTemplate {
 
         for (i, var_name) in self.variables.iter().enumerate() {
             if let Some(value) = captures.get(i + 1) {
-                let value = value.as_str().to_string();
+                // URL-decode per RFC 6570 — template variables are percent-encoded in URIs
+                let value = urlencoding::decode(value.as_str())
+                    .map_err(|e| {
+                        McpError::invalid_param_type(
+                            var_name,
+                            "valid UTF-8 after percent-decoding",
+                            &e.to_string(),
+                        )
+                    })?
+                    .into_owned();
 
-                // Validate extracted value
+                // Validate decoded value
                 if let Some(validator) = self.validators.get(var_name) {
                     validator.validate(&value).map_err(|e| {
                         McpError::invalid_param_type(var_name, &validator.description, &e)
@@ -415,5 +424,59 @@ mod tests {
         );
         assert_eq!(UriTemplate::detect_mime_type("file.unknown"), None);
         assert_eq!(UriTemplate::detect_mime_type("file"), None);
+    }
+
+    #[test]
+    fn test_extract_percent_encoded_hash() {
+        let template = UriTemplate::new("custom://items/{item_id}").unwrap();
+
+        // '#' → %23 in the URI
+        let vars = template
+            .extract("custom://items/PREFIX%23some-value")
+            .unwrap();
+
+        assert_eq!(
+            vars.get("item_id"),
+            Some(&"PREFIX#some-value".to_string()),
+            "Percent-encoded '#' should be decoded to '#'"
+        );
+    }
+
+    #[test]
+    fn test_extract_unencoded_values_unchanged() {
+        let template = UriTemplate::new("file:///user/{user_id}.json").unwrap();
+        let vars = template.extract("file:///user/alice123.json").unwrap();
+        assert_eq!(
+            vars.get("user_id"),
+            Some(&"alice123".to_string()),
+            "Plain values should pass through unchanged"
+        );
+    }
+
+    #[test]
+    fn test_extract_percent_encoded_space() {
+        let template = UriTemplate::new("file:///docs/{name}").unwrap();
+        let vars = template.extract("file:///docs/my%20document").unwrap();
+        assert_eq!(
+            vars.get("name"),
+            Some(&"my document".to_string()),
+            "Percent-encoded space should be decoded"
+        );
+    }
+
+    #[test]
+    fn test_extract_percent_encoded_special_chars() {
+        let template = UriTemplate::new("data://records/{record_id}").unwrap();
+
+        // '@' → %40, '&' → %26
+        let vars = template
+            .extract("data://records/user%40host%26extra")
+            .unwrap();
+
+        assert_eq!(
+            vars.get("record_id"),
+            Some(&"user@host&extra".to_string()),
+            "Multiple percent-encoded chars should all be decoded"
+        );
     }
 }
