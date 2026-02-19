@@ -78,8 +78,11 @@ pub struct LambdaMcpServerBuilder {
     /// Tools registered with the server
     tools: HashMap<String, Arc<dyn McpTool>>,
 
-    /// Resources registered with the server
+    /// Static resources registered with the server
     resources: HashMap<String, Arc<dyn McpResource>>,
+
+    /// Template resources registered with the server (auto-detected from URI)
+    template_resources: Vec<(turul_mcp_server::uri_template::UriTemplate, Arc<dyn McpResource>)>,
 
     /// Prompts registered with the server
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
@@ -237,6 +240,7 @@ impl LambdaMcpServerBuilder {
             capabilities,
             tools: HashMap::new(),
             resources: HashMap::new(),
+            template_resources: Vec::new(),
             prompts: HashMap::new(),
             elicitations: HashMap::new(),
             sampling: HashMap::new(),
@@ -321,9 +325,32 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register a resource with the server
+    ///
+    /// Automatically detects template resources (URIs containing `{variables}`)
+    /// and routes them to the template resource list. Template resources appear
+    /// in `resources/templates/list`, not `resources/list`.
     pub fn resource<R: McpResource + 'static>(mut self, resource: R) -> Self {
         let uri = resource.uri().to_string();
-        self.resources.insert(uri, Arc::new(resource));
+
+        if uri.contains('{') && uri.contains('}') {
+            // Template resource — parse URI as UriTemplate
+            match turul_mcp_server::uri_template::UriTemplate::new(&uri) {
+                Ok(template) => {
+                    self.template_resources.push((template, Arc::new(resource)));
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to parse template resource URI '{}': {}. Registering as static.",
+                        uri,
+                        e
+                    );
+                    self.resources.insert(uri, Arc::new(resource));
+                }
+            }
+        } else {
+            // Static resource
+            self.resources.insert(uri, Arc::new(resource));
+        }
         self
     }
 
@@ -543,13 +570,30 @@ impl LambdaMcpServerBuilder {
             list_changed: Some(false),
         });
 
-        // Create ResourcesHandler and add all registered resources
-        let mut handler = ResourcesHandler::new();
+        // Create ResourcesHandler (resources/list) — static resources only
+        let mut list_handler = ResourcesHandler::new();
         for resource in self.resources.values() {
-            handler = handler.add_resource_arc(resource.clone());
+            list_handler = list_handler.add_resource_arc(resource.clone());
+        }
+        self = self.handler(list_handler);
+
+        // Create ResourceTemplatesHandler (resources/templates/list) — template resources
+        if !self.template_resources.is_empty() {
+            let templates_handler =
+                ResourceTemplatesHandler::new().with_templates(self.template_resources.clone());
+            self = self.handler(templates_handler);
         }
 
-        self.handler(handler)
+        // Create ResourcesReadHandler (resources/read) — both static and template resources
+        let mut read_handler = ResourcesReadHandler::new().without_security();
+        for resource in self.resources.values() {
+            read_handler = read_handler.add_resource_arc(resource.clone());
+        }
+        for (template, resource) in &self.template_resources {
+            read_handler =
+                read_handler.add_template_resource_arc(template.clone(), resource.clone());
+        }
+        self.handler(read_handler)
     }
 
     /// Add logging support
@@ -871,7 +915,7 @@ impl LambdaMcpServerBuilder {
         // Auto-detect and configure server capabilities based on registered components (same as McpServer)
         let mut capabilities = self.capabilities.clone();
         let has_tools = !self.tools.is_empty();
-        let has_resources = !self.resources.is_empty();
+        let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
         let has_prompts = !self.prompts.is_empty();
         let has_elicitations = !self.elicitations.is_empty();
         let has_completions = !self.completions.is_empty();
@@ -972,6 +1016,37 @@ impl LambdaMcpServerBuilder {
                 "tasks/result".to_string(),
                 Arc::new(TasksResultHandler::new(Arc::clone(runtime))),
             );
+        }
+
+        // Auto-populate resource handlers (same as McpServer build() auto-setup)
+        if has_resources {
+            // Populate resources/list handler with static resources
+            let mut list_handler = ResourcesHandler::new();
+            for resource in self.resources.values() {
+                list_handler = list_handler.add_resource_arc(resource.clone());
+            }
+            handlers.insert("resources/list".to_string(), Arc::new(list_handler));
+
+            // Populate resources/templates/list handler with template resources
+            if !self.template_resources.is_empty() {
+                let templates_handler = ResourceTemplatesHandler::new()
+                    .with_templates(self.template_resources.clone());
+                handlers.insert(
+                    "resources/templates/list".to_string(),
+                    Arc::new(templates_handler),
+                );
+            }
+
+            // Create resources/read handler with both static and template resources
+            let mut read_handler = ResourcesReadHandler::new().without_security();
+            for resource in self.resources.values() {
+                read_handler = read_handler.add_resource_arc(resource.clone());
+            }
+            for (template, resource) in &self.template_resources {
+                read_handler =
+                    read_handler.add_template_resource_arc(template.clone(), resource.clone());
+            }
+            handlers.insert("resources/read".to_string(), Arc::new(read_handler));
         }
 
         // Create the Lambda server (stores all configuration like MCP server does)
@@ -1305,7 +1380,10 @@ mod tests {
             .as_ref()
             .expect("Tasks capability should be advertised");
         assert!(tasks_cap.list.is_some(), "list capability should be set");
-        assert!(tasks_cap.cancel.is_some(), "cancel capability should be set");
+        assert!(
+            tasks_cap.cancel.is_some(),
+            "cancel capability should be set"
+        );
         let requests = tasks_cap
             .requests
             .as_ref()
@@ -1440,8 +1518,8 @@ mod tests {
     #[tokio::test]
     async fn test_nonblocking_tools_call_with_task() {
         use turul_mcp_json_rpc_server::r#async::JsonRpcHandler;
-        use turul_mcp_server::task_storage::InMemoryTaskStorage;
         use turul_mcp_server::SessionAwareToolHandler;
+        use turul_mcp_server::task_storage::InMemoryTaskStorage;
 
         let task_storage = Arc::new(InMemoryTaskStorage::new());
         let runtime = Arc::new(turul_mcp_server::TaskRuntime::with_default_executor(
@@ -1515,11 +1593,334 @@ mod tests {
         );
     }
 
+    // =========================================================================
+    // Resource and template resource tests
+    // =========================================================================
+
+    // Mock static resource for testing
+    #[derive(Clone)]
+    struct StaticTestResource;
+
+    impl turul_mcp_builders::prelude::HasResourceMetadata for StaticTestResource {
+        fn name(&self) -> &str {
+            "static_test"
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceDescription for StaticTestResource {
+        fn description(&self) -> Option<&str> {
+            Some("Static test resource")
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceUri for StaticTestResource {
+        fn uri(&self) -> &str {
+            "file:///test.txt"
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceMimeType for StaticTestResource {
+        fn mime_type(&self) -> Option<&str> {
+            Some("text/plain")
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceSize for StaticTestResource {
+        fn size(&self) -> Option<u64> {
+            None
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceAnnotations for StaticTestResource {
+        fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+            None
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceMeta for StaticTestResource {
+        fn resource_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+            None
+        }
+    }
+
+    impl HasIcons for StaticTestResource {}
+
+    #[async_trait::async_trait]
+    impl McpResource for StaticTestResource {
+        async fn read(
+            &self,
+            _params: Option<serde_json::Value>,
+            _session: Option<&turul_mcp_server::SessionContext>,
+        ) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+            use turul_mcp_protocol::resources::ResourceContent;
+            Ok(vec![ResourceContent::text("file:///test.txt", "test")])
+        }
+    }
+
+    // Mock template resource for testing
+    #[derive(Clone)]
+    struct TemplateTestResource;
+
+    impl turul_mcp_builders::prelude::HasResourceMetadata for TemplateTestResource {
+        fn name(&self) -> &str {
+            "template_test"
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceDescription for TemplateTestResource {
+        fn description(&self) -> Option<&str> {
+            Some("Template test resource")
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceUri for TemplateTestResource {
+        fn uri(&self) -> &str {
+            "agent://agents/{agent_id}"
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceMimeType for TemplateTestResource {
+        fn mime_type(&self) -> Option<&str> {
+            Some("application/json")
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceSize for TemplateTestResource {
+        fn size(&self) -> Option<u64> {
+            None
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceAnnotations for TemplateTestResource {
+        fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+            None
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceMeta for TemplateTestResource {
+        fn resource_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+            None
+        }
+    }
+
+    impl HasIcons for TemplateTestResource {}
+
+    #[async_trait::async_trait]
+    impl McpResource for TemplateTestResource {
+        async fn read(
+            &self,
+            _params: Option<serde_json::Value>,
+            _session: Option<&turul_mcp_server::SessionContext>,
+        ) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+            use turul_mcp_protocol::resources::ResourceContent;
+            Ok(vec![ResourceContent::text(
+                "agent://agents/test",
+                "{}",
+            )])
+        }
+    }
+
+    #[test]
+    fn test_resource_auto_detection_static() {
+        let builder = LambdaMcpServerBuilder::new()
+            .name("test")
+            .resource(StaticTestResource);
+
+        assert_eq!(builder.resources.len(), 1);
+        assert!(builder.resources.contains_key("file:///test.txt"));
+        assert_eq!(builder.template_resources.len(), 0);
+    }
+
+    #[test]
+    fn test_resource_auto_detection_template() {
+        let builder = LambdaMcpServerBuilder::new()
+            .name("test")
+            .resource(TemplateTestResource);
+
+        assert_eq!(builder.resources.len(), 0);
+        assert_eq!(builder.template_resources.len(), 1);
+
+        let (template, _) = &builder.template_resources[0];
+        assert_eq!(template.pattern(), "agent://agents/{agent_id}");
+    }
+
+    #[test]
+    fn test_resource_auto_detection_mixed() {
+        let builder = LambdaMcpServerBuilder::new()
+            .name("test")
+            .resource(StaticTestResource)
+            .resource(TemplateTestResource);
+
+        assert_eq!(builder.resources.len(), 1);
+        assert!(builder.resources.contains_key("file:///test.txt"));
+        assert_eq!(builder.template_resources.len(), 1);
+
+        let (template, _) = &builder.template_resources[0];
+        assert_eq!(template.pattern(), "agent://agents/{agent_id}");
+    }
+
+    #[tokio::test]
+    async fn test_build_advertises_resources_capability_for_templates_only() {
+        let server = LambdaMcpServerBuilder::new()
+            .name("template-only")
+            .resource(TemplateTestResource)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            server.capabilities().resources.is_some(),
+            "Resources capability should be advertised when template resources are registered"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_advertises_resources_capability_for_static_only() {
+        let server = LambdaMcpServerBuilder::new()
+            .name("static-only")
+            .resource(StaticTestResource)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            server.capabilities().resources.is_some(),
+            "Resources capability should be advertised when static resources are registered"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_no_resources_no_capability() {
+        let server = LambdaMcpServerBuilder::new()
+            .name("no-resources")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            server.capabilities().resources.is_none(),
+            "Resources capability should NOT be advertised when no resources are registered"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_lambda_builder_templates_list_returns_template() {
+        use turul_mcp_server::handlers::McpHandler;
+
+        // Build a ResourceTemplatesHandler the same way build() does — with the template resource
+        let builder = LambdaMcpServerBuilder::new()
+            .name("template-test")
+            .resource(TemplateTestResource);
+
+        // Verify the template is registered
+        assert_eq!(builder.template_resources.len(), 1);
+
+        // Build the handler the same way build() does
+        let handler =
+            ResourceTemplatesHandler::new().with_templates(builder.template_resources.clone());
+
+        // Invoke the handler directly (same as JSON-RPC dispatch)
+        let result = handler.handle(None).await.expect("should succeed");
+
+        let templates = result["resourceTemplates"]
+            .as_array()
+            .expect("resourceTemplates should be an array");
+        assert_eq!(
+            templates.len(),
+            1,
+            "Should have exactly 1 template resource"
+        );
+        assert_eq!(
+            templates[0]["uriTemplate"], "agent://agents/{agent_id}",
+            "Template URI should match"
+        );
+        assert_eq!(templates[0]["name"], "template_test");
+    }
+
+    #[tokio::test]
+    async fn test_lambda_builder_resources_list_returns_static() {
+        use turul_mcp_server::handlers::McpHandler;
+
+        // Build a ResourcesHandler the same way build() does — with the static resource
+        let builder = LambdaMcpServerBuilder::new()
+            .name("static-test")
+            .resource(StaticTestResource);
+
+        assert_eq!(builder.resources.len(), 1);
+
+        let mut handler = ResourcesHandler::new();
+        for resource in builder.resources.values() {
+            handler = handler.add_resource_arc(resource.clone());
+        }
+
+        let result = handler.handle(None).await.expect("should succeed");
+
+        let resources = result["resources"]
+            .as_array()
+            .expect("resources should be an array");
+        assert_eq!(resources.len(), 1, "Should have exactly 1 static resource");
+        assert_eq!(resources[0]["uri"], "file:///test.txt");
+        assert_eq!(resources[0]["name"], "static_test");
+    }
+
+    #[tokio::test]
+    async fn test_lambda_builder_mixed_resources_separation() {
+        use turul_mcp_server::handlers::McpHandler;
+
+        // Build with both static and template resources
+        let builder = LambdaMcpServerBuilder::new()
+            .name("mixed-test")
+            .resource(StaticTestResource)
+            .resource(TemplateTestResource);
+
+        assert_eq!(builder.resources.len(), 1);
+        assert_eq!(builder.template_resources.len(), 1);
+
+        // Build handlers the same way build() does
+        let mut list_handler = ResourcesHandler::new();
+        for resource in builder.resources.values() {
+            list_handler = list_handler.add_resource_arc(resource.clone());
+        }
+
+        let templates_handler =
+            ResourceTemplatesHandler::new().with_templates(builder.template_resources.clone());
+
+        // resources/list should return only the static resource
+        let list_result = list_handler.handle(None).await.expect("should succeed");
+        let resources = list_result["resources"]
+            .as_array()
+            .expect("resources should be an array");
+        assert_eq!(resources.len(), 1, "Only static resource in resources/list");
+        assert_eq!(resources[0]["uri"], "file:///test.txt");
+
+        // resources/templates/list should return only the template resource
+        let templates_result = templates_handler
+            .handle(None)
+            .await
+            .expect("should succeed");
+        let templates = templates_result["resourceTemplates"]
+            .as_array()
+            .expect("resourceTemplates should be an array");
+        assert_eq!(
+            templates.len(),
+            1,
+            "Only template resource in resources/templates/list"
+        );
+        assert_eq!(templates[0]["uriTemplate"], "agent://agents/{agent_id}");
+    }
+
     #[tokio::test]
     async fn test_tasks_get_route_registered() {
+        use turul_mcp_server::TasksGetHandler;
         use turul_mcp_server::handlers::McpHandler;
         use turul_mcp_server::task_storage::InMemoryTaskStorage;
-        use turul_mcp_server::TasksGetHandler;
 
         let runtime = Arc::new(turul_mcp_server::TaskRuntime::with_default_executor(
             Arc::new(InMemoryTaskStorage::new()),
