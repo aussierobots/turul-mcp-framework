@@ -28,7 +28,7 @@ turul-http-mcp-server = { workspace = true }
 turul-mcp-json-rpc-server = { workspace = true }
 
 # Core dependencies
-tokio = { version = "1.47", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 async-trait = "0.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
