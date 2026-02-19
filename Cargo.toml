@@ -168,7 +168,7 @@ sqlx = { version = "0.8", features = [
   "uuid",
 ] }
 tempfile = "3"
-toml = "0.9"
+toml = "1.0"
 regex = "1.12"
 base64 = "0.22"
 urlencoding = "2.1"
