@@ -332,6 +332,7 @@ impl DynamoDbTaskStorage {
                                     "DynamoDB table '{}' is active and ready",
                                     self.config.table_name
                                 );
+                                self.ensure_ttl_enabled().await?;
                                 Ok(())
                             }
                             _ => {
@@ -495,6 +496,72 @@ impl DynamoDbTaskStorage {
                     "Failed to create table '{}': {}",
                     self.config.table_name, err
                 )))
+            }
+        }
+    }
+
+    /// Ensure TTL is enabled on the table, enabling it if necessary.
+    #[cfg(feature = "dynamodb")]
+    async fn ensure_ttl_enabled(&self) -> Result<(), TaskStorageError> {
+        info!(
+            "Checking TTL status on DynamoDB table: {}",
+            self.config.table_name
+        );
+
+        match self
+            .client
+            .describe_time_to_live()
+            .table_name(&self.config.table_name)
+            .send()
+            .await
+        {
+            Ok(output) => {
+                if let Some(ttl_description) = output.time_to_live_description() {
+                    match ttl_description.time_to_live_status() {
+                        Some(aws_sdk_dynamodb::types::TimeToLiveStatus::Enabled) => {
+                            info!(
+                                "TTL is already enabled on table: {}",
+                                self.config.table_name
+                            );
+                            return Ok(());
+                        }
+                        Some(aws_sdk_dynamodb::types::TimeToLiveStatus::Enabling) => {
+                            info!(
+                                "TTL is currently being enabled on table: {}",
+                                self.config.table_name
+                            );
+                            return Ok(());
+                        }
+                        Some(status) => {
+                            info!(
+                                "TTL status is {:?}, will enable it on table: {}",
+                                status, self.config.table_name
+                            );
+                        }
+                        None => {
+                            info!(
+                                "TTL status unknown, will enable it on table: {}",
+                                self.config.table_name
+                            );
+                        }
+                    }
+                } else {
+                    info!(
+                        "No TTL description found, will enable TTL on table: {}",
+                        self.config.table_name
+                    );
+                }
+
+                // TTL is not enabled, so enable it
+                self.enable_ttl().await
+            }
+            Err(err) => {
+                warn!(
+                    "Failed to describe TTL for table '{}': {}, attempting to enable",
+                    self.config.table_name, err
+                );
+                // If we can't describe TTL, just try to enable it
+                self.enable_ttl().await
             }
         }
     }
