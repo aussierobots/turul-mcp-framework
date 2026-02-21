@@ -13,7 +13,7 @@ turul-mcp-json-rpc-server = { workspace = true }
 turul-mcp-session-storage = { workspace = true }
 turul-http-mcp-server = { workspace = true }
 turul-mcp-client = { workspace = true }
-turul-mcp-aws-lambda = { path = "../crates/turul-mcp-aws-lambda" }
+turul-mcp-aws-lambda = { workspace = true }
 lambda_http = { workspace = true }
 tokio = { workspace = true }
 tokio-test = { workspace = true }
@@ -32,9 +32,8 @@ hyper-util = { workspace = true }
 http-body = { workspace = true }
 http-body-util = { workspace = true }
 bytes = { workspace = true }
-mcp-e2e-shared = { path = "shared" }
-serial_test = "3.0"
-portpicker = "0.1"
+mcp-e2e-shared.workspace = true
+serial_test.workspace = true
 schemars = { workspace = true }
 
 # === Consolidated test binaries (F2 optimization) ===
