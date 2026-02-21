@@ -10,13 +10,13 @@ turul-mcp-protocol = { workspace = true }
 turul-mcp-session-storage = { workspace = true }
 turul-mcp-derive = { workspace = true }
 turul-mcp-builders = { workspace = true }
-tokio = { version = "1.49", features = ["full"] }
-async-trait = "0.1"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-clap = { version = "4", features = ["derive"] }
+tokio.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
 
 [[bin]]
 test = false
