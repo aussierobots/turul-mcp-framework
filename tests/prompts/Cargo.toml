@@ -6,11 +6,11 @@ publish = false
 autotests = false
 
 [dependencies]
-turul-mcp-server = { path = "../../crates/turul-mcp-server" }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
-turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
-turul-mcp-json-rpc-server = { path = "../../crates/turul-mcp-json-rpc-server" }
+turul-mcp-server.workspace = true
+turul-mcp-protocol.workspace = true
+turul-mcp-derive.workspace = true
+turul-mcp-builders.workspace = true
+turul-mcp-json-rpc-server.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -26,13 +26,13 @@ tower = { workspace = true, features = ["util"] }
 futures.workspace = true
 tokio-stream.workspace = true
 tempfile.workspace = true
-mcp-e2e-shared = { path = "../shared" }
+mcp-e2e-shared.workspace = true
 # Additional dependencies for test server binary
 clap.workspace = true
 chrono.workspace = true
 
 [dev-dependencies]
-serial_test = "3"
+serial_test.workspace = true
 
 [lib]
 name = "mcp_prompts_tests"
