@@ -72,7 +72,7 @@ struct Calculator;  // Framework → tools/call
 - **SessionContext**: Use `get_typed_state(key).await` and `set_typed_state(key, value).await?`
 - **Builder Pattern**: `McpServer::builder()` not `McpServerBuilder::new()`
 - **Error Handling**: Always use `McpError` types - NEVER create JsonRpcError directly in handlers
-- **Session IDs**: Always `Uuid::now_v7()` for temporal ordering
+- **Session IDs**: Always `Uuid::now_v7().as_simple()` for temporal ordering (no-hyphen hex)
 
 ### JSON Naming: camelCase ONLY
 

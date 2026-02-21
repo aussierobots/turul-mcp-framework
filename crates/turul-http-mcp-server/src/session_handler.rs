@@ -690,7 +690,7 @@ impl SessionMcpHandler {
         let last_event_id = extract_last_event_id(headers);
 
         // Generate unique connection ID for MCP spec compliance
-        let connection_id = Uuid::now_v7().to_string();
+        let connection_id = Uuid::now_v7().as_simple().to_string();
 
         debug!(
             "Creating SSE stream for session: {} with connection: {}, last_event_id: {:?}",

@@ -61,7 +61,7 @@ impl InMemoryTaskStorage {
 
     /// Generate a new task ID using UUID v7 (temporal ordering).
     pub fn generate_task_id() -> String {
-        Uuid::now_v7().to_string()
+        Uuid::now_v7().as_simple().to_string()
     }
 
     fn now_iso8601() -> String {

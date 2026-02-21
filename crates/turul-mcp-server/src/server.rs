@@ -1343,7 +1343,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             use turul_mcp_task_storage::{TaskOutcome, TaskRecord};
 
             // Backend-agnostic task ID: UUID v7 for temporal ordering
-            let task_id = uuid::Uuid::now_v7().to_string();
+            let task_id = uuid::Uuid::now_v7().as_simple().to_string();
             let now = chrono::Utc::now().to_rfc3339();
             let session_id = mcp_session_context
                 .as_ref()

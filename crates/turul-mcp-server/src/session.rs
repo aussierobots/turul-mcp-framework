@@ -307,7 +307,7 @@ impl SessionContext {
             Arc::new(|_event: SessionEvent| -> BoxFuture<()> { Box::pin(async {}) });
 
         SessionContext {
-            session_id: Uuid::now_v7().to_string(),
+            session_id: Uuid::now_v7().as_simple().to_string(),
             get_state,
             set_state,
             remove_state,
@@ -859,7 +859,7 @@ pub struct McpSession {
 impl McpSession {
     /// Create a new session
     pub fn new(server_capabilities: ServerCapabilities) -> Self {
-        let session_id = Uuid::now_v7().to_string();
+        let session_id = Uuid::now_v7().as_simple().to_string();
         let (event_sender, _) = broadcast::channel(128);
 
         Self {

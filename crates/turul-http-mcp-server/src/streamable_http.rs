@@ -498,7 +498,7 @@ impl StreamableHttpHandler {
             .and_then(|s| s.parse::<u64>().ok());
 
         // Generate unique connection ID for tracking this stream
-        let connection_id = uuid::Uuid::now_v7().to_string();
+        let connection_id = uuid::Uuid::now_v7().as_simple().to_string();
 
         debug!(
             "Creating streamable HTTP connection: session={}, connection={}, last_event_id={:?}",
@@ -1265,7 +1265,7 @@ impl StreamableHttpHandler {
 
         // Register streaming POST connection with StreamManager for progress events
         let wants_sse = context.wants_sse_stream();
-        let connection_id = format!("post-{}", uuid::Uuid::now_v7());
+        let connection_id = format!("post-{}", uuid::Uuid::now_v7().as_simple());
 
         // Progress forwarding only for SSE clients
         let (shutdown_tx, completion_rx) = if wants_sse {

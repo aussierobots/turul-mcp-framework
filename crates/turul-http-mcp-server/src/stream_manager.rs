@@ -134,7 +134,7 @@ impl StreamManager {
         config: StreamConfig,
     ) -> Self {
         use uuid::Uuid;
-        let instance_id = Uuid::now_v7().to_string();
+        let instance_id = Uuid::now_v7().as_simple().to_string();
         debug!("Creating StreamManager instance: {}", instance_id);
         Self {
             storage,

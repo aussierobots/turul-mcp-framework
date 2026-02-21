@@ -51,7 +51,7 @@ impl SessionInfo {
     pub fn new() -> Self {
         let now = chrono::Utc::now().timestamp_millis() as u64;
         Self {
-            session_id: Uuid::now_v7().to_string(),
+            session_id: Uuid::now_v7().as_simple().to_string(),
             client_capabilities: None,
             server_capabilities: None,
             state: HashMap::new(),

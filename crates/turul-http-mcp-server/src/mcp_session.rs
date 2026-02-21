@@ -44,7 +44,7 @@ lazy_static::lazy_static! {
 /// Create a brand new session.
 /// Returns the `session_id` and a `Receiver<String>` you can use to drive an SSE stream.
 pub async fn new_session(mcp_version: McpProtocolVersion) -> SessionHandle {
-    let session_id = Uuid::now_v7().to_string();
+    let session_id = Uuid::now_v7().as_simple().to_string();
     // 128-slot broadcast channel for JSON-RPC notifications
     let (sender, receiver) = broadcast::channel(128);
     let session = Session {
