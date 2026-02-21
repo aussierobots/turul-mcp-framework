@@ -201,6 +201,13 @@ md5 = "0.8"
 # YAML processing
 serde_yaml = "0.9"
 
+# Example-specific dependencies
+indicatif = "0.18"
+colored = "3.1"
+
+# Test-specific dependencies
+mcp-e2e-shared = { path = "tests/shared" }
+
 
 [profile.release]
 lto = true
