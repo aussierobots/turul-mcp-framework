@@ -6,21 +6,21 @@ autotests = false
 
 [dependencies]
 # Core framework
-turul-mcp-server = { path = "../../crates/turul-mcp-server" }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
+turul-mcp-server.workspace = true
+turul-mcp-protocol.workspace = true
+turul-mcp-builders.workspace = true
 
 # Shared test utilities
-mcp-e2e-shared = { path = "../shared" }
+mcp-e2e-shared.workspace = true
 
 # HTTP client and JSON
-reqwest = { version = "0.12", features = ["json"] }
-serde_json = "1.0"
+reqwest.workspace = true
+serde_json.workspace = true
 
 # Testing
-tokio = { version = "1", features = ["full"] }
-tracing = "0.1"
-tracing-subscriber = "0.3"
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 # Additional dependencies for test server binary
 clap.workspace = true
 async-trait.workspace = true
