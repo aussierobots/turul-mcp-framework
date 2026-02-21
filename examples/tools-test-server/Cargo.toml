@@ -54,11 +54,5 @@ async-trait.workspace = true
 # Command line parsing
 clap.workspace = true
 
-# JSON Schema validation
-jsonschema = "0.17"
-
-# Math operations
-num-bigint = "0.4"
-
 # JSON Schema generation
 schemars = { workspace = true }
