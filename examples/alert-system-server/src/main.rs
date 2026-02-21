@@ -202,7 +202,7 @@ impl ConfigureAlertRuleTool {
 
         // Create alert rule
         let rule = AlertRule {
-            id: Uuid::now_v7().to_string(),
+            id: Uuid::now_v7().as_simple().to_string(),
             name: self.name.clone(),
             description,
             condition_type: self.condition_type.clone(),
@@ -329,7 +329,7 @@ impl CheckAlertConditionsTool {
 
             if let Some(message) = alert_message {
                 let alert_event = AlertEvent {
-                    id: Uuid::now_v7().to_string(),
+                    id: Uuid::now_v7().as_simple().to_string(),
                     rule_id: rule.id.clone(),
                     timestamp: now,
                     severity: rule.severity.clone(),

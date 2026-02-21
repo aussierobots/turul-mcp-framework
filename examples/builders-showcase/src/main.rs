@@ -455,7 +455,7 @@ impl {{component_name}} {
         "components": ["cli", "server", "tests"]
     }))
     .logger("dev-activities")
-    .meta_value("session_id", json!(Uuid::now_v7()))
+    .meta_value("session_id", json!(Uuid::now_v7().as_simple().to_string()))
     .meta_value("user", json!("developer@company.com"))
     .build();
 

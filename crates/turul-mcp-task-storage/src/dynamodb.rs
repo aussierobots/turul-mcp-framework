@@ -1729,7 +1729,7 @@ mod tests {
         let storage = DynamoDbTaskStorage::new().await.unwrap();
 
         let task = TaskRecord {
-            task_id: uuid::Uuid::now_v7().to_string(),
+            task_id: uuid::Uuid::now_v7().as_simple().to_string(),
             session_id: Some("test-session".to_string()),
             status: TaskStatus::Working,
             status_message: Some("Testing".to_string()),
@@ -1760,7 +1760,7 @@ mod tests {
         let storage = DynamoDbTaskStorage::new().await.unwrap();
 
         let task = TaskRecord {
-            task_id: uuid::Uuid::now_v7().to_string(),
+            task_id: uuid::Uuid::now_v7().as_simple().to_string(),
             session_id: None,
             status: TaskStatus::Working,
             status_message: None,

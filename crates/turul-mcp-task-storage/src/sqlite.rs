@@ -155,7 +155,7 @@ impl SqliteTaskStorage {
         let pool = if is_memory {
             // For in-memory databases, connect via URI with a unique name and shared
             // cache so all pool connections see the same database instance.
-            let unique_name = uuid::Uuid::now_v7();
+            let unique_name = uuid::Uuid::now_v7().as_simple();
             let uri = format!("file:{}?mode=memory&cache=shared", unique_name);
             SqlitePool::connect(&uri)
                 .await

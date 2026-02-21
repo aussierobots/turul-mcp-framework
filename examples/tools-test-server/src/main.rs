@@ -465,7 +465,7 @@ impl ProgressTrackerTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<ProgressResult> {
         let steps = self.steps.unwrap_or(5).max(1);
         let step_duration = Duration::from_secs_f64(self.duration / steps as f64);
-        let progress_token = Uuid::now_v7().to_string();
+        let progress_token = Uuid::now_v7().as_simple().to_string();
 
         info!(
             "Starting progress tracking operation: {} seconds, {} steps",

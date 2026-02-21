@@ -272,7 +272,7 @@ impl TestSessionBuilder {
 
     /// Build a SessionContext with working state management and notification support
     pub async fn build_session_context(&self) -> SessionContext {
-        let session_id = Uuid::now_v7().to_string();
+        let session_id = Uuid::now_v7().as_simple().to_string();
         self.build_session_context_with_id(session_id).await
     }
 

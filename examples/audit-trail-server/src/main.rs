@@ -103,7 +103,7 @@ impl LogAuditEventTool {
 
         // Create audit event
         let audit_event = AuditEvent {
-            id: Uuid::now_v7().to_string(),
+            id: Uuid::now_v7().as_simple().to_string(),
             timestamp: Utc::now(),
             session_id: session.session_id.clone(),
             event_type: self.event_type.clone(),
