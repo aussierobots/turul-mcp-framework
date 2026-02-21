@@ -15,11 +15,10 @@ path = "src/main.rs"
 turul-mcp-client = { workspace = true }
 
 # HTTP client for MCP communication (still needed for direct requests during testing)
-reqwest = { version = "0.13", features = ["json", "stream"] }
+reqwest = { workspace = true, features = ["json", "stream"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
 futures = { workspace = true }
-futures-util = "0.3"
 
 # JSON and serialization
 serde = { workspace = true }
@@ -35,21 +34,15 @@ tracing-subscriber = { workspace = true }
 # Test framework
 tokio-test = { workspace = true }
 
-# Schema validation
-jsonschema = "0.26"
-
 # Date/time handling
 chrono = { workspace = true }
 
 # CLI argument parsing
-clap = { version = "4.5", features = ["derive"] }
+clap.workspace = true
 
 # Progress bars and output formatting
-indicatif = "0.18"
-colored = "3.1"
-
-# Configuration management
-config = "0.15"
+indicatif.workspace = true
+colored.workspace = true
 
 [dev-dependencies]
 tokio-test.workspace = true
