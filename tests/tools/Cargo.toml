@@ -19,9 +19,6 @@ serde.workspace = true
 # Async runtime
 tokio.workspace = true
 
-# Process management for test servers
-tokio-process = "0.2"
-
 # Test utilities
 anyhow.workspace = true
 
@@ -32,27 +29,24 @@ tracing-subscriber.workspace = true
 # Time utilities
 chrono.workspace = true
 
-# Collections
-indexmap = "2.0"
-
 # Async utilities
 futures.workspace = true
 
-# Shared E2E test utilities (will create this)
-mcp-e2e-shared = { path = "../shared" }
+# Shared E2E test utilities
+mcp-e2e-shared.workspace = true
 
 # Additional dependencies for test server binary
-turul-mcp-server = { path = "../../crates/turul-mcp-server" }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
-turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
+turul-mcp-server.workspace = true
+turul-mcp-protocol.workspace = true
+turul-mcp-derive.workspace = true
+turul-mcp-builders.workspace = true
 clap.workspace = true
 async-trait.workspace = true
 uuid = { workspace = true, features = ["v7", "serde"] }
-schemars = { workspace = true }
+schemars.workspace = true
 
 [dev-dependencies]
-serial_test = "3"
+serial_test.workspace = true
 
 [[bin]]
 name = "tools-test-server-e2e"
