@@ -27,8 +27,6 @@ cargo run --example <name>
 
 ---
 
----
-
 ## 📝 **FULL VERIFICATION RUN — 2026-02-26 (v0.3.0, MCP 2025-11-25)**
 
 ### Build Step
