@@ -148,7 +148,7 @@ async fn count_words(text: String) -> McpResult<WordCount> {
 
 **Session handshake**: `initialize` → `notifications/initialized` → `Mcp-Session-Id` header on all subsequent requests.
 
-**Verify**: `cargo test --test mcp_compliance_tests` and `cargo test --test mcp_specification_compliance`
+**Verify**: `cargo test -p turul-mcp-framework-integration-tests --test compliance`
 
 ## Quick Reference
 
@@ -182,14 +182,18 @@ struct SearchTool { query: String }
 
 **Why Required**: Derive macros cannot inspect the `execute` method's return type at compile time. The `output` attribute tells the macro what schema to generate.
 
-**Schemars (auto-sync with types):**
+**Schemars (automatic detection):**
+If the output type derives `schemars::JsonSchema`, the framework automatically uses it for detailed schema generation — no additional schemars flag is needed. The `output = Type` attribute is still required on derive macros:
 ```rust
+#[derive(schemars::JsonSchema, serde::Serialize)]
+struct MyOutput { value: f64 }
+
 #[derive(McpTool)]
-#[tool(name = "calc", description = "...", output = MyOutput, schemars)]
+#[tool(name = "calc", description = "...", output = MyOutput)]  // output = required
 struct MyTool { a: f64 }
 
-#[mcp_tool(name = "add", description = "...", schemars)]
-async fn add(a: f64) -> McpResult<MyOutput> { Ok(MyOutput { value: a }) }
+#[mcp_tool(name = "add", description = "Add numbers")]
+async fn add(a: f64) -> McpResult<MyOutput> { Ok(MyOutput { value: a }) }  // auto-detected from return type
 ```
 
 For manual `HasOutputSchema` implementation, see `examples/calculator-add-manual-server`.
@@ -221,7 +225,7 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:52935/mcp
 If behavior doesn't match code changes:
 ```bash
 cargo clean  # Full workspace clean required for cross-crate changes
-cargo test --test streamable_http_e2e
+cargo test -p turul-mcp-framework-integration-tests --test e2e_tests
 ```
 
 **Why**: Incremental compilation caches string literals/errors across crates.
@@ -257,7 +261,8 @@ let json_request = r#"{"method":"tools/call"}"#;
 - `turul-http-mcp-server/` - HTTP/SSE transport
 - `turul-mcp-json-rpc-server/` - JSON-RPC dispatch layer
 - `turul-mcp-client/` - Client library
-- `turul-mcp-session-storage/` - Pluggable session storage
+- `turul-mcp-session-storage/` - Pluggable session storage (InMemory, SQLite, PostgreSQL, DynamoDB)
+- `turul-mcp-task-storage/` - Task storage for long-running operations
 - `turul-mcp-aws-lambda/` - AWS Lambda integration
 
 ### Session Management
