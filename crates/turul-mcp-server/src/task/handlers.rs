@@ -735,7 +735,7 @@ mod tests {
             fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
                 static SCHEMA: std::sync::OnceLock<turul_mcp_protocol::ToolSchema> =
                     std::sync::OnceLock::new();
-                SCHEMA.get_or_init(|| turul_mcp_protocol::ToolSchema::object())
+                SCHEMA.get_or_init(turul_mcp_protocol::ToolSchema::object)
             }
         }
         impl HasOutputSchema for DummyTool {
