@@ -63,9 +63,19 @@ Middleware is registered on the server builder using the `.middleware()` method,
 
 This middleware system provides a robust mechanism for adding custom logic to the request/response lifecycle, without cluttering the core MCP implementation.
 
+### Task Runtime & Storage Architecture
+
+The v0.3.0 release introduced a comprehensive Task system, enabling long-running operations with asynchronous results and cancellation support. This system is built on a clean three-layer architectural split:
+
+*   **Task Storage (`turul-mcp-task-storage`):** A dedicated crate providing a `TaskStorage` trait for persistent task state management. It includes high-performance backends for SQLite, PostgreSQL, and DynamoDB, each supporting optimistic locking, TTL-based cleanup, and cursor-based pagination.
+*   **Task Executor:** A trait-based abstraction for executing background logic. The framework provides a `TokioTaskExecutor` for standard asynchronous execution and a `CancellationHandle` for cooperative task termination.
+*   **Task Runtime:** The orchestration layer that ties storage and execution together. It handles the lifecycle of MCP tasks (`tasks/get`, `tasks/list`, `tasks/cancel`, `tasks/result`) and ensures that terminal results are correctly persisted and delivered to clients.
+
+This architecture ensures that task-enabled servers are resilient to restarts and can scale across multiple instances when using durable backends like PostgreSQL or DynamoDB.
+
 ### Capability-by-Capability Compliance
 
-A detailed analysis of all major capabilities (`Tools`, `Resources`, `Prompts`, `Completion`, `Logging`, `Notifications`, `Elicitation`, and `Sampling`) reveals a robust and spec-compliant implementation. For each capability, the `turul-mcp-protocol-2025-11-25` crate defines the necessary structs and traits, while `turul-mcp-derive` and `turul-mcp-builders` provide convenient and flexible ways to create and manage these components.
+A detailed analysis of all major capabilities (`Tools`, `Resources`, `Prompts`, `Completion`, `Logging`, `Notifications`, `Elicitation`, `Sampling`, and `Tasks`) reveals a robust and spec-compliant implementation. For each capability, the `turul-mcp-protocol-2025-11-25` crate defines the necessary structs and traits, while `turul-mcp-derive` and `turul-mcp-builders` provide convenient and flexible ways to create and manage these components.
 
 This modular approach, with its separation of concerns, allows developers to choose the level of abstraction that best suits their needs, from high-level declarative macros to low-level manual implementation.
 
@@ -104,14 +114,15 @@ These are not compliance bugs but rather represent the current scope of the fram
 
 ## Recent Release Highlights
 
-Recent releases focused on stability, bug fixing, and improving developer experience. Key highlights include:
+The framework has recently crossed the **v0.3.0** milestone, focusing on full 2025-11-25 spec compliance and a durable Task system. Key highlights include:
 
-*   **Schemars Integration**: A breaking change now requires tool output types to derive `schemars::JsonSchema`, enabling the generation of detailed, accurate schemas for all tools in the `tools/list` endpoint.
-*   **Protocol Crate Purity**: All framework-specific traits have been moved from `turul-mcp-protocol` to `turul-mcp-builders`. This breaking change ensures the protocol crate is a pure, 1-to-1 implementation of the MCP specification.
-*   **Notification Payloads Fixed**: A critical regression where notification payloads were not being serialized correctly has been fixed, and 18 new tests have been added to prevent future regressions.
-*   **Improved SSE Resumability:** Ensured that SSE keepalive events preserve the `Last-Event-ID`, allowing for proper reconnection.
-*   **Enhanced Verification:** The verification infrastructure was significantly improved, with deterministic polling, pre-built binaries, and better error diagnosis.
-*   **Code Quality:** Fixed 156 clippy warnings, resulting in a 100% clean codebase.
+*   **Full MCP 2025-11-25 Support**: Complete implementation of the latest specification, including Icons, Annotations, and Task-related content blocks. The `turul-mcp-protocol` crate now re-exports these types by default.
+*   **Asynchronous Task Stack**: Introduction of the `turul-mcp-task-storage` crate with SQLite, PostgreSQL, and DynamoDB backends, enabling production-grade long-running task management.
+*   **README Testing (`skeptic`)**: Automated validation of all code examples within README files to ensure documentation stays in sync with the codebase.
+*   **Test Binary Consolidation**: Significantly reduced CI overhead by consolidating 155 test binaries into 43, improving build times and resource efficiency.
+*   **Schemars Integration**: Tool output types now derive `schemars::JsonSchema`, enabling detailed and accurate schema generation for `tools/list`.
+*   **Protocol Crate Purity**: Framework-specific traits moved to `turul-mcp-builders`, ensuring the protocol crate is a pure implementation of the MCP specification.
+*   **Code Quality**: Fixed 156 clippy warnings, maintaining a 100% clean codebase with Rust 2024 edition support.
 
 ## Building and Running
 

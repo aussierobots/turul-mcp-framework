@@ -1,8 +1,9 @@
 # Working Memory
 
-**Last Updated**: 2026-02-12
+**Last Updated**: 2026-02-26
 **Version**: v0.3.0 (branch: `0.3.0`)
-**Tests**: ~1,500+ workspace tests, 43 test binaries, zero warnings
+**Tests**: 1,560+ workspace tests, 43 test binaries, zero warnings
+**Examples**: 58 active, 25 archived
 
 ---
 
@@ -33,16 +34,12 @@ All major v0.3.0 work is complete. The framework fully supports MCP 2025-11-25.
 
 ## Remaining Work
 
-### v0.3.0 Release
+See `TODO_TRACKER.md` for the full tracked list. Key items:
 
-1. ~~**CHANGELOG.md** - Update with 2025-11-25 protocol + task storage + durable backends~~ ✅ [0.3.0] section created
-2. **CHANGELOG.md** - Expand [0.3.0] with full feature list (protocol phases, task stack, durable backends)
-3. **crates.io publish preparation** - Version bumps, dependency audit
-
-### Future Work (Post v0.3.0)
-
-- resources/subscribe - Real-time resource update notifications
-- roots/list enhancements - Advanced filtering and permissions
+- **CHANGELOG.md** — Expand [0.3.0] with full feature list
+- **crates.io publish preparation** — Version bumps, dependency audit
+- **Durable task storage examples** — SQLite, PostgreSQL, DynamoDB (backends done, no examples)
+- **Verification phases 6-8** — Scripts exist, never executed
 
 ### Known Issues
 
@@ -53,7 +50,7 @@ All major v0.3.0 work is complete. The framework fully supports MCP 2025-11-25.
 ## Quick Reference
 
 ```bash
-cargo test --workspace                                    # Full suite (~1,500 tests)
+cargo test --workspace                                    # Full suite (1,560+ tests)
 cargo test -p turul-mcp-task-storage --all-features       # Task storage (62 pass, 31 ignored)
 cargo test -p turul-mcp-task-storage --features sqlite    # SQLite backend (57 tests)
 cargo check -p turul-mcp-task-storage --no-default-features  # Verify zero-Tokio public API

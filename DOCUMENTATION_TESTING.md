@@ -33,8 +33,9 @@
 ```rust
 /// ```rust
 /// use turul_mcp_derive::mcp_tool;
-/// #[mcp_tool(name = "add")]
-/// async fn add(a: f64, b: f64) -> f64 { a + b }
+/// use turul_mcp_protocol::McpResult;
+/// #[mcp_tool(name = "add", description = "Add two numbers")]
+/// async fn add(a: f64, b: f64) -> McpResult<f64> { Ok(a + b) }
 /// ```
 ```
 
@@ -44,7 +45,6 @@
 /// let server = McpServer::builder()
 ///     .name("my-server")
 ///     .tool_fn(my_tool)
-///     .bind_address("127.0.0.1:8080".parse()?)
 ///     .build()?;
 /// server.run().await
 /// ```
@@ -79,7 +79,8 @@ cargo test --doc -- --ignored
 
 ## Current Status
 
-- ✅ **Fixed broken doctest** in `builder.rs`
-- ✅ **Enabled critical examples** in `turul-mcp-derive`
-- ✅ **All 30+ ignored tests pass** when run manually
-- 📋 **Next**: Systematically review and categorize all doctests
+- ✅ **98 doctests passing**, 0 failures across workspace
+- ✅ **74 `no_run` examples** compile-checked across 27 files
+- ✅ **Systematic categorization complete** — all doctests reviewed and assigned tiers
+- ✅ **Fixed broken doctests** in `builder.rs` and `turul-mcp-derive`
+- 📋 **Next**: Add CI pipeline when `.github/workflows/` is set up
