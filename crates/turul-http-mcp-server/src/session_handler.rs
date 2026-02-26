@@ -306,7 +306,7 @@ impl SessionMcpHandler {
             .headers()
             .get(ACCEPT)
             .and_then(|accept| accept.to_str().ok())
-            .map(|v| normalize_header_value(v))
+            .map(normalize_header_value)
             .unwrap_or_else(|| "application/json".to_string());
 
         let (accept_mode, accepts_sse) = parse_mcp_accept_header(&accept_header);
