@@ -296,7 +296,6 @@ impl RpcResult for CompleteResult {}
 // ===========================================
 
 /// Trait for completion metadata (method, reference type)
-
 #[cfg(test)]
 mod tests {
     use super::*;

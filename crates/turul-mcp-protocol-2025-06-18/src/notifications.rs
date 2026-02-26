@@ -437,7 +437,6 @@ impl HasMetaParam for NotificationParams {
 // ===========================================
 
 /// Trait for notification metadata (method, type info)
-
 #[cfg(test)]
 mod tests {
     use super::*;

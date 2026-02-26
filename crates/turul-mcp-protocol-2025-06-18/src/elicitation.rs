@@ -485,7 +485,6 @@ impl ElicitationBuilder {
 // ===========================================
 
 /// Trait for elicitation metadata (message, title)
-
 #[cfg(test)]
 mod tests {
     use super::*;
