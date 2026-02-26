@@ -171,12 +171,12 @@ impl McpMiddleware for AuthMiddleware {
 
                     // Iterate over metadata entries
                     for (key, value) in metadata.iter() {
-                        if let Some(field_name) = key.strip_prefix("x-authorizer-") {
-                            if let Some(value_str) = value.as_str() {
-                                debug!("📋 Authorizer context: {} = {}", field_name, value_str);
-                                authorizer_context
-                                    .insert(field_name.to_string(), value_str.to_string());
-                            }
+                        if let Some(field_name) = key.strip_prefix("x-authorizer-")
+                            && let Some(value_str) = value.as_str()
+                        {
+                            debug!("📋 Authorizer context: {} = {}", field_name, value_str);
+                            authorizer_context
+                                .insert(field_name.to_string(), value_str.to_string());
                         }
                     }
 

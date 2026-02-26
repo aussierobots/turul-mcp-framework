@@ -458,10 +458,10 @@ fn print_test_results(results: &[TestResult], duration: Duration, detailed: bool
                 result.duration.as_secs_f64()
             );
 
-            if detailed && result.details.is_some() {
+            if detailed && let Some(details) = result.details.as_ref() {
                 println!(
                     "    Details: {}",
-                    serde_json::to_string_pretty(result.details.as_ref().unwrap())?
+                    serde_json::to_string_pretty(details)?
                 );
             }
         }

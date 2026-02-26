@@ -283,7 +283,7 @@ impl GetTableInfoTool {
             turul_mcp_protocol::McpError::tool_execution("Session storage not initialized")
         })?;
 
-        debug!("Using session storage for table info: {:p}", &*storage);
+        debug!("Using session storage for table info: {:p}", storage);
 
         // Determine storage backend type and table information
         let storage_type = if cfg!(feature = "dynamodb") {

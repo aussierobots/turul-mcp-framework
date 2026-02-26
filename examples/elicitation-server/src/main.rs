@@ -80,6 +80,7 @@ struct FormField {
 #[derive(Debug, Deserialize, Clone)]
 struct ComplianceForm {
     name: String,
+    #[allow(dead_code)]
     description: String,
     fields: Vec<FormField>,
 }
