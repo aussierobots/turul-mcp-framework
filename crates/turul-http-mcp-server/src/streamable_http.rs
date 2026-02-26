@@ -401,6 +401,24 @@ impl StreamableHttpHandler {
             context.wants_sse_stream()
         );
 
+        // Handle OPTIONS preflight before validation (no Accept header required)
+        if *req.method() == Method::OPTIONS {
+            return Response::builder()
+                .status(StatusCode::OK)
+                .header(
+                    "Access-Control-Allow-Methods",
+                    "GET, POST, DELETE, OPTIONS",
+                )
+                .header(
+                    "Access-Control-Allow-Headers",
+                    "Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id, Last-Event-ID",
+                )
+                .header("Access-Control-Max-Age", "86400")
+                .body(Full::new(Bytes::new()))
+                .unwrap()
+                .map(|body| body.map_err(|never| match never {}).boxed_unsync());
+        }
+
         // Validate request
         if let Err(error) = context.validate(req.method()) {
             warn!("Invalid streamable HTTP request: {}", error);
@@ -1705,17 +1723,15 @@ impl StreamableHttpHandler {
         };
 
         // Apply injection to session storage (only if session exists)
-        if !injection.is_empty() {
-            if let Some(ref sv) = session_view {
-                for (key, value) in injection.state() {
-                    if let Err(e) = sv.set_state(key, value.clone()).await {
-                        tracing::warn!("Failed to apply injection state '{}': {}", key, e);
-                    }
+        if !injection.is_empty() && let Some(ref sv) = session_view {
+            for (key, value) in injection.state() {
+                if let Err(e) = sv.set_state(key, value.clone()).await {
+                    tracing::warn!("Failed to apply injection state '{}': {}", key, e);
                 }
-                for (key, value) in injection.metadata() {
-                    if let Err(e) = sv.set_metadata(key, value.clone()).await {
-                        tracing::warn!("Failed to apply injection metadata '{}': {}", key, e);
-                    }
+            }
+            for (key, value) in injection.metadata() {
+                if let Err(e) = sv.set_metadata(key, value.clone()).await {
+                    tracing::warn!("Failed to apply injection metadata '{}': {}", key, e);
                 }
             }
         }
