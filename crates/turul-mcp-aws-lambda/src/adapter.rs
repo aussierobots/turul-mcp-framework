@@ -823,15 +823,15 @@ mod tests {
 
             assert_eq!(fields.get("user_id"), Some(&"user-123".to_string()));
             assert!(
-                fields.get("principal_id").is_none(),
+                !fields.contains_key("principal_id"),
                 "principalId should be skipped"
             );
             assert!(
-                fields.get("integration_latency").is_none(),
+                !fields.contains_key("integration_latency"),
                 "integrationLatency should be skipped"
             );
             assert!(
-                fields.get("usage_identifier_key").is_none(),
+                !fields.contains_key("usage_identifier_key"),
                 "usageIdentifierKey should be skipped"
             );
         }
