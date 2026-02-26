@@ -5,7 +5,8 @@
 //! connection management, and setup/teardown lifecycle.
 
 use chrono::{DateTime, Utc};
-use rand::Rng;
+use clap::Parser;
+use rand::RngExt;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::{Row, SqlitePool, query_as};
@@ -17,7 +18,6 @@ use turul_mcp_protocol::meta::{Cursor, Meta};
 use turul_mcp_protocol::{McpError, McpResult};
 use turul_mcp_server::prelude::*;
 use turul_mcp_server::{McpServer, SessionContext};
-use clap::Parser;
 
 #[derive(Parser)]
 #[command(name = "pagination-server")]
@@ -588,7 +588,10 @@ impl SearchUsersTool {
             ));
         }
 
-        match db.search_users(&self.query, self.cursor.as_deref(), limit).await {
+        match db
+            .search_users(&self.query, self.cursor.as_deref(), limit)
+            .await
+        {
             Ok((users, next_cursor, total)) => {
                 let search_results: Vec<_> = users.iter().map(|user| {
                     json!({
@@ -654,7 +657,10 @@ impl SearchUsersTool {
     description = "Refresh database by updating user activity status and generating new data"
 )]
 pub struct RefreshDataTool {
-    #[param(description = "Type of refresh operation: update_activity, full_stats", optional)]
+    #[param(
+        description = "Type of refresh operation: update_activity, full_stats",
+        optional
+    )]
     pub operation: Option<String>,
 }
 
@@ -665,14 +671,12 @@ impl RefreshDataTool {
 
         match operation {
             "update_activity" => match db.refresh_user_activity().await {
-                Ok(updated_count) => {
-                    Ok(json!({
-                        "operation": "update_activity",
-                        "updated_users": updated_count,
-                        "timestamp": Utc::now().to_rfc3339(),
-                        "message": format!("Successfully updated activity status for {} users", updated_count)
-                    }))
-                }
+                Ok(updated_count) => Ok(json!({
+                    "operation": "update_activity",
+                    "updated_users": updated_count,
+                    "timestamp": Utc::now().to_rfc3339(),
+                    "message": format!("Successfully updated activity status for {} users", updated_count)
+                })),
                 Err(e) => {
                     error!("Failed to refresh user activity: {}", e);
                     Err(McpError::tool_execution(&format!(
@@ -681,15 +685,13 @@ impl RefreshDataTool {
                     )))
                 }
             },
-            "full_stats" => {
-                match db.get_database_stats().await {
-                    Ok(stats) => Ok(stats),
-                    Err(e) => {
-                        error!("Failed to get database stats: {}", e);
-                        Err(McpError::tool_execution(&format!("Database error: {}", e)))
-                    }
+            "full_stats" => match db.get_database_stats().await {
+                Ok(stats) => Ok(stats),
+                Err(e) => {
+                    error!("Failed to get database stats: {}", e);
+                    Err(McpError::tool_execution(&format!("Database error: {}", e)))
                 }
-            }
+            },
             _ => Err(McpError::invalid_param_type(
                 "operation",
                 "update_activity|full_stats",
@@ -780,7 +782,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .bind_address(format!("127.0.0.1:{}", port).parse()?)
         .build()?;
 
-    info!("SQLite Pagination server running at: http://127.0.0.1:{}/mcp", port);
+    info!(
+        "SQLite Pagination server running at: http://127.0.0.1:{}/mcp",
+        port
+    );
     info!("Database contains 10,000 sample users across 8 departments");
     info!("");
     info!("Available tools:");

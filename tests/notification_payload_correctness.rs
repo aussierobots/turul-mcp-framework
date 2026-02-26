@@ -6,17 +6,19 @@
 //! This test suite validates the fix for the critical regression where
 //! all notification payloads were returning None.
 
-use turul_mcp_protocol::notifications::*;
-use turul_mcp_protocol::RequestId;
-use turul_mcp_builders::traits::{HasNotificationPayload, NotificationDefinition};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
+use turul_mcp_builders::traits::{HasNotificationPayload, NotificationDefinition};
+use turul_mcp_protocol::RequestId;
+use turul_mcp_protocol::notifications::*;
 
 #[test]
 fn test_base_notification_with_params() {
     // Base Notification with params.other and _meta
     let mut params = NotificationParams::new();
-    params.other.insert("customField".to_string(), json!("customValue"));
+    params
+        .other
+        .insert("customField".to_string(), json!("customValue"));
 
     let mut meta = HashMap::new();
     meta.insert("sessionId".to_string(), json!("test-session-123"));
@@ -25,7 +27,10 @@ fn test_base_notification_with_params() {
     let notification = Notification::new("notifications/test").with_params(params);
 
     let payload = notification.payload();
-    assert!(payload.is_some(), "Base notification with params should return payload");
+    assert!(
+        payload.is_some(),
+        "Base notification with params should return payload"
+    );
 
     let payload_obj = payload.unwrap();
     assert_eq!(
@@ -37,7 +42,10 @@ fn test_base_notification_with_params() {
     let meta_value = payload_obj.get("_meta");
     assert!(meta_value.is_some(), "_meta should be present in payload");
     assert_eq!(
-        meta_value.unwrap().get("sessionId").and_then(|v| v.as_str()),
+        meta_value
+            .unwrap()
+            .get("sessionId")
+            .and_then(|v| v.as_str()),
         Some("test-session-123"),
         "_meta.sessionId should be preserved"
     );
@@ -48,7 +56,10 @@ fn test_base_notification_without_params() {
     let notification = Notification::new("notifications/test");
 
     let payload = notification.payload();
-    assert!(payload.is_none(), "Base notification without params should return None");
+    assert!(
+        payload.is_none(),
+        "Base notification without params should return None"
+    );
 }
 
 #[test]
@@ -71,7 +82,10 @@ fn test_progress_notification_full_payload() {
     };
 
     let payload = notification.payload();
-    assert!(payload.is_some(), "ProgressNotification should return payload");
+    assert!(
+        payload.is_some(),
+        "ProgressNotification should return payload"
+    );
 
     let payload_obj = payload.unwrap();
     assert_eq!(
@@ -96,9 +110,15 @@ fn test_progress_notification_full_payload() {
     );
 
     let meta_value = payload_obj.get("_meta");
-    assert!(meta_value.is_some(), "_meta should be present in ProgressNotification payload");
+    assert!(
+        meta_value.is_some(),
+        "_meta should be present in ProgressNotification payload"
+    );
     assert_eq!(
-        meta_value.unwrap().get("operationId").and_then(|v| v.as_str()),
+        meta_value
+            .unwrap()
+            .get("operationId")
+            .and_then(|v| v.as_str()),
         Some("op-789"),
         "_meta.operationId should be preserved"
     );
@@ -121,7 +141,10 @@ fn test_resource_updated_notification_payload() {
     };
 
     let payload = notification.payload();
-    assert!(payload.is_some(), "ResourceUpdatedNotification should return payload");
+    assert!(
+        payload.is_some(),
+        "ResourceUpdatedNotification should return payload"
+    );
 
     let payload_obj = payload.unwrap();
     assert_eq!(
@@ -131,9 +154,15 @@ fn test_resource_updated_notification_payload() {
     );
 
     let meta_value = payload_obj.get("_meta");
-    assert!(meta_value.is_some(), "_meta should be present in ResourceUpdatedNotification payload");
+    assert!(
+        meta_value.is_some(),
+        "_meta should be present in ResourceUpdatedNotification payload"
+    );
     assert_eq!(
-        meta_value.unwrap().get("changeType").and_then(|v| v.as_str()),
+        meta_value
+            .unwrap()
+            .get("changeType")
+            .and_then(|v| v.as_str()),
         Some("modified"),
         "_meta.changeType should be preserved"
     );
@@ -157,7 +186,10 @@ fn test_cancelled_notification_full_payload() {
     };
 
     let payload = notification.payload();
-    assert!(payload.is_some(), "CancelledNotification should return payload");
+    assert!(
+        payload.is_some(),
+        "CancelledNotification should return payload"
+    );
 
     let payload_obj = payload.unwrap();
     assert_eq!(
@@ -172,9 +204,15 @@ fn test_cancelled_notification_full_payload() {
     );
 
     let meta_value = payload_obj.get("_meta");
-    assert!(meta_value.is_some(), "_meta should be present in CancelledNotification payload");
+    assert!(
+        meta_value.is_some(),
+        "_meta should be present in CancelledNotification payload"
+    );
     assert_eq!(
-        meta_value.unwrap().get("timestamp").and_then(|v| v.as_str()),
+        meta_value
+            .unwrap()
+            .get("timestamp")
+            .and_then(|v| v.as_str()),
         Some("2024-01-01T12:00:00Z"),
         "_meta.timestamp should be preserved"
     );
@@ -193,7 +231,10 @@ fn test_resource_list_changed_with_params() {
     };
 
     let payload = notification.payload();
-    assert!(payload.is_some(), "ResourceListChangedNotification with params should return payload");
+    assert!(
+        payload.is_some(),
+        "ResourceListChangedNotification with params should return payload"
+    );
 
     let payload_obj = payload.unwrap();
     let meta_value = payload_obj.get("_meta");
@@ -213,7 +254,10 @@ fn test_resource_list_changed_without_params() {
     };
 
     let payload = notification.payload();
-    assert!(payload.is_none(), "ResourceListChangedNotification without params should return None");
+    assert!(
+        payload.is_none(),
+        "ResourceListChangedNotification without params should return None"
+    );
 }
 
 #[test]
@@ -229,13 +273,19 @@ fn test_tool_list_changed_with_meta() {
     };
 
     let payload = notification.payload();
-    assert!(payload.is_some(), "ToolListChangedNotification with params should return payload");
+    assert!(
+        payload.is_some(),
+        "ToolListChangedNotification with params should return payload"
+    );
 
     let payload_obj = payload.unwrap();
     let meta_value = payload_obj.get("_meta");
     assert!(meta_value.is_some(), "_meta should be present");
     assert_eq!(
-        meta_value.unwrap().get("pluginLoaded").and_then(|v| v.as_str()),
+        meta_value
+            .unwrap()
+            .get("pluginLoaded")
+            .and_then(|v| v.as_str()),
         Some("calculator-plugin"),
         "_meta.pluginLoaded should be preserved"
     );
@@ -254,7 +304,10 @@ fn test_prompt_list_changed_with_meta() {
     };
 
     let payload = notification.payload();
-    assert!(payload.is_some(), "PromptListChangedNotification with params should return payload");
+    assert!(
+        payload.is_some(),
+        "PromptListChangedNotification with params should return payload"
+    );
 
     let payload_obj = payload.unwrap();
     let meta_value = payload_obj.get("_meta");
@@ -279,13 +332,19 @@ fn test_roots_list_changed_with_meta() {
     };
 
     let payload = notification.payload();
-    assert!(payload.is_some(), "RootsListChangedNotification with params should return payload");
+    assert!(
+        payload.is_some(),
+        "RootsListChangedNotification with params should return payload"
+    );
 
     let payload_obj = payload.unwrap();
     let meta_value = payload_obj.get("_meta");
     assert!(meta_value.is_some(), "_meta should be present");
     assert_eq!(
-        meta_value.unwrap().get("mountPoint").and_then(|v| v.as_str()),
+        meta_value
+            .unwrap()
+            .get("mountPoint")
+            .and_then(|v| v.as_str()),
         Some("/workspace"),
         "_meta.mountPoint should be preserved"
     );
@@ -304,13 +363,19 @@ fn test_initialized_notification_with_meta() {
     };
 
     let payload = notification.payload();
-    assert!(payload.is_some(), "InitializedNotification with params should return payload");
+    assert!(
+        payload.is_some(),
+        "InitializedNotification with params should return payload"
+    );
 
     let payload_obj = payload.unwrap();
     let meta_value = payload_obj.get("_meta");
     assert!(meta_value.is_some(), "_meta should be present");
     assert_eq!(
-        meta_value.unwrap().get("serverVersion").and_then(|v| v.as_str()),
+        meta_value
+            .unwrap()
+            .get("serverVersion")
+            .and_then(|v| v.as_str()),
         Some("1.0.0"),
         "_meta.serverVersion should be preserved"
     );
@@ -324,7 +389,10 @@ fn test_initialized_notification_without_params() {
     };
 
     let payload = notification.payload();
-    assert!(payload.is_none(), "InitializedNotification without params should return None");
+    assert!(
+        payload.is_none(),
+        "InitializedNotification without params should return None"
+    );
 }
 
 #[test]
@@ -349,7 +417,10 @@ fn test_notification_definition_to_notification() {
     // to_notification() should convert to base Notification
     let base_notification = notification.to_notification();
     assert_eq!(base_notification.method, "notifications/progress");
-    assert!(base_notification.params.is_some(), "Converted notification should have params");
+    assert!(
+        base_notification.params.is_some(),
+        "Converted notification should have params"
+    );
 }
 
 #[test]
@@ -389,15 +460,20 @@ fn test_empty_params_serialization() {
     let notification = Notification::new("notifications/test").with_params(params);
 
     let payload = notification.payload();
-    assert!(payload.is_some(), "Empty params should still produce payload");
+    assert!(
+        payload.is_some(),
+        "Empty params should still produce payload"
+    );
 
     let payload_obj = payload.unwrap();
     assert!(payload_obj.is_object(), "Payload should be an object");
 
     // Empty params should produce empty object (no _meta if meta is None)
     let obj_map = payload_obj.as_object().unwrap();
-    assert!(obj_map.is_empty() || !obj_map.contains_key("_meta"),
-            "Empty params should not have _meta field if meta is None");
+    assert!(
+        obj_map.is_empty() || !obj_map.contains_key("_meta"),
+        "Empty params should not have _meta field if meta is None"
+    );
 }
 
 #[test]
@@ -416,7 +492,11 @@ fn test_progress_notification_priority() {
 
     // Verify HasNotificationRules implementation
     use turul_mcp_builders::traits::HasNotificationRules;
-    assert_eq!(notification.priority(), 2, "ProgressNotification should have priority 2");
+    assert_eq!(
+        notification.priority(),
+        2,
+        "ProgressNotification should have priority 2"
+    );
 }
 
 #[test]
@@ -433,7 +513,11 @@ fn test_cancelled_notification_priority() {
 
     // Verify HasNotificationRules implementation
     use turul_mcp_builders::traits::HasNotificationRules;
-    assert_eq!(notification.priority(), 3, "CancelledNotification should have priority 3");
+    assert_eq!(
+        notification.priority(),
+        3,
+        "CancelledNotification should have priority 3"
+    );
 }
 
 #[test]
@@ -445,5 +529,9 @@ fn test_initialized_notification_priority() {
 
     // Verify HasNotificationRules implementation
     use turul_mcp_builders::traits::HasNotificationRules;
-    assert_eq!(notification.priority(), 3, "InitializedNotification should have priority 3");
+    assert_eq!(
+        notification.priority(),
+        3,
+        "InitializedNotification should have priority 3"
+    );
 }

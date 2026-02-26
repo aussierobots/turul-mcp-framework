@@ -228,7 +228,6 @@ impl HasParams for LoggingMessageNotification {
 // ===========================================
 
 /// Trait for logging metadata (method, logger name)
-
 #[cfg(test)]
 mod tests {
     use super::*;

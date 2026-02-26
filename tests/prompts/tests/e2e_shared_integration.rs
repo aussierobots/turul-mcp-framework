@@ -173,7 +173,10 @@ async fn test_multi_message_prompt_with_shared_utils() {
     client.initialize().await.expect("Failed to initialize");
 
     let mut arguments = std::collections::HashMap::new();
-    arguments.insert("scenario".to_string(), serde_json::json!("debugging session"));
+    arguments.insert(
+        "scenario".to_string(),
+        serde_json::json!("debugging session"),
+    );
 
     let result = client
         .get_prompt("multi_message_prompt", Some(arguments))

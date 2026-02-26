@@ -42,8 +42,8 @@ impl McpPrompt for TestPrompt {
 #[tokio::test]
 async fn test_tools_capability_truthfulness() {
     // Use ephemeral port (0) for OS allocation - safer than portpicker in sandboxes
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("Failed to bind to ephemeral port");
+    let listener =
+        std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind to ephemeral port");
     let port = listener.local_addr().unwrap().port();
     drop(listener); // Release for server to bind
 
@@ -109,8 +109,8 @@ async fn test_tools_capability_truthfulness() {
 #[tokio::test]
 async fn test_prompts_capability_truthfulness() {
     // Use ephemeral port (0) for OS allocation - safer than portpicker in sandboxes
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("Failed to bind to ephemeral port");
+    let listener =
+        std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind to ephemeral port");
     let port = listener.local_addr().unwrap().port();
     drop(listener); // Release for server to bind
 
@@ -178,8 +178,8 @@ async fn test_prompts_capability_truthfulness() {
 #[tokio::test]
 async fn test_empty_server_capabilities() {
     // Use ephemeral port (0) for OS allocation - safer than portpicker in sandboxes
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("Failed to bind to ephemeral port");
+    let listener =
+        std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind to ephemeral port");
     let port = listener.local_addr().unwrap().port();
     drop(listener); // Release for server to bind
 
@@ -243,8 +243,8 @@ async fn test_empty_server_capabilities() {
 #[tokio::test]
 async fn test_json_rpc_protocol_compliance() {
     // Use ephemeral port (0) for OS allocation - safer than portpicker in sandboxes
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("Failed to bind to ephemeral port");
+    let listener =
+        std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind to ephemeral port");
     let port = listener.local_addr().unwrap().port();
     drop(listener); // Release for server to bind
 
@@ -321,10 +321,10 @@ mod integration {
     #[tokio::test]
     async fn test_full_mcp_compliance_integration() {
         // Use ephemeral port (0) for OS allocation - safer than portpicker in sandboxes
-    let listener = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("Failed to bind to ephemeral port");
-    let port = listener.local_addr().unwrap().port();
-    drop(listener); // Release for server to bind
+        let listener =
+            std::net::TcpListener::bind("127.0.0.1:0").expect("Failed to bind to ephemeral port");
+        let port = listener.local_addr().unwrap().port();
+        drop(listener); // Release for server to bind
 
         let server_handle = tokio::spawn(async move {
             let server = McpServer::builder()

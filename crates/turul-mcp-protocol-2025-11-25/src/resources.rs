@@ -391,6 +391,15 @@ impl ResourceContent {
         })
     }
 
+    pub fn json(uri: impl Into<String>, json: impl Into<String>) -> Self {
+        Self::Text(TextResourceContents {
+            uri: uri.into(),
+            mime_type: Some("application/json".to_string()),
+            meta: None,
+            text: json.into(),
+        })
+    }
+
     pub fn blob(
         uri: impl Into<String>,
         blob: impl Into<String>,

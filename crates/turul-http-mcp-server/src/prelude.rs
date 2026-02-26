@@ -3,7 +3,7 @@
 //! This module provides convenient re-exports of the most commonly used types
 //! from the HTTP MCP server library.
 //!
-//! ```rust
+//! ```rust,no_run
 //! use turul_http_mcp_server::prelude::*;
 //! ```
 

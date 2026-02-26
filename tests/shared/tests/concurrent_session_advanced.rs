@@ -202,15 +202,20 @@ async fn test_resource_contention_isolation() {
 
                             // Verify session-aware resources include correct session
                             if resource_uri == "file:///session/info.json"
-                                && let Some(result_data) = response.get("result").and_then(|r| r.as_object())
-                                && let Some(contents) = result_data.get("contents").and_then(|c| c.as_array())
+                                && let Some(result_data) =
+                                    response.get("result").and_then(|r| r.as_object())
+                                && let Some(contents) =
+                                    result_data.get("contents").and_then(|c| c.as_array())
                                 && let Some(content) = contents
                                     .first()
                                     .and_then(|item| item.get("text"))
                                     .and_then(|t| t.as_str())
                                 && !content.contains("session")
                             {
-                                warn!("Session resource missing session info for client {}", client_id);
+                                warn!(
+                                    "Session resource missing session info for client {}",
+                                    client_id
+                                );
                             }
                         }
                         Err(e) => {

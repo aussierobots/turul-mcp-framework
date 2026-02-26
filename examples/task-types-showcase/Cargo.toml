@@ -1,6 +1,6 @@
 [package]
 name = "task-types-showcase"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -12,3 +12,8 @@ description = "Example showcasing MCP 2025-11-25 task types: TaskInfo, TaskStatu
 turul-mcp-protocol = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
+
+[[bin]]
+name = "task-types-showcase"
+path = "src/main.rs"
+test = false

@@ -2,10 +2,10 @@
 //!
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 
-use turul_mcp_protocol::Tool;
-use turul_mcp_protocol::sampling::{CreateMessageParams, SamplingMessage, ModelPreferences, Role};
-use turul_mcp_protocol::prompts::ContentBlock;
 use serde_json::Value;
+use turul_mcp_protocol::Tool;
+use turul_mcp_protocol::prompts::ContentBlock;
+use turul_mcp_protocol::sampling::{CreateMessageParams, ModelPreferences, Role, SamplingMessage};
 
 pub trait HasSamplingMessageMetadata {
     /// Role of the message (from spec)
@@ -165,7 +165,9 @@ pub trait HasSamplingTools {
 /// - Technical documentation generation
 /// - Question-answering with domain context
 /// - Conversational AI with specific personalities
-pub trait SamplingDefinition: HasSamplingConfig + HasSamplingContext + HasModelPreferences + HasSamplingTools {
+pub trait SamplingDefinition:
+    HasSamplingConfig + HasSamplingContext + HasModelPreferences + HasSamplingTools
+{
     /// Convert to CreateMessageParams
     fn to_create_params(&self) -> CreateMessageParams {
         CreateMessageParams {
@@ -179,6 +181,7 @@ pub trait SamplingDefinition: HasSamplingConfig + HasSamplingContext + HasModelP
             metadata: self.metadata().cloned(),
             tools: self.tools().cloned(),
             tool_choice: None,
+            task: None,
             meta: None,
         }
     }

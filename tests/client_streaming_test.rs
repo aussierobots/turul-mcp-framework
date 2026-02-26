@@ -9,7 +9,9 @@ use tracing::{info, warn};
 use turul_mcp_client::transport::{HttpTransport, ServerEvent, Transport};
 
 /// Test helper to create an in-memory byte stream for testing
-fn create_test_stream(data: Vec<Vec<u8>>) -> impl Stream<Item = Result<Vec<u8>, std::io::Error>> + Unpin {
+fn create_test_stream(
+    data: Vec<Vec<u8>>,
+) -> impl Stream<Item = Result<Vec<u8>, std::io::Error>> + Unpin {
     futures::stream::iter(data.into_iter().map(Ok))
 }
 
@@ -154,7 +156,10 @@ async fn test_streaming_json_frames() -> Result<()> {
         .map_err(|_| anyhow::anyhow!("Event listener timed out"))??;
 
     // Verify we received the progress notifications
-    assert!(received_events.len() >= 2, "Should have received at least 2 progress notifications");
+    assert!(
+        received_events.len() >= 2,
+        "Should have received at least 2 progress notifications"
+    );
 
     info!(
         "✅ Streaming test completed with {} events received",
@@ -195,7 +200,10 @@ async fn test_error_response() -> Result<()> {
         "Expected error response for nonexistent method"
     );
     let error_msg = result.unwrap_err().to_string();
-    assert!(error_msg.contains("Server error"), "Error should mention server error");
+    assert!(
+        error_msg.contains("Server error"),
+        "Error should mention server error"
+    );
     info!("✅ Error response test passed with error: {}", error_msg);
 
     Ok(())

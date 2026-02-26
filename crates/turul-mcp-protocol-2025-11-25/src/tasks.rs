@@ -424,6 +424,93 @@ impl ListTasksResult {
     }
 }
 
+// === tasks/result ===
+
+/// Parameters for tasks/result request (retrieves the original operation's result)
+///
+/// The response is NOT a custom type — it returns the original request's result verbatim
+/// (e.g., `CallToolResult` for `tools/call`), with `_meta.io.modelcontextprotocol/related-task`
+/// injected by the handler.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetTaskPayloadParams {
+    /// The task ID whose result to retrieve (serde: "taskId")
+    pub task_id: String,
+    /// Meta information (optional _meta field inside params)
+    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
+    pub meta: Option<HashMap<String, Value>>,
+}
+
+impl GetTaskPayloadParams {
+    pub fn new(task_id: impl Into<String>) -> Self {
+        Self {
+            task_id: task_id.into(),
+            meta: None,
+        }
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
+}
+
+/// Complete tasks/result request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetTaskPayloadRequest {
+    /// Method name (always "tasks/result")
+    pub method: String,
+    /// Request parameters
+    pub params: GetTaskPayloadParams,
+}
+
+impl GetTaskPayloadRequest {
+    pub fn new(task_id: impl Into<String>) -> Self {
+        Self {
+            method: "tasks/result".to_string(),
+            params: GetTaskPayloadParams::new(task_id),
+        }
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.params = self.params.with_meta(meta);
+        self
+    }
+}
+
+// === CreateTaskResult ===
+
+/// Returned when a task-augmented request is accepted (instead of the operation's direct result).
+///
+/// The client receives this as the JSON-RPC result and can then poll with `tasks/get`,
+/// retrieve the outcome with `tasks/result`, or cancel with `tasks/cancel`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateTaskResult {
+    /// The newly created task
+    pub task: Task,
+    /// Meta information (follows MCP Result interface)
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "_meta",
+        rename = "_meta"
+    )]
+    pub meta: Option<HashMap<String, Value>>,
+}
+
+impl CreateTaskResult {
+    pub fn new(task: Task) -> Self {
+        Self { task, meta: None }
+    }
+
+    pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
+        self.meta = Some(meta);
+        self
+    }
+}
+
 // === Trait Implementations ===
 
 use crate::traits::*;
@@ -558,6 +645,48 @@ impl HasMeta for ListTasksResult {
 
 impl RpcResult for ListTasksResult {}
 
+// -- GetTaskPayloadParams --
+impl Params for GetTaskPayloadParams {}
+
+impl HasMetaParam for GetTaskPayloadParams {
+    fn meta(&self) -> Option<&HashMap<String, Value>> {
+        self.meta.as_ref()
+    }
+}
+
+// -- GetTaskPayloadRequest --
+impl HasMethod for GetTaskPayloadRequest {
+    fn method(&self) -> &str {
+        &self.method
+    }
+}
+
+impl HasParams for GetTaskPayloadRequest {
+    fn params(&self) -> Option<&dyn Params> {
+        Some(&self.params)
+    }
+}
+
+// -- CreateTaskResult --
+impl HasData for CreateTaskResult {
+    fn data(&self) -> HashMap<String, Value> {
+        let mut data = HashMap::new();
+        data.insert(
+            "task".to_string(),
+            serde_json::to_value(&self.task).unwrap_or(Value::Null),
+        );
+        data
+    }
+}
+
+impl HasMeta for CreateTaskResult {
+    fn meta(&self) -> Option<HashMap<String, Value>> {
+        self.meta.clone()
+    }
+}
+
+impl RpcResult for CreateTaskResult {}
+
 // === Tests ===
 
 #[cfg(test)]
@@ -617,7 +746,10 @@ mod tests {
         // Verify TS field names
         assert!(json.get("taskId").is_some(), "TS spec uses taskId, not id");
         assert!(json.get("id").is_none(), "id is wrong, should be taskId");
-        assert_eq!(json["status"], "working", "TS spec uses working, not running");
+        assert_eq!(
+            json["status"], "working",
+            "TS spec uses working, not running"
+        );
         assert!(json.get("createdAt").is_some(), "required field");
         assert!(json.get("lastUpdatedAt").is_some(), "required field");
     }
@@ -741,10 +873,7 @@ mod tests {
             .with_limit(10);
 
         assert_eq!(request.method, "tasks/list");
-        assert_eq!(
-            request.params.cursor.as_ref().unwrap().as_str(),
-            "page-2"
-        );
+        assert_eq!(request.params.cursor.as_ref().unwrap().as_str(), "page-2");
         assert_eq!(request.params.limit, Some(10));
     }
 
@@ -767,21 +896,21 @@ mod tests {
             Task::new("task-1", TaskStatus::Working, TIMESTAMP, TIMESTAMP),
             Task::new("task-2", TaskStatus::Completed, TIMESTAMP, TIMESTAMP),
         ];
-        let result = ListTasksResult::new(tasks)
-            .with_next_cursor(Cursor::new("next-page"));
+        let result = ListTasksResult::new(tasks).with_next_cursor(Cursor::new("next-page"));
 
         assert_eq!(result.tasks.len(), 2);
-        assert_eq!(
-            result.next_cursor.as_ref().unwrap().as_str(),
-            "next-page"
-        );
+        assert_eq!(result.next_cursor.as_ref().unwrap().as_str(), "next-page");
     }
 
     #[test]
     fn test_list_tasks_result_camel_case() {
-        let tasks = vec![Task::new("task-1", TaskStatus::Working, TIMESTAMP, TIMESTAMP)];
-        let result = ListTasksResult::new(tasks)
-            .with_next_cursor(Cursor::new("page-2"));
+        let tasks = vec![Task::new(
+            "task-1",
+            TaskStatus::Working,
+            TIMESTAMP,
+            TIMESTAMP,
+        )];
+        let result = ListTasksResult::new(tasks).with_next_cursor(Cursor::new("page-2"));
 
         let json_value = serde_json::to_value(&result).unwrap();
 
@@ -822,10 +951,7 @@ mod tests {
         assert_eq!(parsed.tasks[0].status, TaskStatus::Working);
         assert_eq!(parsed.tasks[1].task_id, "task-2");
         assert_eq!(parsed.tasks[1].status, TaskStatus::Failed);
-        assert_eq!(
-            parsed.next_cursor.as_ref().unwrap().as_str(),
-            "cursor-xyz"
-        );
+        assert_eq!(parsed.next_cursor.as_ref().unwrap().as_str(), "cursor-xyz");
         assert!(parsed.meta.is_some());
     }
 
@@ -873,13 +999,243 @@ mod tests {
 
     #[test]
     fn test_list_tasks_has_data_trait() {
-        let tasks = vec![Task::new("task-1", TaskStatus::Working, TIMESTAMP, TIMESTAMP)];
-        let result = ListTasksResult::new(tasks)
-            .with_next_cursor(Cursor::new("next"));
+        let tasks = vec![Task::new(
+            "task-1",
+            TaskStatus::Working,
+            TIMESTAMP,
+            TIMESTAMP,
+        )];
+        let result = ListTasksResult::new(tasks).with_next_cursor(Cursor::new("next"));
 
         let data = HasData::data(&result);
         assert!(data.contains_key("tasks"));
         assert!(data.contains_key("nextCursor"));
         assert_eq!(data["nextCursor"], Value::String("next".to_string()));
+    }
+
+    // === Phase A: New type tests ===
+
+    #[test]
+    fn test_get_task_payload_request() {
+        let request = GetTaskPayloadRequest::new("task-789");
+        assert_eq!(request.method, "tasks/result");
+        assert_eq!(request.params.task_id, "task-789");
+    }
+
+    #[test]
+    fn test_get_task_payload_request_serialization() {
+        let request = GetTaskPayloadRequest::new("task-789");
+        let json_value = serde_json::to_value(&request).unwrap();
+
+        assert_eq!(json_value["method"], "tasks/result");
+        assert_eq!(json_value["params"]["taskId"], "task-789");
+        assert!(json_value["params"].get("id").is_none());
+    }
+
+    #[test]
+    fn test_get_task_payload_request_roundtrip() {
+        let request = GetTaskPayloadRequest::new("task-rt");
+        let json = serde_json::to_string(&request).unwrap();
+        let parsed: GetTaskPayloadRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.method, "tasks/result");
+        assert_eq!(parsed.params.task_id, "task-rt");
+    }
+
+    #[test]
+    fn test_get_task_payload_trait_implementations() {
+        let request = GetTaskPayloadRequest::new("task-1");
+        assert_eq!(HasMethod::method(&request), "tasks/result");
+    }
+
+    #[test]
+    fn test_create_task_result() {
+        let task = Task::new("task-new", TaskStatus::Working, TIMESTAMP, TIMESTAMP)
+            .with_ttl(60000)
+            .with_poll_interval(5000);
+        let result = CreateTaskResult::new(task);
+
+        let json_value = serde_json::to_value(&result).unwrap();
+
+        // CreateTaskResult wraps task in a "task" field (NOT flattened)
+        assert!(
+            json_value.get("task").is_some(),
+            "task field should be present"
+        );
+        assert_eq!(json_value["task"]["taskId"], "task-new");
+        assert_eq!(json_value["task"]["status"], "working");
+        assert_eq!(json_value["task"]["ttl"], 60000);
+        assert_eq!(json_value["task"]["pollInterval"], 5000);
+    }
+
+    #[test]
+    fn test_create_task_result_roundtrip() {
+        let task = Task::new("task-rt", TaskStatus::Working, TIMESTAMP, TIMESTAMP);
+        let result = CreateTaskResult::new(task);
+
+        let json = serde_json::to_string(&result).unwrap();
+        let parsed: CreateTaskResult = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(parsed.task.task_id, "task-rt");
+        assert_eq!(parsed.task.status, TaskStatus::Working);
+    }
+
+    #[test]
+    fn test_create_task_result_has_data_trait() {
+        let task = Task::new("task-d", TaskStatus::Working, TIMESTAMP, TIMESTAMP);
+        let result = CreateTaskResult::new(task);
+        let data = HasData::data(&result);
+        assert!(data.contains_key("task"));
+    }
+
+    #[test]
+    fn test_task_support_serialization() {
+        assert_eq!(
+            serde_json::to_value(crate::tools::TaskSupport::Required).unwrap(),
+            json!("required")
+        );
+        assert_eq!(
+            serde_json::to_value(crate::tools::TaskSupport::Optional).unwrap(),
+            json!("optional")
+        );
+        assert_eq!(
+            serde_json::to_value(crate::tools::TaskSupport::Forbidden).unwrap(),
+            json!("forbidden")
+        );
+    }
+
+    #[test]
+    fn test_task_support_deserialization() {
+        let required: crate::tools::TaskSupport =
+            serde_json::from_value(json!("required")).unwrap();
+        assert_eq!(required, crate::tools::TaskSupport::Required);
+
+        let optional: crate::tools::TaskSupport =
+            serde_json::from_value(json!("optional")).unwrap();
+        assert_eq!(optional, crate::tools::TaskSupport::Optional);
+
+        let forbidden: crate::tools::TaskSupport =
+            serde_json::from_value(json!("forbidden")).unwrap();
+        assert_eq!(forbidden, crate::tools::TaskSupport::Forbidden);
+
+        // Backward compat: "supported" alias deserializes to Optional
+        let legacy: crate::tools::TaskSupport = serde_json::from_value(json!("supported")).unwrap();
+        assert_eq!(legacy, crate::tools::TaskSupport::Optional);
+    }
+
+    #[test]
+    fn test_call_tool_params_with_task() {
+        let params = crate::tools::CallToolParams::new("my_tool")
+            .with_task(TaskMetadata::new().with_ttl(60000));
+
+        let json_value = serde_json::to_value(&params).unwrap();
+
+        assert_eq!(json_value["name"], "my_tool");
+        assert_eq!(json_value["task"]["ttl"], 60000);
+    }
+
+    #[test]
+    fn test_call_tool_params_without_task_backward_compat() {
+        let params = crate::tools::CallToolParams::new("my_tool");
+        let json_value = serde_json::to_value(&params).unwrap();
+
+        assert_eq!(json_value["name"], "my_tool");
+        // task field should be absent (not null)
+        assert!(json_value.get("task").is_none());
+    }
+
+    #[test]
+    fn test_create_message_params_with_task() {
+        let params = crate::sampling::CreateMessageParams::new(vec![], 100)
+            .with_task(TaskMetadata::new().with_ttl(30000));
+
+        let json_value = serde_json::to_value(&params).unwrap();
+        assert_eq!(json_value["task"]["ttl"], 30000);
+    }
+
+    #[test]
+    fn test_create_message_params_without_task_backward_compat() {
+        let params = crate::sampling::CreateMessageParams::new(vec![], 100);
+        let json_value = serde_json::to_value(&params).unwrap();
+        assert!(json_value.get("task").is_none());
+    }
+
+    #[test]
+    fn test_elicit_create_params_with_task() {
+        let schema = crate::elicitation::ElicitationSchema::new();
+        let params = crate::elicitation::ElicitCreateParams::new("test", schema)
+            .with_task(TaskMetadata::new().with_ttl(15000));
+
+        let json_value = serde_json::to_value(&params).unwrap();
+        assert_eq!(json_value["task"]["ttl"], 15000);
+    }
+
+    #[test]
+    fn test_elicit_create_params_without_task_backward_compat() {
+        let schema = crate::elicitation::ElicitationSchema::new();
+        let params = crate::elicitation::ElicitCreateParams::new("test", schema);
+        let json_value = serde_json::to_value(&params).unwrap();
+        assert!(json_value.get("task").is_none());
+    }
+
+    #[test]
+    fn test_tasks_capabilities_structured_serialization() {
+        use crate::initialize::*;
+
+        let caps = TasksCapabilities {
+            list: Some(TasksListCapabilities::default()),
+            cancel: Some(TasksCancelCapabilities::default()),
+            requests: Some(TasksRequestCapabilities {
+                tools: Some(TasksToolCapabilities {
+                    call: Some(TasksToolCallCapabilities::default()),
+                    extra: Default::default(),
+                }),
+                extra: Default::default(),
+            }),
+            extra: Default::default(),
+        };
+
+        let json_value = serde_json::to_value(&caps).unwrap();
+
+        // Verify structured shape: {"list":{},"cancel":{},"requests":{"tools":{"call":{}}}}
+        assert!(json_value.get("list").is_some());
+        assert!(json_value.get("cancel").is_some());
+        assert!(json_value["requests"]["tools"]["call"].is_object());
+    }
+
+    #[test]
+    fn test_tasks_capabilities_empty_signals_support() {
+        use crate::initialize::*;
+
+        // Empty sub-structs still serialize as `{}`
+        let list_caps = TasksListCapabilities::default();
+        let json = serde_json::to_value(&list_caps).unwrap();
+        assert!(json.is_object());
+        assert_eq!(json.as_object().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn test_tasks_capabilities_roundtrip() {
+        use crate::initialize::*;
+
+        let caps = TasksCapabilities {
+            list: Some(TasksListCapabilities::default()),
+            cancel: None,
+            requests: Some(TasksRequestCapabilities {
+                tools: Some(TasksToolCapabilities {
+                    call: Some(TasksToolCallCapabilities::default()),
+                    extra: Default::default(),
+                }),
+                extra: Default::default(),
+            }),
+            extra: Default::default(),
+        };
+
+        let json = serde_json::to_string(&caps).unwrap();
+        let parsed: TasksCapabilities = serde_json::from_str(&json).unwrap();
+
+        assert!(parsed.list.is_some());
+        assert!(parsed.cancel.is_none());
+        assert!(parsed.requests.is_some());
+        assert!(parsed.requests.unwrap().tools.unwrap().call.is_some());
     }
 }

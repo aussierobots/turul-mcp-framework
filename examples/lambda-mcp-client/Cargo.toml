@@ -1,24 +1,24 @@
 [package]
 name = "lambda-turul-mcp-client"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 description = "Comprehensive test client for lambda-turul-mcp-server validation and end-to-end testing"
 license = "MIT"
 
 [[bin]]
+test = false
 name = "lambda-turul-mcp-client"
 path = "src/main.rs"
 
 [dependencies]
 # MCP client framework
-turul-mcp-client = { path = "../../crates/turul-mcp-client" }
+turul-mcp-client = { workspace = true }
 
 # HTTP client for MCP communication (still needed for direct requests during testing)
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { workspace = true, features = ["json", "stream"] }
 tokio = { workspace = true, features = ["full"] }
 tokio-stream = { workspace = true }
 futures = { workspace = true }
-futures-util = "0.3"
 
 # JSON and serialization
 serde = { workspace = true }
@@ -34,21 +34,15 @@ tracing-subscriber = { workspace = true }
 # Test framework
 tokio-test = { workspace = true }
 
-# Schema validation
-jsonschema = "0.26"
-
 # Date/time handling
 chrono = { workspace = true }
 
 # CLI argument parsing
-clap = { version = "4.5", features = ["derive"] }
+clap.workspace = true
 
 # Progress bars and output formatting
-indicatif = "0.17"
-colored = "2.1"
-
-# Configuration management
-config = "0.14"
+indicatif.workspace = true
+colored.workspace = true
 
 [dev-dependencies]
 tokio-test.workspace = true

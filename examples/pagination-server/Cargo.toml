@@ -1,6 +1,6 @@
 [package]
 name = "pagination-server"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 
 [dependencies]
@@ -20,3 +20,7 @@ rand = { workspace = true }
 sqlx = { workspace = true }
 tempfile = { workspace = true }
 clap = { workspace = true }
+[[bin]]
+name = "pagination-server"
+path = "src/main.rs"
+test = false

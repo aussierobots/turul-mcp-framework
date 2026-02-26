@@ -36,6 +36,7 @@ fn test_basic_http_server_configuration() {
         enable_get_sse: true,
         enable_post_sse: true,
         session_expiry_minutes: 30,
+        allow_unauthenticated_ping: true,
     };
 
     // Note: We don't actually create the HttpMcpServer here since it would try to bind to the port

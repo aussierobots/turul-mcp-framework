@@ -2,9 +2,9 @@
 //!
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 
-use turul_mcp_protocol::elicitation::{ElicitCreateRequest, ElicitationSchema};
 use serde_json::Value;
 use std::collections::HashMap;
+use turul_mcp_protocol::elicitation::{ElicitCreateRequest, ElicitationSchema};
 
 pub trait HasElicitationMetadata {
     /// The message to present to the user

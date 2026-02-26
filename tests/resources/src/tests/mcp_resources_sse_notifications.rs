@@ -19,10 +19,7 @@ async fn test_resource_notifications_method_string_compliance() {
     let list_changed = ResourceListChangedNotification::new();
     let updated = ResourceUpdatedNotification::new("test://resource/1".to_string());
 
-    assert_eq!(
-        list_changed.method,
-        "notifications/resources/list_changed"
-    );
+    assert_eq!(list_changed.method, "notifications/resources/list_changed");
     assert_eq!(updated.method, "notifications/resources/updated");
 
     // Verify underscore convention
@@ -65,10 +62,7 @@ async fn test_notification_json_serialization_format() {
     let json_value = serde_json::to_value(&notification).unwrap();
 
     // Should have method field
-    assert_eq!(
-        json_value["method"],
-        "notifications/resources/list_changed"
-    );
+    assert_eq!(json_value["method"], "notifications/resources/list_changed");
 
     // Should NOT have jsonrpc or id fields (those are added by transport layer)
     assert!(json_value.get("jsonrpc").is_none());

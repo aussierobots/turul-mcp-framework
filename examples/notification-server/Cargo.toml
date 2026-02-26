@@ -1,6 +1,6 @@
 [package]
 name = "notification-server"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -17,3 +17,7 @@ serde_json.workspace = true
 serde.workspace = true
 uuid.workspace = true
 chrono.workspace = true
+[[bin]]
+name = "notification-server"
+path = "src/main.rs"
+test = false

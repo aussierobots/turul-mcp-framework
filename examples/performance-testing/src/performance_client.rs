@@ -5,7 +5,7 @@
 
 use clap::{Parser, Subcommand};
 use futures::future::join_all;
-use rand::Rng;
+use rand::RngExt;
 use serde_json::{Value, json};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};

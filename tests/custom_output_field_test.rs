@@ -1,9 +1,9 @@
 //! Test for custom output field name feature
 
 use serde_json::json;
+use turul_mcp_builders::{HasOutputSchema, ToolDefinition};
 use turul_mcp_derive::mcp_tool;
 use turul_mcp_server::{McpResult, McpTool};
-use turul_mcp_builders::{HasOutputSchema, ToolDefinition};
 
 #[mcp_tool(
     name = "test_custom_field",

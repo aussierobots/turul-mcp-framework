@@ -1,6 +1,6 @@
 [package]
 name = "manual-tools-server"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -18,3 +18,7 @@ serde_json = { workspace = true }
 turul-mcp-derive = { workspace = true }
 uuid = { workspace = true }
 chrono = { workspace = true }
+[[bin]]
+name = "manual-tools-server"
+path = "src/main.rs"
+test = false

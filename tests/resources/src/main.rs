@@ -160,7 +160,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     info!("🎉 MCP Resources Example completed successfully!");
-    info!("✨ All resource patterns working: Derive Macros ✅ | Business Logic ✅ | URI Templates ✅ | Text/Blob Content ✅");
+    info!(
+        "✨ All resource patterns working: Derive Macros ✅ | Business Logic ✅ | URI Templates ✅ | Text/Blob Content ✅"
+    );
 
     Ok(())
 }

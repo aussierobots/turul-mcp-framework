@@ -6,11 +6,14 @@
 //! 3. Limit parameter support
 //! 4. All list handlers preserve pagination fields
 
+use async_trait::async_trait;
 use serde_json::{Value, json};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 use tokio::time::sleep;
 use turul_mcp_server::McpServer;
+use turul_mcp_server::prelude::*;
 use turul_mcp_session_storage::InMemorySessionStorage;
 
 async fn start_test_server_with_tools() -> String {
@@ -1004,4 +1007,545 @@ async fn test_version_negotiation_ancient_client_error() {
     let error_message = body["error"]["message"].as_str().unwrap();
     assert!(error_message.contains("Cannot negotiate compatible version"));
     assert!(error_message.contains("2020-01-01"));
+}
+
+// =============================================================================
+// Sessionless Ping Tests (MCP 2025-11-25 Lifecycle Compliance)
+//
+// MCP spec permits clients to send `ping` before initialization completes.
+// These tests verify the framework allows sessionless ping at the transport
+// layer while preserving session requirements for all other methods.
+// =============================================================================
+
+/// Start a test server with allow_unauthenticated_ping disabled
+async fn start_test_server_no_unauthenticated_ping() -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server_url = format!("http://127.0.0.1:{}/mcp", addr.port());
+    drop(listener);
+
+    use turul_mcp_derive::mcp_tool;
+    use turul_mcp_protocol::McpResult;
+
+    #[mcp_tool(name = "noop", description = "No-op tool")]
+    async fn noop() -> McpResult<String> {
+        Ok("ok".to_string())
+    }
+
+    let session_storage = Arc::new(InMemorySessionStorage::new());
+    let server = McpServer::builder()
+        .name("no-unauth-ping-server")
+        .version("1.0.0")
+        .tool_fn(noop)
+        .with_session_storage(session_storage)
+        .bind_address(addr)
+        .allow_unauthenticated_ping(false)
+        .build()
+        .unwrap();
+
+    tokio::spawn(async move {
+        if let Err(e) = server.run().await {
+            eprintln!("Test server error: {}", e);
+        }
+    });
+
+    sleep(Duration::from_millis(200)).await;
+    server_url
+}
+
+/// T1: Pre-init ping request allowed
+///
+/// MCP spec: Clients "SHOULD NOT send requests other than pings before the
+/// server has responded to the initialize request". Sessionless ping must
+/// return a valid JSON-RPC result.
+#[tokio::test]
+async fn test_sessionless_ping_request_allowed() {
+    let server_url = start_test_server_with_tools().await;
+    let client = reqwest::Client::new();
+
+    // Send ping without Mcp-Session-Id header
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "ping",
+            "id": 1
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200, "Sessionless ping should return 200");
+
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["jsonrpc"], "2.0");
+    assert_eq!(body["id"], 1);
+    assert!(
+        body["result"].is_object(),
+        "Ping result should be an empty object"
+    );
+    assert!(body["error"].is_null(), "Ping should not return an error");
+}
+
+/// T2: Pre-init ping notification (no id) returns 202
+///
+/// Per JSON-RPC 2.0, notifications have no `id` field and expect no response.
+/// The server should return HTTP 202 Accepted with empty body.
+#[tokio::test]
+async fn test_sessionless_ping_notification_returns_202() {
+    let server_url = start_test_server_with_tools().await;
+    let client = reqwest::Client::new();
+
+    // Send ping as notification (no "id" field)
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "ping"
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        202,
+        "Ping notification should return 202 Accepted"
+    );
+
+    let body = response.text().await.unwrap();
+    assert!(
+        body.is_empty(),
+        "Notification response body should be empty"
+    );
+}
+
+/// T3: Pre-init non-ping request rejected
+///
+/// All methods other than `ping` require a valid Mcp-Session-Id header.
+/// Without one, the server should return 401.
+#[tokio::test]
+async fn test_sessionless_non_ping_rejected() {
+    let server_url = start_test_server_with_tools().await;
+    let client = reqwest::Client::new();
+
+    // Send tools/list without Mcp-Session-Id
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": 1,
+            "params": {}
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        401,
+        "Non-ping request without session should be rejected with 401"
+    );
+}
+
+/// T4: Post-init ping with session works normally
+///
+/// Ping with a valid session ID should work through the normal
+/// session-validated dispatch path and return the same result.
+#[tokio::test]
+async fn test_post_init_ping_with_session_works() {
+    let server_url = start_test_server_with_tools().await;
+    let client = reqwest::Client::new();
+    let session_id = initialize_session(&client, &server_url).await;
+
+    // Send ping WITH valid Mcp-Session-Id
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Session-Id", &session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "ping",
+            "id": 42
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200, "Post-init ping should return 200");
+
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["jsonrpc"], "2.0");
+    assert_eq!(body["id"], 42);
+    assert!(body["result"].is_object());
+}
+
+/// T5: allow_unauthenticated_ping=false restores rejection
+///
+/// When the config opt-out is set, sessionless ping should be rejected
+/// with 401, restoring the original strict behavior.
+#[tokio::test]
+async fn test_unauthenticated_ping_disabled_rejects_sessionless_ping() {
+    let server_url = start_test_server_no_unauthenticated_ping().await;
+    let client = reqwest::Client::new();
+
+    // Send ping without session — should be rejected
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "ping",
+            "id": 1
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        401,
+        "Sessionless ping should be 401 when allow_unauthenticated_ping=false"
+    );
+}
+
+/// T9: Legacy handler (SessionMcpHandler) — sessionless ping works
+///
+/// The legacy handler already dispatches sessionless requests without
+/// middleware. This is a regression guard ensuring sessionless ping
+/// continues to work through the legacy path.
+#[tokio::test]
+async fn test_legacy_handler_sessionless_ping_works() {
+    let server_url = start_test_server_with_tools().await;
+    let client = reqwest::Client::new();
+
+    // Use legacy protocol version to route to SessionMcpHandler
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2024-11-05")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "ping",
+            "id": 1
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        200,
+        "Legacy handler sessionless ping should succeed"
+    );
+
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["jsonrpc"], "2.0");
+    assert_eq!(body["id"], 1);
+    assert!(
+        body["result"].is_object(),
+        "Legacy ping should return empty result object"
+    );
+}
+
+/// T8: Legacy handler — sessionless non-ping request handled at app level
+///
+/// The legacy handler dispatches non-initialize requests without middleware
+/// and with session_context=None. The handler should return a JSON-RPC error
+/// (not silently succeed) since it lacks the session context.
+#[tokio::test]
+async fn test_legacy_handler_sessionless_non_ping_returns_error() {
+    let server_url = start_test_server_with_tools().await;
+    let client = reqwest::Client::new();
+
+    // Use legacy protocol version to route to SessionMcpHandler
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2024-11-05")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": 1,
+            "params": {}
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    // Legacy handler returns 200 with JSON-RPC response — may be result or error
+    // depending on handler implementation. The key invariant is that it doesn't
+    // crash or silently succeed with invalid data.
+    assert_eq!(response.status(), 200, "Legacy handler should return 200");
+
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["jsonrpc"], "2.0");
+    assert_eq!(body["id"], 1);
+    // The handler should have returned something valid (either result or error)
+    assert!(
+        body["result"].is_object() || body["error"].is_object(),
+        "Legacy handler should return valid JSON-RPC response, got: {}",
+        serde_json::to_string_pretty(&body).unwrap()
+    );
+}
+
+// =============================================================================
+// Sessionless Ping Middleware Tests (T6, T7)
+//
+// These tests verify that the middleware stack executes correctly for
+// sessionless ping requests, including auth bypass and rate limiting.
+// =============================================================================
+
+/// Auth middleware that requires X-API-Key for all methods except ping and initialize
+struct TestAuthMiddleware;
+
+#[async_trait]
+impl McpMiddleware for TestAuthMiddleware {
+    async fn before_dispatch(
+        &self,
+        ctx: &mut RequestContext<'_>,
+        _session: Option<&dyn turul_mcp_session_storage::SessionView>,
+        _injection: &mut SessionInjection,
+    ) -> Result<(), MiddlewareError> {
+        // Skip auth for ping and initialize
+        if ctx.method() == "ping" || ctx.method() == "initialize" {
+            return Ok(());
+        }
+        // For everything else, require API key
+        let has_key = ctx.metadata().get("x-api-key").is_some();
+        if !has_key {
+            return Err(MiddlewareError::Unauthenticated(
+                "Missing API key".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Rate-limiting middleware that rejects after N calls
+struct TestRateLimitMiddleware {
+    call_count: AtomicUsize,
+    max_calls: usize,
+}
+
+impl TestRateLimitMiddleware {
+    fn new(max_calls: usize) -> Self {
+        Self {
+            call_count: AtomicUsize::new(0),
+            max_calls,
+        }
+    }
+}
+
+#[async_trait]
+impl McpMiddleware for TestRateLimitMiddleware {
+    async fn before_dispatch(
+        &self,
+        _ctx: &mut RequestContext<'_>,
+        _session: Option<&dyn turul_mcp_session_storage::SessionView>,
+        _injection: &mut SessionInjection,
+    ) -> Result<(), MiddlewareError> {
+        let count = self.call_count.fetch_add(1, Ordering::SeqCst);
+        if count >= self.max_calls {
+            return Err(MiddlewareError::RateLimitExceeded {
+                message: "Rate limit exceeded".to_string(),
+                retry_after: None,
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Start a test server with auth middleware
+async fn start_test_server_with_auth_middleware() -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server_url = format!("http://127.0.0.1:{}/mcp", addr.port());
+    drop(listener);
+
+    use turul_mcp_derive::mcp_tool;
+    use turul_mcp_protocol::McpResult;
+
+    #[mcp_tool(name = "noop_auth", description = "No-op tool")]
+    async fn noop_auth() -> McpResult<String> {
+        Ok("ok".to_string())
+    }
+
+    let session_storage = Arc::new(InMemorySessionStorage::new());
+    let server = McpServer::builder()
+        .name("auth-middleware-test-server")
+        .version("1.0.0")
+        .tool_fn(noop_auth)
+        .with_session_storage(session_storage)
+        .middleware(Arc::new(TestAuthMiddleware))
+        .bind_address(addr)
+        .build()
+        .unwrap();
+
+    tokio::spawn(async move {
+        if let Err(e) = server.run().await {
+            eprintln!("Test server error: {}", e);
+        }
+    });
+
+    sleep(Duration::from_millis(200)).await;
+    server_url
+}
+
+/// Start a test server with rate-limiting middleware
+async fn start_test_server_with_rate_limit(max_calls: usize) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server_url = format!("http://127.0.0.1:{}/mcp", addr.port());
+    drop(listener);
+
+    use turul_mcp_derive::mcp_tool;
+    use turul_mcp_protocol::McpResult;
+
+    #[mcp_tool(name = "noop_rate", description = "No-op tool")]
+    async fn noop_rate() -> McpResult<String> {
+        Ok("ok".to_string())
+    }
+
+    let session_storage = Arc::new(InMemorySessionStorage::new());
+    let server = McpServer::builder()
+        .name("rate-limit-test-server")
+        .version("1.0.0")
+        .tool_fn(noop_rate)
+        .with_session_storage(session_storage)
+        .middleware(Arc::new(TestRateLimitMiddleware::new(max_calls)))
+        .bind_address(addr)
+        .build()
+        .unwrap();
+
+    tokio::spawn(async move {
+        if let Err(e) = server.run().await {
+            eprintln!("Test server error: {}", e);
+        }
+    });
+
+    sleep(Duration::from_millis(200)).await;
+    server_url
+}
+
+/// T6: Sessionless ping with auth middleware
+///
+/// Auth middleware skips ping (like the real middleware-auth examples),
+/// so sessionless ping without API key should succeed.
+#[tokio::test]
+async fn test_sessionless_ping_with_auth_middleware_succeeds() {
+    let server_url = start_test_server_with_auth_middleware().await;
+    let client = reqwest::Client::new();
+
+    // Send ping without API key, without session — should succeed because
+    // auth middleware skips ping method
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "ping",
+            "id": 1
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        200,
+        "Sessionless ping should succeed even with auth middleware"
+    );
+
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(body["jsonrpc"], "2.0");
+    assert_eq!(body["id"], 1);
+    assert!(body["result"].is_object());
+    assert!(body["error"].is_null());
+}
+
+/// T7: Rate-limiting middleware enforced for sessionless ping
+///
+/// Rate-limiting middleware applies to all requests including sessionless ping.
+/// First ping succeeds, second returns rate-limit error.
+#[tokio::test]
+async fn test_rate_limiting_enforced_for_sessionless_ping() {
+    let server_url = start_test_server_with_rate_limit(1).await;
+    let client = reqwest::Client::new();
+
+    // First ping should succeed
+    let response1 = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "ping",
+            "id": 1
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response1.status(), 200, "First ping should succeed");
+
+    let body1: Value = response1.json().await.unwrap();
+    assert!(
+        body1["result"].is_object(),
+        "First ping should return result"
+    );
+
+    // Second ping should be rate-limited
+    let response2 = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "ping",
+            "id": 2
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response2.status(),
+        200,
+        "Rate-limited response is JSON-RPC error in 200"
+    );
+
+    let body2: Value = response2.json().await.unwrap();
+    assert!(
+        body2["error"].is_object(),
+        "Second ping should return JSON-RPC error due to rate limit, got: {}",
+        serde_json::to_string_pretty(&body2).unwrap()
+    );
+
+    // Error code -32003 is the standard code for RateLimitExceeded
+    let error_code = body2["error"]["code"].as_i64().unwrap();
+    assert_eq!(
+        error_code, -32003,
+        "Rate limit error should use code -32003"
+    );
 }

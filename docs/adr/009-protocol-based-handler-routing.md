@@ -9,7 +9,7 @@
 The turul-mcp-framework HTTP server needs to support multiple MCP protocol versions with different transport mechanisms:
 
 - **MCP 2024-11-05 and earlier**: Traditional HTTP+SSE with session-based event storage and replay
-- **MCP 2025-06-18**: Streamable HTTP transport with chunked Transfer-Encoding and direct JSON-RPC frame streaming
+- **MCP 2025-03-26+**: Streamable HTTP transport with chunked Transfer-Encoding and direct JSON-RPC frame streaming (current default: 2025-11-25)
 
 The challenge was implementing a single HTTP server that can route requests to the appropriate handler based on the `MCP-Protocol-Version` header while maintaining backward compatibility and optimal performance for each protocol variant.
 
@@ -23,8 +23,8 @@ Implement **protocol-based handler routing** in the HTTP server with two special
 - Implements traditional SSE event replay via `Last-Event-ID`
 - Maintains full backward compatibility
 
-### 2. StreamableHttpHandler (MCP 2025-06-18)
-- Handles MCP 2025-06-18 Streamable HTTP transport
+### 2. StreamableHttpHandler (MCP 2025-03-26+)
+- Handles MCP 2025-03-26 and later Streamable HTTP transport (including 2025-06-18 and 2025-11-25)
 - Uses `Transfer-Encoding: chunked` for progressive responses
 - Streams JSON-RPC frames directly (Progress, PartialResult, FinalResult)
 - Bypasses session storage for tool call responses (performance optimization)
@@ -37,14 +37,14 @@ let protocol_version_str = req
     .headers()
     .get("MCP-Protocol-Version")
     .and_then(|h| h.to_str().ok())
-    .unwrap_or("2025-06-18"); // Default to latest
+    .unwrap_or("2025-11-25"); // Default to latest
 
 let protocol_version = McpProtocolVersion::parse_version(protocol_version_str)
-    .unwrap_or(McpProtocolVersion::V2025_06_18);
+    .unwrap_or(McpProtocolVersion::V2025_11_25);
 
 // Route based on protocol capabilities
 if protocol_version.supports_streamable_http() {
-    // Use StreamableHttpHandler for MCP 2025-06-18 clients
+    // Use StreamableHttpHandler for MCP 2025-03-26+ clients
     handler.streamable_handler.handle_request(req).await
 } else {
     // Use SessionMcpHandler for legacy clients
@@ -56,7 +56,7 @@ if protocol_version.supports_streamable_http() {
 
 ### Positive
 - **Protocol Compliance**: Each handler optimized for its specific MCP version requirements
-- **Performance**: MCP 2025-06-18 clients get direct streaming without session storage overhead
+- **Performance**: Streamable HTTP clients (2025-03-26+) get direct streaming without session storage overhead
 - **Backward Compatibility**: Legacy clients continue working without changes
 - **Clean Architecture**: Separation of concerns between protocol versions
 - **Maintainability**: Protocol-specific logic isolated in dedicated handlers
@@ -80,7 +80,7 @@ if protocol_version.supports_streamable_http() {
 #[derive(Clone)]
 struct McpRequestHandler {
     session_handler: SessionMcpHandler,      // For legacy protocols
-    streamable_handler: StreamableHttpHandler, // For MCP 2025-06-18
+    streamable_handler: StreamableHttpHandler, // For MCP 2025-03-26+
 }
 ```
 
@@ -88,12 +88,14 @@ struct McpRequestHandler {
 ```rust
 pub enum McpProtocolVersion {
     V2024_11_05,
+    V2025_03_26,
     V2025_06_18,
+    V2025_11_25,
 }
 
 impl McpProtocolVersion {
     pub fn supports_streamable_http(&self) -> bool {
-        matches!(self, McpProtocolVersion::V2025_06_18)
+        !matches!(self, McpProtocolVersion::V2024_11_05)
     }
 }
 ```
@@ -123,6 +125,6 @@ Stale binaries can mask routing changes and cause test failures.
 
 ## See Also
 
-- [MCP 2025-06-18 Specification](https://spec.modelcontextprotocol.io/specification/transports/http/)
+- [MCP 2025-11-25 Specification](https://modelcontextprotocol.io/specification/2025-11-25)
 - [ADR-005: MCP Message Notifications Architecture](./005-mcp-message-notifications-architecture.md)
 - [CLAUDE.md: HTTP Transport Routing](../../CLAUDE.md#http-transport-routing)

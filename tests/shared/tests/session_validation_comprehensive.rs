@@ -33,15 +33,24 @@ async fn test_session_id_generation_and_persistence() {
         .expect("Resource client should have session ID");
     info!("Resource server session ID: {}", resource_session);
 
-    // Verify UUID v7 format (should start with current timestamp-ish)
-    assert!(
-        resource_session.len() == 36,
-        "Session ID should be standard UUID length"
+    // Verify no-hyphen UUIDv7 format
+    assert_eq!(
+        resource_session.len(),
+        32,
+        "Session ID should be 32-char no-hyphen hex"
     );
     assert!(
-        resource_session.contains('-'),
-        "Session ID should contain hyphens"
+        !resource_session.contains('-'),
+        "New session IDs must not contain hyphens"
     );
+    assert!(
+        resource_session
+            .chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+        "Session ID must be lowercase hex"
+    );
+    let uuid = uuid::Uuid::parse_str(resource_session).expect("Session ID must parse as UUID");
+    assert_eq!(uuid.get_version_num(), 7, "Session ID must be UUIDv7");
 
     // Test prompts server sessions
     let mut prompts_client = McpTestClient::new(prompts_server.port());

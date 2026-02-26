@@ -54,9 +54,16 @@ mod basic_operations_tests {
 
         let session_id = manager.create_session().await;
 
-        // Session ID should be a valid UUID string
+        // Session ID should be a valid no-hyphen UUIDv7
         assert!(!session_id.is_empty());
-        assert_eq!(session_id.len(), 36); // UUID format
+        assert_eq!(session_id.len(), 32, "no-hyphen UUID is 32 hex chars");
+        assert!(!session_id.contains('-'), "new session IDs must not contain hyphens");
+        assert!(
+            session_id.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+            "must be lowercase hex"
+        );
+        let uuid = uuid::Uuid::parse_str(&session_id).expect("must parse as valid UUID");
+        assert_eq!(uuid.get_version_num(), 7, "must be UUIDv7");
 
         // Session should exist
         assert!(manager.session_exists(&session_id).await);

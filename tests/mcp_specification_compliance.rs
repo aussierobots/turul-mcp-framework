@@ -404,9 +404,7 @@ async fn test_notification_backward_compat_acceptance() {
     assert!(is_accepted_notification(
         "notifications/resources/list_changed"
     ));
-    assert!(is_accepted_notification(
-        "notifications/tools/list_changed"
-    ));
+    assert!(is_accepted_notification("notifications/tools/list_changed"));
 }
 
 // Helper functions for validation
@@ -568,10 +566,7 @@ mod regression_tests {
         let server = match TestServerManager::start_tools_server().await {
             Ok(s) => s,
             Err(e) => {
-                println!(
-                    "Skipping live compat test - server start failed: {}",
-                    e
-                );
+                println!("Skipping live compat test - server start failed: {}", e);
                 return;
             }
         };
@@ -605,16 +600,16 @@ mod regression_tests {
             );
 
             // If server returns a response body, ensure it's not -32601
-            if let Ok(ref resp) = response {
-                if let Some(error) = resp.get("error") {
-                    let code = error.get("code").and_then(|c| c.as_i64());
-                    assert_ne!(
-                        code,
-                        Some(-32601),
-                        "Server must not return 'Method not found' for legacy notification: {}",
-                        method
-                    );
-                }
+            if let Ok(ref resp) = response
+                && let Some(error) = resp.get("error")
+            {
+                let code = error.get("code").and_then(|c| c.as_i64());
+                assert_ne!(
+                    code,
+                    Some(-32601),
+                    "Server must not return 'Method not found' for legacy notification: {}",
+                    method
+                );
             }
         }
     }

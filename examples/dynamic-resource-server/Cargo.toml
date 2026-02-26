@@ -1,6 +1,6 @@
 [package]
 name = "dynamic-resource-server"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 
 [dependencies]
@@ -18,3 +18,7 @@ chrono.workspace = true
 rand.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_yaml.workspace = true
+[[bin]]
+name = "dynamic-resource-server"
+path = "src/main.rs"
+test = false

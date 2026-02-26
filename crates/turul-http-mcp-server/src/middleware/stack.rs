@@ -1,8 +1,8 @@
 //! Middleware stack execution
 
-use super::{McpMiddleware, RequestContext, SessionInjection, DispatcherResult, MiddlewareError};
-use turul_mcp_session_storage::SessionView;
+use super::{DispatcherResult, McpMiddleware, MiddlewareError, RequestContext, SessionInjection};
 use std::sync::Arc;
+use turul_mcp_session_storage::SessionView;
 
 /// Ordered collection of middleware with execution logic
 ///
@@ -109,7 +109,9 @@ impl MiddlewareStack {
 
         for middleware in &self.middleware {
             let mut injection = SessionInjection::new();
-            middleware.before_dispatch(ctx, session, &mut injection).await?;
+            middleware
+                .before_dispatch(ctx, session, &mut injection)
+                .await?;
 
             // Accumulate injections (later middleware can override earlier ones)
             for (key, value) in injection.state() {
@@ -173,7 +175,10 @@ mod tests {
             _session: Option<&dyn SessionView>,
             injection: &mut SessionInjection,
         ) -> Result<(), MiddlewareError> {
-            self.counter.lock().unwrap().push(format!("before_{}", self.id));
+            self.counter
+                .lock()
+                .unwrap()
+                .push(format!("before_{}", self.id));
             injection.set_state(&self.id, json!(true));
             Ok(())
         }
@@ -183,7 +188,10 @@ mod tests {
             _ctx: &RequestContext<'_>,
             _result: &mut DispatcherResult,
         ) -> Result<(), MiddlewareError> {
-            self.counter.lock().unwrap().push(format!("after_{}", self.id));
+            self.counter
+                .lock()
+                .unwrap()
+                .push(format!("after_{}", self.id));
             Ok(())
         }
     }
@@ -264,7 +272,10 @@ mod tests {
         // Execute before - should fail at second middleware (no session needed)
         let result = stack.execute_before(&mut ctx, None).await;
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), MiddlewareError::unauthorized("Test error"));
+        assert_eq!(
+            result.unwrap_err(),
+            MiddlewareError::unauthorized("Test error")
+        );
 
         // Verify only first middleware executed
         let log = counter.lock().unwrap();

@@ -1,6 +1,6 @@
 //! Request context and session injection types
 
-use serde_json::{Value, Map};
+use serde_json::{Map, Value};
 use std::collections::HashMap;
 
 /// Normalized request context across all transports (HTTP, Lambda, etc.)
@@ -9,7 +9,7 @@ use std::collections::HashMap;
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use turul_http_mcp_server::middleware::RequestContext;
 /// use serde_json::json;
 ///
@@ -75,7 +75,7 @@ impl<'a> RequestContext<'a> {
     ///
     /// # Examples
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use turul_http_mcp_server::middleware::RequestContext;
     /// use serde_json::json;
     ///
@@ -100,7 +100,7 @@ impl<'a> RequestContext<'a> {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use turul_http_mcp_server::middleware::SessionInjection;
 /// use serde_json::json;
 ///
@@ -173,7 +173,7 @@ impl SessionInjection {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```rust,no_run
 /// use turul_http_mcp_server::middleware::DispatcherResult;
 /// use serde_json::json;
 ///

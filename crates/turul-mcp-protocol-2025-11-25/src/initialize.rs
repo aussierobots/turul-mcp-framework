@@ -133,10 +133,73 @@ pub struct ToolsCapabilities {
 }
 
 /// Capabilities for tasks (per MCP 2025-11-25)
+///
+/// Structured capability advertisement for task operations.
+/// Presence of a sub-field (e.g., `list: Some(...)`) signals that the capability is supported.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct TasksCapabilities {
-    /// Additional opaque capability data
+    /// Supports tasks/list operation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub list: Option<TasksListCapabilities>,
+    /// Supports tasks/cancel operation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cancel: Option<TasksCancelCapabilities>,
+    /// Supports task-augmented requests
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub requests: Option<TasksRequestCapabilities>,
+    /// Forward-compatible extension fields
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
+}
+
+/// Signals support for tasks/list — presence means supported, extensible via extra
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TasksListCapabilities {
+    /// Forward-compatible extension fields
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
+}
+
+/// Signals support for tasks/cancel — presence means supported, extensible via extra
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TasksCancelCapabilities {
+    /// Forward-compatible extension fields
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
+}
+
+/// Describes which request types support task augmentation
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TasksRequestCapabilities {
+    /// Tool request task capabilities
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tools: Option<TasksToolCapabilities>,
+    /// Forward-compatible extension fields
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
+}
+
+/// Tool-level task capabilities
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TasksToolCapabilities {
+    /// Supports task-augmented tools/call
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub call: Option<TasksToolCallCapabilities>,
+    /// Forward-compatible extension fields
+    #[serde(flatten)]
+    pub extra: HashMap<String, Value>,
+}
+
+/// Signals support for task-augmented tools/call — presence means supported
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct TasksToolCallCapabilities {
+    /// Forward-compatible extension fields
     #[serde(flatten)]
     pub extra: HashMap<String, Value>,
 }

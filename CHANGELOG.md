@@ -7,29 +7,93 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.2.2] - TBD
+## [0.3.0] - 2026-02-26
 
 ### Added
 
+**MCP 2025-11-25 Protocol Support:**
+- `turul-mcp-protocol-2025-11-25` crate with full spec compliance (127+ protocol tests)
+- `turul-mcp-protocol` alias now re-exports 2025-11-25 types (ADR-015)
+- `Icon` struct (`src`, `mime_type`, `sizes`, `theme`) on tools, resources, prompts, resource templates, and implementations
+- `Task` struct with `task_id`, `TaskStatus` (`Working`/`InputRequired`/`Completed`/`Failed`/`Cancelled`), `created_at`/`last_updated_at`, `ttl`, `poll_interval`
+- `ToolUse` and `ToolResult` content block variants
+- `ToolExecution`, `ToolChoice`, `ToolChoiceMode` (`Auto`/`None`/`Required`)
+- `TaskStatusNotification` and `ElicitationCompleteNotification`
+- URL elicitation mode (`ElicitRequestURLParams`) alongside existing form mode
+- `$schema` field on `ElicitationSchema`
+- `tools` field on `CreateMessageParams` for sampling with tools
+- `ModelHint { name }` struct (replaces closed enum)
+- `Implementation` gains `description` and `website_url` fields
+- Structured `TasksCapabilities` with `list`, `cancel`, `requests` sub-fields
+
+**Task Storage (`turul-mcp-task-storage` crate):**
+- `TaskStorage` trait with zero-Tokio public API
+- `InMemoryTaskStorage` with state machine enforcement
+- SQLite backend (`SqliteTaskStorage`) — optimistic locking, `julianday()` TTL, background cleanup
+- PostgreSQL backend (`PostgresTaskStorage`) — `version` column optimistic locking, JSONB, partial index for stuck tasks
+- DynamoDB backend (`DynamoDbTaskStorage`) — conditional writes, GSIs, native TTL, base64 cursors
+- 11-function parity test suite shared across all backends
+- Feature flags: `sqlite`, `postgres`, `dynamodb` (each opt-in with Tokio)
+
+**Task Runtime & Executor:**
+- `TaskExecutor` trait and `TokioTaskExecutor` in `turul-mcp-server`
+- `CancellationHandle` for cooperative task cancellation
+- `TaskRuntime` with `::new(storage, executor)`, `::with_default_executor(storage)`, `::in_memory()` constructors
+- Server handlers for `tasks/get`, `tasks/list`, `tasks/cancel`, `tasks/result` (blocks until terminal per spec)
+- Auto-capability advertisement via `McpServer::builder().with_task_runtime()`
+
+**Task Examples:**
+- `tasks-e2e-inmemory-server` — task-enabled MCP server with `slow_add` tool
+- `tasks-e2e-inmemory-client` — full task lifecycle client (create, poll, cancel, result)
+- `client-task-lifecycle` — task API demonstration
+- `task-types-showcase` — print-only demo of Task, TaskStatus, TaskMetadata, CRUD types
+
+**Lambda Examples:**
+- `lambda-authorizer` — API Gateway REQUEST authorizer with wildcard methodArn for MCP Streamable HTTP
+
 **README Testing Infrastructure:**
-- Added `skeptic` crate for automated markdown code block testing
-- README.md files now validated as part of `cargo test` suite
-- Prevents documentation drift and ensures all code examples compile
-
-### Fixed
-
-**Documentation Accuracy (turul-mcp-protocol-2025-06-18):**
-- Fixed version numbers in README.md (0.2.0 → 0.2.1)
-- Corrected architectural descriptions to reflect spec-purity design
-- Removed outdated "trait-based architecture" marketing
-- Clarified that framework traits live in `turul-mcp-builders` crate
-- Updated "Why Choose This Crate" section to emphasize concrete MCP types
-- All 20+ README code examples now tested and verified
+- `skeptic` crate for automated markdown code block testing
+- README.md files validated as part of `cargo test` suite
 
 ### Changed
 
-- README narrative now accurately describes crate as "spec-pure protocol implementation"
-- Documentation emphasizes concrete types (Tool, Resource, Prompt) over trait abstraction
+**Protocol Types (Breaking):**
+- `CreateMessageResult` flattened — `role` and `content` at top level (no `message` wrapper)
+- `Role` enum: only `User` and `Assistant` (removed `System` variant; system prompts use `systemPrompt` field)
+- `ProgressNotificationParams.progress`: `f64` (was `u64`)
+- `icon` fields renamed to `icons: Option<Vec<Icon>>` (singular string → plural object array)
+- `HasIcon` trait renamed to `HasIcons`; `HasSamplingTools` trait added
+- Notification method strings use underscores (`notifications/tools/list_changed`) per spec; JSON capability keys remain camelCase (`listChanged`)
+- Default protocol version is 2025-11-25 everywhere; backward-compat 2025-06-18 paths annotated with `// Intentional`
+
+**Test Infrastructure:**
+- 1,560+ workspace tests passing, 98 doctests, zero warnings
+- Test binaries reduced from 155 to 43 via consolidation (Phase F)
+- Root integration tests: 39 → 8 binaries (5 consolidated in `tests/consolidated/` + 3 standalone)
+- Sub-crate integration tests: 24 → 7 binaries (`tests/*/tests/all.rs` with `#[path]` imports)
+- Derive crate integration tests moved to workspace root (2 binaries eliminated)
+
+**Examples:**
+- 58 active examples (up from 42+ in v0.1.0), 25 archived
+- 12 core crates in workspace
+
+**Documentation:**
+- README narrative updated to reflect spec-pure protocol crate design
+- All 20+ protocol crate README code examples tested and verified
+- Documentation accuracy fixes across READMEs, ADRs, and compliance reports (repo URL, config field names, notification method strings, version references, port numbers)
+- CHANGELOG duplicate `[0.2.0]` sections merged
+- ADR-009 updated with `V2025_03_26` and `V2025_11_25` protocol versions
+- ADR-004 status updated from CRITICAL to Accepted (Implemented)
+- Stale MIGRATION_0.2.1.md references removed workspace-wide
+
+### Fixed
+
+- Sampling server README: removed `System` role, fixed `ModelHint` to object form, corrected snake_case JSON fields to camelCase
+- Session storage README: corrected config field names (`session_timeout_minutes`, `database_url`, `PostgresConfig`)
+- Compliance reports marked as historical with accurate resolution status
+- Client README compatibility list now includes 2025-11-25
+- Protocol alias ADR updated from 2025-06-18 to 2025-11-25
+- Notification method strings in ADR-005 and E2E test plan corrected to `list_changed`
 
 ## [0.2.1] - 2025-10-08
 
@@ -63,7 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   // After
   use turul_mcp_builders::prelude::*;  // or turul_mcp_server::prelude::*
   ```
-- **Migration Guide**: See [MIGRATION_0.2.1.md](MIGRATION_0.2.1.md) for complete step-by-step migration instructions
+- **Migration Guide**: See the breaking changes listed above for step-by-step migration instructions
 
 ### Fixed
 
@@ -88,6 +152,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+**MCP 2025-06-18 Specification:**
+- Full compliance with MCP 2025-06-18 spec
+- Session-Aware Resources: All resources now support `session: Option<&SessionContext>` parameter
+- Sampling Validation Framework: `ProvidedSamplingHandler` for request validation
+- SSE Streaming: Chunked transfer encoding with real-time notifications
+- CLI Support: All test servers now support `--port` argument with dynamic binding
+- Path Normalization: Traversal attack detection in roots validation
+- Strict Lifecycle Mode: Optional strict session initialization enforcement
+
 **Middleware System:**
 - Complete middleware architecture for HTTP and Lambda transports
 - `.middleware()` builder method on `McpServer` and `LambdaMcpServerBuilder`
@@ -107,6 +180,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive example verification suite (5 phases, 31 servers)
 - Session lifecycle compliance: `notifications/initialized` in all e2e tests
 
+### Changed
+
+- **Resource Trait**: Updated `read()` signature to include session parameter
+- **Tool Output**: Tools with `outputSchema` automatically include `structuredContent`
+- **Error Handling**: Session lifecycle violations use `SessionError` type
+- **Pagination**: Reject `limit=0` to prevent stalls
+- **HTTP Transport**: Protocol-based routing (≥2025-03-26 uses streaming, ≤2024-11-05 uses buffered)
+- SSE keepalives use comment syntax for better client compatibility
+- DynamoDB queries use strongly consistent reads
+- Lambda `LambdaMcpHandler` now cached globally (preserves DynamoDB client, StreamManager, middleware instances)
+- Test packages updated to Rust edition 2024 and tokio version "1"
+- Middleware stack execution order documented (FIFO/LIFO)
+
 ### Fixed
 
 **Examples (4 bugs fixed):**
@@ -123,6 +209,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Tool output: Schema and runtime field names now consistent
 - CamelCase: Proper acronym handling (GPS → gps, HTTPServer → httpServer)
 - Lambda compilation: Fixed `LambdaError::Config` reference
+- **TestServerManager**: Blocking wait for process termination, prevents zombie processes
+- **Session Tests**: Correct response structure (`output` vs `value`)
+- **Prompt Arguments**: Fix argument name mismatches in test expectations
+- **MCP Inspector**: Enable compatibility with MCP Inspector and FastMCP clients
+- **Zero-Config**: Correct output field expectations for derived tools
+- **Borrow Checker**: Resolve errors in `roots_derive` macro
 
 **Code Quality:**
 - Fixed 14 collapsible_if clippy warnings using Rust 2024 let-chain syntax
@@ -136,13 +228,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SKIPPED tracked separately from PASSED (no hidden failures)
 - Build errors properly diagnosed with detailed logs
 
-### Changed
-
-- SSE keepalives use comment syntax for better client compatibility
-- DynamoDB queries use strongly consistent reads
-- Lambda `LambdaMcpHandler` now cached globally (preserves DynamoDB client, StreamManager, middleware instances)
-- Test packages updated to Rust edition 2024 and tokio version "1"
-- Middleware stack execution order documented (FIFO/LIFO)
+### Examples
+- Restored `roots-server` with clap CLI (108 lines, down from 512)
+- Updated `elicitation-server` with multi-path data loading
+- Updated `sampling-server` with dynamic port binding
+- Updated `pagination-server` with proper SQLite URI (`?mode=rwc`)
+- All 31 core examples verified and working
 
 ### Documentation
 
@@ -151,58 +242,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Doctests passing: turul-mcp-derive (25/25), turul-mcp-protocol (7/7)
 - Complete verification run documented with bug fixes and runbook
 - Middleware testing scripts: `test_middleware_live.sh` and Lambda examples
-
-### Tests
-
-- Fixed 9 integration test failures
-- All 161 integration tests passing across 20 test suites
-- 30/31 examples verified (Phases 1-5: 100% passing)
-- Middleware parity tests verify HTTP/Lambda consistency
-
-## [0.2.0] - 2025-10-01
-
-### Added
-- **MCP 2025-06-18 Specification**: Full compliance with latest MCP spec
-- **Session-Aware Resources**: All resources now support `session: Option<&SessionContext>` parameter
-- **Sampling Validation Framework**: `ProvidedSamplingHandler` for request validation
-- **SSE Streaming**: Chunked transfer encoding with real-time notifications
-- **CLI Support**: All test servers now support `--port` argument with dynamic binding
-- **Path Normalization**: Traversal attack detection in roots validation
-- **Strict Lifecycle Mode**: Optional strict session initialization enforcement
-
-### Changed
-- **Resource Trait**: Updated `read()` signature to include session parameter
-- **Tool Output**: Tools with `outputSchema` automatically include `structuredContent`
-- **Error Handling**: Session lifecycle violations use `SessionError` type
-- **Pagination**: Reject `limit=0` to prevent stalls
-- **HTTP Transport**: Protocol-based routing (≥2025-03-26 uses streaming, ≤2024-11-05 uses buffered)
-
-### Fixed
-- **TestServerManager**: Blocking wait for process termination, prevents zombie processes
-- **Session Tests**: Correct response structure (`output` vs `value`)
-- **Prompt Arguments**: Fix argument name mismatches in test expectations
-- **MCP Inspector**: Enable compatibility with MCP Inspector and FastMCP clients
-- **Zero-Config**: Correct output field expectations for derived tools
-- **Borrow Checker**: Resolve errors in `roots_derive` macro
-
-### Examples
-- Restored `roots-server` with clap CLI (108 lines, down from 512)
-- Updated `elicitation-server` with multi-path data loading
-- Updated `sampling-server` with dynamic port binding
-- Updated `pagination-server` with proper SQLite URI (`?mode=rwc`)
-- All 31 core examples verified and working
-
-### Tests
-- 440+ unit tests passing
-- 31/35 examples verified (89%)
-- Phase 1-4, 6, 8 verification: 100% passing
-- All critical functionality validated
-
-### Documentation
 - Updated CLAUDE.md with session-aware patterns
 - Updated EXAMPLES.md with validation results
 - Added curl and jq to auto-approved commands
 - Comprehensive test coverage documentation
+
+### Tests
+
+- 440+ unit tests passing (161 integration tests across 20 test suites)
+- 30/31 examples verified (Phases 1-5: 100% passing)
+- Middleware parity tests verify HTTP/Lambda consistency
+- All critical functionality validated
 
 ## [0.1.0] - Initial Release
 
@@ -218,6 +268,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/aussierobots/turul-mcp-framework/releases/tag/v0.1.0

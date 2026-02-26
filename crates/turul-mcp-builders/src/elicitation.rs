@@ -8,8 +8,8 @@ use std::collections::HashMap;
 
 // Import protocol types
 use turul_mcp_protocol::elicitation::{
-    BooleanSchema, ElicitCreateRequest, ElicitResult, ElicitationSchema, EnumSchema,
-    NumberSchema, PrimitiveSchemaDefinition, StringFormat, StringSchema,
+    BooleanSchema, ElicitCreateRequest, ElicitResult, ElicitationSchema, EnumSchema, NumberSchema,
+    PrimitiveSchemaDefinition, StringFormat, StringSchema,
 };
 
 // Import framework traits from local crate
@@ -537,9 +537,9 @@ impl ElicitResultBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::traits::ElicitationDefinition;
     use serde_json::json;
     use turul_mcp_protocol::elicitation::ElicitAction;
-    use crate::traits::ElicitationDefinition;
 
     #[test]
     fn test_elicitation_builder_basic() {

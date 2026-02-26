@@ -2,8 +2,8 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use turul_mcp_derive::McpTool;
 use turul_mcp_builders::prelude::*;
+use turul_mcp_derive::McpTool;
 use turul_mcp_protocol::McpResult;
 use turul_mcp_server::{McpTool as McpToolTrait, SessionContext};
 
@@ -43,7 +43,8 @@ async fn test_optional_fields_schema() {
         value: "test".to_string(),
     };
 
-    let schema = tool.output_schema()
+    let schema = tool
+        .output_schema()
         .expect("Tool should have output schema");
 
     // Should have a schema (either detailed or fallback)
@@ -54,10 +55,15 @@ async fn test_optional_fields_schema() {
     let inner_schema = &properties["outputWithOptional"];
 
     match inner_schema {
-        turul_mcp_protocol::schema::JsonSchema::Object { properties: Some(props), .. } => {
+        turul_mcp_protocol::schema::JsonSchema::Object {
+            properties: Some(props),
+            ..
+        } => {
             // ✅ Detailed schema worked despite Option<T>
-            assert!(props.contains_key("required_field"),
-                "Should have required_field");
+            assert!(
+                props.contains_key("required_field"),
+                "Should have required_field"
+            );
             println!("✓ Detailed schema with Option<T> fields");
             println!("  Schema has {} properties", props.len());
 
@@ -67,14 +73,18 @@ async fn test_optional_fields_schema() {
             } else {
                 println!("  ℹ optional_field not in schema (expected for skip_serializing_if)");
             }
-        },
-        turul_mcp_protocol::schema::JsonSchema::Object { properties: None, description, .. } => {
+        }
+        turul_mcp_protocol::schema::JsonSchema::Object {
+            properties: None,
+            description,
+            ..
+        } => {
             // ✅ Safe fallback for complex anyOf/oneOf patterns
             println!("✓ Safe fallback for complex schemars patterns");
             if let Some(desc) = description {
                 println!("  Description: {}", desc);
             }
-        },
+        }
         other => {
             panic!("Unexpected schema type: {:?}", other);
         }
@@ -97,8 +107,10 @@ async fn test_optional_field_tool_execution() {
     assert!(result.is_ok(), "Tool execution should succeed");
 
     let call_result = result.unwrap();
-    assert!(call_result.is_error.is_none() || !call_result.is_error.unwrap(),
-        "Result should not be an error");
+    assert!(
+        call_result.is_error.is_none() || !call_result.is_error.unwrap(),
+        "Result should not be an error"
+    );
 
     // Verify we got content
     assert!(!call_result.content.is_empty(), "Should have content");

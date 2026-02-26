@@ -1,6 +1,6 @@
 [package]
 name = "elicitation-server"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 
 [dependencies]
@@ -19,3 +19,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 rand = { workspace = true }
 clap = { workspace = true }
+[[bin]]
+name = "elicitation-server"
+path = "src/main.rs"
+test = false

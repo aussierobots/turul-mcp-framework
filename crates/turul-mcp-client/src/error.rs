@@ -63,9 +63,6 @@ pub enum TransportError {
     #[error("SSE transport error: {0}")]
     Sse(String),
 
-    #[error("WebSocket transport error: {0}")]
-    WebSocket(String),
-
     #[error("Stdio transport error: {0}")]
     Stdio(String),
 

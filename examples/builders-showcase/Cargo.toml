@@ -7,8 +7,8 @@ license.workspace = true
 
 [dependencies]
 # Core MCP dependencies
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
+turul-mcp-builders.workspace = true
+turul-mcp-protocol.workspace = true
 
 # Standard dependencies
 tokio.workspace = true
@@ -19,3 +19,7 @@ serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid = { workspace = true, features = ["v7", "serde"] }
+[[bin]]
+name = "builders-showcase"
+path = "src/main.rs"
+test = false

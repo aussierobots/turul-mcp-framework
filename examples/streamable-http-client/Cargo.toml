@@ -1,6 +1,6 @@
 [package]
 name = "streamable-http-client"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 description = "MCP 2025-11-25 Streamable HTTP client example with multi-threaded SSE processing"
 
@@ -15,3 +15,7 @@ tracing-subscriber = { workspace = true }
 clap = { workspace = true }
 reqwest = { workspace = true }
 futures = { workspace = true }
+[[bin]]
+name = "streamable-http-client"
+path = "src/main.rs"
+test = false

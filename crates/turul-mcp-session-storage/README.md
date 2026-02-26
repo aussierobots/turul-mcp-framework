@@ -34,8 +34,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-session-storage = { version = "0.2", features = ["sqlite"] }
-turul-mcp-server = "0.2"
+turul-mcp-session-storage = { version = "0.3", features = ["sqlite"] }
+turul-mcp-server = "0.3"
 ```
 
 ### In-Memory (Development)
@@ -216,10 +216,12 @@ The storage backend will replay all events after `event-123`.
 use turul_mcp_session_storage::{SqliteSessionStorage, SqliteConfig};
 
 let config = SqliteConfig {
-    database_path: "sessions.db".to_string(),
-    session_ttl_seconds: 3600,  // 1 hour
-    cleanup_interval_seconds: 300,  // 5 minutes
+    database_path: "sessions.db".into(),
+    session_timeout_minutes: 60,       // 1 hour
+    cleanup_interval_minutes: 5,       // 5 minutes
     max_events_per_session: 1000,
+    create_tables_if_missing: true,
+    ..Default::default()
 };
 
 let storage = SqliteSessionStorage::with_config(config).await?;
@@ -228,17 +230,18 @@ let storage = SqliteSessionStorage::with_config(config).await?;
 ### PostgreSQL Configuration
 
 ```rust
-use turul_mcp_session_storage::{PostgreSqlSessionStorage, PostgreSqlConfig};
+use turul_mcp_session_storage::{PostgresSessionStorage, PostgresConfig};
 
-let config = PostgreSqlConfig {
-    connection_string: "postgresql://user:pass@localhost/mcpdb".to_string(),
-    table_prefix: "mcp_".to_string(),
-    session_ttl_seconds: 1800,  // 30 minutes
-    max_pool_size: 10,
-    cleanup_interval_seconds: 600,  // 10 minutes
+let config = PostgresConfig {
+    database_url: "postgresql://user:pass@localhost/mcpdb".to_string(),
+    session_timeout_minutes: 30,       // 30 minutes
+    cleanup_interval_minutes: 10,      // 10 minutes
+    max_connections: 10,
+    create_tables_if_missing: true,
+    ..Default::default()
 };
 
-let storage = PostgreSqlSessionStorage::with_config(config).await?;
+let storage = PostgresSessionStorage::with_config(config).await?;
 ```
 
 ### DynamoDB Configuration
@@ -248,10 +251,11 @@ use turul_mcp_session_storage::{DynamoDbSessionStorage, DynamoDbConfig};
 
 let config = DynamoDbConfig {
     table_name: "mcp-sessions".to_string(),
-    events_table_name: "mcp-session-events".to_string(),
     region: "us-east-1".to_string(),
-    session_ttl_seconds: 1800,
-    auto_create_tables: true,
+    session_ttl_minutes: 30,
+    event_ttl_minutes: 60,
+    create_tables_if_missing: true,
+    ..Default::default()
 };
 
 let storage = DynamoDbSessionStorage::with_config(config).await?;
@@ -265,10 +269,12 @@ let storage = DynamoDbSessionStorage::with_config(config).await?;
 use turul_mcp_session_storage::{SqliteSessionStorage, SqliteConfig};
 
 let storage = SqliteSessionStorage::with_config(SqliteConfig {
-    database_path: "/var/lib/mcp/sessions.db".to_string(),
-    session_ttl_seconds: 7200,
-    cleanup_interval_seconds: 600,
+    database_path: "/var/lib/mcp/sessions.db".into(),
+    session_timeout_minutes: 120,      // 2 hours
+    cleanup_interval_minutes: 10,      // 10 minutes
     max_events_per_session: 5000,
+    create_tables_if_missing: true,
+    ..Default::default()
 }).await?;
 ```
 
@@ -411,8 +417,8 @@ Production backends use connection pooling:
 
 ```rust
 // PostgreSQL with custom pool size
-let storage = PostgreSqlSessionStorage::with_config(PostgreSqlConfig {
-    max_pool_size: 20,  // Increase for high concurrency
+let storage = PostgresSessionStorage::with_config(PostgresConfig {
+    max_connections: 20,  // Increase for high concurrency
     ..Default::default()
 }).await?;
 ```
@@ -470,14 +476,13 @@ cargo test --package turul-mcp-session-storage --features postgres -- --ignored
 
 ```toml
 [dependencies]
-turul-mcp-session-storage = { version = "0.1.1", features = ["sqlite", "postgres"] }
+turul-mcp-session-storage = { version = "0.3", features = ["sqlite", "postgres"] }
 ```
 
 - `default` - Only InMemory backend
 - `sqlite` - SQLite backend  
 - `postgres` - PostgreSQL backend
 - `dynamodb` - DynamoDB backend
-- `redis` - Redis backend (planned)
 
 ## Migration Guide
 

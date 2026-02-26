@@ -3,8 +3,8 @@
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 //! The MCP specification defines concrete types only.
 
-use std::collections::HashMap;
 use serde_json::Value;
+use std::collections::HashMap;
 
 // Import protocol types (spec-defined)
 use turul_mcp_protocol::Resource;

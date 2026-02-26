@@ -2,40 +2,30 @@
 
 Production-ready Rust framework for Model Context Protocol (MCP) servers with zero-configuration design and complete MCP 2025-11-25 specification support.
 
-**For historical context and completed phases, see WORKING_MEMORY.md**
-**For architectural decisions, see docs/adr/**
+> **Source of Truth**
+> - **AGENTS.md** — repo policy, compliance rules, full architecture
+> - **CLAUDE.md** — concise operator playbook (this file)
+> - **WORKING_MEMORY.md** — historical context and status
+> - **docs/adr/** — architectural decisions
+> - If conflict: AGENTS.md wins.
 
-## 🚨 Critical Rules
+## Critical Rules
 
-### 📜 Protocol Crate Purity
-**NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2025-11-25` unless it directly relates to MCP spec compliance.** These crates MUST remain clean mirrors of the official MCP specification. No framework features, middleware hooks, or convenience additions belong here.
+### Protocol Crate Purity
+**NEVER modify `turul-mcp-protocol` or `turul-mcp-protocol-2025-11-25` unless it directly relates to MCP spec compliance.** No framework features, middleware hooks, or convenience additions.
 
-**Forbidden in Protocol Crates:**
-- ❌ Trait hierarchies (HasBaseMetadata, ToolDefinition, etc.)
-- ❌ Builder patterns (ToolBuilder, ResourceBuilder, etc.)
-- ❌ Framework helpers (blanket implementations, convenience methods)
-- ❌ Tutorial documentation (belongs in builders crate)
+**Forbidden**: Trait hierarchies, builder patterns, framework helpers, tutorial docs
+**Allowed**: MCP spec types, serde derives, basic builder methods on concrete types, spec error types
+**Framework traits belong in `turul-mcp-builders`** (`turul-mcp-builders/src/traits/`)
 
-**Allowed in Protocol Crates:**
-- ✅ MCP spec types (Tool, Resource, Prompt, etc.)
-- ✅ Serialization/deserialization (#[derive(Serialize, Deserialize)])
-- ✅ Basic builder methods on concrete types (Tool::new(), with_description())
-- ✅ MCP spec error types (McpError with spec error codes)
-
-**Framework Traits Belong in `turul-mcp-builders`:**
-All framework trait hierarchies live in `turul-mcp-builders/src/traits/`:
-- Tool traits: HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, ToolDefinition
-- Resource traits: HasResourceMetadata, HasResourceDescription, HasResourceUri, ResourceDefinition
-- Prompt traits: HasPromptMetadata, HasPromptDescription, HasPromptArguments, PromptDefinition
-
-### 🎯 Simple Solutions First
+### Simple Solutions First
 **ALWAYS** prefer simple, minimal fixes over complex or over-engineered solutions:
 
 ```rust
-// ✅ SIMPLE - Add parameter to existing signature
+// SIMPLE - Add parameter to existing signature
 async fn read(&self, params: Option<Value>, session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>>
 
-// ❌ COMPLEX - Create new traits, elaborate architectures
+// COMPLEX - Create new traits, elaborate architectures
 trait McpResourceLegacy { ... }  // Avoid backwards compatibility layers
 trait McpResourceV2 { ... }      // Avoid versioned APIs
 ```
@@ -46,65 +36,35 @@ trait McpResourceV2 { ... }      // Avoid versioned APIs
 - **One obvious way to do it** - avoid multiple patterns for the same thing
 - **If it compiles and tests pass** - you probably fixed it correctly
 
-### 📦 Protocol Re-export Rule (MANDATORY)
+### Protocol Re-export Rule (MANDATORY)
 
-**NEVER reference versioned protocol crates directly in Rust code or Cargo.toml dependencies.** Always use the `turul-mcp-protocol` re-export crate, which aliases the latest spec version.
+**NEVER reference versioned protocol crates directly.** Always use the `turul-mcp-protocol` re-export crate.
 
 ```rust
-// ✅ CORRECT - Always use the re-export crate
+// CORRECT
 use turul_mcp_protocol::*;
 use turul_mcp_protocol::elicitation::ElicitResult;
-use turul_mcp_protocol::PromptMessage;
 
-// ❌ WRONG - NEVER reference versioned crates directly
-use turul_mcp_protocol_2025_11_25::*;              // FORBIDDEN
-use turul_mcp_protocol_2025_11_25::PromptMessage;  // FORBIDDEN
-use turul_mcp_protocol_2025_06_18::*;              // FORBIDDEN
+// WRONG - NEVER reference versioned crates directly
+use turul_mcp_protocol_2025_11_25::*;   // FORBIDDEN
+use turul_mcp_protocol_2025_06_18::*;   // FORBIDDEN
 ```
 
-**In Cargo.toml:**
-```toml
-# ✅ CORRECT
-[dependencies]
-turul-mcp-protocol = { workspace = true }
+**Only exceptions**: `crates/turul-mcp-protocol/` (the re-export crate itself) and `crates/turul-mcp-protocol-2025-11-25/` (its own source).
 
-# ❌ WRONG - NEVER depend on versioned crate directly (except in turul-mcp-protocol itself)
-turul-mcp-protocol-2025-11-25 = { workspace = true }
-```
-
-**Only exceptions** (the ONLY places allowed to reference versioned crates):
-- `crates/turul-mcp-protocol/` — the re-export crate itself (must reference what it re-exports)
-- `crates/turul-mcp-protocol-2025-11-25/` — the versioned crate's own source
-
-### Import Conventions
-```rust
-// ✅ BEST - Use preludes for framework traits and builders
-use turul_mcp_server::prelude::*;      // Gets protocol types + builders + traits
-use turul_mcp_builders::prelude::*;    // Gets builders + traits (if not using server)
-use turul_mcp_derive::{McpTool, McpResource, McpPrompt, mcp_tool};
-
-// ❌ WRONG - Direct trait imports
-use turul_mcp_protocol::tools::ToolDefinition;     // Trait moved to builders!
-use turul_mcp_builders::traits::ToolDefinition;    // Use prelude instead
-
-// ❌ WRONG - Versioned imports
-use turul_mcp_protocol_2025_11_25::*;  // Use turul_mcp_protocol::* instead
-use turul_mcp_protocol_2025_06_18::*;  // Use turul_mcp_protocol::* instead
-```
-
-**Import Hierarchy:**
-- `turul_mcp_protocol::*` - MCP spec types only (Tool, Resource, Prompt, McpError)
-- `turul_mcp_builders::prelude::*` - Framework traits + runtime builders
-- `turul_mcp_server::prelude::*` - Re-exports everything (protocol + builders + server types)
+**Import Hierarchy** (prefer top):
+- `turul_mcp_server::prelude::*` — re-exports everything (protocol + builders + server types)
+- `turul_mcp_builders::prelude::*` — framework traits + runtime builders
+- `turul_mcp_protocol::*` — MCP spec types only (Tool, Resource, Prompt, McpError)
 
 ### Zero-Configuration Design
 Users NEVER specify method strings - framework auto-determines from types:
 ```rust
-// ✅ CORRECT
+// CORRECT
 #[derive(McpTool)]
 struct Calculator;  // Framework → tools/call
 
-// ❌ WRONG
+// WRONG
 #[mcp_tool(method = "tools/call")]  // NO METHOD STRINGS!
 ```
 
@@ -112,42 +72,24 @@ struct Calculator;  // Framework → tools/call
 - **SessionContext**: Use `get_typed_state(key).await` and `set_typed_state(key, value).await?`
 - **Builder Pattern**: `McpServer::builder()` not `McpServerBuilder::new()`
 - **Error Handling**: Always use `McpError` types - NEVER create JsonRpcError directly in handlers
-- **Session IDs**: Always `Uuid::now_v7()` for temporal ordering
+- **Session IDs**: Always `Uuid::now_v7().as_simple()` for temporal ordering (no-hyphen hex)
 
-### 🔤 JSON Naming: camelCase ONLY
+### JSON Naming: camelCase ONLY
 
 **CRITICAL**: All JSON fields MUST use camelCase per MCP 2025-11-25.
 
 ```rust
-// ✅ CORRECT - Always rename snake_case fields
+// CORRECT - Always rename snake_case fields
 #[serde(rename = "additionalProperties")]
 additional_properties: Option<bool>,
 
-// ❌ WRONG - Never serialize as snake_case
-additional_properties: Option<bool>,  // becomes "additional_properties" ❌
+// WRONG - Never serialize as snake_case
+additional_properties: Option<bool>,  // becomes "additional_properties"
 ```
 
-**Verify**: `cargo test --test mcp_compliance_tests` must pass
-
-### 🚨 Critical Error Handling Rules
+### Critical Error Handling Rules
 
 **MANDATORY**: Handlers return domain errors only. Dispatcher owns protocol conversion.
-
-```rust
-// ✅ CORRECT - Handlers return domain errors only
-#[async_trait]
-impl JsonRpcHandler for MyHandler {
-    type Error = McpError;  // Always use McpError
-
-    async fn handle(&self, method: &str, params: Option<RequestParams>, session: Option<SessionContext>)
-        -> Result<Value, McpError> {
-        Err(McpError::InvalidParameters("Missing required parameter".to_string()))
-    }
-}
-
-// ❌ WRONG - Never create JsonRpcError in handlers
-Err(JsonRpcError::new(...))  // NEVER DO THIS
-```
 
 **Key Rules:**
 1. Handlers return `Result<Value, McpError>` ONLY
@@ -155,12 +97,12 @@ Err(JsonRpcError::new(...))  // NEVER DO THIS
 3. Never create JsonRpcError, JsonRpcResponse in business logic
 4. Use `McpError::InvalidParameters`, `McpError::ToolNotFound`, etc.
 
-### 🔧 MCP Tool Output Compliance
+### MCP Tool Output Compliance
 
 **Tools with `outputSchema` MUST provide `structuredContent`** - Framework handles automatically.
 
 ```rust
-// ✅ COMPLIANT - Framework auto-generates structuredContent
+// Framework auto-generates structuredContent
 #[mcp_tool(
     name = "word_count",
     description = "Count words in text",
@@ -176,7 +118,7 @@ async fn count_words(text: String) -> McpResult<WordCount> {
 2. Use `output_field` to customize output field name (default: "result")
 3. **NEVER change tests to match code** - Tests validate MCP spec compliance
 
-### 🌐 Streamable HTTP Requirements
+### Streamable HTTP Requirements
 
 **Accept Headers:**
 - `Accept: application/json` - JSON responses
@@ -190,35 +132,41 @@ async fn count_words(text: String) -> McpResult<WordCount> {
 
 **Testing:** All requests need valid Accept header (application/json, text/event-stream, or */*)
 
-### 🎯 MCP 2025-11-25 Compliance Status
+### MCP 2025-11-25 Compliance
 
-**Current Framework Status:**
-✅ Full MCP 2025-11-25 schema compliance (icons, tasks, URL elicitation, sampling tools)
-✅ Session-aware resources (all resources require `session: Option<&SessionContext>`)
-✅ SSE streaming with chunked transfer encoding
-✅ 770+ tests passing across all core functionality
+**Notification method strings**: `notifications/*/list_changed` (underscore) — spec-compliant form. Server accepts legacy `listChanged` (camelCase) for backward compat only.
 
-**Migration Notes:**
-- Resources use `async fn read(&self, params: Option<Value>, session: Option<&SessionContext>)`
-- Tools with `outputSchema` automatically include `structuredContent`
-- Use `file://` URIs for maximum client compatibility
+**JSON capability keys**: `listChanged` (camelCase) — correct per spec.
+
+**ToolChoiceMode**: `"auto" | "none" | "required"`. Legacy `"any"` accepted on deserialize only.
+
+**Role enum**: `User` and `Assistant` only — no `System` variant in MCP protocol.
+
+**Progress fields**: `f64` (not `u64`). Use `as_f64()`, never `as_u64()`.
+
+**structuredContent**: Auto-generated by framework when `outputSchema` exists.
+
+**Session handshake**: `initialize` → `notifications/initialized` → `Mcp-Session-Id` header on all subsequent requests.
+
+**Verify**: `cargo test -p turul-mcp-framework-integration-tests --test compliance`
 
 ## Quick Reference
 
-### Tool Creation (4 Levels)
+### Tool Creation (macro-first)
 ```rust
-// Level 1: Function
-#[mcp_tool(name = "add")]
+// Recommended: Function macro
+#[mcp_tool(name = "add", description = "Add two numbers")]
 async fn add(a: f64, b: f64) -> McpResult<f64> { Ok(a + b) }
 
-// Level 2: Derive
+// Alternative: Derive macro
 #[derive(McpTool)]
-struct Calculator { a: f64, b: f64 }
+#[tool(name = "calc", description = "Calculate", output = CalcResult)]
+struct CalcTool { a: f64, b: f64 }
 
-// Level 3: Builder
+// Runtime: Builder
 let tool = ToolBuilder::new("calc").execute(|args| async { /*...*/ }).build()?;
 
-// Level 4: Manual trait implementation
+// Manual trait implementation: reference-only — see examples/calculator-add-manual-server
 ```
 
 ### Output Types and Schemas
@@ -226,84 +174,29 @@ let tool = ToolBuilder::new("calc").execute(|args| async { /*...*/ }).build()?;
 **IMPORTANT**: Tools with custom output types (including Vec<T>) MUST specify the `output` attribute:
 
 ```rust
-// ✅ CORRECT - Specify output type for Vec, custom structs, etc.
 #[derive(McpTool)]
-#[tool(
-    name = "search",
-    description = "Search for items",
-    output = Vec<SearchResult>  // ← REQUIRED for Vec<T> and custom types
-)]
+#[tool(name = "search", description = "Search", output = Vec<SearchResult>)]
 struct SearchTool { query: String }
-
-// ✅ CORRECT - Specify custom struct outputs
-#[derive(McpTool)]
-#[tool(
-    name = "calculate",
-    description = "Calculate result",
-    output = CalculationResult  // ← REQUIRED for custom types
-)]
-struct CalculatorTool { a: f64, b: f64 }
-
-// ❌ WRONG - Missing output type generates incorrect schema
-#[derive(McpTool)]
-#[tool(name = "search", description = "Search")]
-struct SearchTool { query: String }
-// Without output attribute, schema will show tool inputs (query) not Vec output!
+// Without output attribute, schema shows tool inputs not output type!
 ```
 
 **Why Required**: Derive macros cannot inspect the `execute` method's return type at compile time. The `output` attribute tells the macro what schema to generate.
 
-### Tool Output Schemas (Optional)
-
-Tools can optionally define output schemas using two approaches:
-
-**Manual Schema (Full Control):**
+**Schemars (automatic detection):**
+If the output type derives `schemars::JsonSchema`, the framework automatically uses it for detailed schema generation — no additional schemars flag is needed. The `output = Type` attribute is still required on derive macros:
 ```rust
-use std::sync::OnceLock;
-use std::collections::HashMap;
-use turul_mcp_protocol::{ToolSchema, schema::JsonSchema};
-use turul_mcp_builders::HasOutputSchema;
-
-impl HasOutputSchema for MyTool {
-    fn output_schema(&self) -> Option<&ToolSchema> {
-        static SCHEMA: OnceLock<ToolSchema> = OnceLock::new();
-        Some(SCHEMA.get_or_init(|| {
-            ToolSchema {
-                schema_type: "object".to_string(),
-                properties: Some({
-                    let mut props = HashMap::new();
-                    props.insert(
-                        "result".to_string(),
-                        JsonSchema::number().with_description("Result".to_string()),
-                    );
-                    props
-                }),
-                required: Some(vec!["result".to_string()]),
-                additional: HashMap::new(),
-            }
-        }))
-    }
-}
-```
-
-**Schemars (Auto-sync with types):**
-```rust
-use schemars::JsonSchema;
-
-#[derive(Serialize, JsonSchema)]
+#[derive(schemars::JsonSchema, serde::Serialize)]
 struct MyOutput { value: f64 }
 
-// Derive macro
 #[derive(McpTool)]
-#[tool(name = "calc", description = "...", output = MyOutput, schemars)]
+#[tool(name = "calc", description = "...", output = MyOutput)]  // output = required
 struct MyTool { a: f64 }
 
-// Function macro
-#[mcp_tool(name = "add", description = "...", schemars)]
-async fn add(a: f64) -> McpResult<MyOutput> { Ok(MyOutput { value: a }) }
+#[mcp_tool(name = "add", description = "Add numbers")]
+async fn add(a: f64) -> McpResult<MyOutput> { Ok(MyOutput { value: a }) }  // auto-detected from return type
 ```
 
-**Note**: Keep schemas simple - complex `Option` types may not convert
+For manual `HasOutputSchema` implementation, see `examples/calculator-add-manual-server`.
 
 ### Basic Server
 ```rust
@@ -332,191 +225,78 @@ cargo run --example client-initialise-report -- --url http://127.0.0.1:52935/mcp
 If behavior doesn't match code changes:
 ```bash
 cargo clean  # Full workspace clean required for cross-crate changes
-cargo test --test streamable_http_e2e
+cargo test -p turul-mcp-framework-integration-tests --test e2e_tests
 ```
 
 **Why**: Incremental compilation caches string literals/errors across crates.
 
-## Core Modification Rules
+## Before Modifying Core Crates
 
-### 🚨 Production Safety
-- **NO PANICS**: Use `Result<T, McpError>` for fallible operations
-- **Error Handling**: Graceful degradation, proper MCP error types
-- **Builder Stability**: Changes require breaking change analysis
-- **Zero-Config**: Framework handles invalid inputs gracefully
+- **Impact Analysis**: All examples, tests, user code affected?
+- **Breaking changes documented** clearly
+- **No panics** — `Result<T, McpError>` for all fallible operations
+- **Zero warnings**: `cargo check` must be clean
+- **Doctests**: Every ```rust block MUST compile — fix errors, don't convert to ```text
+- **Extend existing** components, never create "enhanced" versions
+- **Test with framework-native APIs**, not raw JSON manipulation
 
-### Before Core Changes
-1. **Impact Analysis**: All examples, tests, user code affected?
-2. **Backwards Compatibility**: Breaking changes documented clearly
-3. **Production Safety**: No crashes from user input
-4. **Testing**: Framework-native APIs, not JSON manipulation
+```rust
+// Framework-native testing
+let tool = CalculatorTool { a: 5.0, b: 3.0 };
+let result = tool.call(json!({"a": 5.0, "b": 3.0}), None).await?;
+
+// NOT raw JSON manipulation
+let json_request = r#"{"method":"tools/call"}"#;
+```
 
 ## Architecture
 
-### Core Crates
-- `turul-mcp-server/` - High-level framework
-- `turul-mcp-protocol/` - Protocol types/traits
-- `turul-mcp-builders/` - Runtime builders
-- `turul-http-mcp-server/` - HTTP transport
-- `turul-mcp-derive/` - Macros
+### Workspace Crates
+- `turul-mcp-server/` - High-level framework (main entry point)
+- `turul-mcp-protocol/` - Protocol re-export crate (always use this)
+- `turul-mcp-protocol-2025-11-25/` - Versioned protocol types (internal only)
+- `turul-mcp-protocol-2025-06-18/` - Legacy protocol (backward compat)
+- `turul-mcp-builders/` - Runtime builders + framework traits
+- `turul-mcp-derive/` - Proc macros (McpTool, McpResource, McpPrompt, mcp_tool)
+- `turul-http-mcp-server/` - HTTP/SSE transport
+- `turul-mcp-json-rpc-server/` - JSON-RPC dispatch layer
+- `turul-mcp-client/` - Client library
+- `turul-mcp-session-storage/` - Pluggable session storage (InMemory, SQLite, PostgreSQL, DynamoDB)
+- `turul-mcp-task-storage/` - Task storage for long-running operations
+- `turul-mcp-aws-lambda/` - AWS Lambda integration
 
 ### Session Management
 - UUID v7 sessions with automatic cleanup
 - Streamable HTTP with SSE notifications
 - Pluggable storage (InMemory, SQLite, PostgreSQL, DynamoDB)
 
-### Session ID Requirements
-
-**Session Handshake Protocol:**
-1. `initialize` - ONLY method allowed without `Mcp-Session-Id` header
-2. All other methods MUST include `Mcp-Session-Id` header (returns 401 if missing)
-3. Client library handles this automatically: `client.connect().await?`
-
 ### HTTP Transport Routing
+- **Protocol >= 2025-03-26**: `StreamableHttpHandler` (chunked SSE, MCP 2025-11-25)
+- **Protocol <= 2024-11-05**: `SessionMcpHandler` (buffered JSON, legacy compatibility)
 
-**Protocol-based routing:**
-- **Protocol ≥ 2025-03-26**: `StreamableHttpHandler` (chunked SSE, MCP 2025-11-25)
-- **Protocol ≤ 2024-11-05**: `SessionMcpHandler` (buffered JSON, legacy compatibility)
+Routing in `crates/turul-http-mcp-server/src/server.rs`
 
-Routing decision made in `crates/turul-http-mcp-server/src/server.rs`
+## Generally Safe Dev Commands
 
-### Testing Philosophy
-```rust
-// ✅ Framework-native
-let tool = CalculatorTool { a: 5.0, b: 3.0 };
-let result = tool.call(json!({"a": 5.0, "b": 3.0}), None).await?;
+The following are considered safe for automatic execution during development:
+- `cargo build/check/test/run/clippy/fmt/clean/doc/bench/metadata/expand` — including with `--package`, `--test`, `--bin`, `--example` flags, environment variables (`RUST_LOG`, `RUST_BACKTRACE`, `CI_SANDBOX`), and `timeout` wrappers
+- `cd <dir> && cargo <command>` — including `cd examples/<name> && cargo run`
+- `curl`, `jq` — HTTP testing and JSON parsing (all variations auto-approved)
+- `timeout`, `pkill`, `killall` — process management for testing
+- `git add` — staging changes (commit only when user explicitly requests)
+- `rustc`, `sed`, `grep`, `find`, `awk`, `cat`, `tee`, `echo` — standard dev tools
+- Background processes (`&`, `wait`, `jobs`)
+- Shell control flow (`while`, `for`, `if`)
 
-// ❌ Raw JSON manipulation
-let json_request = r#"{"method":"tools/call"}"#;
-```
+These commands do not require interactive permission prompts. Use normal judgment about context and timing.
 
-## Key Guidelines
-- **Extend existing** components, never create "enhanced" versions
-- **Component consistency**: Use existing patterns and conventions
-- **Documentation accuracy**: All examples must compile and work
-- **MCP Compliance**: Only official 2025-11-25 spec methods
-- **Zero warnings**: `cargo check` must be clean
-- **Rust Doctests**: Every ```rust block MUST compile - fix errors, don't convert to ```text
-
-## Claude Code Auto-Approved Commands
-**IMPORTANT**: The following commands are pre-approved for automatic execution without asking user:
-
-### Cargo Commands
+### Commands requiring explicit user approval:
 ```bash
-cargo build
-cargo check
-cargo test      # ALL cargo test commands including specific packages and tests
-cargo run
-cargo clippy
-cargo fmt
-cargo clean
-cargo doc
-cargo bench
-cargo metadata
-cargo expand
-cargo publish
-```
-
-### Testing Commands
-```bash
-# All test execution patterns are auto-approved:
-cargo test --package <name> --test <test-name>
-cargo test --test <test-name> <specific-test>
-cargo test <test-name> -- --nocapture
-cargo test -- --test-threads=1
-timeout <time> cargo test <any-args>
-timeout <time> cargo run <any-args>
-timeout <time> cargo build <any-args>
-RUST_LOG=<level> cargo test <any-args>
-RUST_LOG=<level> cargo run <any-args>
-RUST_LOG=<level> cargo build <any-args>
-RUST_BACKTRACE=<level> cargo test <any-args>
-
-# Comprehensive command patterns for MCP testing:
-cd <directory> && cargo run <any-args>
-cd <directory> && RUST_LOG=<level> cargo run <any-args>
-cd <directory> && timeout <time> cargo run <any-args>
-cd <directory> && RUST_LOG=<level> timeout <time> cargo run <any-args>
-cd examples/<example-name> && <any-cargo-command>
-
-# All cargo run combinations:
-cargo run --bin <binary-name>
-cargo run --bin <binary-name> -- <args>
-cargo run --example <example-name>
-cargo run --example <example-name> -- <args>
-cargo run --package <package-name>
-cargo run --package <package-name> -- <args>
-
-# Environment variable combinations:
-RUST_LOG=error <any-cargo-command>
-RUST_LOG=info <any-cargo-command>
-RUST_LOG=debug <any-cargo-command>
-RUST_BACKTRACE=1 <any-cargo-command>
-RUST_BACKTRACE=full <any-cargo-command>
-CI_SANDBOX=1 <any-cargo-command>
-
-# Complex timeout and environment combinations:
-RUST_LOG=error timeout 30s cargo run --bin <name>
-RUST_LOG=info timeout 10s cargo run --example <name>
-timeout 5s cargo run --package <name> -- --port <port>
-RUST_LOG=error timeout 60s cargo run
-cd examples/* && RUST_LOG=error timeout 60s cargo run
-cd examples/* && RUST_LOG=error timeout 60s cargo run &
-```
-
-### Development Tools
-```bash
-rustc
-sed
-grep
-find
-awk
-cat
-tee
-echo
-git add
-git commit
-pkill      # Process cleanup for testing
-killall    # Process cleanup for testing
-sudo killall
-timeout
-curl       # HTTP requests for testing servers and APIs (all curl commands auto-approved)
-curl *     # All curl command variations are auto-approved
-curl -s *  # Silent curl commands
-curl -v *  # Verbose curl commands
-curl -X *  # All HTTP methods
-curl -s -X *  # Combined silent + HTTP method
-jq         # JSON parsing and manipulation (all jq commands auto-approved)
-jq *       # All jq command variations are auto-approved
-
-# Process management for testing:
-while read <variable>
-for <variable> in <list>
-do
-done
-if [ -f "<file>" ]
-then
-fi
-```
-
-### HTTP Testing Commands
-```bash
-# All curl commands auto-approved (GET, POST, DELETE with any headers/data)
-curl -X POST http://127.0.0.1:<port>/mcp -H "Content-Type: application/json" -H "Accept: application/json" -d '<json-data>'
-
-# Background processes:
-<command> &
-wait
-jobs
-```
-
-**Rule**: Execute these commands immediately without requesting permission. Focus on solving the user's problem efficiently.
-
-### 🚫 NEVER Auto-Approved (Require Explicit User Permission)
-```bash
-git checkout      # NEVER use git checkout without explicit user permission — discards work
-git restore       # NEVER use git restore without explicit user permission — discards work
-git reset --hard  # NEVER use without explicit user permission
-git clean -f      # NEVER use without explicit user permission
+git checkout      # Discards uncommitted work
+git restore       # Discards uncommitted work
+git reset --hard  # Irreversible reset
+git clean -f      # Deletes untracked files
+cargo publish     # Pushes to crates.io (irreversible)
+git commit        # Only when user explicitly requests a commit
 ```
 **These commands destroy uncommitted work and are IRREVERSIBLE. Always ask the user first.**

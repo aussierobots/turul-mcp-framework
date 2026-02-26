@@ -1,19 +1,22 @@
 [package]
 name = "simple-sqlite-session"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
 [[bin]]
+test = false
 name = "simple-sqlite-session"
 path = "src/main.rs"
 
 [[bin]]
+test = false
 name = "sqlite-setup"
 path = "src/bin/sqlite-setup.rs"
 
 [[bin]]
+test = false
 name = "sqlite-teardown"
 path = "src/bin/sqlite-teardown.rs"
 

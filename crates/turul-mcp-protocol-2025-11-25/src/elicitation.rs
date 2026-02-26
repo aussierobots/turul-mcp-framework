@@ -116,6 +116,9 @@ pub struct ElicitCreateParams {
     pub message: String,
     /// A restricted subset of JSON Schema - only top-level properties, no nesting
     pub requested_schema: ElicitationSchema,
+    /// Task metadata for task-augmented requests (MCP 2025-11-25)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task: Option<crate::tasks::TaskMetadata>,
     /// Meta information (optional _meta field inside params)
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<HashMap<String, Value>>,
@@ -138,6 +141,7 @@ impl ElicitCreateRequest {
             params: ElicitCreateParams {
                 message: message.into(),
                 requested_schema,
+                task: None,
                 meta: None,
             },
         }
@@ -154,8 +158,14 @@ impl ElicitCreateParams {
         Self {
             message: message.into(),
             requested_schema,
+            task: None,
             meta: None,
         }
+    }
+
+    pub fn with_task(mut self, task: crate::tasks::TaskMetadata) -> Self {
+        self.task = Some(task);
+        self
     }
 
     pub fn with_meta(mut self, meta: HashMap<String, Value>) -> Self {
@@ -542,7 +552,6 @@ impl ElicitationBuilder {
 // ===========================================
 
 /// Trait for elicitation metadata (message, title)
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -148,6 +148,14 @@ pub fn extract_last_event_id(headers: &hyper::HeaderMap) -> Option<u64> {
         .and_then(|s| s.parse::<u64>().ok())
 }
 
+/// Normalize an HTTP header value by trimming whitespace and lowercasing.
+///
+/// HTTP media types are case-insensitive (RFC 7231 §3.1.1.1).
+/// This function ensures consistent comparison regardless of client formatting.
+pub fn normalize_header_value(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -199,6 +207,31 @@ mod tests {
         assert!(v2025_11.supports_elicitation());
         assert!(v2025_11.supports_tasks());
         assert!(v2025_11.supports_icons());
+    }
+
+    #[test]
+    fn test_normalize_header_value() {
+        assert_eq!(
+            normalize_header_value("application/json"),
+            "application/json"
+        );
+        assert_eq!(
+            normalize_header_value("  application/json  "),
+            "application/json"
+        );
+        assert_eq!(
+            normalize_header_value("Application/JSON"),
+            "application/json"
+        );
+        assert_eq!(
+            normalize_header_value("Application/Json; Charset=UTF-8"),
+            "application/json; charset=utf-8"
+        );
+        assert_eq!(
+            normalize_header_value("  TEXT/EVENT-STREAM "),
+            "text/event-stream"
+        );
+        assert_eq!(normalize_header_value(""), "");
     }
 
     #[test]

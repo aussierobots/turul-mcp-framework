@@ -23,7 +23,11 @@ turul-mcp-json-rpc-server.workspace = true
 turul-mcp-protocol.workspace = true
 turul-mcp-session-storage.workspace = true
 turul-mcp-builders.workspace = true
+turul-mcp-task-storage.workspace = true
 turul-http-mcp-server = {workspace = true, optional = true}
+
+# Runtime utilities for task cancellation
+tokio-util = { workspace = true }
 
 # Core dependencies
 serde.workspace = true
@@ -37,6 +41,7 @@ uuid = { workspace = true, features = ["v7"] }
 chrono = { workspace = true, features = ["serde"] }
 regex.workspace = true
 once_cell.workspace = true
+urlencoding.workspace = true
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

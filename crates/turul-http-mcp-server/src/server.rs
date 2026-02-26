@@ -38,6 +38,14 @@ pub struct ServerConfig {
     pub enable_post_sse: bool,
     /// Session expiry time in minutes (default: 30 minutes)
     pub session_expiry_minutes: u64,
+    /// Allow ping requests without Mcp-Session-Id header (default: true)
+    ///
+    /// When true, the server accepts pre-initialization `ping` requests without
+    /// requiring a session. The full middleware stack still runs with `session=None`,
+    /// so rate-limiting middleware can still block unauthenticated pings.
+    ///
+    /// Set to false for hardened deployments that require session for all methods.
+    pub allow_unauthenticated_ping: bool,
 }
 
 impl Default for ServerConfig {
@@ -50,6 +58,7 @@ impl Default for ServerConfig {
             enable_get_sse: cfg!(feature = "sse"), // GET SSE enabled if "sse" feature is compiled
             enable_post_sse: false, // Disabled by default for better client compatibility (e.g., MCP Inspector)
             session_expiry_minutes: 30, // 30 minutes default
+            allow_unauthenticated_ping: true, // Allow pre-init pings per MCP spec
         }
     }
 }
@@ -148,6 +157,15 @@ impl HttpMcpServerBuilder {
     /// Set session expiry time in minutes
     pub fn session_expiry_minutes(mut self, minutes: u64) -> Self {
         self.config.session_expiry_minutes = minutes;
+        self
+    }
+
+    /// Allow or disallow ping requests without Mcp-Session-Id header
+    ///
+    /// Default: `true` (sessionless pings allowed per MCP spec).
+    /// Set to `false` for hardened deployments requiring session for all methods.
+    pub fn allow_unauthenticated_ping(mut self, allow: bool) -> Self {
+        self.config.allow_unauthenticated_ping = allow;
         self
     }
 

@@ -25,7 +25,12 @@ struct SessionAccessMiddleware {
 }
 
 impl SessionAccessMiddleware {
-    fn new() -> (Self, Arc<Mutex<Vec<String>>>, Arc<Mutex<Vec<(String, String)>>>) {
+    #[allow(clippy::type_complexity)]
+    fn new() -> (
+        Self,
+        Arc<Mutex<Vec<String>>>,
+        Arc<Mutex<Vec<(String, String)>>>,
+    ) {
         let reads = Arc::new(Mutex::new(Vec::new()));
         let writes = Arc::new(Mutex::new(Vec::new()));
 
@@ -48,10 +53,10 @@ impl McpMiddleware for SessionAccessMiddleware {
     ) -> Result<(), MiddlewareError> {
         if let Some(session_view) = session {
             // Try to read existing state
-            if let Ok(Some(value)) = session_view.get_state("existing_key").await {
-                if let Some(s) = value.as_str() {
-                    self.reads.lock().unwrap().push(s.to_string());
-                }
+            if let Ok(Some(value)) = session_view.get_state("existing_key").await
+                && let Some(s) = value.as_str()
+            {
+                self.reads.lock().unwrap().push(s.to_string());
             }
 
             // Write new state via injection
@@ -169,19 +174,27 @@ async fn test_middleware_can_read_write_session_state() {
         .unwrap();
 
     // Verify middleware read the existing state
-    let read_values = reads.lock().unwrap();
-    assert_eq!(read_values.len(), 1);
-    assert_eq!(read_values[0], "existing_value");
+    {
+        let read_values = reads.lock().unwrap();
+        assert_eq!(read_values.len(), 1);
+        assert_eq!(read_values[0], "existing_value");
+    }
 
     // Verify middleware wrote via injection
-    let write_values = writes.lock().unwrap();
-    assert_eq!(write_values.len(), 2);
-    assert!(write_values
-        .iter()
-        .any(|(k, v)| k == "middleware_wrote" && v == "test_value"));
-    assert!(write_values
-        .iter()
-        .any(|(k, v)| k == "request_id" && v == "req-123"));
+    {
+        let write_values = writes.lock().unwrap();
+        assert_eq!(write_values.len(), 2);
+        assert!(
+            write_values
+                .iter()
+                .any(|(k, v)| k == "middleware_wrote" && v == "test_value")
+        );
+        assert!(
+            write_values
+                .iter()
+                .any(|(k, v)| k == "request_id" && v == "req-123")
+        );
+    }
 
     // Verify injection contains the writes
     assert_eq!(
@@ -198,10 +211,7 @@ async fn test_middleware_can_read_write_session_state() {
         session_view.set_state(key, value.clone()).await.unwrap();
     }
     for (key, value) in injection.metadata() {
-        session_view
-            .set_metadata(key, value.clone())
-            .await
-            .unwrap();
+        session_view.set_metadata(key, value.clone()).await.unwrap();
     }
 
     // Verify state persisted to storage
@@ -246,15 +256,14 @@ async fn test_middleware_can_inject_during_initialize() {
         session_view.set_state(key, value.clone()).await.unwrap();
     }
     for (key, value) in injection.metadata() {
-        session_view
-            .set_metadata(key, value.clone())
-            .await
-            .unwrap();
+        session_view.set_metadata(key, value.clone()).await.unwrap();
     }
 
     // 5. Verify middleware wrote to the session
-    let write_values = writes.lock().unwrap();
-    assert!(write_values.len() >= 2); // At least state + metadata
+    {
+        let write_values = writes.lock().unwrap();
+        assert!(write_values.len() >= 2); // At least state + metadata
+    }
 
     // 6. Verify data persisted to storage
     assert_eq!(
@@ -268,7 +277,10 @@ async fn test_middleware_can_inject_during_initialize() {
 
     // 7. Verify we can read it back from storage
     let session = storage.get_session(&session_id).await.unwrap().unwrap();
-    assert_eq!(session.state.get("middleware_wrote"), Some(&json!("test_value")));
+    assert_eq!(
+        session.state.get("middleware_wrote"),
+        Some(&json!("test_value"))
+    );
 
     // Metadata stored with __meta__: prefix
     assert_eq!(

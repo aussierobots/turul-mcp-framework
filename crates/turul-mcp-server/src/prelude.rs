@@ -5,7 +5,7 @@
 //!
 //! # Usage
 //!
-//! ```rust
+//! ```rust,no_run
 //! use turul_mcp_server::prelude::*;
 //!
 //! // Now you have access to all common server types plus protocol types

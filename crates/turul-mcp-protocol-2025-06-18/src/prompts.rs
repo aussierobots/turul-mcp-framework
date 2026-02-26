@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-
 /// Prompt annotations structure (matches TypeScript PromptAnnotations)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptAnnotations {

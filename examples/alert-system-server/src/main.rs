@@ -97,7 +97,10 @@ pub struct ConfigureAlertRuleTool {
     pub severity: String,
 
     /// Minutes to wait before firing again
-    #[param(description = "Minutes to wait before firing again (default: 15)", optional)]
+    #[param(
+        description = "Minutes to wait before firing again (default: 15)",
+        optional
+    )]
     pub cooldown_minutes: Option<i64>,
 
     /// Notification channels
@@ -199,7 +202,7 @@ impl ConfigureAlertRuleTool {
 
         // Create alert rule
         let rule = AlertRule {
-            id: Uuid::now_v7().to_string(),
+            id: Uuid::now_v7().as_simple().to_string(),
             name: self.name.clone(),
             description,
             condition_type: self.condition_type.clone(),
@@ -326,7 +329,7 @@ impl CheckAlertConditionsTool {
 
             if let Some(message) = alert_message {
                 let alert_event = AlertEvent {
-                    id: Uuid::now_v7().to_string(),
+                    id: Uuid::now_v7().as_simple().to_string(),
                     rule_id: rule.id.clone(),
                     timestamp: now,
                     severity: rule.severity.clone(),
@@ -476,11 +479,17 @@ fn check_threshold_condition(data: &Value, rule: &AlertRule) -> Option<String> {
 )]
 pub struct GetAlertHistoryTool {
     /// Maximum number of alerts to return
-    #[param(description = "Maximum number of alerts to return (default: 20)", optional)]
+    #[param(
+        description = "Maximum number of alerts to return (default: 20)",
+        optional
+    )]
     pub limit: Option<i64>,
 
     /// Filter by severity level
-    #[param(description = "Filter by severity level: LOW, MEDIUM, HIGH, CRITICAL", optional)]
+    #[param(
+        description = "Filter by severity level: LOW, MEDIUM, HIGH, CRITICAL",
+        optional
+    )]
     pub severity_filter: Option<String>,
 
     /// Filter by acknowledgment status
@@ -504,10 +513,7 @@ impl GetAlertHistoryTool {
         let session = session.ok_or_else(|| McpError::tool_execution("Session required"))?;
 
         let limit = self.limit.unwrap_or(20) as usize;
-        let acknowledged_filter = self
-            .acknowledged_filter
-            .as_deref()
-            .unwrap_or("all");
+        let acknowledged_filter = self.acknowledged_filter.as_deref().unwrap_or("all");
 
         // Get alert events and rules
         let mut alert_events: Vec<AlertEvent> = session

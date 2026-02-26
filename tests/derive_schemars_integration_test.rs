@@ -8,10 +8,10 @@
 mod schemars_tests {
     use schemars::JsonSchema;
     use serde::{Deserialize, Serialize};
+    use turul_mcp_builders::traits::*;
     use turul_mcp_derive::McpTool;
     use turul_mcp_protocol::McpResult;
     use turul_mcp_server::SessionContext;
-    use turul_mcp_builders::traits::*;
 
     /// Output type with JsonSchema derive
     #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -97,7 +97,11 @@ mod schemars_tests {
 
         // Verify the wrapped schema is an Object with the actual fields
         match wrapped_schema {
-            turul_mcp_protocol::schema::JsonSchema::Object { properties: inner_props, required: inner_req, .. } => {
+            turul_mcp_protocol::schema::JsonSchema::Object {
+                properties: inner_props,
+                required: inner_req,
+                ..
+            } => {
                 assert!(inner_props.is_some(), "Inner schema must have properties");
                 let inner_props = inner_props.as_ref().unwrap();
 
@@ -116,23 +120,42 @@ mod schemars_tests {
                 );
 
                 // Verify field types are detailed, not just Object
-                if let turul_mcp_protocol::schema::JsonSchema::Number { .. } = &inner_props["result"] {
+                if let turul_mcp_protocol::schema::JsonSchema::Number { .. } =
+                    &inner_props["result"]
+                {
                     // Correct - result is a number
                 } else {
-                    panic!("'result' field should be Number type, got: {:?}", inner_props["result"]);
+                    panic!(
+                        "'result' field should be Number type, got: {:?}",
+                        inner_props["result"]
+                    );
                 }
 
-                if let turul_mcp_protocol::schema::JsonSchema::String { .. } = &inner_props["operation"] {
+                if let turul_mcp_protocol::schema::JsonSchema::String { .. } =
+                    &inner_props["operation"]
+                {
                     // Correct - operation is a string
                 } else {
-                    panic!("'operation' field should be String type, got: {:?}", inner_props["operation"]);
+                    panic!(
+                        "'operation' field should be String type, got: {:?}",
+                        inner_props["operation"]
+                    );
                 }
 
                 // Verify required fields
-                assert!(inner_req.is_some(), "Inner schema must specify required fields");
+                assert!(
+                    inner_req.is_some(),
+                    "Inner schema must specify required fields"
+                );
                 let required = inner_req.as_ref().unwrap();
-                assert!(required.contains(&"result".to_string()), "result should be required");
-                assert!(required.contains(&"operation".to_string()), "operation should be required");
+                assert!(
+                    required.contains(&"result".to_string()),
+                    "result should be required"
+                );
+                assert!(
+                    required.contains(&"operation".to_string()),
+                    "operation should be required"
+                );
             }
             other => panic!("Expected Object schema, got: {:?}", other),
         }
@@ -165,8 +188,8 @@ mod schemars_tests {
     #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
     pub struct NestedOutput {
         pub device_id: String,
-        pub stats: NestedStats,             // Nested object
-        pub data_points: Vec<DataPoint>,    // Array of objects
+        pub stats: NestedStats,          // Nested object
+        pub data_points: Vec<DataPoint>, // Array of objects
     }
 
     #[derive(McpTool, Default)]
@@ -190,8 +213,14 @@ mod schemars_tests {
                     avg_value: 5.5,
                 },
                 data_points: vec![
-                    DataPoint { timestamp: "2024-01-01".to_string(), value: 1.0 },
-                    DataPoint { timestamp: "2024-01-02".to_string(), value: 2.0 },
+                    DataPoint {
+                        timestamp: "2024-01-01".to_string(),
+                        value: 1.0,
+                    },
+                    DataPoint {
+                        timestamp: "2024-01-02".to_string(),
+                        value: 2.0,
+                    },
                 ],
             })
         }
@@ -212,7 +241,10 @@ mod schemars_tests {
         let output_schema = properties.values().next().unwrap();
 
         match output_schema {
-            turul_mcp_protocol::schema::JsonSchema::Object { properties: Some(props), .. } => {
+            turul_mcp_protocol::schema::JsonSchema::Object {
+                properties: Some(props),
+                ..
+            } => {
                 println!("✓ Top-level schema has {} properties", props.len());
 
                 // Verify top-level fields
@@ -222,30 +254,58 @@ mod schemars_tests {
 
                 // ===== CRITICAL: Verify nested object (stats) has detailed schema =====
                 match &props["stats"] {
-                    turul_mcp_protocol::schema::JsonSchema::Object { properties: Some(stats_props), .. } => {
-                        println!("✓ Nested 'stats' object has {} properties", stats_props.len());
-                        assert!(stats_props.contains_key("min_value"), "stats missing min_value");
-                        assert!(stats_props.contains_key("max_value"), "stats missing max_value");
-                        assert!(stats_props.contains_key("avg_value"), "stats missing avg_value");
+                    turul_mcp_protocol::schema::JsonSchema::Object {
+                        properties: Some(stats_props),
+                        ..
+                    } => {
+                        println!(
+                            "✓ Nested 'stats' object has {} properties",
+                            stats_props.len()
+                        );
+                        assert!(
+                            stats_props.contains_key("min_value"),
+                            "stats missing min_value"
+                        );
+                        assert!(
+                            stats_props.contains_key("max_value"),
+                            "stats missing max_value"
+                        );
+                        assert!(
+                            stats_props.contains_key("avg_value"),
+                            "stats missing avg_value"
+                        );
                         println!("✓ Nested object has detailed fields!");
-                    },
-                    other => panic!("'stats' should be detailed Object with properties, got: {:?}", other),
+                    }
+                    other => panic!(
+                        "'stats' should be detailed Object with properties, got: {:?}",
+                        other
+                    ),
                 }
 
                 // ===== CRITICAL: Verify array items have detailed schema =====
                 match &props["data_points"] {
-                    turul_mcp_protocol::schema::JsonSchema::Array { items: Some(items), .. } => {
+                    turul_mcp_protocol::schema::JsonSchema::Array {
+                        items: Some(items), ..
+                    } => {
                         println!("✓ Array 'data_points' has item schema");
                         match items.as_ref() {
-                            turul_mcp_protocol::schema::JsonSchema::Object { properties: Some(item_props), .. } => {
+                            turul_mcp_protocol::schema::JsonSchema::Object {
+                                properties: Some(item_props),
+                                ..
+                            } => {
                                 println!("✓ Array items have {} properties", item_props.len());
-                                assert!(item_props.contains_key("timestamp"), "items missing timestamp");
+                                assert!(
+                                    item_props.contains_key("timestamp"),
+                                    "items missing timestamp"
+                                );
                                 assert!(item_props.contains_key("value"), "items missing value");
                                 println!("✓ Array items have detailed schema!");
-                            },
-                            other => panic!("Array items should be detailed objects, got: {:?}", other),
+                            }
+                            other => {
+                                panic!("Array items should be detailed objects, got: {:?}", other)
+                            }
                         }
-                    },
+                    }
                     other => panic!("'data_points' should be Array with items, got: {:?}", other),
                 }
 
@@ -253,7 +313,7 @@ mod schemars_tests {
                 println!("   - Top-level fields: device_id, stats, data_points");
                 println!("   - Nested object (stats): 3 detailed fields");
                 println!("   - Array items (data_points): 2 detailed fields each");
-            },
+            }
             other => panic!("Expected detailed Object schema, got: {:?}", other),
         }
     }
@@ -282,7 +342,10 @@ mod schemars_tests {
     }
 
     impl OptionalFieldsTool {
-        async fn execute(&self, _session: Option<SessionContext>) -> McpResult<OutputWithOptionals> {
+        async fn execute(
+            &self,
+            _session: Option<SessionContext>,
+        ) -> McpResult<OutputWithOptionals> {
             Ok(OutputWithOptionals {
                 required_field: self.id.clone(),
                 optional_string: Some("test".to_string()),
@@ -306,40 +369,62 @@ mod schemars_tests {
         let output_schema = properties.values().next().unwrap();
 
         match output_schema {
-            turul_mcp_protocol::schema::JsonSchema::Object { properties: Some(props), required, .. } => {
+            turul_mcp_protocol::schema::JsonSchema::Object {
+                properties: Some(props),
+                required,
+                ..
+            } => {
                 println!("✓ Top-level schema has {} properties", props.len());
 
                 // Verify all fields are present
-                assert!(props.contains_key("required_field"), "Missing required_field");
-                assert!(props.contains_key("optional_string"), "Missing optional_string");
-                assert!(props.contains_key("optional_number"), "Missing optional_number");
+                assert!(
+                    props.contains_key("required_field"),
+                    "Missing required_field"
+                );
+                assert!(
+                    props.contains_key("optional_string"),
+                    "Missing optional_string"
+                );
+                assert!(
+                    props.contains_key("optional_number"),
+                    "Missing optional_number"
+                );
 
                 // Verify optional fields have proper types (not generic objects)
                 match &props["optional_string"] {
                     turul_mcp_protocol::schema::JsonSchema::String { .. } => {
                         println!("✓ optional_string is String type (anyOf resolved correctly)");
-                    },
+                    }
                     other => panic!("optional_string should be String, got: {:?}", other),
                 }
 
                 match &props["optional_number"] {
                     turul_mcp_protocol::schema::JsonSchema::Number { .. } => {
                         println!("✓ optional_number is Number type (anyOf resolved correctly)");
-                    },
+                    }
                     other => panic!("optional_number should be Number, got: {:?}", other),
                 }
 
                 // Verify required fields - only required_field should be required
                 assert!(required.is_some(), "Schema must specify required fields");
                 let required = required.as_ref().unwrap();
-                assert!(required.contains(&"required_field".to_string()), "required_field should be required");
-                assert!(!required.contains(&"optional_string".to_string()), "optional_string should NOT be required");
-                assert!(!required.contains(&"optional_number".to_string()), "optional_number should NOT be required");
+                assert!(
+                    required.contains(&"required_field".to_string()),
+                    "required_field should be required"
+                );
+                assert!(
+                    !required.contains(&"optional_string".to_string()),
+                    "optional_string should NOT be required"
+                );
+                assert!(
+                    !required.contains(&"optional_number".to_string()),
+                    "optional_number should NOT be required"
+                );
 
                 println!("✅ OPTIONAL FIELDS TEST PASSED!");
                 println!("   - Optional fields have proper types (not generic objects)");
                 println!("   - anyOf nullable patterns resolved correctly");
-            },
+            }
             other => panic!("Expected detailed Object schema, got: {:?}", other),
         }
     }
@@ -365,20 +450,30 @@ mod schemars_tests {
         let json_with_nulls = serde_json::to_value(&output_with_nulls).unwrap();
 
         println!("\n=== Output with Some values ===");
-        println!("{}", serde_json::to_string_pretty(&json_with_values).unwrap());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json_with_values).unwrap()
+        );
 
         println!("\n=== Output with None values ===");
-        println!("{}", serde_json::to_string_pretty(&json_with_nulls).unwrap());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json_with_nulls).unwrap()
+        );
 
         // Verify Some values are present
         assert!(json_with_values.get("optional_string").is_some());
         assert!(json_with_values.get("optional_number").is_some());
 
         // CRITICAL: Verify None values are OMITTED, not serialized as null
-        assert!(json_with_nulls.get("optional_string").is_none(),
-            "optional_string should be omitted when None, not serialized as null");
-        assert!(json_with_nulls.get("optional_number").is_none(),
-            "optional_number should be omitted when None, not serialized as null");
+        assert!(
+            json_with_nulls.get("optional_string").is_none(),
+            "optional_string should be omitted when None, not serialized as null"
+        );
+        assert!(
+            json_with_nulls.get("optional_number").is_none(),
+            "optional_number should be omitted when None, not serialized as null"
+        );
 
         println!("✅ OPTIONAL SERIALIZATION TEST PASSED!");
         println!("   - None values are omitted (not serialized as null)");

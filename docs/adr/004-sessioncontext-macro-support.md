@@ -1,8 +1,8 @@
 # ADR: SessionContext Accessibility in Derive and Function Macros
 
-**Status**: 🔴 **CRITICAL** - Framework Breaking Issue  
-**Date**: 2025-08-28  
-**Type**: Critical Bug Fix  
+**Status**: Accepted (Implemented)
+**Date**: 2025-08-28
+**Type**: Bug Fix (Resolved)
 
 ## Context
 
@@ -299,6 +299,4 @@ async fn my_tool(
 
 ## Conclusion
 
-This is a **critical architectural bug** that must be fixed immediately. The solution maintains backward compatibility while enabling full MCP functionality through macros, fulfilling the framework's promise of providing powerful tools with minimal boilerplate.
-
-**Priority**: 🔴 **CRITICAL** - Blocks all other feature work until resolved
+This architectural bug has been resolved. The solution maintains backward compatibility while enabling full MCP functionality through macros, fulfilling the framework's promise of providing powerful tools with minimal boilerplate.

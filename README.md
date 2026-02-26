@@ -2,18 +2,18 @@
 
 A comprehensive Rust framework for building Model Context Protocol (MCP) servers and clients with modern patterns, extensive tooling, and enterprise-grade features. Fully compliant with **MCP 2025-11-25 specification**.
 
-⚠️ **Beta Status** - Active development with ongoing feature enhancements. Phase 6 session-aware resources completed. Suitable for development and testing.
+⚠️ **Beta Status** - Active development with ongoing feature enhancements. Full MCP 2025-11-25 compliance including task storage and runtime. Suitable for development and testing.
 
 ## 🧪 **Active Development** - Comprehensive Test Coverage
-**300+ passing tests across workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
+**1560+ passing tests across workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
 
 ## ✨ Key Highlights
 
-- **🏗️ 10 Framework Crates**: Complete MCP ecosystem with core framework, client library, and serverless support
-- **📚 45+ Comprehensive Examples**: Real-world business applications and framework demonstration examples (all validated through comprehensive testing campaign)
-- **🧪 300+ Development Tests**: Comprehensive test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
+- **🏗️ 12 Framework Crates**: Complete MCP ecosystem with core framework, client library, task storage, and serverless support
+- **📚 58 Comprehensive Examples**: Real-world business applications and framework demonstration examples (all validated through comprehensive testing campaign)
+- **🧪 1560+ Development Tests**: Comprehensive test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
-- **🌐 Transport Flexibility**: HTTP/1.1 and SSE streaming via SessionMcpHandler (WebSocket and stdio planned)
+- **🌐 Transport Flexibility**: Streamable HTTP via StreamableHttpHandler with SSE streaming (stdio planned)
 - **☁️ Serverless Support**: AWS Lambda integration with streaming responses and SQS event processing
 - **🔧 Development Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
 - **⚡ Performance Optimized**: Comprehensive benchmarking suite with >1000 RPS throughput, <100ms response times, and extensive stress testing
@@ -172,7 +172,7 @@ The framework automatically:
 cargo build --workspace
 
 # 2. Run compliance tests
-cargo test -p turul-mcp-framework-integration-tests --test mcp_runtime_capability_validation
+cargo test -p turul-mcp-framework-integration-tests --test compliance
 
 # 3. Start a simple server
 cargo run -p minimal-server
@@ -188,7 +188,7 @@ curl -X POST http://127.0.0.1:8641/mcp \
 **Core Test Servers:**
 ```bash
 # Comprehensive server (all MCP features)
-cargo run --package comprehensive-server -- --port 8082
+cargo run --package comprehensive-server -- --port 8002
 
 # Resource server (17 test resources)  
 cargo run --package resource-test-server -- --port 8080
@@ -238,7 +238,7 @@ curl -X POST http://127.0.0.1:$PORT/mcp \
   "id": 1,
   "result": {
     "protocolVersion": "2025-11-25",
-    "serverInfo": {"name": "server-name", "version": "0.2.0"},
+    "serverInfo": {"name": "server-name", "version": "0.3.0"},
     "capabilities": {"tools": {"listChanged": false}}
   }
 }
@@ -300,7 +300,7 @@ chmod +x quick_check.sh
 
 # Test any server
 cargo run -p minimal-server &
-./quick_check.sh 8000
+./quick_check.sh 8641
 ```
 
 ## 🏛️ Architecture Overview
@@ -388,20 +388,31 @@ impl McpMiddleware for AuthMiddleware {
 - ✅ Session state integration
 
 **Example:**
-- `examples/middleware-auth-lambda` - Full authorizer extraction pattern
-- Test events: `test-events/apigw-v1-with-authorizer.json`, `apigw-v2-with-authorizer.json`
+- `examples/middleware-auth-lambda` - Full authorizer extraction pattern (V1 nested, V1 flat, V2)
+- Test events: V1 nested, V1 flat, V2 authorizer shapes (`test-events/`)
 
-### Core Framework (10 Crates)
-- **`turul-mcp-server`** - High-level server builder with session management
+### Core Framework (12 Crates)
+- **`turul-mcp-server`** - High-level server builder with session management and task runtime
 - **`turul-mcp-client`** - Comprehensive client library with HTTP transport support
 - **`turul-http-mcp-server`** - HTTP/SSE transport with CORS and streaming
 - **`turul-mcp-protocol`** - Current MCP specification (alias to 2025-11-25)
-- **`turul-mcp-protocol-2025-11-25`** - Complete MCP specification implementation
+- **`turul-mcp-protocol-2025-11-25`** - Complete MCP 2025-11-25 specification implementation
+- **`turul-mcp-protocol-2025-06-18`** - Legacy MCP specification (backward compatibility)
 - **`turul-mcp-derive`** - Procedural macros for all MCP areas
 - **`turul-mcp-builders`** - Runtime builder patterns for dynamic MCP components
 - **`turul-mcp-json-rpc-server`** - Transport-agnostic JSON-RPC 2.0 foundation
 - **`turul-mcp-session-storage`** - Session storage backends (SQLite, PostgreSQL, DynamoDB)
+- **`turul-mcp-task-storage`** - Task storage for long-running operations (InMemory, with pluggable backends)
 - **`turul-mcp-aws-lambda`** - AWS Lambda integration for serverless deployment
+
+### Tasks Architecture ADRs
+
+Tasks are an experimental MCP 2025-11-25 capability. The framework provides full implementation support (protocol types, storage, runtime, handlers, and tests). See the architecture decision records for design rationale:
+
+- [ADR-015: Protocol Crate Strategy](docs/adr/015-mcp-2025-11-25-protocol-crate.md) — separate crate for 2025-11-25 spec types including Tasks
+- [ADR-016: Task Storage Architecture](docs/adr/016-task-storage-architecture.md) — `TaskStorage` trait, 4 backends, state machine, parity test suite
+- [ADR-017: Task Runtime-Executor Boundary](docs/adr/017-task-runtime-executor-boundary.md) — three-layer split: storage / executor / runtime
+- [ADR-018: Task Pagination Cursor Contract](docs/adr/018-task-pagination-cursor-contract.md) — deterministic cursor-based pagination across backends
 
 ### Fine-Grained Trait Architecture
 **Modern composable design pattern for all MCP areas:**
@@ -477,8 +488,8 @@ let server = McpServer::builder()
     .resource(AppConfigResource::new())
     .resources(vec![LogsResource::new(), MetricsResource::new()])
     // Prompts
-    .prompt_provider(CodeReviewPrompt::new())
-    .prompt_providers(vec![DocumentationPrompt::new(), TestPrompt::new()])
+    .prompt(CodeReviewPrompt::new())
+    .prompts(vec![DocumentationPrompt::new(), TestPrompt::new()])
     // Sampling
     .sampling_provider(CreativeSampling::new())
     .sampling_providers(vec![CodeSampling::new(), TechnicalSampling::new()])
@@ -492,8 +503,8 @@ let server = McpServer::builder()
     .root_provider(WorkspaceRoot::new())
     .root_providers(vec![ConfigRoot::new(), TempRoot::new()])
     // Elicitation
-    .elicitation_provider(OnboardingElicitation::new())
-    .elicitation_providers(vec![SurveyElicitation::new(), FeedbackElicitation::new()])
+    .elicitation(OnboardingElicitation::new())
+    .elicitations(vec![SurveyElicitation::new(), FeedbackElicitation::new()])
     // Notifications
     .notification_provider(ProgressNotification::new())
     .notification_providers(vec![AlertNotification::new(), StatusNotification::new()])
@@ -517,12 +528,12 @@ let server = McpServer::builder()
 - ✅ **Session Management** - Stateful operations with UUID v7 correlation IDs
 
 ### Transport Support
-- **HTTP/1.1 & HTTP/2** - Standard web transport with JSON-RPC
-- **Server-Sent Events (SSE)** - Development streaming with full real-time capabilities
-- **Stdio** - Command-line integration
+- **Streamable HTTP** - Production transport via `StreamableHttpHandler` (HTTP/1.1 & HTTP/2 with chunked SSE, MCP 2025-11-25)
+- **HTTP+SSE (Legacy)** - Backward-compatible transport via `SessionMcpHandler` (protocol <= 2024-11-05)
 - **AWS Lambda** - Serverless deployment with streaming responses
+- **Stdio** - Planned for future implementation
 
-> **Note**: SSE streaming is in active development with full real-time event broadcasting, session isolation, and correlation ID tracking.
+> **Note**: The framework auto-selects transport handler based on protocol version negotiation.
 
 ## 📚 Examples Overview
 
@@ -537,15 +548,15 @@ Development servers for actual business problems:
 6. **completion-server** → IDE Auto-Completion Server
 7. **prompts-server** → AI-Assisted Development Prompts
 8. **derive-macro-server** → Code Generation & Template Engine
-9. **calculator-server** → Business Financial Calculator
+9. **calculator-add-\*-server** → Calculator examples (builder, function, derive, manual patterns)
 10. **resources-server** → Development Team Resource Hub
 
 ### 🔧 Framework Demonstrations
 Educational examples showcasing framework patterns:
-- **Basic Patterns**: minimal-server, manual-tools-server, spec-compliant-server
-- **Advanced Features**: stateful-server, pagination-server, version-negotiation-server
-- **Macro System**: tool-macro-example, resource-macro-example, enhanced-tool-macro-test
-- **Serverless**: lambda-turul-mcp-server (AWS Lambda with SQS integration)
+- **Basic Patterns**: minimal-server, manual-tools-server, zero-config-getting-started
+- **Advanced Features**: stateful-server, pagination-server, tasks-e2e-inmemory-server
+- **Macro System**: derive-macro-server, function-macro-server, function-resource-server
+- **Serverless**: lambda-mcp-server (AWS Lambda with SQS integration)
 - **Testing**: performance-testing (comprehensive benchmarking suite)
 
 ## ☁️ Serverless Support
@@ -554,7 +565,7 @@ Educational examples showcasing framework patterns:
 Full serverless implementation with advanced AWS integration:
 
 ```bash
-cd examples/lambda-turul-mcp-server
+cd examples/lambda-mcp-server
 
 # Local development
 cargo lambda watch
@@ -575,27 +586,28 @@ sam deploy --guided
 
 ### 🧪 **Comprehensive Test Coverage - Development Quality**
 
-**Framework Excellence**: 100+ tests across all components with complete async SessionContext integration:
+**Framework Excellence**: 1560+ tests across all components with complete async SessionContext integration:
 
-- **✅ Core Framework Tests** - Protocol, server, client, derive macros (36+ passing)
-- **✅ SessionContext Integration** - Full session state management (8/8 passing) 
-- **✅ Framework Integration Tests** - Proper API usage patterns (7/7 passing)
-- **✅ MCP Compliance Tests** - Protocol specification validation (28+ passing)
-- **✅ Builder Pattern Tests** - Runtime tool creation (70+ passing)
+- **✅ Core Framework Tests** - Protocol, server, client, derive macros
+- **✅ SessionContext Integration** - Full session state management
+- **✅ Framework Integration Tests** - Proper API usage patterns
+- **✅ MCP Compliance Tests** - Protocol specification validation
+- **✅ Builder Pattern Tests** - Runtime tool creation
+- **✅ E2E Integration Tests** - Streamable HTTP, SSE, task lifecycle
 - **✅ Example Applications** - Real-world scenario validation
 
 ```bash
-# Run all tests - expect 100+ passing
+# Run all tests - expect 1560+ passing
 cargo test --workspace
 
 # SessionContext integration tests
-cargo test --test session_context_macro_tests
+cargo test -p turul-mcp-framework-integration-tests --test session_context_macro_tests
 
 # Framework integration tests (proper patterns)
-cargo test --test framework_integration_tests
+cargo test -p turul-mcp-framework-integration-tests --test feature_tests
 
 # MCP compliance tests
-cargo test --test mcp_compliance_tests
+cargo test -p turul-mcp-framework-integration-tests --test compliance
 ```
 
 ### 🎯 **Framework-Native Testing Patterns**
@@ -900,7 +912,7 @@ let content = client.read_resource("config://app.json").await?;
 
 ### Modern Architecture
 - **UUID v7** - Time-ordered IDs for better database performance and observability
-- **Workspace Dependencies** - Consistent dependency management across 37 crates
+- **Workspace Dependencies** - Consistent dependency management across 12 core crates and 58 examples
 - **Rust 2024 Edition** - Latest language features and performance improvements
 - **Tokio/Hyper** - High-performance async runtime with HTTP/2 support
 
@@ -976,14 +988,14 @@ cargo build --release
 
 ### Running Tests
 
-The framework includes **300+ comprehensive tests** covering all functionality. Test server binaries are **automatically built** when needed - no manual setup required.
+The framework includes **1560+ comprehensive tests** covering all functionality. Test server binaries are **automatically built** when needed - no manual setup required.
 
 ```bash
 # Run all tests (recommended - includes E2E integration tests)
 cargo test --workspace
 
 # Run specific test suite
-cargo test --test concurrent_session_advanced
+cargo test --package mcp-e2e-shared --test all -- concurrent_session
 
 # Run with logging output
 RUST_LOG=info cargo test --workspace
@@ -1067,20 +1079,20 @@ The framework includes comprehensive SSE testing to verify real-time notificatio
 
 ```bash
 # Test SSE functionality in prompts package
-cargo test --package mcp-prompts-tests --test sse_notifications_test
+cargo test --package mcp-prompts-tests --test all -- sse
 
 # Test specific SSE scenarios
-cargo test test_sse_prompts_connection_establishment -- --nocapture
-cargo test test_sse_prompts_list_changed_notification -- --nocapture
-cargo test test_sse_prompts_session_isolation -- --nocapture
+cargo test --package mcp-prompts-tests test_sse_prompts_connection_establishment -- --nocapture
+cargo test --package mcp-prompts-tests test_sse_prompts_list_changed_notification -- --nocapture
+cargo test --package mcp-prompts-tests test_sse_prompts_session_isolation -- --nocapture
 
 # Test SSE functionality in resources package
-cargo test --package mcp-resources-tests --test sse_notifications_test
+cargo test --package mcp-resources-tests --test all -- sse
 
 # Test specific resource SSE scenarios
-cargo test test_sse_connection_establishment -- --nocapture
-cargo test test_sse_resource_list_changed_notification -- --nocapture
-cargo test test_sse_session_isolation -- --nocapture
+cargo test --package mcp-resources-tests test_sse_connection_establishment -- --nocapture
+cargo test --package mcp-resources-tests test_sse_resource_list_changed_notification -- --nocapture
+cargo test --package mcp-resources-tests test_sse_session_isolation -- --nocapture
 ```
 
 #### Expected SSE Test Output
@@ -1174,7 +1186,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 ### 🎯 Current Framework State
 - **Phase 6 Complete**: Session-aware resources implemented with full MCP 2025-11-25 compliance
-- **45+ Examples Validated**: Comprehensive testing campaign completed across all framework areas
+- **58 Examples Validated**: Comprehensive testing campaign completed across all framework areas
 - **SSE Streaming Verified**: Real-time notifications and session-aware logging working correctly
 - **Beta Status**: Active development with API stability considerations before 1.0.0
 
@@ -1182,7 +1194,7 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 **Transport & Streaming:**
 - **Lambda SSE**: Snapshot-based responses work reliably; real-time streaming requires `run_with_streaming_response`
-- **WebSocket Transport**: Planned but not yet available (HTTP/1.1 and SSE currently supported)
+- **Additional transport variants**: Streamable HTTP and legacy HTTP+SSE are supported; stdio remains planned
 - **CI Environment Testing**: SSE tests require port binding capabilities (graceful fallbacks implemented)
 
 **Features & Integration:**
@@ -1201,4 +1213,4 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 
 **🚀 Ready to build MCP servers?** Start with our [comprehensive examples](examples/) or check the [getting started guide](EXAMPLES.md).
 
-**💡 Need help?** Open an issue or check our [45+ validated examples](examples/) covering everything from simple calculators to enterprise systems.
+**💡 Need help?** Open an issue or check our [58 validated examples](examples/) covering everything from simple calculators to enterprise systems.

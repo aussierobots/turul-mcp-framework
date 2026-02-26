@@ -10,7 +10,7 @@ The MCP specification released version 2025-11-25 with several new features:
 - **Icons** on tools, resources, prompts, resource templates, and implementations
 - **URL Elicitation** via `StringFormat::Uri` and builder conveniences
 - **Sampling Tools** allowing tools in `CreateMessageParams`
-- **Tasks** (experimental) for long-running operation tracking
+- **Tasks** (experimental) for long-running operation tracking. Tasks are an experimental MCP 2025-11-25 capability; this framework provides full implementation support (protocol types, storage, runtime, handlers, and tests).
 
 We needed to decide how to support the new spec version alongside the existing
 2025-06-18 implementation. Three options were considered:
@@ -46,8 +46,9 @@ of `turul-mcp-protocol-2025-06-18` but includes all 2025-11-25 additions.
 2. **Same trait hierarchy** - Both crates implement the same protocol traits (HasMethod,
    HasParams, HasData, HasMeta, RpcResult, Params) ensuring framework compatibility.
 
-3. **IconUrl in tools.rs** - The `IconUrl` type lives in `tools.rs` (not a separate module)
-   and is referenced by other modules via `crate::tools::IconUrl`.
+3. **Icon in tools.rs** - The `Icon` type (with `src`, `mime_type`, `sizes`, `theme` fields)
+   lives in `tools.rs` (not a separate module) and is referenced by other modules via
+   `crate::tools::Icon`.
 
 4. **Tasks as a new module** - `tasks.rs` follows the same Request/Params/Result pattern
    as tools, resources, and prompts.
@@ -79,8 +80,8 @@ of `turul-mcp-protocol-2025-06-18` but includes all 2025-11-25 additions.
 - **Code duplication** - Common types (JsonRpcRequest, ContentBlock, etc.) exist in both
   crates. Changes to shared patterns must be applied in both places.
 - **Workspace size** - An additional crate adds to build times and workspace complexity.
-- **Version alias complexity** - `turul-mcp-protocol` currently aliases to 2025-06-18.
-  When 2025-11-25 becomes the default, this alias must be updated carefully.
+- **Version alias complexity** - `turul-mcp-protocol` now aliases to 2025-11-25 (updated from 2025-06-18).
+  Future spec versions will require the same alias update.
 
 ### Risks
 
@@ -101,10 +102,10 @@ crates/turul-mcp-protocol-2025-11-25/
   README.md
   src/
     lib.rs          # Re-exports, McpError, McpResult
-    tools.rs        # Tool, IconUrl, ToolSchema, CallTool*, ListTools*
+    tools.rs        # Tool, Icon, ToolSchema, CallTool*, ListTools*
     resources.rs    # Resource, ResourceTemplate (with icon field)
     prompts.rs      # Prompt (with icon field)
-    tasks.rs        # TaskStatus, TaskInfo, TaskProgress, CRUD types
+    tasks.rs        # TaskStatus, Task, TaskMetadata, query/result types
     sampling.rs     # CreateMessageParams (with tools field)
     elicitation.rs  # StringFormat::Uri, ElicitationBuilder::url_input()
     initialize.rs   # Implementation (with icon field)
@@ -117,9 +118,9 @@ crates/turul-mcp-protocol-2025-11-25/
 
 | Module | New Types | Purpose |
 |--------|-----------|---------|
-| tools.rs | `IconUrl` | Icon URLs (data: URI or https://) |
-| tasks.rs | `TaskStatus`, `TaskInfo`, `TaskProgress` | Task lifecycle |
-| tasks.rs | `CreateTask*`, `GetTask*`, `CancelTask*`, `ListTasks*` | Task CRUD |
+| tools.rs | `Icon` | Icon with src, mime_type, sizes, theme |
+| tasks.rs | `TaskStatus`, `Task`, `TaskMetadata` | Task lifecycle |
+| tasks.rs | `GetTask*`, `CancelTask*`, `ListTasks*`, `GetTaskPayload*`, `CreateTaskResult` | Task queries and result reporting |
 | elicitation.rs | `StringFormat::Uri` | URL format constraint |
 | sampling.rs | `tools` field on `CreateMessageParams` | Sampling tools |
 
@@ -135,6 +136,9 @@ Client sends initialize request with protocolVersion
 
 ## See Also
 
-- [ADR 009: Protocol-Based Handler Routing](./009-protocol-based-handler-routing.md)
-- [ADR 014: Schemars Schema Generation](./014-schemars-schema-generation.md)
+- [ADR-009: Protocol-Based Handler Routing](./009-protocol-based-handler-routing.md)
+- [ADR-014: Schemars Schema Generation](./014-schemars-schema-generation.md)
+- [ADR-016: Task Storage Architecture](./016-task-storage-architecture.md) -- storage trait, 4 backends, parity test suite
+- [ADR-017: Task Runtime-Executor Boundary](./017-task-runtime-executor-boundary.md) -- three-layer split: storage / executor / runtime
+- [ADR-018: Task Pagination Cursor Contract](./018-task-pagination-cursor-contract.md) -- deterministic cursor-based pagination
 - [WORKING_MEMORY.md](../../WORKING_MEMORY.md) - Current migration status

@@ -4,7 +4,7 @@
 //! Validates protocol compliance and file system access control.
 
 use mcp_roots_tests::test_utils::{extract_roots_list, roots_capabilities, validate_root_object};
-use mcp_roots_tests::{debug, info, json, McpTestClient, TestServerManager};
+use mcp_roots_tests::{McpTestClient, TestServerManager, debug, info, json};
 
 #[tokio::test]
 async fn test_roots_list_endpoint() {

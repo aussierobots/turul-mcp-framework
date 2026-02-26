@@ -37,7 +37,6 @@ parking_lot = { workspace = true }
 tracing = { workspace = true }
 
 # Optional features for different transports
-tokio-tungstenite = { workspace = true, optional = true }
 tokio-util = { workspace = true, features = ["codec"], optional = true }
 
 [features]
@@ -45,10 +44,9 @@ default = ["http", "sse"]
 # Transport features
 http = []
 sse = ["tokio-util"]
-websocket = ["tokio-tungstenite"]
 stdio = ["tokio-util"]
 # All transports
-all-transports = ["http", "sse", "websocket", "stdio"]
+all-transports = ["http", "sse", "stdio"]
 
 [dev-dependencies]
-tokio-test = "0.4"
+tokio-test.workspace = true

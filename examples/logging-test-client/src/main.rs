@@ -213,7 +213,7 @@ impl LoggingTestClient {
         let session_id = self.session_id.as_ref().unwrap();
 
         // Generate unique correlation ID for this message
-        let correlation_id = Uuid::now_v7().to_string();
+        let correlation_id = Uuid::now_v7().as_simple().to_string();
 
         println!(
             "📤 [MSG-{}] Sending log message: '{}' at level '{}' [correlation_id: {}]",
@@ -730,7 +730,7 @@ async fn main() -> Result<()> {
     let mut test1_requests = Vec::new(); // Store (correlation_id, level) pairs
 
     for (i, level) in all_levels.iter().enumerate() {
-        let correlation_id = Uuid::now_v7().to_string();
+        let correlation_id = Uuid::now_v7().as_simple().to_string();
         let sequence = i + 1;
 
         let json_rpc_request = serde_json::json!({
@@ -805,7 +805,7 @@ async fn main() -> Result<()> {
     let mut test2_requests = Vec::new();
 
     for (i, level) in all_levels.iter().enumerate() {
-        let correlation_id = Uuid::now_v7().to_string();
+        let correlation_id = Uuid::now_v7().as_simple().to_string();
         let sequence = i + 10;
 
         let json_rpc_request = serde_json::json!({
@@ -880,7 +880,7 @@ async fn main() -> Result<()> {
     let mut test3_requests = Vec::new();
 
     for (i, level) in all_levels.iter().enumerate() {
-        let correlation_id = Uuid::now_v7().to_string();
+        let correlation_id = Uuid::now_v7().as_simple().to_string();
         let sequence = i + 20;
 
         let json_rpc_request = serde_json::json!({

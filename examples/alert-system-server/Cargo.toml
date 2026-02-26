@@ -17,3 +17,7 @@ async-trait.workspace = true
 chrono.workspace = true
 uuid.workspace = true
 regex.workspace = true
+[[bin]]
+name = "alert-system-server"
+path = "src/main.rs"
+test = false

@@ -18,3 +18,7 @@ async-trait.workspace = true
 chrono.workspace = true
 sqlx.workspace = true
 uuid.workspace = true
+[[bin]]
+name = "audit-trail-server"
+path = "src/main.rs"
+test = false

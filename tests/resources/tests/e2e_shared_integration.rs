@@ -1,4 +1,3 @@
-
 //! E2E Integration Tests for MCP Resources using Shared Utilities
 //!
 //! Tests real HTTP/SSE transport using resource-test-server with shared utilities
@@ -60,12 +59,16 @@ async fn test_resource_list_with_shared_utils() {
     let resource_uris: Vec<&str> = resources.iter().filter_map(|r| r["uri"].as_str()).collect();
 
     assert!(resource_uris.iter().any(|uri| uri.starts_with("file://")));
-    assert!(resource_uris
-        .iter()
-        .any(|uri| uri.starts_with("file:///memory/")));
-    assert!(resource_uris
-        .iter()
-        .any(|uri| uri.starts_with("file:///error/")));
+    assert!(
+        resource_uris
+            .iter()
+            .any(|uri| uri.starts_with("file:///memory/"))
+    );
+    assert!(
+        resource_uris
+            .iter()
+            .any(|uri| uri.starts_with("file:///error/"))
+    );
     // Note: Template resources are returned by resources/templates/list, not resources/list
 }
 

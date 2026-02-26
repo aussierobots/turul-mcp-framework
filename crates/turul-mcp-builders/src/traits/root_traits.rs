@@ -2,9 +2,9 @@
 //!
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 
-use turul_mcp_protocol::roots::Root;
 use serde_json::Value;
 use std::collections::HashMap;
+use turul_mcp_protocol::roots::Root;
 
 pub trait HasRootMetadata {
     /// The root URI (must start with "file://")

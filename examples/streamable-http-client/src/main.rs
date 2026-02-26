@@ -211,29 +211,25 @@ impl StreamableHttpMcpClient {
                                     if let Some(event_data) = Self::parse_sse_event(&event_text)
                                         && let Ok(json_data) =
                                             serde_json::from_str::<Value>(&event_data)
+                                    {
+                                        // Check if this is the final JSON-RPC response
+                                        if json_data.get("id").is_some()
+                                            && json_data.get("result").is_some()
                                         {
-                                            // Check if this is the final JSON-RPC response
-                                            if json_data.get("id").is_some()
-                                                && json_data.get("result").is_some()
-                                            {
-                                                info!("📦 Found final tool result in SSE stream");
-                                                let _ = result_tx.send(json_data);
-                                            }
-                                            // Check for progress notifications
-                                            else if let Some(method) =
-                                                json_data.get("method").and_then(|m| m.as_str())
-                                                && method.starts_with("notifications/") {
-                                                    let progress =
-                                                        Self::parse_progress_notification(
-                                                            &json_data,
-                                                        );
-                                                    debug!(
-                                                        "📈 Progress notification: {:?}",
-                                                        progress
-                                                    );
-                                                    let _ = progress_tx.send(progress);
-                                                }
+                                            info!("📦 Found final tool result in SSE stream");
+                                            let _ = result_tx.send(json_data);
                                         }
+                                        // Check for progress notifications
+                                        else if let Some(method) =
+                                            json_data.get("method").and_then(|m| m.as_str())
+                                            && method.starts_with("notifications/")
+                                        {
+                                            let progress =
+                                                Self::parse_progress_notification(&json_data);
+                                            debug!("📈 Progress notification: {:?}", progress);
+                                            let _ = progress_tx.send(progress);
+                                        }
+                                    }
                                 }
                             }
                             Err(e) => {

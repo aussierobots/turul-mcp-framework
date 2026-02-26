@@ -40,6 +40,8 @@ pub struct McpServer {
     strict_lifecycle: bool,
     /// Middleware stack for request/response processing
     middleware_stack: crate::middleware::MiddlewareStack,
+    /// Task runtime for long-running operations (None = tasks not supported)
+    task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
 
     // HTTP configuration (if enabled)
     #[cfg(feature = "http")]
@@ -50,6 +52,8 @@ pub struct McpServer {
     enable_cors: bool,
     #[cfg(feature = "http")]
     enable_sse: bool,
+    #[cfg(feature = "http")]
+    allow_unauthenticated_ping: Option<bool>,
 }
 
 impl McpServer {
@@ -64,12 +68,14 @@ impl McpServer {
         session_timeout_minutes: Option<u64>,
         session_cleanup_interval_seconds: Option<u64>,
         session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
+        task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
         strict_lifecycle: bool,
         middleware_stack: crate::middleware::MiddlewareStack,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
         #[cfg(feature = "http")] enable_sse: bool,
+        #[cfg(feature = "http")] allow_unauthenticated_ping: Option<bool>,
     ) -> Self {
         // Create session manager with server capabilities, custom timeouts, and storage
         let session_manager = match &session_storage {
@@ -125,6 +131,7 @@ impl McpServer {
             handlers,
             session_manager,
             session_storage,
+            task_runtime,
             instructions,
             strict_lifecycle,
             middleware_stack,
@@ -136,13 +143,15 @@ impl McpServer {
             enable_cors,
             #[cfg(feature = "http")]
             enable_sse,
+            #[cfg(feature = "http")]
+            allow_unauthenticated_ping,
         }
     }
 
     /// Create a new builder
     ///
     /// # Example
-    /// ```rust
+    /// ```rust,no_run
     /// use turul_mcp_server::McpServer;
     ///
     /// let builder = McpServer::builder()
@@ -156,6 +165,11 @@ impl McpServer {
     /// Get the server's configured capabilities
     pub fn capabilities(&self) -> &turul_mcp_protocol::ServerCapabilities {
         &self.capabilities
+    }
+
+    /// Get the task runtime, if task support is configured.
+    pub fn task_runtime(&self) -> Option<&Arc<crate::task::runtime::TaskRuntime>> {
+        self.task_runtime.as_ref()
     }
 
     /// Run the server with the default transport (HTTP if available)
@@ -189,12 +203,31 @@ impl McpServer {
         // Start session cleanup task
         let _cleanup_task = self.session_manager.clone().start_cleanup_task();
 
-        // Create session-aware tool handler
-        let tool_handler = SessionAwareToolHandler::new(
+        // Recover stuck tasks on startup (tasks stuck in Working/InputRequired after unclean shutdown)
+        if let Some(ref runtime) = self.task_runtime {
+            match runtime.recover_stuck_tasks().await {
+                Ok(recovered) if !recovered.is_empty() => {
+                    info!(
+                        count = recovered.len(),
+                        "Recovered stuck tasks from previous session"
+                    );
+                }
+                Err(e) => {
+                    warn!(error = %e, "Failed to recover stuck tasks on startup");
+                }
+                _ => {}
+            }
+        }
+
+        // Create session-aware tool handler (with optional task runtime for async execution)
+        let mut tool_handler = SessionAwareToolHandler::new(
             self.tools.clone(),
             self.session_manager.clone(),
             self.strict_lifecycle,
         );
+        if let Some(ref runtime) = self.task_runtime {
+            tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
+        }
 
         // Create session-aware initialize handler
         let init_handler = SessionAwareInitializeHandler::new(
@@ -227,6 +260,11 @@ impl McpServer {
                     ),
                 )
                 .register_handler(vec!["tools/call".to_string()], tool_handler);
+
+        // Pass allow_unauthenticated_ping config to HTTP layer
+        if let Some(allow) = self.allow_unauthenticated_ping {
+            builder = builder.allow_unauthenticated_ping(allow);
+        }
 
         // Register all MCP handlers with session awareness
         for (method, handler) in &self.handlers {
@@ -352,12 +390,31 @@ impl McpServer {
         // Start session cleanup task
         let _cleanup_task = self.session_manager.clone().start_cleanup_task();
 
-        // Create session-aware tool handler
-        let tool_handler = SessionAwareToolHandler::new(
+        // Recover stuck tasks on startup (tasks stuck in Working/InputRequired after unclean shutdown)
+        if let Some(ref runtime) = self.task_runtime {
+            match runtime.recover_stuck_tasks().await {
+                Ok(recovered) if !recovered.is_empty() => {
+                    info!(
+                        count = recovered.len(),
+                        "Recovered stuck tasks from previous session"
+                    );
+                }
+                Err(e) => {
+                    warn!(error = %e, "Failed to recover stuck tasks on startup");
+                }
+                _ => {}
+            }
+        }
+
+        // Create session-aware tool handler (with optional task runtime for async execution)
+        let mut tool_handler = SessionAwareToolHandler::new(
             self.tools.clone(),
             self.session_manager.clone(),
             self.strict_lifecycle,
         );
+        if let Some(ref runtime) = self.task_runtime {
+            tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
+        }
 
         // Create session-aware initialize handler
         let init_handler = SessionAwareInitializeHandler::new(
@@ -390,6 +447,11 @@ impl McpServer {
                     ),
                 )
                 .register_handler(vec!["tools/call".to_string()], tool_handler);
+
+        // Pass allow_unauthenticated_ping config to HTTP layer
+        if let Some(allow) = self.allow_unauthenticated_ping {
+            builder = builder.allow_unauthenticated_ping(allow);
+        }
 
         // TODO investigate if this also adds the tools/list and tools/call handlers
         // Register all MCP handlers with session awareness
@@ -1139,6 +1201,9 @@ pub struct SessionAwareToolHandler {
     tools: HashMap<String, Arc<dyn McpTool>>,
     session_manager: Arc<SessionManager>,
     strict_lifecycle: bool,
+    /// Optional task runtime — when present AND request has `params.task`,
+    /// the handler creates a task and executes asynchronously.
+    task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
 }
 
 impl SessionAwareToolHandler {
@@ -1151,7 +1216,13 @@ impl SessionAwareToolHandler {
             tools,
             session_manager,
             strict_lifecycle,
+            task_runtime: None,
         }
+    }
+
+    pub fn with_task_runtime(mut self, runtime: Arc<crate::task::runtime::TaskRuntime>) -> Self {
+        self.task_runtime = Some(runtime);
+        self
     }
 }
 
@@ -1231,7 +1302,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             None
         };
 
-        // Execute the tool with session context
+        // Build arguments Value
         let args = call_params
             .arguments
             .map(|hashmap| {
@@ -1239,11 +1310,141 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                     .unwrap_or(serde_json::Value::Object(serde_json::Map::new()))
             })
             .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new()));
-        match tool.call(args, mcp_session_context).await {
-            Ok(response) => serde_json::to_value(response).map_err(McpError::SerializationError),
-            Err(error_msg) => {
-                error!("Tool execution error: {}", error_msg);
-                Err(error_msg) // Propagate tool error directly (already proper McpError type)
+
+        // Task-augmented request detection (MCP 2025-11-25):
+        // If params.task is present AND task_runtime is configured, create a task
+        // and execute asynchronously. Otherwise execute synchronously.
+        //
+        // Per spec: respect tool-level execution.taskSupport:
+        // - Forbidden + task present: reject (clients MUST NOT use task augmentation)
+        // - Required + task absent: reject (clients MUST use task augmentation)
+        // - Optional/None: either path is valid
+        {
+            use turul_mcp_protocol::tools::TaskSupport;
+            let tool_descriptor = tool.to_tool();
+            if let Some(ref exec) = tool_descriptor.execution {
+                if call_params.task.is_some() && exec.task_support == Some(TaskSupport::Forbidden) {
+                    return Err(McpError::InvalidParameters(format!(
+                        "Tool '{}' has taskSupport=forbidden; task-augmented requests are not allowed",
+                        call_params.name
+                    )));
+                }
+                if call_params.task.is_none() && exec.task_support == Some(TaskSupport::Required) {
+                    return Err(McpError::InvalidParameters(format!(
+                        "Tool '{}' has taskSupport=required; requests must include task augmentation",
+                        call_params.name
+                    )));
+                }
+            }
+        }
+
+        if let (Some(task_meta), Some(runtime)) = (call_params.task, self.task_runtime.as_ref()) {
+            use turul_mcp_protocol::tasks::{CreateTaskResult, Task};
+            use turul_mcp_task_storage::{TaskOutcome, TaskRecord};
+
+            // Backend-agnostic task ID: UUID v7 for temporal ordering
+            let task_id = uuid::Uuid::now_v7().as_simple().to_string();
+            let now = chrono::Utc::now().to_rfc3339();
+            let session_id = mcp_session_context
+                .as_ref()
+                .map(|ctx| ctx.session_id.to_string());
+
+            let record = TaskRecord {
+                task_id: task_id.clone(),
+                session_id: session_id.clone(),
+                status: turul_mcp_protocol::TaskStatus::Working,
+                status_message: Some("Executing tool".to_string()),
+                created_at: now.clone(),
+                last_updated_at: now,
+                ttl: task_meta.ttl.map(|t| t as i64),
+                poll_interval: Some(1_000),
+                original_method: "tools/call".to_string(),
+                original_params: Some(serde_json::json!({
+                    "name": call_params.name,
+                    "arguments": &args,
+                })),
+                result: None,
+                meta: None,
+            };
+
+            let created = runtime.register_task(record).await.map_err(|e| {
+                McpError::ToolExecutionError(format!("Failed to create task: {}", e))
+            })?;
+
+            // Spawn async execution via the executor.
+            // The work closure is responsible for executing the tool AND persisting
+            // the result to storage, so that tasks/result can retrieve it immediately
+            // when the executor signals terminal status.
+            let tool = Arc::clone(tool);
+            let runtime_for_work = Arc::clone(runtime);
+            let task_id_for_work = task_id.clone();
+
+            let work: crate::task::executor::BoxedTaskWork = Box::new(move || {
+                Box::pin(async move {
+                    let outcome = match tool.call(args, mcp_session_context).await {
+                        Ok(result) => match serde_json::to_value(&result) {
+                            Ok(value) => TaskOutcome::Success(value),
+                            Err(e) => TaskOutcome::Error {
+                                code: -32603,
+                                message: format!("Serialization error: {}", e),
+                                data: None,
+                            },
+                        },
+                        Err(mcp_err) => TaskOutcome::Error {
+                            code: -32603, // Internal error
+                            message: mcp_err.to_string(),
+                            data: None,
+                        },
+                    };
+
+                    // Persist to storage BEFORE returning (so tasks/result can find it)
+                    let terminal_status = match &outcome {
+                        TaskOutcome::Success(_) => turul_mcp_protocol::TaskStatus::Completed,
+                        TaskOutcome::Error { .. } => turul_mcp_protocol::TaskStatus::Failed,
+                    };
+                    if let Err(e) = runtime_for_work
+                        .complete_task(&task_id_for_work, outcome.clone(), terminal_status, None)
+                        .await
+                    {
+                        error!(task_id = %task_id_for_work, error = %e, "Failed to persist task result");
+                    }
+
+                    outcome
+                })
+            });
+
+            // Start execution in the executor
+            let _handle = runtime
+                .executor()
+                .start_task(&task_id, work)
+                .await
+                .map_err(|e| {
+                    McpError::ToolExecutionError(format!("Failed to start task execution: {}", e))
+                })?;
+
+            // Return CreateTaskResult immediately
+            let task = Task {
+                task_id: created.task_id.clone(),
+                status: created.status,
+                created_at: created.created_at.clone(),
+                last_updated_at: created.last_updated_at.clone(),
+                status_message: created.status_message.clone(),
+                ttl: created.ttl,
+                poll_interval: created.poll_interval,
+                meta: None,
+            };
+            let result = CreateTaskResult { task, meta: None };
+            serde_json::to_value(result).map_err(McpError::SerializationError)
+        } else {
+            // Synchronous execution (no task augmentation or no runtime)
+            match tool.call(args, mcp_session_context).await {
+                Ok(response) => {
+                    serde_json::to_value(response).map_err(McpError::SerializationError)
+                }
+                Err(error_msg) => {
+                    error!("Tool execution error: {}", error_msg);
+                    Err(error_msg)
+                }
             }
         }
     }
@@ -1271,9 +1472,9 @@ mod tests {
     use async_trait::async_trait;
     use serde_json::Value;
     use std::collections::HashMap;
+    use turul_mcp_builders::prelude::*;
     use turul_mcp_protocol::ToolSchema;
-    use turul_mcp_protocol::tools::{CallToolResult, ToolResult};
-    use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
+    use turul_mcp_protocol::tools::{CallToolResult, ToolResult}; // HasBaseMetadata, HasDescription, etc.
 
     struct TestTool {
         input_schema: ToolSchema,

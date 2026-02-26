@@ -7,8 +7,7 @@
 use std::collections::HashMap;
 use turul_mcp_protocol::{
     Icon, Implementation, Prompt, PromptArgument, Resource, Tool, ToolSchema,
-    resources::ResourceTemplate,
-    schema::JsonSchema,
+    resources::ResourceTemplate, schema::JsonSchema,
 };
 
 fn main() {
@@ -29,7 +28,10 @@ fn main() {
     .with_icons(vec![Icon::new("https://example.com/icons/calculator.png")]);
 
     println!("1. Tool with HTTPS icon:");
-    println!("{}\n", serde_json::to_string_pretty(&calculator_tool).unwrap());
+    println!(
+        "{}\n",
+        serde_json::to_string_pretty(&calculator_tool).unwrap()
+    );
 
     // --- Tool with a data: URI icon (base64-encoded SVG) ---
     // This is a minimal SVG circle encoded as base64
@@ -37,10 +39,7 @@ fn main() {
     let search_tool = Tool::new(
         "search",
         ToolSchema::object()
-            .with_properties(HashMap::from([(
-                "query".to_string(),
-                JsonSchema::string(),
-            )]))
+            .with_properties(HashMap::from([("query".to_string(), JsonSchema::string())]))
             .with_required(vec!["query".to_string()]),
     )
     .with_title("Search")
@@ -58,7 +57,10 @@ fn main() {
         .with_icons(vec![Icon::new("https://example.com/icons/config.png")]);
 
     println!("3. Resource with icon:");
-    println!("{}\n", serde_json::to_string_pretty(&config_resource).unwrap());
+    println!(
+        "{}\n",
+        serde_json::to_string_pretty(&config_resource).unwrap()
+    );
 
     // --- ResourceTemplate with icon ---
     let log_template = ResourceTemplate::new("logs", "file:///logs/{date}.log")
@@ -91,7 +93,10 @@ fn main() {
         .with_icons(vec![Icon::new("https://example.com/icons/review.png")]);
 
     println!("5. Prompt with icon:");
-    println!("{}\n", serde_json::to_string_pretty(&code_review_prompt).unwrap());
+    println!(
+        "{}\n",
+        serde_json::to_string_pretty(&code_review_prompt).unwrap()
+    );
 
     // --- Implementation (server info) with icon ---
     let server_impl = Implementation::new("my-mcp-server", "1.0.0")
@@ -108,7 +113,10 @@ fn main() {
         .with_theme(turul_mcp_protocol::IconTheme::Dark);
 
     println!("7. Icon with full metadata (mimeType, sizes, theme):");
-    println!("{}\n", serde_json::to_string_pretty(&detailed_icon).unwrap());
+    println!(
+        "{}\n",
+        serde_json::to_string_pretty(&detailed_icon).unwrap()
+    );
 
     println!("=== All MCP types support optional icons via Icon struct ===");
     println!("Icons can be:");

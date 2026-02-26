@@ -3,12 +3,12 @@
 //! Tests for MCP error codes and messages when required args are missing/invalid.
 //! Verifies proper argument validation with structured MCP errors.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use turul_mcp_protocol::prompts::*;
 use turul_mcp_protocol::{McpError, McpResult};
-use turul_mcp_server::handlers::{McpHandler, PromptsGetHandler};
 use turul_mcp_server::McpPrompt;
+use turul_mcp_server::handlers::{McpHandler, PromptsGetHandler};
 
 // Enhanced test prompt with configurable required arguments
 #[derive(Clone)]

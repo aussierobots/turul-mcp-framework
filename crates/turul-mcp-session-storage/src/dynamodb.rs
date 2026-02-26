@@ -161,6 +161,8 @@ impl DynamoDbSessionStorage {
                                         "DynamoDB table '{}' is active and ready",
                                         self.config.table_name
                                     );
+                                    // Ensure TTL is enabled on existing tables
+                                    self.ensure_ttl_enabled().await?;
                                     Ok(())
                                 }
                                 _ => {
@@ -350,7 +352,6 @@ impl DynamoDbSessionStorage {
 
     /// Ensure TTL is enabled on the main session table
     #[cfg(feature = "dynamodb")]
-    #[allow(dead_code)]
     async fn ensure_ttl_enabled(&self) -> Result<(), DynamoDbError> {
         info!(
             "Checking TTL status on DynamoDB table: {}",
@@ -457,6 +458,74 @@ impl DynamoDbSessionStorage {
         }
     }
 
+    /// Ensure TTL is enabled on the events table (idempotent — returns early if already enabled)
+    #[cfg(feature = "dynamodb")]
+    async fn ensure_ttl_on_events_table(
+        &self,
+        event_table: &str,
+    ) -> Result<(), SessionStorageError> {
+        info!(
+            "Checking TTL status on DynamoDB events table: {}",
+            event_table
+        );
+
+        match self
+            .client
+            .describe_time_to_live()
+            .table_name(event_table)
+            .send()
+            .await
+        {
+            Ok(output) => {
+                if let Some(ttl_description) = output.time_to_live_description() {
+                    match ttl_description.time_to_live_status() {
+                        Some(aws_sdk_dynamodb::types::TimeToLiveStatus::Enabled) => {
+                            info!(
+                                "TTL is already enabled on events table: {}",
+                                event_table
+                            );
+                            return Ok(());
+                        }
+                        Some(aws_sdk_dynamodb::types::TimeToLiveStatus::Enabling) => {
+                            info!(
+                                "TTL is currently being enabled on events table: {}",
+                                event_table
+                            );
+                            return Ok(());
+                        }
+                        Some(status) => {
+                            info!(
+                                "TTL status is {:?}, will enable it on events table: {}",
+                                status, event_table
+                            );
+                        }
+                        None => {
+                            info!(
+                                "TTL status unknown, will enable it on events table: {}",
+                                event_table
+                            );
+                        }
+                    }
+                } else {
+                    info!(
+                        "No TTL description found, will enable TTL on events table: {}",
+                        event_table
+                    );
+                }
+
+                // TTL is not enabled, so enable it
+                self.enable_ttl_on_events_table(event_table).await
+            }
+            Err(err) => {
+                warn!(
+                    "Failed to describe TTL for events table '{}': {}, attempting to enable",
+                    event_table, err
+                );
+                self.enable_ttl_on_events_table(event_table).await
+            }
+        }
+    }
+
     /// Wait for the table to become active
     #[cfg(feature = "dynamodb")]
     async fn wait_for_table_active(&self) -> Result<(), DynamoDbError> {
@@ -536,6 +605,8 @@ impl DynamoDbSessionStorage {
                 if let Some(table) = output.table()
                     && let Some(TableStatus::Active) = table.table_status()
                 {
+                    // Ensure TTL is enabled on existing events table
+                    self.ensure_ttl_on_events_table(event_table).await?;
                     return Ok(());
                 }
             }
@@ -1933,7 +2004,8 @@ mod tests {
         let config = DynamoDbConfig::default();
         assert_eq!(config.table_name, "mcp-sessions");
         // Region from AWS_REGION env var or default "us-east-1"
-        let expected_region = std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
+        let expected_region =
+            std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
         assert_eq!(config.region, expected_region);
         assert_eq!(config.session_ttl_minutes, 5);
     }

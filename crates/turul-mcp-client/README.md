@@ -24,7 +24,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-client = "0.2.0"
+turul-mcp-client = "0.3.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -95,7 +95,7 @@ let client = McpClientBuilder::new()
 
 ### Future Transport Support
 
-Additional transport implementations (WebSocket, stdio) are planned for future releases.
+Additional transport implementations (stdio) are planned for future releases.
 
 ## Client Configuration
 
@@ -281,6 +281,31 @@ let prompt_result = client.get_prompt("greeting", Some(serde_json::json!({
 println!("Prompt messages: {:?}", prompt_result.messages);
 ```
 
+### Tasks (MCP 2025-11-25)
+
+```rust
+// Call a tool with task augmentation (long-running)
+let task = client.call_tool_with_task(
+    "batch_process",
+    serde_json::json!({"items": 1000}),
+    Some(60_000),  // TTL in milliseconds
+).await?;
+println!("Task created: {}", task.task_id);
+
+// Poll task status
+let task = client.get_task(&task.task_id).await?;
+println!("Status: {:?}", task.status);
+
+// Wait for result (blocks until terminal)
+let result = client.get_task_result(&task.task_id).await?;
+
+// List all tasks
+let tasks = client.list_tasks().await?;
+
+// Cancel a running task
+let cancelled = client.cancel_task(&task.task_id).await?;
+```
+
 ## Streaming and Events
 
 ### Stream Handler
@@ -451,14 +476,13 @@ fn compare_transports() -> Result<(), Box<dyn std::error::Error>> {
 
 ```toml
 [dependencies]
-turul-mcp-client = { version = "0.2", features = ["sse"] }
+turul-mcp-client = { version = "0.3", features = ["sse"] }
 ```
 
 Available features:
 - `default` = `["http", "sse"]` - HTTP and SSE transport
 - `http` - HTTP transport support (included by default)
 - `sse` - Server-Sent Events transport (included by default)
-- `websocket` - *(Planned)* WebSocket transport support
 - `stdio` - *(Planned)* Standard I/O transport for executable servers
 
 ## Error Reference
@@ -510,14 +534,14 @@ match error {
 The client automatically adapts to server capabilities:
 
 - **2024-11-05**: Basic MCP without streamable HTTP
-- **2025-03-26**: Streamable HTTP with SSE support  
+- **2025-03-26**: Streamable HTTP with SSE support
 - **2025-06-18**: Full feature set with meta fields and enhanced capabilities
+- **2025-11-25**: Icons, tasks, sampling tools, URL elicitation (current default)
 
 ### Transport Compatibility
 
 - **HTTP**: Works with all MCP servers
 - **SSE**: Requires server-sent events support
-- **WebSocket**: *(Planned)* WebSocket endpoint support
 - **Stdio**: *(Planned)* Executable MCP server support
 
 ## Related Crates

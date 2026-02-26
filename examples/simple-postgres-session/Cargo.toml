@@ -1,19 +1,22 @@
 [package]
 name = "simple-postgres-session"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
 [[bin]]
+test = false
 name = "simple-postgres-session"
 path = "src/main.rs"
 
 [[bin]]
+test = false
 name = "postgres-setup"
 path = "src/bin/postgres-setup.rs"
 
 [[bin]]
+test = false
 name = "postgres-teardown"
 path = "src/bin/postgres-teardown.rs"
 
@@ -32,7 +35,7 @@ serde_json.workspace = true
 chrono.workspace = true
 async-trait.workspace = true
 sqlx = { workspace = true, features = ["postgres", "runtime-tokio-rustls"] }
-url = "2.4"
+url.workspace = true
 
 [features]
 default = []

@@ -237,10 +237,7 @@ impl ContentBlock {
     }
 
     /// Create tool result content block
-    pub fn tool_result(
-        tool_use_id: impl Into<String>,
-        content: Vec<ContentBlock>,
-    ) -> Self {
+    pub fn tool_result(tool_use_id: impl Into<String>, content: Vec<ContentBlock>) -> Self {
         Self::ToolResult {
             tool_use_id: tool_use_id.into(),
             content,
@@ -251,10 +248,7 @@ impl ContentBlock {
     }
 
     /// Create tool result error content block
-    pub fn tool_result_error(
-        tool_use_id: impl Into<String>,
-        content: Vec<ContentBlock>,
-    ) -> Self {
+    pub fn tool_result_error(tool_use_id: impl Into<String>, content: Vec<ContentBlock>) -> Self {
         Self::ToolResult {
             tool_use_id: tool_use_id.into(),
             content,
@@ -509,7 +503,10 @@ mod tests {
 
         // Round-trip
         let parsed: ContentBlock = serde_json::from_value(json).unwrap();
-        if let ContentBlock::ToolUse { id, name, input, .. } = parsed {
+        if let ContentBlock::ToolUse {
+            id, name, input, ..
+        } = parsed
+        {
             assert_eq!(id, "tu-123");
             assert_eq!(name, "search");
             assert_eq!(input.get("query"), Some(&json!("test search")));
@@ -520,10 +517,8 @@ mod tests {
 
     #[test]
     fn test_tool_result_content_block() {
-        let block = ContentBlock::tool_result(
-            "tu-123",
-            vec![ContentBlock::text("Search results here")],
-        );
+        let block =
+            ContentBlock::tool_result("tu-123", vec![ContentBlock::text("Search results here")]);
         let json = serde_json::to_value(&block).unwrap();
 
         assert_eq!(json["type"], "tool_result");
@@ -534,7 +529,13 @@ mod tests {
 
         // Round-trip
         let parsed: ContentBlock = serde_json::from_value(json).unwrap();
-        if let ContentBlock::ToolResult { tool_use_id, content, is_error, .. } = parsed {
+        if let ContentBlock::ToolResult {
+            tool_use_id,
+            content,
+            is_error,
+            ..
+        } = parsed
+        {
             assert_eq!(tool_use_id, "tu-123");
             assert_eq!(content.len(), 1);
             assert!(is_error.is_none());

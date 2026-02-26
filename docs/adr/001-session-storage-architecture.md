@@ -172,7 +172,7 @@ let server = McpServer::builder()
 let dynamodb_config = DynamoDbConfig {
     table_name: "mcp-sessions".to_string(),
     region: "us-east-1".to_string(),
-    session_ttl_hours: 24,
+    session_ttl_minutes: 1440,
     ..Default::default()
 };
 let dynamodb_storage = Arc::new(DynamoDbSessionStorage::with_config(dynamodb_config).await?);

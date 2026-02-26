@@ -82,25 +82,19 @@ async fn test_sse_notification_round_trip_delivery() {
     // Parse and analyze events for progress notifications from progress_tracker tool
     let mut found_progress = false;
     for line in response_text.lines() {
-        if let Some(data) = line.strip_prefix("data: ") {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                // Check for progress notification (MCP spec)
-                if let Some(method) = parsed.get("method").and_then(|m| m.as_str()) {
-                    if method == "notifications/progress" {
-                        found_progress = true;
-                        info!("✅ Found progress notification from progress_tracker tool");
-                        if let Some(params) = parsed.get("params") {
-                            if let Some(token) =
-                                params.get("progressToken").and_then(|t| t.as_str())
-                            {
-                                info!("✅ Progress token: '{}'", token);
-                            }
-                            if let Some(progress) = params.get("progress").and_then(|p| p.as_u64())
-                            {
-                                info!("✅ Progress value: {}%", progress);
-                            }
-                        }
-                    }
+        if let Some(data) = line.strip_prefix("data: ")
+            && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data)
+            && let Some(method) = parsed.get("method").and_then(|m| m.as_str())
+            && method == "notifications/progress"
+        {
+            found_progress = true;
+            info!("✅ Found progress notification from progress_tracker tool");
+            if let Some(params) = parsed.get("params") {
+                if let Some(token) = params.get("progressToken").and_then(|t| t.as_str()) {
+                    info!("✅ Progress token: '{}'", token);
+                }
+                if let Some(progress) = params.get("progress").and_then(|p| p.as_u64()) {
+                    info!("✅ Progress value: {}%", progress);
                 }
             }
         }
@@ -218,26 +212,22 @@ async fn test_sse_notification_session_isolation() {
     let mut client2_progress_count = 0;
 
     for line in events1_text.lines() {
-        if let Some(data) = line.strip_prefix("data: ") {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                if let Some(method) = parsed.get("method").and_then(|m| m.as_str()) {
-                    if method == "notifications/progress" {
-                        client1_progress_count += 1;
-                    }
-                }
-            }
+        if let Some(data) = line.strip_prefix("data: ")
+            && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data)
+            && let Some(method) = parsed.get("method").and_then(|m| m.as_str())
+            && method == "notifications/progress"
+        {
+            client1_progress_count += 1;
         }
     }
 
     for line in events2_text.lines() {
-        if let Some(data) = line.strip_prefix("data: ") {
-            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data) {
-                if let Some(method) = parsed.get("method").and_then(|m| m.as_str()) {
-                    if method == "notifications/progress" {
-                        client2_progress_count += 1;
-                    }
-                }
-            }
+        if let Some(data) = line.strip_prefix("data: ")
+            && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(data)
+            && let Some(method) = parsed.get("method").and_then(|m| m.as_str())
+            && method == "notifications/progress"
+        {
+            client2_progress_count += 1;
         }
     }
 

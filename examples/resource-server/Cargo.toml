@@ -1,16 +1,20 @@
 [package]
 name = "resource-server"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 
 [dependencies]
 turul-mcp-server = { workspace = true }
 turul-mcp-protocol = { workspace = true }
 turul-mcp-derive = { workspace = true }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
+turul-mcp-builders = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+[[bin]]
+name = "resource-server"
+path = "src/main.rs"
+test = false

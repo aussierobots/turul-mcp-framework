@@ -129,8 +129,8 @@
 //! ```
 
 pub mod prelude;
-pub mod traits;
 pub mod protocol_impls;
+pub mod traits;
 
 pub mod completion;
 pub mod elicitation;
@@ -144,7 +144,9 @@ pub mod tool;
 
 // Schemars integration for JSON schema generation
 pub mod schemars_helpers;
-pub use schemars_helpers::{ToolSchemaExt, convert_value_to_json_schema, convert_value_to_json_schema_with_defs};
+pub use schemars_helpers::{
+    ToolSchemaExt, convert_value_to_json_schema, convert_value_to_json_schema_with_defs,
+};
 
 // Schema provider with automatic JsonSchema detection
 // schema_provider module removed - schemars detection now happens directly in derive macros

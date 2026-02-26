@@ -268,7 +268,9 @@ impl PlatformState {
     description = "Manage development teams, members, and team information including skills, projects, and on-call rotations"
 )]
 pub struct TeamManagementTool {
-    #[param(description = "Team management action: list_teams, get_team_details, get_team_members, get_on_call_rotation, team_workload")]
+    #[param(
+        description = "Team management action: list_teams, get_team_details, get_team_members, get_on_call_rotation, team_workload"
+    )]
     pub action: String,
 
     #[param(description = "Team ID for team-specific operations", optional)]
@@ -523,16 +525,24 @@ impl TeamManagementTool {
     description = "Manage development projects including status tracking, milestone management, and resource allocation"
 )]
 pub struct ProjectManagementTool {
-    #[param(description = "Project management action: list_projects, get_project_details, project_status_summary, milestone_tracking, resource_allocation, project_timeline")]
+    #[param(
+        description = "Project management action: list_projects, get_project_details, project_status_summary, milestone_tracking, resource_allocation, project_timeline"
+    )]
     pub action: String,
 
     #[param(description = "Project ID for project-specific operations", optional)]
     pub project_id: Option<String>,
 
-    #[param(description = "Filter projects by status (in_progress, planning, completed, etc.)", optional)]
+    #[param(
+        description = "Filter projects by status (in_progress, planning, completed, etc.)",
+        optional
+    )]
     pub status_filter: Option<String>,
 
-    #[param(description = "Filter projects by priority (critical, high, medium, low)", optional)]
+    #[param(
+        description = "Filter projects by priority (critical, high, medium, low)",
+        optional
+    )]
     pub priority_filter: Option<String>,
 }
 
@@ -788,7 +798,9 @@ impl HasPromptMetadata for WorkflowGeneratorPrompt {
 
 impl HasPromptDescription for WorkflowGeneratorPrompt {
     fn description(&self) -> Option<&str> {
-        Some("Generate standardized development workflows based on team practices and project requirements")
+        Some(
+            "Generate standardized development workflows based on team practices and project requirements",
+        )
     }
 }
 
@@ -910,27 +922,21 @@ impl McpResourceTrait for ProjectResourcesHandler {
         // Repository information
         let repos_content = format!(
             "# Code Repositories\n\n{}\n",
-            serde_json::to_string_pretty(
-                &state.resources.development_resources.code_repositories
-            )?
+            serde_json::to_string_pretty(&state.resources.development_resources.code_repositories)?
         );
         content.push(ResourceContent::text("repos", repos_content));
 
         // API documentation
         let api_content = format!(
             "# API Documentation\n\n{}\n",
-            serde_json::to_string_pretty(
-                &state.resources.development_resources.api_documentation
-            )?
+            serde_json::to_string_pretty(&state.resources.development_resources.api_documentation)?
         );
         content.push(ResourceContent::text("api", api_content));
 
         // Database schemas
         let db_content = format!(
             "# Database Schemas\n\n{}\n",
-            serde_json::to_string_pretty(
-                &state.resources.development_resources.database_schemas
-            )?
+            serde_json::to_string_pretty(&state.resources.development_resources.database_schemas)?
         );
         content.push(ResourceContent::text("database", db_content));
 

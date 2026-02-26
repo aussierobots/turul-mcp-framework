@@ -3,12 +3,17 @@
 # Phase 6: Clients & Test Utilities - Intent-Based Verification
 # Tests CLIENT applications and integration tests (NOT servers)
 #
+# Uses pre-built binaries from target/debug/ for fast execution.
+# Run `cargo build --workspace` first, or this script will build for you.
+#
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
+
+BIN_DIR="$PROJECT_ROOT/target/debug"
 
 echo "======================================================================"
 echo "Phase 6: Clients & Test Utilities - Intent-Based Verification"
@@ -17,6 +22,13 @@ echo ""
 echo "Testing Objective: Verify CLIENT applications and test utilities"
 echo "                   work correctly with MCP servers"
 echo ""
+
+# Build all binaries if not already built
+if [ ! -f "$BIN_DIR/minimal-server" ]; then
+    echo "Pre-built binaries not found. Building workspace..."
+    cargo build --workspace
+    echo ""
+fi
 
 PASSED=0
 FAILED=0
@@ -28,16 +40,16 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Cleanup function
+# Track PIDs for cleanup
+PIDS=()
+
+# Cleanup function (PID-based, not pkill)
 cleanup() {
     echo ""
     echo "Cleaning up background processes..."
-    pkill -f "client-initialise-server" 2>/dev/null || true
-    pkill -f "client-initialise-report" 2>/dev/null || true
-    pkill -f "streamable-http-client" 2>/dev/null || true
-    pkill -f "logging-test-server" 2>/dev/null || true
-    pkill -f "logging-test-client" 2>/dev/null || true
-    pkill -f "session-management-compliance-test" 2>/dev/null || true
+    for pid in "${PIDS[@]}"; do
+        kill "$pid" 2>/dev/null || true
+    done
     sleep 1
 }
 
@@ -52,9 +64,10 @@ test_client_initialization() {
 
     # Start the test server
     echo "Starting client-initialise-server..."
-    RUST_LOG=error timeout 30s cargo run --bin client-initialise-server -- --port 52935 &
+    RUST_LOG=error timeout 30s "$BIN_DIR/client-initialise-server" --port 52935 &
     SERVER_PID=$!
-    sleep 5
+    PIDS+=($SERVER_PID)
+    sleep 3
 
     # Check if server is running
     if ! kill -0 $SERVER_PID 2>/dev/null; then
@@ -65,7 +78,7 @@ test_client_initialization() {
 
     # Run the client report
     echo "Running client-initialise-report..."
-    RUST_LOG=error timeout 10s cargo run --bin client-initialise-report -- --url http://127.0.0.1:52935/mcp > /tmp/client_report.log 2>&1 &
+    RUST_LOG=error timeout 10s "$BIN_DIR/client-initialise-report" --url http://127.0.0.1:52935/mcp > /tmp/client_report.log 2>&1 &
     CLIENT_PID=$!
 
     # Wait for client to complete
@@ -96,9 +109,10 @@ test_streamable_client() {
 
     # Start minimal-server as test target
     echo "Starting minimal-server as test target..."
-    RUST_LOG=error timeout 30s cargo run --bin minimal-server -- --port 8641 &
+    RUST_LOG=error timeout 30s "$BIN_DIR/minimal-server" --port 8641 &
     SERVER_PID=$!
-    sleep 5
+    PIDS+=($SERVER_PID)
+    sleep 3
 
     # Check if server is running
     if ! kill -0 $SERVER_PID 2>/dev/null; then
@@ -109,7 +123,7 @@ test_streamable_client() {
 
     # Run streamable client
     echo "Running streamable-http-client..."
-    RUST_LOG=error timeout 10s cargo run --bin streamable-http-client -- --url http://127.0.0.1:8641/mcp > /tmp/streamable_client.log 2>&1 &
+    RUST_LOG=error timeout 10s "$BIN_DIR/streamable-http-client" --url http://127.0.0.1:8641/mcp > /tmp/streamable_client.log 2>&1 &
     CLIENT_PID=$!
 
     # Wait for client to complete
@@ -140,9 +154,10 @@ test_logging_client() {
 
     # Start logging test server
     echo "Starting logging-test-server..."
-    RUST_LOG=error timeout 30s cargo run --bin logging-test-server -- --port 8052 &
+    RUST_LOG=error timeout 30s "$BIN_DIR/logging-test-server" --port 8052 &
     SERVER_PID=$!
-    sleep 5
+    PIDS+=($SERVER_PID)
+    sleep 3
 
     # Check if server is running
     if ! kill -0 $SERVER_PID 2>/dev/null; then
@@ -153,7 +168,7 @@ test_logging_client() {
 
     # Run logging test client
     echo "Running logging-test-client..."
-    RUST_LOG=error timeout 10s cargo run --bin logging-test-client -- --url http://127.0.0.1:8052/mcp > /tmp/logging_client.log 2>&1 &
+    RUST_LOG=error timeout 10s "$BIN_DIR/logging-test-client" --url http://127.0.0.1:8052/mcp > /tmp/logging_client.log 2>&1 &
     CLIENT_PID=$!
 
     # Wait for client to complete
@@ -184,7 +199,7 @@ test_session_compliance() {
 
     # This is a standalone test utility
     echo "Running session management compliance test..."
-    RUST_LOG=error timeout 10s cargo run --bin session-management-compliance-test > /tmp/session_compliance.log 2>&1 &
+    RUST_LOG=error timeout 10s "$BIN_DIR/session-management-compliance-test" > /tmp/session_compliance.log 2>&1 &
     TEST_PID=$!
 
     # Wait for test to complete
@@ -211,9 +226,10 @@ test_session_logging() {
 
     # This is a standalone test utility
     echo "Running session logging proof test..."
-    RUST_LOG=error timeout 10s cargo run --bin session-logging-proof-test -- --port 8050 &
+    RUST_LOG=error timeout 10s "$BIN_DIR/session-logging-proof-test" --port 8050 &
     SERVER_PID=$!
-    sleep 5
+    PIDS+=($SERVER_PID)
+    sleep 3
 
     # Check if server started
     if ! kill -0 $SERVER_PID 2>/dev/null; then

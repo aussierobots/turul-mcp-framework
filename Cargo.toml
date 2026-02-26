@@ -7,6 +7,7 @@ members = [
   "crates/turul-mcp-protocol-2025-11-25",
   "crates/turul-mcp-protocol",
   "crates/turul-mcp-session-storage",
+  "crates/turul-mcp-task-storage",
   "crates/turul-http-mcp-server",
   "crates/turul-mcp-server",
   "crates/turul-mcp-derive",
@@ -62,15 +63,23 @@ members = [
   "examples/task-types-showcase",
   "examples/sampling-with-tools-showcase",
 
+  # Tasks E2E test examples
+  "examples/tasks-e2e-inmemory-server",
+  "examples/tasks-e2e-inmemory-client",
+
   # Moved from turul-mcp-server/examples
   "examples/client-initialise-server",
   "examples/client-initialise-report",
+  "examples/client-task-lifecycle",
   "examples/logging-test-client",
   "examples/logging-test-server",
   "examples/session-aware-logging-demo",
   "examples/session-logging-proof-test",
   "examples/session-management-compliance-test",
   "examples/streamable-http-client",
+
+  # AWS/Lambda authorizer examples
+  "examples/lambda-authorizer",
 
   # Middleware examples
   "examples/middleware-auth-server",
@@ -135,11 +144,13 @@ turul-mcp-protocol-2025-06-18 = { version = "0.3.0", path = "crates/turul-mcp-pr
 turul-mcp-protocol-2025-11-25 = { version = "0.3.0", path = "crates/turul-mcp-protocol-2025-11-25" }
 turul-mcp-protocol = { version = "0.3.0", path = "crates/turul-mcp-protocol" }
 turul-mcp-session-storage = { version = "0.3.0", path = "crates/turul-mcp-session-storage" }
+turul-mcp-task-storage = { version = "0.3.0", path = "crates/turul-mcp-task-storage" }
 turul-http-mcp-server = { version = "0.3.0", path = "crates/turul-http-mcp-server" }
 turul-mcp-server = { version = "0.3.0", path = "crates/turul-mcp-server" }
 turul-mcp-derive = { version = "0.3.0", path = "crates/turul-mcp-derive" }
 turul-mcp-client = { version = "0.3.0", path = "crates/turul-mcp-client" }
 turul-mcp-builders = { version = "0.3.0", path = "crates/turul-mcp-builders" }
+turul-mcp-aws-lambda = { version = "0.3.0", path = "crates/turul-mcp-aws-lambda" }
 
 # Additional dependencies for examples and tests
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -157,7 +168,7 @@ sqlx = { version = "0.8", features = [
   "uuid",
 ] }
 tempfile = "3"
-toml = "0.9"
+toml = "1.0"
 regex = "1.12"
 base64 = "0.22"
 urlencoding = "2.1"
@@ -171,13 +182,13 @@ aws-sdk-sns = "1"
 # AWS Lambda dependencies
 lambda_runtime = "1"
 lambda_http = "1"
-lambda-web = "1"
+lambda-web = "0.2"
 aws_lambda_events = "1"
 
 # Other dependencies
 url = "2.5"
 parking_lot = "0.12"
-rand = "0.9"
+rand = { version = "0.10", features = ["thread_rng"] }
 tracing-test = "0.2"
 pin-project = "1.1"
 proc-macro2 = "1.0"
@@ -185,9 +196,17 @@ quote = "1.0"
 syn = "2.0"
 serial_test = "3.3"
 tokio-test = "0.4"
+md5 = "0.8"
 
 # YAML processing
 serde_yaml = "0.9"
+
+# Example-specific dependencies
+indicatif = "0.18"
+colored = "3.1"
+
+# Test-specific dependencies
+mcp-e2e-shared = { path = "tests/shared" }
 
 
 [profile.release]

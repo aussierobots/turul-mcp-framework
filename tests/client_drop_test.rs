@@ -3,6 +3,11 @@
 //! This script demonstrates that when an MCP client is dropped without
 //! explicit disconnect(), it automatically sends a DELETE request to
 //! clean up the session on the server.
+//!
+//! NOTE: This is a standalone script (not a `#[test]`), included in the
+//! consolidated e2e_tests binary for compilation coverage only.
+
+#![allow(dead_code)]
 
 use std::time::Duration;
 use tokio::time::sleep;

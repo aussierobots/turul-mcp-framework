@@ -134,7 +134,7 @@ impl StreamManager {
         config: StreamConfig,
     ) -> Self {
         use uuid::Uuid;
-        let instance_id = Uuid::now_v7().to_string();
+        let instance_id = Uuid::now_v7().as_simple().to_string();
         debug!("Creating StreamManager instance: {}", instance_id);
         Self {
             storage,
@@ -155,7 +155,7 @@ impl StreamManager {
         Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>>,
         StreamError,
     > {
-        info!(
+        debug!(
             "🌊 handle_sse_connection called: session={}, connection={}, last_event_id={:?}",
             session_id, connection_id, last_event_id
         );

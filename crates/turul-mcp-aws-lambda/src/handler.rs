@@ -267,7 +267,7 @@ impl LambdaMcpHandler {
             .and_then(|v| v.to_str().ok())
             .map(|s| s.to_string());
 
-        info!(
+        debug!(
             "🌊 Lambda streaming MCP request: {} {} (origin: {:?})",
             method, uri, request_origin
         );
@@ -564,7 +564,7 @@ mod tests {
 
         // Additional verification: Test that the configuration is actually used functionally
         // by verifying the stream manager can be used with the custom configuration
-        let test_session_id = uuid::Uuid::now_v7().to_string();
+        let test_session_id = uuid::Uuid::now_v7().as_simple().to_string();
 
         // The stream manager should be able to handle session operations with the custom config
         // This verifies the config isn't just preserved but actually used

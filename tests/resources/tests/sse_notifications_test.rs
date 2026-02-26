@@ -1,4 +1,3 @@
-
 //! SSE Notifications Tests for MCP Resources
 //!
 //! Tests Server-Sent Events functionality for resources/list changes
@@ -252,21 +251,19 @@ async fn test_sse_notification_format_compliance() {
                     info!("✅ Valid SSE data line: {}", line);
 
                     // If it's JSON data, validate structure
-                    if let Some(json_part) = line.strip_prefix("data:").map(|s| s.trim()) {
-                        if json_part.starts_with('{') {
-                            match serde_json::from_str::<serde_json::Value>(json_part) {
-                                Ok(parsed) => {
-                                    info!("✅ Valid JSON notification: {:?}", parsed);
+                    if let Some(json_part) = line.strip_prefix("data:").map(|s| s.trim()) && json_part.starts_with('{') {
+                        match serde_json::from_str::<serde_json::Value>(json_part) {
+                            Ok(parsed) => {
+                                info!("✅ Valid JSON notification: {:?}", parsed);
 
-                                    // Check for MCP notification structure
-                                    if parsed.get("method").is_some() {
-                                        assert!(parsed.get("method").unwrap().is_string());
-                                        info!("✅ MCP notification method found");
-                                    }
+                                // Check for MCP notification structure
+                                if parsed.get("method").is_some() {
+                                    assert!(parsed.get("method").unwrap().is_string());
+                                    info!("✅ MCP notification method found");
                                 }
-                                Err(e) => {
-                                    debug!("Non-JSON SSE data (acceptable): {}", e);
-                                }
+                            }
+                            Err(e) => {
+                                debug!("Non-JSON SSE data (acceptable): {}", e);
                             }
                         }
                     }

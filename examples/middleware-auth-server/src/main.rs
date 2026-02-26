@@ -61,16 +61,14 @@ impl McpMiddleware for AuthMiddleware {
         _session: Option<&dyn turul_mcp_session_storage::SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Skip authentication for initialize method (required for session creation)
-        if ctx.method() == "initialize" {
-            tracing::debug!("Skipping auth for initialize method");
+        // Skip authentication for initialize (session creation) and ping (pre-init health check)
+        if ctx.method() == "initialize" || ctx.method() == "ping" {
+            tracing::debug!("Skipping auth for {} method", ctx.method());
             return Ok(());
         }
 
         // Extract X-API-Key from request metadata (HTTP headers are stored here)
-        let api_key = ctx.metadata()
-            .get("x-api-key")
-            .and_then(|v| v.as_str());
+        let api_key = ctx.metadata().get("x-api-key").and_then(|v| v.as_str());
 
         match api_key {
             Some(key) => {
@@ -114,13 +112,16 @@ impl McpMiddleware for AuthMiddleware {
 
 /// Tool that reads the authenticated user_id from session
 #[derive(McpTool, Clone, Default)]
-#[tool(name = "whoami", description = "Returns the authenticated user ID from the session")]
+#[tool(
+    name = "whoami",
+    description = "Returns the authenticated user ID from the session"
+)]
 struct WhoAmITool {}
 
 impl WhoAmITool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
         let session = session.ok_or_else(|| McpError::InvalidRequest {
-            message: "Session required".to_string()
+            message: "Session required".to_string(),
         })?;
 
         // Read user_id from session state (written by AuthMiddleware)
@@ -128,7 +129,7 @@ impl WhoAmITool {
             .get_typed_state::<String>("user_id")
             .await
             .ok_or_else(|| McpError::InvalidRequest {
-                message: "Not authenticated".to_string()
+                message: "Not authenticated".to_string(),
             })?;
 
         Ok(json!({
@@ -144,10 +145,15 @@ async fn main() -> McpResult<()> {
 
     // Initialize tracing
     tracing_subscriber::fmt()
-        .with_env_filter("middleware_auth_server=debug,turul_mcp_server=debug,turul_http_mcp_server=debug")
+        .with_env_filter(
+            "middleware_auth_server=debug,turul_mcp_server=debug,turul_http_mcp_server=debug",
+        )
         .init();
 
-    tracing::info!("Starting middleware-auth-server example on port {}", args.port);
+    tracing::info!(
+        "Starting middleware-auth-server example on port {}",
+        args.port
+    );
     tracing::info!("Valid API keys:");
     tracing::info!("  - secret-key-123 (user-alice)");
     tracing::info!("  - secret-key-456 (user-bob)");
@@ -163,7 +169,7 @@ async fn main() -> McpResult<()> {
         .instructions(
             "This server demonstrates middleware-based authentication. \
              Include X-API-Key header with valid key (secret-key-123 or secret-key-456). \
-             Use 'whoami' tool to see your authenticated user ID."
+             Use 'whoami' tool to see your authenticated user ID.",
         )
         // Register authentication middleware FIRST (executes before other middleware)
         .middleware(Arc::new(AuthMiddleware::new()))
@@ -179,7 +185,9 @@ async fn main() -> McpResult<()> {
     tracing::info!("    -H 'Content-Type: application/json' \\");
     tracing::info!("    -H 'Accept: application/json' \\");
     tracing::info!("    -H 'X-API-Key: secret-key-123' \\");
-    tracing::info!("    -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'");
+    tracing::info!(
+        "    -d '{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"test\",\"version\":\"1.0\"}}}}}}'"
+    );
 
     server.run().await
 }

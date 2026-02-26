@@ -1,6 +1,6 @@
 [package]
 name = "zero-config-getting-started"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 
 [dependencies]
@@ -18,3 +18,7 @@ async-trait.workspace = true
 
 [features]
 default = ["turul-mcp-server/http"]
+[[bin]]
+name = "zero-config-getting-started"
+path = "src/main.rs"
+test = false

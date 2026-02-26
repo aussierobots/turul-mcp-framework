@@ -7,7 +7,7 @@
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use turul_mcp_derive::{mcp_tool, McpTool};
+use turul_mcp_derive::{McpTool, mcp_tool};
 use turul_mcp_protocol::McpResult;
 use turul_mcp_server::prelude::*;
 
@@ -54,7 +54,7 @@ impl CalculatorDeriveTool {
             _ => {
                 return Err(turul_mcp_protocol::McpError::tool_execution(
                     "Invalid operation",
-                ))
+                ));
             }
         };
 
@@ -170,9 +170,9 @@ impl AnalyzeDataTool {
             warning: if values.len() < 3 {
                 Some("Small sample size".to_string())
             } else {
-                None  // Omitted from JSON, not serialized as null
+                None // Omitted from JSON, not serialized as null
             },
-            notes: None,  // Omitted from JSON
+            notes: None, // Omitted from JSON
         })
     }
 }

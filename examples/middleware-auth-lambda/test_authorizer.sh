@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 echo -e "${BLUE}📋 Step 1: Running unit tests...${NC}"
 cargo test --package turul-mcp-aws-lambda --lib adapter::tests::authorizer_tests --quiet
 
-echo -e "${GREEN}✅ Unit tests passed (6/6)${NC}"
+echo -e "${GREEN}✅ Adapter authorizer tests passed${NC}"
 echo ""
 
 # 2. Build verification
@@ -85,9 +85,29 @@ sleep 2  # Wait for logs to flush
 V1_COUNT=$(grep -c "Authorizer context:" /tmp/lambda-output.log || true)
 
 if [ "$V1_COUNT" -gt "$V2_COUNT" ]; then
-    echo -e "${GREEN}✅ V1 authorizer context extracted${NC}"
+    echo -e "${GREEN}✅ V1 nested authorizer context extracted${NC}"
 else
-    echo "⚠️  V1 may not have extracted authorizer context"
+    echo "⚠️  V1 nested may not have extracted authorizer context"
+fi
+
+echo ""
+
+# Test V1 flat format
+echo -e "${BLUE}📡 Step 5b: Testing API Gateway V1 Flat (REST API, simple authorizer) format...${NC}"
+PRE_FLAT_COUNT=$(grep -c "Authorizer context:" /tmp/lambda-output.log || true)
+cargo lambda invoke middleware-auth-lambda \
+  --data-file examples/middleware-auth-lambda/test-events/apigw-v1-flat-authorizer.json \
+  > /tmp/v1-flat-response.json 2>&1
+
+echo "Response saved to /tmp/v1-flat-response.json"
+
+sleep 2  # Wait for logs to flush
+POST_FLAT_COUNT=$(grep -c "Authorizer context:" /tmp/lambda-output.log || true)
+
+if [ "$POST_FLAT_COUNT" -gt "$PRE_FLAT_COUNT" ]; then
+    echo -e "${GREEN}✅ V1 flat authorizer context extracted${NC}"
+else
+    echo "⚠️  V1 flat may not have extracted authorizer context"
 fi
 
 echo ""
@@ -104,7 +124,8 @@ echo ""
 echo "📝 Test artifacts:"
 echo "   - Lambda logs: /tmp/lambda-output.log"
 echo "   - V2 response: /tmp/v2-response.json"
-echo "   - V1 response: /tmp/v1-response.json"
+echo "   - V1 nested response: /tmp/v1-response.json"
+echo "   - V1 flat response: /tmp/v1-flat-response.json"
 echo ""
 echo "To view full Lambda logs:"
 echo "   cat /tmp/lambda-output.log | grep 'Authorizer context'"

@@ -934,7 +934,7 @@ mod tests {
 
     #[test]
     fn test_invalid_scheme() {
-        let result = HttpTransport::new("ws://localhost:8080/mcp");
+        let result = HttpTransport::new("ftp://localhost:8080/mcp");
         assert!(result.is_err());
     }
 

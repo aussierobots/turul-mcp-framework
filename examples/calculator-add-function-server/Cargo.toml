@@ -1,6 +1,6 @@
 [package]
 name = "calculator-add-function-server"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -12,10 +12,14 @@ description = "Example MCP calculator server using function macro (Level 1)"
 turul-mcp-server = { workspace = true }
 turul-mcp-protocol = { workspace = true }
 turul-mcp-derive = { workspace = true }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
+turul-mcp-builders = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+[[bin]]
+name = "calculator-add-function-server"
+path = "src/main.rs"
+test = false

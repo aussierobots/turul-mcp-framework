@@ -1,11 +1,12 @@
 [package]
 name = "middleware-auth-lambda"
-version = "0.2.2"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
 publish = false
 description = "AWS Lambda MCP server with authentication middleware"
 
 [[bin]]
+test = false
 name = "middleware-auth-lambda"
 path = "src/main.rs"
 
@@ -19,20 +20,20 @@ aws-config = { workspace = true }
 aws-sdk-dynamodb = { workspace = true }
 
 # MCP framework
-turul-mcp-server = { path = "../../crates/turul-mcp-server" }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
-turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage", features = ["dynamodb"] }
-turul-mcp-aws-lambda = { path = "../../crates/turul-mcp-aws-lambda" }
-turul-http-mcp-server = { path = "../../crates/turul-http-mcp-server" }
-turul-mcp-json-rpc-server = { path = "../../crates/turul-mcp-json-rpc-server" }
+turul-mcp-server = { workspace = true }
+turul-mcp-protocol = { workspace = true }
+turul-mcp-session-storage = { workspace = true, features = ["dynamodb"] }
+turul-mcp-aws-lambda = { workspace = true }
+turul-http-mcp-server = { workspace = true }
+turul-mcp-json-rpc-server = { workspace = true }
 
 # Core dependencies
-tokio = { version = "1.47", features = ["full"] }
-async-trait = "0.1"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tokio.workspace = true
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
 
 [features]
 default = []

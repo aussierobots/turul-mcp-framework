@@ -4,7 +4,7 @@
 //! Validates error handling, JSON-RPC error structure, and client recovery
 
 use mcp_e2e_shared::{McpTestClient, TestFixtures, TestServerManager};
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 use serial_test::serial;
 use tracing::{debug, info};
 
@@ -382,15 +382,15 @@ async fn test_parameter_out_of_range_error() {
             } else {
                 // Tool might handle this as a validation result
                 let parsed_result = TestFixtures::extract_tool_result_object(&response);
-                if let Some(result_obj) = parsed_result {
-                    if let Some(validation) = result_obj.get("validation_result") {
-                        assert_ne!(
-                            validation.as_str().unwrap(),
-                            "passed",
-                            "Validation should fail for invalid parameters"
-                        );
-                        info!("✅ Parameter validation properly handled in tool result");
-                    }
+                if let Some(result_obj) = parsed_result
+                    && let Some(validation) = result_obj.get("validation_result")
+                {
+                    assert_ne!(
+                        validation.as_str().unwrap(),
+                        "passed",
+                        "Validation should fail for invalid parameters"
+                    );
+                    info!("✅ Parameter validation properly handled in tool result");
                 }
             }
         }

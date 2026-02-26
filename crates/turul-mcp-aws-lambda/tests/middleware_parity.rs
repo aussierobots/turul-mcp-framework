@@ -13,10 +13,10 @@ use turul_http_mcp_server::middleware::{
     SessionInjection,
 };
 use turul_http_mcp_server::{ServerConfig, StreamConfig, StreamManager};
+use turul_mcp_aws_lambda::LambdaMcpHandler;
 use turul_mcp_json_rpc_server::JsonRpcDispatcher;
 use turul_mcp_protocol::{McpError, ServerCapabilities};
 use turul_mcp_session_storage::{BoxedSessionStorage, InMemorySessionStorage, SessionView};
-use turul_mcp_aws_lambda::LambdaMcpHandler;
 
 /// Test middleware that tracks execution
 struct TrackingMiddleware {
@@ -31,7 +31,10 @@ impl McpMiddleware for TrackingMiddleware {
         _session: Option<&dyn SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        self.executions.lock().unwrap().push(format!("before:{}", ctx.method()));
+        self.executions
+            .lock()
+            .unwrap()
+            .push(format!("before:{}", ctx.method()));
         injection.set_state("lambda_test", json!("executed"));
         Ok(())
     }
@@ -41,7 +44,10 @@ impl McpMiddleware for TrackingMiddleware {
         ctx: &RequestContext<'_>,
         _result: &mut DispatcherResult,
     ) -> Result<(), MiddlewareError> {
-        self.executions.lock().unwrap().push(format!("after:{}", ctx.method()));
+        self.executions
+            .lock()
+            .unwrap()
+            .push(format!("after:{}", ctx.method()));
         Ok(())
     }
 }
@@ -57,7 +63,9 @@ impl McpMiddleware for BlockingMiddleware {
         _session: Option<&dyn SessionView>,
         _injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        Err(MiddlewareError::Unauthenticated("Lambda auth required".to_string()))
+        Err(MiddlewareError::Unauthenticated(
+            "Lambda auth required".to_string(),
+        ))
     }
 
     async fn after_dispatch(
@@ -208,7 +216,12 @@ async fn test_lambda_middleware_error_short_circuits() {
     let error = response_json.get("error").unwrap();
     assert_eq!(error.get("code").unwrap(), -32001); // UNAUTHENTICATED
     assert!(
-        error.get("message").unwrap().as_str().unwrap().contains("Lambda auth required"),
+        error
+            .get("message")
+            .unwrap()
+            .as_str()
+            .unwrap()
+            .contains("Lambda auth required"),
         "Error message should be from middleware"
     );
 }

@@ -22,8 +22,8 @@
 //!
 //! ```toml
 //! [dependencies]
-//! turul-mcp-derive = "0.2"
-//! turul-mcp-server = "0.2"  # For server-side usage
+//! turul-mcp-derive = "0.3"
+//! turul-mcp-server = "0.3"  # For server-side usage
 //! ```
 //!
 //! ## Quick Start

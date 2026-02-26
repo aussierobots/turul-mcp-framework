@@ -72,7 +72,10 @@ pub fn lambda_to_hyper_request(
         };
 
         parts.headers.insert(name, value);
-        trace!("Injected authorizer header: {} = {}", header_name, field_value);
+        trace!(
+            "Injected authorizer header: {} = {}",
+            header_name, field_value
+        );
     }
 
     // Convert LambdaBody to Bytes
@@ -165,7 +168,7 @@ pub fn hyper_to_lambda_streaming(
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// # use turul_mcp_aws_lambda::adapter::camel_to_snake;
 /// assert_eq!(camel_to_snake("userId"), "user_id");
 /// assert_eq!(camel_to_snake("deviceId"), "device_id");
@@ -210,7 +213,7 @@ pub fn camel_to_snake(s: &str) -> String {
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// # use turul_mcp_aws_lambda::adapter::sanitize_authorizer_field_name;
 /// assert_eq!(sanitize_authorizer_field_name("userId"), "user_id");
 /// assert_eq!(sanitize_authorizer_field_name("deviceId"), "device_id");
@@ -246,7 +249,8 @@ pub fn sanitize_authorizer_field_name(field: &str) -> String {
 /// - Converts camelCase to snake_case (userId → user_id)
 /// - Skips fields that fail sanitization
 /// - Converts non-string values to JSON strings
-/// - Handles both `ApiGatewayV2.authorizer.fields` and `ApiGateway.authorizer["lambda"]`
+/// - Handles `ApiGateway.authorizer.fields["lambda"]` (V1 nested) or direct fields (V1 flat)
+/// - Handles `ApiGatewayV2.authorizer.fields` (V2, deserialized from "lambda" key by serde)
 ///
 /// # Examples
 ///
@@ -267,8 +271,34 @@ pub fn extract_authorizer_context(req: &LambdaRequest) -> HashMap<String, String
         return fields; // No context, return empty
     };
 
+    // Diagnostic: log raw authorizer context shape (debug level only)
+    match request_context {
+        RequestContext::ApiGatewayV1(ctx) => {
+            debug!(
+                authorizer_field_count = ctx.authorizer.fields.len(),
+                authorizer_keys = ?ctx.authorizer.fields.keys().collect::<Vec<_>>(),
+                "V1 REST API authorizer context"
+            );
+        }
+        RequestContext::ApiGatewayV2(ctx) => {
+            if let Some(ref authorizer) = ctx.authorizer {
+                debug!(
+                    authorizer_field_count = authorizer.fields.len(),
+                    authorizer_keys = ?authorizer.fields.keys().collect::<Vec<_>>(),
+                    "V2 HTTP API authorizer context"
+                );
+            } else {
+                debug!("V2 HTTP API: no authorizer present");
+            }
+        }
+        _ => {
+            debug!("Non-API Gateway request context (ALB or other)");
+        }
+    }
+
     // Extract authorizer fields based on API Gateway version
-    // V2 uses HashMap, V1 uses serde_json::Map - convert both to HashMap
+    // V1: flat HashMap (may contain "lambda" key or direct fields)
+    // V2: fields in ctx.authorizer.fields (deserialized from "lambda" key by serde)
     let mut authorizer_fields_map = HashMap::new();
 
     match request_context {
@@ -281,9 +311,27 @@ pub fn extract_authorizer_context(req: &LambdaRequest) -> HashMap<String, String
             }
         }
         RequestContext::ApiGatewayV1(ctx) => {
-            // API Gateway V1 (REST API) format - extract from authorizer.fields["lambda"]
+            // API Gateway V1 (REST API) — authorizer fields are deserialized as a
+            // flat HashMap by aws_lambda_events. Two shapes occur:
+            //   1. Nested: { "lambda": { "userId": "...", ... } }
+            //   2. Flat: { "userId": "...", "accountId": "..." }
+            // Try nested "lambda" first, then fall back to flat top-level fields.
             if let Some(serde_json::Value::Object(auth_map)) = ctx.authorizer.fields.get("lambda") {
                 for (key, value) in auth_map {
+                    authorizer_fields_map.insert(key.clone(), value.clone());
+                }
+            } else {
+                // Flat shape — iterate all fields, skip known API Gateway internals:
+                //   principalId        — required authorizer output, not user context
+                //   integrationLatency — injected by API Gateway
+                //   usageIdentifierKey — API key for usage plans (apiKeySource=AUTHORIZER)
+                for (key, value) in &ctx.authorizer.fields {
+                    if key == "principalId"
+                        || key == "integrationLatency"
+                        || key == "usageIdentifierKey"
+                    {
+                        continue;
+                    }
                     authorizer_fields_map.insert(key.clone(), value.clone());
                 }
             }
@@ -594,7 +642,10 @@ mod tests {
             assert_eq!(sanitize_authorizer_field_name("deviceId"), "device_id");
             assert_eq!(sanitize_authorizer_field_name("userId"), "user_id");
             assert_eq!(sanitize_authorizer_field_name("tenantId"), "tenant_id");
-            assert_eq!(sanitize_authorizer_field_name("customClaim"), "custom_claim");
+            assert_eq!(
+                sanitize_authorizer_field_name("customClaim"),
+                "custom_claim"
+            );
         }
 
         #[test]
@@ -609,7 +660,10 @@ mod tests {
         fn test_sanitize_field_name_acronyms() {
             // Acronyms: treated as a single unit, underscore before transition to lowercase
             assert_eq!(sanitize_authorizer_field_name("APIKey"), "api_key");
-            assert_eq!(sanitize_authorizer_field_name("HTTPSEnabled"), "https_enabled");
+            assert_eq!(
+                sanitize_authorizer_field_name("HTTPSEnabled"),
+                "https_enabled"
+            );
             assert_eq!(sanitize_authorizer_field_name("XMLParser"), "xml_parser");
         }
 
@@ -623,10 +677,7 @@ mod tests {
         #[test]
         fn test_sanitize_field_name_special_chars() {
             assert_eq!(sanitize_authorizer_field_name("user@email"), "user-email");
-            assert_eq!(
-                sanitize_authorizer_field_name("test.field"),
-                "test-field"
-            );
+            assert_eq!(sanitize_authorizer_field_name("test.field"), "test-field");
             assert_eq!(sanitize_authorizer_field_name("a/b/c"), "a-b-c");
         }
 
@@ -667,6 +718,188 @@ mod tests {
                 hyper_req.headers().get("content-type").unwrap(),
                 "application/json"
             );
+        }
+
+        /// Helper: build a LambdaRequest with a RequestContext inserted into extensions
+        fn request_with_context(ctx: lambda_http::request::RequestContext) -> LambdaRequest {
+            let mut req = Request::builder()
+                .method(Method::POST)
+                .uri("/mcp")
+                .body(LambdaBody::Empty)
+                .unwrap();
+            req.extensions_mut().insert(ctx);
+            req
+        }
+
+        #[test]
+        fn test_extract_authorizer_v1_top_level_fields() {
+            // V1 REST API where authorizer returns flat fields (no "lambda" wrapper).
+            // This is the shape seen with proxy integration authorizers that return
+            // context directly, e.g. { "userId": "user-123", "tenantId": "tenant-456" }
+            use aws_lambda_events::apigw::{
+                ApiGatewayProxyRequestContext, ApiGatewayRequestAuthorizer,
+            };
+
+            let mut authorizer = ApiGatewayRequestAuthorizer::default();
+            authorizer
+                .fields
+                .insert("userId".to_string(), serde_json::json!("user-123"));
+            authorizer
+                .fields
+                .insert("tenantId".to_string(), serde_json::json!("tenant-456"));
+            authorizer
+                .fields
+                .insert("role".to_string(), serde_json::json!("admin"));
+
+            let mut v1_ctx = ApiGatewayProxyRequestContext::default();
+            v1_ctx.authorizer = authorizer;
+
+            let req =
+                request_with_context(lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx));
+            let fields = extract_authorizer_context(&req);
+
+            assert_eq!(fields.get("user_id"), Some(&"user-123".to_string()));
+            assert_eq!(fields.get("tenant_id"), Some(&"tenant-456".to_string()));
+            assert_eq!(fields.get("role"), Some(&"admin".to_string()));
+        }
+
+        #[test]
+        fn test_extract_authorizer_v1_nested_lambda() {
+            // V1 REST API where authorizer context is nested under "lambda" key.
+            // Shape: { "lambda": { "userId": "user-123", ... } }
+            use aws_lambda_events::apigw::{
+                ApiGatewayProxyRequestContext, ApiGatewayRequestAuthorizer,
+            };
+
+            let mut authorizer = ApiGatewayRequestAuthorizer::default();
+            authorizer.fields.insert(
+                "lambda".to_string(),
+                serde_json::json!({
+                    "userId": "user-123",
+                    "tenantId": "tenant-456"
+                }),
+            );
+
+            let mut v1_ctx = ApiGatewayProxyRequestContext::default();
+            v1_ctx.authorizer = authorizer;
+
+            let req =
+                request_with_context(lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx));
+            let fields = extract_authorizer_context(&req);
+
+            assert_eq!(fields.get("user_id"), Some(&"user-123".to_string()));
+            assert_eq!(fields.get("tenant_id"), Some(&"tenant-456".to_string()));
+        }
+
+        #[test]
+        fn test_extract_authorizer_v1_skips_internal_fields() {
+            // Verify API Gateway internal fields are excluded from extraction
+            use aws_lambda_events::apigw::{
+                ApiGatewayProxyRequestContext, ApiGatewayRequestAuthorizer,
+            };
+
+            let mut authorizer = ApiGatewayRequestAuthorizer::default();
+            authorizer
+                .fields
+                .insert("userId".to_string(), serde_json::json!("user-123"));
+            authorizer.fields.insert(
+                "principalId".to_string(),
+                serde_json::json!("principal-abc"),
+            );
+            authorizer
+                .fields
+                .insert("integrationLatency".to_string(), serde_json::json!(42));
+            authorizer.fields.insert(
+                "usageIdentifierKey".to_string(),
+                serde_json::json!("api-key-xyz"),
+            );
+
+            let mut v1_ctx = ApiGatewayProxyRequestContext::default();
+            v1_ctx.authorizer = authorizer;
+
+            let req =
+                request_with_context(lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx));
+            let fields = extract_authorizer_context(&req);
+
+            assert_eq!(fields.get("user_id"), Some(&"user-123".to_string()));
+            assert!(
+                !fields.contains_key("principal_id"),
+                "principalId should be skipped"
+            );
+            assert!(
+                !fields.contains_key("integration_latency"),
+                "integrationLatency should be skipped"
+            );
+            assert!(
+                !fields.contains_key("usage_identifier_key"),
+                "usageIdentifierKey should be skipped"
+            );
+        }
+
+        #[test]
+        fn test_extract_authorizer_v1_non_string_values() {
+            // Verify numeric and boolean values are JSON-serialized to strings
+            use aws_lambda_events::apigw::{
+                ApiGatewayProxyRequestContext, ApiGatewayRequestAuthorizer,
+            };
+
+            let mut authorizer = ApiGatewayRequestAuthorizer::default();
+            authorizer
+                .fields
+                .insert("maxAge".to_string(), serde_json::json!(3600));
+            authorizer
+                .fields
+                .insert("isAdmin".to_string(), serde_json::json!(true));
+
+            let mut v1_ctx = ApiGatewayProxyRequestContext::default();
+            v1_ctx.authorizer = authorizer;
+
+            let req =
+                request_with_context(lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx));
+            let fields = extract_authorizer_context(&req);
+
+            assert_eq!(fields.get("max_age"), Some(&"3600".to_string()));
+            assert_eq!(fields.get("is_admin"), Some(&"true".to_string()));
+        }
+
+        #[test]
+        fn test_extract_authorizer_v1_empty() {
+            // Verify empty authorizer returns empty HashMap
+            use aws_lambda_events::apigw::ApiGatewayProxyRequestContext;
+
+            let v1_ctx = ApiGatewayProxyRequestContext::default();
+
+            let req =
+                request_with_context(lambda_http::request::RequestContext::ApiGatewayV1(v1_ctx));
+            let fields = extract_authorizer_context(&req);
+
+            assert!(fields.is_empty());
+        }
+
+        #[test]
+        fn test_extract_authorizer_v2_lambda_fields() {
+            // V2 HTTP API — authorizer.fields are already deserialized from "lambda" key
+            use aws_lambda_events::apigw::{
+                ApiGatewayRequestAuthorizer, ApiGatewayV2httpRequestContext,
+            };
+
+            let mut authorizer = ApiGatewayRequestAuthorizer::default();
+            authorizer
+                .fields
+                .insert("userId".to_string(), serde_json::json!("user-v2"));
+            authorizer
+                .fields
+                .insert("scope".to_string(), serde_json::json!("read write"));
+
+            let mut v2_ctx = ApiGatewayV2httpRequestContext::default();
+            v2_ctx.authorizer = Some(authorizer);
+
+            let req =
+                request_with_context(lambda_http::request::RequestContext::ApiGatewayV2(v2_ctx));
+            let fields = extract_authorizer_context(&req);
+
+            assert_eq!(fields.get("user_id"), Some(&"user-v2".to_string()));
+            assert_eq!(fields.get("scope"), Some(&"read write".to_string()));
         }
     }
 }

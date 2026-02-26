@@ -3,7 +3,7 @@
 //! Common utilities for MCP E2E testing across resources and prompts
 
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -376,6 +376,7 @@ impl TestServerManager {
             "sampling-server" => Some("sampling-server"),
             "roots-server" => Some("roots-server"),
             "elicitation-server" => Some("elicitation-server"),
+            "tasks-e2e-inmemory-server" => Some("tasks-e2e-inmemory-server"),
             _ => None,
         }
     }
@@ -399,7 +400,10 @@ impl TestServerManager {
         // Auto-build the binary if it doesn't exist
         if !binary_path.exists() {
             if let Some(package) = Self::server_package(server_name) {
-                info!("Binary {} not found, building package {}...", server_name, package);
+                info!(
+                    "Binary {} not found, building package {}...",
+                    server_name, package
+                );
                 let build_status = std::process::Command::new("cargo")
                     .args(["build", "--package", package, "--bin", server_name])
                     .current_dir(&workspace_root)
@@ -418,8 +422,11 @@ impl TestServerManager {
                         .into());
                     }
                     Err(e) => {
-                        return Err(format!("Failed to run cargo build for {}: {}", server_name, e)
-                            .into());
+                        return Err(format!(
+                            "Failed to run cargo build for {}: {}",
+                            server_name, e
+                        )
+                        .into());
                     }
                 }
             } else {

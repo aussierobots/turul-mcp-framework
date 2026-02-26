@@ -25,8 +25,12 @@ turul-mcp-protocol.workspace = true
 schemars.workspace = true
 
 [dev-dependencies]
+# Integration tests (comprehensive_tool_tests, schemars_integration_test) moved to
+# workspace root tests/ crate — eliminates 2 heavy test binaries from this crate.
+# Dev-deps retained for doctests and inline unit tests only.
 tokio = { workspace = true, features = ["test-util"] }
 async-trait.workspace = true
 tracing-test = { workspace = true }
 turul-mcp-server = { workspace = true }
 turul-mcp-builders = { workspace = true }
+

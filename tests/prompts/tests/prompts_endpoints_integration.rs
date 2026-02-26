@@ -3,7 +3,7 @@
 //! End-to-end integration tests for prompts/list and prompts/get endpoints
 //! using direct handler calls to verify JSON-RPC compliance and MCP specification adherence.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashMap;
 use turul_mcp_protocol::meta::*;
 use turul_mcp_protocol::prompts::*;
@@ -34,11 +34,11 @@ impl SimpleTestPrompt {
 }
 
 // Required trait implementations
-use turul_mcp_protocol::prompts::PromptArgument;
 use turul_mcp_builders::prelude::{
     HasPromptAnnotations, HasPromptArguments, HasPromptDescription, HasPromptMeta,
     HasPromptMetadata,
 };
+use turul_mcp_protocol::prompts::PromptArgument;
 use turul_mcp_server::McpPrompt;
 
 impl HasPromptMetadata for SimpleTestPrompt {
@@ -123,11 +123,13 @@ async fn test_prompts_list_endpoint_integration() {
     let first_prompt = &response_obj.data.prompts[0];
     assert!(!first_prompt.name.is_empty());
     assert!(first_prompt.description.is_some());
-    assert!(first_prompt
-        .description
-        .as_ref()
-        .unwrap()
-        .contains("integration testing"));
+    assert!(
+        first_prompt
+            .description
+            .as_ref()
+            .unwrap()
+            .contains("integration testing")
+    );
 }
 
 #[tokio::test]

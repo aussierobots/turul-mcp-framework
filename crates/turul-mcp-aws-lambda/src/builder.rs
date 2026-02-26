@@ -78,8 +78,11 @@ pub struct LambdaMcpServerBuilder {
     /// Tools registered with the server
     tools: HashMap<String, Arc<dyn McpTool>>,
 
-    /// Resources registered with the server
+    /// Static resources registered with the server
     resources: HashMap<String, Arc<dyn McpResource>>,
+
+    /// Template resources registered with the server (auto-detected from URI)
+    template_resources: Vec<(turul_mcp_server::uri_template::UriTemplate, Arc<dyn McpResource>)>,
 
     /// Prompts registered with the server
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
@@ -129,6 +132,11 @@ pub struct LambdaMcpServerBuilder {
 
     /// Middleware stack for request/response interception
     middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
+
+    /// Optional task runtime for MCP task support
+    task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
+    /// Recovery timeout for stuck tasks (milliseconds)
+    task_recovery_timeout_ms: u64,
 
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
@@ -232,6 +240,7 @@ impl LambdaMcpServerBuilder {
             capabilities,
             tools: HashMap::new(),
             resources: HashMap::new(),
+            template_resources: Vec::new(),
             prompts: HashMap::new(),
             elicitations: HashMap::new(),
             sampling: HashMap::new(),
@@ -250,6 +259,8 @@ impl LambdaMcpServerBuilder {
             server_config: ServerConfig::default(),
             stream_config: StreamConfig::default(),
             middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack::new(),
+            task_runtime: None,
+            task_recovery_timeout_ms: 300_000, // 5 minutes
             #[cfg(feature = "cors")]
             cors_config: None,
         }
@@ -314,9 +325,32 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Register a resource with the server
+    ///
+    /// Automatically detects template resources (URIs containing `{variables}`)
+    /// and routes them to the template resource list. Template resources appear
+    /// in `resources/templates/list`, not `resources/list`.
     pub fn resource<R: McpResource + 'static>(mut self, resource: R) -> Self {
         let uri = resource.uri().to_string();
-        self.resources.insert(uri, Arc::new(resource));
+
+        if uri.contains('{') && uri.contains('}') {
+            // Template resource — parse URI as UriTemplate
+            match turul_mcp_server::uri_template::UriTemplate::new(&uri) {
+                Ok(template) => {
+                    self.template_resources.push((template, Arc::new(resource)));
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to parse template resource URI '{}': {}. Registering as static.",
+                        uri,
+                        e
+                    );
+                    self.resources.insert(uri, Arc::new(resource));
+                }
+            }
+        } else {
+            // Static resource
+            self.resources.insert(uri, Arc::new(resource));
+        }
         self
     }
 
@@ -536,13 +570,30 @@ impl LambdaMcpServerBuilder {
             list_changed: Some(false),
         });
 
-        // Create ResourcesHandler and add all registered resources
-        let mut handler = ResourcesHandler::new();
+        // Create ResourcesHandler (resources/list) — static resources only
+        let mut list_handler = ResourcesHandler::new();
         for resource in self.resources.values() {
-            handler = handler.add_resource_arc(resource.clone());
+            list_handler = list_handler.add_resource_arc(resource.clone());
+        }
+        self = self.handler(list_handler);
+
+        // Create ResourceTemplatesHandler (resources/templates/list) — template resources
+        if !self.template_resources.is_empty() {
+            let templates_handler =
+                ResourceTemplatesHandler::new().with_templates(self.template_resources.clone());
+            self = self.handler(templates_handler);
         }
 
-        self.handler(handler)
+        // Create ResourcesReadHandler (resources/read) — both static and template resources
+        let mut read_handler = ResourcesReadHandler::new().without_security();
+        for resource in self.resources.values() {
+            read_handler = read_handler.add_resource_arc(resource.clone());
+        }
+        for (template, resource) in &self.template_resources {
+            read_handler =
+                read_handler.add_template_resource_arc(template.clone(), resource.clone());
+        }
+        self.handler(read_handler)
     }
 
     /// Add logging support
@@ -570,10 +621,7 @@ impl LambdaMcpServerBuilder {
     }
 
     /// Add elicitation support with custom provider
-    pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(
-        self,
-        provider: P,
-    ) -> Self {
+    pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(self, provider: P) -> Self {
         // Elicitation is a client-side capability per MCP 2025-11-25
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
@@ -581,6 +629,47 @@ impl LambdaMcpServerBuilder {
     /// Add notifications support
     pub fn with_notifications(self) -> Self {
         self.handler(NotificationsHandler)
+    }
+
+    // =============================================================================
+    // TASK SUPPORT METHODS
+    // =============================================================================
+
+    /// Configure task storage to enable MCP task support for long-running operations.
+    ///
+    /// When task storage is configured, the server will:
+    /// - Advertise `tasks` capabilities in the initialize response
+    /// - Register handlers for `tasks/get`, `tasks/list`, `tasks/cancel`, `tasks/result`
+    /// - Wire task-augmented `tools/call` for `CreateTaskResult` returns
+    /// - Recover stuck tasks on cold start
+    ///
+    /// **Lambda note**: Use a durable backend (DynamoDB recommended) since Lambda
+    /// invocations are stateless. `InMemoryTaskStorage` will lose state between invocations.
+    pub fn with_task_storage(
+        mut self,
+        storage: Arc<dyn turul_mcp_server::task_storage::TaskStorage>,
+    ) -> Self {
+        let runtime = turul_mcp_server::TaskRuntime::with_default_executor(storage)
+            .with_recovery_timeout(self.task_recovery_timeout_ms);
+        self.task_runtime = Some(Arc::new(runtime));
+        self
+    }
+
+    /// Configure task support with a pre-built `TaskRuntime`.
+    ///
+    /// Use this when you need fine-grained control over the task runtime configuration.
+    pub fn with_task_runtime(mut self, runtime: Arc<turul_mcp_server::TaskRuntime>) -> Self {
+        self.task_runtime = Some(runtime);
+        self
+    }
+
+    /// Set the recovery timeout for stuck tasks (in milliseconds).
+    ///
+    /// On Lambda cold start, tasks in non-terminal states older than this timeout
+    /// will be marked as `Failed`. Default: 300,000 ms (5 minutes).
+    pub fn task_recovery_timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.task_recovery_timeout_ms = timeout_ms;
+        self
     }
 
     // =============================================================================
@@ -706,7 +795,10 @@ impl LambdaMcpServerBuilder {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn middleware(mut self, middleware: Arc<dyn turul_http_mcp_server::middleware::McpMiddleware>) -> Self {
+    pub fn middleware(
+        mut self,
+        middleware: Arc<dyn turul_http_mcp_server::middleware::McpMiddleware>,
+    ) -> Self {
         self.middleware_stack.push(middleware);
         self
     }
@@ -823,7 +915,7 @@ impl LambdaMcpServerBuilder {
         // Auto-detect and configure server capabilities based on registered components (same as McpServer)
         let mut capabilities = self.capabilities.clone();
         let has_tools = !self.tools.is_empty();
-        let has_resources = !self.resources.is_empty();
+        let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
         let has_prompts = !self.prompts.is_empty();
         let has_elicitations = !self.elicitations.is_empty();
         let has_completions = !self.completions.is_empty();
@@ -876,6 +968,23 @@ impl LambdaMcpServerBuilder {
             ]),
         });
 
+        // Tasks capabilities — auto-configure when task runtime is set
+        if self.task_runtime.is_some() {
+            use turul_mcp_protocol::initialize::*;
+            capabilities.tasks = Some(TasksCapabilities {
+                list: Some(TasksListCapabilities::default()),
+                cancel: Some(TasksCancelCapabilities::default()),
+                requests: Some(TasksRequestCapabilities {
+                    tools: Some(TasksToolCapabilities {
+                        call: Some(TasksToolCallCapabilities::default()),
+                        extra: Default::default(),
+                    }),
+                    extra: Default::default(),
+                }),
+                extra: Default::default(),
+            });
+        }
+
         // Add RootsHandler if roots were configured (same pattern as MCP server)
         let mut handlers = self.handlers;
         if !self.roots.is_empty() {
@@ -884,6 +993,60 @@ impl LambdaMcpServerBuilder {
                 roots_handler = roots_handler.add_root(root.clone());
             }
             handlers.insert("roots/list".to_string(), Arc::new(roots_handler));
+        }
+
+        // Add task handlers if task runtime is configured
+        if let Some(ref runtime) = self.task_runtime {
+            use turul_mcp_server::{
+                TasksCancelHandler, TasksGetHandler, TasksListHandler, TasksResultHandler,
+            };
+            handlers.insert(
+                "tasks/get".to_string(),
+                Arc::new(TasksGetHandler::new(Arc::clone(runtime))),
+            );
+            handlers.insert(
+                "tasks/list".to_string(),
+                Arc::new(TasksListHandler::new(Arc::clone(runtime))),
+            );
+            handlers.insert(
+                "tasks/cancel".to_string(),
+                Arc::new(TasksCancelHandler::new(Arc::clone(runtime))),
+            );
+            handlers.insert(
+                "tasks/result".to_string(),
+                Arc::new(TasksResultHandler::new(Arc::clone(runtime))),
+            );
+        }
+
+        // Auto-populate resource handlers (same as McpServer build() auto-setup)
+        if has_resources {
+            // Populate resources/list handler with static resources
+            let mut list_handler = ResourcesHandler::new();
+            for resource in self.resources.values() {
+                list_handler = list_handler.add_resource_arc(resource.clone());
+            }
+            handlers.insert("resources/list".to_string(), Arc::new(list_handler));
+
+            // Populate resources/templates/list handler with template resources
+            if !self.template_resources.is_empty() {
+                let templates_handler = ResourceTemplatesHandler::new()
+                    .with_templates(self.template_resources.clone());
+                handlers.insert(
+                    "resources/templates/list".to_string(),
+                    Arc::new(templates_handler),
+                );
+            }
+
+            // Create resources/read handler with both static and template resources
+            let mut read_handler = ResourcesReadHandler::new().without_security();
+            for resource in self.resources.values() {
+                read_handler = read_handler.add_resource_arc(resource.clone());
+            }
+            for (template, resource) in &self.template_resources {
+                read_handler =
+                    read_handler.add_template_resource_arc(template.clone(), resource.clone());
+            }
+            handlers.insert("resources/read".to_string(), Arc::new(read_handler));
         }
 
         // Create the Lambda server (stores all configuration like MCP server does)
@@ -910,6 +1073,7 @@ impl LambdaMcpServerBuilder {
             #[cfg(feature = "cors")]
             self.cors_config,
             self.middleware_stack,
+            self.task_runtime,
         ))
     }
 }
@@ -986,8 +1150,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use turul_mcp_session_storage::InMemorySessionStorage;
-    use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
+    use turul_mcp_builders::prelude::*;
+    use turul_mcp_session_storage::InMemorySessionStorage; // HasBaseMetadata, HasDescription, etc.
 
     // Mock tool for testing
     #[derive(Clone, Default)]
@@ -1172,6 +1336,613 @@ mod tests {
         assert!(
             handler.get_stream_manager().as_ref() as *const _ as usize > 0,
             "Stream manager must be initialized"
+        );
+    }
+
+    // =========================================================================
+    // Task support tests
+    // =========================================================================
+
+    #[tokio::test]
+    async fn test_builder_without_tasks_no_capability() {
+        let server = LambdaMcpServerBuilder::new()
+            .name("no-tasks")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            server.capabilities().tasks.is_none(),
+            "Tasks capability should not be advertised without task storage"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_builder_with_task_storage_advertises_capability() {
+        use turul_mcp_server::task_storage::InMemoryTaskStorage;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("with-tasks")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .with_task_storage(Arc::new(InMemoryTaskStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        let tasks_cap = server
+            .capabilities()
+            .tasks
+            .as_ref()
+            .expect("Tasks capability should be advertised");
+        assert!(tasks_cap.list.is_some(), "list capability should be set");
+        assert!(
+            tasks_cap.cancel.is_some(),
+            "cancel capability should be set"
+        );
+        let requests = tasks_cap
+            .requests
+            .as_ref()
+            .expect("requests capability should be set");
+        let tools = requests
+            .tools
+            .as_ref()
+            .expect("tools capability should be set");
+        assert!(tools.call.is_some(), "tools.call capability should be set");
+    }
+
+    #[tokio::test]
+    async fn test_builder_with_task_runtime_advertises_capability() {
+        let runtime = Arc::new(turul_mcp_server::TaskRuntime::in_memory());
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("with-runtime")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .with_task_runtime(runtime)
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            server.capabilities().tasks.is_some(),
+            "Tasks capability should be advertised with task runtime"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_task_recovery_timeout_configuration() {
+        use turul_mcp_server::task_storage::InMemoryTaskStorage;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("custom-timeout")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .task_recovery_timeout_ms(60_000)
+            .with_task_storage(Arc::new(InMemoryTaskStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            server.capabilities().tasks.is_some(),
+            "Tasks should be enabled with custom timeout"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_backward_compatibility_no_tasks() {
+        // Existing builder pattern still works unchanged
+        let server = LambdaMcpServerBuilder::new()
+            .name("backward-compat")
+            .version("1.0.0")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        let handler = server.handler().await.unwrap();
+        assert!(
+            handler.get_stream_manager().as_ref() as *const _ as usize > 0,
+            "Stream manager must be initialized"
+        );
+        assert!(server.capabilities().tasks.is_none());
+    }
+
+    /// Slow tool that sleeps for 2 seconds — used to prove non-blocking behavior.
+    #[derive(Clone, Default)]
+    struct SlowTool;
+
+    impl HasBaseMetadata for SlowTool {
+        fn name(&self) -> &str {
+            "slow_tool"
+        }
+    }
+
+    impl HasDescription for SlowTool {
+        fn description(&self) -> Option<&str> {
+            Some("A slow tool for testing")
+        }
+    }
+
+    impl HasInputSchema for SlowTool {
+        fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
+            use turul_mcp_protocol::ToolSchema;
+            static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+            SCHEMA.get_or_init(ToolSchema::object)
+        }
+    }
+
+    impl HasOutputSchema for SlowTool {
+        fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> {
+            None
+        }
+    }
+
+    impl HasAnnotations for SlowTool {
+        fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
+            None
+        }
+    }
+
+    impl HasToolMeta for SlowTool {
+        fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+            None
+        }
+    }
+
+    impl HasIcons for SlowTool {}
+
+    #[async_trait::async_trait]
+    impl McpTool for SlowTool {
+        async fn call(
+            &self,
+            _args: serde_json::Value,
+            _session: Option<turul_mcp_server::SessionContext>,
+        ) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
+            use turul_mcp_protocol::tools::{CallToolResult, ToolResult};
+            // Sleep 2 seconds to prove the task path is non-blocking
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            Ok(CallToolResult::success(vec![ToolResult::text("slow done")]))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_nonblocking_tools_call_with_task() {
+        use turul_mcp_json_rpc_server::r#async::JsonRpcHandler;
+        use turul_mcp_server::SessionAwareToolHandler;
+        use turul_mcp_server::task_storage::InMemoryTaskStorage;
+
+        let task_storage = Arc::new(InMemoryTaskStorage::new());
+        let runtime = Arc::new(turul_mcp_server::TaskRuntime::with_default_executor(
+            task_storage,
+        ));
+
+        // Build tools map
+        let mut tools: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
+        tools.insert("slow_tool".to_string(), Arc::new(SlowTool));
+
+        // Create session manager
+        let session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
+            Arc::new(InMemorySessionStorage::new());
+        let session_manager = Arc::new(turul_mcp_server::session::SessionManager::with_storage(
+            session_storage,
+            turul_mcp_protocol::ServerCapabilities::default(),
+        ));
+
+        // Create tool handler with task runtime
+        let tool_handler = SessionAwareToolHandler::new(tools, session_manager, false)
+            .with_task_runtime(Arc::clone(&runtime));
+
+        // Build a tools/call request with task parameter
+        let params = serde_json::json!({
+            "name": "slow_tool",
+            "arguments": {},
+            "task": {}
+        });
+        let request_params = turul_mcp_json_rpc_server::RequestParams::Object(
+            params
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
+        );
+
+        // Time the call
+        let start = std::time::Instant::now();
+        let result = tool_handler
+            .handle("tools/call", Some(request_params), None)
+            .await;
+        let elapsed = start.elapsed();
+
+        // Should succeed with CreateTaskResult
+        let value = result.expect("tools/call with task should succeed");
+        assert!(
+            value.get("task").is_some(),
+            "Response should contain 'task' field (CreateTaskResult shape)"
+        );
+        let task = value.get("task").unwrap();
+        assert!(
+            task.get("taskId").is_some(),
+            "Task should have taskId field"
+        );
+        assert_eq!(
+            task.get("status")
+                .and_then(|v| v.as_str())
+                .unwrap_or_default(),
+            "working",
+            "Task status should be 'working'"
+        );
+
+        // Non-blocking proof: should return well under the 2s tool sleep.
+        // Threshold is 1s (not 500ms) to avoid flakes on slow CI runners —
+        // the 2s tool sleep vs 1s threshold still proves a clear 2x gap.
+        assert!(
+            elapsed < std::time::Duration::from_secs(1),
+            "tools/call with task should return immediately (took {:?}, expected < 1s)",
+            elapsed
+        );
+    }
+
+    // =========================================================================
+    // Resource and template resource tests
+    // =========================================================================
+
+    // Mock static resource for testing
+    #[derive(Clone)]
+    struct StaticTestResource;
+
+    impl turul_mcp_builders::prelude::HasResourceMetadata for StaticTestResource {
+        fn name(&self) -> &str {
+            "static_test"
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceDescription for StaticTestResource {
+        fn description(&self) -> Option<&str> {
+            Some("Static test resource")
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceUri for StaticTestResource {
+        fn uri(&self) -> &str {
+            "file:///test.txt"
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceMimeType for StaticTestResource {
+        fn mime_type(&self) -> Option<&str> {
+            Some("text/plain")
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceSize for StaticTestResource {
+        fn size(&self) -> Option<u64> {
+            None
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceAnnotations for StaticTestResource {
+        fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+            None
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceMeta for StaticTestResource {
+        fn resource_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+            None
+        }
+    }
+
+    impl HasIcons for StaticTestResource {}
+
+    #[async_trait::async_trait]
+    impl McpResource for StaticTestResource {
+        async fn read(
+            &self,
+            _params: Option<serde_json::Value>,
+            _session: Option<&turul_mcp_server::SessionContext>,
+        ) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+            use turul_mcp_protocol::resources::ResourceContent;
+            Ok(vec![ResourceContent::text("file:///test.txt", "test")])
+        }
+    }
+
+    // Mock template resource for testing
+    #[derive(Clone)]
+    struct TemplateTestResource;
+
+    impl turul_mcp_builders::prelude::HasResourceMetadata for TemplateTestResource {
+        fn name(&self) -> &str {
+            "template_test"
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceDescription for TemplateTestResource {
+        fn description(&self) -> Option<&str> {
+            Some("Template test resource")
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceUri for TemplateTestResource {
+        fn uri(&self) -> &str {
+            "agent://agents/{agent_id}"
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceMimeType for TemplateTestResource {
+        fn mime_type(&self) -> Option<&str> {
+            Some("application/json")
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceSize for TemplateTestResource {
+        fn size(&self) -> Option<u64> {
+            None
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceAnnotations for TemplateTestResource {
+        fn annotations(&self) -> Option<&turul_mcp_protocol::meta::Annotations> {
+            None
+        }
+    }
+
+    impl turul_mcp_builders::prelude::HasResourceMeta for TemplateTestResource {
+        fn resource_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
+            None
+        }
+    }
+
+    impl HasIcons for TemplateTestResource {}
+
+    #[async_trait::async_trait]
+    impl McpResource for TemplateTestResource {
+        async fn read(
+            &self,
+            _params: Option<serde_json::Value>,
+            _session: Option<&turul_mcp_server::SessionContext>,
+        ) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+            use turul_mcp_protocol::resources::ResourceContent;
+            Ok(vec![ResourceContent::text(
+                "agent://agents/test",
+                "{}",
+            )])
+        }
+    }
+
+    #[test]
+    fn test_resource_auto_detection_static() {
+        let builder = LambdaMcpServerBuilder::new()
+            .name("test")
+            .resource(StaticTestResource);
+
+        assert_eq!(builder.resources.len(), 1);
+        assert!(builder.resources.contains_key("file:///test.txt"));
+        assert_eq!(builder.template_resources.len(), 0);
+    }
+
+    #[test]
+    fn test_resource_auto_detection_template() {
+        let builder = LambdaMcpServerBuilder::new()
+            .name("test")
+            .resource(TemplateTestResource);
+
+        assert_eq!(builder.resources.len(), 0);
+        assert_eq!(builder.template_resources.len(), 1);
+
+        let (template, _) = &builder.template_resources[0];
+        assert_eq!(template.pattern(), "agent://agents/{agent_id}");
+    }
+
+    #[test]
+    fn test_resource_auto_detection_mixed() {
+        let builder = LambdaMcpServerBuilder::new()
+            .name("test")
+            .resource(StaticTestResource)
+            .resource(TemplateTestResource);
+
+        assert_eq!(builder.resources.len(), 1);
+        assert!(builder.resources.contains_key("file:///test.txt"));
+        assert_eq!(builder.template_resources.len(), 1);
+
+        let (template, _) = &builder.template_resources[0];
+        assert_eq!(template.pattern(), "agent://agents/{agent_id}");
+    }
+
+    #[tokio::test]
+    async fn test_build_advertises_resources_capability_for_templates_only() {
+        let server = LambdaMcpServerBuilder::new()
+            .name("template-only")
+            .resource(TemplateTestResource)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            server.capabilities().resources.is_some(),
+            "Resources capability should be advertised when template resources are registered"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_advertises_resources_capability_for_static_only() {
+        let server = LambdaMcpServerBuilder::new()
+            .name("static-only")
+            .resource(StaticTestResource)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            server.capabilities().resources.is_some(),
+            "Resources capability should be advertised when static resources are registered"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_no_resources_no_capability() {
+        let server = LambdaMcpServerBuilder::new()
+            .name("no-resources")
+            .tool(TestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(false)
+            .build()
+            .await
+            .unwrap();
+
+        assert!(
+            server.capabilities().resources.is_none(),
+            "Resources capability should NOT be advertised when no resources are registered"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_lambda_builder_templates_list_returns_template() {
+        use turul_mcp_server::handlers::McpHandler;
+
+        // Build a ResourceTemplatesHandler the same way build() does — with the template resource
+        let builder = LambdaMcpServerBuilder::new()
+            .name("template-test")
+            .resource(TemplateTestResource);
+
+        // Verify the template is registered
+        assert_eq!(builder.template_resources.len(), 1);
+
+        // Build the handler the same way build() does
+        let handler =
+            ResourceTemplatesHandler::new().with_templates(builder.template_resources.clone());
+
+        // Invoke the handler directly (same as JSON-RPC dispatch)
+        let result = handler.handle(None).await.expect("should succeed");
+
+        let templates = result["resourceTemplates"]
+            .as_array()
+            .expect("resourceTemplates should be an array");
+        assert_eq!(
+            templates.len(),
+            1,
+            "Should have exactly 1 template resource"
+        );
+        assert_eq!(
+            templates[0]["uriTemplate"], "agent://agents/{agent_id}",
+            "Template URI should match"
+        );
+        assert_eq!(templates[0]["name"], "template_test");
+    }
+
+    #[tokio::test]
+    async fn test_lambda_builder_resources_list_returns_static() {
+        use turul_mcp_server::handlers::McpHandler;
+
+        // Build a ResourcesHandler the same way build() does — with the static resource
+        let builder = LambdaMcpServerBuilder::new()
+            .name("static-test")
+            .resource(StaticTestResource);
+
+        assert_eq!(builder.resources.len(), 1);
+
+        let mut handler = ResourcesHandler::new();
+        for resource in builder.resources.values() {
+            handler = handler.add_resource_arc(resource.clone());
+        }
+
+        let result = handler.handle(None).await.expect("should succeed");
+
+        let resources = result["resources"]
+            .as_array()
+            .expect("resources should be an array");
+        assert_eq!(resources.len(), 1, "Should have exactly 1 static resource");
+        assert_eq!(resources[0]["uri"], "file:///test.txt");
+        assert_eq!(resources[0]["name"], "static_test");
+    }
+
+    #[tokio::test]
+    async fn test_lambda_builder_mixed_resources_separation() {
+        use turul_mcp_server::handlers::McpHandler;
+
+        // Build with both static and template resources
+        let builder = LambdaMcpServerBuilder::new()
+            .name("mixed-test")
+            .resource(StaticTestResource)
+            .resource(TemplateTestResource);
+
+        assert_eq!(builder.resources.len(), 1);
+        assert_eq!(builder.template_resources.len(), 1);
+
+        // Build handlers the same way build() does
+        let mut list_handler = ResourcesHandler::new();
+        for resource in builder.resources.values() {
+            list_handler = list_handler.add_resource_arc(resource.clone());
+        }
+
+        let templates_handler =
+            ResourceTemplatesHandler::new().with_templates(builder.template_resources.clone());
+
+        // resources/list should return only the static resource
+        let list_result = list_handler.handle(None).await.expect("should succeed");
+        let resources = list_result["resources"]
+            .as_array()
+            .expect("resources should be an array");
+        assert_eq!(resources.len(), 1, "Only static resource in resources/list");
+        assert_eq!(resources[0]["uri"], "file:///test.txt");
+
+        // resources/templates/list should return only the template resource
+        let templates_result = templates_handler
+            .handle(None)
+            .await
+            .expect("should succeed");
+        let templates = templates_result["resourceTemplates"]
+            .as_array()
+            .expect("resourceTemplates should be an array");
+        assert_eq!(
+            templates.len(),
+            1,
+            "Only template resource in resources/templates/list"
+        );
+        assert_eq!(templates[0]["uriTemplate"], "agent://agents/{agent_id}");
+    }
+
+    #[tokio::test]
+    async fn test_tasks_get_route_registered() {
+        use turul_mcp_server::TasksGetHandler;
+        use turul_mcp_server::handlers::McpHandler;
+        use turul_mcp_server::task_storage::InMemoryTaskStorage;
+
+        let runtime = Arc::new(turul_mcp_server::TaskRuntime::with_default_executor(
+            Arc::new(InMemoryTaskStorage::new()),
+        ));
+        let handler = TasksGetHandler::new(runtime);
+
+        // Dispatch tasks/get with a non-existent task_id — should return MCP error
+        // (not "method not found"), proving the route is registered and responds
+        let params = serde_json::json!({ "taskId": "nonexistent-task-id" });
+
+        let result = handler.handle(Some(params)).await;
+
+        // Should be an error (task not found) — NOT a "method not found" error
+        assert!(
+            result.is_err(),
+            "tasks/get with unknown task should return error"
+        );
+        let err = result.unwrap_err();
+        let err_str = err.to_string();
+        assert!(
+            !err_str.contains("method not found"),
+            "Error should not be 'method not found' — handler should respond to tasks/get"
         );
     }
 }

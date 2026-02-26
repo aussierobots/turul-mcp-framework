@@ -12,12 +12,9 @@
 mod tests {
 
     use serde_json::{Value, json};
-    use turul_mcp_derive::mcp_tool;
-    use turul_mcp_protocol::{
-        McpResult, ToolResult,
-        tools::CallToolResult,
-    };
     use turul_mcp_builders::prelude::{HasOutputSchema, ToolDefinition, ToolSchema};
+    use turul_mcp_derive::mcp_tool;
+    use turul_mcp_protocol::{McpResult, ToolResult, tools::CallToolResult};
     use turul_mcp_server::{McpTool, SessionContext};
 
     /// Test tool that claims to have an output schema but doesn't provide structured content
@@ -427,8 +424,8 @@ mod tests {
         use turul_mcp_derive::McpTool;
 
         // Test derive macro with custom output field
-        use serde::{Deserialize, Serialize};
         use schemars::JsonSchema;
+        use serde::{Deserialize, Serialize};
 
         #[derive(Clone, Serialize, Deserialize, JsonSchema)]
         struct CountResult {

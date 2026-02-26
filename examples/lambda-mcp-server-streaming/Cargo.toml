@@ -1,11 +1,12 @@
 [package]
 name = "lambda-turul-mcp-server-streaming"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 description = "AWS Lambda MCP server with real-time SSE streaming using turul-mcp-framework"
 license = "MIT"
 
 [[bin]]
+test = false
 name = "lambda-turul-mcp-server-streaming"
 path = "src/main.rs"
 
@@ -28,7 +29,7 @@ turul-mcp-session-storage = { workspace = true, features = ["dynamodb"] }
 turul-mcp-builders.workspace = true
 turul-http-mcp-server.workspace = true
 turul-mcp-json-rpc-server = { workspace = true }
-turul-mcp-aws-lambda = { path = "../../crates/turul-mcp-aws-lambda", features = ["streaming"] }
+turul-mcp-aws-lambda = { workspace = true, features = ["streaming"] }
 async-trait = { workspace = true }
 
 # Tower middleware for Lambda
@@ -61,7 +62,7 @@ tracing-subscriber = { workspace = true }
 urlencoding = { workspace = true }
 
 # Additional dependencies for tools
-md5 = "0.7"
+md5 = { workspace = true }
 
 [dev-dependencies]
 tokio-test.workspace = true

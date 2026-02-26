@@ -47,9 +47,7 @@ impl ShoppingCartTool {
                     .as_deref()
                     .ok_or_else(|| McpError::missing_param("item"))?;
                 let quantity = self.quantity.unwrap_or(1);
-                let price = self
-                    .price
-                    .ok_or_else(|| McpError::missing_param("price"))?;
+                let price = self.price.ok_or_else(|| McpError::missing_param("price"))?;
 
                 if quantity <= 0 {
                     return Err(McpError::param_out_of_range(

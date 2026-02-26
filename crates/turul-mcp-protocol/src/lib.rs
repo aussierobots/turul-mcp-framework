@@ -14,7 +14,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! turul-mcp-protocol = "0.2"
+//! turul-mcp-protocol = "0.3"
 //! ```
 //!
 //! ## Quick Start
@@ -63,7 +63,7 @@
 //!
 //! | This Crate | MCP Spec | Implementation Crate |
 //! |------------|----------|---------------------|
-//! | `0.2.x` | `2025-11-25` | `turul-mcp-protocol-2025-11-25` |
+//! | `0.3.x` | `2025-11-25` | `turul-mcp-protocol-2025-11-25` |
 //!
 //! Currently aliases: `turul-mcp-protocol-2025-11-25`
 

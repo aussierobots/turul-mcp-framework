@@ -6,9 +6,9 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use turul_mcp_builders::prelude::*; // HasResourceUri, etc.
 use turul_mcp_derive::McpResource;
 use turul_mcp_protocol::resources::ResourceContent;
-use turul_mcp_builders::prelude::*;  // HasResourceUri, etc.
 use turul_mcp_server::{McpResource, McpResult, McpServer, SessionContext};
 
 /// Simple configuration file resource
@@ -41,7 +41,11 @@ impl ConfigResource {
 
 #[async_trait]
 impl McpResource for ConfigResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![ResourceContent::blob(
             self.uri().to_string(),
             self.config_data.clone(),
@@ -61,7 +65,11 @@ struct SystemStatusResource;
 
 #[async_trait]
 impl McpResource for SystemStatusResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         let status = serde_json::json!({
             "status": "healthy",
             "uptime": "72h 15m",
@@ -121,7 +129,11 @@ impl UserProfileResource {
 
 #[async_trait]
 impl McpResource for UserProfileResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
         Ok(vec![
             ResourceContent::blob(
                 format!("{}/profile", self.uri()),
@@ -160,11 +172,12 @@ impl LogFileResource {
 
 #[async_trait]
 impl McpResource for LogFileResource {
-    async fn read(&self, _params: Option<Value>, _session: Option<&SessionContext>) -> McpResult<Vec<ResourceContent>> {
-        Ok(vec![ResourceContent::text(
-            self.uri(),
-            &self.0,
-        )])
+    async fn read(
+        &self,
+        _params: Option<Value>,
+        _session: Option<&SessionContext>,
+    ) -> McpResult<Vec<ResourceContent>> {
+        Ok(vec![ResourceContent::text(self.uri(), &self.0)])
     }
 }
 

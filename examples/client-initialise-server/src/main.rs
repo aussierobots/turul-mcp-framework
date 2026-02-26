@@ -51,10 +51,7 @@ pub struct EchoSseTool {
 }
 
 impl EchoSseTool {
-    async fn execute(
-        &self,
-        session: Option<SessionContext>,
-    ) -> McpResult<serde_json::Value> {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
         // Log the call on the server side
         info!("echo_sse called with text: '{}'", self.text);
 
@@ -108,15 +105,12 @@ impl EchoSseTool {
 pub struct GetSessionDataTool {}
 
 impl GetSessionDataTool {
-    async fn execute(
-        &self,
-        session: Option<SessionContext>,
-    ) -> McpResult<serde_json::Value> {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
         info!("get_session_data called");
 
-        let storage = SESSION_STORAGE
-            .get()
-            .ok_or_else(|| turul_mcp_protocol::McpError::tool_execution("Session storage not initialized"))?;
+        let storage = SESSION_STORAGE.get().ok_or_else(|| {
+            turul_mcp_protocol::McpError::tool_execution("Session storage not initialized")
+        })?;
 
         if let Some(session_ctx) = &session {
             // Get session info from storage
@@ -186,20 +180,20 @@ impl GetSessionDataTool {
     description = "Returns SSE events for the current session from session storage"
 )]
 pub struct GetSessionEventsTool {
-    #[param(description = "Maximum number of events to return (default: 10)", optional)]
+    #[param(
+        description = "Maximum number of events to return (default: 10)",
+        optional
+    )]
     pub limit: Option<u64>,
 }
 
 impl GetSessionEventsTool {
-    async fn execute(
-        &self,
-        session: Option<SessionContext>,
-    ) -> McpResult<serde_json::Value> {
+    async fn execute(&self, session: Option<SessionContext>) -> McpResult<serde_json::Value> {
         info!("get_session_events called");
 
-        let storage = SESSION_STORAGE
-            .get()
-            .ok_or_else(|| turul_mcp_protocol::McpError::tool_execution("Session storage not initialized"))?;
+        let storage = SESSION_STORAGE.get().ok_or_else(|| {
+            turul_mcp_protocol::McpError::tool_execution("Session storage not initialized")
+        })?;
 
         let limit = self.limit.unwrap_or(10) as usize;
 
@@ -282,20 +276,14 @@ impl GetSessionEventsTool {
 pub struct GetTableInfoTool {}
 
 impl GetTableInfoTool {
-    async fn execute(
-        &self,
-        _session: Option<SessionContext>,
-    ) -> McpResult<serde_json::Value> {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<serde_json::Value> {
         info!("get_table_info called");
 
-        let storage = SESSION_STORAGE
-            .get()
-            .ok_or_else(|| turul_mcp_protocol::McpError::tool_execution("Session storage not initialized"))?;
+        let storage = SESSION_STORAGE.get().ok_or_else(|| {
+            turul_mcp_protocol::McpError::tool_execution("Session storage not initialized")
+        })?;
 
-        debug!(
-            "Using session storage for table info: {:p}",
-            &*storage
-        );
+        debug!("Using session storage for table info: {:p}", storage);
 
         // Determine storage backend type and table information
         let storage_type = if cfg!(feature = "dynamodb") {
@@ -358,10 +346,7 @@ impl GetTableInfoTool {
             }
         });
 
-        info!(
-            "Retrieved table information for backend: {}",
-            storage_type
-        );
+        info!("Retrieved table information for backend: {}", storage_type);
         Ok(table_info)
     }
 }

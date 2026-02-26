@@ -5,10 +5,10 @@
 
 use serde_json::json;
 use std::collections::HashMap;
+use turul_mcp_builders::prelude::*;
 use turul_mcp_protocol::meta::Cursor;
 use turul_mcp_protocol::prompts::*;
-use turul_mcp_protocol::{Annotations, BlobResourceContents, TextResourceContents};
-use turul_mcp_builders::prelude::*;  // PromptDefinition and other framework traits
+use turul_mcp_protocol::{Annotations, BlobResourceContents, TextResourceContents}; // PromptDefinition and other framework traits
 
 #[tokio::test]
 async fn test_content_block_text_variant() {

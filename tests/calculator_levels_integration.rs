@@ -137,11 +137,11 @@ async fn test_level3_builder_pattern() {
 // ===========================================
 
 use async_trait::async_trait;
-use turul_mcp_protocol::schema::JsonSchema;
 use turul_mcp_builders::prelude::{
     HasAnnotations, HasBaseMetadata, HasDescription, HasIcons, HasInputSchema, HasOutputSchema,
     HasToolMeta, ToolSchema,
 };
+use turul_mcp_protocol::schema::JsonSchema;
 
 #[derive(Clone)]
 struct CalculatorAddManualTool;

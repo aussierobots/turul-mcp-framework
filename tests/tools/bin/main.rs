@@ -48,9 +48,9 @@ use tracing::info;
 use uuid::Uuid;
 
 use turul_mcp_derive::McpTool;
+use turul_mcp_protocol::ResourceContents;
 use turul_mcp_protocol::schema::{JsonSchema, JsonSchemaGenerator};
 use turul_mcp_protocol::tools::{ToolAnnotations, ToolSchema};
-use turul_mcp_protocol::ResourceContents;
 // Server prelude re-exports builders prelude + protocol types
 use turul_mcp_server::prelude::*;
 
@@ -120,7 +120,7 @@ impl CalculatorTool {
                 return Err(McpError::tool_execution(&format!(
                     "Invalid operation: {}",
                     self.operation
-                )))
+                )));
             }
         };
 
@@ -196,7 +196,7 @@ impl StringProcessorTool {
                 return Err(McpError::tool_execution(&format!(
                     "Invalid operation: {}",
                     self.operation
-                )))
+                )));
             }
         };
 
@@ -303,7 +303,7 @@ impl DataTransformerTool {
                 return Err(McpError::tool_execution(&format!(
                     "Invalid operation: {}",
                     self.operation
-                )))
+                )));
             }
         };
 
@@ -395,7 +395,7 @@ impl SessionCounterTool {
                 return Err(McpError::tool_execution(&format!(
                     "Invalid operation: {}",
                     self.operation
-                )))
+                )));
             }
         };
 
@@ -466,7 +466,7 @@ impl ProgressTrackerTool {
     async fn execute(&self, session: Option<SessionContext>) -> McpResult<ProgressResult> {
         let steps = self.steps.unwrap_or(5).max(1);
         let step_duration = Duration::from_secs_f64(self.duration / steps as f64);
-        let progress_token = Uuid::now_v7().to_string();
+        let progress_token = Uuid::now_v7().as_simple().to_string();
 
         info!(
             "Starting progress tracking operation: {} seconds, {} steps",
@@ -748,21 +748,25 @@ impl McpTool for LegacyCalculatorTool {
         let result = a + b;
 
         Ok(CallToolResult::success(vec![
-            ToolResult::text("⚠️ DEPRECATED: legacy_calculator is deprecated since v0.1.0. Use 'calculator' instead."),
+            ToolResult::text(
+                "⚠️ DEPRECATED: legacy_calculator is deprecated since v0.1.0. Use 'calculator' instead.",
+            ),
             ToolResult::text(format!("{} + {} = {}", a, b, result)),
             ToolResult::resource(ResourceContents::text(
                 "file:///calculation/result.json",
                 serde_json::to_string_pretty(&serde_json::json!({
-                "result": result,
-                "operation": "add",
-                "inputs": {"a": a, "b": b},
-                "deprecation_warning": {
-                    "deprecated": true,
-                    "since": "0.1.0",
-                    "replacement": "calculator",
-                    "removal_date": "2025-12-31"
-                }
-            })).unwrap())),
+                    "result": result,
+                    "operation": "add",
+                    "inputs": {"a": a, "b": b},
+                    "deprecation_warning": {
+                        "deprecated": true,
+                        "since": "0.1.0",
+                        "replacement": "calculator",
+                        "removal_date": "2025-12-31"
+                    }
+                }))
+                .unwrap(),
+            )),
         ]))
     }
 }
@@ -973,7 +977,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
 
     info!("🚀 Tools Test Server running on port {}", args.port);
-    info!("📋 Available tools: calculator, string_processor, data_transformer, session_counter, progress_tracker, error_generator, parameter_validator, legacy_calculator (deprecated), word_count_analyzer (custom output: analysisResult), custom_calculator (custom output: calculationResult)");
+    info!(
+        "📋 Available tools: calculator, string_processor, data_transformer, session_counter, progress_tracker, error_generator, parameter_validator, legacy_calculator (deprecated), word_count_analyzer (custom output: analysisResult), custom_calculator (custom output: calculationResult)"
+    );
 
     server.run().await?;
     Ok(())

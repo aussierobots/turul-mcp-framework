@@ -1,6 +1,6 @@
 [package]
 name = "calculator-add-builder-server"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -17,3 +17,7 @@ tokio = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
+[[bin]]
+name = "calculator-add-builder-server"
+path = "src/main.rs"
+test = false

@@ -263,6 +263,9 @@ match version {
     McpProtocolVersion::V2025_06_18 => {
         // Full feature set with _meta, cursor, progressToken
     }
+    McpProtocolVersion::V2025_11_25 => {
+        // Tasks, icons, URL elicitation, sampling tools
+    }
 }
 ```
 
@@ -499,7 +502,7 @@ let transport = HttpMcpServerBuilder::new()
 
 ```toml
 [dependencies]
-turul-http-mcp-server = { version = "0.2", features = ["sse"] }
+turul-http-mcp-server = { version = "0.3", features = ["sse"] }
 ```
 
 Available features:

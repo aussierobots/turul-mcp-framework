@@ -599,7 +599,8 @@ impl EnterpriseApiTool {
         let apply_transformation = self.apply_transformation.unwrap_or(false);
 
         // Call the enterprise API
-        let mut response = gateway.call_enterprise_api(&self.service, &self.endpoint_id, parameters)?;
+        let mut response =
+            gateway.call_enterprise_api(&self.service, &self.endpoint_id, parameters)?;
 
         // Apply transformation if requested
         if apply_transformation {
@@ -608,7 +609,8 @@ impl EnterpriseApiTool {
                     response = gateway.apply_transformation("customer_360", &response)?;
                 }
                 "financial_reporting" => {
-                    response = gateway.apply_transformation("financial_consolidation", &response)?;
+                    response =
+                        gateway.apply_transformation("financial_consolidation", &response)?;
                 }
                 _ => {}
             }
@@ -682,7 +684,10 @@ impl DataSourceQueryTool {
     description = "Discover available enterprise APIs and third-party integrations with their capabilities"
 )]
 pub struct ApiDiscoveryTool {
-    #[param(description = "Category filter: all, enterprise, third_party, transformations", optional)]
+    #[param(
+        description = "Category filter: all, enterprise, third_party, transformations",
+        optional
+    )]
     pub category: Option<String>,
 
     #[param(description = "Include endpoint details", optional)]
@@ -1036,9 +1041,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             + gateway.data_sources.data_sources.streaming_sources.len()
     );
 
-    GATEWAY
-        .set(gateway)
-        .expect("Gateway already initialized");
+    GATEWAY.set(gateway).expect("Gateway already initialized");
 
     let server = McpServer::builder()
         .name("enterprise-api-gateway")

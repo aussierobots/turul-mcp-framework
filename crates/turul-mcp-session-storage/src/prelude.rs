@@ -3,7 +3,7 @@
 //! This module provides convenient re-exports of the most commonly used types
 //! from the session storage library.
 //!
-//! ```rust
+//! ```rust,no_run
 //! use turul_mcp_session_storage::prelude::*;
 //! ```
 

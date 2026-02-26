@@ -90,10 +90,8 @@ async fn test_handler_pattern_middleware_writes_to_session() {
     }));
 
     // Simulate handler pattern: create SessionView
-    let session_view = StorageBackedSessionView::new(
-        session_info.session_id.clone(),
-        Arc::clone(&storage),
-    );
+    let session_view =
+        StorageBackedSessionView::new(session_info.session_id.clone(), Arc::clone(&storage));
 
     // Execute middleware
     let mut ctx = RequestContext::new("test/method", None);
@@ -139,10 +137,8 @@ async fn test_handler_pattern_middleware_error_short_circuits() {
     middleware_stack.push(Arc::new(BlockingMiddleware));
 
     // Create session view
-    let session_view = StorageBackedSessionView::new(
-        session_info.session_id.clone(),
-        Arc::clone(&storage),
-    );
+    let session_view =
+        StorageBackedSessionView::new(session_info.session_id.clone(), Arc::clone(&storage));
 
     // Execute middleware - should return error
     let mut ctx = RequestContext::new("test/method", None);
@@ -194,10 +190,8 @@ async fn test_both_handlers_use_run_middleware_and_dispatch() {
 
     let middleware_stack = MiddlewareStack::new(); // Empty stack
 
-    let session_view = StorageBackedSessionView::new(
-        session_info.session_id.clone(),
-        Arc::clone(&storage),
-    );
+    let session_view =
+        StorageBackedSessionView::new(session_info.session_id.clone(), Arc::clone(&storage));
 
     let mut ctx = RequestContext::new("test/method", None);
     let injection = middleware_stack

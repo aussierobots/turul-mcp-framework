@@ -1,0 +1,24 @@
+[package]
+name = "tasks-e2e-inmemory-server"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+turul-mcp-server.workspace = true
+turul-mcp-protocol.workspace = true
+turul-mcp-derive.workspace = true
+turul-mcp-builders.workspace = true
+turul-mcp-task-storage.workspace = true
+async-trait.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[[bin]]
+name = "tasks-e2e-inmemory-server"
+path = "src/main.rs"
+test = false

@@ -1,7 +1,12 @@
-//! Middleware Authentication Example for AWS Lambda
+//! Middleware Authentication Example for AWS Lambda (Streamable HTTP + REST/HTTP API)
 //!
 //! This example demonstrates middleware-based authentication in Lambda with
-//! API Gateway authorizer context integration.
+//! API Gateway authorizer context integration. It supports all three authorizer
+//! context shapes that API Gateway can produce:
+//!
+//! - **V1 Nested**: REST API with `requestContext.authorizer.lambda.{field}` (standard Lambda proxy)
+//! - **V1 Flat**: REST API with `requestContext.authorizer.{field}` (simple Lambda authorizer)
+//! - **V2**: HTTP API with `requestContext.authorizer.{field}` (HTTP API authorizer)
 //!
 //! The middleware:
 //! 1. Extracts the X-API-Key header from Lambda requests
@@ -9,6 +14,17 @@
 //! 3. Extracts Lambda authorizer context (x-authorizer-* headers)
 //! 4. Stores the authenticated user_id and authorizer data in session state
 //! 5. Tools can read the user_id and context from session
+//!
+//! # Transport: Streamable HTTP (REST API V1)
+//!
+//! This example uses the MCP 2025-11-25 Streamable HTTP transport via REST API (V1).
+//! REST API supports standard HTTP POST with full request/response control, making it
+//! compatible with Streamable HTTP. The Lambda adapter converts the API Gateway event
+//! into a standard `hyper::Request`, which the framework's `StreamableHttpHandler`
+//! processes normally.
+//!
+//! **Note**: HTTP API (V2) authorizer context extraction is fully supported, but
+//! Streamable HTTP transport requires REST API (V1).
 //!
 //! # Deployment
 //!
@@ -31,6 +47,27 @@
 //! 2. turul-mcp-aws-lambda adapter extracts context → injects `x-authorizer-*` headers
 //! 3. Middleware reads headers → stores in session state
 //! 4. Your tools access via `session.get_typed_state("authorizer")`
+//!
+//! # API Gateway Authorizer Context Shapes
+//!
+//! The adapter handles three distinct JSON shapes from API Gateway:
+//!
+//! **V1 Nested** (REST API, Lambda proxy integration):
+//! ```json
+//! { "requestContext": { "authorizer": { "lambda": { "userId": "user-123" } } } }
+//! ```
+//!
+//! **V1 Flat** (REST API, simple Lambda authorizer):
+//! ```json
+//! { "requestContext": { "authorizer": { "userId": "user-123", "principalId": "..." } } }
+//! ```
+//! Internal fields (`principalId`, `integrationLatency`, `usageIdentifierKey`) are
+//! filtered out automatically — only your custom context fields are extracted.
+//!
+//! **V2** (HTTP API):
+//! ```json
+//! { "requestContext": { "authorizer": { "userId": "user-123" } } }
+//! ```
 //!
 //! **Example tool using authorizer context**:
 //! ```rust,ignore
@@ -69,7 +106,7 @@
 //! ```
 
 use async_trait::async_trait;
-use lambda_http::{run, service_fn, Body, Error, Request, Response};
+use lambda_http::{Body, Error, Request, Response, run, service_fn};
 use serde_json::json;
 use std::collections::HashMap;
 use std::env;
@@ -105,9 +142,9 @@ impl McpMiddleware for AuthMiddleware {
         _session: Option<&dyn turul_mcp_session_storage::SessionView>,
         injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        // Skip authentication for initialize method (required for session creation)
-        if ctx.method() == "initialize" {
-            debug!("Skipping auth for initialize method");
+        // Skip authentication for initialize (session creation) and ping (pre-init health check)
+        if ctx.method() == "initialize" || ctx.method() == "ping" {
+            debug!("Skipping auth for {} method", ctx.method());
             return Ok(());
         }
 
@@ -134,16 +171,20 @@ impl McpMiddleware for AuthMiddleware {
 
                     // Iterate over metadata entries
                     for (key, value) in metadata.iter() {
-                        if let Some(field_name) = key.strip_prefix("x-authorizer-") {
-                            if let Some(value_str) = value.as_str() {
-                                debug!("📋 Authorizer context: {} = {}", field_name, value_str);
-                                authorizer_context.insert(field_name.to_string(), value_str.to_string());
-                            }
+                        if let Some(field_name) = key.strip_prefix("x-authorizer-")
+                            && let Some(value_str) = value.as_str()
+                        {
+                            debug!("📋 Authorizer context: {} = {}", field_name, value_str);
+                            authorizer_context
+                                .insert(field_name.to_string(), value_str.to_string());
                         }
                     }
 
                     if !authorizer_context.is_empty() {
-                        debug!("✅ Extracted {} authorizer fields", authorizer_context.len());
+                        debug!(
+                            "✅ Extracted {} authorizer fields",
+                            authorizer_context.len()
+                        );
                         injection.set_state("authorizer", json!(authorizer_context));
                     }
 

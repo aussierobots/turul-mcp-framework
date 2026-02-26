@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-
 /// Tool annotations structure (matches TypeScript ToolAnnotations)
 /// NOTE: all properties in ToolAnnotations are **hints**.
 /// They are not guaranteed to provide a faithful description of tool behavior.
@@ -495,8 +494,7 @@ impl CallToolResult {
             crate::McpError::tool_execution(&format!("Structured content error: {}", e))
         })?;
 
-        Ok(Self::success(vec![ToolResult::text(text_content)])
-            .with_structured_content(structured))
+        Ok(Self::success(vec![ToolResult::text(text_content)]).with_structured_content(structured))
     }
 
     /// Create response from serializable result with automatic structured content based on schema

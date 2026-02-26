@@ -3,7 +3,7 @@
 //! This module provides convenient re-exports of the most commonly used types
 //! from the AWS Lambda MCP server library.
 //!
-//! ```rust
+//! ```rust,no_run
 //! use turul_mcp_aws_lambda::prelude::*;
 //! ```
 

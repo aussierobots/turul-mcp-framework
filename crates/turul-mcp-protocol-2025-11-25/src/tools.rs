@@ -83,13 +83,18 @@ impl ToolAnnotations {
 }
 
 /// Whether a tool supports long-running task execution (per MCP 2025-11-25)
+///
+/// Spec values: `"required"`, `"optional"`, `"forbidden"`
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum TaskSupport {
-    /// Tool supports task mode but doesn't require it
-    Supported,
-    /// Tool requires task mode for execution
+    /// Clients MUST use task augmentation
     Required,
+    /// Clients MAY use task augmentation
+    #[serde(alias = "supported")]
+    Optional,
+    /// Clients MUST NOT use task augmentation
+    Forbidden,
 }
 
 /// Execution configuration for a tool (per MCP 2025-11-25)
@@ -105,9 +110,7 @@ pub struct ToolExecution {
 
 impl ToolExecution {
     pub fn new() -> Self {
-        Self {
-            task_support: None,
-        }
+        Self { task_support: None }
     }
 
     pub fn with_task_support(mut self, task_support: TaskSupport) -> Self {
@@ -380,6 +383,11 @@ pub struct CallToolParams {
     /// Arguments to pass to the tool - matches TypeScript { [key: string]: unknown }
     #[serde(skip_serializing_if = "Option::is_none")]
     pub arguments: Option<HashMap<String, Value>>,
+    /// Task metadata for task-augmented requests (MCP 2025-11-25)
+    /// When present, the server should create a task and return `CreateTaskResult`
+    /// instead of executing the tool synchronously.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub task: Option<crate::tasks::TaskMetadata>,
     /// Meta information (optional _meta field inside params)
     #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
     pub meta: Option<HashMap<String, Value>>,
@@ -390,8 +398,14 @@ impl CallToolParams {
         Self {
             name: name.into(),
             arguments: None,
+            task: None,
             meta: None,
         }
+    }
+
+    pub fn with_task(mut self, task: crate::tasks::TaskMetadata) -> Self {
+        self.task = Some(task);
+        self
     }
 
     /// Get arguments as HashMap - CRITICAL: Use this instead of the trait method
@@ -552,8 +566,7 @@ impl CallToolResult {
             crate::McpError::tool_execution(&format!("Structured content error: {}", e))
         })?;
 
-        Ok(Self::success(vec![ToolResult::text(text_content)])
-            .with_structured_content(structured))
+        Ok(Self::success(vec![ToolResult::text(text_content)]).with_structured_content(structured))
     }
 
     /// Create response from serializable result with automatic structured content based on schema
@@ -851,7 +864,10 @@ mod tests {
         assert_eq!(icons[0]["src"], "https://example.com/tool.png");
 
         // Verify singular "icon" field is NOT present
-        assert!(json.get("icon").is_none(), "should NOT have singular icon field");
+        assert!(
+            json.get("icon").is_none(),
+            "should NOT have singular icon field"
+        );
 
         let parsed: Tool = serde_json::from_str(&serde_json::to_string(&tool).unwrap()).unwrap();
         assert_eq!(parsed.icons.unwrap().len(), 1);

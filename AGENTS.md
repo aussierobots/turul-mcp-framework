@@ -63,7 +63,7 @@
 - Resources: `Resource`, `ResourceTemplate`, and results (`List*Result`, `ReadResourceResult`) follow TS names, including `nextCursor` and `_meta`.
 - `CallToolResult.structuredContent` is an optional field in the MCP 2025-11-25 schema. Keep it optional and ensure clients/tests handle its absence correctly.
 - Tool output schemas:
-  - External output structs **must** derive `schemars::JsonSchema` so the derive macros can emit detailed schemas via `schema_for!(T)`. Missing derives now produce compile-time errors (see `MIGRATION_0.2.1.md`).
+  - External output structs **must** derive `schemars::JsonSchema` so the derive macros can emit detailed schemas via `schema_for!(T)`. Missing derives now produce compile-time errors (see CHANGELOG.md v0.2.1 breaking changes).
   - Zero-config (`output` omitted) heuristics still target `Self`; use `#[tool(output = Type)]` for accurate schemas on complex responses.
   - Array outputs (`Vec<T>`) are validated by `mcp_vec_result_schema_test` to ensure `tools/list` advertises `"type": "array"` and the runtime result matches.
 
@@ -164,6 +164,40 @@
 - Do not relax security, logging, or API contracts to “make tests pass”; fix root causes while preserving spec compliance.
 - Boundaries: do not modify core framework areas unless explicitly requested. The ~9 areas are Tools, Resources, Prompts, Sampling, Completion, Logging, Roots, Elicitation, and Notifications.
  - Extensions: if introducing truly non-standard fields, document them clearly, keep optional, and ensure baseline compliance without them.
+
+### Critic Review Mode (Architecture + Best Practices + MCP Compliance)
+- Default stance for review-only requests: **no code changes** unless the user explicitly asks for a patch.
+- Review output should prioritize findings over summaries:
+  - Lead with concrete issues (severity-ordered) and file references.
+  - Separate architecture risks, spec compliance risks, and documentation/process drift.
+  - Call out missing tests/coverage when behavior claims change.
+- Treat docs/examples/agent-instruction changes as potentially compliance-impacting:
+  - Flag docs that advertise unsupported capabilities or incorrect defaults.
+  - Flag examples that imply `listChanged`/subscription/progress/lifecycle support without matching implementation/tests.
+  - Flag spec-version drift (must remain aligned to MCP `2025-11-25` unless intentionally upgraded everywhere).
+- When reviewing client/server API guidance, verify it preserves typed error propagation and truthful capability advertisement.
+
+### Workspace State Triage (Required Before Review Conclusions)
+- Start with `git status --short --branch` to identify whether changes are code, docs, tests, or agent/process files.
+- If changes are primarily docs/agent guidance (e.g., `README.md`, `CLAUDE.md`, `GEMINI.md`, `.claude/agents/*`):
+  - Perform a consistency audit across all agent guidance files and this `AGENTS.md`.
+  - Check that MCP terminology, method names, capability keys, and spec date are consistent.
+  - Check that testing commands and compliance expectations match the current framework guidance in this file.
+- If no code changed but behavior claims changed, treat that as a review finding unless the claims are demonstrably accurate.
+
+### Reviewer Focus Areas (Do Not Skip)
+- Architecture boundaries: examples and docs should not encourage bypassing crate layering (`protocol` vs `server` vs transport crates).
+- Capability truthfulness: docs/tests must not imply dynamic capabilities when the framework is static by default.
+- Lifecycle strictness: guidance must preserve `notifications/initialized` gating and correct error mapping semantics.
+- Pagination/meta/schema accuracy: docs/examples must use `cursor`, `nextCursor`, and optional `_meta` consistently with the protocol crate.
+- Notifications naming: spec method names use snake_case path segments; capability keys remain camelCase.
+- Tool error semantics: do not normalize transport/framework errors into fake successful tool payloads.
+
+### Current Workspace Risk Pattern (Doc + Agent Expansion)
+- When multiple agent instruction files are added/modified alongside `README.md`, treat it as a **coordination risk**:
+  - Watch for conflicting role definitions (critic vs implementer vs docs writer).
+  - Watch for duplicated but diverging command guidance.
+  - Prefer this `AGENTS.md` as the compliance authority when conflicts exist, and flag drift explicitly.
 
 ## Release Readiness Notes (2025-10-01)
 - **Pagination Compliance**: `prompts/list`, `resources/list`, and `resources/templates/list` now honor caller-supplied `limit` values, clamp to the DoS ceiling, and reject `limit=0`. Preserve this behaviour in future patches and cover regression paths in the relevant handler tests.

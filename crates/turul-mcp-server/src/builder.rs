@@ -72,6 +72,12 @@ pub struct McpServerBuilder {
     /// Session storage backend (defaults to InMemory if None)
     session_storage: Option<Arc<turul_mcp_session_storage::BoxedSessionStorage>>,
 
+    /// Task storage / runtime (None = tasks not supported)
+    task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
+
+    /// Recovery timeout for stuck tasks (milliseconds), default 5 minutes
+    task_recovery_timeout_ms: u64,
+
     /// MCP Lifecycle enforcement configuration
     strict_lifecycle: bool,
 
@@ -90,6 +96,8 @@ pub struct McpServerBuilder {
     enable_cors: bool,
     #[cfg(feature = "http")]
     enable_sse: bool,
+    #[cfg(feature = "http")]
+    allow_unauthenticated_ping: Option<bool>,
 
     /// Validation errors collected during builder configuration
     validation_errors: Vec<String>,
@@ -206,9 +214,11 @@ impl McpServerBuilder {
             instructions: None,
             session_timeout_minutes: None,
             session_cleanup_interval_seconds: None,
-            session_storage: None,   // Default: InMemory storage
-            strict_lifecycle: false, // Default: lenient mode for compatibility
-            test_mode: false,        // Default: production mode with security
+            session_storage: None,             // Default: InMemory storage
+            task_runtime: None,                // Default: tasks not supported
+            task_recovery_timeout_ms: 300_000, // Default: 5 minutes
+            strict_lifecycle: false,           // Default: lenient mode for compatibility
+            test_mode: false,                  // Default: production mode with security
             middleware_stack: crate::middleware::MiddlewareStack::new(), // Default: empty middleware stack
             #[cfg(feature = "http")]
             bind_address: "127.0.0.1:8000".parse().unwrap(),
@@ -218,6 +228,8 @@ impl McpServerBuilder {
             enable_cors: true,
             #[cfg(feature = "http")]
             enable_sse: cfg!(feature = "sse"),
+            #[cfg(feature = "http")]
+            allow_unauthenticated_ping: None, // Default: use ServerConfig default (true)
             validation_errors: Vec::new(),
         }
     }
@@ -1070,10 +1082,7 @@ impl McpServerBuilder {
     ///
     /// Note: Elicitation is a client-side capability per MCP 2025-11-25.
     /// The server requests elicitation from the client; it doesn't advertise it.
-    pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(
-        self,
-        provider: P,
-    ) -> Self {
+    pub fn with_elicitation_provider<P: ElicitationProvider + 'static>(self, provider: P) -> Self {
         self.handler(ElicitationHandler::new(Arc::new(provider)))
     }
 
@@ -1181,6 +1190,54 @@ impl McpServerBuilder {
         self
     }
 
+    /// Configure task storage to enable MCP task support for long-running operations.
+    ///
+    /// When task storage is configured, the server will:
+    /// - Advertise `tasks` capabilities in the initialize response
+    /// - Register handlers for `tasks/get`, `tasks/list`, `tasks/cancel`, `tasks/result`
+    /// - Recover stuck tasks (in `Working`/`InputRequired` state) on startup
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// # use turul_mcp_server::prelude::*;
+    /// # use turul_mcp_task_storage::InMemoryTaskStorage;
+    /// # use std::sync::Arc;
+    /// #
+    /// # fn example() -> McpResult<()> {
+    /// let server = McpServer::builder()
+    ///     .name("task-server")
+    ///     .with_task_storage(Arc::new(InMemoryTaskStorage::new()))
+    ///     .build()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_task_storage(
+        mut self,
+        storage: Arc<dyn turul_mcp_task_storage::TaskStorage>,
+    ) -> Self {
+        let runtime = crate::task::runtime::TaskRuntime::with_default_executor(storage)
+            .with_recovery_timeout(self.task_recovery_timeout_ms);
+        self.task_runtime = Some(Arc::new(runtime));
+        self
+    }
+
+    /// Configure task support with a pre-built `TaskRuntime`.
+    ///
+    /// Use this when you need fine-grained control over the task runtime configuration.
+    pub fn with_task_runtime(mut self, runtime: Arc<crate::task::runtime::TaskRuntime>) -> Self {
+        self.task_runtime = Some(runtime);
+        self
+    }
+
+    /// Set the recovery timeout for stuck tasks (in milliseconds).
+    ///
+    /// On server startup, tasks in non-terminal states older than this timeout
+    /// will be marked as `Failed`. Default: 300,000 ms (5 minutes).
+    pub fn task_recovery_timeout_ms(mut self, timeout_ms: u64) -> Self {
+        self.task_recovery_timeout_ms = timeout_ms;
+        self
+    }
+
     /// Set HTTP bind address (requires "http" feature)
     #[cfg(feature = "http")]
     pub fn bind_address(mut self, addr: SocketAddr) -> Self {
@@ -1206,6 +1263,16 @@ impl McpServerBuilder {
     #[cfg(feature = "http")]
     pub fn sse(mut self, enable: bool) -> Self {
         self.enable_sse = enable;
+        self
+    }
+
+    /// Allow or disallow ping requests without Mcp-Session-Id header (requires "http" feature)
+    ///
+    /// Default: `true` (sessionless pings allowed per MCP spec).
+    /// Set to `false` for hardened deployments requiring session for all methods.
+    #[cfg(feature = "http")]
+    pub fn allow_unauthenticated_ping(mut self, allow: bool) -> Self {
+        self.allow_unauthenticated_ping = Some(allow);
         self
     }
 
@@ -1443,6 +1510,26 @@ impl McpServerBuilder {
             ]),
         });
 
+        // Tasks capabilities — auto-configure when task runtime is set
+        let has_tasks = self.task_runtime.is_some();
+        if has_tasks {
+            use turul_mcp_protocol::initialize::*;
+
+            // Advertise full task support: list, cancel, and task-augmented tools/call
+            self.capabilities.tasks = Some(TasksCapabilities {
+                list: Some(TasksListCapabilities::default()),
+                cancel: Some(TasksCancelCapabilities::default()),
+                requests: Some(TasksRequestCapabilities {
+                    tools: Some(TasksToolCapabilities {
+                        call: Some(TasksToolCallCapabilities::default()),
+                        extra: Default::default(),
+                    }),
+                    extra: Default::default(),
+                }),
+                extra: Default::default(),
+            });
+        }
+
         tracing::debug!("🔧 Auto-configured server capabilities:");
         tracing::debug!("   - Tools: {}", has_tools);
         tracing::debug!("   - Resources: {}", has_resources);
@@ -1450,6 +1537,7 @@ impl McpServerBuilder {
         tracing::debug!("   - Roots: {}", has_roots);
         tracing::debug!("   - Elicitation: {}", has_elicitations);
         tracing::debug!("   - Completions: {}", has_completions);
+        tracing::debug!("   - Tasks: {}", has_tasks);
         tracing::debug!("   - Logging: enabled");
 
         // Create implementation info
@@ -1502,6 +1590,34 @@ impl McpServerBuilder {
             );
         }
 
+        // Add task handlers if task runtime is configured
+        if let Some(ref runtime) = self.task_runtime {
+            handlers.insert(
+                "tasks/get".to_string(),
+                Arc::new(crate::task::handlers::TasksGetHandler::new(Arc::clone(
+                    runtime,
+                ))),
+            );
+            handlers.insert(
+                "tasks/list".to_string(),
+                Arc::new(crate::task::handlers::TasksListHandler::new(Arc::clone(
+                    runtime,
+                ))),
+            );
+            handlers.insert(
+                "tasks/cancel".to_string(),
+                Arc::new(crate::task::handlers::TasksCancelHandler::new(Arc::clone(
+                    runtime,
+                ))),
+            );
+            handlers.insert(
+                "tasks/result".to_string(),
+                Arc::new(crate::task::handlers::TasksResultHandler::new(Arc::clone(
+                    runtime,
+                ))),
+            );
+        }
+
         // Create server
         Ok(McpServer::new(
             implementation,
@@ -1512,6 +1628,7 @@ impl McpServerBuilder {
             self.session_timeout_minutes,
             self.session_cleanup_interval_seconds,
             self.session_storage,
+            self.task_runtime,
             self.strict_lifecycle,
             self.middleware_stack,
             #[cfg(feature = "http")]
@@ -1522,6 +1639,8 @@ impl McpServerBuilder {
             self.enable_cors,
             #[cfg(feature = "http")]
             self.enable_sse,
+            #[cfg(feature = "http")]
+            self.allow_unauthenticated_ping,
         ))
     }
 }
@@ -1539,8 +1658,8 @@ mod tests {
     use async_trait::async_trait;
     use serde_json::Value;
     use std::collections::HashMap;
+    use turul_mcp_builders::prelude::*; // HasBaseMetadata, HasDescription, etc.
     use turul_mcp_protocol::tools::ToolAnnotations;
-    use turul_mcp_builders::prelude::*;  // HasBaseMetadata, HasDescription, etc.
     use turul_mcp_protocol::{CallToolResult, ToolSchema};
 
     struct TestTool {
@@ -1715,7 +1834,11 @@ mod tests {
 
     #[async_trait]
     impl crate::McpResource for StaticTestResource {
-        async fn read(&self, _params: Option<Value>, _session: Option<&crate::SessionContext>) -> crate::McpResult<Vec<ResourceContent>> {
+        async fn read(
+            &self,
+            _params: Option<Value>,
+            _session: Option<&crate::SessionContext>,
+        ) -> crate::McpResult<Vec<ResourceContent>> {
             Ok(vec![ResourceContent::text(
                 "file:///test.txt",
                 "test content",
@@ -1771,7 +1894,11 @@ mod tests {
 
     #[async_trait]
     impl crate::McpResource for TemplateTestResource {
-        async fn read(&self, _params: Option<Value>, _session: Option<&crate::SessionContext>) -> crate::McpResult<Vec<ResourceContent>> {
+        async fn read(
+            &self,
+            _params: Option<Value>,
+            _session: Option<&crate::SessionContext>,
+        ) -> crate::McpResult<Vec<ResourceContent>> {
             Ok(vec![ResourceContent::text(
                 "template://data/123.json",
                 "test content",
@@ -1912,7 +2039,11 @@ mod tests {
 
         #[async_trait]
         impl crate::McpResource for InvalidTemplateResource {
-            async fn read(&self, _params: Option<Value>, _session: Option<&crate::SessionContext>) -> crate::McpResult<Vec<ResourceContent>> {
+            async fn read(
+                &self,
+                _params: Option<Value>,
+                _session: Option<&crate::SessionContext>,
+            ) -> crate::McpResult<Vec<ResourceContent>> {
                 Ok(vec![])
             }
         }

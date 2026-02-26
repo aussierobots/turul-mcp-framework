@@ -530,7 +530,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .sse(true)
         .build()?;
 
-    info!("🚀 Real MCP sampling server running at: http://127.0.0.1:{}/mcp", port);
+    info!(
+        "🚀 Real MCP sampling server running at: http://127.0.0.1:{}/mcp",
+        port
+    );
     info!("🤖 This server implements ACTUAL MCP sampling:");
     info!("   • Creative Writing Sampler - High-temperature creative content generation");
     info!("   • Technical Writing Sampler - Low-temperature precise documentation");

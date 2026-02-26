@@ -1,0 +1,43 @@
+[package]
+name = "turul-mcp-task-storage"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Task storage abstractions for Model Context Protocol (MCP) servers - durable state machines for long-running operations"
+
+[dependencies]
+# Core dependencies
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, optional = true }
+uuid = { workspace = true, features = ["v4", "v7"] }
+chrono = { workspace = true, features = ["serde"] }
+
+# Protocol types
+turul-mcp-protocol.workspace = true
+
+# Optional database support
+sqlx = { workspace = true, optional = true }
+
+# AWS SDK dependencies
+aws-config = { workspace = true, optional = true }
+aws-sdk-dynamodb = { workspace = true, optional = true }
+
+# DynamoDB cursor encoding
+base64 = { workspace = true, optional = true }
+
+[features]
+default = ["in-memory"]
+in-memory = ["tokio"]
+sqlite = ["sqlx", "tokio"]
+postgres = ["sqlx", "tokio"]
+dynamodb = ["aws-config", "aws-sdk-dynamodb", "tokio", "base64"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }

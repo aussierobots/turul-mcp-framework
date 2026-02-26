@@ -401,8 +401,8 @@ pub mod methods {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     use crate::traits::NotificationDefinition;
+    use serde_json::json;
 
     #[test]
     fn test_notification_builder_basic() {
@@ -587,7 +587,10 @@ mod tests {
     fn test_method_constants() {
         use super::methods::*;
 
-        assert_eq!(RESOURCE_LIST_CHANGED, "notifications/resources/list_changed");
+        assert_eq!(
+            RESOURCE_LIST_CHANGED,
+            "notifications/resources/list_changed"
+        );
         assert_eq!(TOOL_LIST_CHANGED, "notifications/tools/list_changed");
         assert_eq!(PROMPT_LIST_CHANGED, "notifications/prompts/list_changed");
         assert_eq!(ROOTS_LIST_CHANGED, "notifications/roots/list_changed");

@@ -1,6 +1,6 @@
 [package]
 name = "sampling-server"
-version = "1.0.0"
+version.workspace = true
 edition.workspace = true
 
 [dependencies]
@@ -17,3 +17,7 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 rand = { workspace = true }
 clap = { workspace = true }
+[[bin]]
+name = "sampling-server"
+path = "src/main.rs"
+test = false

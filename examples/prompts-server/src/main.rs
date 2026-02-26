@@ -9,11 +9,11 @@ use std::collections::HashMap;
 use async_trait::async_trait;
 use serde_json::Value;
 use tracing::info;
+use turul_mcp_builders::prelude::*; // HasPromptMetadata, HasPromptDescription, etc.
 use turul_mcp_protocol::{
     McpError,
     prompts::{PromptAnnotations, PromptArgument, PromptMessage},
 };
-use turul_mcp_builders::prelude::*;  // HasPromptMetadata, HasPromptDescription, etc.
 use turul_mcp_server::prompt::McpPrompt;
 use turul_mcp_server::{McpResult, McpServer};
 

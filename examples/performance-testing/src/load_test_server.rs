@@ -6,7 +6,7 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use rand::Rng;
+use rand::RngExt;
 use serde_json::json;
 use tokio::time::sleep;
 use tracing::info;

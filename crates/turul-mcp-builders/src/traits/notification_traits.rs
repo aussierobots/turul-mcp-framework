@@ -2,9 +2,9 @@
 //!
 //! **IMPORTANT**: These are framework features, NOT part of the MCP specification.
 
-use turul_mcp_protocol::notifications::{Notification, NotificationParams};
 use serde_json::Value;
 use std::collections::HashMap;
+use turul_mcp_protocol::notifications::{Notification, NotificationParams};
 
 pub trait HasNotificationMetadata {
     /// The notification method name

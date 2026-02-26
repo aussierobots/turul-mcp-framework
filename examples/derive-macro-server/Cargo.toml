@@ -1,6 +1,6 @@
 [package]
 name = "derive-macro-server"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
@@ -9,7 +9,7 @@ license.workspace = true
 turul-mcp-server = { workspace = true }
 turul-mcp-protocol = { workspace = true }
 turul-mcp-derive = { workspace = true }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
+turul-mcp-builders = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -19,3 +19,7 @@ serde = { workspace = true }
 serde_yml = { workspace = true }
 toml = { workspace = true }
 regex = { workspace = true }
+[[bin]]
+name = "derive-macro-server"
+path = "src/main.rs"
+test = false

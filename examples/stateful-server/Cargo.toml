@@ -1,6 +1,6 @@
 [package]
 name = "stateful-server"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
 
 [dependencies]
@@ -15,3 +15,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 uuid = { workspace = true }
+[[bin]]
+name = "stateful-server"
+path = "src/main.rs"
+test = false

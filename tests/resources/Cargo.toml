@@ -1,17 +1,18 @@
 [package]
 name = "mcp-resources-tests"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 publish = false
+autotests = false
 
 [dependencies]
-turul-mcp-server = { path = "../../crates/turul-mcp-server" }
-turul-http-mcp-server = { path = "../../crates/turul-http-mcp-server" }
-turul-mcp-json-rpc-server = { path = "../../crates/turul-mcp-json-rpc-server" }
-turul-mcp-session-storage = { path = "../../crates/turul-mcp-session-storage" }
-turul-mcp-protocol = { path = "../../crates/turul-mcp-protocol" }
-turul-mcp-derive = { path = "../../crates/turul-mcp-derive" }
-turul-mcp-builders = { path = "../../crates/turul-mcp-builders" }
+turul-mcp-server.workspace = true
+turul-http-mcp-server.workspace = true
+turul-mcp-json-rpc-server.workspace = true
+turul-mcp-session-storage.workspace = true
+turul-mcp-protocol.workspace = true
+turul-mcp-derive.workspace = true
+turul-mcp-builders.workspace = true
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -27,8 +28,7 @@ tower = { workspace = true, features = ["util"] }
 futures.workspace = true
 tokio-stream.workspace = true
 tempfile.workspace = true
-mcp-e2e-shared = { path = "../shared" }
-portpicker = "0.1"
+mcp-e2e-shared.workspace = true
 # Additional dependencies for test server binary
 clap.workspace = true
 base64.workspace = true
@@ -39,8 +39,12 @@ name = "mcp_resources_tests"
 path = "src/lib.rs"
 
 [dev-dependencies]
-serial_test = "3"
+serial_test.workspace = true
 
 [[bin]]
 name = "resource-test-server-e2e"
 path = "bin/main.rs"
+
+[[test]]
+name = "all"
+path = "tests/all.rs"

@@ -105,6 +105,8 @@ tests/
 ├── sse_progress_delivery.rs             # SSE progress delivery
 ├── streamable_http_client_test.rs       # Streamable HTTP client
 ├── streamable_http_e2e.rs               # Streamable HTTP E2E
+├── tasks_e2e_inmemory.rs                # Task lifecycle E2E (MCP 2025-11-25)
+├── mcp_2025_11_25_features.rs           # MCP 2025-11-25 feature tests
 ├── working_examples_validation.rs       # Example validation tests
 │
 └── test_helpers/                        # Common test utilities
@@ -259,6 +261,7 @@ curl -X POST http://127.0.0.1:8080/mcp \
 - ✅ **Sampling Testing**: Message generation with parameter validation and content formats
 - ✅ **Roots Testing**: Directory discovery, URI validation, and security boundaries
 - ✅ **Elicitation Testing**: Workflow management, form generation, and data validation
+- ✅ **Tasks Testing**: Task lifecycle, cancellation, result retrieval, and status polling (MCP 2025-11-25)
 
 ### Advanced Testing Features
 - ✅ **URI Templates**: Template variable substitution (e.g., `file:///template/items/{id}`)

@@ -367,7 +367,7 @@ export DB_PASSWORD="your-database-password"
 - **Authentication**: User-specific resource access with permissions
 - **Caching**: Performance optimization for expensive resource operations
 - **Versioning**: Historical versions of configuration and documentation
-- **Real-time Updates**: WebSocket notifications when external files change
+- **Real-time Updates**: SSE notifications when external files change
 
 ### Team Workflow Integration
 - **Pull Request Reviews**: Configuration and schema change validation

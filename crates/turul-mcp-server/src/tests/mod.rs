@@ -8,3 +8,4 @@ pub mod pagination_integration_tests;
 pub mod security_integration_tests;
 pub mod session_aware_logging_tests;
 pub mod session_tests;
+pub mod uri_template_tests;

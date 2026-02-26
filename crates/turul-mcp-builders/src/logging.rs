@@ -420,8 +420,8 @@ impl LogLevel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
     use crate::traits::LoggerDefinition;
+    use serde_json::json;
 
     #[test]
     fn test_logging_builder_basic() {

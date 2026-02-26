@@ -24,6 +24,7 @@ use tracing::{debug, error, warn};
 use turul_mcp_session_storage::SessionView;
 
 use crate::ServerConfig;
+use crate::protocol::normalize_header_value;
 
 /// MCP Protocol versions
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -164,8 +165,8 @@ impl StreamableHttpContext {
         let accept_header = headers
             .get(ACCEPT)
             .and_then(|h| h.to_str().ok())
-            .unwrap_or_default()
-            .to_ascii_lowercase();
+            .map(normalize_header_value)
+            .unwrap_or_default();
 
         let wants_sse_stream = accept_header.contains("text/event-stream");
         let accepts_stream_frames = accept_header.contains("application/json")
@@ -400,6 +401,24 @@ impl StreamableHttpHandler {
             context.wants_sse_stream()
         );
 
+        // Handle OPTIONS preflight before validation (no Accept header required)
+        if *req.method() == Method::OPTIONS {
+            return Response::builder()
+                .status(StatusCode::OK)
+                .header(
+                    "Access-Control-Allow-Methods",
+                    "GET, POST, DELETE, OPTIONS",
+                )
+                .header(
+                    "Access-Control-Allow-Headers",
+                    "Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id, Last-Event-ID",
+                )
+                .header("Access-Control-Max-Age", "86400")
+                .body(Full::new(Bytes::new()))
+                .unwrap()
+                .map(|body| body.map_err(|never| match never {}).boxed_unsync());
+        }
+
         // Validate request
         if let Err(error) = context.validate(req.method()) {
             warn!("Invalid streamable HTTP request: {}", error);
@@ -497,7 +516,7 @@ impl StreamableHttpHandler {
             .and_then(|s| s.parse::<u64>().ok());
 
         // Generate unique connection ID for tracking this stream
-        let connection_id = uuid::Uuid::now_v7().to_string();
+        let connection_id = uuid::Uuid::now_v7().as_simple().to_string();
 
         debug!(
             "Creating streamable HTTP connection: session={}, connection={}, last_event_id={:?}",
@@ -579,7 +598,8 @@ impl StreamableHttpHandler {
             .headers()
             .get(CONTENT_TYPE)
             .and_then(|ct| ct.to_str().ok())
-            .unwrap_or("");
+            .map(normalize_header_value)
+            .unwrap_or_default();
 
         if !content_type.starts_with("application/json") {
             warn!("Invalid content type for legacy POST: {}", content_type);
@@ -1016,6 +1036,52 @@ impl StreamableHttpHandler {
             }
         };
 
+        // Handle sessionless ping (pre-init ping support per MCP 2025-11-25)
+        // Clients are permitted to send pings before initialization completes.
+        // When allowed by config, dispatch through the shared middleware + dispatch pipeline
+        // with session=None, so rate-limiting middleware can still block abuse.
+        let is_sessionless_ping = match &message {
+            JsonRpcMessage::Request(req) => req.method == "ping",
+            JsonRpcMessage::Notification(notif) => notif.method == "ping",
+        } && context.session_id.is_none()
+            && self.config.allow_unauthenticated_ping;
+
+        if is_sessionless_ping {
+            return match message {
+                JsonRpcMessage::Request(request) => {
+                    // Sessionless ping request: shared dispatch path
+                    let (response, _) = self
+                        .run_middleware_and_dispatch(request, context.headers.clone(), None)
+                        .await;
+                    let response_value =
+                        serde_json::to_value(&response).unwrap_or(serde_json::json!({}));
+                    StreamableResponse::Json(response_value).into_boxed_response(&context)
+                }
+                JsonRpcMessage::Notification(notification) => {
+                    // Sessionless ping notification: dispatch and return 202 Accepted
+                    let dispatcher = Arc::clone(&self.dispatcher);
+                    tokio::spawn(async move {
+                        if let Err(e) = dispatcher
+                            .handle_notification_with_context(notification, None)
+                            .await
+                        {
+                            error!("Failed to process sessionless ping notification: {}", e);
+                        }
+                    });
+
+                    Response::builder()
+                        .status(StatusCode::ACCEPTED)
+                        .header("MCP-Protocol-Version", context.protocol_version.as_str())
+                        .body(
+                            Full::new(Bytes::new())
+                                .map_err(|never| match never {})
+                                .boxed_unsync(),
+                        )
+                        .unwrap()
+                }
+            };
+        }
+
         // Validate session requirements based on method
         let session_id = match &message {
             JsonRpcMessage::Request(req) if req.method == "initialize" => {
@@ -1217,7 +1283,7 @@ impl StreamableHttpHandler {
 
         // Register streaming POST connection with StreamManager for progress events
         let wants_sse = context.wants_sse_stream();
-        let connection_id = format!("post-{}", uuid::Uuid::now_v7());
+        let connection_id = format!("post-{}", uuid::Uuid::now_v7().as_simple());
 
         // Progress forwarding only for SSE clients
         let (shutdown_tx, completion_rx) = if wants_sse {
@@ -1350,7 +1416,7 @@ impl StreamableHttpHandler {
             // Process actual request through middleware pipeline
             // Injection is applied immediately inside run_middleware_and_dispatch
             let (response, _) = self_clone
-                .run_middleware_and_dispatch(request, headers, session_context)
+                .run_middleware_and_dispatch(request, headers, Some(session_context))
                 .await;
 
             // Send final result - format depends on client type
@@ -1559,7 +1625,8 @@ impl StreamableHttpHandler {
             .headers()
             .get(CONTENT_TYPE)
             .and_then(|ct| ct.to_str().ok())
-            .unwrap_or("");
+            .map(normalize_header_value)
+            .unwrap_or_default();
         if !content_type.starts_with("application/json") {
             warn!("Invalid content type for POST: {}", content_type);
             return StreamableResponse::Error {
@@ -1593,13 +1660,20 @@ impl StreamableHttpHandler {
         &self,
         request: turul_mcp_json_rpc_server::JsonRpcRequest,
         headers: HashMap<String, String>,
-        session: turul_mcp_json_rpc_server::SessionContext,
-    ) -> (turul_mcp_json_rpc_server::JsonRpcMessage, Option<crate::middleware::SessionInjection>) {
+        session: Option<turul_mcp_json_rpc_server::SessionContext>,
+    ) -> (
+        turul_mcp_json_rpc_server::JsonRpcMessage,
+        Option<crate::middleware::SessionInjection>,
+    ) {
         // Fast path: if middleware stack is empty, dispatch directly
         if self.middleware_stack.is_empty() {
-            let result = self.dispatcher
-                .handle_request_with_context(request, session)
-                .await;
+            let result = if let Some(session_ctx) = session {
+                self.dispatcher
+                    .handle_request_with_context(request, session_ctx)
+                    .await
+            } else {
+                self.dispatcher.handle_request(request).await
+            };
             return (result, None);
         }
 
@@ -1610,9 +1684,7 @@ impl StreamableHttpHandler {
             .collect();
 
         // Build RequestContext with method and headers
-        // Clone method and session_id for ctx (request will be moved to dispatcher)
         let method = request.method.clone();
-        let session_id = session.session_id.clone();
 
         // Convert params to Option<Value>
         let params = request.params.clone().map(|p| match p {
@@ -1627,62 +1699,73 @@ impl StreamableHttpHandler {
             ctx.add_metadata(k, serde_json::json!(v));
         }
 
-        // Create SessionView adapter for middleware to access storage-backed session
-        let session_view = crate::middleware::StorageBackedSessionView::new(
-            session_id.clone(),
-            Arc::clone(&self.session_storage),
-        );
+        // Create SessionView adapter if session is available
+        let session_view = session.as_ref().map(|s| {
+            crate::middleware::StorageBackedSessionView::new(
+                s.session_id.clone(),
+                Arc::clone(&self.session_storage),
+            )
+        });
 
-        // Execute before_dispatch with SessionView
-        let injection = match self.middleware_stack.execute_before(&mut ctx, Some(&session_view)).await {
+        // Execute before_dispatch with SessionView (None if sessionless)
+        let injection = match self
+            .middleware_stack
+            .execute_before(
+                &mut ctx,
+                session_view.as_ref().map(|v| v as &dyn SessionView),
+            )
+            .await
+        {
             Ok(inj) => inj,
             Err(err) => {
-                // Map middleware error to proper JSON-RPC error code
                 return (Self::map_middleware_error_to_jsonrpc(err, request.id), None);
             }
         };
 
-        // Apply injection immediately to session storage
-        if !injection.is_empty() {
+        // Apply injection to session storage (only if session exists)
+        if !injection.is_empty() && let Some(ref sv) = session_view {
             for (key, value) in injection.state() {
-                if let Err(e) = session_view.set_state(key, value.clone()).await {
+                if let Err(e) = sv.set_state(key, value.clone()).await {
                     tracing::warn!("Failed to apply injection state '{}': {}", key, e);
                 }
             }
             for (key, value) in injection.metadata() {
-                if let Err(e) = session_view.set_metadata(key, value.clone()).await {
+                if let Err(e) = sv.set_metadata(key, value.clone()).await {
                     tracing::warn!("Failed to apply injection metadata '{}': {}", key, e);
                 }
             }
         }
 
         // Dispatch the request
-        let result = self.dispatcher
-            .handle_request_with_context(request, session)
-            .await;
+        let result = if let Some(session_ctx) = session {
+            self.dispatcher
+                .handle_request_with_context(request, session_ctx)
+                .await
+        } else {
+            self.dispatcher.handle_request(request).await
+        };
 
         // Execute after_dispatch
-        // Convert JsonRpcMessage to DispatcherResult for middleware
         let mut dispatcher_result = match &result {
-            turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
-                match &resp.result {
-                    turul_mcp_json_rpc_server::response::ResponseResult::Success(val) => {
-                        crate::middleware::DispatcherResult::Success(val.clone())
-                    }
-                    turul_mcp_json_rpc_server::response::ResponseResult::Null => {
-                        crate::middleware::DispatcherResult::Success(serde_json::Value::Null)
-                    }
+            turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => match &resp.result {
+                turul_mcp_json_rpc_server::response::ResponseResult::Success(val) => {
+                    crate::middleware::DispatcherResult::Success(val.clone())
                 }
-            }
+                turul_mcp_json_rpc_server::response::ResponseResult::Null => {
+                    crate::middleware::DispatcherResult::Success(serde_json::Value::Null)
+                }
+            },
             turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
                 crate::middleware::DispatcherResult::Error(err.error.message.clone())
             }
         };
 
-        // Ignore errors from after_dispatch (they shouldn't prevent returning the result)
-        let _ = self.middleware_stack.execute_after(&ctx, &mut dispatcher_result).await;
+        let _ = self
+            .middleware_stack
+            .execute_after(&ctx, &mut dispatcher_result)
+            .await;
 
-        (result, None) // Injection already applied, no need to return it
+        (result, None)
     }
 
     /// Map MiddlewareError to JSON-RPC error with semantic error codes
@@ -1690,8 +1773,8 @@ impl StreamableHttpHandler {
         err: crate::middleware::MiddlewareError,
         request_id: turul_mcp_json_rpc_server::RequestId,
     ) -> turul_mcp_json_rpc_server::JsonRpcMessage {
-        use crate::middleware::error::error_codes;
         use crate::middleware::MiddlewareError;
+        use crate::middleware::error::error_codes;
 
         let (code, message, data) = match err {
             MiddlewareError::Unauthenticated(msg) => (error_codes::UNAUTHENTICATED, msg, None),
@@ -1709,7 +1792,11 @@ impl StreamableHttpHandler {
         };
 
         let error_obj = if let Some(d) = data {
-            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(code, &message, Some(d))
+            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
+                code,
+                &message,
+                Some(d),
+            )
         } else {
             turul_mcp_json_rpc_server::error::JsonRpcErrorObject::server_error(
                 code,
@@ -1718,10 +1805,9 @@ impl StreamableHttpHandler {
             )
         };
 
-        turul_mcp_json_rpc_server::JsonRpcMessage::Error(turul_mcp_json_rpc_server::JsonRpcError::new(
-            Some(request_id),
-            error_obj,
-        ))
+        turul_mcp_json_rpc_server::JsonRpcMessage::Error(
+            turul_mcp_json_rpc_server::JsonRpcError::new(Some(request_id), error_obj),
+        )
     }
 }
 

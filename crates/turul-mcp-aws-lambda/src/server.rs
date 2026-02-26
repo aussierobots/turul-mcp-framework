@@ -73,6 +73,8 @@ pub struct LambdaMcpServer {
     cors_config: Option<CorsConfig>,
     /// Middleware stack for request/response interception
     middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
+    /// Optional task runtime for MCP task support
+    task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
 }
 
 impl LambdaMcpServer {
@@ -100,6 +102,7 @@ impl LambdaMcpServer {
         stream_config: StreamConfig,
         #[cfg(feature = "cors")] cors_config: Option<CorsConfig>,
         middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
+        task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
     ) -> Self {
         // Create session manager with server capabilities
         let session_manager = Arc::new(SessionManager::with_storage_and_timeouts(
@@ -133,7 +136,13 @@ impl LambdaMcpServer {
             #[cfg(feature = "cors")]
             cors_config,
             middleware_stack,
+            task_runtime,
         }
+    }
+
+    /// Get a reference to the server capabilities.
+    pub fn capabilities(&self) -> &ServerCapabilities {
+        &self.capabilities
     }
 
     /// Create a Lambda handler ready for use with Lambda runtime
@@ -167,6 +176,24 @@ impl LambdaMcpServer {
         // Start session cleanup task (same as MCP server)
         let _cleanup_task = self.session_manager.clone().start_cleanup_task();
 
+        // Cold-start recovery: handler() is called once per Lambda cold start from main().
+        // The returned LambdaMcpHandler is Clone'd for each request — recovery runs exactly once.
+        if let Some(ref runtime) = self.task_runtime {
+            match runtime.recover_stuck_tasks().await {
+                Ok(recovered) if !recovered.is_empty() => {
+                    info!(
+                        count = recovered.len(),
+                        "Recovered stuck tasks from previous invocations"
+                    );
+                }
+                Err(e) => {
+                    use tracing::warn;
+                    warn!(error = %e, "Failed to recover stuck tasks on startup");
+                }
+                _ => {}
+            }
+        }
+
         // Create stream manager for SSE
         let stream_manager = Arc::new(StreamManager::with_config(
             self.session_storage.clone(),
@@ -195,11 +222,14 @@ impl LambdaMcpServer {
 
         // Create session-aware tool handler for tools/call (reuse MCP server handler)
         use turul_mcp_server::SessionAwareToolHandler;
-        let tool_handler = SessionAwareToolHandler::new(
+        let mut tool_handler = SessionAwareToolHandler::new(
             self.tools.clone(),
             self.session_manager.clone(),
             self.strict_lifecycle,
         );
+        if let Some(ref runtime) = self.task_runtime {
+            tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
+        }
         dispatcher.register_method("tools/call".to_string(), tool_handler);
 
         // Register all MCP handlers with session awareness (reuse MCP server bridge)

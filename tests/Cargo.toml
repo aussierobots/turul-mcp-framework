@@ -1,7 +1,8 @@
 [package]
 name = "turul-mcp-framework-integration-tests"
-version = "0.2.2"
+version.workspace = true
 edition.workspace = true
+autotests = false
 
 [dependencies]
 turul-mcp-derive = { workspace = true }
@@ -12,7 +13,7 @@ turul-mcp-json-rpc-server = { workspace = true }
 turul-mcp-session-storage = { workspace = true }
 turul-http-mcp-server = { workspace = true }
 turul-mcp-client = { workspace = true }
-turul-mcp-aws-lambda = { path = "../crates/turul-mcp-aws-lambda" }
+turul-mcp-aws-lambda = { workspace = true }
 lambda_http = { workspace = true }
 tokio = { workspace = true }
 tokio-test = { workspace = true }
@@ -31,194 +32,49 @@ hyper-util = { workspace = true }
 http-body = { workspace = true }
 http-body-util = { workspace = true }
 bytes = { workspace = true }
-mcp-e2e-shared = { path = "shared" }
-serial_test = "3.0"
-portpicker = "0.1"
+mcp-e2e-shared.workspace = true
+serial_test.workspace = true
 schemars = { workspace = true }
 
-[[test]]
-name = "basic_session_test"
-path = "basic_session_test.rs"
+# === Consolidated test binaries (F2 optimization) ===
+# Previously 39+ separate test binaries, now 7 consolidated + 1 standalone.
+# Each consolidated binary groups related tests via #[path] mod imports.
 
 [[test]]
-name = "calculator_levels_integration"
-path = "calculator_levels_integration.rs"
+name = "compliance"
+path = "consolidated/compliance.rs"
 
 [[test]]
-name = "custom_output_field_test"
-path = "custom_output_field_test.rs"
+name = "schema_tests"
+path = "consolidated/schema_tests.rs"
 
 [[test]]
-name = "mcp_compliance_tests"
-path = "mcp_compliance_tests.rs"
+name = "example_validation"
+path = "consolidated/example_validation.rs"
 
+[[test]]
+name = "e2e_tests"
+path = "consolidated/e2e_tests.rs"
+
+[[test]]
+name = "feature_tests"
+path = "consolidated/feature_tests.rs"
+
+# Standalone: uses mod test_helpers which requires crate-root relative path
 [[test]]
 name = "session_context_macro_tests"
 path = "session_context_macro_tests.rs"
 
+# Derive macro integration tests (moved from crates/turul-mcp-derive/tests/)
 [[test]]
-name = "working_examples_validation"
-path = "working_examples_validation.rs"
-
-[[test]]
-name = "framework_integration_tests"
-path = "framework_integration_tests.rs"
-
-# README example tests
-[[test]]
-name = "server_examples"
-path = "server_examples.rs"
+name = "derive_comprehensive_tool_tests"
+path = "derive_comprehensive_tool_tests.rs"
 
 [[test]]
-name = "derive_examples"
-path = "derive_examples.rs"
+name = "derive_schemars_integration_test"
+path = "derive_schemars_integration_test.rs"
 
+# Tasks E2E integration test (uses tasks-e2e-inmemory-server binary)
 [[test]]
-name = "builders_examples"
-path = "builders_examples.rs"
-
-[[test]]
-name = "client_examples"
-path = "client_examples.rs"
-
-[[test]]
-name = "http_server_examples"
-path = "http_server_examples.rs"
-
-[[test]]
-name = "lambda_examples"
-path = "lambda_examples.rs"
-
-[[test]]
-name = "lambda_streaming_real"
-path = "lambda_streaming_real.rs"
-
-[[test]]
-name = "client_drop_test"
-path = "client_drop_test.rs"
-
-[[test]]
-name = "mcp_runtime_capability_validation"
-path = "mcp_runtime_capability_validation.rs"
-
-[[test]]
-name = "mcp_specification_compliance"
-path = "mcp_specification_compliance.rs"
-
-[[test]]
-name = "e2e_sse_notification_roundtrip"
-path = "e2e_sse_notification_roundtrip.rs"
-
-[[test]]
-name = "streamable_http_e2e"
-path = "streamable_http_e2e.rs"
-
-[[test]]
-name = "session_id_compliance"
-path = "session_id_compliance.rs"
-
-[[test]]
-name = "mcp_behavioral_compliance"
-path = "mcp_behavioral_compliance.rs"
-
-[[test]]
-name = "sse_progress_delivery"
-path = "sse_progress_delivery.rs"
-
-[[test]]
-name = "streamable_http_client_test"
-path = "streamable_http_client_test.rs"
-
-[[test]]
-name = "client_streaming_test"
-path = "client_streaming_test.rs"
-
-[[test]]
-name = "mcp_tool_schema_runtime_sync_test"
-path = "mcp_tool_schema_runtime_sync_test.rs"
-
-[[test]]
-name = "mcp_vec_result_schema_test"
-path = "mcp_vec_result_schema_test.rs"
-
-[[test]]
-name = "mcp_vec_result_runtime_schema_test"
-path = "mcp_vec_result_runtime_schema_test.rs"
-
-[[test]]
-name = "mcp_explicit_vec_output_test"
-path = "mcp_explicit_vec_output_test.rs"
-
-[[test]]
-name = "mcp_vec_badly_named_tool_test"
-path = "mcp_vec_badly_named_tool_test.rs"
-
-[[test]]
-name = "mcp_derive_macro_bug_detection"
-path = "mcp_derive_macro_bug_detection.rs"
-
-[[test]]
-name = "mcp_tool_compliance"
-path = "mcp_tool_compliance.rs"
-
-# [[test]]
-# name = "client_integration_test"
-# path = "client_integration_test.rs"
-# DEFERRED: Requires client API updates for current turul-mcp-client interface
-
-# [[test]]
-# name = "phase5_regression_tests"
-# path = "phase5_regression_tests.rs"
-# DEFERRED: Import error - TestServerManager not exported from mcp-e2e-shared
-
-[[test]]
-name = "readme_examples"
-path = "readme_examples.rs"
-
-# [[test]]
-# name = "resources_integration_tests"
-# path = "resources_integration_tests.rs"
-# ARCHIVED: Tests unimplemented features (SecurityMiddleware, UriTemplateRegistry, ResourceAccessControl)
-# These are planned Phase 7+ features not yet in framework
-
-# [[test]]
-# name = "mcp_runtime_capabilities_validation"
-# path = "mcp_runtime_capabilities_validation.rs"
-# DEFERRED: Requires McpServerBuilder API updates (.with_tools() → .tools())
-
-# [[test]]
-# name = "e2e_sse_message_flow"
-# path = "e2e_sse_message_flow.rs"
-# DEFERRED: Requires complex API migration (JsonRpcHandler, McpError, JsonRpcDispatcher changes)
-# Replaced by e2e_sse_notification_roundtrip which uses working infrastructure
-
-[[test]]
-name = "output_field_consistency_test"
-path = "output_field_consistency_test.rs"
-
-
-[[test]]
-name = "acronym_output_field_test"
-path = "acronym_output_field_test.rs"
-
-[[test]]
-name = "notification_payload_correctness"
-path = "notification_payload_correctness.rs"
-
-# Schemars integration tests
-[[test]]
-name = "test_schemars_derive"
-path = "test_schemars_derive.rs"
-
-[[test]]
-name = "schemars_detailed_schema_test"
-path = "schemars_detailed_schema_test.rs"
-
-[[test]]
-name = "schemars_optional_fields_test"
-path = "schemars_optional_fields_test.rs"
-
-# MCP 2025-11-25 feature tests
-[[test]]
-name = "mcp_2025_11_25_features"
-path = "mcp_2025_11_25_features.rs"
+name = "tasks_e2e_inmemory"
+path = "tasks_e2e_inmemory.rs"
