@@ -600,16 +600,16 @@ mod regression_tests {
             );
 
             // If server returns a response body, ensure it's not -32601
-            if let Ok(ref resp) = response {
-                if let Some(error) = resp.get("error") {
-                    let code = error.get("code").and_then(|c| c.as_i64());
-                    assert_ne!(
-                        code,
-                        Some(-32601),
-                        "Server must not return 'Method not found' for legacy notification: {}",
-                        method
-                    );
-                }
+            if let Ok(ref resp) = response
+                && let Some(error) = resp.get("error")
+            {
+                let code = error.get("code").and_then(|c| c.as_i64());
+                assert_ne!(
+                    code,
+                    Some(-32601),
+                    "Server must not return 'Method not found' for legacy notification: {}",
+                    method
+                );
             }
         }
     }

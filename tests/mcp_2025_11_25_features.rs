@@ -1045,7 +1045,7 @@ mod version_detection {
     #[test]
     fn test_version_serialization() {
         let v = McpVersion::V2025_11_25;
-        let json_val = serde_json::to_value(&v).unwrap();
+        let json_val = serde_json::to_value(v).unwrap();
         assert_eq!(json_val, json!("2025-11-25"));
     }
 

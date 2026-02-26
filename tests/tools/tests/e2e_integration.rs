@@ -484,20 +484,19 @@ async fn test_progress_tracker_with_notifications() {
 
         // Listen for progress events for up to 4 seconds
         while start.elapsed() < tokio::time::Duration::from_secs(4) && progress_events.len() < 3 {
-            if let Some(chunk) = response.chunk().await.unwrap_or(None) {
-                if let Ok(text) = String::from_utf8(chunk.to_vec()) {
-                    if !text.trim().is_empty() {
-                        debug!("📨 Received SSE chunk: {}", text);
+            if let Some(chunk) = response.chunk().await.unwrap_or(None)
+                && let Ok(text) = String::from_utf8(chunk.to_vec())
+                && !text.trim().is_empty()
+            {
+                debug!("📨 Received SSE chunk: {}", text);
 
-                        // Look for progress notifications in the SSE stream
-                        if text.contains("\"method\":\"notifications/progress\"") {
-                            progress_events.push(text);
-                            info!(
-                                "✅ Progress notification received via SSE: {}",
-                                progress_events.len()
-                            );
-                        }
-                    }
+                // Look for progress notifications in the SSE stream
+                if text.contains("\"method\":\"notifications/progress\"") {
+                    progress_events.push(text);
+                    info!(
+                        "✅ Progress notification received via SSE: {}",
+                        progress_events.len()
+                    );
                 }
             }
 
@@ -682,13 +681,12 @@ async fn test_notifications_initialized_lifecycle() {
 
             // Listen for any server events for 2 seconds after initialization
             while start.elapsed() < tokio::time::Duration::from_secs(2) {
-                if let Some(chunk) = response.chunk().await.unwrap_or(None) {
-                    if let Ok(text) = String::from_utf8(chunk.to_vec()) {
-                        if !text.trim().is_empty() {
-                            debug!("📨 SSE event received: {}", text);
-                            server_events.push(text);
-                        }
-                    }
+                if let Some(chunk) = response.chunk().await.unwrap_or(None)
+                    && let Ok(text) = String::from_utf8(chunk.to_vec())
+                    && !text.trim().is_empty()
+                {
+                    debug!("📨 SSE event received: {}", text);
+                    server_events.push(text);
                 }
                 tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
             }
@@ -830,17 +828,16 @@ async fn test_notifications_tools_list_changed_compliance() {
 
             // Listen for listChanged notifications for up to 3 seconds
             while start.elapsed() < tokio::time::Duration::from_secs(3) {
-                if let Some(chunk) = response.chunk().await.unwrap_or(None) {
-                    if let Ok(text) = String::from_utf8(chunk.to_vec()) {
-                        if !text.trim().is_empty() {
-                            debug!("📨 SSE event received: {}", text);
+                if let Some(chunk) = response.chunk().await.unwrap_or(None)
+                    && let Ok(text) = String::from_utf8(chunk.to_vec())
+                    && !text.trim().is_empty()
+                {
+                    debug!("📨 SSE event received: {}", text);
 
-                            // Look for tools list_changed notifications (MCP 2025-11-25: underscore)
-                            if text.contains("\"method\":\"notifications/tools/list_changed\"") {
-                                list_changed_events.push(text);
-                                info!("✅ tools/list_changed notification received via SSE");
-                            }
-                        }
+                    // Look for tools list_changed notifications (MCP 2025-11-25: underscore)
+                    if text.contains("\"method\":\"notifications/tools/list_changed\"") {
+                        list_changed_events.push(text);
+                        info!("✅ tools/list_changed notification received via SSE");
                     }
                 }
 
