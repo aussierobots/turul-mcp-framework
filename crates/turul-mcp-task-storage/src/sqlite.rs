@@ -141,21 +141,22 @@ impl SqliteTaskStorage {
         let is_memory = db_path_str == ":memory:";
 
         // Ensure parent directory exists for file-based databases
-        if !is_memory {
-            if let Some(parent) = config.database_path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| {
-                    TaskStorageError::DatabaseError(format!(
-                        "Failed to create database directory: {}",
-                        e
-                    ))
-                })?;
-            }
+        if !is_memory
+            && let Some(parent) = config.database_path.parent()
+        {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                TaskStorageError::DatabaseError(format!(
+                    "Failed to create database directory: {}",
+                    e
+                ))
+            })?;
         }
 
         let pool = if is_memory {
             // For in-memory databases, connect via URI with a unique name and shared
             // cache so all pool connections see the same database instance.
-            let unique_name = uuid::Uuid::now_v7().as_simple();
+            let uuid = uuid::Uuid::now_v7();
+            let unique_name = uuid.as_simple();
             let uri = format!("file:{}?mode=memory&cache=shared", unique_name);
             SqlitePool::connect(&uri)
                 .await
