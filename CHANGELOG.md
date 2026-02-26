@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.0] - TBD
+## [0.3.0] - 2026-02-26
 
 ### Added
 
@@ -42,10 +42,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Server handlers for `tasks/get`, `tasks/list`, `tasks/cancel`, `tasks/result` (blocks until terminal per spec)
 - Auto-capability advertisement via `McpServer::builder().with_task_runtime()`
 
-**Task E2E Examples:**
+**Task Examples:**
 - `tasks-e2e-inmemory-server` — task-enabled MCP server with `slow_add` tool
 - `tasks-e2e-inmemory-client` — full task lifecycle client (create, poll, cancel, result)
 - `client-task-lifecycle` — task API demonstration
+- `task-types-showcase` — print-only demo of Task, TaskStatus, TaskMetadata, CRUD types
+
+**Lambda Examples:**
+- `lambda-authorizer` — API Gateway REQUEST authorizer with wildcard methodArn for MCP Streamable HTTP
 
 **README Testing Infrastructure:**
 - `skeptic` crate for automated markdown code block testing
@@ -63,10 +67,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Default protocol version is 2025-11-25 everywhere; backward-compat 2025-06-18 paths annotated with `// Intentional`
 
 **Test Infrastructure:**
+- 1,560+ workspace tests passing, 98 doctests, zero warnings
 - Test binaries reduced from 155 to 43 via consolidation (Phase F)
 - Root integration tests: 39 → 8 binaries (5 consolidated in `tests/consolidated/` + 3 standalone)
 - Sub-crate integration tests: 24 → 7 binaries (`tests/*/tests/all.rs` with `#[path]` imports)
 - Derive crate integration tests moved to workspace root (2 binaries eliminated)
+
+**Examples:**
+- 58 active examples (up from 42+ in v0.1.0), 25 archived
+- 12 core crates in workspace
 
 **Documentation:**
 - README narrative updated to reflect spec-pure protocol crate design
