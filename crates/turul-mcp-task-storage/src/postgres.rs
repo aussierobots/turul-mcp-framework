@@ -231,11 +231,11 @@ fn row_to_task_record(row: &PgRow) -> Result<TaskRecord, TaskStorageError> {
     let meta_json: Option<Value> = row.get("meta");
 
     let result = result_json
-        .map(|v| serde_json::from_value::<TaskOutcome>(v))
+        .map(serde_json::from_value::<TaskOutcome>)
         .transpose()?;
 
     let meta = meta_json
-        .map(|v| serde_json::from_value::<HashMap<String, Value>>(v))
+        .map(serde_json::from_value::<HashMap<String, Value>>)
         .transpose()?;
 
     let poll_interval: Option<i64> = row.get("poll_interval");
@@ -326,17 +326,17 @@ impl TaskStorage for PostgresTaskStorage {
         let original_params_json = task
             .original_params
             .as_ref()
-            .map(|v| serde_json::to_value(v))
+            .map(serde_json::to_value)
             .transpose()?;
         let result_json = task
             .result
             .as_ref()
-            .map(|v| serde_json::to_value(v))
+            .map(serde_json::to_value)
             .transpose()?;
         let meta_json = task
             .meta
             .as_ref()
-            .map(|v| serde_json::to_value(v))
+            .map(serde_json::to_value)
             .transpose()?;
 
         sqlx::query(
@@ -390,17 +390,17 @@ impl TaskStorage for PostgresTaskStorage {
         let original_params_json = task
             .original_params
             .as_ref()
-            .map(|v| serde_json::to_value(v))
+            .map(serde_json::to_value)
             .transpose()?;
         let result_json = task
             .result
             .as_ref()
-            .map(|v| serde_json::to_value(v))
+            .map(serde_json::to_value)
             .transpose()?;
         let meta_json = task
             .meta
             .as_ref()
-            .map(|v| serde_json::to_value(v))
+            .map(serde_json::to_value)
             .transpose()?;
 
         let rows_affected = sqlx::query(

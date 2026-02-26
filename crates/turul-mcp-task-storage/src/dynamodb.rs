@@ -134,20 +134,20 @@ fn task_record_to_item(
         "original_method".to_string(),
         AttributeValue::S(record.original_method.clone()),
     );
-    if let Some(ref params) = record.original_params {
-        if let Ok(json_str) = serde_json::to_string(params) {
-            item.insert("original_params".to_string(), AttributeValue::S(json_str));
-        }
+    if let Some(ref params) = record.original_params
+        && let Ok(json_str) = serde_json::to_string(params)
+    {
+        item.insert("original_params".to_string(), AttributeValue::S(json_str));
     }
-    if let Some(ref result) = record.result {
-        if let Ok(json_str) = serde_json::to_string(result) {
-            item.insert("result".to_string(), AttributeValue::S(json_str));
-        }
+    if let Some(ref result) = record.result
+        && let Ok(json_str) = serde_json::to_string(result)
+    {
+        item.insert("result".to_string(), AttributeValue::S(json_str));
     }
-    if let Some(ref meta) = record.meta {
-        if let Ok(json_str) = serde_json::to_string(meta) {
-            item.insert("meta".to_string(), AttributeValue::S(json_str));
-        }
+    if let Some(ref meta) = record.meta
+        && let Ok(json_str) = serde_json::to_string(meta)
+    {
+        item.insert("meta".to_string(), AttributeValue::S(json_str));
     }
 
     // Compute ttl_epoch for DynamoDB native TTL
@@ -186,7 +186,7 @@ fn item_to_task_record(
     let session_id = item
         .get("session_id")
         .and_then(|v| v.as_s().ok())
-        .map(|s| s.clone());
+        .cloned();
 
     let status_str = item
         .get("status")
@@ -197,7 +197,7 @@ fn item_to_task_record(
     let status_message = item
         .get("status_message")
         .and_then(|v| v.as_s().ok())
-        .map(|s| s.clone());
+        .cloned();
 
     let created_at = item
         .get("created_at")
@@ -1247,19 +1247,17 @@ impl TaskStorage for DynamoDbTaskStorage {
                 match result {
                     Ok(output) => {
                         for item in output.items() {
-                            if let Ok(record) = item_to_task_record(item) {
-                                if let Some(ttl_ms) = record.ttl {
-                                    if let Ok(created) =
-                                        chrono::DateTime::parse_from_rfc3339(&record.created_at)
-                                    {
-                                        let expiry = created.with_timezone(&Utc)
-                                            + chrono::Duration::milliseconds(ttl_ms);
-                                        if now > expiry {
-                                            // Delete the expired task
-                                            if self.delete_task(&record.task_id).await? {
-                                                expired.push(record.task_id);
-                                            }
-                                        }
+                            if let Ok(record) = item_to_task_record(item)
+                                && let Some(ttl_ms) = record.ttl
+                                && let Ok(created) =
+                                    chrono::DateTime::parse_from_rfc3339(&record.created_at)
+                            {
+                                let expiry = created.with_timezone(&Utc)
+                                    + chrono::Duration::milliseconds(ttl_ms);
+                                if now > expiry {
+                                    // Delete the expired task
+                                    if self.delete_task(&record.task_id).await? {
+                                        expired.push(record.task_id);
                                     }
                                 }
                             }
