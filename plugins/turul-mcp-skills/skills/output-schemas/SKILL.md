@@ -1,11 +1,12 @@
 ---
 name: output-schemas
 description: >
-  Configure MCP tool output schemas in Turul MCP Framework (Rust).
-  Covers the required output = Type attribute on derive macros, automatic
-  schemars detection, Vec<T> output patterns, output_field customization,
-  and structuredContent auto-generation. Use when output schema shows inputs
-  instead of outputs, when using schemars, or when returning custom types.
+  This skill should be used when the user asks about "output schema",
+  "structuredContent", "schemars", "output_field", "Vec output", or
+  "schema shows inputs not outputs". Covers the required output = Type
+  attribute on derive macros, automatic schemars detection, Vec<T> output
+  patterns, output_field customization, and structuredContent auto-generation
+  in the Turul MCP Framework (Rust).
 triggers:
   - "output schema"
   - "structuredContent"
@@ -20,7 +21,7 @@ triggers:
 
 # Output Schemas — Turul MCP Framework
 
-MCP tools can declare an output schema so clients know the shape of the result. The framework auto-generates `structuredContent` when an output schema exists — you never create it manually.
+MCP tools can declare an output schema so clients know the shape of the result. The framework auto-generates `structuredContent` when an output schema exists — never create it manually.
 
 ## The #1 Gotcha: `output = Type` on Derive Macros
 
@@ -146,7 +147,7 @@ The `output_field` affects the JSON key name in the `structuredContent` response
 The MCP 2025-11-25 spec requires that tools with `outputSchema` provide `structuredContent` in the response. The framework handles this automatically:
 
 1. If your tool declares an `outputSchema` (via `output = Type`, schemars, or builder schema methods), the framework generates `structuredContent` from your return value.
-2. You just return your Rust type from `execute` — the framework serializes it into both `content` (text) and `structuredContent` (typed JSON).
+2. Just return the Rust type from `execute` — the framework serializes it into both `content` (text) and `structuredContent` (typed JSON).
 3. **Never construct `structuredContent` yourself** in handler code.
 
 See: [CLAUDE.md — MCP Tool Output Compliance](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#mcp-tool-output-compliance)

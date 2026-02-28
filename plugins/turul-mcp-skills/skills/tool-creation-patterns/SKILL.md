@@ -1,10 +1,11 @@
 ---
 name: tool-creation-patterns
 description: >
-  Choose the right tool creation approach for Turul MCP Framework (Rust).
-  Covers function macro (#[mcp_tool]), derive macro (#[derive(McpTool)]),
-  and runtime builder (ToolBuilder) patterns. Use when creating MCP tools,
-  choosing between tool patterns, or understanding macro vs builder tradeoffs.
+  This skill should be used when the user asks to "create a tool",
+  "which tool pattern", "mcp_tool macro", "derive McpTool", or "ToolBuilder".
+  Covers choosing between function macro (#[mcp_tool]), derive macro
+  (#[derive(McpTool)]), and runtime builder (ToolBuilder) patterns in the
+  Turul MCP Framework (Rust).
 triggers:
   - "create a tool"
   - "mcp_tool macro"
