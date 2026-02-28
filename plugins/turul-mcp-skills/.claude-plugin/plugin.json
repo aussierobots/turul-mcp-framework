@@ -1,7 +1,7 @@
 {
   "name": "turul-mcp-skills",
-  "version": "0.1.0",
-  "description": "Skills and tools for building MCP servers with the Turul MCP Framework (Rust). Guides tool creation, output schemas, and project scaffolding.",
+  "version": "0.1.1",
+  "description": "Skills and tools for building MCP servers with the Turul MCP Framework (Rust). Guides tool creation, output schemas, storage backend selection, and project scaffolding.",
   "author": {
     "name": "Aussie Robots",
     "url": "https://github.com/aussierobots"
