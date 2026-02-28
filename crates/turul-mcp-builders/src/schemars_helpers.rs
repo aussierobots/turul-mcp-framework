@@ -338,13 +338,78 @@ pub trait ToolSchemaExt {
 
 impl ToolSchemaExt for ToolSchema {
     fn from_schemars(schema: schemars::Schema) -> Result<Self, String> {
-        // Convert schemars Schema to serde_json::Value
         let json_value = serde_json::to_value(schema)
             .map_err(|e| format!("Failed to serialize schemars schema: {}", e))?;
 
-        // Deserialize into ToolSchema
-        serde_json::from_value(json_value)
-            .map_err(|e| format!("Failed to deserialize ToolSchema: {}", e))
+        let obj = json_value
+            .as_object()
+            .ok_or_else(|| "Schema is not an object".to_string())?;
+
+        // Validate root is an object schema (ToolSchema requires type: "object")
+        let is_object = obj.get("type").is_some_and(|v| {
+            v.as_str() == Some("object")
+                || v.as_array()
+                    .is_some_and(|arr| arr.iter().any(|t| t.as_str() == Some("object")))
+        }) || obj.contains_key("properties");
+
+        if !is_object {
+            return Err("ToolSchema requires an object schema (type: \"object\")".to_string());
+        }
+
+        // Extract definitions for $ref resolution — merge both $defs and definitions
+        let mut definitions: HashMap<String, Value> = HashMap::new();
+        for key in ["$defs", "definitions"] {
+            if let Some(defs) = obj.get(key).and_then(|v| v.as_object()) {
+                definitions.extend(defs.iter().map(|(k, v)| (k.clone(), v.clone())));
+            }
+        }
+
+        // Convert each property using the centralized converter
+        let properties = obj
+            .get("properties")
+            .and_then(|v| v.as_object())
+            .map(|props| {
+                props
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            convert_value_to_json_schema_with_defs(v, &definitions),
+                        )
+                    })
+                    .collect()
+            });
+
+        let required = obj
+            .get("required")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            });
+
+        // Preserve remaining top-level fields (description, title, additionalProperties, etc.)
+        let reserved = [
+            "type",
+            "properties",
+            "required",
+            "$defs",
+            "definitions",
+            "$schema",
+        ];
+        let additional: HashMap<String, Value> = obj
+            .iter()
+            .filter(|(k, _)| !reserved.contains(&k.as_str()))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+
+        Ok(ToolSchema {
+            schema_type: "object".to_string(),
+            properties,
+            required,
+            additional,
+        })
     }
 }
 
@@ -352,7 +417,7 @@ impl ToolSchemaExt for ToolSchema {
 mod tests {
     use super::*;
     use schemars::{JsonSchema, schema_for};
-    use serde::Serialize;
+    use serde::{Deserialize, Serialize};
 
     #[derive(Serialize, JsonSchema)]
     struct TestOutput {
@@ -372,7 +437,7 @@ mod tests {
 
     #[test]
     fn test_from_schemars_with_optional_field() {
-        #[derive(Serialize, JsonSchema)]
+        #[derive(Serialize, Deserialize, JsonSchema)]
         struct OutputWithOptional {
             required_field: String,
             #[serde(skip_serializing_if = "Option::is_none")]
@@ -382,23 +447,120 @@ mod tests {
         let json_schema = schema_for!(OutputWithOptional);
         let result = ToolSchema::from_schemars(json_schema);
 
-        // Note: schemars may generate complex schemas with anyOf/oneOf for Option fields
-        // This is expected behavior - the test just verifies the conversion doesn't panic
-        match result {
-            Ok(schema) => {
-                assert_eq!(
-                    schema.schema_type, "object",
-                    "Should convert to object schema"
-                );
-            }
-            Err(e) => {
-                // This is acceptable - complex schemas with anyOf/oneOf may not convert
-                // Users should use simpler schema patterns for tool outputs
-                eprintln!(
-                    "Schema conversion failed (expected for complex optional patterns): {}",
-                    e
-                );
-            }
+        assert!(
+            result.is_ok(),
+            "Schema with optional fields should convert successfully"
+        );
+        let schema = result.unwrap();
+        assert_eq!(schema.schema_type, "object");
+        assert!(schema.properties.is_some());
+        let props = schema.properties.as_ref().unwrap();
+        assert!(props.contains_key("required_field"));
+        assert!(props.contains_key("optional_field"));
+    }
+
+    #[test]
+    fn test_from_schemars_anyof_null() {
+        #[derive(Serialize, Deserialize, JsonSchema)]
+        struct Inner {
+            x: i32,
         }
+
+        #[derive(Serialize, Deserialize, JsonSchema)]
+        struct WithOptionalNested {
+            name: String,
+            inner: Option<Inner>,
+        }
+
+        let json_schema = schema_for!(WithOptionalNested);
+        let result = ToolSchema::from_schemars(json_schema);
+
+        assert!(
+            result.is_ok(),
+            "Schema with anyOf/null optional nested struct should convert: {:?}",
+            result.err()
+        );
+        let schema = result.unwrap();
+        assert_eq!(schema.schema_type, "object");
+        let props = schema.properties.as_ref().unwrap();
+        assert!(props.contains_key("name"));
+        assert!(props.contains_key("inner"));
+    }
+
+    #[test]
+    fn test_from_schemars_with_nested_ref() {
+        #[derive(Serialize, Deserialize, JsonSchema)]
+        struct Nested {
+            value: f64,
+        }
+
+        #[derive(Serialize, Deserialize, JsonSchema)]
+        struct WithNested {
+            label: String,
+            nested: Nested,
+        }
+
+        let json_schema = schema_for!(WithNested);
+        let result = ToolSchema::from_schemars(json_schema);
+
+        assert!(
+            result.is_ok(),
+            "Schema with $ref nested struct should convert: {:?}",
+            result.err()
+        );
+        let schema = result.unwrap();
+        assert_eq!(schema.schema_type, "object");
+        let props = schema.properties.as_ref().unwrap();
+        assert!(props.contains_key("label"));
+        assert!(props.contains_key("nested"));
+    }
+
+    #[test]
+    fn test_from_schemars_with_legacy_definitions() {
+        // Construct a schema using "definitions" (not "$defs") to test backward compat
+        let schema_json = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "item": { "$ref": "#/definitions/Item" }
+            },
+            "required": ["item"],
+            "definitions": {
+                "Item": {
+                    "type": "object",
+                    "properties": {
+                        "id": { "type": "integer" }
+                    },
+                    "required": ["id"]
+                }
+            }
+        });
+
+        let schema: schemars::Schema =
+            serde_json::from_value(schema_json).expect("valid schemars schema");
+        let result = ToolSchema::from_schemars(schema);
+
+        assert!(
+            result.is_ok(),
+            "Schema with legacy definitions should convert: {:?}",
+            result.err()
+        );
+        let tool_schema = result.unwrap();
+        assert_eq!(tool_schema.schema_type, "object");
+        let props = tool_schema.properties.as_ref().unwrap();
+        assert!(props.contains_key("item"));
+    }
+
+    #[test]
+    fn test_from_schemars_rejects_non_object() {
+        let json_schema = schema_for!(String);
+        let result = ToolSchema::from_schemars(json_schema);
+
+        assert!(
+            result.is_err(),
+            "Non-object root schema should be rejected"
+        );
+        assert!(result
+            .unwrap_err()
+            .contains("ToolSchema requires an object schema"));
     }
 }
