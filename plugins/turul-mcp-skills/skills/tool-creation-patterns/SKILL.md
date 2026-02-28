@@ -2,20 +2,12 @@
 name: tool-creation-patterns
 description: >
   This skill should be used when the user asks to "create a tool",
-  "which tool pattern", "mcp_tool macro", "derive McpTool", or "ToolBuilder".
-  Covers choosing between function macro (#[mcp_tool]), derive macro
-  (#[derive(McpTool)]), and runtime builder (ToolBuilder) patterns in the
-  Turul MCP Framework (Rust).
-triggers:
-  - "create a tool"
-  - "mcp_tool macro"
-  - "derive McpTool"
-  - "ToolBuilder"
-  - "which tool pattern"
-  - "add a tool"
-  - "function macro tool"
-  - "tool creation"
-  - "new tool"
+  "add a tool", "new tool", "which tool pattern", "compare tool patterns",
+  "function macro vs derive", "mcp_tool macro", "#[mcp_tool]",
+  "derive McpTool", "#[derive(McpTool)]", "ToolBuilder", "tool creation",
+  or "function macro tool". Covers choosing between function macro
+  (#[mcp_tool]), derive macro (#[derive(McpTool)]), and runtime builder
+  (ToolBuilder) patterns in the Turul MCP Framework (Rust).
 ---
 
 # Tool Creation Patterns — Turul MCP Framework

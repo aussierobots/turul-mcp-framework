@@ -2,21 +2,12 @@
 name: output-schemas
 description: >
   This skill should be used when the user asks about "output schema",
-  "structuredContent", "schemars", "output_field", "Vec output", or
-  "schema shows inputs not outputs". Covers the required output = Type
-  attribute on derive macros, automatic schemars detection, Vec<T> output
-  patterns, output_field customization, and structuredContent auto-generation
-  in the Turul MCP Framework (Rust).
-triggers:
-  - "output schema"
-  - "structuredContent"
-  - "schemars"
-  - "output_field"
-  - "Vec output"
-  - "tool returns a struct"
-  - "schema shows inputs not outputs"
-  - "output type"
-  - "JsonSchema derive"
+  "outputSchema", "structuredContent", "schemars", "JsonSchema derive",
+  "output_field", "output = Type", "Vec output", "tool returns a struct",
+  "output type", or "schema shows inputs not outputs". Covers the required
+  output = Type attribute on derive macros, automatic schemars detection,
+  Vec<T> output patterns, output_field customization, and structuredContent
+  auto-generation in the Turul MCP Framework (Rust).
 ---
 
 # Output Schemas — Turul MCP Framework
