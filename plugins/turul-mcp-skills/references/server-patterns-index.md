@@ -20,3 +20,6 @@ Pointer index to authoritative documentation for common Turul MCP Framework patt
 | Release gates | 7 named test suites covering compliance, schemas, lifecycle, capabilities. | [AGENTS.md — Release Readiness Notes](https://github.com/aussierobots/turul-mcp-framework/blob/main/AGENTS.md#release-readiness-notes-2025-10-01) |
 | Streamable HTTP | Accept headers, session handshake, SSE notifications. | [CLAUDE.md — Streamable HTTP Requirements](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#streamable-http-requirements) |
 | MCP 2025-11-25 | Notification naming, progress fields, Role enum, structuredContent. | [CLAUDE.md — MCP 2025-11-25 Compliance](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#mcp-2025-11-25-compliance) |
+| Resource creation | Function macro, derive, declarative macro, builder patterns for MCP resources. | [resource-prompt-patterns skill](../skills/resource-prompt-patterns/SKILL.md) |
+| Prompt creation | Derive, declarative macro, builder patterns for MCP prompts. | [resource-prompt-patterns skill](../skills/resource-prompt-patterns/SKILL.md) |
+| MCP Client | Transport selection, connection lifecycle, tool invocation, task workflows, error handling. | [mcp-client-patterns skill](../skills/mcp-client-patterns/SKILL.md) |

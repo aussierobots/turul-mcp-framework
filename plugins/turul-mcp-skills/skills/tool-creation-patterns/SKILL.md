@@ -223,7 +223,7 @@ let tool = ToolBuilder::new("slow_tool")
 |---|---|---|---|
 | Complexity | Lowest | Medium | Highest |
 | Type safety | Full | Full | Manual |
-| Session access | No | Yes | No |
+| Session access | Yes | Yes | No |
 | Shared state (DB, API) | `OnceLock` | `OnceLock` | Closure capture |
 | Output schema | Auto-detected | `output = Type` required | Explicit methods |
 | Task support | `task_support = "..."` | `task_support = "..."` | `.execution()` |
@@ -241,7 +241,11 @@ let tool = ToolBuilder::new("slow_tool")
 
 ## Beyond This Skill
 
+**Resources or prompts?** → See the `resource-prompt-patterns` skill for `#[mcp_resource]`, `#[derive(McpResource)]`, `resource!{}`, `ResourceBuilder`, `#[derive(McpPrompt)]`, `prompt!{}`, and `PromptBuilder`.
+
 **Output schemas, schemars, structuredContent?** → See the `output-schemas` skill.
+
+**Client-side tool/resource/prompt invocation?** → See the `mcp-client-patterns` skill.
 
 **Session state?** Use `session.get_typed_state(key).await` / `session.set_typed_state(key, value).await?`. See: [CLAUDE.md — API Conventions](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#api-conventions)
 

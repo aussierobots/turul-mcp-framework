@@ -1,13 +1,15 @@
 # turul-mcp-skills
 
-Skills and tools for building MCP servers with the [Turul MCP Framework](https://github.com/aussierobots/turul-mcp-framework) (Rust).
+Skills and tools for building MCP servers and clients with the [Turul MCP Framework](https://github.com/aussierobots/turul-mcp-framework) (Rust).
 
-## What's Included (v0.1.1)
+## What's Included (v0.2.0)
 
 | Component | Type | Purpose |
 |---|---|---|
 | `tool-creation-patterns` | Skill | Decision tree: function macro vs derive vs builder |
+| `resource-prompt-patterns` | Skill | Resource creation (4 patterns) and prompt creation (3 patterns) with decision flowcharts |
 | `output-schemas` | Skill | The `output = Type` requirement, schemars, Vec\<T\>, structuredContent |
+| `mcp-client-patterns` | Skill | Transport selection, connection lifecycle, tool invocation, task workflows, error handling |
 | `/new-mcp-server` | Command | Scaffold a Turul MCP server project with storage backend selection and dual validation |
 | `server-patterns-index` | Reference | Pointer index to CLAUDE.md/AGENTS.md authoritative sections |
 | `storage-backend-matrix` | Reference | Feature flags, Cargo.toml patterns, and config for InMemory/SQLite/PostgreSQL/DynamoDB |
@@ -31,6 +33,15 @@ claude --plugin-dir plugins/turul-mcp-skills
 
 ## Skills
 
+### resource-prompt-patterns
+
+Triggers on: "create a resource", "MCP resource", "McpResource", "mcp_resource", "resource!", "ResourceBuilder", "create a prompt", "MCP prompt", "McpPrompt", "prompt!", "PromptBuilder"
+
+Guides you through choosing the right resource or prompt creation approach:
+- **Resources** — 4 patterns: Function Macro (`#[mcp_resource]`), Derive (`#[derive(McpResource)]`), Declarative (`resource!{}`), Builder (`ResourceBuilder`)
+- **Prompts** — 3 patterns: Derive (`#[derive(McpPrompt)]`), Declarative (`prompt!{}`), Builder (`PromptBuilder`)
+- Decision flowcharts, comparison table, common mistakes, cross-references
+
 ### tool-creation-patterns
 
 Triggers on: "create a tool", "mcp_tool macro", "derive McpTool", "ToolBuilder", "which tool pattern"
@@ -51,6 +62,18 @@ Covers the most common gotchas with MCP tool output:
 - `output_field` customization
 - structuredContent auto-generation
 
+### mcp-client-patterns
+
+Triggers on: "MCP client", "McpClient", "McpClientBuilder", "connect to MCP server", "HttpTransport", "SseTransport", "client session", "ToolCallResponse"
+
+Covers building MCP client applications with `turul-mcp-client`:
+- Transport selection (auto-detect, HttpTransport, SseTransport)
+- Connection lifecycle (connect, disconnect, session states)
+- Tool/resource/prompt invocation from the client side
+- Task workflows (call_tool_with_task, polling, all TaskStatus variants)
+- Error handling (McpClientError variants, retryability, backoff)
+- Configuration (ClientConfig, timeouts, retries, connection settings)
+
 ## Command
 
 ### /new-mcp-server
@@ -67,6 +90,15 @@ Scaffolds a new Turul MCP server project with:
 This plugin targets **turul-mcp-server v0.3** (MCP 2025-11-25).
 
 ## Changelog
+
+### v0.2.0
+- Added `resource-prompt-patterns` skill: 4 resource patterns (function macro, derive, declarative, builder) + 3 prompt patterns (derive, declarative, builder) with decision flowcharts, comparison table, and 7 example files
+- Added Resource creation and Prompt creation rows to `server-patterns-index`
+- Updated `tool-creation-patterns` "Beyond This Skill" with resource/prompt hand-off
+
+### v0.1.2
+- Added `mcp-client-patterns` skill: transport selection, connection lifecycle, tool invocation, task workflows, error handling for `turul-mcp-client`
+- Added MCP Client row to `server-patterns-index`
 
 ### v0.1.1
 - Added `storage-backend-matrix` reference: decision matrix, feature flags, Cargo.toml patterns, config structs for all storage backends
