@@ -273,6 +273,23 @@ let result = tool.call(json!({"a": 5.0, "b": 3.0}), None).await?;
 let json_request = r#"{"method":"tools/call"}"#;
 ```
 
+## Pre-Release Checklist
+
+Before publishing a new version:
+
+1. **Workspace version**: Update `version` in `Cargo.toml` `[workspace.package]` and all internal crate dependency versions
+2. **Example server versions**: Update `.version("x.y.z")` strings in `examples/*/src/main.rs`
+3. **Plugin skill comments**: Update `// turul-mcp-server v0.x` version comments in `.claude/plugins/*/skills/*.md`
+4. **CHANGELOG.md**: Add release entry with date and comparison links
+5. **Stale version scan**: `grep -rn 'v0\.[0-9]\.[0-9]' plugins/ examples/ .claude/` — fix any outdated references
+6. **Publish order** (dependency-first):
+   ```
+   protocol-2025-06-18 → protocol-2025-11-25 → protocol → builders → json-rpc-server →
+   session-storage → task-storage → derive* → server → http-server → client → aws-lambda
+   ```
+   *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*
+7. **Git tag**: `git tag v0.x.y && git push origin v0.x.y`
+
 ## Architecture
 
 ### Workspace Crates
@@ -324,3 +341,7 @@ cargo publish     # Pushes to crates.io (irreversible)
 git commit        # Only when user explicitly requests a commit
 ```
 **These commands destroy uncommitted work and are IRREVERSIBLE. Always ask the user first.**
+
+### Commit Message Style
+- **No `Co-Authored-By` attribution** — omit Claude/AI co-author trailers
+- **Succinct** — one-line summary, optional body only if non-obvious
