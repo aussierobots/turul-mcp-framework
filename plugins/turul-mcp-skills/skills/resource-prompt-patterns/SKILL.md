@@ -345,6 +345,8 @@ PromptMessage::user_image(data, mime)     // User image (base64)
 
 **Client-side resource/prompt calls?** → See the `mcp-client-patterns` skill.
 
-**Session state?** Use `session.get_typed_state(key).await` / `session.set_typed_state(key, value).await?`. See: [CLAUDE.md — API Conventions](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#api-conventions)
+**Middleware (auth, rate limiting, logging)?** → See the `middleware-patterns` skill for `McpMiddleware`, `RequestContext`, `SessionInjection`, and `MiddlewareError`.
 
-**Error handling?** Return `McpResult<T>` (alias for `Result<T, McpError>`). Never create `JsonRpcError` in handlers. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
+**Error handling (McpError variants, decision tree)?** → See the `error-handling-patterns` skill for all 22 variants, error codes, and `From` conversions.
+
+**Session state?** Use `session.get_typed_state(key).await` / `session.set_typed_state(key, value).await?`. See: [CLAUDE.md — API Conventions](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#api-conventions)

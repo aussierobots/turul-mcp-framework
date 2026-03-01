@@ -12,7 +12,7 @@ Pointer index to authoritative documentation for common Turul MCP Framework patt
 | Tool output schemas | Tools with `outputSchema` must provide `structuredContent` (auto-generated). | [CLAUDE.md — MCP Tool Output Compliance](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#mcp-tool-output-compliance) |
 | Server builder | Use `McpServer::builder()` to configure and start servers. | [CLAUDE.md — Basic Server](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#basic-server) |
 | Middleware | Pre/post dispatch hooks for auth, logging, rate limiting. | [examples/middleware-auth-server](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples/middleware-auth-server) |
-| Lambda deployment | `LambdaMcpServerBuilder` for AWS Lambda integration. | [examples/lambda-mcp-server](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples/lambda-mcp-server) |
+| Lambda deployment | `LambdaMcpServerBuilder`, cold-start caching, streaming vs snapshot, DynamoDB storage, CORS. | [lambda-deployment skill](../skills/lambda-deployment/SKILL.md) |
 | Session storage | InMemory (default), SQLite, PostgreSQL, DynamoDB backends. | [examples/simple-sqlite-session](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples/simple-sqlite-session) |
 | Task storage | Durable task backends for long-running operations. | [turul-mcp-task-storage crate](https://github.com/aussierobots/turul-mcp-framework/tree/main/crates/turul-mcp-task-storage) |
 | Storage backend matrix | Feature flags, Cargo.toml patterns, config structs, and environment guidance for all storage backends. | [storage-backend-matrix.md](./storage-backend-matrix.md) |
@@ -23,3 +23,6 @@ Pointer index to authoritative documentation for common Turul MCP Framework patt
 | Resource creation | Function macro, derive, declarative macro, builder patterns for MCP resources. | [resource-prompt-patterns skill](../skills/resource-prompt-patterns/SKILL.md) |
 | Prompt creation | Derive, declarative macro, builder patterns for MCP prompts. | [resource-prompt-patterns skill](../skills/resource-prompt-patterns/SKILL.md) |
 | MCP Client | Transport selection, connection lifecycle, tool invocation, task workflows, error handling. | [mcp-client-patterns skill](../skills/mcp-client-patterns/SKILL.md) |
+| Middleware patterns | McpMiddleware trait, auth/rate-limit/logging middleware, SessionInjection, execution order. | [middleware-patterns skill](../skills/middleware-patterns/SKILL.md) |
+| Error handling patterns | McpError decision tree, 22 variants, error codes, From conversions, common mistakes. | [error-handling-patterns skill](../skills/error-handling-patterns/SKILL.md) |
+| Task patterns | Task state machine, TaskRuntime, TaskStorage backends, task_support attribute, cancellation. | [task-patterns skill](../skills/task-patterns/SKILL.md) |

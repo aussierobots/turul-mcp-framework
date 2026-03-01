@@ -247,9 +247,13 @@ let tool = ToolBuilder::new("slow_tool")
 
 **Client-side tool/resource/prompt invocation?** → See the `mcp-client-patterns` skill.
 
-**Session state?** Use `session.get_typed_state(key).await` / `session.set_typed_state(key, value).await?`. See: [CLAUDE.md — API Conventions](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#api-conventions)
+**Middleware (auth, rate limiting, logging)?** → See the `middleware-patterns` skill for `McpMiddleware`, `RequestContext`, `SessionInjection`, and `MiddlewareError`.
 
-**Error handling?** Return `McpResult<T>` (alias for `Result<T, McpError>`). Never create `JsonRpcError` in handlers. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
+**Error handling (McpError variants, decision tree)?** → See the `error-handling-patterns` skill for all 22 variants, error codes, and `From` conversions.
+
+**Task support (long-running tools)?** → See the `task-patterns` skill for `TaskRuntime`, `TaskStorage`, state machine, and `task_support` attribute.
+
+**Session state?** Use `session.get_typed_state(key).await` / `session.set_typed_state(key, value).await?`. See: [CLAUDE.md — API Conventions](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#api-conventions)
 
 **Server configuration?** Use `McpServer::builder()`. See: [CLAUDE.md — Basic Server](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#basic-server)
 
