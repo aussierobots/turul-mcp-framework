@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3.0
+// turul-mcp-server v0.3
 // Vec<T> output schema — the most common gotcha
 //
 // Tools returning arrays need:

@@ -139,7 +139,7 @@ CARGO_EOF
 case "$STORAGE" in
     inmemory)
         cat > "$PROJECT_DIR/src/main.rs" << 'MAIN_EOF'
-// turul-mcp-server v0.3.0
+// turul-mcp-server v0.3
 use turul_mcp_derive::mcp_tool;
 use turul_mcp_server::{McpResult, McpServer};
 
@@ -177,7 +177,7 @@ MAIN_EOF
         ;;
     sqlite)
         cat > "$PROJECT_DIR/src/main.rs" << 'MAIN_EOF'
-// turul-mcp-server v0.3.0 — SQLite session storage
+// turul-mcp-server v0.3 — SQLite session storage
 use std::path::PathBuf;
 use std::sync::Arc;
 use turul_mcp_derive::mcp_tool;
@@ -230,7 +230,7 @@ MAIN_EOF
         ;;
     postgres)
         cat > "$PROJECT_DIR/src/main.rs" << 'MAIN_EOF'
-// turul-mcp-server v0.3.0 — PostgreSQL session storage
+// turul-mcp-server v0.3 — PostgreSQL session storage
 use std::sync::Arc;
 use turul_mcp_derive::mcp_tool;
 use turul_mcp_server::{McpResult, McpServer};
@@ -280,7 +280,7 @@ MAIN_EOF
         ;;
     dynamodb)
         cat > "$PROJECT_DIR/src/main.rs" << 'MAIN_EOF'
-// turul-mcp-server v0.3.0 — DynamoDB session storage
+// turul-mcp-server v0.3 — DynamoDB session storage
 use std::sync::Arc;
 use turul_mcp_derive::mcp_tool;
 use turul_mcp_server::{McpResult, McpServer};

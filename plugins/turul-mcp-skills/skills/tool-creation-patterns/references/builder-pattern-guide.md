@@ -5,7 +5,7 @@ The builder pattern constructs MCP tools at runtime. Use it when tool definition
 ## Basic Usage
 
 ```rust
-// turul-mcp-server v0.3.0
+// turul-mcp-server v0.3
 use serde_json::json;
 use turul_mcp_server::ToolBuilder;
 

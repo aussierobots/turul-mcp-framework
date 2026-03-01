@@ -64,7 +64,7 @@ Scaffolds a new Turul MCP server project with:
 
 ## Version Compatibility
 
-This plugin targets **turul-mcp-server v0.3.0** (MCP 2025-11-25).
+This plugin targets **turul-mcp-server v0.3** (MCP 2025-11-25).
 
 ## Changelog
 

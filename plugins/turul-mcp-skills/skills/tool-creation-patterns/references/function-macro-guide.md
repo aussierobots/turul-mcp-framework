@@ -5,7 +5,7 @@ The function macro is the simplest way to create MCP tools. Annotate an async fu
 ## Basic Usage
 
 ```rust
-// turul-mcp-server v0.3.0
+// turul-mcp-server v0.3
 use turul_mcp_derive::mcp_tool;
 use turul_mcp_server::McpResult;
 

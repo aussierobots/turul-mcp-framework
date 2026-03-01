@@ -1,4 +1,4 @@
-// turul-mcp-server v0.3.0
+// turul-mcp-server v0.3
 // Level 2: Derive Macro (#[derive(McpTool)]) — session access + custom output
 //
 // Source: examples/calculator-add-simple-server-derive/src/main.rs

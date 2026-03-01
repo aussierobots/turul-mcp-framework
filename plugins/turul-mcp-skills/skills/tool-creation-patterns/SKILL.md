@@ -28,7 +28,7 @@ Need a tool?
 **Best for:** Most tools. Simple, stateless functions with typed parameters.
 
 ```rust
-// turul-mcp-server v0.3.0
+// turul-mcp-server v0.3
 use turul_mcp_derive::mcp_tool;
 use turul_mcp_server::{McpResult, McpServer};
 
@@ -65,7 +65,7 @@ let server = McpServer::builder()
 **Best for:** Tools that need session access, complex state, or custom output types.
 
 ```rust
-// turul-mcp-server v0.3.0
+// turul-mcp-server v0.3
 use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, McpServer, SessionContext};
 
@@ -110,7 +110,7 @@ let server = McpServer::builder()
 **Best for:** Dynamic tools, runtime configuration, plugin systems.
 
 ```rust
-// turul-mcp-server v0.3.0
+// turul-mcp-server v0.3
 use serde_json::json;
 use turul_mcp_server::{McpServer, ToolBuilder};
 

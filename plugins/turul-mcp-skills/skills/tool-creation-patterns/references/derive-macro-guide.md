@@ -5,7 +5,7 @@ The derive macro generates MCP tool boilerplate from a struct definition. It sup
 ## Basic Usage
 
 ```rust
-// turul-mcp-server v0.3.0
+// turul-mcp-server v0.3
 use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, SessionContext};
 
