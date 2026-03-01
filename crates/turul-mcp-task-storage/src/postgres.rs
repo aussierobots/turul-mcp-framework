@@ -126,7 +126,7 @@ impl PostgresTaskStorage {
             r#"
             CREATE TABLE IF NOT EXISTS tasks (
                 task_id TEXT PRIMARY KEY,
-                session_id TEXT,
+                session_id VARCHAR(36),
                 status TEXT NOT NULL DEFAULT 'working',
                 status_message TEXT,
                 created_at TEXT NOT NULL,
