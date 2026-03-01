@@ -8,7 +8,7 @@ Add schemars to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-schemars = "0.8"
+schemars = "1"
 ```
 
 ## Deriving JsonSchema
@@ -116,6 +116,31 @@ pub struct ServerInfo {
 ```
 
 See: [CLAUDE.md — JSON Naming: camelCase ONLY](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#json-naming-camelcase-only)
+
+## Vec\<T\> Output — Use Wrapper Structs
+
+**Do NOT use `schema_for!(Vec<T>)` with `ToolSchema::from_schemars()`.** Schemars 1.x generates a root array schema (`{"type": "array", ...}`) but `from_schemars()` requires `type: "object"` at root — it will reject the schema.
+
+**Always wrap `Vec<T>` in a response struct:**
+
+```rust
+// WRONG — schema_for!(Vec<T>) produces array root → from_schemars() REJECTS
+let schema = ToolSchema::from_schemars(schema_for!(Vec<SearchResult>));
+// Error: "ToolSchema requires an object schema"
+
+// CORRECT — wrapper struct produces object root
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SearchResponse {
+    pub results: Vec<SearchResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+let schema = ToolSchema::from_schemars(schema_for!(SearchResponse));
+// Ok: {"type": "object", "properties": {"results": {"type": "array", ...}}}
+```
+
+This applies to all tool patterns (macros and builder). For derive macros, use `output = SearchResponse` instead of `output = Vec<SearchResult>`.
 
 ## Compile-Time Errors
 

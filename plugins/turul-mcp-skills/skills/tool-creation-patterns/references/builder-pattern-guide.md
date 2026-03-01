@@ -1,6 +1,8 @@
 # Builder Pattern Guide — `ToolBuilder`
 
-The builder pattern constructs MCP tools at runtime. Use it when tool definitions are not known at compile time — dynamic tools, plugin systems, or configuration-driven servers.
+The builder pattern constructs MCP tools at runtime. Use it **only** when tool definitions are not known at compile time — tools loaded from config files, databases, or plugin systems.
+
+**Do NOT use Builder because a tool needs a database connection.** Use `OnceLock` with function macros instead (see `references/function-macro-guide.md`). Builder trades compile-time type safety for runtime flexibility — only accept that trade-off when you truly need it.
 
 ## Basic Usage
 
@@ -230,4 +232,4 @@ let tool = ToolBuilder::new("slow_process")
 | Task support | `.execution()` | `task_support = "..."` |
 | Best for | Plugin systems, dynamic config | Application tools |
 
-Use macros (Level 1 or 2) unless you specifically need runtime flexibility.
+**Use macros (Level 1 or 2) for all application tools.** Builder is only appropriate when tool definitions are loaded at runtime (config files, databases, plugin systems). If a tool is defined in your source code, use macros — even if it needs database access (use `OnceLock` for that).

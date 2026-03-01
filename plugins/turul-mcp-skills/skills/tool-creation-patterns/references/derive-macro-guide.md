@@ -192,11 +192,43 @@ struct SlowCalc {
 
 **Server requirement:** The server must have `.with_task_storage()` configured for tools with task support. `task_support = "required"` without a task runtime causes a build-time error.
 
+## Shared Application State (`OnceLock`)
+
+For application-wide dependencies (database connections, API clients), use `OnceLock` — NOT session state. Session state is for per-session MCP data (shopping carts, user preferences).
+
+```rust
+use std::sync::OnceLock;
+
+static DB: OnceLock<Arc<DatabaseConnection>> = OnceLock::new();
+
+fn get_db() -> McpResult<&'static Arc<DatabaseConnection>> {
+    DB.get().ok_or_else(|| McpError::tool_execution("Database not initialized"))
+}
+
+impl Calculator {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<CalcResult> {
+        let db = get_db()?;  // Application state via OnceLock
+        // ...
+    }
+}
+```
+
+**When to use session vs `OnceLock`:**
+
+| State type | Pattern | Example |
+|---|---|---|
+| Application-wide (DB, config, API client) | `OnceLock<T>` | Database pool, API key |
+| Per-session MCP state | `session.get_typed_state()` | Shopping cart, call counter |
+
+**Important:** All derive macro struct fields become MCP input parameters. Do NOT put `Arc<DatabaseConnection>` or other dependencies as struct fields — they will appear in the tool's parameter schema.
+
 ## When to Use Builder Instead
 
-If your tools are:
+Use Level 3 (builder) only when tools are **not known at compile time**:
 - Loaded from configuration files at startup
 - Created dynamically based on runtime conditions
-- Part of a plugin system where tool definitions are not known at compile time
+- Part of a plugin system
 
-Then use Level 3 (builder). See: `references/builder-pattern-guide.md`.
+Do NOT use Builder just because a tool needs a database connection — use `OnceLock` with macros instead.
+
+See: `references/builder-pattern-guide.md`.

@@ -18,10 +18,13 @@ The framework provides three approaches to creating MCP tools, organized by comp
 
 ```
 Need a tool?
-├─ Stateless + simple params? ──────────→ Level 1: Function Macro (#[mcp_tool])
-├─ Need session access or struct state? ─→ Level 2: Derive Macro (#[derive(McpTool)])
-└─ Dynamic/runtime tool construction? ──→ Level 3: Builder (ToolBuilder)
+├─ Tool definitions known at compile time? ───→ Use macros (L1 or L2)
+│   ├─ Need per-session MCP state? ───────────→ Level 2: Derive Macro (#[derive(McpTool)])
+│   └─ Otherwise ─────────────────────────────→ Level 1: Function Macro (#[mcp_tool])  ← DEFAULT
+└─ Tools loaded from config/DB at runtime? ───→ Level 3: Builder (ToolBuilder)
 ```
+
+**Start with Level 1 (function macro).** Most real-world tools — including those that query databases or call APIs — work with function macros. Shared application state (database pools, API clients) is passed via `OnceLock`, not closures. See [Shared Application State](#shared-application-state-oncelock) below.
 
 ## Level 1: Function Macro — `#[mcp_tool]` (Start Here)
 
@@ -107,7 +110,7 @@ let server = McpServer::builder()
 
 ## Level 3: Builder — `ToolBuilder`
 
-**Best for:** Dynamic tools, runtime configuration, plugin systems.
+**Best for:** Tools whose definitions are unknown at compile time (loaded from config files, databases, or plugin systems). Do NOT use Builder just because a tool needs a database connection — use `OnceLock` with macros instead.
 
 ```rust
 // turul-mcp-server v0.3
@@ -144,6 +147,52 @@ let server = McpServer::builder()
 
 **See:** `references/builder-pattern-guide.md` for full details.
 
+## Shared Application State (`OnceLock`)
+
+**Most tools need shared dependencies** — database connections, API clients, configuration. Use `OnceLock<T>` for this. Do NOT use ToolBuilder just because a tool needs a database pool.
+
+```rust
+// turul-mcp-server v0.3
+use std::sync::OnceLock;
+use std::sync::Arc;
+use sea_orm::DatabaseConnection;
+use turul_mcp_derive::mcp_tool;
+use turul_mcp_server::McpResult;
+use turul_mcp_protocol::McpError;
+
+// Module-level shared state — initialized once at startup
+static DB: OnceLock<Arc<DatabaseConnection>> = OnceLock::new();
+
+fn get_db() -> McpResult<&'static Arc<DatabaseConnection>> {
+    DB.get().ok_or_else(|| McpError::tool_execution("Database not initialized"))
+}
+
+// Function macro tool that queries a database — NO Builder needed
+#[mcp_tool(name = "get_profile", description = "Get user profile by username")]
+async fn get_profile(
+    #[param(description = "Username to look up")] username: String,
+) -> McpResult<ProfileSummary> {
+    let db = get_db()?;
+    let profile = queries::latest_profile(db, &username).await
+        .map_err(|e| McpError::tool_execution(e.to_string()))?;
+    profile.ok_or_else(|| McpError::tool_execution(
+        format!("No profile found for '{username}'")
+    ))
+}
+
+// Initialize at startup, before building the server
+DB.set(db_connection).expect("DB already initialized");
+
+let server = McpServer::builder()
+    .name("my-server")
+    .tool_fn(get_profile)
+    .build()?;
+```
+
+**This is the framework-idiomatic pattern.** Multiple framework examples use it: `audit-trail-server`, `dynamic-resource-server`, `elicitation-server`. The `OnceLock` is set once during startup and accessed by all macro-based tools.
+
+**See:** `examples/shared-state-tool.rs` for a complete example.
+
 ## Task Support (Per-Tool)
 
 Tools can declare `task_support` to enable long-running async execution via MCP tasks. This controls whether MCP Inspector shows a "Run as Task" button.
@@ -175,17 +224,20 @@ let tool = ToolBuilder::new("slow_tool")
 | Complexity | Lowest | Medium | Highest |
 | Type safety | Full | Full | Manual |
 | Session access | No | Yes | No |
+| Shared state (DB, API) | `OnceLock` | `OnceLock` | Closure capture |
 | Output schema | Auto-detected | `output = Type` required | Explicit methods |
 | Task support | `task_support = "..."` | `task_support = "..."` | `.execution()` |
 | Registration | `.tool_fn()` | `.tool()` | `.tool()` |
-| Best for | Simple tools | Stateful tools | Dynamic tools |
+| Best for | Most tools (default) | Per-session MCP state | Runtime-defined tools |
 
 ## Common Mistakes
 
-1. **Using `.tool()` for function macros** — use `.tool_fn(name)` instead
-2. **Forgetting `output = Type` on derive macros** — schema will show inputs instead of outputs
-3. **Creating `JsonRpcError` directly** — return `McpError` variants instead. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
-4. **Adding method strings** — framework auto-determines from types. See: [CLAUDE.md — Zero-Configuration Design](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#zero-configuration-design)
+1. **Using `ToolBuilder` for database-backed tools** — use function macros + `OnceLock` instead. Builder is only for tools whose definitions are unknown at compile time.
+2. **Using `.tool()` for function macros** — use `.tool_fn(name)` instead
+3. **Forgetting `output = Type` on derive macros** — schema will show inputs instead of outputs
+4. **Putting `Arc<DatabaseConnection>` as a derive macro struct field** — all struct fields become MCP parameters. Use `OnceLock` for shared state.
+5. **Creating `JsonRpcError` directly** — return `McpError` variants instead. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
+6. **Adding method strings** — framework auto-determines from types. See: [CLAUDE.md — Zero-Configuration Design](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#zero-configuration-design)
 
 ## Beyond This Skill
 

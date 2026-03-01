@@ -81,9 +81,9 @@ struct MyOutput {
 
 See: `references/schemars-integration.md` for advanced schemars patterns.
 
-## Vec\<T\> Output Pattern
+## Vec\<T\> Output — Always Use Wrapper Structs
 
-Tools that return arrays need special attention:
+**Do NOT return bare `Vec<T>` from tools.** Wrap arrays in a response struct:
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -92,28 +92,49 @@ pub struct SearchResult {
     pub score: f64,
 }
 
-// Derive macro: specify Vec<SearchResult> as the output type
+// RECOMMENDED: Wrapper struct with Vec<T> field
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct SearchResponse {
+    /// The matching results
+    pub results: Vec<SearchResult>,
+    /// Optional pagination cursor
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_cursor: Option<String>,
+}
+
+// Derive macro: output = SearchResponse (NOT Vec<SearchResult>)
 #[derive(McpTool, Default)]
 #[tool(
     name = "search",
     description = "Search items",
-    output = Vec<SearchResult>  // Vec<T> is supported directly
+    output = SearchResponse
 )]
 struct SearchTool {
     #[param(description = "Search query")]
     query: String,
 }
 
-// Function macro: auto-detected from return type
+// Function macro: return SearchResponse
 #[mcp_tool(name = "search_fn", description = "Search items")]
 async fn search(
     #[param(description = "Search query")] query: String,
-) -> McpResult<Vec<SearchResult>> {
-    Ok(vec![SearchResult { title: query, score: 1.0 }])
+) -> McpResult<SearchResponse> {
+    Ok(SearchResponse {
+        results: vec![SearchResult { title: query, score: 1.0 }],
+        next_cursor: None,
+    })
 }
 ```
 
-The generated schema will have `"type": "array"` with `"items"` containing the item schema.
+### Why Not Bare Vec\<T\>?
+
+Bare `Vec<T>` output has known issues with schemars 1.x:
+
+1. **ToolBuilder**: `schema_for!(Vec<T>)` generates a root array schema, but `ToolSchema::from_schemars()` requires `type: "object"` at root — it **rejects** array schemas entirely.
+2. **Derive macro without schemars**: The static schema returned by `tools/list` can show `"type": "object"` instead of `"array"`, causing client-side validation failures (FastMCP, MCP Inspector).
+3. **Derive macro with schemars**: Works correctly, but wrapper structs are cleaner and allow adding pagination fields (`next_cursor`, `total_count`).
+
+**Wrapper structs work reliably with all tool patterns** (function macro, derive macro, builder).
 
 ## output_field Customization
 
@@ -150,9 +171,10 @@ See: [CLAUDE.md — MCP Tool Output Compliance](https://github.com/aussierobots/
 | Simple f64/String return | Function macro | Not needed | Optional |
 | Custom struct return (fn macro) | Function macro | Not needed | Recommended |
 | Custom struct return (derive) | Derive macro | **Required** | Recommended |
-| Vec\<T\> return (fn macro) | Function macro | Not needed | Recommended on T |
-| Vec\<T\> return (derive) | Derive macro | **Required**: `output = Vec<T>` | Recommended on T |
+| Array return | Any | Use wrapper struct (e.g., `SearchResponse`) | Recommended |
 | Dynamic/runtime | Builder | `.custom_output_schema()` | N/A |
+
+**Array returns:** Always wrap `Vec<T>` in a response struct. Bare `Vec<T>` output has schemars 1.x compatibility issues. See [Vec\<T\> Output](#vect-output--always-use-wrapper-structs) above.
 
 ## Beyond This Skill
 

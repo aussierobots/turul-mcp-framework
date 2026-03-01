@@ -147,9 +147,49 @@ async fn slow_process(input: String) -> McpResult<String> {
 
 **Server requirement:** The server must have `.with_task_storage()` configured for tools with task support.
 
+## Shared Application State (`OnceLock`)
+
+Function macros work with shared dependencies (database connections, API clients) via module-level `OnceLock<T>`:
+
+```rust
+use std::sync::OnceLock;
+use std::sync::Arc;
+use sea_orm::DatabaseConnection;
+use turul_mcp_protocol::McpError;
+
+static DB: OnceLock<Arc<DatabaseConnection>> = OnceLock::new();
+
+fn get_db() -> McpResult<&'static Arc<DatabaseConnection>> {
+    DB.get().ok_or_else(|| McpError::tool_execution("Database not initialized"))
+}
+
+#[mcp_tool(name = "get_profile", description = "Get profile by username")]
+async fn get_profile(
+    #[param(description = "Username")] username: String,
+) -> McpResult<ProfileSummary> {
+    let db = get_db()?;
+    let profile = queries::latest_profile(db, &username).await
+        .map_err(|e| McpError::tool_execution(e.to_string()))?;
+    profile.ok_or_else(|| McpError::tool_execution(
+        format!("No profile found for '{username}'")
+    ))
+}
+```
+
+Initialize the `OnceLock` before building the server:
+```rust
+DB.set(db_connection).expect("DB already initialized");
+let server = McpServer::builder()
+    .name("my-server")
+    .tool_fn(get_profile)
+    .build()?;
+```
+
+This is the framework-idiomatic pattern — used in `audit-trail-server`, `dynamic-resource-server`, `elicitation-server`. Do NOT use ToolBuilder just because a tool needs a database.
+
 ## Limitations
 
-- **No session access** — function macros cannot receive `SessionContext`. Use the derive macro if you need session state.
-- **No struct state** — the function is stateless. If you need to share state between calls, use the derive macro with a struct.
+- **No per-session MCP state** — function macros cannot receive `SessionContext`. Use the derive macro if you need `get_typed_state`/`set_typed_state` for per-session data.
+- **All struct fields are parameters** — cannot have non-parameter fields on the tool struct (not applicable to function macros since there's no struct).
 
-When these limitations matter, upgrade to Level 2 (derive macro). See: `references/derive-macro-guide.md`.
+When you need per-session MCP state, upgrade to Level 2 (derive macro). See: `references/derive-macro-guide.md`.
