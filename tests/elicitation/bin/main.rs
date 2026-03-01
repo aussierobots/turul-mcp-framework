@@ -508,6 +508,7 @@ impl HasToolMeta for StartOnboardingWorkflowTool {
 }
 
 impl HasIcons for StartOnboardingWorkflowTool {}
+impl HasExecution for StartOnboardingWorkflowTool {}
 
 // ToolDefinition automatically implemented via blanket impl!
 
@@ -713,6 +714,7 @@ impl HasToolMeta for ComplianceFormTool {
 }
 
 impl HasIcons for ComplianceFormTool {}
+impl HasExecution for ComplianceFormTool {}
 
 // ToolDefinition automatically implemented via blanket impl!
 
@@ -923,6 +925,7 @@ impl HasToolMeta for PreferenceCollectionTool {
 }
 
 impl HasIcons for PreferenceCollectionTool {}
+impl HasExecution for PreferenceCollectionTool {}
 
 #[async_trait]
 impl McpTool for PreferenceCollectionTool {
@@ -1160,6 +1163,7 @@ impl HasToolMeta for CustomerSurveyTool {
 }
 
 impl HasIcons for CustomerSurveyTool {}
+impl HasExecution for CustomerSurveyTool {}
 
 #[async_trait]
 impl McpTool for CustomerSurveyTool {
@@ -1372,6 +1376,7 @@ impl HasToolMeta for DataValidationTool {
 }
 
 impl HasIcons for DataValidationTool {}
+impl HasExecution for DataValidationTool {}
 
 #[async_trait]
 impl McpTool for DataValidationTool {

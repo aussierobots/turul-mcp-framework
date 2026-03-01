@@ -36,6 +36,7 @@ impl Calculator {
 | `name` | Yes | Tool name exposed via MCP `tools/list` |
 | `description` | Yes | Human-readable description |
 | `output` | **Required for non-primitives** | Output type for schema generation |
+| `task_support` | No | Per-tool task support: `"optional"`, `"required"`, or `"forbidden"` |
 
 ### Why `output = Type` Is Required
 
@@ -168,6 +169,28 @@ See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobo
 ## Complete Example
 
 See: `examples/derive-macro-tool.rs` in this skill, or the full server at [`examples/calculator-add-simple-server-derive/src/main.rs`](https://github.com/aussierobots/turul-mcp-framework/blob/main/examples/calculator-add-simple-server-derive/src/main.rs) in the framework repository.
+
+## Task Support
+
+Declare `task_support` to enable long-running async execution via MCP tasks:
+
+```rust
+#[derive(McpTool, Default)]
+#[tool(
+    name = "slow_calc",
+    description = "Slow calculation",
+    output = CalcResult,
+    task_support = "optional"
+)]
+struct SlowCalc {
+    #[param(description = "Input value")]
+    value: f64,
+}
+```
+
+**Values:** `"optional"` (sync or async), `"required"` (must run as task), `"forbidden"` (never as task). Omit the attribute for tools that don't support tasks.
+
+**Server requirement:** The server must have `.with_task_storage()` configured for tools with task support. `task_support = "required"` without a task runtime causes a build-time error.
 
 ## When to Use Builder Instead
 

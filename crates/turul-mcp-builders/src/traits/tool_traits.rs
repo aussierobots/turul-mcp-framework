@@ -67,6 +67,7 @@ pub trait ToolDefinition:
     HasAnnotations +            // annotations
     HasToolMeta +               // _meta (tool-specific)
     super::icon_traits::HasIcons + // icons (MCP 2025-11-25)
+    super::execution_traits::HasExecution + // execution.taskSupport (MCP 2025-11-25)
     Send +
     Sync
 {
@@ -88,7 +89,7 @@ pub trait ToolDefinition:
             input_schema: self.input_schema().clone(),
             output_schema: self.output_schema().cloned(),
             annotations: self.annotations().cloned(),
-            execution: None,
+            execution: self.execution(),
             icons: self.icons().cloned(),
             meta: self.tool_meta().cloned(),
         }
@@ -105,6 +106,7 @@ where
         + HasAnnotations
         + HasToolMeta
         + super::icon_traits::HasIcons
+        + super::execution_traits::HasExecution
         + Send
         + Sync,
 {

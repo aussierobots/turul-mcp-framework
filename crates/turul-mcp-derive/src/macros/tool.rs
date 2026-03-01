@@ -290,6 +290,8 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
 
             impl turul_mcp_builders::HasIcons for #tool_name_ident {}
 
+            impl turul_mcp_builders::HasExecution for #tool_name_ident {}
+
             // ToolDefinition automatically implemented via blanket impl!
 
             #[async_trait::async_trait]

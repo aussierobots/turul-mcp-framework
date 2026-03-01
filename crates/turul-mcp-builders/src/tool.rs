@@ -10,13 +10,13 @@ use std::pin::Pin;
 
 // Import traits from local traits module
 use crate::traits::{
-    HasAnnotations, HasBaseMetadata, HasDescription, HasIcons, HasInputSchema, HasOutputSchema,
-    HasToolMeta,
+    HasAnnotations, HasBaseMetadata, HasDescription, HasExecution, HasIcons, HasInputSchema,
+    HasOutputSchema, HasToolMeta,
 };
 // Import protocol types
 use turul_mcp_protocol::icons::Icon;
 use turul_mcp_protocol::schema::JsonSchema;
-use turul_mcp_protocol::tools::{ToolAnnotations, ToolSchema};
+use turul_mcp_protocol::tools::{ToolAnnotations, ToolExecution, ToolSchema};
 
 /// Type alias for dynamic tool execution function
 pub type DynamicToolFn =
@@ -30,6 +30,7 @@ pub struct ToolBuilder {
     input_schema: ToolSchema,
     output_schema: Option<ToolSchema>,
     annotations: Option<ToolAnnotations>,
+    execution: Option<ToolExecution>,
     icons: Option<Vec<Icon>>,
     meta: Option<HashMap<String, Value>>,
     execute_fn: Option<DynamicToolFn>,
@@ -45,6 +46,7 @@ impl ToolBuilder {
             input_schema: ToolSchema::object(),
             output_schema: None,
             annotations: None,
+            execution: None,
             icons: None,
             meta: None,
             execute_fn: None,
@@ -146,6 +148,12 @@ impl ToolBuilder {
         self
     }
 
+    /// Set execution configuration (per-tool task support)
+    pub fn execution(mut self, execution: ToolExecution) -> Self {
+        self.execution = Some(execution);
+        self
+    }
+
     /// Set the tool icons (display hints)
     pub fn icons(mut self, icons: Vec<Icon>) -> Self {
         self.icons = Some(icons);
@@ -179,6 +187,7 @@ impl ToolBuilder {
             input_schema: self.input_schema,
             output_schema: self.output_schema,
             annotations: self.annotations,
+            execution: self.execution,
             icons: self.icons,
             meta: self.meta,
             execute_fn,
@@ -194,6 +203,7 @@ pub struct DynamicTool {
     input_schema: ToolSchema,
     output_schema: Option<ToolSchema>,
     annotations: Option<ToolAnnotations>,
+    execution: Option<ToolExecution>,
     icons: Option<Vec<Icon>>,
     meta: Option<HashMap<String, Value>>,
     execute_fn: DynamicToolFn,
@@ -257,6 +267,13 @@ impl HasToolMeta for DynamicTool {
 impl HasIcons for DynamicTool {
     fn icons(&self) -> Option<&Vec<Icon>> {
         self.icons.as_ref()
+    }
+}
+
+/// Implements HasExecution for DynamicTool providing task support configuration
+impl HasExecution for DynamicTool {
+    fn execution(&self) -> Option<ToolExecution> {
+        self.execution.clone()
     }
 }
 

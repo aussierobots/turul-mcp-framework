@@ -66,6 +66,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 description: camel_to_readable(&name.to_string()),
                 output_type: None,
                 output_field: None,
+                task_support: None,
             }
         }
     };
@@ -169,6 +170,40 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         // This allows tools to return Self and get detailed schemas automatically
         let self_type: syn::Type = syn::parse_quote!(Self);
         generate_output_schema_auto(&self_type, &runtime_field_name, Some(&input))
+    };
+
+    // Generate HasExecution impl based on task_support attribute
+    let execution_impl = match tool_meta.task_support.as_deref() {
+        Some("optional") => quote! {
+            impl turul_mcp_builders::traits::HasExecution for #name {
+                fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
+                    Some(turul_mcp_protocol::tools::ToolExecution {
+                        task_support: Some(turul_mcp_protocol::tools::TaskSupport::Optional),
+                    })
+                }
+            }
+        },
+        Some("required") => quote! {
+            impl turul_mcp_builders::traits::HasExecution for #name {
+                fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
+                    Some(turul_mcp_protocol::tools::ToolExecution {
+                        task_support: Some(turul_mcp_protocol::tools::TaskSupport::Required),
+                    })
+                }
+            }
+        },
+        Some("forbidden") => quote! {
+            impl turul_mcp_builders::traits::HasExecution for #name {
+                fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
+                    Some(turul_mcp_protocol::tools::ToolExecution {
+                        task_support: Some(turul_mcp_protocol::tools::TaskSupport::Forbidden),
+                    })
+                }
+            }
+        },
+        _ => quote! {
+            impl turul_mcp_builders::traits::HasExecution for #name {}
+        },
     };
 
     let expanded = quote! {
@@ -329,6 +364,8 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         }
 
         impl turul_mcp_builders::traits::HasIcons for #name {}
+
+        #execution_impl
 
         // ToolDefinition automatically implemented via trait composition!
 

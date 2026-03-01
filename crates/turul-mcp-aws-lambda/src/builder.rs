@@ -1196,6 +1196,7 @@ mod tests {
     }
 
     impl HasIcons for TestTool {}
+    impl HasExecution for TestTool {}
 
     #[async_trait::async_trait]
     impl McpTool for TestTool {
@@ -1500,6 +1501,13 @@ mod tests {
     }
 
     impl HasIcons for SlowTool {}
+    impl HasExecution for SlowTool {
+        fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
+            Some(turul_mcp_protocol::tools::ToolExecution {
+                task_support: Some(turul_mcp_protocol::tools::TaskSupport::Optional),
+            })
+        }
+    }
 
     #[async_trait::async_trait]
     impl McpTool for SlowTool {

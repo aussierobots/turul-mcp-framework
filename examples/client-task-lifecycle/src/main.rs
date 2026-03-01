@@ -31,7 +31,7 @@ struct Args {
     url: String,
 
     /// Tool name to call
-    #[arg(long, default_value = "add")]
+    #[arg(long, default_value = "slow_add")]
     tool: String,
 
     /// TTL in milliseconds for the task
@@ -41,7 +41,9 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::INFO)
+        .init();
     let args = Args::parse();
 
     info!(url = %args.url, "Connecting to MCP server");

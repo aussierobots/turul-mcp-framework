@@ -5,6 +5,7 @@
 
 pub mod completion_traits;
 pub mod elicitation_traits;
+pub mod execution_traits;
 pub mod icon_traits;
 pub mod logging_traits;
 pub mod notification_traits;
@@ -17,6 +18,7 @@ pub mod tool_traits;
 // Re-export all traits at traits module level
 pub use completion_traits::*;
 pub use elicitation_traits::*;
+pub use execution_traits::*;
 pub use icon_traits::*;
 pub use logging_traits::*;
 pub use notification_traits::*;

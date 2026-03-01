@@ -167,7 +167,31 @@ struct CalcTool { a: f64, b: f64 }
 let tool = ToolBuilder::new("calc").execute(|args| async { /*...*/ }).build()?;
 
 // Manual trait implementation: reference-only — see examples/calculator-add-manual-server
+// Manual impls MUST include: impl HasExecution for MyTool {}
 ```
+
+### Task Support (per-tool)
+
+Tools can declare `task_support` to enable the "Run as Task" button in MCP Inspector:
+
+```rust
+// Function macro
+#[mcp_tool(name = "slow_add", description = "Add with delay", task_support = "optional")]
+async fn slow_add(a: f64, b: f64) -> McpResult<f64> { Ok(a + b) }
+
+// Derive macro
+#[derive(McpTool)]
+#[tool(name = "slow_calc", description = "Slow calc", task_support = "optional")]
+struct SlowCalcTool { a: f64 }
+```
+
+**Values**: `"optional"` (sync or async), `"required"` (must run as task), `"forbidden"` (never as task). Omit for no task support.
+
+**Server requirement**: The server must have a task runtime configured (`.with_task_storage()`) for tools with task support. `task_support = "required"` without a runtime causes a build-time error.
+
+**Manual impls**: Override `HasExecution::execution()` to return `Some(ToolExecution { task_support: Some(TaskSupport::Optional) })`.
+
+**Capability truthfulness**: When no task runtime is configured, the server strips `execution` from `tools/list` responses and rejects task-augmented `tools/call` requests.
 
 ### Output Types and Schemas
 

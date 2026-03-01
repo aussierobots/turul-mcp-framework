@@ -55,6 +55,12 @@ let tool = ToolBuilder::new("add")
 | `.object_output()` | `{"result": object}` |
 | `.custom_output_schema(schema)` | Custom JSON schema |
 
+### Task Support
+
+| Method | Description |
+|---|---|
+| `.execution(ToolExecution)` | Set per-tool task support configuration |
+
 ### Execution
 
 | Method | Description |
@@ -190,6 +196,29 @@ The framework wraps these into `McpError::ToolExecutionError` automatically. See
 
 See: `examples/builder-tool.rs` in this skill, or the full server at [`examples/calculator-add-builder-server/src/main.rs`](https://github.com/aussierobots/turul-mcp-framework/blob/main/examples/calculator-add-builder-server/src/main.rs) in the framework repository.
 
+## Task Support
+
+Declare task support via `.execution()`:
+
+```rust
+use turul_mcp_protocol::tools::{ToolExecution, TaskSupport};
+
+let tool = ToolBuilder::new("slow_process")
+    .description("Long-running process")
+    .string_param("input", "Data to process")
+    .string_output()
+    .execution(ToolExecution { task_support: Some(TaskSupport::Optional) })
+    .execute(|args| async move {
+        // Long-running work...
+        Ok(json!({"result": "done"}))
+    })
+    .build()?;
+```
+
+**Values:** `TaskSupport::Optional`, `TaskSupport::Required`, `TaskSupport::Forbidden`.
+
+**Server requirement:** The server must have `.with_task_storage()` configured for tools with task support.
+
 ## Trade-offs vs Macros
 
 | Aspect | Builder | Macros |
@@ -198,6 +227,7 @@ See: `examples/builder-tool.rs` in this skill, or the full server at [`examples/
 | Boilerplate | More (parameter extraction) | Less |
 | Flexibility | Can construct tools at runtime | Fixed at compile time |
 | Session | No direct access | Available (derive only) |
+| Task support | `.execution()` | `task_support = "..."` |
 | Best for | Plugin systems, dynamic config | Application tools |
 
 Use macros (Level 1 or 2) unless you specifically need runtime flexibility.

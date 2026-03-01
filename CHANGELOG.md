@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-02-28
+
+### Added
+
+- `HasExecution` trait for per-tool task support declaration (follows `HasIcons` supertrait pattern)
+- `task_support` attribute on `#[derive(McpTool)]` and `#[mcp_tool]` (`"optional"` | `"required"` | `"forbidden"`)
+- `.execution()` builder method on `ToolBuilder`
+- Build-time coherence guard rejects `taskSupport=required` without task runtime configured
+- `tools/list` strips `execution` field when server has no tasks capability (truthful capability advertisement)
+- `tools/call` with `params.task` returns `InvalidParameters` when server has no task runtime (was silent sync fallback)
+
+### Changed
+
+- **Breaking**: `HasExecution` added to `ToolDefinition` supertrait — manual tool impls must add `impl HasExecution for MyTool {}`
+
+### Fixed
+
+- `ToolDefinition::to_tool()` now populates `execution` field from trait (was hardcoded `None`)
+- `tools/call` rejects task-augmented requests to tools that don't declare `task_support` (was silently accepted)
+
 ## [0.3.1] - 2026-02-28
 
 ### Fixed
@@ -276,7 +296,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.2.0...v0.2.1

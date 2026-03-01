@@ -47,6 +47,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+> **Task support:** Add `task_support = "optional"` to enable the "Run as Task" button in MCP Inspector. Values: `"optional"`, `"required"`, `"forbidden"`. Requires `.with_task_storage()` on the server builder.
+
 ### 2. Derive Macros (Struct-Based)
 
 ```rust
@@ -448,7 +450,8 @@ impl HasInputSchema for MyTool {
     }
 }
 
-// ... other trait implementations
+impl HasIcons for MyTool {}     // No icons (default)
+impl HasExecution for MyTool {} // No task support (default)
 
 // ToolDefinition automatically implemented via blanket impl
 #[async_trait]
@@ -855,6 +858,9 @@ impl HasAnnotations for ManualTool {
 impl HasToolMeta for ManualTool {
     fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
 }
+
+impl HasIcons for ManualTool {}     // No icons
+impl HasExecution for ManualTool {} // No task support
 
 #[async_trait]
 impl McpTool for ManualTool {

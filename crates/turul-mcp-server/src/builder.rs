@@ -11,6 +11,7 @@ use crate::resource::McpResource;
 use crate::{
     McpCompletion, McpElicitation, McpLogger, McpNotification, McpPrompt, McpRoot, McpSampling,
 };
+use crate::tool::tool_to_descriptor;
 use crate::{McpServer, McpTool, Result};
 use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::initialize::*;
@@ -320,6 +321,7 @@ impl McpServerBuilder {
     /// }
     ///
     /// impl turul_mcp_builders::traits::HasIcons for AddTool {}
+    /// impl turul_mcp_builders::traits::HasExecution for AddTool {}
     ///
     /// #[async_trait]
     /// impl McpTool for AddTool {
@@ -1428,6 +1430,24 @@ impl McpServerBuilder {
             )));
         }
 
+        // Coherence guard: reject taskSupport=required without task runtime
+        if self.task_runtime.is_none() {
+            for (name, tool) in &self.tools {
+                let descriptor = tool_to_descriptor(tool.as_ref());
+                if let Some(ref exec) = descriptor.execution {
+                    if exec.task_support
+                        == Some(turul_mcp_protocol::tools::TaskSupport::Required)
+                    {
+                        return Err(McpError::configuration(&format!(
+                            "Tool '{}' has taskSupport=required but no task runtime is configured. \
+                             Use .with_task_storage() or .with_task_runtime() on the builder.",
+                            name
+                        )));
+                    }
+                }
+            }
+        }
+
         // Auto-register resource handlers if resources were registered
         // This eliminates the need for manual .with_resources() calls
         let has_resources = !self.resources.is_empty() || !self.template_resources.is_empty();
@@ -1715,6 +1735,7 @@ mod tests {
     }
 
     impl HasIcons for TestTool {}
+    impl HasExecution for TestTool {}
 
     #[async_trait]
     impl McpTool for TestTool {
@@ -2190,5 +2211,108 @@ mod tests {
         assert!(server.capabilities.resources.is_some());
         let resources_caps = server.capabilities.resources.as_ref().unwrap();
         assert_eq!(resources_caps.list_changed, Some(false)); // Static framework
+    }
+
+    /// Coherence guard: taskSupport=required without task runtime must fail at build().
+    #[test]
+    fn test_coherence_guard_rejects_required_without_runtime() {
+        use turul_mcp_protocol::tools::{TaskSupport, ToolExecution};
+
+        struct RequiredTaskTool {
+            input_schema: ToolSchema,
+        }
+        impl HasBaseMetadata for RequiredTaskTool {
+            fn name(&self) -> &str { "required_task" }
+        }
+        impl HasDescription for RequiredTaskTool {
+            fn description(&self) -> Option<&str> { Some("Requires tasks") }
+        }
+        impl HasInputSchema for RequiredTaskTool {
+            fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+        }
+        impl HasOutputSchema for RequiredTaskTool {
+            fn output_schema(&self) -> Option<&ToolSchema> { None }
+        }
+        impl HasAnnotations for RequiredTaskTool {
+            fn annotations(&self) -> Option<&ToolAnnotations> { None }
+        }
+        impl HasToolMeta for RequiredTaskTool {
+            fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+        }
+        impl HasIcons for RequiredTaskTool {}
+        impl HasExecution for RequiredTaskTool {
+            fn execution(&self) -> Option<ToolExecution> {
+                Some(ToolExecution {
+                    task_support: Some(TaskSupport::Required),
+                })
+            }
+        }
+        #[async_trait]
+        impl McpTool for RequiredTaskTool {
+            async fn call(&self, _args: Value, _session: Option<SessionContext>) -> crate::McpResult<CallToolResult> {
+                Ok(CallToolResult::success(vec![turul_mcp_protocol::ToolResult::text("ok")]))
+            }
+        }
+
+        // Build without task runtime — should fail
+        let result = McpServerBuilder::new()
+            .name("coherence-test")
+            .tool(RequiredTaskTool { input_schema: ToolSchema::object() })
+            .build();
+
+        assert!(result.is_err(), "build() should reject taskSupport=required without runtime");
+        let err = format!("{}", result.unwrap_err());
+        assert!(err.contains("taskSupport=required"), "Error should mention taskSupport=required: {}", err);
+        assert!(err.contains("required_task"), "Error should mention tool name: {}", err);
+    }
+
+    /// Coherence guard: taskSupport=optional without runtime should succeed (optional is fine).
+    #[test]
+    fn test_coherence_guard_allows_optional_without_runtime() {
+        use turul_mcp_protocol::tools::{TaskSupport, ToolExecution};
+
+        struct OptionalTaskTool {
+            input_schema: ToolSchema,
+        }
+        impl HasBaseMetadata for OptionalTaskTool {
+            fn name(&self) -> &str { "optional_task" }
+        }
+        impl HasDescription for OptionalTaskTool {
+            fn description(&self) -> Option<&str> { Some("Optional tasks") }
+        }
+        impl HasInputSchema for OptionalTaskTool {
+            fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+        }
+        impl HasOutputSchema for OptionalTaskTool {
+            fn output_schema(&self) -> Option<&ToolSchema> { None }
+        }
+        impl HasAnnotations for OptionalTaskTool {
+            fn annotations(&self) -> Option<&ToolAnnotations> { None }
+        }
+        impl HasToolMeta for OptionalTaskTool {
+            fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+        }
+        impl HasIcons for OptionalTaskTool {}
+        impl HasExecution for OptionalTaskTool {
+            fn execution(&self) -> Option<ToolExecution> {
+                Some(ToolExecution {
+                    task_support: Some(TaskSupport::Optional),
+                })
+            }
+        }
+        #[async_trait]
+        impl McpTool for OptionalTaskTool {
+            async fn call(&self, _args: Value, _session: Option<SessionContext>) -> crate::McpResult<CallToolResult> {
+                Ok(CallToolResult::success(vec![turul_mcp_protocol::ToolResult::text("ok")]))
+            }
+        }
+
+        // Build without task runtime — should succeed (optional is fine)
+        let result = McpServerBuilder::new()
+            .name("coherence-optional-test")
+            .tool(OptionalTaskTool { input_schema: ToolSchema::object() })
+            .build();
+
+        assert!(result.is_ok(), "build() should allow taskSupport=optional without runtime");
     }
 }

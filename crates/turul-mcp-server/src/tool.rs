@@ -97,6 +97,7 @@ mod tests {
     }
 
     impl HasIcons for TestTool {}
+    impl HasExecution for TestTool {}
 
     // ToolDefinition is automatically implemented via blanket impl!
 
@@ -163,5 +164,70 @@ mod tests {
             panic!("Expected MissingParameter error, got: {:?}", error);
         };
         assert_eq!(param, "message");
+    }
+
+    /// Regression test: verify that HasExecution is wired through to_tool() → Tool → JSON.
+    /// A tool with task_support=optional must serialize `execution.taskSupport = "optional"`.
+    /// A tool without execution must omit the field entirely.
+    #[test]
+    fn test_execution_wiring_in_descriptor() {
+        use turul_mcp_protocol::tools::{TaskSupport, ToolExecution};
+
+        // --- Tool with execution ---
+        struct TaskAwareTool {
+            input_schema: ToolSchema,
+        }
+        impl HasBaseMetadata for TaskAwareTool {
+            fn name(&self) -> &str { "task_aware" }
+        }
+        impl HasDescription for TaskAwareTool {
+            fn description(&self) -> Option<&str> { Some("Has execution") }
+        }
+        impl HasInputSchema for TaskAwareTool {
+            fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+        }
+        impl HasOutputSchema for TaskAwareTool {
+            fn output_schema(&self) -> Option<&ToolSchema> { None }
+        }
+        impl HasAnnotations for TaskAwareTool {
+            fn annotations(&self) -> Option<&ToolAnnotations> { None }
+        }
+        impl HasToolMeta for TaskAwareTool {
+            fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+        }
+        impl HasIcons for TaskAwareTool {}
+        impl HasExecution for TaskAwareTool {
+            fn execution(&self) -> Option<ToolExecution> {
+                Some(ToolExecution {
+                    task_support: Some(TaskSupport::Optional),
+                })
+            }
+        }
+        #[async_trait]
+        impl McpTool for TaskAwareTool {
+            async fn call(&self, _args: serde_json::Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+                Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
+            }
+        }
+
+        let tool = TaskAwareTool { input_schema: ToolSchema::object() };
+        let descriptor = tool_to_descriptor(&tool);
+
+        // Verify the execution field is populated
+        assert!(descriptor.execution.is_some(), "execution should be Some for task-aware tool");
+        let exec = descriptor.execution.clone().unwrap();
+        assert_eq!(exec.task_support, Some(TaskSupport::Optional));
+
+        // Verify JSON serialization produces the expected field
+        let json = serde_json::to_value(&descriptor).unwrap();
+        assert_eq!(json["execution"]["taskSupport"], "optional");
+
+        // --- Tool without execution ---
+        let plain_tool = TestTool::new();
+        let plain_descriptor = tool_to_descriptor(&plain_tool);
+        assert!(plain_descriptor.execution.is_none(), "execution should be None for plain tool");
+
+        let plain_json = serde_json::to_value(&plain_descriptor).unwrap();
+        assert!(plain_json.get("execution").is_none(), "execution key should be absent in JSON");
     }
 }

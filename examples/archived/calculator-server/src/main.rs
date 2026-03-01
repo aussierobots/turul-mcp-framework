@@ -14,7 +14,7 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 use turul_mcp_protocol::{ToolResult, ToolSchema, schema::JsonSchema, McpError, McpResult, CallToolResult};
 use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta};
-use turul_mcp_builders::prelude::HasIcon;
+use turul_mcp_builders::prelude::{HasExecution, HasIcon};
 use turul_mcp_server::{McpServer, McpTool, SessionContext};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value, from_str};
@@ -183,6 +183,7 @@ impl HasToolMeta for FinancialCalculatorTool {
 }
 
 impl HasIcons for FinancialCalculatorTool {}
+impl HasExecution for FinancialCalculatorTool {}
 
 #[async_trait]
 impl McpTool for FinancialCalculatorTool {
@@ -448,6 +449,7 @@ impl HasToolMeta for BusinessMetricsTool {
 }
 
 impl HasIcons for BusinessMetricsTool {}
+impl HasExecution for BusinessMetricsTool {}
 
 #[async_trait]
 impl McpTool for BusinessMetricsTool {
@@ -710,6 +712,7 @@ impl HasToolMeta for IndustryBenchmarkTool {
 }
 
 impl HasIcons for IndustryBenchmarkTool {}
+impl HasExecution for IndustryBenchmarkTool {}
 
 #[async_trait]
 impl McpTool for IndustryBenchmarkTool {
@@ -851,6 +854,7 @@ impl HasToolMeta for CalculatorDocumentationTool {
 }
 
 impl HasIcons for CalculatorDocumentationTool {}
+impl HasExecution for CalculatorDocumentationTool {}
 
 #[async_trait]
 impl McpTool for CalculatorDocumentationTool {

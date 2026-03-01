@@ -13,6 +13,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
     let mut tool_name = None;
     let mut tool_description = None;
     let mut output_field_name = None;
+    let mut task_support = None;
 
     for arg in args {
         match arg {
@@ -35,6 +36,20 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                     && let Lit::Str(s) = &expr_lit.lit
                 {
                     output_field_name = Some(s.value());
+                }
+            }
+            Meta::NameValue(nv) if nv.path.is_ident("task_support") => {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Str(s) = &expr_lit.lit
+                {
+                    let val = s.value();
+                    match val.as_str() {
+                        "optional" | "required" | "forbidden" => task_support = Some(val),
+                        _ => return Err(syn::Error::new_spanned(
+                            s,
+                            "task_support must be \"optional\", \"required\", or \"forbidden\""
+                        )),
+                    }
                 }
             }
             _ => {}
@@ -162,6 +177,40 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         }
     }
 
+    // Generate HasExecution impl based on task_support attribute
+    let execution_impl = match task_support.as_deref() {
+        Some("optional") => quote! {
+            impl turul_mcp_builders::traits::HasExecution for #struct_name {
+                fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
+                    Some(turul_mcp_protocol::tools::ToolExecution {
+                        task_support: Some(turul_mcp_protocol::tools::TaskSupport::Optional),
+                    })
+                }
+            }
+        },
+        Some("required") => quote! {
+            impl turul_mcp_builders::traits::HasExecution for #struct_name {
+                fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
+                    Some(turul_mcp_protocol::tools::ToolExecution {
+                        task_support: Some(turul_mcp_protocol::tools::TaskSupport::Required),
+                    })
+                }
+            }
+        },
+        Some("forbidden") => quote! {
+            impl turul_mcp_builders::traits::HasExecution for #struct_name {
+                fn execution(&self) -> Option<turul_mcp_protocol::tools::ToolExecution> {
+                    Some(turul_mcp_protocol::tools::ToolExecution {
+                        task_support: Some(turul_mcp_protocol::tools::TaskSupport::Forbidden),
+                    })
+                }
+            }
+        },
+        _ => quote! {
+            impl turul_mcp_builders::traits::HasExecution for #struct_name {}
+        },
+    };
+
     let expanded = quote! {
         // Keep the original function for direct use (with cleaned attributes)
         #clean_input
@@ -221,6 +270,9 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
 
         #[automatically_derived]
         impl turul_mcp_builders::traits::HasIcons for #struct_name {}
+
+        #[automatically_derived]
+        #execution_impl
 
         // ToolDefinition automatically implemented via blanket impl!
 

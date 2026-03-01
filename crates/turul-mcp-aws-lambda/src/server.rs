@@ -217,7 +217,7 @@ impl LambdaMcpServer {
 
         // Create tools/list handler (reuse MCP server handler)
         use turul_mcp_server::ListToolsHandler;
-        let list_handler = ListToolsHandler::new(self.tools.clone());
+        let list_handler = ListToolsHandler::new(self.tools.clone(), self.task_runtime.is_some());
         dispatcher.register_method("tools/list".to_string(), list_handler);
 
         // Create session-aware tool handler for tools/call (reuse MCP server handler)

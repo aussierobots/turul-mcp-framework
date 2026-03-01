@@ -144,6 +144,30 @@ let server = McpServer::builder()
 
 **See:** `references/builder-pattern-guide.md` for full details.
 
+## Task Support (Per-Tool)
+
+Tools can declare `task_support` to enable long-running async execution via MCP tasks. This controls whether MCP Inspector shows a "Run as Task" button.
+
+```rust
+// Function macro
+#[mcp_tool(name = "slow_op", description = "Long operation", task_support = "optional")]
+async fn slow_op(input: String) -> McpResult<String> { /* ... */ }
+
+// Derive macro
+#[derive(McpTool)]
+#[tool(name = "slow_calc", description = "Slow calc", task_support = "optional")]
+struct SlowCalc { a: f64 }
+
+// Builder
+let tool = ToolBuilder::new("slow_tool")
+    .execution(ToolExecution { task_support: Some(TaskSupport::Optional) })
+    .build()?;
+```
+
+**Values:** `"optional"` (sync or async), `"required"` (must run as task), `"forbidden"` (never as task). Omit for no task support.
+
+**Server requirement:** The server must have `.with_task_storage()` configured. `task_support = "required"` without a task runtime causes a build-time error.
+
 ## Quick Comparison
 
 | Feature | Function Macro | Derive Macro | Builder |
@@ -152,6 +176,7 @@ let server = McpServer::builder()
 | Type safety | Full | Full | Manual |
 | Session access | No | Yes | No |
 | Output schema | Auto-detected | `output = Type` required | Explicit methods |
+| Task support | `task_support = "..."` | `task_support = "..."` | `.execution()` |
 | Registration | `.tool_fn()` | `.tool()` | `.tool()` |
 | Best for | Simple tools | Stateful tools | Dynamic tools |
 

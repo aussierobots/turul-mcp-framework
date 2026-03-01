@@ -63,6 +63,7 @@ impl HasToolMeta for CalculatorAddTool {
 }
 
 impl HasIcons for CalculatorAddTool {}
+impl HasExecution for CalculatorAddTool {}
 
 // ToolDefinition automatically implemented via blanket impl!
 

@@ -10,7 +10,7 @@ use turul_mcp_derive::{McpTool, resource};
 use turul_mcp_server::{McpServer, McpTool, McpResource, SessionContext};
 use turul_mcp_protocol::{ToolSchema, ToolResult, schema::JsonSchema};
 use turul_mcp_protocol::tools::{HasBaseMetadata, HasDescription, HasInputSchema, HasOutputSchema, HasAnnotations, HasToolMeta, CallToolResult};
-use turul_mcp_builders::prelude::HasIcon;
+use turul_mcp_builders::prelude::{HasExecution, HasIcon};
 use turul_mcp_protocol::{
     Meta, ProgressToken, ResultWithMeta, HasData, HasMeta,
     JsonRpcRequest, JsonRpcResponse, RequestParams
@@ -107,6 +107,7 @@ impl HasToolMeta for SessionAwareTool {
 }
 
 impl HasIcons for SessionAwareTool {}
+impl HasExecution for SessionAwareTool {}
 
 #[async_trait]
 impl McpTool for SessionAwareTool {

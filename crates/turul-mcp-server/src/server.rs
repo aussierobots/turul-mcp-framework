@@ -257,6 +257,7 @@ impl McpServer {
                         self.tools.clone(),
                         self.session_manager.clone(),
                         self.strict_lifecycle,
+                        self.task_runtime.is_some(),
                     ),
                 )
                 .register_handler(vec!["tools/call".to_string()], tool_handler);
@@ -444,6 +445,7 @@ impl McpServer {
                         self.tools.clone(),
                         self.session_manager.clone(),
                         self.strict_lifecycle,
+                        self.task_runtime.is_some(),
                     ),
                 )
                 .register_handler(vec!["tools/call".to_string()], tool_handler);
@@ -1016,14 +1018,16 @@ pub struct ListToolsHandler {
     tools: HashMap<String, Arc<dyn McpTool>>,
     session_manager: Option<Arc<SessionManager>>,
     strict_lifecycle: bool,
+    has_tasks: bool,
 }
 
 impl ListToolsHandler {
-    pub fn new(tools: HashMap<String, Arc<dyn McpTool>>) -> Self {
+    pub fn new(tools: HashMap<String, Arc<dyn McpTool>>, has_tasks: bool) -> Self {
         Self {
             tools,
             session_manager: None,
             strict_lifecycle: false,
+            has_tasks,
         }
     }
 
@@ -1031,11 +1035,13 @@ impl ListToolsHandler {
         tools: HashMap<String, Arc<dyn McpTool>>,
         session_manager: Arc<SessionManager>,
         strict_lifecycle: bool,
+        has_tasks: bool,
     ) -> Self {
         Self {
             tools,
             session_manager: Some(session_manager),
             strict_lifecycle,
+            has_tasks,
         }
     }
 }
@@ -1102,6 +1108,13 @@ impl JsonRpcHandler for ListToolsHandler {
 
         // Sort by tool name to ensure stable ordering for pagination
         tools.sort_by(|a, b| a.name.cmp(&b.name));
+
+        // Strip execution field when server has no task capability (truthful advertisement)
+        if !self.has_tasks {
+            for tool in &mut tools {
+                tool.execution = None;
+            }
+        }
 
         // Implement cursor-based pagination
         const DEFAULT_PAGE_SIZE: usize = 50; // MCP suggested default
@@ -1318,7 +1331,8 @@ impl JsonRpcHandler for SessionAwareToolHandler {
         // Per spec: respect tool-level execution.taskSupport:
         // - Forbidden + task present: reject (clients MUST NOT use task augmentation)
         // - Required + task absent: reject (clients MUST use task augmentation)
-        // - Optional/None: either path is valid
+        // - Optional: either path is valid
+        // - None (no declaration): reject task-augmented calls (experimental; no declaration = no support)
         {
             use turul_mcp_protocol::tools::TaskSupport;
             let tool_descriptor = tool.to_tool();
@@ -1335,7 +1349,20 @@ impl JsonRpcHandler for SessionAwareToolHandler {
                         call_params.name
                     )));
                 }
+            } else if call_params.task.is_some() {
+                return Err(McpError::InvalidParameters(format!(
+                    "Tool '{}' does not declare task support; task-augmented requests are not allowed",
+                    call_params.name
+                )));
             }
+        }
+
+        // Reject task-augmented calls when no task runtime is configured
+        if call_params.task.is_some() && self.task_runtime.is_none() {
+            return Err(McpError::InvalidParameters(
+                "Task-augmented tool calls require the server to have task support configured"
+                    .into(),
+            ));
         }
 
         if let (Some(task_meta), Some(runtime)) = (call_params.task, self.task_runtime.as_ref()) {
@@ -1528,6 +1555,7 @@ mod tests {
     }
 
     impl HasIcons for TestTool {}
+    impl HasExecution for TestTool {}
 
     #[async_trait]
     impl McpTool for TestTool {
@@ -1561,7 +1589,7 @@ mod tests {
         let mut tools: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
         tools.insert("test".to_string(), Arc::new(TestTool::new()));
 
-        let handler = ListToolsHandler::new(tools);
+        let handler = ListToolsHandler::new(tools, false);
         let result = handler.handle("tools/list", None, None).await.unwrap();
 
         let response: ListToolsResult = serde_json::from_value(result).unwrap();

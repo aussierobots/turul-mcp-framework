@@ -32,7 +32,8 @@ struct Args {
 /// Working state while the client can poll for status.
 #[mcp_tool(
     name = "slow_add",
-    description = "Add two numbers with a delay (for task testing)"
+    description = "Add two numbers with a delay (for task testing)",
+    task_support = "optional"
 )]
 async fn slow_add(
     #[param(description = "First number")] a: f64,
@@ -48,7 +49,8 @@ async fn slow_add(
 /// Designed to be cancelled mid-flight via tasks/cancel.
 #[mcp_tool(
     name = "slow_cancelable",
-    description = "Long-running sleep tool (for cancellation testing)"
+    description = "Long-running sleep tool (for cancellation testing)",
+    task_support = "optional"
 )]
 async fn slow_cancelable(
     #[param(description = "Sleep duration in milliseconds (default 30000)")] duration_ms: Option<

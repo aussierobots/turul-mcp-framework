@@ -29,6 +29,7 @@ async fn greet(
 | `name` | Yes | Tool name exposed via MCP `tools/list` |
 | `description` | Yes | Human-readable description for MCP clients |
 | `output_field` | No | JSON field name wrapping the output (default: `"result"`) |
+| `task_support` | No | Per-tool task support: `"optional"`, `"required"`, or `"forbidden"` |
 
 ### Parameter Attributes
 
@@ -125,6 +126,26 @@ See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobo
 ## Complete Example
 
 See: `examples/function-macro-tool.rs` in this skill, or the full server at [`examples/calculator-add-function-server/src/main.rs`](https://github.com/aussierobots/turul-mcp-framework/blob/main/examples/calculator-add-function-server/src/main.rs) in the framework repository.
+
+## Task Support
+
+Declare `task_support` to enable long-running async execution via MCP tasks:
+
+```rust
+#[mcp_tool(
+    name = "slow_process",
+    description = "Process data with delay",
+    task_support = "optional"  // Clients can run sync or as a task
+)]
+async fn slow_process(input: String) -> McpResult<String> {
+    tokio::time::sleep(Duration::from_secs(10)).await;
+    Ok(format!("Processed: {}", input))
+}
+```
+
+**Values:** `"optional"` (sync or async), `"required"` (must run as task), `"forbidden"` (never as task). Omit the attribute for tools that don't support tasks.
+
+**Server requirement:** The server must have `.with_task_storage()` configured for tools with task support.
 
 ## Limitations
 

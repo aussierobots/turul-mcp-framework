@@ -754,6 +754,7 @@ mod tests {
             }
         }
         impl HasIcons for DummyTool {}
+        impl HasExecution for DummyTool {}
 
         #[async_trait::async_trait]
         impl crate::McpTool for DummyTool {

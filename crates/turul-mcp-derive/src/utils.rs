@@ -11,6 +11,7 @@ pub struct ToolMeta {
     pub description: String,
     pub output_type: Option<syn::Type>,
     pub output_field: Option<String>, // Custom field name for output
+    pub task_support: Option<String>, // "optional" | "required" | "forbidden"
 }
 
 pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
@@ -18,6 +19,7 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
     let mut description = None;
     let mut output_type = None;
     let mut output_field = None;
+    let mut task_support = None;
 
     for attr in attrs {
         if attr.path().is_ident("tool") {
@@ -38,6 +40,16 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
                     let value = meta.value()?;
                     let s: syn::LitStr = value.parse()?;
                     output_field = Some(s.value());
+                } else if meta.path.is_ident("task_support") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    let val = s.value();
+                    match val.as_str() {
+                        "optional" | "required" | "forbidden" => task_support = Some(val),
+                        _ => return Err(meta.error(
+                            "task_support must be \"optional\", \"required\", or \"forbidden\""
+                        )),
+                    }
                 }
                 Ok(())
             })?;
@@ -77,6 +89,7 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
         description,
         output_type,
         output_field,
+        task_support,
     })
 }
 

@@ -21,6 +21,7 @@ use turul_mcp_protocol::notifications::{
 };
 use turul_mcp_protocol::roots::Root;
 use turul_mcp_protocol::sampling::{CreateMessageParams, ModelPreferences, SamplingMessage};
+use turul_mcp_protocol::tools::ToolExecution;
 use turul_mcp_protocol::{Prompt, Resource, Tool, ToolSchema};
 
 // ============================================================================
@@ -175,6 +176,12 @@ impl HasToolMeta for Tool {
 impl HasIcons for Tool {
     fn icons(&self) -> Option<&Vec<turul_mcp_protocol::icons::Icon>> {
         self.icons.as_ref()
+    }
+}
+
+impl HasExecution for Tool {
+    fn execution(&self) -> Option<ToolExecution> {
+        self.execution.clone()
     }
 }
 
