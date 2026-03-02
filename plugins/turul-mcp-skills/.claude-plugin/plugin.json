@@ -1,7 +1,7 @@
 {
   "name": "turul-mcp-skills",
-  "version": "0.3.1",
-  "description": "Skills and tools for building MCP servers and clients with the Turul MCP Framework (Rust). Guides tool creation, resource/prompt patterns, output schemas, client patterns, middleware, error handling, task support, Lambda deployment, storage backend selection, and project scaffolding.",
+  "version": "0.5.0",
+  "description": "Skills and tools for building MCP servers and clients with the Turul MCP Framework (Rust). Guides tool creation, resource/prompt patterns, output schemas, client patterns, middleware, error handling, task support, Lambda deployment, testing, elicitation, session storage, storage backend selection, project scaffolding, and validation.",
   "author": {
     "name": "Aussie Robots",
     "url": "https://github.com/aussierobots"

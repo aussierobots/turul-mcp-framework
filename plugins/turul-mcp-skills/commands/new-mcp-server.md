@@ -45,7 +45,7 @@ If the script is not available locally, generate the files manually following th
 
 Determine if we're inside the Turul monorepo or an external project:
 
-**Monorepo detection** (ALL must be true):
+**Monorepo detection** (either method suffices):
 1. A `Cargo.toml` with `[workspace]` containing `turul-mcp-` members exists in a parent directory, OR
 2. **Fallback**: The file `AGENTS.md` exists in the workspace root AND `tests/Cargo.toml` contains `name = "turul-mcp-framework-integration-tests"`
 

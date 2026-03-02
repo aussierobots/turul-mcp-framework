@@ -26,3 +26,6 @@ Pointer index to authoritative documentation for common Turul MCP Framework patt
 | Middleware patterns | McpMiddleware trait, auth/rate-limit/logging middleware, SessionInjection, execution order. | [middleware-patterns skill](../skills/middleware-patterns/SKILL.md) |
 | Error handling patterns | McpError decision tree, 22 variants, error codes, From conversions, common mistakes. | [error-handling-patterns skill](../skills/error-handling-patterns/SKILL.md) |
 | Task patterns | Task state machine, TaskRuntime, TaskStorage backends, task_support attribute, cancellation. | [task-patterns skill](../skills/task-patterns/SKILL.md) |
+| Testing patterns | Unit tests, E2E tests (McpTestClient + TestServerManager), compliance tests, SSE testing, doctest strategy. | [testing-patterns skill](../skills/testing-patterns/SKILL.md) |
+| Elicitation workflows | ElicitationBuilder, schema primitives, multi-step workflows, ElicitationProvider, validation. | [elicitation-workflows skill](../skills/elicitation-workflows/SKILL.md) |
+| Session storage backends | SessionStorage trait, backend decision tree, event management, SSE resumability, error types. | [session-storage-backends skill](../skills/session-storage-backends/SKILL.md) |

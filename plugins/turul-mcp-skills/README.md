@@ -2,7 +2,7 @@
 
 Skills and tools for building MCP servers and clients with the [Turul MCP Framework](https://github.com/aussierobots/turul-mcp-framework) (Rust).
 
-## What's Included (v0.3.1)
+## What's Included (v0.5.0)
 
 | Component | Type | Purpose |
 |---|---|---|
@@ -14,7 +14,11 @@ Skills and tools for building MCP servers and clients with the [Turul MCP Framew
 | `error-handling-patterns` | Skill | McpError decision tree, 22 variants, error codes, From conversions, common mistakes |
 | `task-patterns` | Skill | Task state machine, TaskRuntime, TaskStorage backends, task\_support attribute, cancellation |
 | `lambda-deployment` | Skill | LambdaMcpServerBuilder, cold-start caching, streaming vs snapshot, DynamoDB, CORS, middleware, tasks |
+| `testing-patterns` | Skill | Unit tests, E2E tests, compliance tests, McpTestClient, TestServerManager, doctest strategy |
+| `elicitation-workflows` | Skill | ElicitationBuilder, schema primitives, multi-step workflows, ElicitationProvider, validation |
+| `session-storage-backends` | Skill | SessionStorage trait, backend decision tree, event management, SSE resumability, error types |
 | `/new-mcp-server` | Command | Scaffold a Turul MCP server project with storage backend selection and dual validation |
+| `/validate-mcp-server` | Command | Validate an existing Turul MCP server for correctness, compliance, and best practices |
 | `server-patterns-index` | Reference | Pointer index to CLAUDE.md/AGENTS.md authoritative sections |
 | `storage-backend-matrix` | Reference | Feature flags, Cargo.toml patterns, and config for InMemory/SQLite/PostgreSQL/DynamoDB |
 
@@ -126,7 +130,41 @@ Covers building MCP client applications with `turul-mcp-client`:
 - Error handling (McpClientError variants, retryability, backoff)
 - Configuration (ClientConfig, timeouts, retries, connection settings)
 
-## Command
+### testing-patterns
+
+Triggers on: "testing", "test patterns", "write tests", "unit test", "e2e test", "integration test", "McpTestClient", "TestServerManager", "compliance test", "test server", "test fixture", "doctest", "cargo test"
+
+Covers three testing layers for MCP servers:
+- **Unit testing** — `tool.call()` with framework-native API, `#[tokio::test]`
+- **E2E testing** — `TestServerManager::start()` + `McpTestClient` for full HTTP round-trips
+- **Compliance testing** — 4 compliance modules (JSON-RPC format, capabilities, behavior, tools)
+- **SSE testing** — `call_tool_with_sse()`, event parsing, `Last-Event-ID` replay
+- Test organization (consolidated binaries, `autotests = false`), doctest strategy, common mistakes
+
+### elicitation-workflows
+
+Triggers on: "elicitation", "ElicitationBuilder", "elicit", "ElicitResult", "ElicitAction", "ElicitationProvider", "PrimitiveSchemaDefinition", "ElicitationSchema", "with_elicitation"
+
+Covers MCP elicitation for collecting structured user input:
+- **Schema primitives** — StringSchema, NumberSchema, BooleanSchema, EnumSchema (no nesting)
+- **ElicitationBuilder** — Field methods, convenience constructors (`text_input`, `confirm`, `choice`)
+- **Response handling** — `ElicitAction::Accept`/`Decline`/`Cancel`, `ElicitResultBuilder`
+- **Server setup** — `.with_elicitation()` (mock) vs `.with_elicitation_provider(custom)`
+- **Multi-step workflows** — Sequential elicitations with session state accumulation
+- Validation via `DynamicElicitation`, common mistakes
+
+### session-storage-backends
+
+Triggers on: "session storage", "SessionStorage trait", "SqliteSessionStorage", "PostgresSessionStorage", "DynamoDbSessionStorage", "InMemorySessionStorage", "session backend", "session persistence", "SSE reconnection storage"
+
+Covers the SessionStorage trait and backend architecture:
+- **Backend decision tree** — InMemory → SQLite → PostgreSQL → DynamoDB based on persistence/scaling needs
+- **SessionStorage trait** — Session lifecycle, state management, event management for SSE resumability
+- **Event management** — `store_event()`, `get_events_after()`, `Last-Event-ID` replay
+- **Backend-specific gotchas** — DynamoDB 5-min TTL, SQLite `:memory:` pool isolation, PostgreSQL optimistic locking
+- Error types (`SessionStorageError`), background cleanup patterns, common mistakes
+
+## Commands
 
 ### /new-mcp-server
 
@@ -137,11 +175,32 @@ Scaffolds a new Turul MCP server project with:
 - `.env.example` with connection string template (non-inmemory backends)
 - Dual validation: full release gates in monorepo, local checks for external projects
 
+### /validate-mcp-server
+
+Validates an existing Turul MCP server project:
+- Auto-detects monorepo vs external project
+- **Monorepo mode** — Runs all 7 release gate tests (compliance, lifecycle, capability truthfulness, E2E)
+- **External mode** — `cargo check` + `cargo clippy` + `cargo test`
+- **Additional checks** — Turul dependency presence, MCP component registration, forbidden direct protocol imports, derive macro `output` attributes, builder `.name()`/`.version()`, `JsonRpcError` usage in handlers
+- Report with pass/fail/warn per check and actionable fix suggestions
+
 ## Version Compatibility
 
 This plugin targets **turul-mcp-server v0.3** (MCP 2025-11-25).
 
 ## Changelog
+
+### v0.5.0
+- Added `session-storage-backends` skill: SessionStorage trait, backend decision tree, event management for SSE resumability, error types, background cleanup, 3 example files
+- Added `/validate-mcp-server` command: monorepo/external detection, 7 release gates, 6 additional static checks, pass/fail/warn report
+- Added Session storage backends row to `server-patterns-index`
+- Updated `lambda-deployment` "Beyond This Skill" with session-storage-backends hand-off
+
+### v0.4.0
+- Added `testing-patterns` skill: unit testing, E2E testing (McpTestClient + TestServerManager), compliance tests, SSE testing, test organization, doctest strategy, 1 reference file, 3 example files
+- Added `elicitation-workflows` skill: ElicitationBuilder, schema primitives, multi-step workflows, ElicitationProvider trait, DynamicElicitation validation, 1 reference file, 3 example files
+- Added Testing patterns and Elicitation workflows rows to `server-patterns-index`
+- Updated `tool-creation-patterns` "Beyond This Skill" with testing-patterns hand-off
 
 ### v0.3.1
 - Added `lambda-deployment` skill: LambdaMcpServerBuilder, cold-start caching, streaming vs snapshot modes, DynamoDB session/task storage, CORS, middleware, API Gateway authorizer integration, 2 reference files, 4 example files

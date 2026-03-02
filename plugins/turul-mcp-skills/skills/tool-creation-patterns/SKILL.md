@@ -253,6 +253,8 @@ let tool = ToolBuilder::new("slow_tool")
 
 **Task support (long-running tools)?** → See the `task-patterns` skill for `TaskRuntime`, `TaskStorage`, state machine, and `task_support` attribute.
 
+**Testing tools?** → See the `testing-patterns` skill for unit testing with `tool.call()`, E2E testing with `McpTestClient`, and compliance assertions.
+
 **Session state?** Use `session.get_typed_state(key).await` / `session.set_typed_state(key, value).await?`. See: [CLAUDE.md — API Conventions](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#api-conventions)
 
 **Server configuration?** Use `McpServer::builder()`. See: [CLAUDE.md — Basic Server](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#basic-server)

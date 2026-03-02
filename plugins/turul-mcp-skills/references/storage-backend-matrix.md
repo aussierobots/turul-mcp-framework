@@ -134,8 +134,8 @@ DATABASE_URL=postgres://mcp:mcp_pass@localhost:5432/mcp_sessions
 AWS_ACCESS_KEY_ID=your_access_key
 AWS_SECRET_ACCESS_KEY=your_secret_key
 AWS_REGION=us-east-1
-MCP_SESSION_TABLE=mcp-sessions     # DynamoDB table name (default: mcp-sessions)
-MCP_TASK_TABLE=mcp-tasks           # DynamoDB task table name (default: mcp-tasks)
+MCP_SESSION_TABLE=mcp-sessions     # Convention used by scaffold-generated code (not read by DynamoDbSessionStorage natively)
+MCP_TASK_TABLE=mcp-tasks           # Convention used by scaffold-generated code (not read by DynamoDbTaskStorage natively)
 ```
 
 ## Builder Patterns

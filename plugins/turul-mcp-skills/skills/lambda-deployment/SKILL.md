@@ -290,6 +290,8 @@ let server = LambdaMcpServerBuilder::new()
 
 **Storage backend config?** → See the `storage-backend-matrix` reference for DynamoDB/SQLite/PostgreSQL feature flags and Cargo.toml patterns.
 
+**Session storage architecture?** → See the `session-storage-backends` skill for the SessionStorage trait, backend decision tree, event management, and error types.
+
 **Error handling in tools?** → See the `error-handling-patterns` skill for `McpError` variants and decision tree.
 
 **Client-side workflows?** → See the `mcp-client-patterns` skill for transport selection and tool invocation.
