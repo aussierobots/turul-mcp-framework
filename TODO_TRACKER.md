@@ -10,7 +10,7 @@
 
 - [x] **CHANGELOG.md** — Document MCP 2025-11-25 protocol support, task storage (4 backends), task executor/runtime, test optimization
 - [ ] **CHANGELOG.md** — Expand [0.3.0] section with full 2025-11-25 feature list (protocol phases, task stack, durable backends)
-- [ ] **crates.io publish preparation** — Version bumps, dependency audit, dry-run publish
+- [x] **crates.io publish** — v0.3.4 published (12 crates), tags v0.3.3 + v0.3.4 pushed *(2026-03-03)*
 
 ---
 
