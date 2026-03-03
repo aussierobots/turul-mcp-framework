@@ -1,7 +1,7 @@
 # Working Memory
 
 **Last Updated**: 2026-03-03
-**Version**: v0.3.5 (branch: `main`)
+**Version**: v0.3.6 (branch: `main`)
 **Tests**: 1,560+ workspace tests, 43 test binaries, zero warnings
 **Examples**: 58 active, 25 archived
 
@@ -15,6 +15,7 @@ All major v0.3.0 work is complete. The framework fully supports MCP 2025-11-25.
 
 | Version | Date | Highlights |
 |---------|------|-----------|
+| v0.3.6 | 2026-03-03 | Fix `Option<T>`/`Vec<T>` JSON Schema types in derive macros; qualified-path `is_option_type` fix |
 | v0.3.5 | 2026-03-03 | `McpClient::list_resource_templates()` + `list_resource_templates_paginated()`; HTTP transport session ID warning fix |
 | v0.3.4 | 2026-03-03 | HTTP/SSE preflight removal; `#[mcp_tool]` optional params fix; DynamoDB camelCase migration |
 | v0.3.3 | 2026-03-01 | PostgreSQL task storage column type fix |
@@ -33,7 +34,7 @@ All major v0.3.0 work is complete. The framework fully supports MCP 2025-11-25.
 | Task Executor (Phase E) | Done | `TaskExecutor` trait, `TokioTaskExecutor`, `TaskRuntime`, `CancellationHandle` |
 | Test Optimization (Phase F) | Done | 155 → 43 test binaries, ~7:41 workspace test time |
 | Governance Review | Done | 63 files dual-reviewed (spec-auditor + arch-reviewer), all PASS |
-| crates.io publish | Done | All 12 crates published through v0.3.5 |
+| crates.io publish | Done | All 12 crates published through v0.3.6 |
 
 ### Key Architecture
 
