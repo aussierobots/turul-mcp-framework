@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `McpClient::list_resource_templates()` and `list_resource_templates_paginated()` for `resources/templates/list` discovery
+
 ## [0.3.4] - 2026-03-03
 
 ### Fixed

@@ -108,6 +108,7 @@ These are the most frequently used methods. For the full API surface, see the `M
 | `call_tool(name, args)` | `&str, Value` | `McpClientResult<Vec<ToolResult>>` |
 | `call_tool_with_task(name, args, ttl)` | `&str, Value, Option<i64>` | `McpClientResult<ToolCallResponse>` |
 | `list_resources()` | `&self` | `McpClientResult<Vec<Resource>>` |
+| `list_resource_templates()` | `&self` | `McpClientResult<Vec<ResourceTemplate>>` |
 | `read_resource(uri)` | `&str` | `McpClientResult<Vec<ResourceContent>>` |
 | `list_prompts()` | `&self` | `McpClientResult<Vec<Prompt>>` |
 | `get_prompt(name, args)` | `&str, Option<Value>` | `McpClientResult<Vec<PromptMessage>>` |
@@ -116,7 +117,7 @@ These are the most frequently used methods. For the full API surface, see the `M
 | `cancel_task(id)` | `&str` | `McpClientResult<Task>` |
 | `ping()` | `&self` | `McpClientResult<()>` |
 
-Additional methods: `list_resources_paginated()`, `list_prompts_paginated()`, `list_tasks()`, `list_tasks_paginated()`, `connection_status()`, `session_info()`, `transport_stats()`.
+Additional methods: `list_resources_paginated()`, `list_resource_templates_paginated()`, `list_prompts_paginated()`, `list_tasks()`, `list_tasks_paginated()`, `connection_status()`, `session_info()`, `transport_stats()`.
 
 ## Task Workflow
 

@@ -40,6 +40,7 @@ path = "src/lib.rs"
 
 [dev-dependencies]
 serial_test.workspace = true
+turul-mcp-client.workspace = true
 
 [[bin]]
 name = "resource-test-server-e2e"

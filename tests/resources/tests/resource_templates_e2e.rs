@@ -454,3 +454,118 @@ async fn test_resource_templates_error_handling() {
     );
     info!("✅ Server remains responsive after error handling");
 }
+
+// --- McpClient-based E2E tests ---
+
+#[tokio::test]
+#[serial]
+async fn test_mcp_client_list_resource_templates() {
+    use turul_mcp_client::{McpClient, McpClientBuilder};
+
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start resource server");
+
+    let url = format!("http://127.0.0.1:{}/mcp", server.port());
+
+    let client: McpClient = McpClientBuilder::new()
+        .with_url(&url)
+        .expect("Failed to parse URL")
+        .build();
+
+    client
+        .connect()
+        .await
+        .expect("Failed to connect to resource server");
+
+    // Test simple list_resource_templates()
+    let templates = client
+        .list_resource_templates()
+        .await
+        .expect("Failed to list resource templates via McpClient");
+
+    assert!(
+        !templates.is_empty(),
+        "McpClient should return at least one resource template"
+    );
+
+    for template in &templates {
+        assert!(!template.name.is_empty(), "Template name should not be empty");
+        assert!(
+            !template.uri_template.is_empty(),
+            "Template uri_template should not be empty"
+        );
+        info!(
+            "McpClient template: '{}' -> '{}'",
+            template.name, template.uri_template
+        );
+    }
+
+    info!(
+        "list_resource_templates() returned {} templates",
+        templates.len()
+    );
+}
+
+#[tokio::test]
+#[serial]
+async fn test_mcp_client_list_resource_templates_paginated() {
+    use turul_mcp_client::{McpClient, McpClientBuilder};
+
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let server = TestServerManager::start_resource_server()
+        .await
+        .expect("Failed to start resource server");
+
+    let url = format!("http://127.0.0.1:{}/mcp", server.port());
+
+    let client: McpClient = McpClientBuilder::new()
+        .with_url(&url)
+        .expect("Failed to parse URL")
+        .build();
+
+    client
+        .connect()
+        .await
+        .expect("Failed to connect to resource server");
+
+    // Test paginated variant with no cursor
+    let result_no_cursor = client
+        .list_resource_templates_paginated(None)
+        .await
+        .expect("Failed to list resource templates paginated via McpClient");
+
+    assert!(
+        !result_no_cursor.resource_templates.is_empty(),
+        "Paginated result should contain resource templates"
+    );
+
+    info!(
+        "list_resource_templates_paginated(None) returned {} templates, next_cursor={:?}",
+        result_no_cursor.resource_templates.len(),
+        result_no_cursor.next_cursor
+    );
+
+    // Test cursor wiring: use server-returned cursor if available, otherwise a synthetic one.
+    // Only assert the call succeeds and returns a valid result shape — cursor semantics
+    // (empty terminal page, repeated results, etc.) are server-defined.
+    use turul_mcp_protocol::meta::Cursor;
+
+    let cursor = result_no_cursor
+        .next_cursor
+        .unwrap_or_else(|| Cursor::new("test_cursor"));
+
+    let result_with_cursor = client
+        .list_resource_templates_paginated(Some(cursor))
+        .await
+        .expect("Paginated call with cursor should succeed");
+
+    info!(
+        "list_resource_templates_paginated(Some(cursor)) returned {} templates, next_cursor={:?}",
+        result_with_cursor.resource_templates.len(),
+        result_with_cursor.next_cursor
+    );
+}

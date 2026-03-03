@@ -126,6 +126,9 @@
 //! // List available resources
 //! let resources = client.list_resources().await?;
 //!
+//! // Discover dynamic URI templates
+//! let templates = client.list_resource_templates().await?;
+//!
 //! // Read a specific resource
 //! let content = client.read_resource("file://config.json").await?;
 //! println!("Resource content: {:?}", content);

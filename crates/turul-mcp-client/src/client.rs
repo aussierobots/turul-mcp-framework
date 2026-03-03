@@ -16,6 +16,7 @@ use turul_mcp_protocol::meta::Cursor;
 use turul_mcp_protocol::tasks::{
     CancelTaskResult, CreateTaskResult, GetTaskResult, ListTasksResult, Task,
 };
+use turul_mcp_protocol::resources::{ListResourceTemplatesResult, ResourceTemplate};
 use turul_mcp_protocol::{
     CallToolResult, GetPromptResult, InitializeResult, ListPromptsResult, ListResourcesResult,
     ListToolsResult, Prompt, ReadResourceResult, Resource, Tool, ToolResult,
@@ -568,6 +569,60 @@ impl McpClient {
             "Resource read completed"
         );
         Ok(read_response.contents)
+    }
+
+    /// List available resource templates
+    pub async fn list_resource_templates(&self) -> McpClientResult<Vec<ResourceTemplate>> {
+        debug!("Listing resource templates");
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "resources/templates/list",
+            "id": self.next_request_id(),
+            "params": {}
+        });
+
+        let response = self.send_request_internal(request).await?;
+        let templates_response: ListResourceTemplatesResult =
+            serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
+
+        debug!(
+            count = templates_response.resource_templates.len(),
+            "Retrieved resource templates"
+        );
+        Ok(templates_response.resource_templates)
+    }
+
+    /// List available resource templates with pagination support
+    pub async fn list_resource_templates_paginated(
+        &self,
+        cursor: Option<Cursor>,
+    ) -> McpClientResult<ListResourceTemplatesResult> {
+        debug!("Listing resource templates with pagination");
+
+        let request_params = if let Some(cursor) = cursor {
+            json!({ "cursor": cursor.as_str() })
+        } else {
+            json!({})
+        };
+
+        let request = json!({
+            "jsonrpc": "2.0",
+            "method": "resources/templates/list",
+            "id": self.next_request_id(),
+            "params": request_params
+        });
+
+        let response = self.send_request_internal(request).await?;
+        let templates_response: ListResourceTemplatesResult =
+            serde_json::from_value(response.get("result").cloned().unwrap_or(Value::Null))?;
+
+        debug!(
+            count = templates_response.resource_templates.len(),
+            has_cursor = templates_response.next_cursor.is_some(),
+            "Retrieved resource templates with pagination"
+        );
+        Ok(templates_response)
     }
 
     /// List available prompts
