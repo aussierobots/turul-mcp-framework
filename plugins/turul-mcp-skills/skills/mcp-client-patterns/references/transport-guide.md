@@ -6,12 +6,12 @@ Deep-dive reference for MCP client transport selection and configuration. Both t
 
 **Constructor:** `HttpTransport::new(endpoint: &str) -> McpClientResult<Self>`
 
-The default and recommended transport. Uses standard HTTP POST for all requests and handles SSE streaming for server-initiated events within the response body.
+The default and recommended transport. Uses standard HTTP POST for all requests and handles streamed `application/json` frames in request responses.
 
 **Key behaviors:**
 - Validates `http://` or `https://` scheme on construction
 - Automatic `Mcp-Session-Id` header management — captured from server response, included in all subsequent requests
-- Handles chunked SSE responses: parses `text/event-stream` content type, queues `ServerEvent` notifications for the stream handler
+- Responses stream as concatenated `application/json` frames (progress notifications then final result); an optional SSE listener exists but `server_events` defaults to `false`
 - JSON responses: standard `application/json` parsing
 - Session cleanup via HTTP DELETE on disconnect
 
@@ -20,7 +20,7 @@ The default and recommended transport. Uses standard HTTP POST for all requests 
 TransportCapabilities {
     streaming: true,
     bidirectional: false,
-    server_events: true,
+    server_events: false,
     max_message_size: None,
     persistent: false,
 }
@@ -38,7 +38,7 @@ Legacy transport for servers implementing MCP 2024-11-05 or earlier. Uses a two-
 
 **Key behaviors:**
 - Validates `http://` or `https://` scheme
-- Spawns a background Tokio task for SSE event listening on `connect()`
+- `connect()` is a no-op (marks transport ready); SSE listener starts lazily via `start_event_listener()`
 - Aborts the SSE listener task on `disconnect()` or `Drop`
 - Separate SSE endpoint URL derived from the base endpoint
 
@@ -108,9 +108,9 @@ Custom transports can implement this trait and pass to `McpClientBuilder::with_t
 | MCP protocol version | 2025-11-25 | 2024-11-05 |
 | Request method | POST | POST |
 | Server events | In-response SSE | Separate SSE endpoint |
-| Session ID | `Mcp-Session-Id` header | Connection-based |
-| Connection model | Request/response | Long-lived SSE + POST |
-| Background tasks | None | SSE listener task |
+| Session ID | `Mcp-Session-Id` header | `Mcp-Session-Id` header |
+| Connection model | Request/response | Long-lived SSE + POST (listener starts lazily) |
+| Background tasks | None | SSE listener task (lazy, via `start_event_listener()`) |
 | Disconnect cleanup | HTTP DELETE | Abort SSE task |
 | Custom `reqwest::Client` | `with_client()` | Not supported |
 | Custom endpoints | N/A | `with_endpoints()` |

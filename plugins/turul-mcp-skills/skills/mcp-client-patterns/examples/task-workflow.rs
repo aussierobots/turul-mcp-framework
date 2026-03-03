@@ -23,17 +23,17 @@ async fn main() -> McpClientResult<()> {
             println!("Got immediate result: {result:?}");
         }
         ToolCallResponse::TaskCreated(task) => {
-            println!("Task created: {}", task.id);
+            println!("Task created: {}", task.task_id);
 
             // --- Option A: Block until terminal (per MCP spec) ---
             // get_task_result blocks until the task reaches a terminal state.
-            // let value = client.get_task_result(&task.id).await?;
+            // let value = client.get_task_result(&task.task_id).await?;
             // println!("Task result: {value}");
 
             // --- Option B: Poll for status ---
             let max_polls = 60;
             for _ in 0..max_polls {
-                let current = client.get_task(&task.id).await?;
+                let current = client.get_task(&task.task_id).await?;
                 match current.status {
                     TaskStatus::Working => {
                         println!("Task still working...");
@@ -42,7 +42,7 @@ async fn main() -> McpClientResult<()> {
                     TaskStatus::Completed => {
                         println!("Task completed!");
                         // Fetch the final result
-                        let value = client.get_task_result(&current.id).await?;
+                        let value = client.get_task_result(&current.task_id).await?;
                         println!("Result: {value}");
                         break;
                     }

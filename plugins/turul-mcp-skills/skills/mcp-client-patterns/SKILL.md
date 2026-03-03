@@ -40,7 +40,7 @@ McpClientBuilder::new().with_transport(Box::new(SseTransport::new("http://host/s
 |---|---|---|
 | Protocol | MCP 2025-11-25 (Streamable HTTP) | MCP 2024-11-05 (Legacy HTTP+SSE) |
 | Server events | SSE streaming on response | Separate SSE endpoint |
-| Session management | `Mcp-Session-Id` header | Separate SSE connection |
+| Session management | `Mcp-Session-Id` header | `Mcp-Session-Id` header |
 | Recommended for | New servers | Legacy servers only |
 
 See [references/transport-guide.md](references/transport-guide.md) for full details.
@@ -134,13 +134,12 @@ match response {
         println!("Immediate result: {result:?}");
     }
     ToolCallResponse::TaskCreated(task) => {
-        let task_id = &task.id;
         // Option A: Block until terminal (per MCP spec)
-        let value = client.get_task_result(task_id).await?;
+        let value = client.get_task_result(&task.task_id).await?;
 
         // Option B: Poll for status
         loop {
-            let task = client.get_task(task_id).await?;
+            let task = client.get_task(&task.task_id).await?;
             match task.status {
                 TaskStatus::Working => { /* continue polling */ }
                 TaskStatus::Completed => { break; }

@@ -27,7 +27,7 @@ Uninitialized ──→ Initializing ──→ Active ──→ Terminated
 
 `client.connect().await?` performs these steps:
 
-1. **Transport connect** — `transport.connect()` establishes the underlying connection
+1. **Transport connect** — `transport.connect()` marks the transport as logically ready (no network I/O); first real network validation occurs at step 3
 2. **Mark initializing** — session state transitions to `Initializing`
 3. **Send `initialize`** — sends the MCP `initialize` request with client capabilities and info
 4. **Capture server response** — stores `ServerCapabilities`, `protocolVersion`, and `Mcp-Session-Id`
