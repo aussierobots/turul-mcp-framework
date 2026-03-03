@@ -5,10 +5,14 @@
 //!
 //! ## Table Schema
 //!
-//! - **Partition Key**: `task_id` (S)
-//! - **GSI `SessionIndex`**: PK=`session_id`, SK=`created_at`
-//! - **GSI `StatusIndex`**: PK=`status`, SK=`created_at`
-//! - **TTL attribute**: `ttl_epoch` (N, Unix epoch seconds)
+//! New tables (v0.3.4+) use camelCase attribute names:
+//! - **Partition Key**: `taskId` (S)
+//! - **GSI `SessionIndex`**: PK=`sessionId`, SK=`createdAt`
+//! - **GSI `StatusIndex`**: PK=`status`, SK=`createdAt`
+//! - **TTL attribute**: `ttlEpoch` (N, Unix epoch seconds)
+//!
+//! Legacy tables (pre-v0.3.4) use snake_case and are auto-detected via
+//! `describe_table()` key schema inspection. Both conventions are fully supported.
 
 use crate::error::TaskStorageError;
 use crate::state_machine;
@@ -27,6 +31,94 @@ use aws_sdk_dynamodb::Client;
 use aws_sdk_dynamodb::types::AttributeValue;
 #[cfg(feature = "dynamodb")]
 use base64::Engine;
+
+/// Naming convention detected from an existing DynamoDB table's key schema.
+///
+/// New tables use `CamelCase`; legacy pre-v0.3.4 tables use `SnakeCase`.
+/// Detected automatically via `describe_table()` — callers never choose.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum NamingConvention {
+    /// Legacy pre-v0.3.4 tables with snake_case attribute names.
+    SnakeCase,
+    /// New v0.3.4+ tables with camelCase attribute names.
+    CamelCase,
+}
+
+/// Attribute name mappings for a given naming convention.
+#[derive(Debug, Clone)]
+pub(crate) struct TaskAttrNames {
+    pub task_id: &'static str,
+    pub session_id: &'static str,
+    pub created_at: &'static str,
+    pub last_updated_at: &'static str,
+    pub status_message: &'static str,
+    pub ttl_epoch: &'static str,
+    pub poll_interval: &'static str,
+    pub original_method: &'static str,
+    pub original_params: &'static str,
+    // Single-word attributes (unchanged across conventions):
+    // status, ttl, result, meta
+}
+
+impl TaskAttrNames {
+    const SNAKE: Self = Self {
+        task_id: "task_id",
+        session_id: "session_id",
+        created_at: "created_at",
+        last_updated_at: "last_updated_at",
+        status_message: "status_message",
+        ttl_epoch: "ttl_epoch",
+        poll_interval: "poll_interval",
+        original_method: "original_method",
+        original_params: "original_params",
+    };
+
+    const CAMEL: Self = Self {
+        task_id: "taskId",
+        session_id: "sessionId",
+        created_at: "createdAt",
+        last_updated_at: "lastUpdatedAt",
+        status_message: "statusMessage",
+        ttl_epoch: "ttlEpoch",
+        poll_interval: "pollInterval",
+        original_method: "originalMethod",
+        original_params: "originalParams",
+    };
+
+    pub(crate) fn for_convention(convention: NamingConvention) -> &'static Self {
+        match convention {
+            NamingConvention::SnakeCase => &Self::SNAKE,
+            NamingConvention::CamelCase => &Self::CAMEL,
+        }
+    }
+}
+
+/// Detect whether a DynamoDB table uses snake_case or camelCase attribute names
+/// by inspecting its key schema. Any multi-word key containing an underscore
+/// indicates a legacy snake_case table.
+#[cfg(feature = "dynamodb")]
+fn detect_naming_convention(
+    table: &aws_sdk_dynamodb::types::TableDescription,
+) -> NamingConvention {
+    for element in table.key_schema() {
+        let name = element.attribute_name();
+        if name.contains('_') {
+            return NamingConvention::SnakeCase;
+        }
+    }
+    NamingConvention::CamelCase
+}
+
+/// Read-tolerance helper: tries `primary` attribute name first, falls back to `fallback`.
+/// Used for non-key attributes that may have been written with either naming convention.
+#[cfg(feature = "dynamodb")]
+fn get_attr<'a>(
+    item: &'a HashMap<String, AttributeValue>,
+    primary: &str,
+    fallback: &str,
+) -> Option<&'a AttributeValue> {
+    item.get(primary).or_else(|| item.get(fallback))
+}
 
 /// Configuration for DynamoDB task storage.
 #[derive(Debug, Clone)]
@@ -62,10 +154,23 @@ impl Default for DynamoDbTaskConfig {
 ///
 /// Uses a single table with two GSIs (SessionIndex, StatusIndex) and
 /// DynamoDB native TTL for automatic task expiry.
+///
+/// Naming convention (camelCase vs snake_case) is auto-detected from the
+/// table's key schema at initialization time.
 pub struct DynamoDbTaskStorage {
     config: DynamoDbTaskConfig,
     #[cfg(feature = "dynamodb")]
     client: Client,
+    #[cfg(feature = "dynamodb")]
+    naming: NamingConvention,
+}
+
+#[cfg(feature = "dynamodb")]
+impl DynamoDbTaskStorage {
+    /// Returns the attribute names for this storage's detected naming convention.
+    fn attrs(&self) -> &'static TaskAttrNames {
+        TaskAttrNames::for_convention(self.naming)
+    }
 }
 
 fn status_to_str(status: TaskStatus) -> &'static str {
@@ -96,29 +201,30 @@ fn str_to_status(s: &str) -> Result<TaskStatus, TaskStorageError> {
 fn task_record_to_item(
     record: &TaskRecord,
     config: &DynamoDbTaskConfig,
+    attrs: &TaskAttrNames,
 ) -> HashMap<String, AttributeValue> {
     let mut item = HashMap::new();
 
     item.insert(
-        "task_id".to_string(),
+        attrs.task_id.to_string(),
         AttributeValue::S(record.task_id.clone()),
     );
     if let Some(ref sid) = record.session_id {
-        item.insert("session_id".to_string(), AttributeValue::S(sid.clone()));
+        item.insert(attrs.session_id.to_string(), AttributeValue::S(sid.clone()));
     }
     item.insert(
         "status".to_string(),
         AttributeValue::S(status_to_str(record.status).to_string()),
     );
     if let Some(ref msg) = record.status_message {
-        item.insert("status_message".to_string(), AttributeValue::S(msg.clone()));
+        item.insert(attrs.status_message.to_string(), AttributeValue::S(msg.clone()));
     }
     item.insert(
-        "created_at".to_string(),
+        attrs.created_at.to_string(),
         AttributeValue::S(record.created_at.clone()),
     );
     item.insert(
-        "last_updated_at".to_string(),
+        attrs.last_updated_at.to_string(),
         AttributeValue::S(record.last_updated_at.clone()),
     );
     if let Some(ttl) = record.ttl {
@@ -126,18 +232,18 @@ fn task_record_to_item(
     }
     if let Some(interval) = record.poll_interval {
         item.insert(
-            "poll_interval".to_string(),
+            attrs.poll_interval.to_string(),
             AttributeValue::N(interval.to_string()),
         );
     }
     item.insert(
-        "original_method".to_string(),
+        attrs.original_method.to_string(),
         AttributeValue::S(record.original_method.clone()),
     );
     if let Some(ref params) = record.original_params
         && let Ok(json_str) = serde_json::to_string(params)
     {
-        item.insert("original_params".to_string(), AttributeValue::S(json_str));
+        item.insert(attrs.original_params.to_string(), AttributeValue::S(json_str));
     }
     if let Some(ref result) = record.result
         && let Ok(json_str) = serde_json::to_string(result)
@@ -155,7 +261,7 @@ fn task_record_to_item(
         if let Ok(created) = chrono::DateTime::parse_from_rfc3339(&record.created_at) {
             let epoch_secs = created.timestamp() + ttl_ms / 1000;
             item.insert(
-                "ttl_epoch".to_string(),
+                attrs.ttl_epoch.to_string(),
                 AttributeValue::N(epoch_secs.to_string()),
             );
         }
@@ -164,7 +270,7 @@ fn task_record_to_item(
         if let Ok(created) = chrono::DateTime::parse_from_rfc3339(&record.created_at) {
             let epoch_secs = created.timestamp() + (config.task_ttl_minutes * 60) as i64;
             item.insert(
-                "ttl_epoch".to_string(),
+                attrs.ttl_epoch.to_string(),
                 AttributeValue::N(epoch_secs.to_string()),
             );
         }
@@ -176,15 +282,17 @@ fn task_record_to_item(
 #[cfg(feature = "dynamodb")]
 fn item_to_task_record(
     item: &HashMap<String, AttributeValue>,
+    attrs: &TaskAttrNames,
 ) -> Result<TaskRecord, TaskStorageError> {
-    let task_id = item
-        .get("task_id")
+    // Key attributes: use primary name first, fallback to opposite convention
+    let task_id = get_attr(item, attrs.task_id, TaskAttrNames::SNAKE.task_id)
+        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.task_id, ""))
         .and_then(|v| v.as_s().ok())
         .ok_or_else(|| TaskStorageError::SerializationError("Missing task_id".to_string()))?
         .clone();
 
-    let session_id = item
-        .get("session_id")
+    let session_id = get_attr(item, attrs.session_id, TaskAttrNames::SNAKE.session_id)
+        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.session_id, ""))
         .and_then(|v| v.as_s().ok())
         .cloned();
 
@@ -194,19 +302,19 @@ fn item_to_task_record(
         .ok_or_else(|| TaskStorageError::SerializationError("Missing status".to_string()))?;
     let status = str_to_status(status_str)?;
 
-    let status_message = item
-        .get("status_message")
+    let status_message = get_attr(item, attrs.status_message, TaskAttrNames::SNAKE.status_message)
+        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.status_message, ""))
         .and_then(|v| v.as_s().ok())
         .cloned();
 
-    let created_at = item
-        .get("created_at")
+    let created_at = get_attr(item, attrs.created_at, TaskAttrNames::SNAKE.created_at)
+        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.created_at, ""))
         .and_then(|v| v.as_s().ok())
         .ok_or_else(|| TaskStorageError::SerializationError("Missing created_at".to_string()))?
         .clone();
 
-    let last_updated_at = item
-        .get("last_updated_at")
+    let last_updated_at = get_attr(item, attrs.last_updated_at, TaskAttrNames::SNAKE.last_updated_at)
+        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.last_updated_at, ""))
         .and_then(|v| v.as_s().ok())
         .ok_or_else(|| TaskStorageError::SerializationError("Missing last_updated_at".to_string()))?
         .clone();
@@ -216,19 +324,19 @@ fn item_to_task_record(
         .and_then(|v| v.as_n().ok())
         .and_then(|n| n.parse::<i64>().ok());
 
-    let poll_interval = item
-        .get("poll_interval")
+    let poll_interval = get_attr(item, attrs.poll_interval, TaskAttrNames::SNAKE.poll_interval)
+        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.poll_interval, ""))
         .and_then(|v| v.as_n().ok())
         .and_then(|n| n.parse::<u64>().ok());
 
-    let original_method = item
-        .get("original_method")
+    let original_method = get_attr(item, attrs.original_method, TaskAttrNames::SNAKE.original_method)
+        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.original_method, ""))
         .and_then(|v| v.as_s().ok())
         .ok_or_else(|| TaskStorageError::SerializationError("Missing original_method".to_string()))?
         .clone();
 
-    let original_params = item
-        .get("original_params")
+    let original_params = get_attr(item, attrs.original_params, TaskAttrNames::SNAKE.original_params)
+        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.original_params, ""))
         .and_then(|v| v.as_s().ok())
         .map(|s| serde_json::from_str(s))
         .transpose()
@@ -271,6 +379,9 @@ impl DynamoDbTaskStorage {
     }
 
     /// Create a new DynamoDB task storage with custom configuration.
+    ///
+    /// Auto-detects the table's naming convention (camelCase vs snake_case)
+    /// from its key schema. New tables are created with camelCase.
     pub async fn with_config(config: DynamoDbTaskConfig) -> Result<Self, TaskStorageError> {
         info!(
             "Initializing DynamoDB task storage with table: {} in region: {}",
@@ -286,16 +397,18 @@ impl DynamoDbTaskStorage {
 
             let client = Client::new(&aws_config);
 
-            let storage = Self {
+            // Default to CamelCase; verify_table_schema will detect and override
+            let mut storage = Self {
                 config: config.clone(),
                 client,
+                naming: NamingConvention::CamelCase,
             };
 
             storage.verify_table_schema().await?;
 
             info!(
-                "DynamoDB task storage initialized successfully in region: {}",
-                config.region
+                "DynamoDB task storage initialized successfully in region: {} (naming: {:?})",
+                config.region, storage.naming
             );
             Ok(storage)
         }
@@ -310,8 +423,9 @@ impl DynamoDbTaskStorage {
     }
 
     /// Verify that the DynamoDB table exists and has the correct schema.
+    /// Also detects and stores the table's naming convention.
     #[cfg(feature = "dynamodb")]
-    async fn verify_table_schema(&self) -> Result<(), TaskStorageError> {
+    async fn verify_table_schema(&mut self) -> Result<(), TaskStorageError> {
         use aws_sdk_dynamodb::types::TableStatus;
 
         debug!("Verifying table schema for: {}", self.config.table_name);
@@ -325,6 +439,13 @@ impl DynamoDbTaskStorage {
         {
             Ok(output) => {
                 if let Some(table) = output.table() {
+                    // Detect naming convention from key schema
+                    self.naming = detect_naming_convention(table);
+                    info!(
+                        "Detected naming convention for table '{}': {:?}",
+                        self.config.table_name, self.naming
+                    );
+
                     if let Some(status) = table.table_status() {
                         match status {
                             TableStatus::Active => {
@@ -362,6 +483,8 @@ impl DynamoDbTaskStorage {
                         "Table '{}' does not exist, attempting to create it",
                         self.config.table_name
                     );
+                    // New tables always use CamelCase
+                    self.naming = NamingConvention::CamelCase;
                     self.create_table().await?;
                     self.wait_for_table_active().await?;
                     self.enable_ttl().await?;
@@ -378,7 +501,7 @@ impl DynamoDbTaskStorage {
         }
     }
 
-    /// Create the DynamoDB table with proper schema including GSIs.
+    /// Create the DynamoDB table with camelCase key schema and GSIs.
     #[cfg(feature = "dynamodb")]
     async fn create_table(&self) -> Result<(), TaskStorageError> {
         use aws_sdk_dynamodb::types::{
@@ -386,11 +509,12 @@ impl DynamoDbTaskStorage {
             Projection, ProjectionType, ScalarAttributeType,
         };
 
-        info!("Creating DynamoDB table: {}", self.config.table_name);
+        let attrs = self.attrs();
+        info!("Creating DynamoDB table: {} (naming: {:?})", self.config.table_name, self.naming);
 
         let key_schema = vec![
             KeySchemaElement::builder()
-                .attribute_name("task_id")
+                .attribute_name(attrs.task_id)
                 .key_type(KeyType::Hash)
                 .build()
                 .map_err(|e| TaskStorageError::DatabaseError(e.to_string()))?,
@@ -398,17 +522,17 @@ impl DynamoDbTaskStorage {
 
         let attribute_definitions = vec![
             AttributeDefinition::builder()
-                .attribute_name("task_id")
+                .attribute_name(attrs.task_id)
                 .attribute_type(ScalarAttributeType::S)
                 .build()
                 .map_err(|e| TaskStorageError::DatabaseError(e.to_string()))?,
             AttributeDefinition::builder()
-                .attribute_name("session_id")
+                .attribute_name(attrs.session_id)
                 .attribute_type(ScalarAttributeType::S)
                 .build()
                 .map_err(|e| TaskStorageError::DatabaseError(e.to_string()))?,
             AttributeDefinition::builder()
-                .attribute_name("created_at")
+                .attribute_name(attrs.created_at)
                 .attribute_type(ScalarAttributeType::S)
                 .build()
                 .map_err(|e| TaskStorageError::DatabaseError(e.to_string()))?,
@@ -419,19 +543,19 @@ impl DynamoDbTaskStorage {
                 .map_err(|e| TaskStorageError::DatabaseError(e.to_string()))?,
         ];
 
-        // GSI: SessionIndex — PK: session_id, SK: created_at
+        // GSI: SessionIndex — PK: sessionId, SK: createdAt
         let session_index = GlobalSecondaryIndex::builder()
             .index_name("SessionIndex")
             .key_schema(
                 KeySchemaElement::builder()
-                    .attribute_name("session_id")
+                    .attribute_name(attrs.session_id)
                     .key_type(KeyType::Hash)
                     .build()
                     .map_err(|e| TaskStorageError::DatabaseError(e.to_string()))?,
             )
             .key_schema(
                 KeySchemaElement::builder()
-                    .attribute_name("created_at")
+                    .attribute_name(attrs.created_at)
                     .key_type(KeyType::Range)
                     .build()
                     .map_err(|e| TaskStorageError::DatabaseError(e.to_string()))?,
@@ -444,7 +568,7 @@ impl DynamoDbTaskStorage {
             .build()
             .map_err(|e| TaskStorageError::DatabaseError(e.to_string()))?;
 
-        // GSI: StatusIndex — PK: status, SK: created_at
+        // GSI: StatusIndex — PK: status, SK: createdAt
         let status_index = GlobalSecondaryIndex::builder()
             .index_name("StatusIndex")
             .key_schema(
@@ -456,7 +580,7 @@ impl DynamoDbTaskStorage {
             )
             .key_schema(
                 KeySchemaElement::builder()
-                    .attribute_name("created_at")
+                    .attribute_name(attrs.created_at)
                     .key_type(KeyType::Range)
                     .build()
                     .map_err(|e| TaskStorageError::DatabaseError(e.to_string()))?,
@@ -566,15 +690,16 @@ impl DynamoDbTaskStorage {
         }
     }
 
-    /// Enable TTL on the `ttl_epoch` attribute.
+    /// Enable TTL on the `ttlEpoch` (or `ttl_epoch` for legacy) attribute.
     #[cfg(feature = "dynamodb")]
     async fn enable_ttl(&self) -> Result<(), TaskStorageError> {
         use aws_sdk_dynamodb::types::TimeToLiveSpecification;
 
-        info!("Enabling TTL on DynamoDB table: {}", self.config.table_name);
+        let attrs = self.attrs();
+        info!("Enabling TTL on DynamoDB table: {} (attribute: {})", self.config.table_name, attrs.ttl_epoch);
 
         let ttl_spec = TimeToLiveSpecification::builder()
-            .attribute_name("ttl_epoch")
+            .attribute_name(attrs.ttl_epoch)
             .enabled(true)
             .build()
             .map_err(|e| TaskStorageError::DatabaseError(e.to_string()))?;
@@ -682,14 +807,15 @@ impl TaskStorage for DynamoDbTaskStorage {
                 task.last_updated_at = task.created_at.clone();
             }
 
-            let item = task_record_to_item(&task, &self.config);
+            let attrs = self.attrs();
+            let item = task_record_to_item(&task, &self.config, attrs);
 
             match self
                 .client
                 .put_item()
                 .table_name(&self.config.table_name)
                 .set_item(Some(item))
-                .condition_expression("attribute_not_exists(task_id)")
+                .condition_expression(format!("attribute_not_exists({})", attrs.task_id))
                 .send()
                 .await
             {
@@ -727,8 +853,9 @@ impl TaskStorage for DynamoDbTaskStorage {
     async fn get_task(&self, task_id: &str) -> Result<Option<TaskRecord>, TaskStorageError> {
         #[cfg(feature = "dynamodb")]
         {
+            let attrs = self.attrs();
             let key = HashMap::from([(
-                "task_id".to_string(),
+                attrs.task_id.to_string(),
                 AttributeValue::S(task_id.to_string()),
             )]);
 
@@ -743,7 +870,7 @@ impl TaskStorage for DynamoDbTaskStorage {
             {
                 Ok(output) => {
                     if let Some(item) = output.item() {
-                        let record = item_to_task_record(item)?;
+                        let record = item_to_task_record(item, attrs)?;
                         Ok(Some(record))
                     } else {
                         Ok(None)
@@ -771,14 +898,15 @@ impl TaskStorage for DynamoDbTaskStorage {
     async fn update_task(&self, task: TaskRecord) -> Result<(), TaskStorageError> {
         #[cfg(feature = "dynamodb")]
         {
-            let item = task_record_to_item(&task, &self.config);
+            let attrs = self.attrs();
+            let item = task_record_to_item(&task, &self.config, attrs);
 
             match self
                 .client
                 .put_item()
                 .table_name(&self.config.table_name)
                 .set_item(Some(item))
-                .condition_expression("attribute_exists(task_id)")
+                .condition_expression(format!("attribute_exists({})", attrs.task_id))
                 .send()
                 .await
             {
@@ -813,8 +941,9 @@ impl TaskStorage for DynamoDbTaskStorage {
     async fn delete_task(&self, task_id: &str) -> Result<bool, TaskStorageError> {
         #[cfg(feature = "dynamodb")]
         {
+            let attrs = self.attrs();
             let key = HashMap::from([(
-                "task_id".to_string(),
+                attrs.task_id.to_string(),
                 AttributeValue::S(task_id.to_string()),
             )]);
 
@@ -861,6 +990,7 @@ impl TaskStorage for DynamoDbTaskStorage {
     ) -> Result<TaskListPage, TaskStorageError> {
         #[cfg(feature = "dynamodb")]
         {
+            let attrs = self.attrs();
             let limit = limit.unwrap_or(self.config.default_page_size);
 
             // Decode cursor from base64 to DynamoDB ExclusiveStartKey
@@ -909,7 +1039,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                 Ok(output) => {
                     let mut records: Vec<TaskRecord> = Vec::new();
                     for item in output.items() {
-                        match item_to_task_record(item) {
+                        match item_to_task_record(item, attrs) {
                             Ok(record) => records.push(record),
                             Err(e) => {
                                 warn!("Skipping malformed task record: {}", e);
@@ -970,6 +1100,8 @@ impl TaskStorage for DynamoDbTaskStorage {
     ) -> Result<TaskRecord, TaskStorageError> {
         #[cfg(feature = "dynamodb")]
         {
+            let task_attrs = self.attrs();
+
             // First, get the current task to validate the state transition
             let current = self
                 .get_task(task_id)
@@ -989,7 +1121,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                 ("#status".to_string(), "status".to_string()),
                 (
                     "#last_updated_at".to_string(),
-                    "last_updated_at".to_string(),
+                    task_attrs.last_updated_at.to_string(),
                 ),
             ]);
             let mut expr_values: HashMap<String, AttributeValue> = HashMap::from([
@@ -1003,15 +1135,15 @@ impl TaskStorage for DynamoDbTaskStorage {
 
             if let Some(ref msg) = status_message {
                 update_expr.push_str(", #status_message = :msg");
-                expr_names.insert("#status_message".to_string(), "status_message".to_string());
+                expr_names.insert("#status_message".to_string(), task_attrs.status_message.to_string());
                 expr_values.insert(":msg".to_string(), AttributeValue::S(msg.clone()));
             } else {
                 update_expr.push_str(" REMOVE #status_message");
-                expr_names.insert("#status_message".to_string(), "status_message".to_string());
+                expr_names.insert("#status_message".to_string(), task_attrs.status_message.to_string());
             }
 
             let key = HashMap::from([(
-                "task_id".to_string(),
+                task_attrs.task_id.to_string(),
                 AttributeValue::S(task_id.to_string()),
             )]);
 
@@ -1029,8 +1161,8 @@ impl TaskStorage for DynamoDbTaskStorage {
                 .await
             {
                 Ok(output) => {
-                    if let Some(attrs) = output.attributes() {
-                        item_to_task_record(attrs)
+                    if let Some(returned) = output.attributes() {
+                        item_to_task_record(returned, task_attrs)
                     } else {
                         // Fallback: re-read the task
                         self.get_task(task_id)
@@ -1060,7 +1192,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                             ("#status".to_string(), "status".to_string()),
                             (
                                 "#last_updated_at".to_string(),
-                                "last_updated_at".to_string(),
+                                task_attrs.last_updated_at.to_string(),
                             ),
                         ]);
                         let mut retry_values: HashMap<String, AttributeValue> = HashMap::from([
@@ -1076,19 +1208,19 @@ impl TaskStorage for DynamoDbTaskStorage {
                             retry_update.push_str(", #status_message = :msg");
                             retry_names.insert(
                                 "#status_message".to_string(),
-                                "status_message".to_string(),
+                                task_attrs.status_message.to_string(),
                             );
                             retry_values.insert(":msg".to_string(), AttributeValue::S(msg.clone()));
                         } else {
                             retry_update.push_str(" REMOVE #status_message");
                             retry_names.insert(
                                 "#status_message".to_string(),
-                                "status_message".to_string(),
+                                task_attrs.status_message.to_string(),
                             );
                         }
 
                         let retry_key = HashMap::from([(
-                            "task_id".to_string(),
+                            task_attrs.task_id.to_string(),
                             AttributeValue::S(task_id.to_string()),
                         )]);
 
@@ -1106,8 +1238,8 @@ impl TaskStorage for DynamoDbTaskStorage {
                             .await
                         {
                             Ok(retry_output) => {
-                                if let Some(attrs) = retry_output.attributes() {
-                                    item_to_task_record(attrs)
+                                if let Some(returned) = retry_output.attributes() {
+                                    item_to_task_record(returned, task_attrs)
                                 } else {
                                     self.get_task(task_id).await?.ok_or_else(|| {
                                         TaskStorageError::TaskNotFound(task_id.to_string())
@@ -1146,11 +1278,12 @@ impl TaskStorage for DynamoDbTaskStorage {
     ) -> Result<(), TaskStorageError> {
         #[cfg(feature = "dynamodb")]
         {
+            let task_attrs = self.attrs();
             let result_json = serde_json::to_string(&result)?;
             let now = Self::now_iso8601();
 
             let key = HashMap::from([(
-                "task_id".to_string(),
+                task_attrs.task_id.to_string(),
                 AttributeValue::S(task_id.to_string()),
             )]);
 
@@ -1159,7 +1292,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                 ("#result".to_string(), "result".to_string()),
                 (
                     "#last_updated_at".to_string(),
-                    "last_updated_at".to_string(),
+                    task_attrs.last_updated_at.to_string(),
                 ),
             ]);
             let expr_values = HashMap::from([
@@ -1173,7 +1306,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                 .table_name(&self.config.table_name)
                 .set_key(Some(key))
                 .update_expression(update_expr)
-                .condition_expression("attribute_exists(task_id)")
+                .condition_expression(format!("attribute_exists({})", task_attrs.task_id))
                 .set_expression_attribute_names(Some(expr_names))
                 .set_expression_attribute_values(Some(expr_values))
                 .send()
@@ -1222,6 +1355,7 @@ impl TaskStorage for DynamoDbTaskStorage {
     async fn expire_tasks(&self) -> Result<Vec<String>, TaskStorageError> {
         #[cfg(feature = "dynamodb")]
         {
+            let attrs = self.attrs();
             // DynamoDB native TTL handles most expiry automatically.
             // For immediate cleanup, query non-terminal statuses and filter by expired TTL.
             let now = Utc::now();
@@ -1247,7 +1381,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                 match result {
                     Ok(output) => {
                         for item in output.items() {
-                            if let Ok(record) = item_to_task_record(item)
+                            if let Ok(record) = item_to_task_record(item, attrs)
                                 && let Some(ttl_ms) = record.ttl
                                 && let Ok(created) =
                                     chrono::DateTime::parse_from_rfc3339(&record.created_at)
@@ -1331,6 +1465,7 @@ impl TaskStorage for DynamoDbTaskStorage {
     ) -> Result<TaskListPage, TaskStorageError> {
         #[cfg(feature = "dynamodb")]
         {
+            let attrs = self.attrs();
             let limit = limit.unwrap_or(self.config.default_page_size);
 
             let exclusive_start_key: Option<HashMap<String, AttributeValue>> =
@@ -1372,7 +1507,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                 .query()
                 .table_name(&self.config.table_name)
                 .index_name("SessionIndex")
-                .key_condition_expression("session_id = :session_id")
+                .key_condition_expression(format!("{} = :session_id", attrs.session_id))
                 .set_expression_attribute_values(Some(expr_values))
                 .scan_index_forward(true)
                 .limit(limit as i32);
@@ -1385,7 +1520,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                 Ok(output) => {
                     let mut records: Vec<TaskRecord> = Vec::new();
                     for item in output.items() {
-                        match item_to_task_record(item) {
+                        match item_to_task_record(item, attrs) {
                             Ok(record) => records.push(record),
                             Err(e) => {
                                 warn!("Skipping malformed task record: {}", e);
@@ -1443,6 +1578,7 @@ impl TaskStorage for DynamoDbTaskStorage {
     async fn recover_stuck_tasks(&self, max_age_ms: u64) -> Result<Vec<String>, TaskStorageError> {
         #[cfg(feature = "dynamodb")]
         {
+            let task_attrs = self.attrs();
             let now = Utc::now();
             let mut recovered = Vec::new();
 
@@ -1467,7 +1603,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                 match result {
                     Ok(output) => {
                         for item in output.items() {
-                            if let Ok(record) = item_to_task_record(item) {
+                            if let Ok(record) = item_to_task_record(item, task_attrs) {
                                 // Check age based on last_updated_at
                                 if let Ok(updated) =
                                     chrono::DateTime::parse_from_rfc3339(&record.last_updated_at)
@@ -1477,7 +1613,7 @@ impl TaskStorage for DynamoDbTaskStorage {
                                     if age_ms > max_age_ms as i64 {
                                         // Mark as Failed using conditional update
                                         let key = HashMap::from([(
-                                            "task_id".to_string(),
+                                            task_attrs.task_id.to_string(),
                                             AttributeValue::S(record.task_id.clone()),
                                         )]);
                                         let update_now = Self::now_iso8601();
@@ -1494,11 +1630,11 @@ impl TaskStorage for DynamoDbTaskStorage {
                                             .expression_attribute_names("#status", "status")
                                             .expression_attribute_names(
                                                 "#last_updated_at",
-                                                "last_updated_at",
+                                                task_attrs.last_updated_at,
                                             )
                                             .expression_attribute_names(
                                                 "#status_message",
-                                                "status_message",
+                                                task_attrs.status_message,
                                             )
                                             .expression_attribute_values(
                                                 ":failed",
@@ -1578,9 +1714,9 @@ mod tests {
         assert!(config.create_tables_if_missing);
     }
 
-    #[tokio::test]
-    async fn test_dynamodb_item_conversion_round_trip() {
-        let record = TaskRecord {
+    /// Helper to build a full test TaskRecord.
+    fn full_test_record() -> TaskRecord {
+        TaskRecord {
             task_id: "test-task-123".to_string(),
             session_id: Some("session-456".to_string()),
             status: TaskStatus::Working,
@@ -1593,11 +1729,16 @@ mod tests {
             original_params: Some(json!({"tool": "calculator", "args": {"a": 1, "b": 2}})),
             result: Some(TaskOutcome::Success(json!({"value": 3}))),
             meta: Some(HashMap::from([("key".to_string(), json!("value"))])),
-        };
+        }
+    }
 
+    /// Verify round-trip for a given naming convention.
+    fn assert_round_trip(convention: NamingConvention) {
+        let record = full_test_record();
         let config = DynamoDbTaskConfig::default();
-        let item = task_record_to_item(&record, &config);
-        let restored = item_to_task_record(&item).unwrap();
+        let attrs = TaskAttrNames::for_convention(convention);
+        let item = task_record_to_item(&record, &config, attrs);
+        let restored = item_to_task_record(&item, attrs).unwrap();
 
         assert_eq!(restored.task_id, record.task_id);
         assert_eq!(restored.session_id, record.session_id);
@@ -1612,8 +1753,24 @@ mod tests {
         assert!(restored.result.is_some());
         assert!(restored.meta.is_some());
 
-        // Verify ttl_epoch was set
-        assert!(item.contains_key("ttl_epoch"));
+        // Verify ttl_epoch uses the correct attribute name
+        assert!(item.contains_key(attrs.ttl_epoch));
+    }
+
+    #[tokio::test]
+    async fn test_camel_case_task_item_round_trip() {
+        assert_round_trip(NamingConvention::CamelCase);
+    }
+
+    #[tokio::test]
+    async fn test_snake_case_task_item_round_trip() {
+        assert_round_trip(NamingConvention::SnakeCase);
+    }
+
+    #[tokio::test]
+    async fn test_dynamodb_item_conversion_round_trip() {
+        // Default: CamelCase (new convention)
+        assert_round_trip(NamingConvention::CamelCase);
     }
 
     #[tokio::test]
@@ -1635,8 +1792,9 @@ mod tests {
         };
 
         let config = DynamoDbTaskConfig::default();
-        let item = task_record_to_item(&record, &config);
-        let restored = item_to_task_record(&item).unwrap();
+        let attrs = TaskAttrNames::for_convention(NamingConvention::CamelCase);
+        let item = task_record_to_item(&record, &config, attrs);
+        let restored = item_to_task_record(&item, attrs).unwrap();
 
         assert_eq!(restored.task_id, "minimal-task");
         assert_eq!(restored.session_id, None);
@@ -1670,8 +1828,9 @@ mod tests {
         };
 
         let config = DynamoDbTaskConfig::default();
-        let item = task_record_to_item(&record, &config);
-        let restored = item_to_task_record(&item).unwrap();
+        let attrs = TaskAttrNames::for_convention(NamingConvention::CamelCase);
+        let item = task_record_to_item(&record, &config, attrs);
+        let restored = item_to_task_record(&item, attrs).unwrap();
 
         match restored.result {
             Some(TaskOutcome::Error {
@@ -1685,6 +1844,81 @@ mod tests {
             }
             other => panic!("Expected Error outcome, got: {:?}", other),
         }
+    }
+
+    #[tokio::test]
+    async fn test_detect_task_table_snake_case() {
+        use aws_sdk_dynamodb::types::{KeySchemaElement, KeyType, TableDescription};
+
+        let table = TableDescription::builder()
+            .key_schema(
+                KeySchemaElement::builder()
+                    .attribute_name("task_id")
+                    .key_type(KeyType::Hash)
+                    .build()
+                    .unwrap(),
+            )
+            .build();
+
+        assert_eq!(detect_naming_convention(&table), NamingConvention::SnakeCase);
+    }
+
+    #[tokio::test]
+    async fn test_detect_task_table_camel_case() {
+        use aws_sdk_dynamodb::types::{KeySchemaElement, KeyType, TableDescription};
+
+        let table = TableDescription::builder()
+            .key_schema(
+                KeySchemaElement::builder()
+                    .attribute_name("taskId")
+                    .key_type(KeyType::Hash)
+                    .build()
+                    .unwrap(),
+            )
+            .build();
+
+        assert_eq!(detect_naming_convention(&table), NamingConvention::CamelCase);
+    }
+
+    #[tokio::test]
+    async fn test_detect_single_word_key_defaults_to_camel() {
+        use aws_sdk_dynamodb::types::{KeySchemaElement, KeyType, TableDescription};
+
+        // Single-word key "status" has no underscore → defaults to CamelCase
+        let table = TableDescription::builder()
+            .key_schema(
+                KeySchemaElement::builder()
+                    .attribute_name("status")
+                    .key_type(KeyType::Hash)
+                    .build()
+                    .unwrap(),
+            )
+            .build();
+
+        assert_eq!(detect_naming_convention(&table), NamingConvention::CamelCase);
+    }
+
+    #[tokio::test]
+    async fn test_task_read_tolerance_fallback() {
+        // Write with snake_case, read with camelCase primary + fallback
+        let record = full_test_record();
+        let config = DynamoDbTaskConfig::default();
+        let snake_attrs = TaskAttrNames::for_convention(NamingConvention::SnakeCase);
+        let camel_attrs = TaskAttrNames::for_convention(NamingConvention::CamelCase);
+
+        // Write with snake_case
+        let item = task_record_to_item(&record, &config, snake_attrs);
+
+        // Read with camelCase (will fall back to snake_case via get_attr)
+        let restored = item_to_task_record(&item, camel_attrs).unwrap();
+
+        assert_eq!(restored.task_id, record.task_id);
+        assert_eq!(restored.session_id, record.session_id);
+        assert_eq!(restored.status_message, record.status_message);
+        assert_eq!(restored.created_at, record.created_at);
+        assert_eq!(restored.last_updated_at, record.last_updated_at);
+        assert_eq!(restored.poll_interval, record.poll_interval);
+        assert_eq!(restored.original_method, record.original_method);
     }
 
     #[tokio::test]

@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-03-03
+
+### Changed
+
+**DynamoDB Storage: camelCase Attribute Names (One-Way Migration):**
+- New DynamoDB tables created by `turul-mcp-session-storage` and `turul-mcp-task-storage` now use camelCase attribute names (`sessionId`, `taskId`, `createdAt`, `lastActivity`, etc.) — aligning with DynamoDB convention
+- Existing snake_case tables (`session_id`, `task_id`, `created_at`, etc.) are auto-detected via `describe_table()` key schema inspection and continue to work without any changes
+- Per-table detection: session and events tables are detected independently, supporting mixed-convention deployments
+- Read tolerance: non-key attributes written with either convention are readable via fallback lookup
+
+**Rollback Contract (Breaking Storage Format):**
+- This is a **one-way storage format change**. Once new tables are created with camelCase key schemas, pre-v0.3.4 code cannot read them (it has hardcoded snake_case key names)
+- New code reads legacy snake_case tables: **Yes** (auto-detected)
+- New code creates fresh tables with camelCase: **Yes**
+- Old code reads legacy snake_case tables: **Yes** (unchanged)
+- **Old code reads new camelCase tables: No — will fail**
+- Rolling back to pre-v0.3.4 code after creating camelCase tables will break. Plan accordingly.
+
 ## [0.3.3] - 2026-03-01
 
 ### Fixed
@@ -302,7 +320,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.3...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.4...HEAD
+[0.3.4]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.2...v0.3.3
 [0.3.2]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.0...v0.3.1
