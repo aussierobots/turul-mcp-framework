@@ -16,8 +16,8 @@ The original `set_session_state` method was trying to use DynamoDB's nested map 
 The implementation assumed DynamoDB tables would exist, but provided no way to create them.
 
 **Fix**: Added automatic table creation with:
-- Primary key: `session_id` (String)
-- Global Secondary Index: `LastActivityIndex` on `last_activity`
+- Primary key: `sessionId` (String) — camelCase as of v0.3.4 (legacy tables with `session_id` are auto-detected)
+- Global Secondary Index: `LastActivityIndex` on `lastActivity` (legacy: `last_activity`)
 - Pay-per-request billing for cost optimization
 - Automatic wait for table to become active
 

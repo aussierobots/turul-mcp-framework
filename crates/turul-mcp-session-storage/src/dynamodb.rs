@@ -2,6 +2,15 @@
 //!
 //! This module provides a DynamoDB-backed session storage implementation for
 //! serverless and AWS-native MCP deployments.
+//!
+//! ## Table Schema
+//!
+//! New tables (v0.3.4+) use camelCase attribute names:
+//! - **Sessions table**: PK=`sessionId`, GSI `LastActivityIndex` PK=`lastActivity`
+//! - **Events table**: PK=`sessionId`, SK=`eventId`
+//!
+//! Legacy tables (pre-v0.3.4) use snake_case and are auto-detected via
+//! `describe_table()` key schema inspection. Both conventions are fully supported.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -23,6 +32,116 @@ use aws_config::{BehaviorVersion, Region};
 use aws_sdk_dynamodb::Client;
 #[cfg(feature = "dynamodb")]
 use aws_sdk_dynamodb::types::{AttributeValue, TableStatus};
+
+/// Naming convention detected from an existing DynamoDB table's key schema.
+///
+/// New tables use `CamelCase`; legacy pre-v0.3.4 tables use `SnakeCase`.
+/// Detected automatically via `describe_table()` — callers never choose.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum NamingConvention {
+    /// Legacy pre-v0.3.4 tables with snake_case attribute names.
+    SnakeCase,
+    /// New v0.3.4+ tables with camelCase attribute names.
+    CamelCase,
+}
+
+/// Attribute name mappings for the sessions table.
+#[derive(Debug, Clone)]
+pub(crate) struct SessionAttrNames {
+    pub session_id: &'static str,
+    pub last_activity: &'static str,
+    pub client_capabilities: &'static str,
+    pub server_capabilities: &'static str,
+    pub created_at: &'static str,
+    pub is_initialized: &'static str,
+    // Single-word attributes (unchanged across conventions):
+    // state, metadata, ttl
+}
+
+impl SessionAttrNames {
+    const SNAKE: Self = Self {
+        session_id: "session_id",
+        last_activity: "last_activity",
+        client_capabilities: "client_capabilities",
+        server_capabilities: "server_capabilities",
+        created_at: "created_at",
+        is_initialized: "is_initialized",
+    };
+
+    const CAMEL: Self = Self {
+        session_id: "sessionId",
+        last_activity: "lastActivity",
+        client_capabilities: "clientCapabilities",
+        server_capabilities: "serverCapabilities",
+        created_at: "createdAt",
+        is_initialized: "isInitialized",
+    };
+
+    pub(crate) fn for_convention(convention: NamingConvention) -> &'static Self {
+        match convention {
+            NamingConvention::SnakeCase => &Self::SNAKE,
+            NamingConvention::CamelCase => &Self::CAMEL,
+        }
+    }
+}
+
+/// Attribute name mappings for the events table.
+#[derive(Debug, Clone)]
+pub(crate) struct EventAttrNames {
+    pub session_id: &'static str,
+    pub event_id: &'static str,
+    pub event_type: &'static str,
+    // Single-word attributes (unchanged across conventions):
+    // timestamp, data, retry, ttl
+}
+
+impl EventAttrNames {
+    const SNAKE: Self = Self {
+        session_id: "session_id",
+        event_id: "event_id",
+        event_type: "event_type",
+    };
+
+    const CAMEL: Self = Self {
+        session_id: "sessionId",
+        event_id: "eventId",
+        event_type: "eventType",
+    };
+
+    pub(crate) fn for_convention(convention: NamingConvention) -> &'static Self {
+        match convention {
+            NamingConvention::SnakeCase => &Self::SNAKE,
+            NamingConvention::CamelCase => &Self::CAMEL,
+        }
+    }
+}
+
+/// Detect whether a DynamoDB table uses snake_case or camelCase attribute names
+/// by inspecting its key schema. Any multi-word key containing an underscore
+/// indicates a legacy snake_case table.
+#[cfg(feature = "dynamodb")]
+fn detect_naming_convention(
+    table: &aws_sdk_dynamodb::types::TableDescription,
+) -> NamingConvention {
+    for element in table.key_schema() {
+        let name = element.attribute_name();
+        if name.contains('_') {
+            return NamingConvention::SnakeCase;
+        }
+    }
+    NamingConvention::CamelCase
+}
+
+/// Read-tolerance helper: tries `primary` attribute name first, falls back to `fallback`.
+/// Used for non-key attributes that may have been written with either naming convention.
+#[cfg(feature = "dynamodb")]
+fn get_attr<'a>(
+    item: &'a HashMap<String, AttributeValue>,
+    primary: &str,
+    fallback: &str,
+) -> Option<&'a AttributeValue> {
+    item.get(primary).or_else(|| item.get(fallback))
+}
 
 /// Configuration for DynamoDB session storage
 #[derive(Debug, Clone)]
@@ -77,12 +196,33 @@ pub enum DynamoDbError {
     ConfigError(String),
 }
 
-/// DynamoDB-backed session storage
+/// DynamoDB-backed session storage.
+///
+/// Naming convention (camelCase vs snake_case) is auto-detected from each
+/// table's key schema at initialization time. Sessions and events tables
+/// are detected independently.
 pub struct DynamoDbSessionStorage {
     config: DynamoDbConfig,
     #[cfg(feature = "dynamodb")]
     client: Client,
     event_counter: AtomicU64,
+    #[cfg(feature = "dynamodb")]
+    session_naming: NamingConvention,
+    #[cfg(feature = "dynamodb")]
+    event_naming: NamingConvention,
+}
+
+#[cfg(feature = "dynamodb")]
+impl DynamoDbSessionStorage {
+    /// Returns the attribute names for the sessions table's detected naming convention.
+    fn session_attrs(&self) -> &'static SessionAttrNames {
+        SessionAttrNames::for_convention(self.session_naming)
+    }
+
+    /// Returns the attribute names for the events table's detected naming convention.
+    fn event_attrs(&self) -> &'static EventAttrNames {
+        EventAttrNames::for_convention(self.event_naming)
+    }
 }
 
 impl DynamoDbSessionStorage {
@@ -114,18 +254,21 @@ impl DynamoDbSessionStorage {
 
             let client = Client::new(&aws_config);
 
-            let storage = Self {
+            // Default to CamelCase; verify_table_schema will detect and override
+            let mut storage = Self {
                 config: config.clone(),
                 client,
                 event_counter: AtomicU64::new(1),
+                session_naming: NamingConvention::CamelCase,
+                event_naming: NamingConvention::CamelCase,
             };
 
-            // Verify table exists and has correct schema
+            // Verify table exists and has correct schema; detects naming convention
             storage.verify_table_schema().await?;
 
             info!(
-                "DynamoDB session storage initialized successfully in region: {}",
-                config.region
+                "DynamoDB session storage initialized successfully in region: {} (session naming: {:?}, event naming: {:?})",
+                config.region, storage.session_naming, storage.event_naming
             );
             Ok(storage)
         }
@@ -139,98 +282,138 @@ impl DynamoDbSessionStorage {
         }
     }
 
-    /// Verify that the DynamoDB table exists and has the correct schema, create if it doesn't exist
-    async fn verify_table_schema(&self) -> Result<(), DynamoDbError> {
-        #[cfg(feature = "dynamodb")]
-        {
-            debug!("Verifying table schema for: {}", self.config.table_name);
+    /// Verify that the DynamoDB table exists and has the correct schema, create if it doesn't exist.
+    /// Also detects and stores the table's naming convention.
+    #[cfg(feature = "dynamodb")]
+    async fn verify_table_schema(&mut self) -> Result<(), DynamoDbError> {
+        debug!("Verifying table schema for: {}", self.config.table_name);
 
-            match self
-                .client
-                .describe_table()
-                .table_name(&self.config.table_name)
-                .send()
-                .await
-            {
-                Ok(output) => {
-                    if let Some(table) = output.table() {
-                        if let Some(status) = table.table_status() {
-                            match status {
-                                TableStatus::Active => {
-                                    info!(
-                                        "DynamoDB table '{}' is active and ready",
-                                        self.config.table_name
-                                    );
-                                    // Ensure TTL is enabled on existing tables
-                                    self.ensure_ttl_enabled().await?;
-                                    Ok(())
-                                }
-                                _ => {
-                                    warn!(
-                                        "DynamoDB table '{}' is not active: {:?}",
-                                        self.config.table_name, status
-                                    );
-                                    // Wait for table to become active
-                                    self.wait_for_table_active().await
-                                }
+        match self
+            .client
+            .describe_table()
+            .table_name(&self.config.table_name)
+            .send()
+            .await
+        {
+            Ok(output) => {
+                if let Some(table) = output.table() {
+                    // Detect naming convention from key schema
+                    self.session_naming = detect_naming_convention(table);
+                    info!(
+                        "Detected session naming convention for table '{}': {:?}",
+                        self.config.table_name, self.session_naming
+                    );
+
+                    if let Some(status) = table.table_status() {
+                        match status {
+                            TableStatus::Active => {
+                                info!(
+                                    "DynamoDB table '{}' is active and ready",
+                                    self.config.table_name
+                                );
+                                // Ensure TTL is enabled on existing tables
+                                self.ensure_ttl_enabled().await?;
+                                // Also detect event table naming
+                                self.detect_event_naming().await;
+                                Ok(())
                             }
-                        } else {
-                            Err(DynamoDbError::TableNotFound(format!(
-                                "Table '{}' status unknown",
-                                self.config.table_name
-                            )))
+                            _ => {
+                                warn!(
+                                    "DynamoDB table '{}' is not active: {:?}",
+                                    self.config.table_name, status
+                                );
+                                // Wait for table to become active
+                                self.wait_for_table_active().await
+                            }
                         }
                     } else {
                         Err(DynamoDbError::TableNotFound(format!(
-                            "Table '{}' description not found",
+                            "Table '{}' status unknown",
                             self.config.table_name
                         )))
                     }
+                } else {
+                    Err(DynamoDbError::TableNotFound(format!(
+                        "Table '{}' description not found",
+                        self.config.table_name
+                    )))
                 }
-                Err(_err) => {
-                    if self.config.create_tables_if_missing {
-                        warn!(
-                            "Table '{}' does not exist, attempting to create it",
-                            self.config.table_name
-                        );
-                        self.create_table().await?;
-                        self.wait_for_table_active().await?;
-                        // Enable TTL after table becomes active
-                        self.enable_ttl().await?;
+            }
+            Err(_err) => {
+                if self.config.create_tables_if_missing {
+                    warn!(
+                        "Table '{}' does not exist, attempting to create it",
+                        self.config.table_name
+                    );
+                    // New tables always use CamelCase
+                    self.session_naming = NamingConvention::CamelCase;
+                    self.create_table().await?;
+                    self.wait_for_table_active().await?;
+                    // Enable TTL after table becomes active
+                    self.enable_ttl().await?;
 
-                        // Also create the events table upfront
-                        let event_table = self.get_event_table_name();
-                        warn!(
-                            "Creating events table '{}' upfront to ensure both tables exist",
-                            event_table
-                        );
-                        self.ensure_events_table_exists(&event_table)
-                            .await
-                            .map_err(|e| {
-                                DynamoDbError::AwsError(format!(
-                                    "Failed to create events table: {}",
-                                    e
-                                ))
-                            })?;
+                    // Also create the events table upfront
+                    let event_table = self.get_event_table_name();
+                    warn!(
+                        "Creating events table '{}' upfront to ensure both tables exist",
+                        event_table
+                    );
+                    self.ensure_events_table_exists(&event_table)
+                        .await
+                        .map_err(|e| {
+                            DynamoDbError::AwsError(format!(
+                                "Failed to create events table: {}",
+                                e
+                            ))
+                        })?;
 
-                        Ok(())
-                    } else {
-                        let error_msg = format!(
-                            "Table '{}' does not exist and create_tables_if_missing is false. Use --create-tables flag to enable table creation.",
-                            self.config.table_name
-                        );
-                        error!("{}", error_msg);
-                        Err(DynamoDbError::TableNotFound(error_msg))
-                    }
+                    Ok(())
+                } else {
+                    let error_msg = format!(
+                        "Table '{}' does not exist and create_tables_if_missing is false. Use --create-tables flag to enable table creation.",
+                        self.config.table_name
+                    );
+                    error!("{}", error_msg);
+                    Err(DynamoDbError::TableNotFound(error_msg))
                 }
             }
         }
+    }
 
-        #[cfg(not(feature = "dynamodb"))]
+    /// Verify that the DynamoDB table exists (non-dynamodb stub).
+    #[cfg(not(feature = "dynamodb"))]
+    async fn verify_table_schema(&mut self) -> Result<(), DynamoDbError> {
         Ok(())
     }
 
-    /// Create the DynamoDB table with proper schema
+    /// Detect naming convention from the events table (best-effort, non-failing).
+    #[cfg(feature = "dynamodb")]
+    async fn detect_event_naming(&mut self) {
+        let event_table = self.get_event_table_name();
+        match self
+            .client
+            .describe_table()
+            .table_name(&event_table)
+            .send()
+            .await
+        {
+            Ok(output) => {
+                if let Some(table) = output.table() {
+                    self.event_naming = detect_naming_convention(table);
+                    info!(
+                        "Detected event naming convention for table '{}': {:?}",
+                        event_table, self.event_naming
+                    );
+                }
+            }
+            Err(_) => {
+                // Events table doesn't exist yet — will be created with CamelCase
+                debug!("Events table '{}' not found, will use CamelCase when created", event_table);
+            }
+        }
+    }
+
+    /// Create the DynamoDB table with camelCase key schema and GSI.
     #[cfg(feature = "dynamodb")]
     async fn create_table(&self) -> Result<(), DynamoDbError> {
         use aws_sdk_dynamodb::types::{
@@ -238,23 +421,24 @@ impl DynamoDbSessionStorage {
             Projection, ProjectionType, ScalarAttributeType,
         };
 
-        info!("Creating DynamoDB table: {}", self.config.table_name);
+        let sa = self.session_attrs();
+        info!("Creating DynamoDB table: {} (naming: {:?})", self.config.table_name, self.session_naming);
 
         // Define table schema
         let key_schema = [KeySchemaElement::builder()
-            .attribute_name("session_id")
+            .attribute_name(sa.session_id)
             .key_type(KeyType::Hash)
             .build()
             .map_err(|e| DynamoDbError::AwsError(e.to_string()))?];
 
         let attribute_definitions = vec![
             AttributeDefinition::builder()
-                .attribute_name("session_id")
+                .attribute_name(sa.session_id)
                 .attribute_type(ScalarAttributeType::S)
                 .build()
                 .map_err(|e| DynamoDbError::AwsError(e.to_string()))?,
             AttributeDefinition::builder()
-                .attribute_name("last_activity")
+                .attribute_name(sa.last_activity)
                 .attribute_type(ScalarAttributeType::N)
                 .build()
                 .map_err(|e| DynamoDbError::AwsError(e.to_string()))?,
@@ -265,7 +449,7 @@ impl DynamoDbSessionStorage {
             .index_name("LastActivityIndex")
             .key_schema(
                 KeySchemaElement::builder()
-                    .attribute_name("last_activity")
+                    .attribute_name(sa.last_activity)
                     .key_type(KeyType::Hash)
                     .build()
                     .map_err(|e| DynamoDbError::AwsError(e.to_string()))?,
@@ -571,27 +755,17 @@ impl DynamoDbSessionStorage {
         )))
     }
 
-    /// Ensure the events table exists, create if it doesn't
+    /// Ensure the events table exists, create if it doesn't.
+    /// Also detects and stores the events table's naming convention.
     #[cfg(feature = "dynamodb")]
     async fn ensure_events_table_exists(
         &self,
         event_table: &str,
     ) -> Result<(), SessionStorageError> {
         use aws_sdk_dynamodb::types::{
-            AttributeDefinition, BillingMode, GlobalSecondaryIndex, KeySchemaElement, KeyType,
-            Projection, ProjectionType, ScalarAttributeType,
+            AttributeDefinition, BillingMode, KeySchemaElement, KeyType,
+            ScalarAttributeType,
         };
-
-        // Debug: Log all available DynamoDB types for events table creation
-        debug!(
-            "DynamoDB events table creation using types: {}, {}, {}, {}, {}, {} for advanced configurations",
-            std::any::type_name::<AttributeDefinition>(),
-            std::any::type_name::<KeySchemaElement>(),
-            std::any::type_name::<ScalarAttributeType>(),
-            std::any::type_name::<GlobalSecondaryIndex>(),
-            std::any::type_name::<Projection>(),
-            std::any::type_name::<ProjectionType>()
-        );
 
         // Check if events table exists
         match self
@@ -620,17 +794,19 @@ impl DynamoDbSessionStorage {
                     return Err(SessionStorageError::DatabaseError(error_msg));
                 }
 
-                // Table doesn't exist, create it
+                let ea = self.event_attrs();
+
+                // Table doesn't exist, create it with CamelCase
                 info!("Creating DynamoDB events table: {}", event_table);
 
                 let key_schema = vec![
                     KeySchemaElement::builder()
-                        .attribute_name("session_id")
+                        .attribute_name(ea.session_id)
                         .key_type(KeyType::Hash)
                         .build()
                         .map_err(|e| SessionStorageError::AwsError(e.to_string()))?,
                     KeySchemaElement::builder()
-                        .attribute_name("event_id")
+                        .attribute_name(ea.event_id)
                         .key_type(KeyType::Range)
                         .build()
                         .map_err(|e| SessionStorageError::AwsError(e.to_string()))?,
@@ -638,12 +814,12 @@ impl DynamoDbSessionStorage {
 
                 let attribute_definitions = vec![
                     AttributeDefinition::builder()
-                        .attribute_name("session_id")
+                        .attribute_name(ea.session_id)
                         .attribute_type(ScalarAttributeType::S)
                         .build()
                         .map_err(|e| SessionStorageError::AwsError(e.to_string()))?,
                     AttributeDefinition::builder()
-                        .attribute_name("event_id")
+                        .attribute_name(ea.event_id)
                         .attribute_type(ScalarAttributeType::N)
                         .build()
                         .map_err(|e| SessionStorageError::AwsError(e.to_string()))?,
@@ -743,25 +919,26 @@ impl DynamoDbSessionStorage {
     ) -> Result<HashMap<String, AttributeValue>, DynamoDbError> {
         use aws_sdk_dynamodb::types::AttributeValue;
 
+        let sa = self.session_attrs();
         let mut item = HashMap::new();
 
         // Primary key
         item.insert(
-            "session_id".to_string(),
+            sa.session_id.to_string(),
             AttributeValue::S(session.session_id.clone()),
         );
 
         // Session data as JSON strings
         if let Some(ref caps) = session.client_capabilities {
             item.insert(
-                "client_capabilities".to_string(),
+                sa.client_capabilities.to_string(),
                 AttributeValue::S(serde_json::to_string(caps)?),
             );
         }
 
         if let Some(ref caps) = session.server_capabilities {
             item.insert(
-                "server_capabilities".to_string(),
+                sa.server_capabilities.to_string(),
                 AttributeValue::S(serde_json::to_string(caps)?),
             );
         }
@@ -771,15 +948,15 @@ impl DynamoDbSessionStorage {
             AttributeValue::S(serde_json::to_string(&session.state)?),
         );
         item.insert(
-            "created_at".to_string(),
+            sa.created_at.to_string(),
             AttributeValue::N(session.created_at.to_string()),
         );
         item.insert(
-            "last_activity".to_string(),
+            sa.last_activity.to_string(),
             AttributeValue::N(session.last_activity.to_string()),
         );
         item.insert(
-            "is_initialized".to_string(),
+            sa.is_initialized.to_string(),
             AttributeValue::Bool(session.is_initialized),
         );
         item.insert(
@@ -798,26 +975,29 @@ impl DynamoDbSessionStorage {
         Ok(item)
     }
 
-    /// Convert DynamoDB item to SessionInfo
+    /// Convert DynamoDB item to SessionInfo, with read tolerance for both naming conventions.
     #[cfg(feature = "dynamodb")]
     fn dynamodb_item_to_session(
         &self,
         item: &HashMap<String, AttributeValue>,
     ) -> Result<SessionInfo, DynamoDbError> {
-        let session_id = item
-            .get("session_id")
+        let sa = self.session_attrs();
+
+        // Key attributes: use primary name first, fallback to opposite convention
+        let session_id = get_attr(item, sa.session_id, SessionAttrNames::SNAKE.session_id)
+            .or_else(|| get_attr(item, SessionAttrNames::CAMEL.session_id, ""))
             .and_then(|v| v.as_s().ok())
             .ok_or_else(|| DynamoDbError::InvalidSessionData("Missing session_id".to_string()))?
             .clone();
 
-        let client_capabilities = item
-            .get("client_capabilities")
+        let client_capabilities = get_attr(item, sa.client_capabilities, SessionAttrNames::SNAKE.client_capabilities)
+            .or_else(|| get_attr(item, SessionAttrNames::CAMEL.client_capabilities, ""))
             .and_then(|v| v.as_s().ok())
             .map(|s| serde_json::from_str(s))
             .transpose()?;
 
-        let server_capabilities = item
-            .get("server_capabilities")
+        let server_capabilities = get_attr(item, sa.server_capabilities, SessionAttrNames::SNAKE.server_capabilities)
+            .or_else(|| get_attr(item, SessionAttrNames::CAMEL.server_capabilities, ""))
             .and_then(|v| v.as_s().ok())
             .map(|s| serde_json::from_str(s))
             .transpose()?;
@@ -829,22 +1009,22 @@ impl DynamoDbSessionStorage {
             .transpose()?
             .unwrap_or_default();
 
-        let created_at = item
-            .get("created_at")
+        let created_at = get_attr(item, sa.created_at, SessionAttrNames::SNAKE.created_at)
+            .or_else(|| get_attr(item, SessionAttrNames::CAMEL.created_at, ""))
             .and_then(|v| v.as_n().ok())
             .and_then(|s| s.parse().ok())
             .ok_or_else(|| DynamoDbError::InvalidSessionData("Invalid created_at".to_string()))?;
 
-        let last_activity = item
-            .get("last_activity")
+        let last_activity = get_attr(item, sa.last_activity, SessionAttrNames::SNAKE.last_activity)
+            .or_else(|| get_attr(item, SessionAttrNames::CAMEL.last_activity, ""))
             .and_then(|v| v.as_n().ok())
             .and_then(|s| s.parse().ok())
             .ok_or_else(|| {
                 DynamoDbError::InvalidSessionData("Invalid last_activity".to_string())
             })?;
 
-        let is_initialized = item
-            .get("is_initialized")
+        let is_initialized = get_attr(item, sa.is_initialized, SessionAttrNames::SNAKE.is_initialized)
+            .or_else(|| get_attr(item, SessionAttrNames::CAMEL.is_initialized, ""))
             .and_then(|v| v.as_bool().ok())
             .copied()
             .unwrap_or(false);
@@ -877,34 +1057,39 @@ impl DynamoDbSessionStorage {
             "Converting SessionInfo to legacy JSON format for session: {}",
             session.session_id
         );
+        #[cfg(feature = "dynamodb")]
+        let sa = self.session_attrs();
+        #[cfg(not(feature = "dynamodb"))]
+        let sa = SessionAttrNames::for_convention(NamingConvention::CamelCase);
+
         let mut item = HashMap::new();
 
         // Primary key
         item.insert(
-            "session_id".to_string(),
+            sa.session_id.to_string(),
             Value::String(session.session_id.clone()),
         );
 
         // Session data
         item.insert(
-            "client_capabilities".to_string(),
+            sa.client_capabilities.to_string(),
             serde_json::to_value(&session.client_capabilities)?,
         );
         item.insert(
-            "server_capabilities".to_string(),
+            sa.server_capabilities.to_string(),
             serde_json::to_value(&session.server_capabilities)?,
         );
         item.insert("state".to_string(), serde_json::to_value(&session.state)?);
         item.insert(
-            "created_at".to_string(),
+            sa.created_at.to_string(),
             Value::Number(session.created_at.into()),
         );
         item.insert(
-            "last_activity".to_string(),
+            sa.last_activity.to_string(),
             Value::Number(session.last_activity.into()),
         );
         item.insert(
-            "is_initialized".to_string(),
+            sa.is_initialized.to_string(),
             Value::Bool(session.is_initialized),
         );
         item.insert(
@@ -926,19 +1111,30 @@ impl DynamoDbSessionStorage {
     /// Convert DynamoDB item to SessionInfo (legacy JSON format for tests)
     fn item_to_session(&self, item: &HashMap<String, Value>) -> Result<SessionInfo, DynamoDbError> {
         debug!("Converting DynamoDB legacy JSON item to SessionInfo");
+        #[cfg(feature = "dynamodb")]
+        let sa = self.session_attrs();
+        #[cfg(not(feature = "dynamodb"))]
+        let sa = SessionAttrNames::for_convention(NamingConvention::CamelCase);
+
         let session_id = item
-            .get("session_id")
+            .get(sa.session_id)
+            .or_else(|| item.get(SessionAttrNames::SNAKE.session_id))
+            .or_else(|| item.get(SessionAttrNames::CAMEL.session_id))
             .and_then(|v| v.as_str())
             .ok_or_else(|| DynamoDbError::InvalidSessionData("Missing session_id".to_string()))?
             .to_string();
 
         let client_capabilities = item
-            .get("client_capabilities")
+            .get(sa.client_capabilities)
+            .or_else(|| item.get(SessionAttrNames::SNAKE.client_capabilities))
+            .or_else(|| item.get(SessionAttrNames::CAMEL.client_capabilities))
             .map(|v| serde_json::from_value(v.clone()))
             .transpose()?;
 
         let server_capabilities = item
-            .get("server_capabilities")
+            .get(sa.server_capabilities)
+            .or_else(|| item.get(SessionAttrNames::SNAKE.server_capabilities))
+            .or_else(|| item.get(SessionAttrNames::CAMEL.server_capabilities))
             .map(|v| serde_json::from_value(v.clone()))
             .transpose()?;
 
@@ -949,19 +1145,25 @@ impl DynamoDbSessionStorage {
             .unwrap_or_default();
 
         let created_at = item
-            .get("created_at")
+            .get(sa.created_at)
+            .or_else(|| item.get(SessionAttrNames::SNAKE.created_at))
+            .or_else(|| item.get(SessionAttrNames::CAMEL.created_at))
             .and_then(|v| v.as_u64())
             .ok_or_else(|| DynamoDbError::InvalidSessionData("Invalid created_at".to_string()))?;
 
         let last_activity = item
-            .get("last_activity")
+            .get(sa.last_activity)
+            .or_else(|| item.get(SessionAttrNames::SNAKE.last_activity))
+            .or_else(|| item.get(SessionAttrNames::CAMEL.last_activity))
             .and_then(|v| v.as_u64())
             .ok_or_else(|| {
                 DynamoDbError::InvalidSessionData("Invalid last_activity".to_string())
             })?;
 
         let is_initialized = item
-            .get("is_initialized")
+            .get(sa.is_initialized)
+            .or_else(|| item.get(SessionAttrNames::SNAKE.is_initialized))
+            .or_else(|| item.get(SessionAttrNames::CAMEL.is_initialized))
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
@@ -1160,8 +1362,9 @@ impl SessionStorage for DynamoDbSessionStorage {
         {
             use aws_sdk_dynamodb::types::AttributeValue;
 
+            let sa = self.session_attrs();
             let key = HashMap::from([(
-                "session_id".to_string(),
+                sa.session_id.to_string(),
                 AttributeValue::S(session_id.to_string()),
             )]);
 
@@ -1256,9 +1459,11 @@ impl SessionStorage for DynamoDbSessionStorage {
         {
             use aws_sdk_dynamodb::types::AttributeValue;
 
+            let sa = self.session_attrs();
+
             // First, get the current session to retrieve existing state
             let session_key = HashMap::from([(
-                "session_id".to_string(),
+                sa.session_id.to_string(),
                 AttributeValue::S(session_id.to_string()),
             )]);
 
@@ -1302,7 +1507,7 @@ impl SessionStorage for DynamoDbSessionStorage {
             let update_expression = "SET #state = :state, #last_activity = :timestamp";
             let expression_attribute_names = HashMap::from([
                 ("#state".to_string(), "state".to_string()),
-                ("#last_activity".to_string(), "last_activity".to_string()),
+                ("#last_activity".to_string(), sa.last_activity.to_string()),
             ]);
             let expression_attribute_values = HashMap::from([
                 (":state".to_string(), AttributeValue::S(updated_state_json)),
@@ -1404,8 +1609,9 @@ impl SessionStorage for DynamoDbSessionStorage {
             let current_value = self.get_session_state(session_id, key).await?;
 
             if current_value.is_some() {
+                let sa = self.session_attrs();
                 let session_key = HashMap::from([(
-                    "session_id".to_string(),
+                    sa.session_id.to_string(),
                     AttributeValue::S(session_id.to_string()),
                 )]);
 
@@ -1415,7 +1621,7 @@ impl SessionStorage for DynamoDbSessionStorage {
                 let expression_attribute_names = HashMap::from([
                     ("#state".to_string(), "state".to_string()),
                     ("#key".to_string(), key.to_string()),
-                    ("#last_activity".to_string(), "last_activity".to_string()),
+                    ("#last_activity".to_string(), sa.last_activity.to_string()),
                 ]);
                 let expression_attribute_values = HashMap::from([(
                     ":timestamp".to_string(),
@@ -1472,8 +1678,9 @@ impl SessionStorage for DynamoDbSessionStorage {
         {
             use aws_sdk_dynamodb::types::AttributeValue;
 
+            let sa = self.session_attrs();
             let key = HashMap::from([(
-                "session_id".to_string(),
+                sa.session_id.to_string(),
                 AttributeValue::S(session_id.to_string()),
             )]);
 
@@ -1519,15 +1726,16 @@ impl SessionStorage for DynamoDbSessionStorage {
                 .client
                 .scan()
                 .table_name(&self.config.table_name)
-                .projection_expression("session_id")
+                .projection_expression(self.session_attrs().session_id)
                 .send()
                 .await
             {
                 Ok(output) => {
                     let mut session_ids = Vec::new();
+                    let sa = self.session_attrs();
 
                     for item in output.items() {
-                        if let Some(session_id_attr) = item.get("session_id")
+                        if let Some(session_id_attr) = item.get(sa.session_id)
                             && let Ok(session_id) = session_id_attr.as_s()
                         {
                             session_ids.push(session_id.clone());
@@ -1566,9 +1774,12 @@ impl SessionStorage for DynamoDbSessionStorage {
         {
             use aws_sdk_dynamodb::types::AttributeValue;
 
+            let sa = self.session_attrs();
+            let ea = self.event_attrs();
+
             // Check if session exists first
             let session_key = HashMap::from([(
-                "session_id".to_string(),
+                sa.session_id.to_string(),
                 AttributeValue::S(session_id.to_string()),
             )]);
 
@@ -1599,11 +1810,11 @@ impl SessionStorage for DynamoDbSessionStorage {
 
             let mut item = HashMap::from([
                 (
-                    "session_id".to_string(),
+                    ea.session_id.to_string(),
                     AttributeValue::S(session_id.to_string()),
                 ),
                 (
-                    "event_id".to_string(),
+                    ea.event_id.to_string(),
                     AttributeValue::N(event.id.to_string()),
                 ),
                 (
@@ -1611,7 +1822,7 @@ impl SessionStorage for DynamoDbSessionStorage {
                     AttributeValue::N(event.timestamp.to_string()),
                 ),
                 (
-                    "event_type".to_string(),
+                    ea.event_type.to_string(),
                     AttributeValue::S(event.event_type.clone()),
                 ),
                 ("data".to_string(), AttributeValue::S(data_json)),
@@ -1682,12 +1893,17 @@ impl SessionStorage for DynamoDbSessionStorage {
             // Ensure the events table exists
             self.ensure_events_table_exists(&event_table).await?;
 
+            let ea = self.event_attrs();
+
             // Query events for this session where event_id > after_event_id
             let query_result = self
                 .client
                 .query()
                 .table_name(&event_table)
-                .key_condition_expression("session_id = :session_id AND event_id > :after_event_id")
+                .key_condition_expression(format!(
+                    "{} = :session_id AND {} > :after_event_id",
+                    ea.session_id, ea.event_id
+                ))
                 .expression_attribute_values(
                     ":session_id",
                     AttributeValue::S(session_id.to_string()),
@@ -1705,14 +1921,14 @@ impl SessionStorage for DynamoDbSessionStorage {
             let mut events = Vec::new();
             if let Some(items) = query_result.items {
                 for item in items {
-                    let event_id = item
-                        .get("event_id")
+                    let event_id = get_attr(&item, ea.event_id, EventAttrNames::SNAKE.event_id)
+                        .or_else(|| get_attr(&item, EventAttrNames::CAMEL.event_id, ""))
                         .and_then(|v| v.as_n().ok())
                         .and_then(|n| n.parse::<u64>().ok())
                         .unwrap_or(0);
 
-                    let event_type = item
-                        .get("event_type")
+                    let event_type = get_attr(&item, ea.event_type, EventAttrNames::SNAKE.event_type)
+                        .or_else(|| get_attr(&item, EventAttrNames::CAMEL.event_type, ""))
                         .and_then(|v| v.as_s().ok())
                         .map_or("message".to_string(), |s| s.clone());
 
@@ -1774,12 +1990,14 @@ impl SessionStorage for DynamoDbSessionStorage {
             // Ensure the events table exists
             self.ensure_events_table_exists(&event_table).await?;
 
+            let ea = self.event_attrs();
+
             // Query recent events for this session, ordered by event_id DESC (most recent first)
             let query_result = self
                 .client
                 .query()
                 .table_name(&event_table)
-                .key_condition_expression("session_id = :session_id")
+                .key_condition_expression(format!("{} = :session_id", ea.session_id))
                 .expression_attribute_values(
                     ":session_id",
                     AttributeValue::S(session_id.to_string()),
@@ -1794,14 +2012,14 @@ impl SessionStorage for DynamoDbSessionStorage {
             let mut events = Vec::new();
             if let Some(items) = query_result.items {
                 for item in items {
-                    let event_id = item
-                        .get("event_id")
+                    let event_id = get_attr(&item, ea.event_id, EventAttrNames::SNAKE.event_id)
+                        .or_else(|| get_attr(&item, EventAttrNames::CAMEL.event_id, ""))
                         .and_then(|v| v.as_n().ok())
                         .and_then(|n| n.parse::<u64>().ok())
                         .unwrap_or(0);
 
-                    let event_type = item
-                        .get("event_type")
+                    let event_type = get_attr(&item, ea.event_type, EventAttrNames::SNAKE.event_type)
+                        .or_else(|| get_attr(&item, EventAttrNames::CAMEL.event_type, ""))
                         .and_then(|v| v.as_s().ok())
                         .map_or("message".to_string(), |s| s.clone());
 
@@ -2026,5 +2244,294 @@ mod tests {
         assert_eq!(session.is_initialized, deserialized.is_initialized);
     }
 
-    // TODO: Add integration tests with DynamoDB Local or LocalStack
+    // --- Naming convention tests ---
+
+    #[test]
+    fn test_session_attr_names_camel_case() {
+        let attrs = SessionAttrNames::for_convention(NamingConvention::CamelCase);
+        assert_eq!(attrs.session_id, "sessionId");
+        assert_eq!(attrs.last_activity, "lastActivity");
+        assert_eq!(attrs.client_capabilities, "clientCapabilities");
+        assert_eq!(attrs.server_capabilities, "serverCapabilities");
+        assert_eq!(attrs.created_at, "createdAt");
+        assert_eq!(attrs.is_initialized, "isInitialized");
+    }
+
+    #[test]
+    fn test_session_attr_names_snake_case() {
+        let attrs = SessionAttrNames::for_convention(NamingConvention::SnakeCase);
+        assert_eq!(attrs.session_id, "session_id");
+        assert_eq!(attrs.last_activity, "last_activity");
+        assert_eq!(attrs.client_capabilities, "client_capabilities");
+        assert_eq!(attrs.server_capabilities, "server_capabilities");
+        assert_eq!(attrs.created_at, "created_at");
+        assert_eq!(attrs.is_initialized, "is_initialized");
+    }
+
+    #[test]
+    fn test_event_attr_names_camel_case() {
+        let attrs = EventAttrNames::for_convention(NamingConvention::CamelCase);
+        assert_eq!(attrs.session_id, "sessionId");
+        assert_eq!(attrs.event_id, "eventId");
+        assert_eq!(attrs.event_type, "eventType");
+    }
+
+    #[test]
+    fn test_event_attr_names_snake_case() {
+        let attrs = EventAttrNames::for_convention(NamingConvention::SnakeCase);
+        assert_eq!(attrs.session_id, "session_id");
+        assert_eq!(attrs.event_id, "event_id");
+        assert_eq!(attrs.event_type, "event_type");
+    }
+
+    #[tokio::test]
+    async fn test_detect_session_table_snake_case() {
+        use aws_sdk_dynamodb::types::{KeySchemaElement, KeyType, TableDescription};
+
+        let table = TableDescription::builder()
+            .key_schema(
+                KeySchemaElement::builder()
+                    .attribute_name("session_id")
+                    .key_type(KeyType::Hash)
+                    .build()
+                    .unwrap(),
+            )
+            .build();
+
+        assert_eq!(detect_naming_convention(&table), NamingConvention::SnakeCase);
+    }
+
+    #[tokio::test]
+    async fn test_detect_session_table_camel_case() {
+        use aws_sdk_dynamodb::types::{KeySchemaElement, KeyType, TableDescription};
+
+        let table = TableDescription::builder()
+            .key_schema(
+                KeySchemaElement::builder()
+                    .attribute_name("sessionId")
+                    .key_type(KeyType::Hash)
+                    .build()
+                    .unwrap(),
+            )
+            .build();
+
+        assert_eq!(detect_naming_convention(&table), NamingConvention::CamelCase);
+    }
+
+    #[tokio::test]
+    async fn test_detect_event_table_snake_case() {
+        use aws_sdk_dynamodb::types::{KeySchemaElement, KeyType, TableDescription};
+
+        let table = TableDescription::builder()
+            .key_schema(
+                KeySchemaElement::builder()
+                    .attribute_name("session_id")
+                    .key_type(KeyType::Hash)
+                    .build()
+                    .unwrap(),
+            )
+            .key_schema(
+                KeySchemaElement::builder()
+                    .attribute_name("event_id")
+                    .key_type(KeyType::Range)
+                    .build()
+                    .unwrap(),
+            )
+            .build();
+
+        assert_eq!(detect_naming_convention(&table), NamingConvention::SnakeCase);
+    }
+
+    #[tokio::test]
+    async fn test_detect_event_table_camel_case() {
+        use aws_sdk_dynamodb::types::{KeySchemaElement, KeyType, TableDescription};
+
+        let table = TableDescription::builder()
+            .key_schema(
+                KeySchemaElement::builder()
+                    .attribute_name("sessionId")
+                    .key_type(KeyType::Hash)
+                    .build()
+                    .unwrap(),
+            )
+            .key_schema(
+                KeySchemaElement::builder()
+                    .attribute_name("eventId")
+                    .key_type(KeyType::Range)
+                    .build()
+                    .unwrap(),
+            )
+            .build();
+
+        assert_eq!(detect_naming_convention(&table), NamingConvention::CamelCase);
+    }
+
+    #[tokio::test]
+    async fn test_detect_single_word_key_defaults_to_camel() {
+        use aws_sdk_dynamodb::types::{KeySchemaElement, KeyType, TableDescription};
+
+        // Single-word key "status" has no underscore, defaults to CamelCase
+        let table = TableDescription::builder()
+            .key_schema(
+                KeySchemaElement::builder()
+                    .attribute_name("status")
+                    .key_type(KeyType::Hash)
+                    .build()
+                    .unwrap(),
+            )
+            .build();
+
+        assert_eq!(detect_naming_convention(&table), NamingConvention::CamelCase);
+    }
+
+    /// Build a camelCase session DynamoDB item for testing.
+    fn build_camel_session_item(session_id: &str) -> HashMap<String, AttributeValue> {
+        HashMap::from([
+            ("sessionId".to_string(), AttributeValue::S(session_id.to_string())),
+            ("createdAt".to_string(), AttributeValue::N("1700000000000".to_string())),
+            ("lastActivity".to_string(), AttributeValue::N("1700000001000".to_string())),
+            ("isInitialized".to_string(), AttributeValue::Bool(true)),
+            ("state".to_string(), AttributeValue::S("{}".to_string())),
+            ("metadata".to_string(), AttributeValue::S("{}".to_string())),
+        ])
+    }
+
+    /// Build a snake_case session DynamoDB item for testing.
+    fn build_snake_session_item(session_id: &str) -> HashMap<String, AttributeValue> {
+        HashMap::from([
+            ("session_id".to_string(), AttributeValue::S(session_id.to_string())),
+            ("created_at".to_string(), AttributeValue::N("1700000000000".to_string())),
+            ("last_activity".to_string(), AttributeValue::N("1700000001000".to_string())),
+            ("is_initialized".to_string(), AttributeValue::Bool(true)),
+            ("state".to_string(), AttributeValue::S("{}".to_string())),
+            ("metadata".to_string(), AttributeValue::S("{}".to_string())),
+        ])
+    }
+
+    /// Helper: build a DynamoDbSessionStorage with a given naming convention for unit tests.
+    /// Uses a dummy client (tests only call non-network methods).
+    async fn storage_with_naming(
+        session_naming: NamingConvention,
+        event_naming: NamingConvention,
+    ) -> DynamoDbSessionStorage {
+        let aws_config = aws_config::defaults(BehaviorVersion::latest())
+            .region(Region::new("us-east-1"))
+            .load()
+            .await;
+        let client = Client::new(&aws_config);
+
+        DynamoDbSessionStorage {
+            config: DynamoDbConfig::default(),
+            client,
+            event_counter: AtomicU64::new(1),
+            session_naming,
+            event_naming,
+        }
+    }
+
+    #[tokio::test]
+    async fn test_camel_case_session_item_round_trip() {
+        let storage = storage_with_naming(NamingConvention::CamelCase, NamingConvention::CamelCase).await;
+        let session = SessionInfo::new();
+        let item = storage.session_to_dynamodb_item(&session).unwrap();
+
+        // Verify camelCase keys are used
+        assert!(item.contains_key("sessionId"), "Expected sessionId key");
+        assert!(item.contains_key("createdAt"), "Expected createdAt key");
+        assert!(item.contains_key("lastActivity"), "Expected lastActivity key");
+        assert!(item.contains_key("isInitialized"), "Expected isInitialized key");
+        assert!(!item.contains_key("session_id"), "Should not have snake_case session_id");
+        assert!(!item.contains_key("created_at"), "Should not have snake_case created_at");
+
+        let restored = storage.dynamodb_item_to_session(&item).unwrap();
+        assert_eq!(restored.session_id, session.session_id);
+        assert_eq!(restored.created_at, session.created_at);
+        assert_eq!(restored.last_activity, session.last_activity);
+        assert_eq!(restored.is_initialized, session.is_initialized);
+    }
+
+    #[tokio::test]
+    async fn test_snake_case_session_item_round_trip() {
+        let storage = storage_with_naming(NamingConvention::SnakeCase, NamingConvention::SnakeCase).await;
+        let session = SessionInfo::new();
+        let item = storage.session_to_dynamodb_item(&session).unwrap();
+
+        // Verify snake_case keys are used
+        assert!(item.contains_key("session_id"), "Expected session_id key");
+        assert!(item.contains_key("created_at"), "Expected created_at key");
+        assert!(item.contains_key("last_activity"), "Expected last_activity key");
+        assert!(item.contains_key("is_initialized"), "Expected is_initialized key");
+        assert!(!item.contains_key("sessionId"), "Should not have camelCase sessionId");
+        assert!(!item.contains_key("createdAt"), "Should not have camelCase createdAt");
+
+        let restored = storage.dynamodb_item_to_session(&item).unwrap();
+        assert_eq!(restored.session_id, session.session_id);
+        assert_eq!(restored.created_at, session.created_at);
+        assert_eq!(restored.last_activity, session.last_activity);
+        assert_eq!(restored.is_initialized, session.is_initialized);
+    }
+
+    #[tokio::test]
+    async fn test_session_read_tolerance_snake_written_camel_read() {
+        // Storage expects camelCase, but item was written with snake_case
+        let storage = storage_with_naming(NamingConvention::CamelCase, NamingConvention::CamelCase).await;
+        let item = build_snake_session_item("test-session-read-tol");
+
+        let restored = storage.dynamodb_item_to_session(&item).unwrap();
+        assert_eq!(restored.session_id, "test-session-read-tol");
+        assert_eq!(restored.created_at, 1700000000000);
+        assert_eq!(restored.last_activity, 1700000001000);
+        assert!(restored.is_initialized);
+    }
+
+    #[tokio::test]
+    async fn test_session_read_tolerance_camel_written_snake_read() {
+        // Storage expects snake_case, but item was written with camelCase
+        let storage = storage_with_naming(NamingConvention::SnakeCase, NamingConvention::SnakeCase).await;
+        let item = build_camel_session_item("test-session-read-tol-2");
+
+        let restored = storage.dynamodb_item_to_session(&item).unwrap();
+        assert_eq!(restored.session_id, "test-session-read-tol-2");
+        assert_eq!(restored.created_at, 1700000000000);
+        assert_eq!(restored.last_activity, 1700000001000);
+        assert!(restored.is_initialized);
+    }
+
+    #[tokio::test]
+    async fn test_get_attr_primary_wins() {
+        let item = HashMap::from([
+            ("sessionId".to_string(), AttributeValue::S("camel-value".to_string())),
+            ("session_id".to_string(), AttributeValue::S("snake-value".to_string())),
+        ]);
+
+        // Primary key should win
+        let val = get_attr(&item, "sessionId", "session_id")
+            .and_then(|v| v.as_s().ok())
+            .unwrap();
+        assert_eq!(val, "camel-value");
+
+        let val2 = get_attr(&item, "session_id", "sessionId")
+            .and_then(|v| v.as_s().ok())
+            .unwrap();
+        assert_eq!(val2, "snake-value");
+    }
+
+    #[tokio::test]
+    async fn test_get_attr_fallback() {
+        let item = HashMap::from([
+            ("session_id".to_string(), AttributeValue::S("fallback-value".to_string())),
+        ]);
+
+        // Primary "sessionId" not found, falls back to "session_id"
+        let val = get_attr(&item, "sessionId", "session_id")
+            .and_then(|v| v.as_s().ok())
+            .unwrap();
+        assert_eq!(val, "fallback-value");
+    }
+
+    #[tokio::test]
+    async fn test_get_attr_missing() {
+        let item: HashMap<String, AttributeValue> = HashMap::new();
+        assert!(get_attr(&item, "sessionId", "session_id").is_none());
+    }
 }
