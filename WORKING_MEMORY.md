@@ -1,7 +1,7 @@
 # Working Memory
 
-**Last Updated**: 2026-02-26
-**Version**: v0.3.0 (branch: `0.3.0`)
+**Last Updated**: 2026-03-03
+**Version**: v0.3.5 (branch: `main`)
 **Tests**: 1,560+ workspace tests, 43 test binaries, zero warnings
 **Examples**: 58 active, 25 archived
 
@@ -11,7 +11,18 @@
 
 All major v0.3.0 work is complete. The framework fully supports MCP 2025-11-25.
 
-### Completed (v0.3.0)
+### Published Releases
+
+| Version | Date | Highlights |
+|---------|------|-----------|
+| v0.3.5 | 2026-03-03 | `McpClient::list_resource_templates()` + `list_resource_templates_paginated()`; HTTP transport session ID warning fix |
+| v0.3.4 | 2026-03-03 | HTTP/SSE preflight removal; `#[mcp_tool]` optional params fix; DynamoDB camelCase migration |
+| v0.3.3 | 2026-03-01 | PostgreSQL task storage column type fix |
+| v0.3.2 | 2026-02-28 | Per-tool task support (`HasExecution` trait, `task_support` attribute) |
+| v0.3.1 | 2026-02-27 | Lambda task parity, task runtime builder API |
+| v0.3.0 | 2026-02-26 | Full MCP 2025-11-25 support, task storage, durable backends, test optimization |
+
+### Completed (v0.3.0+)
 
 | Area | Status | Details |
 |------|--------|---------|
@@ -22,6 +33,7 @@ All major v0.3.0 work is complete. The framework fully supports MCP 2025-11-25.
 | Task Executor (Phase E) | Done | `TaskExecutor` trait, `TokioTaskExecutor`, `TaskRuntime`, `CancellationHandle` |
 | Test Optimization (Phase F) | Done | 155 → 43 test binaries, ~7:41 workspace test time |
 | Governance Review | Done | 63 files dual-reviewed (spec-auditor + arch-reviewer), all PASS |
+| crates.io publish | Done | All 12 crates published through v0.3.5 |
 
 ### Key Architecture
 
@@ -36,8 +48,6 @@ All major v0.3.0 work is complete. The framework fully supports MCP 2025-11-25.
 
 See `TODO_TRACKER.md` for the full tracked list. Key items:
 
-- **CHANGELOG.md** — Expand [0.3.0] with full feature list
-- **crates.io publish preparation** — Version bumps, dependency audit
 - **Durable task storage examples** — SQLite, PostgreSQL, DynamoDB (backends done, no examples)
 - **Verification phases 6-8** — Scripts exist, never executed
 
