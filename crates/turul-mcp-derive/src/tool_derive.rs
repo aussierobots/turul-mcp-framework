@@ -109,9 +109,13 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             (#field_name_str.to_string(), #schema)
         });
 
-        // Check if field type is Option<T>
+        // Check if field type is Option<T> (handles qualified paths like std::option::Option)
         let is_option_type = if let syn::Type::Path(type_path) = field_type {
-            type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Option"
+            type_path
+                .path
+                .segments
+                .last()
+                .map_or(false, |s| s.ident == "Option")
         } else {
             false
         };

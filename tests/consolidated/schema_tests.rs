@@ -36,3 +36,6 @@ mod schemars_optional_fields_test;
 
 #[path = "../test_schemars_derive.rs"]
 mod test_schemars_derive;
+
+#[path = "../option_vec_input_schema_test.rs"]
+mod option_vec_input_schema_test;

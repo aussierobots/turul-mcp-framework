@@ -152,60 +152,83 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
         .as_ref()
         .map(|d| quote! { .with_description(#d) });
 
-    // Basic type mapping
+    // Match on the last path segment so both `Option<T>` and
+    // `std::option::Option<T>` (and `Vec<T>` / `std::vec::Vec<T>`) are handled.
     match ty {
         syn::Type::Path(type_path) => {
-            if let Some(ident) = type_path.path.get_ident() {
-                match ident.to_string().as_str() {
-                    "String" | "str" => {
-                        quote! {
-                            turul_mcp_protocol::schema::JsonSchema::string() #description
+            let Some(last_seg) = type_path.path.segments.last() else {
+                return quote! {
+                    turul_mcp_protocol::schema::JsonSchema::string() #description
+                };
+            };
+
+            match last_seg.ident.to_string().as_str() {
+                // Option<T>: unwrap the inner type and recurse
+                "Option" => {
+                    if let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments {
+                        if let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first() {
+                            return type_to_schema(inner_ty, param_meta);
                         }
                     }
-                    "f64" | "f32" => {
-                        let min = param_meta.min.map(|m| quote! { .with_minimum(#m) });
-                        let max = param_meta.max.map(|m| quote! { .with_maximum(#m) });
-                        quote! {
-                            turul_mcp_protocol::schema::JsonSchema::number() #description #min #max
-                        }
-                    }
-                    "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize"
-                    | "usize" => {
-                        let min = param_meta.min.map(|m| {
-                            let m_int = m as i64;
-                            quote! { .with_minimum(#m_int as f64) }
-                        });
-                        let max = param_meta.max.map(|m| {
-                            let m_int = m as i64;
-                            quote! { .with_maximum(#m_int as f64) }
-                        });
-                        quote! {
-                            turul_mcp_protocol::schema::JsonSchema::integer() #description #min #max
-                        }
-                    }
-                    "bool" => {
-                        quote! {
-                            turul_mcp_protocol::schema::JsonSchema::boolean() #description
-                        }
-                    }
-                    _ => {
-                        // Check if this is Vec<T>
-                        if type_path.path.segments.len() == 1
-                            && type_path.path.segments[0].ident == "Vec"
-                        {
-                            quote! {
-                                turul_mcp_protocol::schema::JsonSchema::array() #description
-                            }
-                        } else {
-                            quote! {
-                                turul_mcp_protocol::schema::JsonSchema::string() #description
-                            }
-                        }
+                    // Fallback for malformed Option
+                    quote! {
+                        turul_mcp_protocol::schema::JsonSchema::string() #description
                     }
                 }
-            } else {
-                quote! {
-                    turul_mcp_protocol::schema::JsonSchema::string() #description
+                // Vec<T>: array with items schema from inner type
+                "Vec" => {
+                    if let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments {
+                        if let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first() {
+                            let items_schema =
+                                type_to_schema(inner_ty, &ParamMeta::default());
+                            return quote! {
+                                turul_mcp_protocol::schema::JsonSchema::array(#items_schema) #description
+                            };
+                        }
+                    }
+                    // Fallback: array of strings
+                    quote! {
+                        turul_mcp_protocol::schema::JsonSchema::array(
+                            turul_mcp_protocol::schema::JsonSchema::string()
+                        ) #description
+                    }
+                }
+                "String" | "str" => {
+                    quote! {
+                        turul_mcp_protocol::schema::JsonSchema::string() #description
+                    }
+                }
+                "f64" | "f32" => {
+                    let min = param_meta.min.map(|m| quote! { .with_minimum(#m) });
+                    let max = param_meta.max.map(|m| quote! { .with_maximum(#m) });
+                    quote! {
+                        turul_mcp_protocol::schema::JsonSchema::number() #description #min #max
+                    }
+                }
+                "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize"
+                | "usize" => {
+                    let min = param_meta.min.map(|m| {
+                        let m_int = m as i64;
+                        quote! { .with_minimum(#m_int as f64) }
+                    });
+                    let max = param_meta.max.map(|m| {
+                        let m_int = m as i64;
+                        quote! { .with_maximum(#m_int as f64) }
+                    });
+                    quote! {
+                        turul_mcp_protocol::schema::JsonSchema::integer() #description #min #max
+                    }
+                }
+                "bool" => {
+                    quote! {
+                        turul_mcp_protocol::schema::JsonSchema::boolean() #description
+                    }
+                }
+                _ => {
+                    // Unknown type — fall back to string
+                    quote! {
+                        turul_mcp_protocol::schema::JsonSchema::string() #description
+                    }
                 }
             }
         }
@@ -225,9 +248,13 @@ pub fn generate_param_extraction(
 ) -> TokenStream {
     let field_name_str = field_name.to_string();
 
-    // Check if field_type is already an Option<T>
+    // Check if field_type is already an Option<T> (handles qualified paths like std::option::Option)
     let is_option_type = if let syn::Type::Path(type_path) = field_type {
-        type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Option"
+        type_path
+            .path
+            .segments
+            .last()
+            .map_or(false, |s| s.ident == "Option")
     } else {
         false
     };
@@ -235,7 +262,8 @@ pub fn generate_param_extraction(
     if is_option_type {
         // Field is already Option<T>, extract the inner type
         if let syn::Type::Path(type_path) = field_type
-            && let syn::PathArguments::AngleBracketed(args) = &type_path.path.segments[0].arguments
+            && let Some(last_seg) = type_path.path.segments.last()
+            && let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments
             && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
         {
             // Handle Option<T> field
@@ -1141,10 +1169,14 @@ fn extract_struct_schema_content(
     }
 }
 
-/// Check if a type is Option<T>
+/// Check if a type is Option<T> (handles qualified paths like std::option::Option)
 fn is_option_type(ty: &syn::Type) -> bool {
     if let syn::Type::Path(type_path) = ty {
-        type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Option"
+        type_path
+            .path
+            .segments
+            .last()
+            .map_or(false, |s| s.ident == "Option")
     } else {
         false
     }

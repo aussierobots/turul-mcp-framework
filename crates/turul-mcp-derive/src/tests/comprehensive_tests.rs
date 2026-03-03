@@ -249,6 +249,122 @@ mod schema_generation_tests {
         // Should fall back to string schema for unknown types
         assert!(contains_pattern(&schema_str, "JsonSchema::string()"));
     }
+
+    #[test]
+    fn test_option_bool_schema() {
+        let ty: Type = parse_quote! { Option<bool> };
+        let meta = ParamMeta::default();
+
+        let schema = type_to_schema(&ty, &meta);
+        let schema_str = schema.to_string();
+
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::boolean()"),
+            "Option<bool> should produce boolean schema, got: {schema_str}"
+        );
+    }
+
+    #[test]
+    fn test_option_u32_schema() {
+        let ty: Type = parse_quote! { Option<u32> };
+        let meta = ParamMeta::default();
+
+        let schema = type_to_schema(&ty, &meta);
+        let schema_str = schema.to_string();
+
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::integer()"),
+            "Option<u32> should produce integer schema, got: {schema_str}"
+        );
+    }
+
+    #[test]
+    fn test_option_f64_schema() {
+        let ty: Type = parse_quote! { Option<f64> };
+        let meta = ParamMeta::default();
+
+        let schema = type_to_schema(&ty, &meta);
+        let schema_str = schema.to_string();
+
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::number()"),
+            "Option<f64> should produce number schema, got: {schema_str}"
+        );
+    }
+
+    #[test]
+    fn test_option_string_schema() {
+        let ty: Type = parse_quote! { Option<String> };
+        let meta = ParamMeta::default();
+
+        let schema = type_to_schema(&ty, &meta);
+        let schema_str = schema.to_string();
+
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::string()"),
+            "Option<String> should produce string schema, got: {schema_str}"
+        );
+    }
+
+    #[test]
+    fn test_vec_string_schema() {
+        let ty: Type = parse_quote! { Vec<String> };
+        let meta = ParamMeta::default();
+
+        let schema = type_to_schema(&ty, &meta);
+        let schema_str = schema.to_string();
+
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::array"),
+            "Vec<String> should produce array schema, got: {schema_str}"
+        );
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::string"),
+            "Vec<String> items should be string schema, got: {schema_str}"
+        );
+    }
+
+    #[test]
+    fn test_option_vec_string_schema() {
+        let ty: Type = parse_quote! { Option<Vec<String>> };
+        let meta = ParamMeta::default();
+
+        let schema = type_to_schema(&ty, &meta);
+        let schema_str = schema.to_string();
+
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::array"),
+            "Option<Vec<String>> should produce array schema, got: {schema_str}"
+        );
+    }
+
+    #[test]
+    fn test_qualified_option_bool_schema() {
+        let ty: Type = parse_quote! { std::option::Option<bool> };
+        let meta = ParamMeta::default();
+
+        let schema = type_to_schema(&ty, &meta);
+        let schema_str = schema.to_string();
+
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::boolean()"),
+            "std::option::Option<bool> should produce boolean schema, got: {schema_str}"
+        );
+    }
+
+    #[test]
+    fn test_qualified_vec_string_schema() {
+        let ty: Type = parse_quote! { std::vec::Vec<String> };
+        let meta = ParamMeta::default();
+
+        let schema = type_to_schema(&ty, &meta);
+        let schema_str = schema.to_string();
+
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::array"),
+            "std::vec::Vec<String> should produce array schema, got: {schema_str}"
+        );
+    }
 }
 
 /// Test suite for parameter extraction code generation

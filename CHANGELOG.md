@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] - 2026-03-03
+
+### Fixed
+
+- `#[mcp_tool]` and `#[derive(McpTool)]`: `Option<bool>`, `Option<u32>`, `Option<f64>`, `Vec<T>`, and `Option<Vec<T>>` parameters now generate correct JSON Schema types in `tools/list` input schemas (was incorrectly advertising `"type": "string"` for all generic-arg types)
+- Fully-qualified paths (`std::option::Option<T>`, `std::vec::Vec<T>`) now correctly detected across all `is_option_type` checks
+
 ## [0.3.5] - 2026-03-03
 
 ### Added
@@ -335,7 +342,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.5...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.6...HEAD
+[0.3.6]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.4...v0.3.5
 [0.3.4]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.3...v0.3.4
 [0.3.3]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.2...v0.3.3

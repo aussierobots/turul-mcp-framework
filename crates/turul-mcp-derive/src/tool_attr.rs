@@ -336,10 +336,14 @@ fn capitalize(s: &str) -> String {
         .join("")
 }
 
-/// Check if a type is Option<T>
+/// Check if a type is Option<T> (handles qualified paths like std::option::Option)
 fn is_option_type(field_type: &syn::Type) -> bool {
     if let syn::Type::Path(type_path) = field_type {
-        type_path.path.segments.len() == 1 && type_path.path.segments[0].ident == "Option"
+        type_path
+            .path
+            .segments
+            .last()
+            .map_or(false, |s| s.ident == "Option")
     } else {
         false
     }
@@ -349,11 +353,10 @@ fn is_option_type(field_type: &syn::Type) -> bool {
 fn is_session_context_type(field_type: &syn::Type) -> bool {
     match field_type {
         syn::Type::Path(type_path) => {
-            // Check if it's Option<SessionContext>
-            if type_path.path.segments.len() == 1
-                && type_path.path.segments[0].ident == "Option"
-                && let syn::PathArguments::AngleBracketed(args) =
-                    &type_path.path.segments[0].arguments
+            // Check if it's Option<SessionContext> (handles qualified paths)
+            if let Some(last_seg) = type_path.path.segments.last()
+                && last_seg.ident == "Option"
+                && let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments
                 && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
             {
                 return is_session_context_type(inner_type);
