@@ -49,14 +49,14 @@
 ### P1: Bug Fixes
 
 - [x] **DynamoDB storage uses snake_case attribute names** — Fixed in v0.3.4: both `turul-mcp-session-storage` and `turul-mcp-task-storage` now use camelCase for new tables, auto-detect legacy snake_case tables via `describe_table()` key schema inspection, and support read tolerance for both conventions.
-- [ ] **`HttpTransport::connect()` sends OPTIONS** — Server returns 405. Affects `streamable-http-client`, `tasks-e2e-inmemory-client`, `client-task-lifecycle`. Fix: change OPTIONS to POST or skip preflight check. (`crates/turul-mcp-client/src/transport/http.rs:390`)
+- [x] **`HttpTransport::connect()` sends OPTIONS** — Fixed: removed OPTIONS pre-flight; HTTP is stateless so `connect()` just sets the connected flag. Connectivity is validated by the `initialize` request that immediately follows.
 - [ ] **Port inconsistencies in EXAMPLES.md** — Several examples have hardcoded ports that differ from documented values (partially fixed 2026-02-26, remaining: minimal-server ignores `--port` flag)
 - [ ] **Phase 6 verification script** — Uses `cargo run` instead of pre-built binaries, causing timeouts. Update to match phases 1-5 pattern.
 
 ## Known Issues
 
 - `tasks/result` error path wraps original error code in `McpError::ToolExecutionError` — loses original JSON-RPC error code
-- `HttpTransport::connect()` uses OPTIONS method — not supported by server (returns 405)
+
 
 ---
 

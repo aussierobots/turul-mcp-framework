@@ -24,7 +24,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-client = "0.3.0"
+turul-mcp-client = "0.3"
 tokio = { version = "1.0", features = ["full"] }
 ```
 

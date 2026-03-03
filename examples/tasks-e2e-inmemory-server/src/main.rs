@@ -7,7 +7,7 @@
 //!
 //! ## Usage
 //! ```bash
-//! cargo run --example tasks-e2e-inmemory-server -- --port 8080
+//! cargo run -p tasks-e2e-inmemory-server -- --port 8080
 //! ```
 
 use std::sync::Arc;
@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("tasks-e2e-inmemory-server")
-        .version("0.3.3")
+        .version("0.3.4")
         .with_task_storage(Arc::new(InMemoryTaskStorage::new()))
         .tool_fn(slow_add)
         .tool_fn(slow_cancelable)

@@ -320,43 +320,10 @@ impl Transport for SseTransport {
             "Connecting to SSE endpoints"
         );
 
-        // Test main endpoint
-        let response = self
-            .client
-            .request(reqwest::Method::OPTIONS, self.endpoint.clone())
-            .send()
-            .await
-            .map_err(|e| {
-                TransportError::ConnectionFailed(format!("Main endpoint test failed: {}", e))
-            })?;
-
-        if !response.status().is_success() {
-            return Err(TransportError::ConnectionFailed(format!(
-                "Main endpoint returned status: {}",
-                response.status()
-            ))
-            .into());
-        }
-
-        // Test SSE endpoint
-        let sse_response = self
-            .client
-            .head(self.sse_endpoint.clone())
-            .header("Accept", "text/event-stream")
-            .send()
-            .await
-            .map_err(|e| {
-                TransportError::ConnectionFailed(format!("SSE endpoint test failed: {}", e))
-            })?;
-
-        if !sse_response.status().is_success() {
-            return Err(TransportError::ConnectionFailed(format!(
-                "SSE endpoint returned status: {}",
-                sse_response.status()
-            ))
-            .into());
-        }
-
+        // SSE is HTTP-based — no persistent connection to establish here.
+        // The actual SSE subscription is set up during message exchange.
+        // Real connectivity is validated by the initialize request that
+        // immediately follows in McpClient::connect().
         self.connected.store(true, Ordering::SeqCst);
         info!("SSE transport connected");
         Ok(())
@@ -662,6 +629,14 @@ mod tests {
             transport.sse_endpoint.to_string(),
             "http://localhost:8080/mcp/sse"
         );
+    }
+
+    #[tokio::test]
+    async fn test_connect_sets_connected_flag() {
+        let mut transport = SseTransport::new("http://localhost:8080/mcp").unwrap();
+        assert!(!transport.is_connected());
+        transport.connect().await.unwrap();
+        assert!(transport.is_connected());
     }
 
     #[test]

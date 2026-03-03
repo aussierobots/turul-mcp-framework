@@ -137,7 +137,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                 (#param_name_str.to_string(), #schema)
             });
 
-            if !param_meta.optional {
+            if !param_meta.optional && !is_option_type(param_type) {
                 required_fields.push(quote! {
                     #param_name_str.to_string()
                 });

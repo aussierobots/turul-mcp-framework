@@ -20,3 +20,4 @@ Cargo.lock
 
 # Test outputs
 /tmp/test_output.log
+.worktrees/

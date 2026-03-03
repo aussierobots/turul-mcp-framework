@@ -6,9 +6,9 @@
 //! ## Usage
 //! ```bash
 //! # Start the server first:
-//! cargo run --example tasks-e2e-inmemory-server -- --port 8080
+//! cargo run -p tasks-e2e-inmemory-server -- --port 8080
 //! # Then run this client:
-//! cargo run --example tasks-e2e-inmemory-client -- --url http://127.0.0.1:8080/mcp
+//! cargo run -p tasks-e2e-inmemory-client -- --url http://127.0.0.1:8080/mcp
 //! ```
 
 use std::time::Duration;

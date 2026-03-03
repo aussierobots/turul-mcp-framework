@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.4] - 2026-03-03
 
+### Fixed
+
+- `HttpTransport::connect()` and `SseTransport::connect()` no longer send OPTIONS/HEAD pre-flight requests that fail with 405 (direct servers) or 502 (Lambda streaming servers) — connectivity failures now surface at `initialize` time instead of preflight time, matching MCP Inspector behavior
+- `#[mcp_tool]` function-attribute macro: `Option<T>` parameters are now correctly excluded from the `required` array in the generated JSON schema (was incorrectly marking them as required unless `#[param(optional)]` was explicitly set)
+
 ### Changed
 
 **DynamoDB Storage: camelCase Attribute Names (One-Way Migration):**

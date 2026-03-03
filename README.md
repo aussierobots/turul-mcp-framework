@@ -240,7 +240,7 @@ curl -X POST http://127.0.0.1:$PORT/mcp \
   "id": 1,
   "result": {
     "protocolVersion": "2025-11-25",
-    "serverInfo": {"name": "server-name", "version": "0.3.0"},
+    "serverInfo": {"name": "server-name", "version": "0.3"},
     "capabilities": {"tools": {"listChanged": false}}
   }
 }

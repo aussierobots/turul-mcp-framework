@@ -548,6 +548,56 @@ mod tests {
         }
     }
 
+    /// Regression test: Option<T> params must NOT appear in the required array.
+    /// The derive macro handled this correctly, but the function-attribute macro
+    /// was only checking `param_meta.optional` (set via `#[param(optional)]`)
+    /// and not detecting `Option<T>` types automatically.
+    #[tokio::test]
+    async fn test_mcp_tool_option_param_not_required() {
+        #[mcp_tool(name = "greet", description = "Greet someone")]
+        async fn greet(name: String, title: Option<String>) -> McpResult<String> {
+            let greeting = match title {
+                Some(t) => format!("Hello, {} {}!", t, name),
+                None => format!("Hello, {}!", name),
+            };
+            Ok(greeting)
+        }
+
+        let tool = greet();
+        let tool_def = tool.to_tool();
+        let schema = tool_def.input_schema;
+        let required = schema.required.unwrap_or_default();
+
+        // Schema correctness: name is required, title (Option<T>) is not
+        assert!(
+            required.contains(&"name".to_string()),
+            "name should be required"
+        );
+        assert!(
+            !required.contains(&"title".to_string()),
+            "Option<T> title should NOT be required"
+        );
+
+        // Both params still appear in properties
+        let props = schema.properties.unwrap();
+        assert!(props.contains_key("name"));
+        assert!(props.contains_key("title"));
+
+        // Runtime: calling with only the required param succeeds
+        let result = tool
+            .call(json!({"name": "Nick"}), None)
+            .await
+            .expect("calling with only required params should succeed");
+        assert!(!result.content.is_empty());
+
+        // Runtime: calling with both params also succeeds
+        let result = tool
+            .call(json!({"name": "Nick", "title": "Dr."}), None)
+            .await
+            .expect("calling with all params should succeed");
+        assert!(!result.content.is_empty());
+    }
+
     #[test]
     fn test_mcp_tool_compliance_documentation() {
         // This test exists to document the MCP compliance requirements

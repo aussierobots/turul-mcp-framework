@@ -53,6 +53,16 @@
 //!
 //! ### HTTP Transport (Streamable HTTP)
 //!
+//! The Streamable HTTP transport sends each MCP request as an independent HTTP
+//! POST. There is no persistent connection — session continuity is maintained
+//! via the `Mcp-Session-Id` header that the server returns during initialization
+//! and that the client includes on all subsequent requests.
+//!
+//! `transport.connect()` only marks the transport as logically ready; it performs
+//! no network I/O. The first real validation happens when `McpClient::connect()`
+//! sends the `initialize` POST followed by `notifications/initialized`. If the
+//! server is unreachable or rejects the handshake, the error surfaces there.
+//!
 //! ```rust,no_run
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! use turul_mcp_client::transport::HttpTransport;
@@ -62,18 +72,11 @@
 //! # }
 //! ```
 //!
-//! ### SSE Transport (HTTP+SSE)
+//! ### SSE Transport (HTTP+SSE, legacy)
 //!
-//! ```rust,no_run
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! use turul_mcp_client::transport::SseTransport;
-//!
-//! let transport = SseTransport::new("http://localhost:8080/mcp")?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### SSE Transport (Real-time)
+//! For servers using the pre-2025-03-26 SSE-based protocol. Like the HTTP
+//! transport, `connect()` is a no-op marker — the SSE subscription is
+//! established lazily during message exchange.
 //!
 //! ```rust,no_run
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -36,8 +36,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-server = "0.3.0"
-turul-mcp-derive = "0.3.0"  # Required for function macros and derive macros
+turul-mcp-server = "0.3"
+turul-mcp-derive = "0.3"  # Required for function macros and derive macros
 tokio = { version = "1.0", features = ["full"] }
 ```
 
@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 ### Level 2: Derive Macros (Struct-Based)
-*Requires: `turul-mcp-derive = "0.3.0"` dependency*
+*Requires: `turul-mcp-derive = "0.3"` dependency*
 
 ```rust
 use turul_mcp_derive::McpTool;
@@ -439,7 +439,7 @@ use std::sync::Arc;
 
 let server = McpServer::builder()
     .name("my-task-server")
-    .version("0.3.0")
+    .version("0.3")
     .with_task_storage(Arc::new(InMemoryTaskStorage::new()))
     .tool(MyLongRunningTool::default())
     .build()?;

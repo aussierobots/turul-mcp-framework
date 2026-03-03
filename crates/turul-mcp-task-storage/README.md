@@ -109,7 +109,7 @@ use std::sync::Arc;
 
 let server = McpServer::builder()
     .name("my-task-server")
-    .version("0.3.0")
+    .version("0.3")
     .with_task_storage(Arc::new(InMemoryTaskStorage::new()))
     .tool(MyLongRunningTool::default())
     .build()?;

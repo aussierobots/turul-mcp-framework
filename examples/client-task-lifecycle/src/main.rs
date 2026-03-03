@@ -11,7 +11,7 @@
 //! ## Usage
 //! ```bash
 //! # Start a server with task support, then:
-//! cargo run --example client-task-lifecycle -- --url http://127.0.0.1:8080/mcp
+//! cargo run -p client-task-lifecycle -- --url http://127.0.0.1:8080/mcp
 //! ```
 
 use clap::Parser;

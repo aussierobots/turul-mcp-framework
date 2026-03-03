@@ -384,27 +384,12 @@ impl Transport for HttpTransport {
     async fn connect(&mut self) -> McpClientResult<()> {
         debug!(endpoint = %self.endpoint, "Connecting to HTTP endpoint");
 
-        // Test connection with a simple OPTIONS request
-        let response = self
-            .client
-            .request(reqwest::Method::OPTIONS, self.endpoint.clone())
-            .send()
-            .await
-            .map_err(|e| {
-                TransportError::ConnectionFailed(format!("Connection test failed: {}", e))
-            })?;
-
-        if response.status().is_success() {
-            self.connected.store(true, Ordering::SeqCst);
-            info!(endpoint = %self.endpoint, "HTTP transport connected");
-            Ok(())
-        } else {
-            Err(TransportError::ConnectionFailed(format!(
-                "Server returned status: {}",
-                response.status()
-            ))
-            .into())
-        }
+        // HTTP is stateless — no persistent connection to establish.
+        // Real connectivity is validated by the initialize request that
+        // immediately follows in McpClient::connect().
+        self.connected.store(true, Ordering::SeqCst);
+        info!(endpoint = %self.endpoint, "HTTP transport connected");
+        Ok(())
     }
 
     async fn disconnect(&mut self) -> McpClientResult<()> {
@@ -936,6 +921,14 @@ mod tests {
     fn test_invalid_scheme() {
         let result = HttpTransport::new("ftp://localhost:8080/mcp");
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_connect_sets_connected_flag() {
+        let mut transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
+        assert!(!transport.is_connected());
+        transport.connect().await.unwrap();
+        assert!(transport.is_connected());
     }
 
     #[tokio::test]

@@ -27,8 +27,8 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-turul-mcp-aws-lambda = "0.3.0"
-turul-mcp-derive = "0.3.0"
+turul-mcp-aws-lambda = "0.3"
+turul-mcp-derive = "0.3"
 lambda_http = "0.17"
 tokio = { version = "1.0", features = ["macros"] }
 ```
