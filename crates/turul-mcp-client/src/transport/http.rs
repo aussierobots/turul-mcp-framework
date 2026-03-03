@@ -508,7 +508,7 @@ impl Transport for HttpTransport {
             debug!("HTTP request with headers using session ID: {}", session_id);
             req_builder = req_builder.header("Mcp-Session-Id", session_id);
         } else {
-            warn!("HTTP request with headers attempted without session ID - server may reject");
+            debug!("HTTP request without session ID (expected for initialize)");
         }
 
         let response = req_builder
