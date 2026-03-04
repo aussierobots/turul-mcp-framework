@@ -1826,3 +1826,133 @@ async fn test_strict_mode_progress_notifications() {
 
     println!("✅ Progress notifications work correctly in strict mode - session remains active");
 }
+
+/// Test that terminated sessions (after DELETE) reject subsequent POST and GET requests
+#[tokio::test]
+#[serial]
+async fn test_terminated_session_rejects_requests() {
+    let _ = tracing_subscriber::fmt::try_init();
+
+    let server = match TestServerManager::start_tools_server().await {
+        Ok(server) => server,
+        Err(e) => {
+            panic!(
+                "Failed to start test server: {}. Test cannot proceed without a running server.",
+                e
+            );
+        }
+    };
+
+    let client = create_client();
+    let base_url = format!("http://127.0.0.1:{}", server.port());
+
+    // 1. Create initialized session
+    let session_id = create_initialized_session(&client, &base_url)
+        .await
+        .expect("Failed to create initialized session");
+
+    // 2. DELETE the session
+    let delete_request = Request::builder()
+        .method(Method::DELETE)
+        .uri(format!("{}/mcp", base_url))
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Session-Id", &session_id)
+        .header(ACCEPT, "application/json")
+        .body(Full::new(bytes::Bytes::new()))
+        .unwrap();
+
+    let delete_response = timeout(Duration::from_secs(5), client.request(delete_request))
+        .await
+        .expect("Request timeout")
+        .expect("Request failed");
+
+    assert_eq!(
+        delete_response.status(),
+        StatusCode::OK,
+        "DELETE must return 200 for this test to be conclusive"
+    );
+
+    // Consume the body so the connection can be reused
+    let _ = delete_response.into_body().collect().await;
+
+    // 3. POST tools/list with the terminated session → should be rejected
+    let post_request = Request::builder()
+        .method(Method::POST)
+        .uri(format!("{}/mcp", base_url))
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Session-Id", &session_id)
+        .header(CONTENT_TYPE, "application/json")
+        .header(ACCEPT, "application/json")
+        .body(Full::new(
+            json!({
+                "jsonrpc": "2.0",
+                "method": "tools/list",
+                "id": 1
+            })
+            .to_string()
+            .into(),
+        ))
+        .unwrap();
+
+    let post_response = timeout(Duration::from_secs(5), client.request(post_request))
+        .await
+        .expect("Request timeout")
+        .expect("Request failed");
+
+    let post_status = post_response.status();
+    let post_body = post_response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
+    let post_body_str = String::from_utf8_lossy(&post_body);
+
+    assert_ne!(
+        post_status,
+        StatusCode::OK,
+        "POST to terminated session must NOT return 200"
+    );
+    assert!(
+        post_body_str.to_lowercase().contains("terminated"),
+        "POST error response must mention 'terminated', got: {}",
+        post_body_str
+    );
+
+    // 4. GET (SSE stream) with terminated session → should be rejected
+    let get_request = Request::builder()
+        .method(Method::GET)
+        .uri(format!("{}/mcp", base_url))
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Session-Id", &session_id)
+        .header(ACCEPT, "text/event-stream")
+        .body(Full::new(bytes::Bytes::new()))
+        .unwrap();
+
+    let get_response = timeout(Duration::from_secs(5), client.request(get_request))
+        .await
+        .expect("Request timeout")
+        .expect("Request failed");
+
+    let get_status = get_response.status();
+    let get_body = get_response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes();
+    let get_body_str = String::from_utf8_lossy(&get_body);
+
+    assert_ne!(
+        get_status,
+        StatusCode::OK,
+        "GET to terminated session must NOT return 200"
+    );
+    assert!(
+        get_body_str.to_lowercase().contains("terminated"),
+        "GET error response must mention 'terminated', got: {}",
+        get_body_str
+    );
+
+    println!("✅ Terminated session correctly rejects POST and GET requests");
+}

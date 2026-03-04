@@ -82,6 +82,14 @@ impl SessionInfo {
         self.last_activity = chrono::Utc::now().timestamp_millis() as u64;
     }
 
+    /// Check if session has been terminated (e.g., via DELETE /mcp)
+    pub fn is_terminated(&self) -> bool {
+        self.state
+            .get("terminated")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    }
+
     /// Check if session is expired based on timeout
     pub fn is_expired(&self, timeout_minutes: u64) -> bool {
         let now = chrono::Utc::now().timestamp_millis() as u64;
@@ -521,5 +529,29 @@ mod tests {
         assert!(!keepalive_formatted.contains("id:")); // No ID field
         assert!(!keepalive_formatted.contains("event:")); // No event field
         assert!(!keepalive_formatted.contains("data:")); // No data field
+    }
+
+    #[test]
+    fn test_is_terminated_default_false() {
+        let session = SessionInfo::new();
+        assert!(!session.is_terminated());
+    }
+
+    #[test]
+    fn test_is_terminated_true() {
+        let mut session = SessionInfo::new();
+        session
+            .state
+            .insert("terminated".to_string(), Value::Bool(true));
+        assert!(session.is_terminated());
+    }
+
+    #[test]
+    fn test_is_terminated_false_value() {
+        let mut session = SessionInfo::new();
+        session
+            .state
+            .insert("terminated".to_string(), Value::Bool(false));
+        assert!(!session.is_terminated());
     }
 }

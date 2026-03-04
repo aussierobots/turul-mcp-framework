@@ -825,11 +825,18 @@ impl SessionMcpHandler {
         method_not_allowed_response()
     }
 
-    /// Validate that a session exists - do NOT create if missing
+    /// Validate that a session exists and is not terminated - do NOT create if missing
     async fn validate_session_exists(&self, session_id: &str) -> Result<()> {
         // Check if session already exists
         match self.session_storage.get_session(session_id).await {
-            Ok(Some(_)) => {
+            Ok(Some(session_info)) => {
+                if session_info.is_terminated() {
+                    error!("Session '{}' has been terminated", session_id);
+                    return Err(crate::HttpMcpError::InvalidRequest(format!(
+                        "Session '{}' has been terminated. Create a new session to continue.",
+                        session_id
+                    )));
+                }
                 debug!("Session validation successful: {}", session_id);
                 Ok(())
             }
@@ -998,5 +1005,47 @@ impl SessionMcpHandler {
         turul_mcp_json_rpc_server::JsonRpcMessage::Error(
             turul_mcp_json_rpc_server::JsonRpcError::new(Some(request_id), error_obj),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_validate_session_exists_rejects_terminated() {
+        let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
+            Arc::new(InMemorySessionStorage::new());
+
+        // Create a session and mark it terminated
+        let mut session = storage
+            .create_session(turul_mcp_protocol::ServerCapabilities::default())
+            .await
+            .unwrap();
+        let session_id = session.session_id.clone();
+        session
+            .state
+            .insert("terminated".to_string(), serde_json::json!(true));
+        storage.update_session(session).await.unwrap();
+
+        // Build a minimal handler
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::default());
+        let handler = SessionMcpHandler::with_storage(
+            crate::server::ServerConfig::default(),
+            dispatcher,
+            storage,
+            crate::stream_manager::StreamConfig::default(),
+            Arc::new(crate::middleware::MiddlewareStack::new()),
+        );
+
+        // validate_session_exists should fail with "terminated"
+        let result = handler.validate_session_exists(&session_id).await;
+        assert!(result.is_err(), "Expected Err for terminated session");
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(
+            err_msg.to_lowercase().contains("terminated"),
+            "Error must mention 'terminated', got: {}",
+            err_msg
+        );
     }
 }

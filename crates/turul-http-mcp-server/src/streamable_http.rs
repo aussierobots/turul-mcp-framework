@@ -558,10 +558,17 @@ impl StreamableHttpHandler {
         }
     }
 
-    /// Validate that a session exists - do NOT create if missing
+    /// Validate that a session exists and is not terminated - do NOT create if missing
     async fn validate_session_exists(&self, session_id: &str) -> std::result::Result<(), String> {
         match self.session_storage.get_session(session_id).await {
-            Ok(Some(_)) => {
+            Ok(Some(session_info)) => {
+                if session_info.is_terminated() {
+                    error!("Session '{}' has been terminated", session_id);
+                    return Err(format!(
+                        "Session '{}' has been terminated. Create a new session to continue.",
+                        session_id
+                    ));
+                }
                 debug!("Session validation successful: {}", session_id);
                 Ok(())
             }
@@ -1095,7 +1102,7 @@ impl StreamableHttpHandler {
                         );
                         return StreamableResponse::Error {
                             status: StatusCode::UNAUTHORIZED,
-                            message: "Invalid or expired session".to_string(),
+                            message: format!("Invalid or expired session: {}", err),
                         }
                         .into_boxed_response(&context);
                     }
@@ -1134,7 +1141,7 @@ impl StreamableHttpHandler {
                         warn!("Invalid session ID {}: {}", existing_id, err);
                         return StreamableResponse::Error {
                             status: StatusCode::UNAUTHORIZED,
-                            message: "Invalid or expired session".to_string(),
+                            message: format!("Invalid or expired session: {}", err),
                         }
                         .into_boxed_response(&context);
                     }
