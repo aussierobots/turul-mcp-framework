@@ -39,8 +39,7 @@ fn generate_struct_schema(struct_name: &syn::Ident, fields: &Fields) -> TokenStr
                         (#field_name_str.to_string(), #field_schema)
                     });
 
-                    // For now, assume all fields are required
-                    // TODO: Handle Option<T> fields as optional
+                    // Option<T> fields excluded from required (handled by is_option_type)
                     if !is_option_type(&field.ty) {
                         required_fields.push(quote! { #field_name_str.to_string() });
                     }
@@ -78,42 +77,37 @@ fn generate_struct_schema(struct_name: &syn::Ident, fields: &Fields) -> TokenStr
 fn generate_field_schema(ty: &Type) -> TokenStream {
     match ty {
         Type::Path(type_path) => {
-            if let Some(ident) = type_path.path.get_ident() {
-                match ident.to_string().as_str() {
-                    "String" => quote! { JsonSchema::string() },
-                    "f64" | "f32" => quote! { JsonSchema::number() },
-                    "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize"
-                    | "usize" => quote! { JsonSchema::integer() },
-                    "bool" => quote! { JsonSchema::boolean() },
-                    "Vec" => {
-                        // Handle Vec<T> types - extract the inner type if possible
-                        if let Some(segment) = type_path.path.segments.first()
-                            && let syn::PathArguments::AngleBracketed(args) = &segment.arguments
-                            && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
-                        {
-                            let inner_schema = generate_field_schema(inner_type);
-                            return quote! { JsonSchema::array(#inner_schema) };
-                        }
-                        quote! { JsonSchema::array(JsonSchema::string()) }
+            // Use segments.last() to handle both simple (String) and qualified
+            // paths (std::option::Option<T>)
+            let Some(segment) = type_path.path.segments.last() else {
+                return quote! { JsonSchema::string() };
+            };
+
+            match segment.ident.to_string().as_str() {
+                // Option<T>: unwrap inner type and recurse
+                "Option" => {
+                    if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+                        && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
+                    {
+                        return generate_field_schema(inner_type);
                     }
-                    // For custom struct types, create a nested object schema
-                    _ => quote! { JsonSchema::object() },
+                    quote! { JsonSchema::string() }
                 }
-            } else {
-                // Check if this is a Vec type by examining the path segments
-                if type_path.path.segments.len() == 1 {
-                    let segment = &type_path.path.segments[0];
-                    if segment.ident == "Vec" {
-                        if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
-                            && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
-                        {
-                            let inner_schema = generate_field_schema(inner_type);
-                            return quote! { JsonSchema::array(#inner_schema) };
-                        }
-                        return quote! { JsonSchema::array(JsonSchema::string()) };
+                "String" => quote! { JsonSchema::string() },
+                "f64" | "f32" => quote! { JsonSchema::number() },
+                "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize"
+                | "usize" => quote! { JsonSchema::integer() },
+                "bool" => quote! { JsonSchema::boolean() },
+                "Vec" => {
+                    if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
+                        && let Some(syn::GenericArgument::Type(inner_type)) = args.args.first()
+                    {
+                        let inner_schema = generate_field_schema(inner_type);
+                        return quote! { JsonSchema::array(#inner_schema) };
                     }
+                    quote! { JsonSchema::array(JsonSchema::string()) }
                 }
-                quote! { JsonSchema::string() }
+                _ => quote! { JsonSchema::object() },
             }
         }
         Type::Reference(type_ref) => {
@@ -126,7 +120,7 @@ fn generate_field_schema(ty: &Type) -> TokenStream {
 
 fn is_option_type(ty: &Type) -> bool {
     if let Type::Path(type_path) = ty
-        && let Some(segment) = type_path.path.segments.first()
+        && let Some(segment) = type_path.path.segments.last()
     {
         return segment.ident == "Option";
     }
@@ -173,7 +167,48 @@ mod tests {
         };
 
         let result = derive_json_schema(input);
-        assert!(!result.is_empty());
+        let code = result.to_string();
+        assert!(!code.is_empty());
+        // Option<u32> should produce integer schema, not string
+        assert!(code.contains("integer"), "Option<u32> should generate integer schema, got: {}", code);
+    }
+
+    #[test]
+    fn test_option_type_schemas() {
+        // Option<String> → string
+        let ty: syn::Type = parse_quote! { Option<String> };
+        let schema = generate_field_schema(&ty);
+        assert!(schema.to_string().contains("string"), "Option<String> should produce string schema");
+
+        // Option<u32> → integer
+        let ty: syn::Type = parse_quote! { Option<u32> };
+        let schema = generate_field_schema(&ty);
+        assert!(schema.to_string().contains("integer"), "Option<u32> should produce integer schema");
+
+        // Option<f64> → number
+        let ty: syn::Type = parse_quote! { Option<f64> };
+        let schema = generate_field_schema(&ty);
+        assert!(schema.to_string().contains("number"), "Option<f64> should produce number schema");
+
+        // Option<bool> → boolean
+        let ty: syn::Type = parse_quote! { Option<bool> };
+        let schema = generate_field_schema(&ty);
+        assert!(schema.to_string().contains("boolean"), "Option<bool> should produce boolean schema");
+
+        // Option<Vec<String>> → array
+        let ty: syn::Type = parse_quote! { Option<Vec<String>> };
+        let schema = generate_field_schema(&ty);
+        assert!(schema.to_string().contains("array"), "Option<Vec<String>> should produce array schema");
+    }
+
+    #[test]
+    fn test_qualified_option_type() {
+        // std::option::Option<T> should be detected as Option
+        let ty: syn::Type = parse_quote! { std::option::Option<i32> };
+        assert!(is_option_type(&ty), "std::option::Option<i32> should be detected as Option");
+
+        let schema = generate_field_schema(&ty);
+        assert!(schema.to_string().contains("integer"), "std::option::Option<i32> should produce integer schema");
     }
 
     #[test]

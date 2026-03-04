@@ -23,6 +23,12 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let description = &input.description;
     let content_closure = &input.content;
 
+    // Generate title expression for HasResourceMetadata::title()
+    let title_expr = match &input.title {
+        Some(t) => quote! { Some(#t) },
+        None => quote! { None },
+    };
+
     let expanded = quote! {
         {
             #[derive(Clone)]
@@ -41,7 +47,7 @@ pub fn resource_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 }
 
                 fn title(&self) -> Option<&str> {
-                    None
+                    #title_expr
                 }
             }
 
@@ -105,6 +111,7 @@ pub struct ResourceMacroInput {
     pub uri: String,
     pub name: String,
     pub description: String,
+    pub title: Option<String>,
     pub content: Expr,
 }
 
@@ -113,6 +120,7 @@ impl Parse for ResourceMacroInput {
         let mut uri = None;
         let mut name = None;
         let mut description = None;
+        let mut title = None;
         let mut content = None;
 
         while !input.is_empty() {
@@ -131,6 +139,10 @@ impl Parse for ResourceMacroInput {
                 "description" => {
                     let lit: LitStr = input.parse()?;
                     description = Some(lit.value());
+                }
+                "title" => {
+                    let lit: LitStr = input.parse()?;
+                    title = Some(lit.value());
                 }
                 "content" => {
                     let expr: Expr = input.parse()?;
@@ -154,6 +166,7 @@ impl Parse for ResourceMacroInput {
             name: name.ok_or_else(|| syn::Error::new(input.span(), "Missing 'name' field"))?,
             description: description
                 .ok_or_else(|| syn::Error::new(input.span(), "Missing 'description' field"))?,
+            title,
             content: content
                 .ok_or_else(|| syn::Error::new(input.span(), "Missing 'content' field"))?,
         })
@@ -177,5 +190,22 @@ mod tests {
         assert_eq!(parsed.uri, "file://test.txt");
         assert_eq!(parsed.name, "Test Resource");
         assert_eq!(parsed.description, "A test resource");
+        assert_eq!(parsed.title, None);
+    }
+
+    #[test]
+    fn test_resource_macro_parse_with_title() {
+        let input = quote::quote! {
+            uri: "file://test.txt",
+            name: "Test Resource",
+            description: "A test resource",
+            title: "My Custom Title",
+            content: |_self| async { Ok(vec![]) }
+        };
+
+        let parsed = syn::parse2::<ResourceMacroInput>(input).unwrap();
+        assert_eq!(parsed.uri, "file://test.txt");
+        assert_eq!(parsed.name, "Test Resource");
+        assert_eq!(parsed.title, Some("My Custom Title".to_string()));
     }
 }

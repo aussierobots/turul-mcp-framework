@@ -34,6 +34,8 @@ pub struct McpClient {
     stream_handler: Arc<tokio::sync::Mutex<StreamHandler>>,
     /// Request ID counter
     request_counter: Arc<std::sync::atomic::AtomicU64>,
+    /// Handle for the response consumer task (sends JSON-RPC responses back to server)
+    response_consumer_handle: Arc<parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>>,
 }
 
 impl Drop for McpClient {
@@ -42,6 +44,11 @@ impl Drop for McpClient {
     /// This ensures that if the client is dropped without explicit disconnect,
     /// we still attempt to send a DELETE request to clean up the session on the server.
     fn drop(&mut self) {
+        // Abort response consumer task
+        if let Some(handle) = self.response_consumer_handle.lock().take() {
+            handle.abort();
+        }
+
         let session_id = self.session.clone();
         let transport = self.transport.clone();
 
@@ -92,12 +99,18 @@ impl McpClient {
             config,
             stream_handler: Arc::new(tokio::sync::Mutex::new(StreamHandler::new())),
             request_counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            response_consumer_handle: Arc::new(parking_lot::Mutex::new(None)),
         }
     }
 
     /// Connect to the MCP server
     pub async fn connect(&self) -> McpClientResult<()> {
         info!("Connecting to MCP server");
+
+        // Abort any existing response consumer before reconnecting
+        if let Some(handle) = self.response_consumer_handle.lock().take() {
+            handle.abort();
+        }
 
         // Connect transport
         {
@@ -107,9 +120,28 @@ impl McpClient {
             // Start event listener if supported
             if transport.capabilities().server_events {
                 let receiver = transport.start_event_listener().await?;
+
+                // Create response channel for sending JSON-RPC responses back
+                let (response_tx, mut response_rx) = tokio::sync::mpsc::unbounded_channel::<serde_json::Value>();
+
                 let mut stream_handler = self.stream_handler.lock().await;
                 stream_handler.set_receiver(receiver);
+                stream_handler.set_response_sender(response_tx);
                 stream_handler.start().await?;
+
+                // Spawn consumer task that drains the channel and sends responses
+                let transport_clone = Arc::clone(&self.transport);
+                let consumer_handle = tokio::spawn(async move {
+                    while let Some(response) = response_rx.recv().await {
+                        let mut transport = transport_clone.lock().await;
+                        if let Err(e) = transport.send_notification(response).await {
+                            warn!("Failed to send response back to server: {}", e);
+                        }
+                    }
+                    debug!("Response consumer task stopped");
+                });
+
+                *self.response_consumer_handle.lock() = Some(consumer_handle);
             }
         }
 
@@ -123,6 +155,11 @@ impl McpClient {
     /// Disconnect from the MCP server
     pub async fn disconnect(&self) -> McpClientResult<()> {
         info!("Disconnecting from MCP server");
+
+        // Stop response consumer task
+        if let Some(handle) = self.response_consumer_handle.lock().take() {
+            handle.abort();
+        }
 
         // Send DELETE request for session cleanup if we have a session ID
         if let Some(session_id) = self.session.session_id_optional().await {
@@ -1042,6 +1079,13 @@ impl Default for McpClientBuilder {
 mod tests {
     use super::*;
     use crate::transport::http::HttpTransport;
+    use crate::transport::{
+        ConnectionInfo, EventReceiver, ServerEvent, TransportCapabilities, TransportResponse,
+        TransportStatistics, TransportType,
+    };
+    use async_trait::async_trait;
+    use std::collections::HashMap;
+    use tokio::sync::mpsc;
 
     #[tokio::test]
     async fn test_client_builder() {
@@ -1067,5 +1111,259 @@ mod tests {
 
         assert!(status.is_ready());
         assert!(status.summary().contains("HTTP transport"));
+    }
+
+    /// Mock transport that records send_notification() calls and provides
+    /// a controllable event channel for injecting ServerEvents.
+    struct MockTransport {
+        event_tx: mpsc::UnboundedSender<ServerEvent>,
+        event_rx: Option<mpsc::UnboundedReceiver<ServerEvent>>,
+        notifications: Arc<tokio::sync::Mutex<Vec<Value>>>,
+        connected: bool,
+    }
+
+    impl MockTransport {
+        fn new() -> (Self, Arc<tokio::sync::Mutex<Vec<Value>>>) {
+            let (event_tx, event_rx) = mpsc::unbounded_channel();
+            let notifications = Arc::new(tokio::sync::Mutex::new(Vec::new()));
+            let mock = Self {
+                event_tx,
+                event_rx: Some(event_rx),
+                notifications: Arc::clone(&notifications),
+                connected: false,
+            };
+            (mock, notifications)
+        }
+
+        /// Get the event sender for injecting server events from the test
+        fn event_sender(&self) -> mpsc::UnboundedSender<ServerEvent> {
+            self.event_tx.clone()
+        }
+    }
+
+    #[async_trait]
+    impl crate::transport::Transport for MockTransport {
+        fn transport_type(&self) -> TransportType {
+            TransportType::Http
+        }
+
+        fn capabilities(&self) -> TransportCapabilities {
+            TransportCapabilities {
+                streaming: true,
+                bidirectional: true,
+                server_events: true,
+                max_message_size: None,
+                persistent: true,
+            }
+        }
+
+        async fn connect(&mut self) -> McpClientResult<()> {
+            self.connected = true;
+            Ok(())
+        }
+
+        async fn disconnect(&mut self) -> McpClientResult<()> {
+            self.connected = false;
+            Ok(())
+        }
+
+        fn is_connected(&self) -> bool {
+            self.connected
+        }
+
+        async fn send_request(&mut self, _request: Value) -> McpClientResult<Value> {
+            // Not used in this test path
+            Ok(json!({"jsonrpc": "2.0", "result": {}}))
+        }
+
+        async fn send_request_with_headers(
+            &mut self,
+            _request: Value,
+        ) -> McpClientResult<TransportResponse> {
+            // Return a valid initialize response with session ID
+            let mut headers = HashMap::new();
+            headers.insert("mcp-session-id".to_string(), "mock-session-123".to_string());
+
+            Ok(TransportResponse::new(
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_0",
+                    "result": {
+                        "protocolVersion": "2025-11-25",
+                        "capabilities": {
+                            "tools": { "listChanged": true }
+                        },
+                        "serverInfo": {
+                            "name": "mock-server",
+                            "version": "1.0.0"
+                        }
+                    }
+                }),
+                headers,
+            ))
+        }
+
+        async fn send_notification(&mut self, notification: Value) -> McpClientResult<()> {
+            self.notifications.lock().await.push(notification);
+            Ok(())
+        }
+
+        async fn send_delete(&mut self, _session_id: &str) -> McpClientResult<()> {
+            Ok(())
+        }
+
+        fn set_session_id(&mut self, _session_id: String) {}
+
+        async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver> {
+            self.event_rx
+                .take()
+                .ok_or_else(|| McpClientError::generic("Event listener already started"))
+        }
+
+        fn connection_info(&self) -> ConnectionInfo {
+            ConnectionInfo {
+                transport_type: TransportType::Http,
+                endpoint: "mock://test".to_string(),
+                connected: self.connected,
+                capabilities: self.capabilities(),
+                metadata: Value::Null,
+            }
+        }
+
+        fn statistics(&self) -> TransportStatistics {
+            TransportStatistics::default()
+        }
+    }
+
+    /// Verifies the full McpClient pipeline: server request → StreamHandler callback
+    /// → response channel → consumer task → transport.send_notification().
+    #[tokio::test]
+    async fn test_client_response_consumer_pipeline() {
+        let (mock, notifications) = MockTransport::new();
+        let event_sender = mock.event_sender();
+
+        let client = McpClientBuilder::new()
+            .with_transport(Box::new(mock))
+            .build();
+
+        // connect() wires up StreamHandler + consumer task + runs initialization
+        client.connect().await.unwrap();
+
+        // Register a request callback via the public API
+        {
+            let handler = client.stream_handler().await;
+            handler.on_request(|request| {
+                let method = request
+                    .get("method")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("");
+                match method {
+                    "sampling/createMessage" => Ok(json!({
+                        "role": "assistant",
+                        "content": { "type": "text", "text": "mock response" },
+                        "model": "test-model"
+                    })),
+                    _ => Err(format!("Unsupported: {}", method)),
+                }
+            });
+        }
+
+        // Inject a server-initiated request through the event channel
+        event_sender
+            .send(ServerEvent::Request(json!({
+                "jsonrpc": "2.0",
+                "id": "srv-req-42",
+                "method": "sampling/createMessage",
+                "params": {
+                    "messages": [{"role": "user", "content": {"type": "text", "text": "Hi"}}],
+                    "maxTokens": 100
+                }
+            })))
+            .unwrap();
+
+        // Wait for the consumer task to forward the response to transport
+        let response = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                let notifs = notifications.lock().await;
+                // Skip the first notification (notifications/initialized from connect())
+                let responses: Vec<&Value> = notifs
+                    .iter()
+                    .filter(|n| n.get("id").is_some())
+                    .collect();
+                if !responses.is_empty() {
+                    return responses[0].clone();
+                }
+                drop(notifs);
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("timed out waiting for response to reach transport");
+
+        // Verify JSON-RPC 2.0 response structure
+        assert_eq!(response["jsonrpc"], "2.0");
+        assert_eq!(response["id"], "srv-req-42");
+        assert!(
+            response.get("error").is_none(),
+            "should not have error field"
+        );
+        assert_eq!(response["result"]["role"], "assistant");
+        assert_eq!(response["result"]["model"], "test-model");
+
+        client.disconnect().await.unwrap();
+    }
+
+    /// Same pipeline but with an error callback — verifies error responses reach transport.
+    #[tokio::test]
+    async fn test_client_response_consumer_pipeline_error() {
+        let (mock, notifications) = MockTransport::new();
+        let event_sender = mock.event_sender();
+
+        let client = McpClientBuilder::new()
+            .with_transport(Box::new(mock))
+            .build();
+
+        client.connect().await.unwrap();
+
+        {
+            let handler = client.stream_handler().await;
+            handler.on_request(|_req| Err("not supported".to_string()));
+        }
+
+        event_sender
+            .send(ServerEvent::Request(json!({
+                "jsonrpc": "2.0",
+                "id": 99,
+                "method": "elicitation/create",
+                "params": {}
+            })))
+            .unwrap();
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                let notifs = notifications.lock().await;
+                let responses: Vec<&Value> = notifs
+                    .iter()
+                    .filter(|n| n.get("id").is_some())
+                    .collect();
+                if !responses.is_empty() {
+                    return responses[0].clone();
+                }
+                drop(notifs);
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("timed out waiting for error response");
+
+        assert_eq!(response["jsonrpc"], "2.0");
+        assert_eq!(response["id"], 99);
+        assert_eq!(response["error"]["code"], -32603);
+        assert!(response["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("not supported"));
+
+        client.disconnect().await.unwrap();
     }
 }

@@ -1,8 +1,8 @@
 # Working Memory
 
-**Last Updated**: 2026-03-04
-**Version**: v0.3.7 (branch: `main`)
-**Tests**: 1,580+ workspace tests, 43 test binaries, zero warnings
+**Last Updated**: 2026-03-05
+**Version**: v0.3.8 (branch: `main`)
+**Tests**: 1,590+ workspace tests, 43 test binaries, zero warnings
 **Examples**: 58 active, 25 archived
 
 ---
@@ -15,6 +15,7 @@ All major v0.3.0 work is complete. The framework fully supports MCP 2025-11-25.
 
 | Version | Date | Highlights |
 |---------|------|-----------|
+| v0.3.8 | 2026-03-05 | Client streaming response forwarding (P1 fix); JsonSchema `Option<T>` fix; resource `title` macro support |
 | v0.3.7 | 2026-03-04 | ToolAnnotations macro support (`read_only`, `destructive`, `idempotent`, `open_world`, `title`, `annotation_title`) across all 3 macro paths; session termination fix |
 | v0.3.6 | 2026-03-03 | Fix `Option<T>`/`Vec<T>` JSON Schema types in derive macros; qualified-path `is_option_type` fix |
 | v0.3.5 | 2026-03-03 | `McpClient::list_resource_templates()` + `list_resource_templates_paginated()`; HTTP transport session ID warning fix |
@@ -36,7 +37,8 @@ All major v0.3.0 work is complete. The framework fully supports MCP 2025-11-25.
 | Test Optimization (Phase F) | Done | 155 → 43 test binaries, ~7:41 workspace test time |
 | Governance Review | Done | 63 files dual-reviewed (spec-auditor + arch-reviewer), all PASS |
 | Tool Annotations Macros | Done | `read_only`, `destructive`, `idempotent`, `open_world`, `title`, `annotation_title` on derive/function/declarative macros |
-| crates.io publish | Done | All 12 crates published through v0.3.7 |
+| Client Response Forwarding | Done | Channel-based response forwarding for server-initiated requests (ADR-020) |
+| crates.io publish | Done | All 12 crates published through v0.3.8 |
 
 ### Key Architecture
 
@@ -70,4 +72,4 @@ cargo check -p turul-mcp-task-storage --no-default-features  # Verify zero-Tokio
 cargo test --package turul-mcp-protocol-2025-11-25        # Protocol crate (127+ tests)
 ```
 
-**Key ADRs**: 001 (Session Storage), 009 (Handler Routing), 012 (Middleware), 013 (Lambda Auth), 014 (Schemars), 015 (Protocol Crate Strategy), 016 (Task Storage), 017 (Runtime-Executor Boundary), 018 (Pagination Cursor)
+**Key ADRs**: 001 (Session Storage), 009 (Handler Routing), 012 (Middleware), 013 (Lambda Auth), 014 (Schemars), 015 (Protocol Crate Strategy), 016 (Task Storage), 017 (Runtime-Executor Boundary), 018 (Pagination Cursor), 020 (Client Response Forwarding)

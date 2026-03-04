@@ -23,3 +23,6 @@ mod client_streaming_test;
 
 #[path = "../basic_session_test.rs"]
 mod basic_session_test;
+
+#[path = "../client_server_request_response.rs"]
+mod client_server_request_response;

@@ -11,6 +11,7 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
     let mut resource_uri = None;
     let mut resource_name = None;
     let mut resource_description = None;
+    let mut resource_title = None;
     let mut mime_type = None;
 
     for arg in args {
@@ -34,6 +35,13 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
                     && let Lit::Str(s) = &expr_lit.lit
                 {
                     resource_description = Some(s.value());
+                }
+            }
+            Meta::NameValue(nv) if nv.path.is_ident("title") => {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Str(s) = &expr_lit.lit
+                {
+                    resource_title = Some(s.value());
                 }
             }
             Meta::NameValue(nv) if nv.path.is_ident("mime_type") => {
@@ -70,6 +78,12 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
     // Default description if not provided
     let resource_description =
         resource_description.unwrap_or_else(|| format!("Resource: {}", resource_name));
+
+    // Generate title expression for HasResourceMetadata::title()
+    let title_expr = match resource_title {
+        Some(ref t) => quote! { Some(#t) },
+        None => quote! { None },
+    };
 
     // Handle mime_type properly for quote! generation
     let mime_type_expr = match mime_type {
@@ -174,6 +188,10 @@ pub fn mcp_resource_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Re
         impl turul_mcp_builders::traits::HasResourceMetadata for #struct_name {
             fn name(&self) -> &str {
                 #resource_name
+            }
+
+            fn title(&self) -> Option<&str> {
+                #title_expr
             }
         }
 
@@ -349,6 +367,41 @@ mod tests {
         assert!(
             code.contains("fn load_user_profile") && code.contains("LoadUserProfileResourceImpl")
         );
+    }
+
+    #[test]
+    fn test_mcp_resource_with_title() {
+        let args = parse_quote! { uri = "file:///data/test.json", title = "My Resource Title", description = "Test resource" };
+        let input = parse_quote! {
+            async fn get_titled_data() -> McpResult<Vec<ResourceContent>> {
+                Ok(vec![])
+            }
+        };
+
+        let result = mcp_resource_impl(args, input);
+        assert!(result.is_ok());
+
+        let code = result.unwrap().to_string();
+        assert!(code.contains("My Resource Title"), "title should appear in generated code");
+        // Should have explicit title() method in HasResourceMetadata
+        assert!(code.contains("fn title"), "should generate explicit title() method");
+    }
+
+    #[test]
+    fn test_mcp_resource_without_title() {
+        let args = parse_quote! { uri = "file:///data/test.json", description = "Test resource" };
+        let input = parse_quote! {
+            async fn get_untitled_data() -> McpResult<Vec<ResourceContent>> {
+                Ok(vec![])
+            }
+        };
+
+        let result = mcp_resource_impl(args, input);
+        assert!(result.is_ok());
+
+        let code = result.unwrap().to_string();
+        // Should have title() returning None
+        assert!(code.contains("fn title"), "should generate explicit title() method even without title attribute");
     }
 
     #[test]

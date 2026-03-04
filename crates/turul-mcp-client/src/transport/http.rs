@@ -795,16 +795,26 @@ impl Transport for HttpTransport {
                                             );
 
                                             // Determine event type based on JSON content
-                                            if json.get("method").is_some() {
-                                                // Notification
+                                            // Check method+id first: server-initiated requests
+                                            // have both (e.g. sampling/createMessage)
+                                            if json.get("method").is_some()
+                                                && json.get("id").is_some()
+                                            {
+                                                // Server-initiated request needing response
+                                                if tx.send(ServerEvent::Request(json)).is_err() {
+                                                    debug!("Event channel closed during send");
+                                                    return;
+                                                }
+                                            } else if json.get("method").is_some() {
+                                                // Notification (method only, no id)
                                                 if tx.send(ServerEvent::Notification(json)).is_err()
                                                 {
                                                     debug!("Event channel closed during send");
                                                     return;
                                                 }
                                             } else if json.get("id").is_some() {
-                                                // Request requiring response
-                                                if tx.send(ServerEvent::Request(json)).is_err() {
+                                                // Response to a pending client request (no method)
+                                                if tx.send(ServerEvent::Response(json)).is_err() {
                                                     debug!("Event channel closed during send");
                                                     return;
                                                 }
