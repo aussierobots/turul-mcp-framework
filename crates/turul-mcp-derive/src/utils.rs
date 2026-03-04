@@ -4,14 +4,105 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{Attribute, Data, DeriveInput, Fields, Result};
 
+/// Annotation metadata extracted from macro attributes (shared across all macro paths)
+#[derive(Debug, Default)]
+pub struct AnnotationMeta {
+    pub annotation_title: Option<String>, // → ToolAnnotations.title
+    pub read_only: Option<bool>,          // → ToolAnnotations.read_only_hint
+    pub destructive: Option<bool>,        // → ToolAnnotations.destructive_hint
+    pub idempotent: Option<bool>,         // → ToolAnnotations.idempotent_hint
+    pub open_world: Option<bool>,         // → ToolAnnotations.open_world_hint
+}
+
+impl AnnotationMeta {
+    pub fn has_any(&self) -> bool {
+        self.annotation_title.is_some()
+            || self.read_only.is_some()
+            || self.destructive.is_some()
+            || self.idempotent.is_some()
+            || self.open_world.is_some()
+    }
+}
+
+/// Generate HasAnnotations impl from annotation metadata.
+/// If ANY field is Some → OnceLock-backed impl returning Some(ToolAnnotations { ... })
+/// If ALL fields are None → impl returning None (backward compatible)
+pub fn generate_annotations_impl(name: &syn::Ident, meta: &AnnotationMeta) -> TokenStream {
+    if !meta.has_any() {
+        return quote! {
+            impl turul_mcp_builders::traits::HasAnnotations for #name {
+                fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
+                    None
+                }
+            }
+        };
+    }
+
+    let title_expr = match &meta.annotation_title {
+        Some(t) => quote! { Some(#t.to_string()) },
+        None => quote! { None },
+    };
+    let read_only_expr = match meta.read_only {
+        Some(v) => quote! { Some(#v) },
+        None => quote! { None },
+    };
+    let destructive_expr = match meta.destructive {
+        Some(v) => quote! { Some(#v) },
+        None => quote! { None },
+    };
+    let idempotent_expr = match meta.idempotent {
+        Some(v) => quote! { Some(#v) },
+        None => quote! { None },
+    };
+    let open_world_expr = match meta.open_world {
+        Some(v) => quote! { Some(#v) },
+        None => quote! { None },
+    };
+
+    quote! {
+        impl turul_mcp_builders::traits::HasAnnotations for #name {
+            fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
+                static ANNOTATIONS: std::sync::OnceLock<turul_mcp_protocol::tools::ToolAnnotations> = std::sync::OnceLock::new();
+                Some(ANNOTATIONS.get_or_init(|| {
+                    turul_mcp_protocol::tools::ToolAnnotations {
+                        title: #title_expr,
+                        read_only_hint: #read_only_expr,
+                        destructive_hint: #destructive_expr,
+                        idempotent_hint: #idempotent_expr,
+                        open_world_hint: #open_world_expr,
+                    }
+                }))
+            }
+        }
+    }
+}
+
 /// Extract tool metadata from attributes
 #[derive(Debug)]
 pub struct ToolMeta {
     pub name: String,
     pub description: String,
     pub output_type: Option<syn::Type>,
-    pub output_field: Option<String>, // Custom field name for output
-    pub task_support: Option<String>, // "optional" | "required" | "forbidden"
+    pub output_field: Option<String>,  // Custom field name for output
+    pub task_support: Option<String>,  // "optional" | "required" | "forbidden"
+    pub title: Option<String>,        // → HasBaseMetadata::title()
+    pub annotation_title: Option<String>, // → ToolAnnotations.title
+    pub read_only: Option<bool>,
+    pub destructive: Option<bool>,
+    pub idempotent: Option<bool>,
+    pub open_world: Option<bool>,
+}
+
+impl ToolMeta {
+    pub fn to_annotation_meta(&self) -> AnnotationMeta {
+        AnnotationMeta {
+            annotation_title: self.annotation_title.clone(),
+            read_only: self.read_only,
+            destructive: self.destructive,
+            idempotent: self.idempotent,
+            open_world: self.open_world,
+        }
+    }
 }
 
 pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
@@ -20,6 +111,12 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
     let mut output_type = None;
     let mut output_field = None;
     let mut task_support = None;
+    let mut title = None;
+    let mut annotation_title = None;
+    let mut read_only = None;
+    let mut destructive = None;
+    let mut idempotent = None;
+    let mut open_world = None;
 
     for attr in attrs {
         if attr.path().is_ident("tool") {
@@ -50,6 +147,30 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
                             "task_support must be \"optional\", \"required\", or \"forbidden\""
                         )),
                     }
+                } else if meta.path.is_ident("title") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    title = Some(s.value());
+                } else if meta.path.is_ident("annotation_title") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    annotation_title = Some(s.value());
+                } else if meta.path.is_ident("read_only") {
+                    let value = meta.value()?;
+                    let b: syn::LitBool = value.parse()?;
+                    read_only = Some(b.value());
+                } else if meta.path.is_ident("destructive") {
+                    let value = meta.value()?;
+                    let b: syn::LitBool = value.parse()?;
+                    destructive = Some(b.value());
+                } else if meta.path.is_ident("idempotent") {
+                    let value = meta.value()?;
+                    let b: syn::LitBool = value.parse()?;
+                    idempotent = Some(b.value());
+                } else if meta.path.is_ident("open_world") {
+                    let value = meta.value()?;
+                    let b: syn::LitBool = value.parse()?;
+                    open_world = Some(b.value());
                 }
                 Ok(())
             })?;
@@ -90,6 +211,12 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
         output_type,
         output_field,
         task_support,
+        title,
+        annotation_title,
+        read_only,
+        destructive,
+        idempotent,
+        open_world,
     })
 }
 
@@ -165,10 +292,10 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
             match last_seg.ident.to_string().as_str() {
                 // Option<T>: unwrap the inner type and recurse
                 "Option" => {
-                    if let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments {
-                        if let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first() {
-                            return type_to_schema(inner_ty, param_meta);
-                        }
+                    if let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments
+                        && let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first()
+                    {
+                        return type_to_schema(inner_ty, param_meta);
                     }
                     // Fallback for malformed Option
                     quote! {
@@ -177,14 +304,14 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                 }
                 // Vec<T>: array with items schema from inner type
                 "Vec" => {
-                    if let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments {
-                        if let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first() {
-                            let items_schema =
-                                type_to_schema(inner_ty, &ParamMeta::default());
-                            return quote! {
-                                turul_mcp_protocol::schema::JsonSchema::array(#items_schema) #description
-                            };
-                        }
+                    if let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments
+                        && let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first()
+                    {
+                        let items_schema =
+                            type_to_schema(inner_ty, &ParamMeta::default());
+                        return quote! {
+                            turul_mcp_protocol::schema::JsonSchema::array(#items_schema) #description
+                        };
                     }
                     // Fallback: array of strings
                     quote! {
@@ -254,7 +381,7 @@ pub fn generate_param_extraction(
             .path
             .segments
             .last()
-            .map_or(false, |s| s.ident == "Option")
+            .is_some_and(|s| s.ident == "Option")
     } else {
         false
     };
@@ -1176,7 +1303,7 @@ fn is_option_type(ty: &syn::Type) -> bool {
             .path
             .segments
             .last()
-            .map_or(false, |s| s.ident == "Option")
+            .is_some_and(|s| s.ident == "Option")
     } else {
         false
     }

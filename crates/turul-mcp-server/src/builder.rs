@@ -1434,16 +1434,15 @@ impl McpServerBuilder {
         if self.task_runtime.is_none() {
             for (name, tool) in &self.tools {
                 let descriptor = tool_to_descriptor(tool.as_ref());
-                if let Some(ref exec) = descriptor.execution {
-                    if exec.task_support
+                if let Some(ref exec) = descriptor.execution
+                    && exec.task_support
                         == Some(turul_mcp_protocol::tools::TaskSupport::Required)
-                    {
-                        return Err(McpError::configuration(&format!(
-                            "Tool '{}' has taskSupport=required but no task runtime is configured. \
-                             Use .with_task_storage() or .with_task_runtime() on the builder.",
-                            name
-                        )));
-                    }
+                {
+                    return Err(McpError::configuration(&format!(
+                        "Tool '{}' has taskSupport=required but no task runtime is configured. \
+                         Use .with_task_storage() or .with_task_runtime() on the builder.",
+                        name
+                    )));
                 }
             }
         }

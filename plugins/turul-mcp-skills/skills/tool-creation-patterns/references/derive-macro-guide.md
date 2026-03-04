@@ -37,6 +37,12 @@ impl Calculator {
 | `description` | Yes | Human-readable description |
 | `output` | **Required for non-primitives** | Output type for schema generation |
 | `task_support` | No | Per-tool task support: `"optional"`, `"required"`, or `"forbidden"` |
+| `title` | No | Display title → `Tool.title` (via `HasBaseMetadata`) |
+| `annotation_title` | No | Title inside `ToolAnnotations.title` (rare, see note below) |
+| `read_only` | No | `bool` → `readOnlyHint` in JSON (MCP default: `false`) |
+| `destructive` | No | `bool` → `destructiveHint` in JSON (MCP default: `true`) |
+| `idempotent` | No | `bool` → `idempotentHint` in JSON (MCP default: `false`) |
+| `open_world` | No | `bool` → `openWorldHint` in JSON (MCP default: `true`) |
 
 ### Why `output = Type` Is Required
 
@@ -191,6 +197,49 @@ struct SlowCalc {
 **Values:** `"optional"` (sync or async), `"required"` (must run as task), `"forbidden"` (never as task). Omit the attribute for tools that don't support tasks.
 
 **Server requirement:** The server must have `.with_task_storage()` configured for tools with task support. `task_support = "required"` without a task runtime causes a build-time error.
+
+## Tool Annotations
+
+Annotations are MCP 2025-11-25 hints that tell clients about a tool's behavior. All are optional — omitting them preserves `None` (backward compatible).
+
+> **Not to be confused with resource/prompt `Annotations`** (which have `audience` and `priority`). Tool annotations use the separate `ToolAnnotations` type with hint fields.
+
+```rust
+#[derive(McpTool, Default)]
+#[tool(
+    name = "delete_file",
+    description = "Delete a file from disk",
+    title = "File Deleter",          // → Tool.title (primary display name)
+    read_only = false,               // → readOnlyHint in JSON
+    destructive = true,              // → destructiveHint in JSON
+    idempotent = true,               // → idempotentHint in JSON
+    open_world = false,              // → openWorldHint in JSON
+)]
+struct DeleteFileTool {
+    #[param(description = "Path to delete")]
+    path: String,
+}
+```
+
+### `title` vs `annotation_title`
+
+- `title = "..."` → sets `Tool.title` (the primary display name shown by MCP clients). This is the one you almost always want.
+- `annotation_title = "..."` → sets `ToolAnnotations.title` only. Use this only if you need a different title inside the annotations object (rare).
+
+Both can be set independently. If you only set one, use `title`.
+
+### Macro Attributes → JSON Wire Format
+
+Macros accept short snake_case attribute names. The framework generates camelCase JSON keys per MCP spec:
+
+| Attribute | JSON key | Note |
+|---|---|---|
+| `read_only` | `readOnlyHint` | Serde rename on `ToolAnnotations` |
+| `destructive` | `destructiveHint` | |
+| `idempotent` | `idempotentHint` | |
+| `open_world` | `openWorldHint` | |
+
+Unset annotations are omitted from JSON entirely (via `skip_serializing_if`).
 
 ## Shared Application State (`OnceLock`)
 

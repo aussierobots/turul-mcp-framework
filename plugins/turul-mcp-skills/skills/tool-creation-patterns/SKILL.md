@@ -193,6 +193,85 @@ let server = McpServer::builder()
 
 **See:** `examples/shared-state-tool.rs` for a complete example.
 
+## Tool Annotations (Per-Tool)
+
+Tool annotations are MCP 2025-11-25 hints that tell clients about a tool's behavior — whether it's read-only, destructive, idempotent, or interacts with external systems. All annotation attributes are optional; omitting them preserves current behavior (`None`).
+
+> **Not to be confused with resource/prompt `Annotations`** (which have `audience` and `priority` fields). Tool annotations use the separate `ToolAnnotations` type with hint-based fields.
+
+### Macro Attribute Names vs Wire Format
+
+Macros accept short attribute names. The framework generates the camelCase JSON keys required by MCP:
+
+| Macro attribute | Wire key (JSON) | Type | MCP default |
+|---|---|---|---|
+| `title` | `title` (on `Tool`, via `HasBaseMetadata`) | `String` | — |
+| `annotation_title` | `title` (inside `annotations`) | `String` | — |
+| `read_only` | `readOnlyHint` | `bool` | `false` |
+| `destructive` | `destructiveHint` | `bool` | `true` |
+| `idempotent` | `idempotentHint` | `bool` | `false` |
+| `open_world` | `openWorldHint` | `bool` | `true` |
+
+### `title` vs `annotation_title`
+
+The MCP spec has `title` in two places:
+
+- **`Tool.title`** (top-level) — the primary display name shown by MCP clients. Set via `title = "..."` → populates `HasBaseMetadata::title()`.
+- **`ToolAnnotations.title`** (inside annotations) — a secondary title for clients that specifically inspect the annotations object. Set via `annotation_title = "..."`.
+
+Use `title` for display. Only use `annotation_title` if you have a specific need to set a different title inside the annotations object (rare).
+
+### All Three Macro Paths
+
+```rust
+// Function macro
+#[mcp_tool(name = "search", description = "Search the web",
+           title = "Web Search",
+           read_only = true, open_world = true)]
+async fn search(query: String) -> McpResult<String> { Ok(query) }
+
+// Derive macro
+#[derive(McpTool)]
+#[tool(name = "delete_file", description = "Delete a file",
+       title = "File Deleter",
+       read_only = false, destructive = true, idempotent = true, open_world = false)]
+struct DeleteFileTool {
+    #[param(description = "Path to delete")]
+    path: String,
+}
+
+// Declarative macro
+let tool = tool! {
+    name: "lookup",
+    description: "Lookup a value",
+    title: "Key Lookup",
+    read_only: true,
+    idempotent: true,
+    params: { key: String => "The key to look up" },
+    execute: |key: String| async move { Ok::<_, &str>(format!("value for {}", key)) }
+};
+```
+
+### Builder
+
+```rust
+use turul_mcp_protocol::tools::ToolAnnotations;
+
+let tool = ToolBuilder::new("delete_file")
+    .description("Delete a file")
+    .string_param("path", "Path to delete")
+    .annotations(
+        ToolAnnotations::new()
+            .with_read_only_hint(false)
+            .with_destructive_hint(true)
+            .with_idempotent_hint(true)
+            .with_open_world_hint(false)
+    )
+    .build()?;
+```
+
+**See:** `references/derive-macro-guide.md`, `references/function-macro-guide.md`, and `references/builder-pattern-guide.md` for full details per pattern.
+
 ## Task Support (Per-Tool)
 
 Tools can declare `task_support` to enable long-running async execution via MCP tasks. This controls whether MCP Inspector shows a "Run as Task" button.
@@ -227,6 +306,7 @@ let tool = ToolBuilder::new("slow_tool")
 | Shared state (DB, API) | `OnceLock` | `OnceLock` | Closure capture |
 | Output schema | Auto-detected | `output = Type` required | Explicit methods |
 | Task support | `task_support = "..."` | `task_support = "..."` | `.execution()` |
+| Annotations | `read_only = true, ...` | `read_only = true, ...` | `.annotations(ToolAnnotations::new()...)` |
 | Registration | `.tool_fn()` | `.tool()` | `.tool()` |
 | Best for | Most tools (default) | Per-session MCP state | Runtime-defined tools |
 

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.7] - 2026-03-04
 
+### Added
+
+- **Tool annotations macro support**: `#[derive(McpTool)]`, `#[mcp_tool]`, and `tool!{}` now support `read_only`, `destructive`, `idempotent`, `open_world`, `title`, and `annotation_title` attributes — generates `ToolAnnotations` with camelCase JSON keys (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) per MCP 2025-11-25
+- `title` attribute on all three macro paths sets `Tool.title` (via `HasBaseMetadata`); `annotation_title` sets `ToolAnnotations.title` independently
+- Boolean annotation type validation: `#[mcp_tool]` rejects wrong types (e.g., `read_only = "true"`) with a compile error
+
 ### Fixed
 
 - Terminated sessions (after `DELETE /mcp`) now correctly reject subsequent POST and GET requests in both Streamable HTTP and legacy JSON transports

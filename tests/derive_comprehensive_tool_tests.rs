@@ -2,7 +2,7 @@
 
 use serde_json::json;
 use turul_mcp_builders::prelude::*; // HasBaseMetadata, HasOutputSchema, etc.
-use turul_mcp_derive::McpTool;
+use turul_mcp_derive::{McpTool, mcp_tool, tool};
 use turul_mcp_server::{McpResult, McpTool as McpToolTrait, SessionContext};
 
 /// Test tool returning f64 (number)
@@ -455,4 +455,311 @@ fn test_tool_names_auto_determined() {
     assert_eq!(boolean_tool.name(), "boolean");
     assert_eq!(array_tool.name(), "array");
     assert_eq!(object_tool.name(), "object");
+}
+
+// =============================================================================
+// ToolAnnotations macro support tests
+// =============================================================================
+
+/// Derive macro: tool with all annotations set
+#[derive(McpTool)]
+#[tool(name = "delete_file", description = "Delete a file",
+       title = "File Deleter",
+       annotation_title = "File Deletion",
+       read_only = false, destructive = true,
+       idempotent = true, open_world = false)]
+struct DeleteFileTool {
+    #[param(description = "File path")]
+    path: String,
+}
+
+impl DeleteFileTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+        Ok(format!("Deleted: {}", self.path))
+    }
+}
+
+/// Derive macro: tool with no annotations (backward compat)
+#[derive(McpTool)]
+#[tool(name = "plain_tool", description = "A plain tool")]
+struct PlainTool {
+    #[param(description = "Input")]
+    value: String,
+}
+
+impl PlainTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+        Ok(self.value.clone())
+    }
+}
+
+/// Derive macro: tool with partial annotations
+#[derive(McpTool)]
+#[tool(name = "reader", description = "Read data", read_only = true)]
+struct ReaderTool {
+    #[param(description = "Key")]
+    key: String,
+}
+
+impl ReaderTool {
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+        Ok(format!("Read: {}", self.key))
+    }
+}
+
+/// Function macro: tool with annotations
+#[mcp_tool(name = "web_search", description = "Search the web",
+           title = "Web Search",
+           read_only = true, open_world = true)]
+async fn web_search(query: String) -> McpResult<String> {
+    Ok(format!("Results for: {}", query))
+}
+
+/// Function macro: tool with no annotations
+#[mcp_tool(name = "echo", description = "Echo input")]
+async fn echo(text: String) -> McpResult<String> {
+    Ok(text)
+}
+
+#[test]
+fn test_derive_annotations_appear_in_to_tool() {
+    let tool = DeleteFileTool {
+        path: String::new(),
+    };
+    let tool_def = tool.to_tool();
+
+    // title = "File Deleter" → Tool.title (HasBaseMetadata)
+    assert_eq!(tool_def.title.as_deref(), Some("File Deleter"));
+
+    // annotations should be present
+    let annotations = tool_def.annotations.as_ref().expect("annotations should be Some");
+
+    // annotation_title = "File Deletion" → ToolAnnotations.title
+    assert_eq!(annotations.title.as_deref(), Some("File Deletion"));
+    assert_eq!(annotations.read_only_hint, Some(false));
+    assert_eq!(annotations.destructive_hint, Some(true));
+    assert_eq!(annotations.idempotent_hint, Some(true));
+    assert_eq!(annotations.open_world_hint, Some(false));
+
+    // Verify camelCase serialization
+    let json = serde_json::to_value(&tool_def).unwrap();
+    let ann = json["annotations"].as_object().expect("annotations in JSON");
+    assert_eq!(ann.get("readOnlyHint"), Some(&json!(false)));
+    assert_eq!(ann.get("destructiveHint"), Some(&json!(true)));
+    assert_eq!(ann.get("idempotentHint"), Some(&json!(true)));
+    assert_eq!(ann.get("openWorldHint"), Some(&json!(false)));
+    assert_eq!(ann.get("title"), Some(&json!("File Deletion")));
+}
+
+#[test]
+fn test_derive_no_annotations_returns_none() {
+    let tool = PlainTool {
+        value: String::new(),
+    };
+    let tool_def = tool.to_tool();
+
+    assert!(tool_def.annotations.is_none());
+    assert!(tool_def.title.is_none());
+
+    // JSON should not have annotations key (skip_serializing_if)
+    let json = serde_json::to_value(&tool_def).unwrap();
+    assert!(json.get("annotations").is_none());
+}
+
+#[test]
+fn test_derive_partial_annotations() {
+    let tool = ReaderTool {
+        key: String::new(),
+    };
+    let tool_def = tool.to_tool();
+
+    let annotations = tool_def.annotations.as_ref().expect("annotations should be Some");
+    assert_eq!(annotations.read_only_hint, Some(true));
+    // Unset fields should be None
+    assert!(annotations.destructive_hint.is_none());
+    assert!(annotations.idempotent_hint.is_none());
+    assert!(annotations.open_world_hint.is_none());
+    assert!(annotations.title.is_none());
+}
+
+#[test]
+fn test_function_macro_annotations_in_to_tool() {
+    let tool = web_search();
+    let tool_def = tool.to_tool();
+
+    // title = "Web Search" → Tool.title
+    assert_eq!(tool_def.title.as_deref(), Some("Web Search"));
+
+    // annotations should be present
+    let annotations = tool_def.annotations.as_ref().expect("annotations should be Some");
+    assert_eq!(annotations.read_only_hint, Some(true));
+    assert_eq!(annotations.open_world_hint, Some(true));
+    // Unset fields should be None
+    assert!(annotations.destructive_hint.is_none());
+    assert!(annotations.idempotent_hint.is_none());
+
+    // Verify camelCase serialization
+    let json = serde_json::to_value(&tool_def).unwrap();
+    let ann = json["annotations"].as_object().expect("annotations in JSON");
+    assert_eq!(ann.get("readOnlyHint"), Some(&json!(true)));
+    assert_eq!(ann.get("openWorldHint"), Some(&json!(true)));
+}
+
+#[test]
+fn test_function_macro_no_annotations() {
+    let tool = echo();
+    let tool_def = tool.to_tool();
+
+    assert!(tool_def.annotations.is_none());
+    assert!(tool_def.title.is_none());
+}
+
+#[test]
+fn test_tool_macro_annotations_in_to_tool() {
+    let tool = tool! {
+        name: "lookup",
+        description: "Lookup a value",
+        read_only: true,
+        idempotent: true,
+        annotation_title: "Value Lookup",
+        params: {
+            key: String => "The key to look up",
+        },
+        execute: |key: String| async move {
+            Ok::<_, &str>(format!("value for {}", key))
+        }
+    };
+
+    let tool_def = tool.to_tool();
+
+    let annotations = tool_def.annotations.as_ref().expect("annotations should be Some");
+    assert_eq!(annotations.read_only_hint, Some(true));
+    assert_eq!(annotations.idempotent_hint, Some(true));
+    assert_eq!(annotations.title.as_deref(), Some("Value Lookup"));
+    // Unset fields should be None
+    assert!(annotations.destructive_hint.is_none());
+    assert!(annotations.open_world_hint.is_none());
+}
+
+#[test]
+fn test_tool_macro_with_title() {
+    let tool = tool! {
+        name: "named_lookup",
+        description: "Lookup with title",
+        title: "Named Lookup Tool",
+        read_only: true,
+        params: {
+            key: String => "The key to look up",
+        },
+        execute: |key: String| async move {
+            Ok::<_, &str>(key)
+        }
+    };
+
+    let tool_def = tool.to_tool();
+    assert_eq!(tool_def.title.as_deref(), Some("Named Lookup Tool"));
+
+    let annotations = tool_def.annotations.as_ref().expect("annotations should be Some");
+    assert_eq!(annotations.read_only_hint, Some(true));
+}
+
+#[test]
+fn test_tool_macro_no_annotations() {
+    let tool = tool! {
+        name: "simple",
+        description: "Simple tool",
+        params: {
+            value: String => "Input value",
+        },
+        execute: |value: String| async move {
+            Ok::<_, &str>(value)
+        }
+    };
+
+    let tool_def = tool.to_tool();
+    assert!(tool_def.annotations.is_none());
+}
+
+#[test]
+fn test_title_routes_only_to_base_metadata() {
+    // title = "X" should set Tool.title via HasBaseMetadata, NOT ToolAnnotations.title
+    let tool = DeleteFileTool {
+        path: String::new(),
+    };
+
+    // HasBaseMetadata::title()
+    assert_eq!(tool.title(), Some("File Deleter"));
+
+    // ToolAnnotations.title is set separately via annotation_title
+    let ann = tool.annotations().unwrap();
+    assert_eq!(ann.title.as_deref(), Some("File Deletion"));
+    // They're independent
+    assert_ne!(tool.title(), ann.title.as_deref());
+}
+
+#[tokio::test]
+async fn test_server_tools_list_handler_includes_annotations() {
+    // Exercise the actual ListToolsHandler (JSON-RPC dispatcher path)
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use turul_mcp_json_rpc_server::JsonRpcHandler;
+    use turul_mcp_protocol::tools::ListToolsResult;
+    use turul_mcp_server::ListToolsHandler;
+
+    let mut tools: HashMap<String, Arc<dyn McpToolTrait>> = HashMap::new();
+    tools.insert(
+        "delete_file".to_string(),
+        Arc::new(DeleteFileTool {
+            path: String::new(),
+        }),
+    );
+    tools.insert(
+        "plain_tool".to_string(),
+        Arc::new(PlainTool {
+            value: String::new(),
+        }),
+    );
+
+    let handler = ListToolsHandler::new(tools, false);
+    let result_value = handler
+        .handle("tools/list", None, None)
+        .await
+        .expect("tools/list handler should succeed");
+
+    // Parse the JSON-RPC response payload
+    let response: ListToolsResult =
+        serde_json::from_value(result_value.clone()).expect("should parse as ListToolsResult");
+    assert_eq!(response.tools.len(), 2);
+
+    // Find delete_file tool in response
+    let delete_tool = response
+        .tools
+        .iter()
+        .find(|t| t.name == "delete_file")
+        .expect("delete_file tool should exist in tools/list response");
+
+    // Verify annotations through the raw JSON (actual wire format)
+    let raw_json = serde_json::to_value(delete_tool).unwrap();
+    assert_eq!(raw_json["title"], json!("File Deleter"));
+    let ann = raw_json["annotations"]
+        .as_object()
+        .expect("annotations present in JSON-RPC response");
+    assert_eq!(ann.get("readOnlyHint"), Some(&json!(false)));
+    assert_eq!(ann.get("destructiveHint"), Some(&json!(true)));
+    assert_eq!(ann.get("idempotentHint"), Some(&json!(true)));
+    assert_eq!(ann.get("openWorldHint"), Some(&json!(false)));
+    assert_eq!(ann.get("title"), Some(&json!("File Deletion")));
+    // No snake_case keys
+    assert!(ann.get("read_only_hint").is_none());
+    assert!(ann.get("destructive_hint").is_none());
+
+    // Find plain_tool — should NOT have annotations
+    let plain_tool = response
+        .tools
+        .iter()
+        .find(|t| t.name == "plain_tool")
+        .expect("plain_tool should exist in tools/list response");
+    let plain_json = serde_json::to_value(plain_tool).unwrap();
+    assert!(plain_json.get("annotations").is_none());
+    assert!(plain_json.get("title").is_none());
 }

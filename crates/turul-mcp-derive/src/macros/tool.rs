@@ -230,6 +230,24 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
     let tool_description = &input.description;
     let execute_closure = &input.execute;
 
+    // Generate annotations impl (centralized via AnnotationMeta)
+    let annotation_meta = crate::utils::AnnotationMeta {
+        annotation_title: input.annotation_title.clone(),
+        read_only: input.read_only,
+        destructive: input.destructive,
+        idempotent: input.idempotent,
+        open_world: input.open_world,
+    };
+    let annotations_impl = crate::utils::generate_annotations_impl(&tool_name_ident, &annotation_meta);
+
+    // Generate title expression for HasBaseMetadata::title()
+    let tool_title_impl = match &input.title {
+        Some(t) => quote! {
+            fn title(&self) -> Option<&str> { Some(#t) }
+        },
+        None => quote! {},
+    };
+
     let expanded = quote! {
         {
             #[derive(Clone)]
@@ -256,6 +274,7 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 fn name(&self) -> &str {
                     #tool_name
                 }
+                #tool_title_impl
             }
 
             impl turul_mcp_builders::HasDescription for #tool_name_ident {
@@ -276,11 +295,7 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
                 }
             }
 
-            impl turul_mcp_builders::HasAnnotations for #tool_name_ident {
-                fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-                    None
-                }
-            }
+            #annotations_impl
 
             impl turul_mcp_builders::HasToolMeta for #tool_name_ident {
                 fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
@@ -328,6 +343,12 @@ pub struct ToolMacroInput {
     pub description: String,
     pub params: Vec<ToolParam>,
     pub execute: Expr,
+    pub title: Option<String>,             // → HasBaseMetadata::title()
+    pub annotation_title: Option<String>,
+    pub read_only: Option<bool>,
+    pub destructive: Option<bool>,
+    pub idempotent: Option<bool>,
+    pub open_world: Option<bool>,
 }
 
 pub struct ToolParam {
@@ -346,6 +367,12 @@ impl Parse for ToolMacroInput {
         let mut description = None;
         let mut params = Vec::new();
         let mut execute = None;
+        let mut title = None;
+        let mut annotation_title = None;
+        let mut read_only = None;
+        let mut destructive = None;
+        let mut idempotent = None;
+        let mut open_world = None;
 
         while !input.is_empty() {
             let ident: Ident = input.parse()?;
@@ -359,6 +386,30 @@ impl Parse for ToolMacroInput {
                 "description" => {
                     let lit: LitStr = input.parse()?;
                     description = Some(lit.value());
+                }
+                "title" => {
+                    let lit: LitStr = input.parse()?;
+                    title = Some(lit.value());
+                }
+                "annotation_title" => {
+                    let lit: LitStr = input.parse()?;
+                    annotation_title = Some(lit.value());
+                }
+                "read_only" => {
+                    let lit: LitBool = input.parse()?;
+                    read_only = Some(lit.value);
+                }
+                "destructive" => {
+                    let lit: LitBool = input.parse()?;
+                    destructive = Some(lit.value);
+                }
+                "idempotent" => {
+                    let lit: LitBool = input.parse()?;
+                    idempotent = Some(lit.value);
+                }
+                "open_world" => {
+                    let lit: LitBool = input.parse()?;
+                    open_world = Some(lit.value);
                 }
                 "params" => {
                     let content;
@@ -485,6 +536,12 @@ impl Parse for ToolMacroInput {
             params,
             execute: execute
                 .ok_or_else(|| syn::Error::new(input.span(), "Missing 'execute' field"))?,
+            title,
+            annotation_title,
+            read_only,
+            destructive,
+            idempotent,
+            open_world,
         })
     }
 }

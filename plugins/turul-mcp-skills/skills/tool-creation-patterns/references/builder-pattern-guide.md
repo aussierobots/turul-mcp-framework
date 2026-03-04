@@ -57,6 +57,12 @@ let tool = ToolBuilder::new("add")
 | `.object_output()` | `{"result": object}` |
 | `.custom_output_schema(schema)` | Custom JSON schema |
 
+### Annotations
+
+| Method | Description |
+|---|---|
+| `.annotations(ToolAnnotations)` | Set tool behavior hints (read-only, destructive, etc.) |
+
 ### Task Support
 
 | Method | Description |
@@ -198,6 +204,43 @@ The framework wraps these into `McpError::ToolExecutionError` automatically. See
 
 See: `examples/builder-tool.rs` in this skill, or the full server at [`examples/calculator-add-builder-server/src/main.rs`](https://github.com/aussierobots/turul-mcp-framework/blob/main/examples/calculator-add-builder-server/src/main.rs) in the framework repository.
 
+## Tool Annotations
+
+Annotations are MCP 2025-11-25 hints that tell clients about a tool's behavior. Use `.annotations()` with a `ToolAnnotations` builder chain:
+
+> **Not to be confused with resource/prompt `Annotations`** (which have `audience` and `priority`). Tool annotations use the separate `ToolAnnotations` type with hint fields.
+
+```rust
+use turul_mcp_protocol::tools::ToolAnnotations;
+
+let tool = ToolBuilder::new("delete_file")
+    .description("Delete a file from disk")
+    .string_param("path", "Path to delete")
+    .annotations(
+        ToolAnnotations::new()
+            .with_title("File Deleter")        // → annotations.title (rare)
+            .with_read_only_hint(false)         // → readOnlyHint
+            .with_destructive_hint(true)        // → destructiveHint
+            .with_idempotent_hint(true)         // → idempotentHint
+            .with_open_world_hint(false)        // → openWorldHint
+    )
+    .build()?;
+```
+
+### `ToolAnnotations` Builder Methods
+
+| Method | JSON key | Type |
+|---|---|---|
+| `.with_title(s)` | `title` (in annotations) | `String` |
+| `.with_read_only_hint(b)` | `readOnlyHint` | `bool` |
+| `.with_destructive_hint(b)` | `destructiveHint` | `bool` |
+| `.with_idempotent_hint(b)` | `idempotentHint` | `bool` |
+| `.with_open_world_hint(b)` | `openWorldHint` | `bool` |
+
+All fields are optional — `ToolAnnotations::new()` starts with all `None`. Unset fields are omitted from JSON output.
+
+**Note:** For the top-level `Tool.title` (the primary display name), use `ToolBuilder`'s `.title()` method (if available) or set it via the macro `title = "..."` attribute. The `.with_title()` on `ToolAnnotations` sets the annotations-level title, which is a different field.
+
 ## Task Support
 
 Declare task support via `.execution()`:
@@ -230,6 +273,7 @@ let tool = ToolBuilder::new("slow_process")
 | Flexibility | Can construct tools at runtime | Fixed at compile time |
 | Session | No direct access | Available (derive only) |
 | Task support | `.execution()` | `task_support = "..."` |
+| Annotations | `.annotations(ToolAnnotations::new()...)` | `read_only = true, ...` |
 | Best for | Plugin systems, dynamic config | Application tools |
 
 **Use macros (Level 1 or 2) for all application tools.** Builder is only appropriate when tool definitions are loaded at runtime (config files, databases, plugin systems). If a tool is defined in your source code, use macros — even if it needs database access (use `OnceLock` for that).

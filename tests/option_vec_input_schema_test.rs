@@ -14,6 +14,7 @@ use turul_mcp_server::{McpResult, SessionContext};
 
 #[derive(McpTool, Clone)]
 #[tool(name = "derive_mixed_params", description = "Tool with mixed param types")]
+#[allow(dead_code)]
 struct DeriveMixedParams {
     #[param(description = "A required string")]
     name: String,
@@ -62,6 +63,7 @@ async fn attr_mixed_params(
     name = "qualified_path_params",
     description = "Tool with fully-qualified Option and Vec paths"
 )]
+#[allow(dead_code)]
 struct QualifiedPathParams {
     #[param(description = "Qualified option bool")]
     flag: std::option::Option<bool>,
@@ -95,7 +97,7 @@ fn is_required(tool: &impl ToolDefinition, prop: &str) -> bool {
     let schema: Value = serde_json::to_value(tool.input_schema()).unwrap();
     schema["required"]
         .as_array()
-        .map_or(false, |arr| arr.iter().any(|v| v.as_str() == Some(prop)))
+        .is_some_and(|arr| arr.iter().any(|v| v.as_str() == Some(prop)))
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────

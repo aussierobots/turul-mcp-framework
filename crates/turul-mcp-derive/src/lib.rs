@@ -639,6 +639,9 @@ pub fn derive_mcp_notification(input: TokenStream) -> TokenStream {
 /// let divide_tool = tool! {
 ///     name: "divide",
 ///     description: "Divide two numbers with validation",
+///     read_only: false,
+///     destructive: false,
+///     idempotent: true,
 ///     params: {
 ///         a: f64 => "Dividend (first number)",
 ///         b: f64 => "Divisor (second number)",

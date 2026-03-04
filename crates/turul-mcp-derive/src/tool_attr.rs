@@ -14,6 +14,12 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
     let mut tool_description = None;
     let mut output_field_name = None;
     let mut task_support = None;
+    let mut tool_title = None;
+    let mut annotation_title = None;
+    let mut read_only = None;
+    let mut destructive = None;
+    let mut idempotent = None;
+    let mut open_world = None;
 
     for arg in args {
         match arg {
@@ -50,6 +56,56 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                             "task_support must be \"optional\", \"required\", or \"forbidden\""
                         )),
                     }
+                }
+            }
+            Meta::NameValue(nv) if nv.path.is_ident("title") => {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Str(s) = &expr_lit.lit
+                {
+                    tool_title = Some(s.value());
+                }
+            }
+            Meta::NameValue(nv) if nv.path.is_ident("annotation_title") => {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Str(s) = &expr_lit.lit
+                {
+                    annotation_title = Some(s.value());
+                }
+            }
+            Meta::NameValue(nv) if nv.path.is_ident("read_only") => {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Bool(b) = &expr_lit.lit
+                {
+                    read_only = Some(b.value);
+                } else {
+                    return Err(syn::Error::new_spanned(&nv.value, "read_only must be a boolean (true or false)"));
+                }
+            }
+            Meta::NameValue(nv) if nv.path.is_ident("destructive") => {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Bool(b) = &expr_lit.lit
+                {
+                    destructive = Some(b.value);
+                } else {
+                    return Err(syn::Error::new_spanned(&nv.value, "destructive must be a boolean (true or false)"));
+                }
+            }
+            Meta::NameValue(nv) if nv.path.is_ident("idempotent") => {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Bool(b) = &expr_lit.lit
+                {
+                    idempotent = Some(b.value);
+                } else {
+                    return Err(syn::Error::new_spanned(&nv.value, "idempotent must be a boolean (true or false)"));
+                }
+            }
+            Meta::NameValue(nv) if nv.path.is_ident("open_world") => {
+                if let syn::Expr::Lit(expr_lit) = &nv.value
+                    && let Lit::Bool(b) = &expr_lit.lit
+                {
+                    open_world = Some(b.value);
+                } else {
+                    return Err(syn::Error::new_spanned(&nv.value, "open_world must be a boolean (true or false)"));
                 }
             }
             _ => {}
@@ -177,6 +233,22 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         }
     }
 
+    // Generate title expression for HasBaseMetadata::title()
+    let tool_title_expr = match &tool_title {
+        Some(t) => quote! { Some(#t) },
+        None => quote! { None },
+    };
+
+    // Generate annotations impl (centralized via AnnotationMeta)
+    let annotation_meta = crate::utils::AnnotationMeta {
+        annotation_title,
+        read_only,
+        destructive,
+        idempotent,
+        open_world,
+    };
+    let annotations_impl = crate::utils::generate_annotations_impl(&struct_name, &annotation_meta);
+
     // Generate HasExecution impl based on task_support attribute
     let execution_impl = match task_support.as_deref() {
         Some("optional") => quote! {
@@ -237,7 +309,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         #[automatically_derived]
         impl turul_mcp_builders::traits::HasBaseMetadata for #struct_name {
             fn name(&self) -> &str { #tool_name }
-            fn title(&self) -> Option<&str> { None }
+            fn title(&self) -> Option<&str> { #tool_title_expr }
         }
 
         #[automatically_derived]
@@ -259,9 +331,7 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
         }
 
         #[automatically_derived]
-        impl turul_mcp_builders::traits::HasAnnotations for #struct_name {
-            fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
-        }
+        #annotations_impl
 
         #[automatically_derived]
         impl turul_mcp_builders::traits::HasToolMeta for #struct_name {
@@ -343,7 +413,7 @@ fn is_option_type(field_type: &syn::Type) -> bool {
             .path
             .segments
             .last()
-            .map_or(false, |s| s.ident == "Option")
+            .is_some_and(|s| s.ident == "Option")
     } else {
         false
     }
@@ -418,5 +488,69 @@ mod tests {
 
         let result = mcp_tool_impl(args, input);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_function_tool_all_annotations() {
+        let args: Punctuated<Meta, Token![,]> = parse_quote! {
+            name = "search", description = "Search the web",
+            title = "Web Search",
+            read_only = true, open_world = true
+        };
+
+        let input: ItemFn = parse_quote! {
+            async fn search(query: String) -> Result<String, String> {
+                Ok(query)
+            }
+        };
+
+        let result = mcp_tool_impl(args, input);
+        assert!(result.is_ok());
+        let output = result.unwrap().to_string();
+        assert!(output.contains("ANNOTATIONS"));
+        assert!(output.contains("ToolAnnotations"));
+        assert!(output.contains("Web Search"));
+    }
+
+    #[test]
+    fn test_function_tool_no_annotations() {
+        let args: Punctuated<Meta, Token![,]> = parse_quote! {
+            name = "test", description = "A test function"
+        };
+
+        let input: ItemFn = parse_quote! {
+            async fn test_fn(value: f64) -> Result<f64, String> {
+                Ok(value)
+            }
+        };
+
+        let result = mcp_tool_impl(args, input);
+        assert!(result.is_ok());
+        let output = result.unwrap().to_string();
+        // No ANNOTATIONS OnceLock when no annotation fields set
+        assert!(!output.contains("ANNOTATIONS"));
+    }
+
+    #[test]
+    fn test_wrong_type_for_bool_annotation_produces_error() {
+        // read_only = "true" (string, not bool) should error
+        let args: Punctuated<Meta, Token![,]> = parse_quote! {
+            name = "test", description = "A test", read_only = "true"
+        };
+
+        let input: ItemFn = parse_quote! {
+            async fn test_fn(value: f64) -> Result<f64, String> {
+                Ok(value)
+            }
+        };
+
+        let result = mcp_tool_impl(args, input);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("read_only must be a boolean"),
+            "Expected type error, got: {}",
+            err
+        );
     }
 }

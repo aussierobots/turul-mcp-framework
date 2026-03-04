@@ -66,6 +66,49 @@ async fn test_double_tool() {
 
 **See:** `examples/unit-test-tool.rs` for a complete example.
 
+### Asserting Tool Annotations in `tools/list`
+
+Tool annotations (MCP 2025-11-25) serialize with camelCase keys and are omitted when unset. Test both presence and absence to prevent wire-shape regressions:
+
+```rust
+use turul_mcp_server::prelude::*;
+
+#[derive(McpTool, Default)]
+#[tool(name = "delete_file", description = "Delete a file",
+       read_only = false, destructive = true, idempotent = true, open_world = false)]
+struct DeleteFileTool {
+    #[param(description = "Path")]
+    path: String,
+}
+
+// Tool with NO annotations — verify omission
+#[derive(McpTool, Default)]
+#[tool(name = "plain", description = "A plain tool")]
+struct PlainTool {
+    #[param(description = "Value")]
+    value: String,
+}
+
+#[tokio::test]
+async fn test_annotations_wire_shape() {
+    // Annotated tool → camelCase keys present
+    let tool = DeleteFileTool::default().to_tool();
+    let json = serde_json::to_value(&tool).unwrap();
+    let ann = &json["annotations"];
+    assert_eq!(ann["readOnlyHint"], false);       // camelCase, not read_only_hint
+    assert_eq!(ann["destructiveHint"], true);
+    assert_eq!(ann["idempotentHint"], true);
+    assert_eq!(ann["openWorldHint"], false);
+
+    // Unannotated tool → annotations key absent
+    let plain = PlainTool::default().to_tool();
+    let json = serde_json::to_value(&plain).unwrap();
+    assert!(json.get("annotations").is_none());   // omitted, not null
+}
+```
+
+> **Note:** `ToolAnnotations` uses `skip_serializing_if = "Option::is_none"` on all fields, so unset hints don't appear in the JSON at all. This is distinct from resource/prompt `Annotations` (which have `audience`/`priority` fields).
+
 ## E2E Testing Architecture
 
 E2E tests start a real HTTP server and send requests via `McpTestClient`.

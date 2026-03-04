@@ -67,6 +67,12 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 output_type: None,
                 output_field: None,
                 task_support: None,
+                title: None,
+                annotation_title: None,
+                read_only: None,
+                destructive: None,
+                idempotent: None,
+                open_world: None,
             }
         }
     };
@@ -115,7 +121,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
                 .path
                 .segments
                 .last()
-                .map_or(false, |s| s.ident == "Option")
+                .is_some_and(|s| s.ident == "Option")
         } else {
             false
         };
@@ -150,6 +156,15 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
 
     let tool_name = &tool_meta.name;
     let tool_description = &tool_meta.description;
+
+    // Generate title expression for HasBaseMetadata::title()
+    let tool_title_expr = match &tool_meta.title {
+        Some(t) => quote! { Some(#t) },
+        None => quote! { None },
+    };
+
+    // Generate annotations impl (centralized via AnnotationMeta)
+    let annotations_impl = crate::utils::generate_annotations_impl(name, &tool_meta.to_annotation_meta());
 
     // Determine the output field name consistently for both schema and runtime
     let runtime_field_name = if let Some(ref output_type) = tool_meta.output_type {
@@ -219,8 +234,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
 
             fn title(&self) -> Option<&str> {
-                // TODO: Extract from tool attributes when available
-                None
+                #tool_title_expr
             }
         }
 
@@ -354,12 +368,7 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
             }
         }
 
-        impl turul_mcp_builders::traits::HasAnnotations for #name {
-            fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
-                // TODO: Extract from tool attributes when available
-                None
-            }
-        }
+        #annotations_impl
 
         impl turul_mcp_builders::traits::HasToolMeta for #name {
             fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> {
@@ -512,5 +521,92 @@ mod tests {
         assert!(result.is_ok());
 
         // Framework auto-determines name as "calculator"
+    }
+
+    #[test]
+    fn test_derive_all_annotations() {
+        let input: DeriveInput = parse_quote! {
+            #[tool(name = "delete_file", description = "Delete a file",
+                   title = "File Deleter",
+                   annotation_title = "File Deletion",
+                   read_only = false, destructive = true,
+                   idempotent = true, open_world = false)]
+            struct DeleteFileTool {
+                path: String,
+            }
+        };
+        let result = derive_mcp_tool_impl(input);
+        assert!(result.is_ok());
+        let output = result.unwrap().to_string();
+        // Verify annotations are generated (ANNOTATIONS OnceLock pattern)
+        assert!(output.contains("ANNOTATIONS"));
+        assert!(output.contains("ToolAnnotations"));
+        // Verify title is set on HasBaseMetadata
+        assert!(output.contains("File Deleter"));
+    }
+
+    #[test]
+    fn test_derive_no_annotations_backward_compat() {
+        let input: DeriveInput = parse_quote! {
+            #[tool(name = "test", description = "A test tool")]
+            struct TestTool {
+                value: f64,
+            }
+        };
+        let result = derive_mcp_tool_impl(input);
+        assert!(result.is_ok());
+        let output = result.unwrap().to_string();
+        // No ANNOTATIONS OnceLock when no annotation fields set
+        assert!(!output.contains("ANNOTATIONS"));
+    }
+
+    #[test]
+    fn test_derive_partial_annotations() {
+        let input: DeriveInput = parse_quote! {
+            #[tool(name = "search", description = "Search",
+                   read_only = true)]
+            struct SearchTool {
+                query: String,
+            }
+        };
+        let result = derive_mcp_tool_impl(input);
+        assert!(result.is_ok());
+        let output = result.unwrap().to_string();
+        assert!(output.contains("ANNOTATIONS"));
+        assert!(output.contains("ToolAnnotations"));
+    }
+
+    #[test]
+    fn test_derive_title_routes_to_base_metadata() {
+        let input: DeriveInput = parse_quote! {
+            #[tool(name = "test", description = "Test", title = "My Title")]
+            struct TestTool {
+                value: f64,
+            }
+        };
+        let result = derive_mcp_tool_impl(input);
+        assert!(result.is_ok());
+        let output = result.unwrap().to_string();
+        // title = "My Title" goes to HasBaseMetadata::title(), NOT ToolAnnotations
+        assert!(output.contains("My Title"));
+        // No ANNOTATIONS OnceLock should be generated (no annotation fields set)
+        assert!(!output.contains("ANNOTATIONS"));
+    }
+
+    #[test]
+    fn test_derive_annotation_title_routes_to_annotations() {
+        let input: DeriveInput = parse_quote! {
+            #[tool(name = "test", description = "Test",
+                   annotation_title = "Annotation Title")]
+            struct TestTool {
+                value: f64,
+            }
+        };
+        let result = derive_mcp_tool_impl(input);
+        assert!(result.is_ok());
+        let output = result.unwrap().to_string();
+        // annotation_title goes to ToolAnnotations.title
+        assert!(output.contains("ANNOTATIONS"));
+        assert!(output.contains("Annotation Title"));
     }
 }

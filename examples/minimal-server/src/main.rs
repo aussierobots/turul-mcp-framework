@@ -23,10 +23,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut port: u16 = 8641;
     let args: Vec<String> = std::env::args().collect();
     for i in 0..args.len() {
-        if args[i] == "--port" {
-            if let Some(p) = args.get(i + 1) {
-                port = p.parse()?;
-            }
+        if args[i] == "--port"
+            && let Some(p) = args.get(i + 1)
+        {
+            port = p.parse()?;
         }
     }
 

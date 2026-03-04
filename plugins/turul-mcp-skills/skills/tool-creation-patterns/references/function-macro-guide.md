@@ -30,6 +30,12 @@ async fn greet(
 | `description` | Yes | Human-readable description for MCP clients |
 | `output_field` | No | JSON field name wrapping the output (default: `"result"`) |
 | `task_support` | No | Per-tool task support: `"optional"`, `"required"`, or `"forbidden"` |
+| `title` | No | Display title → `Tool.title` (via `HasBaseMetadata`) |
+| `annotation_title` | No | Title inside `ToolAnnotations.title` (rare, see Annotations section) |
+| `read_only` | No | `bool` → `readOnlyHint` in JSON (MCP default: `false`) |
+| `destructive` | No | `bool` → `destructiveHint` in JSON (MCP default: `true`) |
+| `idempotent` | No | `bool` → `idempotentHint` in JSON (MCP default: `false`) |
+| `open_world` | No | `bool` → `openWorldHint` in JSON (MCP default: `true`) |
 
 ### Parameter Attributes
 
@@ -146,6 +152,45 @@ async fn slow_process(input: String) -> McpResult<String> {
 **Values:** `"optional"` (sync or async), `"required"` (must run as task), `"forbidden"` (never as task). Omit the attribute for tools that don't support tasks.
 
 **Server requirement:** The server must have `.with_task_storage()` configured for tools with task support.
+
+## Tool Annotations
+
+Annotations are MCP 2025-11-25 hints that tell clients about a tool's behavior. All are optional — omitting them preserves `None` (backward compatible).
+
+> **Not to be confused with resource/prompt `Annotations`** (which have `audience` and `priority`). Tool annotations use the separate `ToolAnnotations` type with hint fields.
+
+```rust
+#[mcp_tool(
+    name = "web_search",
+    description = "Search the web for information",
+    title = "Web Search",           // → Tool.title (primary display name)
+    read_only = true,               // → readOnlyHint in JSON
+    open_world = true,              // → openWorldHint in JSON
+)]
+async fn web_search(
+    #[param(description = "Search query")] query: String,
+) -> McpResult<String> {
+    Ok(format!("Results for: {}", query))
+}
+```
+
+### `title` vs `annotation_title`
+
+- `title = "..."` → sets `Tool.title` (the primary display name shown by MCP clients). This is the one you almost always want.
+- `annotation_title = "..."` → sets `ToolAnnotations.title` only. Use this only if you need a different title inside the annotations object (rare).
+
+### Macro Attributes → JSON Wire Format
+
+| Attribute | JSON key |
+|---|---|
+| `read_only` | `readOnlyHint` |
+| `destructive` | `destructiveHint` |
+| `idempotent` | `idempotentHint` |
+| `open_world` | `openWorldHint` |
+
+Unset annotations are omitted from JSON entirely (via `skip_serializing_if`).
+
+**Type validation:** Boolean annotations require literal `true` or `false`. Using a string (e.g., `read_only = "true"`) produces a compile error.
 
 ## Shared Application State (`OnceLock`)
 
