@@ -15,6 +15,8 @@ pub struct StreamHandler {
     event_receiver: Option<mpsc::UnboundedReceiver<ServerEvent>>,
     /// Event callbacks
     callbacks: Arc<parking_lot::Mutex<StreamCallbacks>>,
+    /// Channel for sending JSON-RPC responses back to the server
+    response_sender: Option<mpsc::UnboundedSender<Value>>,
 }
 
 /// Type alias for request handler callback
@@ -59,12 +61,18 @@ impl StreamHandler {
         Self {
             event_receiver: None,
             callbacks: Arc::new(parking_lot::Mutex::new(StreamCallbacks::default())),
+            response_sender: None,
         }
     }
 
     /// Set event receiver from transport
     pub fn set_receiver(&mut self, receiver: mpsc::UnboundedReceiver<ServerEvent>) {
         self.event_receiver = Some(receiver);
+    }
+
+    /// Set channel for sending JSON-RPC responses back to the server
+    pub fn set_response_sender(&mut self, sender: mpsc::UnboundedSender<Value>) {
+        self.response_sender = Some(sender);
     }
 
     /// Set notification callback
@@ -115,6 +123,7 @@ impl StreamHandler {
             .ok_or_else(|| McpClientError::generic("No event receiver configured"))?;
 
         let callbacks = Arc::clone(&self.callbacks);
+        let response_sender = self.response_sender.clone();
 
         tokio::spawn(async move {
             info!("Stream handler started");
@@ -131,20 +140,71 @@ impl StreamHandler {
                         }
                     }
                     ServerEvent::Request(request) => {
+                        // Per JSON-RPC 2.0, only requests with a non-null id
+                        // expect a response. Messages without id are notifications
+                        // and MUST NOT receive a reply.
+                        let request_id = request.get("id").filter(|id| !id.is_null()).cloned();
+
+                        if request_id.is_none() {
+                            warn!("Received server request without valid id, treating as notification");
+                            if let Some(ref callback) = callbacks.request {
+                                let _ = callback(request);
+                            }
+                            continue;
+                        }
+
                         if let Some(ref callback) = callbacks.request {
-                            match callback(request) {
-                                Ok(_response) => {
+                            let response_json = match callback(request) {
+                                Ok(result) => {
                                     debug!("Request handled successfully");
-                                    // TODO: Send response back to server
+                                    serde_json::json!({
+                                        "jsonrpc": "2.0",
+                                        "id": request_id,
+                                        "result": result
+                                    })
                                 }
                                 Err(error) => {
                                     warn!(error = %error, "Request handler returned error");
-                                    // TODO: Send error response back to server
+                                    serde_json::json!({
+                                        "jsonrpc": "2.0",
+                                        "id": request_id,
+                                        "error": {
+                                            "code": -32603,
+                                            "message": error
+                                        }
+                                    })
                                 }
+                            };
+
+                            if let Some(ref sender) = response_sender {
+                                if let Err(e) = sender.send(response_json) {
+                                    warn!("Failed to send response via channel: {}", e);
+                                }
+                            } else {
+                                warn!("No response sender configured, response discarded");
                             }
                         } else {
                             warn!("Received server request but no request handler configured");
+                            if let Some(ref sender) = response_sender {
+                                let error_json = serde_json::json!({
+                                    "jsonrpc": "2.0",
+                                    "id": request_id,
+                                    "error": {
+                                        "code": -32601,
+                                        "message": "Method not found: no request handler configured"
+                                    }
+                                });
+                                if let Err(e) = sender.send(error_json) {
+                                    warn!("Failed to send error response via channel: {}", e);
+                                }
+                            }
                         }
+                    }
+                    ServerEvent::Response(_) => {
+                        // Response to a client-originated request received via SSE.
+                        // Handled by the normal request/response matching path,
+                        // not by the stream handler callback.
+                        debug!("Received async response via event stream");
                     }
                     ServerEvent::ConnectionLost => {
                         warn!("Connection lost");
@@ -309,5 +369,183 @@ mod tests {
 
         // Test that callback is registered
         assert!(handler.callbacks.lock().notification.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_stream_handler_sends_success_response() {
+        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let (response_tx, mut response_rx) = mpsc::unbounded_channel();
+
+        let mut handler = StreamHandler::new();
+        handler.set_receiver(event_rx);
+        handler.set_response_sender(response_tx);
+
+        handler.on_request(|_req| Ok(serde_json::json!({"status": "ok"})));
+
+        handler.start().await.unwrap();
+
+        // Send a server-initiated request
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": "srv-1",
+            "method": "sampling/createMessage",
+            "params": {}
+        });
+        event_tx.send(ServerEvent::Request(request)).unwrap();
+
+        // Verify response format
+        let response = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            response_rx.recv(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(response["jsonrpc"], "2.0");
+        assert_eq!(response["id"], "srv-1");
+        assert_eq!(response["result"]["status"], "ok");
+        assert!(response.get("error").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_stream_handler_sends_error_response() {
+        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let (response_tx, mut response_rx) = mpsc::unbounded_channel();
+
+        let mut handler = StreamHandler::new();
+        handler.set_receiver(event_rx);
+        handler.set_response_sender(response_tx);
+
+        handler.on_request(|_req| Err("something went wrong".to_string()));
+
+        handler.start().await.unwrap();
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 42,
+            "method": "sampling/createMessage",
+            "params": {}
+        });
+        event_tx.send(ServerEvent::Request(request)).unwrap();
+
+        let response = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            response_rx.recv(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(response["jsonrpc"], "2.0");
+        assert_eq!(response["id"], 42);
+        assert_eq!(response["error"]["code"], -32603);
+        assert_eq!(response["error"]["message"], "something went wrong");
+    }
+
+    #[tokio::test]
+    async fn test_stream_handler_no_callback_sends_method_not_found() {
+        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let (response_tx, mut response_rx) = mpsc::unbounded_channel();
+
+        let mut handler = StreamHandler::new();
+        handler.set_receiver(event_rx);
+        handler.set_response_sender(response_tx);
+        // No on_request callback registered
+
+        handler.start().await.unwrap();
+
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": "req-99",
+            "method": "unknown/method",
+            "params": {}
+        });
+        event_tx.send(ServerEvent::Request(request)).unwrap();
+
+        let response = tokio::time::timeout(
+            std::time::Duration::from_secs(1),
+            response_rx.recv(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(response["jsonrpc"], "2.0");
+        assert_eq!(response["id"], "req-99");
+        assert_eq!(response["error"]["code"], -32601);
+    }
+
+    #[tokio::test]
+    async fn test_stream_handler_no_id_skips_response() {
+        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let (response_tx, mut response_rx) = mpsc::unbounded_channel();
+
+        let mut handler = StreamHandler::new();
+        handler.set_receiver(event_rx);
+        handler.set_response_sender(response_tx);
+
+        let callback_called = Arc::new(parking_lot::Mutex::new(false));
+        let callback_called_clone = Arc::clone(&callback_called);
+        handler.on_request(move |_req| {
+            *callback_called_clone.lock() = true;
+            Ok(serde_json::json!({"handled": true}))
+        });
+
+        handler.start().await.unwrap();
+
+        // Request without id — should invoke callback but NOT send response
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "sampling/createMessage",
+            "params": {}
+        });
+        event_tx.send(ServerEvent::Request(request)).unwrap();
+
+        // Give handler time to process
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Callback should have been called
+        assert!(*callback_called.lock(), "callback should be invoked even without id");
+
+        // But no response should be emitted
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            response_rx.recv(),
+        )
+        .await;
+        assert!(result.is_err(), "no response should be sent for request without id");
+    }
+
+    #[tokio::test]
+    async fn test_stream_handler_null_id_skips_response() {
+        let (event_tx, event_rx) = mpsc::unbounded_channel();
+        let (response_tx, mut response_rx) = mpsc::unbounded_channel();
+
+        let mut handler = StreamHandler::new();
+        handler.set_receiver(event_rx);
+        handler.set_response_sender(response_tx);
+
+        handler.on_request(|_req| Ok(serde_json::json!({"handled": true})));
+
+        handler.start().await.unwrap();
+
+        // Request with explicit null id — also should NOT send response
+        let request = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": null,
+            "method": "sampling/createMessage",
+            "params": {}
+        });
+        event_tx.send(ServerEvent::Request(request)).unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let result = tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            response_rx.recv(),
+        )
+        .await;
+        assert!(result.is_err(), "no response should be sent for request with null id");
     }
 }

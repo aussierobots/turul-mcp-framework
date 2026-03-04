@@ -170,10 +170,13 @@ pub type EventReceiver = tokio::sync::mpsc::UnboundedReceiver<ServerEvent>;
 /// Server-initiated events
 #[derive(Debug, Clone)]
 pub enum ServerEvent {
-    /// Server sent a notification
+    /// Server sent a notification (method only, no id)
     Notification(Value),
-    /// Server sent a request (requiring response)
+    /// Server sent a request requiring response (method + id)
     Request(Value),
+    /// Response to a client-originated request (id only, no method).
+    /// Received via SSE when server streams responses asynchronously.
+    Response(Value),
     /// Connection was lost
     ConnectionLost,
     /// Transport error occurred

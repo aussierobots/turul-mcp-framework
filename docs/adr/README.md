@@ -38,6 +38,7 @@ Each ADR follows the standard format:
 | [016](./016-task-storage-architecture.md) | Task Storage Architecture | Accepted | 2026-02-11 | Pluggable task storage with 4 backends and parity test suite |
 | [017](./017-task-runtime-executor-boundary.md) | Task Runtime-Executor Boundary | Accepted | 2026-02-11 | Three-layer split: storage / executor / runtime |
 | [018](./018-task-pagination-cursor-contract.md) | Task Pagination Cursor Contract | Accepted | 2026-02-11 | Deterministic cursor-based pagination across backends |
+| [020](./020-client-response-forwarding-architecture.md) | Client Response Forwarding Architecture | Accepted | 2026-03-05 | Channel-based forwarding for server-initiated request responses |
 
 ## Tasks Architecture ADRs
 

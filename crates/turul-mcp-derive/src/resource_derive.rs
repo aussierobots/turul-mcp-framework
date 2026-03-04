@@ -16,6 +16,12 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
     let name = &resource_meta.name;
     let description = &resource_meta.description;
 
+    // Generate title expression for HasResourceMetadata::title()
+    let title_expr = match &resource_meta.title {
+        Some(t) => quote! { Some(#t) },
+        None => quote! { None },
+    };
+
     // Handle mime_type properly for quote! generation
     let mime_type_expr = match &resource_meta.mime_type {
         Some(mt) => quote! { Some(#mt).as_deref() },
@@ -43,7 +49,7 @@ pub fn derive_mcp_resource_impl(input: DeriveInput) -> Result<TokenStream> {
             }
 
             fn title(&self) -> Option<&str> {
-                None  // TODO: Support title from attributes
+                #title_expr
             }
         }
 
@@ -196,5 +202,44 @@ mod tests {
 
         let result = derive_mcp_resource_impl(input);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_resource_title_attribute() {
+        let input: DeriveInput = parse_quote! {
+            #[resource(
+                uri = "system://status",
+                name = "status",
+                description = "System status",
+                title = "Live System Status"
+            )]
+            struct StatusResource;
+        };
+
+        let result = derive_mcp_resource_impl(input);
+        assert!(result.is_ok());
+
+        let generated = result.unwrap().to_string();
+        assert!(generated.contains("Live System Status"), "title should appear in generated code");
+        assert!(generated.contains("Some"), "title should be Some(...)");
+    }
+
+    #[test]
+    fn test_resource_no_title_returns_none() {
+        let input: DeriveInput = parse_quote! {
+            #[resource(
+                uri = "system://info",
+                name = "info",
+                description = "System info"
+            )]
+            struct InfoResource;
+        };
+
+        let result = derive_mcp_resource_impl(input);
+        assert!(result.is_ok());
+
+        let generated = result.unwrap().to_string();
+        // title() should return None
+        assert!(generated.contains("None"), "title without attribute should be None");
     }
 }

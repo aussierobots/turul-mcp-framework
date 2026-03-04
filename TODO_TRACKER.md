@@ -1,21 +1,15 @@
 # TODO Tracker
 
 **Last Updated**: 2026-03-05
-**Version**: v0.3.7 (branch: `main`)
-**Tests**: 1,580+ passing, 43 test binaries, zero clippy warnings
+**Version**: v0.3.8-dev (branch: `feature/v0.3.8`)
+**Tests**: 1,590+ passing, 43 test binaries, zero clippy warnings
 **Spec**: MCP 2025-11-25 (known gaps tracked below)
 
 ---
 
 ## Top Priority (P1) — MCP Correctness / Interoperability
 
-### Client streaming response forwarding
-
-- **File**: `crates/turul-mcp-client/src/streaming.rs:138-142`
-- **What**: Server-initiated requests (sampling, elicitation) are received and dispatched to callbacks, but responses are never sent back to the server. Both success and error paths log and discard.
-- **Why it matters**: MCP 2025-11-25 sampling and elicitation are bidirectional — clients must forward callback responses. Without this, any server using `createMessage` or `elicit` against this client will hang.
-- **Compliance**: Direct — breaks spec-required request/response flow.
-- **Exit criteria**: `streaming.rs` sends JSON-RPC response (success or error) back over the transport after callback invocation. E2E test confirms round-trip.
+(none)
 
 ---
 
@@ -45,13 +39,21 @@
 - **Compliance**: Indirect — progress notifications are delivered, but not via the optimal path.
 - **Exit criteria**: Broadcaster branch sends progress notifications directly via `NotificationBroadcaster`, bypassing the session manager closure. E2E test confirms progress events arrive via SSE under concurrent tool calls.
 
-### Resource title from derive macro attributes
+### Client response forwarding: live wire-format integration test
 
-- **File**: `crates/turul-mcp-derive/src/resource_derive.rs:46`
-- **What**: `#[derive(McpResource)]` hardcodes `title() -> None`. Same pattern as tool annotations (solved in v0.3.7 for tools) but not yet applied to resources.
-- **Why it matters**: Resource `title` is part of MCP 2025-11-25. Users must abandon macros to set resource titles.
+- **File**: `tests/client_server_request_response.rs`, `crates/turul-mcp-client/src/client.rs` (test module)
+- **What**: The v0.3.8 client streaming response forwarding fix is validated with in-process channel tests and a mock transport test. Neither exercises the full wire-format path (HTTP request/response over a live server). Wire-format/network behavior is partially covered by existing transport tests for other flows, but not specifically for server→client→server request/response.
+- **Why it matters**: A regression in HTTP framing, SSE event classification, or content-type negotiation specific to response forwarding would not be caught by current tests.
+- **Compliance**: None (test coverage gap, not spec violation). The protocol logic itself is tested.
+- **Exit criteria**: Integration test that starts a live test server sending a server-initiated request (e.g., `sampling/createMessage`), connects a real `McpClient` with `HttpTransport`, and verifies the server receives the JSON-RPC response over HTTP.
+
+### Prompt title from derive/attribute macros
+
+- **Files**: `crates/turul-mcp-derive/src/prompt_derive.rs`, `crates/turul-mcp-derive/src/prompt_attr.rs`
+- **What**: Same gap that resource macros had before v0.3.8: prompt macros hardcode `title() -> None`. `PromptMeta` doesn't parse `title`.
+- **Why it matters**: Prompt `title` is part of MCP 2025-11-25. Users must abandon macros to set prompt titles.
 - **Compliance**: Indirect — `title` is optional in the spec but useful for client display.
-- **Exit criteria**: `#[derive(McpResource)]` and `#[mcp_resource]` support `title = "..."` attribute; `HasResourceMetadata::title()` returns the value.
+- **Exit criteria**: `#[derive(McpPrompt)]` and `#[mcp_prompt]` support `title = "..."` attribute; `HasPromptMetadata::title()` returns the value.
 
 ### Lambda streaming tests are stubs
 
@@ -76,14 +78,6 @@
 - **Why it matters**: The test server doesn't exercise the full elicitation workflow it models. Low risk — the actual elicitation protocol is tested elsewhere.
 - **Compliance**: None (test completeness).
 - **Exit criteria**: Fields either used in workflow logic or removed. No `#[allow(dead_code)]` TODOs remaining.
-
-### JsonSchema derive Option\<T\> type-schema unwrapping
-
-- **File**: `crates/turul-mcp-derive/src/json_schema_derive.rs:42-44`
-- **What**: `generate_field_schema()` (line 78) does NOT unwrap `Option<T>` to get the inner type's schema. For `Option<u32>`, `path.get_ident()` returns `None` (generic arguments), bypassing the primitive match at line 81. The else branch (line 102) only handles `Vec<T>`, so `Option<u32>` falls through to the catch-all `JsonSchema::string()` at line 116 instead of producing `JsonSchema::integer()`. Required-field exclusion IS done (line 44: `if !is_option_type(&field.ty)`).
-- **Why it matters**: This only affects the legacy `#[derive(JsonSchema)]` path (`JsonSchemaGenerator` trait) — the main tool macro paths (`#[derive(McpTool)]`, `#[mcp_tool]`) use `utils.rs:type_to_schema()` which was fixed in v0.3.6. Low real-world impact since schemars is the recommended approach for output schemas.
-- **Compliance**: Indirect — produces incorrect JSON Schema type for `Option<T>` fields, but only on the legacy derive path.
-- **Exit criteria**: Fix `generate_field_schema()` to unwrap `Option<T>` → schema for `T`, or document that this derive macro is a legacy fallback with known limitations.
 
 ---
 
@@ -121,11 +115,10 @@
 
 ## Next 2 Releases
 
-### v0.3.8 (candidates)
+### v0.3.9 (candidates)
 
-- [ ] Fix client streaming response forwarding (P1)
-- [ ] Fix `json_schema_derive.rs` Option\<T\> type-schema unwrapping (or document as legacy)
-- [ ] Resource `title` attribute on derive/function macros (P2)
+- [ ] Prompt `title` attribute on derive/attribute macros (P2)
+- [ ] Client response forwarding live wire-format integration test (P2)
 
 ### v0.4.0 (candidates)
 
@@ -140,6 +133,9 @@
 
 | Version | Item |
 |---|---|
+| v0.3.8 | Client streaming response forwarding: `StreamHandler` → response channel → consumer task → `transport.send_notification()`. Includes `ServerEvent::Response` variant, id-null guard, HTTP event classification fix, mock transport tests. See [ADR-020](docs/adr/020-client-response-forwarding-architecture.md). |
+| v0.3.8 | Fix `json_schema_derive.rs` `Option<T>` type-schema unwrapping: `generate_field_schema()` now uses `segments.last()` to handle generic types; `is_option_type()` fixed for qualified paths |
+| v0.3.8 | Resource `title` attribute support across all 3 macro paths (`#[derive(McpResource)]`, `#[mcp_resource]`, `resource!{}`) |
 | v0.3.7 | ToolAnnotations macro support (`read_only`, `destructive`, `idempotent`, `open_world`, `title`, `annotation_title`) across all 3 macro paths |
 | v0.3.7 | Session termination: reject requests on terminated sessions after `DELETE /mcp` |
 | v0.3.6 | Fix `Option<T>`/`Vec<T>` JSON Schema types in tool derive macros (`utils.rs:type_to_schema`); legacy `#[derive(JsonSchema)]` path in `json_schema_derive.rs` not covered |

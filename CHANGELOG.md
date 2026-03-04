@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.8] - 2026-03-05
+
+### Fixed
+
+- **Client streaming response forwarding** (P1): Server-initiated requests (`sampling/createMessage`, `elicitation/create`) now receive JSON-RPC responses back from the client callback. Previously responses were logged and discarded, causing servers to hang indefinitely. Architecture: `StreamHandler` → response channel → consumer task → `transport.send_notification()`. See [ADR-020](docs/adr/020-client-response-forwarding-architecture.md).
+- **HTTP transport event classification**: Server-initiated requests (with both `method` and `id`) were misclassified as notifications. Fixed classification order: `method+id` → Request, `method` only → Notification, `id` only → Response.
+- **`json_schema_derive.rs` `Option<T>` type-schema**: `generate_field_schema()` now uses `segments.last()` instead of `get_ident()` to handle generic types. `Option<u32>` correctly generates `integer` schema (was falling through to `string`). `is_option_type()` fixed to use `segments.last()` for qualified path support (`std::option::Option<T>`).
+
+### Added
+
+- **Resource `title` attribute**: All three macro paths (`#[derive(McpResource)]`, `#[mcp_resource]`, `resource!{}`) now support `title = "..."` attribute. `HasResourceMetadata::title()` returns the configured value.
+- `ServerEvent::Response` variant for distinguishing id-only SSE frames (responses to client-originated requests) from server-initiated requests. `StreamHandler` ignores these — they are handled by the normal request/response matching path.
+- Null/missing `id` guard: Server requests without a valid `id` invoke the callback but do not emit a response (per JSON-RPC 2.0 spec).
+- 11 new tests covering client response forwarding pipeline (unit + integration + mock transport).
+
 ## [0.3.7] - 2026-03-04
 
 ### Added
@@ -354,7 +369,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.7...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.8...HEAD
+[0.3.8]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.5...v0.3.6
 [0.3.5]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.4...v0.3.5
