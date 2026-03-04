@@ -193,6 +193,35 @@ struct SlowCalcTool { a: f64 }
 
 **Capability truthfulness**: When no task runtime is configured, the server strips `execution` from `tools/list` responses and rejects task-augmented `tools/call` requests.
 
+### Tool Annotations (per-tool)
+
+MCP 2025-11-25 behavior hints. All attributes are optional — omit for `None`.
+
+```rust
+// Function macro
+#[mcp_tool(name = "search", description = "Search the web",
+           title = "Web Search", read_only = true, open_world = true)]
+async fn search(query: String) -> McpResult<String> { Ok(query) }
+
+// Derive macro
+#[derive(McpTool)]
+#[tool(name = "delete_file", description = "Delete a file",
+       title = "File Deleter", read_only = false, destructive = true,
+       idempotent = true, open_world = false)]
+struct DeleteFileTool { path: String }
+
+// Builder
+let tool = ToolBuilder::new("delete")
+    .annotations(ToolAnnotations::new()
+        .with_read_only_hint(false)
+        .with_destructive_hint(true))
+    .build()?;
+```
+
+**Attributes**: `title` (→ `Tool.title`), `annotation_title` (→ `ToolAnnotations.title`, rare), `read_only` (→ `readOnlyHint`), `destructive` (→ `destructiveHint`), `idempotent` (→ `idempotentHint`), `open_world` (→ `openWorldHint`).
+
+**Not `Annotations`**: Tool annotations (`ToolAnnotations`) are separate from resource/prompt `Annotations` (`audience`/`priority`).
+
 ### Output Types and Schemas
 
 **IMPORTANT**: Tools with custom output types (including Vec<T>) MUST specify the `output` attribute:
@@ -284,8 +313,8 @@ Before publishing a new version:
 5. **Stale version scan**: `grep -rn 'v0\.[0-9]\.[0-9]' plugins/ examples/ .claude/` — fix any outdated references
 6. **Publish order** (dependency-first):
    ```
-   protocol-2025-06-18 → protocol-2025-11-25 → protocol → builders → json-rpc-server →
-   session-storage → task-storage → derive* → server → http-server → client → aws-lambda
+   json-rpc-server → protocol-2025-06-18 → protocol-2025-11-25 → protocol → builders →
+   session-storage → task-storage → derive* → http-server → server → client → aws-lambda
    ```
    *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*
 7. **Git tag**: `git tag v0.x.y && git push origin v0.x.y`
