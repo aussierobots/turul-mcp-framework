@@ -21,6 +21,10 @@ pub enum OAuthError {
     KeyNotFound(String),
     /// Token decoding error
     DecodingError(String),
+    /// Resource URI validation failed
+    InvalidResourceUri(String),
+    /// Configuration error
+    InvalidConfiguration(String),
 }
 
 impl fmt::Display for OAuthError {
@@ -34,6 +38,8 @@ impl fmt::Display for OAuthError {
             Self::JwksFetchError(msg) => write!(f, "JWKS fetch error: {}", msg),
             Self::KeyNotFound(kid) => write!(f, "Key not found: {}", kid),
             Self::DecodingError(msg) => write!(f, "Decoding error: {}", msg),
+            Self::InvalidResourceUri(msg) => write!(f, "Invalid resource URI: {}", msg),
+            Self::InvalidConfiguration(msg) => write!(f, "Invalid configuration: {}", msg),
         }
     }
 }
