@@ -1,15 +1,18 @@
-# OAuth 2.1 Resource Server Compliance — v0.3.10
+# ADR-022: OAuth 2.1 Resource Server Compliance Fix (v0.3.10)
 
-**Status**: Approved
+**Status**: Accepted
+
 **Date**: 2026-03-07
 
-## Problem
+**Amends**: [ADR-021](021-oauth-resource-server-architecture.md) (D7–D11)
+
+## Context
 
 Codex audit against MCP 2025-11-25 Authorization spec found 6 compliance gaps in
-`turul-mcp-oauth` (P0-P2). The v0.3.9 implementation is architecturally sound but
+`turul-mcp-oauth` (P0–P2). The v0.3.9 implementation is architecturally sound but
 defaults are not spec-compliant.
 
-## Changes
+## Decision
 
 ### P0: Audience validation required by default
 
@@ -49,7 +52,22 @@ for tool-level scope checks returning 403 with `error="insufficient_scope"`.
 - Client-side OAuth flows (PKCE, dynamic registration, etc.)
 - Multi-AS JWKS federation (advanced use case, not needed for 0.3.10)
 
-## Release bar for 0.3.10
+## Consequences
+
+### Positive
+
+- All P0–P2 compliance gaps resolved; RS implementation matches MCP 2025-11-25 spec
+- Breaking API changes are minimal and caught at compile time (audience now required,
+  `new()` now returns `Result`)
+- URI validation prevents misconfigured deployments at construction time
+
+### Negative
+
+- Breaking change: `JwtValidator::new()` signature changes (callers must add audience)
+- Breaking change: `ProtectedResourceMetadata::new()` and `oauth_resource_server()`
+  now return `Result` (callers must handle errors)
+
+### Release bar
 
 1. Audience validated by default in JwtValidator and oauth_resource_server
 2. Issuer policy enforced (single AS required, no silent [0] fallback)
@@ -57,7 +75,7 @@ for tool-level scope checks returning 403 with `error="insufficient_scope"`.
 4. Scope in WWW-Authenticate when configured
 5. Cache-Control: no-store on challenge responses
 6. Tests cover all new failure modes
-7. ADR-021 updated
+7. ADR-021 updated (D7–D11)
 8. CHANGELOG.md updated
 9. Version bumped workspace-wide
 10. Dry publish passes
