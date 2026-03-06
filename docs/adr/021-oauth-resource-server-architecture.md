@@ -110,8 +110,8 @@ The `RouteRegistry` for serving `.well-known` paths enforces:
 
 - `OAuthResourceMiddleware` — Pre-session middleware implementing Bearer token
   validation and `WWW-Authenticate` challenge generation
-- `JwtValidator` — RS256/ES256 JWT validation with JWKS caching, kid-miss refresh,
-  and 60-second rate limiting on JWKS fetches
+- `JwtValidator` — RS256/ES256 JWT validation with mandatory audience validation,
+  JWKS caching, kid-miss refresh, and 60-second rate limiting on JWKS fetches
 - `ProtectedResourceMetadata` — RFC 9728 metadata document (serializable)
 - `WellKnownOAuthHandler` — Route handler for `/.well-known/oauth-protected-resource`
 - `oauth_resource_server()` — Convenience function returning both middleware and
@@ -133,18 +133,57 @@ The `RouteRegistry` for serving `.well-known` paths enforces:
 let metadata = ProtectedResourceMetadata::new(
     "https://example.com/mcp",
     vec!["https://auth.example.com".to_string()],
-);
+)?;
 
 let (auth_middleware, well_known) = oauth_resource_server(
     metadata,
     "https://auth.example.com/.well-known/jwks.json",
-);
+)?;
 
 McpServer::builder()
     .middleware(auth_middleware)
     .route("/.well-known/oauth-protected-resource", well_known)
     .build()?
 ```
+
+### v0.3.10 Compliance Amendments
+
+The following decisions address compliance gaps identified by spec audit against
+MCP 2025-11-25 Authorization (P0–P2 severity).
+
+#### D7: Audience Validation Required by Default (P0)
+
+`JwtValidator::new(jwks_uri, audience)` — audience is a required parameter.
+The MCP spec says servers MUST validate token audience. The previous optional
+`with_audience()` builder method has been removed. There is no opt-out.
+
+#### D8: Single-AS Issuer Policy (P1)
+
+`oauth_resource_server()` enforces exactly one authorization server in metadata.
+Multiple AS → `OAuthError::InvalidConfiguration`. The issuer is auto-wired from
+the single AS URI via `with_issuer()`. This prevents silent `[0]` fallback that
+could bypass issuer validation.
+
+#### D9: Scope in WWW-Authenticate (P1)
+
+When `scopes_supported` is configured on `ProtectedResourceMetadata`, the
+middleware includes `scope="scope1 scope2"` in the `WWW-Authenticate` header
+per RFC 6750 Section 3. Omitted when no scopes are configured.
+
+#### D10: Canonical URI Validation (P2)
+
+`ProtectedResourceMetadata::new()` is now fallible (`-> Result<Self, OAuthError>`).
+Validates using `url::Url`:
+- `resource`: absolute URI, http/https scheme, authority present, no fragment
+- `authorization_servers`: non-empty, each absolute URI, no fragment
+
+Invalid URIs return `OAuthError::InvalidResourceUri`. Empty AS list returns
+`OAuthError::InvalidConfiguration`.
+
+#### D11: Cache-Control on Challenge Responses (P2)
+
+All 401/403 challenge responses include `Cache-Control: no-store` per
+OAuth 2.1 Section 5.3. Applied in both Streamable HTTP and legacy transports.
 
 ## Consequences
 
