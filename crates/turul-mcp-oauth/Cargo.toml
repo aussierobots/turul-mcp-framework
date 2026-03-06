@@ -7,8 +7,8 @@ repository.workspace = true
 description = "OAuth 2.1 Resource Server support for Turul MCP framework"
 
 [dependencies]
-turul-http-mcp-server = { version = "0.3.10", path = "../turul-http-mcp-server" }
-turul-mcp-session-storage = { version = "0.3.10", path = "../turul-mcp-session-storage", default-features = false }
+turul-http-mcp-server.workspace = true
+turul-mcp-session-storage.workspace = true
 
 async-trait = "0.1"
 bytes = "1"

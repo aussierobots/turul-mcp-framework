@@ -155,6 +155,7 @@ turul-mcp-derive = { version = "0.3.10", path = "crates/turul-mcp-derive" }
 turul-mcp-client = { version = "0.3.10", path = "crates/turul-mcp-client" }
 turul-mcp-builders = { version = "0.3.10", path = "crates/turul-mcp-builders" }
 turul-mcp-aws-lambda = { version = "0.3.10", path = "crates/turul-mcp-aws-lambda" }
+turul-mcp-oauth = { version = "0.3.10", path = "crates/turul-mcp-oauth" }
 
 # Additional dependencies for examples and tests
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
