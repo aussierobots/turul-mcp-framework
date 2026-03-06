@@ -110,11 +110,18 @@ async fn main() -> McpResult<()> {
 
     // Configure Protected Resource Metadata (RFC 9728)
     let metadata = ProtectedResourceMetadata::new(&args.resource, vec![args.auth_server.clone()])
+        .map_err(|e| McpError::InvalidRequest {
+            message: format!("Invalid OAuth metadata: {}", e),
+        })?
         .with_scopes(vec!["mcp:read".to_string(), "mcp:write".to_string()]);
 
     // Create OAuth middleware + well-known route handlers (root + path form per RFC 9728 §3)
     let (auth_middleware, routes) =
-        turul_mcp_oauth::oauth_resource_server(metadata, &args.jwks_uri);
+        turul_mcp_oauth::oauth_resource_server(metadata, &args.jwks_uri).map_err(|e| {
+            McpError::InvalidRequest {
+                message: format!("OAuth setup failed: {}", e),
+            }
+        })?;
 
     let bind_address: std::net::SocketAddr = format!("127.0.0.1:{}", args.port)
         .parse()
@@ -122,7 +129,7 @@ async fn main() -> McpResult<()> {
 
     let mut builder = McpServer::builder()
         .name("oauth-resource-server")
-        .version("0.3.9")
+        .version("0.3.10")
         .title("OAuth 2.1 Resource Server Example")
         .instructions(
             "This server requires a valid Bearer token from the configured \

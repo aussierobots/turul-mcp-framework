@@ -405,6 +405,7 @@ impl SessionMcpHandler {
                     return Ok(Response::builder()
                         .status(StatusCode::from_u16(status).unwrap_or(StatusCode::UNAUTHORIZED))
                         .header("WWW-Authenticate", &www_authenticate)
+                        .header("Cache-Control", "no-store")
                         .header(CONTENT_TYPE, "application/json")
                         .body(convert_to_unified_body(Full::new(Bytes::from(body_str))))
                         .unwrap());

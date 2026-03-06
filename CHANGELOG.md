@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.10] - 2026-03-07
+
+### Changed
+
+- **`JwtValidator::new()` now requires audience** (`turul-mcp-oauth`): `JwtValidator::new(jwks_uri, audience)` — audience is a mandatory parameter per MCP spec requirement that servers MUST validate token audience. The optional `with_audience()` method has been removed.
+- **`ProtectedResourceMetadata::new()` is now fallible** (`turul-mcp-oauth`): Returns `Result<Self, OAuthError>`. Validates `resource` and `authorization_servers` URIs using `url::Url` — requires http/https scheme, authority present, no fragment. Empty AS list rejected.
+- **`oauth_resource_server()` is now fallible** (`turul-mcp-oauth`): Returns `Result<..., OAuthError>`. Enforces exactly one authorization server in metadata (no silent `[0]` fallback). Auto-wires audience from `metadata.resource` and issuer from single AS.
+
+### Added
+
+- **Scope in `WWW-Authenticate`** (`turul-mcp-oauth`): When `scopes_supported` is configured on metadata, challenge responses include `scope="scope1 scope2"` per RFC 6750 §3.
+- **`Cache-Control: no-store`** (`turul-http-mcp-server`): All 401/403 challenge responses include `Cache-Control: no-store` per OAuth 2.1 §5.3. Applied in both Streamable HTTP and legacy transports.
+- **Canonical URI validation** (`turul-mcp-oauth`): `ProtectedResourceMetadata::new()` validates resource and AS URIs — absolute URI with http/https scheme, authority required, no fragment allowed. New error variants: `OAuthError::InvalidResourceUri`, `OAuthError::InvalidConfiguration`.
+- **Single-AS issuer enforcement** (`turul-mcp-oauth`): `oauth_resource_server()` rejects metadata with multiple authorization servers, preventing misconfigured deployments.
+
 ## [0.3.9] - 2026-03-06
 
 ### Added
@@ -383,7 +398,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.9...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.10...HEAD
+[0.3.10]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.6...v0.3.7

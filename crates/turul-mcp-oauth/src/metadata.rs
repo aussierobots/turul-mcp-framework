@@ -4,6 +4,9 @@
 //! that clients use to discover the authorization server for this resource.
 
 use serde::{Deserialize, Serialize};
+use url::Url;
+
+use crate::error::OAuthError;
 
 /// RFC 9728 Protected Resource Metadata
 ///
@@ -41,18 +44,62 @@ pub struct ProtectedResourceMetadata {
     pub resource_signing_alg_values_supported: Option<Vec<String>>,
 }
 
+fn validate_canonical_uri(uri: &str, field_name: &str) -> Result<(), OAuthError> {
+    let parsed = Url::parse(uri).map_err(|e| {
+        OAuthError::InvalidResourceUri(format!("{}: invalid URI '{}': {}", field_name, uri, e))
+    })?;
+    match parsed.scheme() {
+        "https" | "http" => {}
+        other => {
+            return Err(OAuthError::InvalidResourceUri(format!(
+                "{}: scheme must be https or http, got '{}'",
+                field_name, other
+            )));
+        }
+    }
+    if parsed.host().is_none() {
+        return Err(OAuthError::InvalidResourceUri(format!(
+            "{}: authority (host) required",
+            field_name
+        )));
+    }
+    if parsed.fragment().is_some() {
+        return Err(OAuthError::InvalidResourceUri(format!(
+            "{}: fragment not allowed in canonical URI",
+            field_name
+        )));
+    }
+    Ok(())
+}
+
 impl ProtectedResourceMetadata {
     /// Create minimal metadata with resource URL and authorization servers
-    pub fn new(resource: impl Into<String>, authorization_servers: Vec<String>) -> Self {
-        Self {
-            resource: resource.into(),
+    ///
+    /// Validates that the resource URI and all authorization server URIs are
+    /// canonical HTTP(S) URIs without fragments per RFC 9728.
+    pub fn new(
+        resource: impl Into<String>,
+        authorization_servers: Vec<String>,
+    ) -> Result<Self, OAuthError> {
+        let resource = resource.into();
+        validate_canonical_uri(&resource, "resource")?;
+        if authorization_servers.is_empty() {
+            return Err(OAuthError::InvalidConfiguration(
+                "authorization_servers must contain at least one entry".to_string(),
+            ));
+        }
+        for uri in &authorization_servers {
+            validate_canonical_uri(uri, "authorization_server")?;
+        }
+        Ok(Self {
+            resource,
             authorization_servers,
             jwks_uri: None,
             scopes_supported: None,
             bearer_methods_supported: None,
             resource_documentation: None,
             resource_signing_alg_values_supported: None,
-        }
+        })
     }
 
     /// Set the JWKS URI
@@ -141,6 +188,7 @@ mod tests {
             "https://example.com/mcp",
             vec!["https://auth.example.com".to_string()],
         )
+        .unwrap()
         .with_jwks_uri("https://auth.example.com/.well-known/jwks.json")
         .with_scopes(vec!["mcp:read".to_string(), "mcp:write".to_string()]);
 
@@ -166,21 +214,23 @@ mod tests {
 
     #[test]
     fn test_metadata_url_extracts_origin() {
-        // Resource with path → origin-based URL
+        // Resource with path -> origin-based URL
         let m = ProtectedResourceMetadata::new(
             "https://example.com/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         assert_eq!(
             m.metadata_url(),
             "https://example.com/.well-known/oauth-protected-resource"
         );
 
-        // Resource at root → same as resource + well-known path
+        // Resource at root -> same as resource + well-known path
         let m = ProtectedResourceMetadata::new(
             "https://example.com",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         assert_eq!(
             m.metadata_url(),
             "https://example.com/.well-known/oauth-protected-resource"
@@ -190,7 +240,8 @@ mod tests {
         let m = ProtectedResourceMetadata::new(
             "https://example.com:8443/api/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         assert_eq!(
             m.metadata_url(),
             "https://example.com:8443/.well-known/oauth-protected-resource"
@@ -199,87 +250,82 @@ mod tests {
 
     #[test]
     fn test_resource_path_extraction() {
-        // Resource with path → Some
+        // Resource with path -> Some
         let m = ProtectedResourceMetadata::new(
             "https://example.com/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         assert_eq!(m.resource_path(), Some("/mcp"));
 
-        // Resource at root → None
+        // Resource at root -> None
         let m = ProtectedResourceMetadata::new(
             "https://example.com",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         assert_eq!(m.resource_path(), None);
 
-        // Resource at root with trailing slash → None (just "/" is root)
+        // Resource at root with trailing slash -> None (just "/" is root)
         let m = ProtectedResourceMetadata::new(
             "https://example.com/",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         assert_eq!(m.resource_path(), None);
 
         // Deeper path
         let m = ProtectedResourceMetadata::new(
             "https://example.com/api/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         assert_eq!(m.resource_path(), Some("/api/mcp"));
 
         // With port
         let m = ProtectedResourceMetadata::new(
             "https://example.com:8443/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         assert_eq!(m.resource_path(), Some("/mcp"));
 
         // Query string stripped
         let m = ProtectedResourceMetadata::new(
             "https://example.com/mcp?x=1&y=2",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         assert_eq!(m.resource_path(), Some("/mcp"));
 
-        // Fragment stripped
-        let m = ProtectedResourceMetadata::new(
-            "https://example.com/mcp#section",
-            vec!["https://auth.example.com".to_string()],
-        );
-        assert_eq!(m.resource_path(), Some("/mcp"));
-
-        // Both query and fragment stripped
-        let m = ProtectedResourceMetadata::new(
-            "https://example.com/api/mcp?token=abc#top",
-            vec!["https://auth.example.com".to_string()],
-        );
-        assert_eq!(m.resource_path(), Some("/api/mcp"));
-
-        // Root with query → still None
+        // Root with query -> still None
         let m = ProtectedResourceMetadata::new(
             "https://example.com/?x=1",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         assert_eq!(m.resource_path(), None);
     }
 
     #[test]
     fn test_well_known_paths() {
-        // Resource with path → root form + path form
+        // Resource with path -> root form + path form
         let m = ProtectedResourceMetadata::new(
             "https://example.com/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         let paths = m.well_known_paths();
         assert_eq!(paths.len(), 2);
         assert_eq!(paths[0], "/.well-known/oauth-protected-resource");
         assert_eq!(paths[1], "/.well-known/oauth-protected-resource/mcp");
 
-        // Resource at root → root form only
+        // Resource at root -> root form only
         let m = ProtectedResourceMetadata::new(
             "https://example.com",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         let paths = m.well_known_paths();
         assert_eq!(paths.len(), 1);
         assert_eq!(paths[0], "/.well-known/oauth-protected-resource");
@@ -288,17 +334,19 @@ mod tests {
         let m = ProtectedResourceMetadata::new(
             "https://example.com/api/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         let paths = m.well_known_paths();
         assert_eq!(paths.len(), 2);
         assert_eq!(paths[0], "/.well-known/oauth-protected-resource");
         assert_eq!(paths[1], "/.well-known/oauth-protected-resource/api/mcp");
 
-        // Query/fragment stripped from path-form route
+        // Query string stripped from path-form route
         let m = ProtectedResourceMetadata::new(
-            "https://example.com/mcp?x=1#top",
+            "https://example.com/mcp?x=1",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
         let paths = m.well_known_paths();
         assert_eq!(paths.len(), 2);
         assert_eq!(paths[0], "/.well-known/oauth-protected-resource");
@@ -310,12 +358,86 @@ mod tests {
         let metadata = ProtectedResourceMetadata::new(
             "https://example.com/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
 
         let json = serde_json::to_string(&metadata).unwrap();
         let parsed: ProtectedResourceMetadata = serde_json::from_str(&json).unwrap();
 
         assert_eq!(parsed.resource, metadata.resource);
         assert_eq!(parsed.authorization_servers, metadata.authorization_servers);
+    }
+
+    // Canonical URI validation tests
+
+    #[test]
+    fn test_valid_https_resource() {
+        assert!(ProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec!["https://auth.example.com".to_string()],
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn test_valid_http_resource() {
+        assert!(ProtectedResourceMetadata::new(
+            "http://localhost:8080/mcp",
+            vec!["http://localhost:9090".to_string()],
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn test_reject_missing_scheme() {
+        assert!(ProtectedResourceMetadata::new(
+            "example.com/mcp",
+            vec!["https://auth.example.com".to_string()],
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn test_reject_fragment_in_resource() {
+        assert!(ProtectedResourceMetadata::new(
+            "https://example.com/mcp#section",
+            vec!["https://auth.example.com".to_string()],
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn test_reject_empty_authorization_servers() {
+        assert!(ProtectedResourceMetadata::new("https://example.com/mcp", vec![]).is_err());
+    }
+
+    #[test]
+    fn test_reject_fragment_in_authorization_server() {
+        assert!(ProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec!["https://auth.example.com#frag".to_string()],
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn test_reject_non_http_scheme() {
+        assert!(ProtectedResourceMetadata::new(
+            "ftp://example.com/mcp",
+            vec!["https://auth.example.com".to_string()],
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn test_multiple_valid_authorization_servers() {
+        assert!(ProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec![
+                "https://a1.example.com".to_string(),
+                "https://a2.example.com".to_string(),
+            ],
+        )
+        .is_ok());
     }
 }

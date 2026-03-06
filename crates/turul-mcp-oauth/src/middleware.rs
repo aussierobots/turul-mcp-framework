@@ -35,6 +35,22 @@ impl OAuthResourceMiddleware {
             metadata,
         }
     }
+
+    /// Build a WWW-Authenticate challenge header value
+    fn build_challenge(&self, error_params: &str) -> String {
+        let scope_param = self
+            .metadata
+            .scopes_supported
+            .as_ref()
+            .map(|scopes| format!(", scope=\"{}\"", scopes.join(" ")))
+            .unwrap_or_default();
+        format!(
+            "Bearer realm=\"mcp\", resource_metadata=\"{}\"{}{}",
+            self.metadata.metadata_url(),
+            scope_param,
+            error_params,
+        )
+    }
 }
 
 #[async_trait]
@@ -50,13 +66,7 @@ impl McpMiddleware for OAuthResourceMiddleware {
         _injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
         let token = ctx.bearer_token().ok_or_else(|| {
-            MiddlewareError::http_challenge(
-                401,
-                format!(
-                    "Bearer realm=\"mcp\", resource_metadata=\"{}\"",
-                    self.metadata.metadata_url(),
-                ),
-            )
+            MiddlewareError::http_challenge(401, self.build_challenge(""))
         })?;
 
         debug!("Validating Bearer token for method: {}", ctx.method());
@@ -69,11 +79,10 @@ impl McpMiddleware for OAuthResourceMiddleware {
                 debug!("Token validation failed: {}", e);
                 MiddlewareError::http_challenge(
                     401,
-                    format!(
-                        "Bearer realm=\"mcp\", error=\"invalid_token\", error_description=\"{}\", resource_metadata=\"{}\"",
-                        e,
-                        self.metadata.metadata_url(),
-                    ),
+                    self.build_challenge(&format!(
+                        ", error=\"invalid_token\", error_description=\"{}\"",
+                        e
+                    )),
                 )
             })?;
 
@@ -106,10 +115,11 @@ mod tests {
         let metadata = ProtectedResourceMetadata::new(
             "https://example.com/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
 
         let middleware = OAuthResourceMiddleware::new(
-            Arc::new(JwtValidator::new("http://localhost/jwks")),
+            Arc::new(JwtValidator::new("http://localhost/jwks", "https://example.com/mcp")),
             metadata,
         );
 
@@ -122,10 +132,11 @@ mod tests {
         let metadata = ProtectedResourceMetadata::new(
             "https://example.com/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
 
         let middleware = OAuthResourceMiddleware::new(
-            Arc::new(JwtValidator::new("http://localhost/jwks")),
+            Arc::new(JwtValidator::new("http://localhost/jwks", "https://example.com/mcp")),
             metadata,
         );
 
@@ -155,6 +166,75 @@ mod tests {
                 assert!(
                     !www_authenticate.contains("/mcp/.well-known/"),
                     "Metadata URL must not include resource path: {}",
+                    www_authenticate
+                );
+            }
+            other => panic!("Expected HttpChallenge, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_401_includes_scope_when_configured() {
+        let metadata = ProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec!["https://auth.example.com".to_string()],
+        )
+        .unwrap()
+        .with_scopes(vec!["mcp:read".to_string(), "mcp:write".to_string()]);
+
+        let middleware = OAuthResourceMiddleware::new(
+            Arc::new(JwtValidator::new(
+                "http://localhost/jwks",
+                "https://example.com/mcp",
+            )),
+            metadata,
+        );
+        let mut ctx = RequestContext::new("tools/call", None);
+        let mut injection = SessionInjection::new();
+        let result = middleware
+            .before_dispatch(&mut ctx, None, &mut injection)
+            .await;
+        match result {
+            Err(MiddlewareError::HttpChallenge {
+                www_authenticate, ..
+            }) => {
+                assert!(
+                    www_authenticate.contains("scope=\"mcp:read mcp:write\""),
+                    "Expected scope in challenge, got: {}",
+                    www_authenticate
+                );
+            }
+            other => panic!("Expected HttpChallenge, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_401_omits_scope_when_not_configured() {
+        let metadata = ProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec!["https://auth.example.com".to_string()],
+        )
+        .unwrap();
+
+        let middleware = OAuthResourceMiddleware::new(
+            Arc::new(JwtValidator::new(
+                "http://localhost/jwks",
+                "https://example.com/mcp",
+            )),
+            metadata,
+        );
+        let mut ctx = RequestContext::new("tools/call", None);
+        let mut injection = SessionInjection::new();
+        let result = middleware
+            .before_dispatch(&mut ctx, None, &mut injection)
+            .await;
+        match result {
+            Err(MiddlewareError::HttpChallenge {
+                www_authenticate, ..
+            }) => {
+                assert!(
+                    !www_authenticate.contains("scope="),
+                    "Should not include scope, got: {}",
                     www_authenticate
                 );
             }

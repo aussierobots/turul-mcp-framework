@@ -24,12 +24,12 @@
 //! let metadata = ProtectedResourceMetadata::new(
 //!     "https://example.com/mcp",
 //!     vec!["https://auth.example.com".to_string()],
-//! );
+//! ).unwrap();
 //!
 //! let (auth_middleware, routes) = oauth_resource_server(
 //!     metadata,
 //!     "https://auth.example.com/.well-known/jwks.json",
-//! );
+//! ).unwrap();
 //!
 //! // Register with McpServer::builder()
 //! //   let mut builder = McpServer::builder().middleware(auth_middleware);
@@ -57,7 +57,10 @@ pub type RouteEntry = (String, Arc<dyn turul_http_mcp_server::routes::RouteHandl
 
 /// Convenience function to create both the OAuth middleware and well-known route handlers
 ///
-/// Returns `(middleware, routes)` where `routes` contains path/handler pairs for all
+/// Requires exactly one authorization server in the metadata. For multi-AS deployments,
+/// construct `JwtValidator` and `OAuthResourceMiddleware` manually.
+///
+/// Returns `Ok((middleware, routes))` where `routes` contains path/handler pairs for all
 /// RFC 9728 metadata endpoints. For resources with a path component (e.g.,
 /// `https://example.com/mcp`), this registers both root-form and path-form endpoints:
 ///
@@ -66,7 +69,7 @@ pub type RouteEntry = (String, Arc<dyn turul_http_mcp_server::routes::RouteHandl
 ///
 /// Register all routes with the server builder:
 /// ```rust,ignore
-/// let (middleware, routes) = oauth_resource_server(metadata, jwks_uri);
+/// let (middleware, routes) = oauth_resource_server(metadata, jwks_uri)?;
 /// let mut builder = McpServer::builder().middleware(middleware);
 /// for (path, handler) in routes {
 ///     builder = builder.route(&path, handler);
@@ -75,8 +78,17 @@ pub type RouteEntry = (String, Arc<dyn turul_http_mcp_server::routes::RouteHandl
 pub fn oauth_resource_server(
     metadata: ProtectedResourceMetadata,
     jwks_uri: &str,
-) -> (Arc<OAuthResourceMiddleware>, Vec<RouteEntry>) {
-    let validator = Arc::new(JwtValidator::new(jwks_uri));
+) -> Result<(Arc<OAuthResourceMiddleware>, Vec<RouteEntry>), OAuthError> {
+    if metadata.authorization_servers.len() != 1 {
+        return Err(OAuthError::InvalidConfiguration(format!(
+            "oauth_resource_server requires exactly one authorization server, got {}; \
+             for multi-AS deployments, construct JwtValidator and OAuthResourceMiddleware manually",
+            metadata.authorization_servers.len()
+        )));
+    }
+    let audience = &metadata.resource;
+    let issuer = &metadata.authorization_servers[0];
+    let validator = Arc::new(JwtValidator::new(jwks_uri, audience).with_issuer(issuer));
     let middleware = Arc::new(OAuthResourceMiddleware::new(validator, metadata.clone()));
     let handler: Arc<dyn turul_http_mcp_server::routes::RouteHandler> =
         Arc::new(WellKnownOAuthHandler::new(&metadata));
@@ -88,5 +100,39 @@ pub fn oauth_resource_server(
         .map(|path| (path, handler.clone()))
         .collect();
 
-    (middleware, routes)
+    Ok((middleware, routes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_single_as_ok() {
+        let metadata = ProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec!["https://auth.example.com".to_string()],
+        )
+        .unwrap();
+        assert!(
+            oauth_resource_server(metadata, "https://auth.example.com/.well-known/jwks.json")
+                .is_ok()
+        );
+    }
+
+    #[test]
+    fn test_multiple_as_rejected() {
+        let metadata = ProtectedResourceMetadata::new(
+            "https://example.com/mcp",
+            vec![
+                "https://a1.example.com".to_string(),
+                "https://a2.example.com".to_string(),
+            ],
+        )
+        .unwrap();
+        assert!(
+            oauth_resource_server(metadata, "https://auth.example.com/.well-known/jwks.json")
+                .is_err()
+        );
+    }
 }

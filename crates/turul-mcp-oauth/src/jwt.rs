@@ -89,14 +89,14 @@ pub struct JwtValidator {
 }
 
 impl JwtValidator {
-    /// Create a new JWT validator
-    pub fn new(jwks_uri: impl Into<String>) -> Self {
+    /// Create a new JWT validator with a required audience
+    pub fn new(jwks_uri: impl Into<String>, audience: impl Into<String>) -> Self {
         Self {
             jwks_uri: jwks_uri.into(),
             cached_jwks: RwLock::new(None),
             allowed_algorithms: vec![Algorithm::RS256, Algorithm::ES256],
             issuer: None,
-            audience: None,
+            audience: Some(audience.into()),
             refresh_interval: Duration::from_secs(60),
             http_client: reqwest::Client::new(),
         }
@@ -105,12 +105,6 @@ impl JwtValidator {
     /// Set the expected issuer
     pub fn with_issuer(mut self, issuer: impl Into<String>) -> Self {
         self.issuer = Some(issuer.into());
-        self
-    }
-
-    /// Set the expected audience
-    pub fn with_audience(mut self, audience: impl Into<String>) -> Self {
-        self.audience = Some(audience.into());
         self
     }
 
@@ -317,7 +311,7 @@ impl JwtValidator {
         let mut keys = HashMap::new();
         keys.insert(kid.to_string(), (decoding_key, alg));
 
-        let validator = Self::new("http://localhost/jwks");
+        let validator = Self::new("http://localhost/jwks", "https://example.com/mcp");
         let mut cache = validator.cached_jwks.write().await;
         *cache = Some(CachedJwks {
             keys,
@@ -452,10 +446,26 @@ mod tests {
         assert!(matches!(result, Err(OAuthError::UnsupportedAlgorithm(_))));
     }
 
+    #[tokio::test]
+    async fn test_audience_always_validated() {
+        let (enc_key, dec_key) = generate_rsa_keys();
+        let validator =
+            JwtValidator::test_with_key_async(dec_key, "test-kid", Algorithm::RS256).await;
+        let mut claims = valid_claims();
+        claims.aud = serde_json::json!("https://wrong.example.com");
+        let token = create_test_token(&enc_key, "test-kid", &claims);
+        let result = validator.validate(&token).await;
+        assert!(
+            matches!(result, Err(OAuthError::InvalidAudience)),
+            "Audience must always be validated, got: {:?}",
+            result
+        );
+    }
+
     // T36: RS256 and ES256 both accepted
     #[tokio::test]
     async fn test_rs256_es256_both_accepted() {
-        let validator = JwtValidator::new("http://localhost/jwks");
+        let validator = JwtValidator::new("http://localhost/jwks", "https://example.com/mcp");
         assert!(validator.allowed_algorithms.contains(&Algorithm::RS256));
         assert!(validator.allowed_algorithms.contains(&Algorithm::ES256));
     }

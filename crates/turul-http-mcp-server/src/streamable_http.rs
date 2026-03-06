@@ -1939,6 +1939,7 @@ fn build_http_challenge_response(
     Response::builder()
         .status(status_code)
         .header("WWW-Authenticate", www_authenticate)
+        .header("Cache-Control", "no-store")
         .header("Content-Type", "application/json")
         .header("MCP-Protocol-Version", context.protocol_version.as_str())
         .body(
