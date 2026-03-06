@@ -238,7 +238,8 @@ pub fn tool_declarative_impl(input: TokenStream) -> Result<TokenStream> {
         idempotent: input.idempotent,
         open_world: input.open_world,
     };
-    let annotations_impl = crate::utils::generate_annotations_impl(&tool_name_ident, &annotation_meta);
+    let annotations_impl =
+        crate::utils::generate_annotations_impl(&tool_name_ident, &annotation_meta);
 
     // Generate title expression for HasBaseMetadata::title()
     let tool_title_impl = match &input.title {
@@ -343,7 +344,7 @@ pub struct ToolMacroInput {
     pub description: String,
     pub params: Vec<ToolParam>,
     pub execute: Expr,
-    pub title: Option<String>,             // → HasBaseMetadata::title()
+    pub title: Option<String>, // → HasBaseMetadata::title()
     pub annotation_title: Option<String>,
     pub read_only: Option<bool>,
     pub destructive: Option<bool>,

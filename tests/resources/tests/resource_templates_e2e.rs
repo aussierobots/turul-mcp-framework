@@ -492,7 +492,10 @@ async fn test_mcp_client_list_resource_templates() {
     );
 
     for template in &templates {
-        assert!(!template.name.is_empty(), "Template name should not be empty");
+        assert!(
+            !template.name.is_empty(),
+            "Template name should not be empty"
+        );
         assert!(
             !template.uri_template.is_empty(),
             "Template uri_template should not be empty"

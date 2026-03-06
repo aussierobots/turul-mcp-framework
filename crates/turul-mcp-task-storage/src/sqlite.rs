@@ -141,9 +141,7 @@ impl SqliteTaskStorage {
         let is_memory = db_path_str == ":memory:";
 
         // Ensure parent directory exists for file-based databases
-        if !is_memory
-            && let Some(parent) = config.database_path.parent()
-        {
+        if !is_memory && let Some(parent) = config.database_path.parent() {
             std::fs::create_dir_all(parent).map_err(|e| {
                 TaskStorageError::DatabaseError(format!(
                     "Failed to create database directory: {}",

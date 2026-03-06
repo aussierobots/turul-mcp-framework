@@ -164,7 +164,8 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     };
 
     // Generate annotations impl (centralized via AnnotationMeta)
-    let annotations_impl = crate::utils::generate_annotations_impl(name, &tool_meta.to_annotation_meta());
+    let annotations_impl =
+        crate::utils::generate_annotations_impl(name, &tool_meta.to_annotation_meta());
 
     // Determine the output field name consistently for both schema and runtime
     let runtime_field_name = if let Some(ref output_type) = tool_meta.output_type {

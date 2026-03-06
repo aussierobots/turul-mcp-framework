@@ -95,8 +95,9 @@ fn generate_field_schema(ty: &Type) -> TokenStream {
                 }
                 "String" => quote! { JsonSchema::string() },
                 "f64" | "f32" => quote! { JsonSchema::number() },
-                "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize"
-                | "usize" => quote! { JsonSchema::integer() },
+                "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize" | "usize" => {
+                    quote! { JsonSchema::integer() }
+                }
                 "bool" => quote! { JsonSchema::boolean() },
                 "Vec" => {
                     if let syn::PathArguments::AngleBracketed(args) = &segment.arguments
@@ -170,7 +171,11 @@ mod tests {
         let code = result.to_string();
         assert!(!code.is_empty());
         // Option<u32> should produce integer schema, not string
-        assert!(code.contains("integer"), "Option<u32> should generate integer schema, got: {}", code);
+        assert!(
+            code.contains("integer"),
+            "Option<u32> should generate integer schema, got: {}",
+            code
+        );
     }
 
     #[test]
@@ -178,37 +183,58 @@ mod tests {
         // Option<String> → string
         let ty: syn::Type = parse_quote! { Option<String> };
         let schema = generate_field_schema(&ty);
-        assert!(schema.to_string().contains("string"), "Option<String> should produce string schema");
+        assert!(
+            schema.to_string().contains("string"),
+            "Option<String> should produce string schema"
+        );
 
         // Option<u32> → integer
         let ty: syn::Type = parse_quote! { Option<u32> };
         let schema = generate_field_schema(&ty);
-        assert!(schema.to_string().contains("integer"), "Option<u32> should produce integer schema");
+        assert!(
+            schema.to_string().contains("integer"),
+            "Option<u32> should produce integer schema"
+        );
 
         // Option<f64> → number
         let ty: syn::Type = parse_quote! { Option<f64> };
         let schema = generate_field_schema(&ty);
-        assert!(schema.to_string().contains("number"), "Option<f64> should produce number schema");
+        assert!(
+            schema.to_string().contains("number"),
+            "Option<f64> should produce number schema"
+        );
 
         // Option<bool> → boolean
         let ty: syn::Type = parse_quote! { Option<bool> };
         let schema = generate_field_schema(&ty);
-        assert!(schema.to_string().contains("boolean"), "Option<bool> should produce boolean schema");
+        assert!(
+            schema.to_string().contains("boolean"),
+            "Option<bool> should produce boolean schema"
+        );
 
         // Option<Vec<String>> → array
         let ty: syn::Type = parse_quote! { Option<Vec<String>> };
         let schema = generate_field_schema(&ty);
-        assert!(schema.to_string().contains("array"), "Option<Vec<String>> should produce array schema");
+        assert!(
+            schema.to_string().contains("array"),
+            "Option<Vec<String>> should produce array schema"
+        );
     }
 
     #[test]
     fn test_qualified_option_type() {
         // std::option::Option<T> should be detected as Option
         let ty: syn::Type = parse_quote! { std::option::Option<i32> };
-        assert!(is_option_type(&ty), "std::option::Option<i32> should be detected as Option");
+        assert!(
+            is_option_type(&ty),
+            "std::option::Option<i32> should be detected as Option"
+        );
 
         let schema = generate_field_schema(&ty);
-        assert!(schema.to_string().contains("integer"), "std::option::Option<i32> should produce integer schema");
+        assert!(
+            schema.to_string().contains("integer"),
+            "std::option::Option<i32> should produce integer schema"
+        );
     }
 
     #[test]

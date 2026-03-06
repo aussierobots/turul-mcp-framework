@@ -97,9 +97,7 @@ impl TaskAttrNames {
 /// by inspecting its key schema. Any multi-word key containing an underscore
 /// indicates a legacy snake_case table.
 #[cfg(feature = "dynamodb")]
-fn detect_naming_convention(
-    table: &aws_sdk_dynamodb::types::TableDescription,
-) -> NamingConvention {
+fn detect_naming_convention(table: &aws_sdk_dynamodb::types::TableDescription) -> NamingConvention {
     for element in table.key_schema() {
         let name = element.attribute_name();
         if name.contains('_') {
@@ -217,7 +215,10 @@ fn task_record_to_item(
         AttributeValue::S(status_to_str(record.status).to_string()),
     );
     if let Some(ref msg) = record.status_message {
-        item.insert(attrs.status_message.to_string(), AttributeValue::S(msg.clone()));
+        item.insert(
+            attrs.status_message.to_string(),
+            AttributeValue::S(msg.clone()),
+        );
     }
     item.insert(
         attrs.created_at.to_string(),
@@ -243,7 +244,10 @@ fn task_record_to_item(
     if let Some(ref params) = record.original_params
         && let Ok(json_str) = serde_json::to_string(params)
     {
-        item.insert(attrs.original_params.to_string(), AttributeValue::S(json_str));
+        item.insert(
+            attrs.original_params.to_string(),
+            AttributeValue::S(json_str),
+        );
     }
     if let Some(ref result) = record.result
         && let Ok(json_str) = serde_json::to_string(result)
@@ -302,10 +306,14 @@ fn item_to_task_record(
         .ok_or_else(|| TaskStorageError::SerializationError("Missing status".to_string()))?;
     let status = str_to_status(status_str)?;
 
-    let status_message = get_attr(item, attrs.status_message, TaskAttrNames::SNAKE.status_message)
-        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.status_message, ""))
-        .and_then(|v| v.as_s().ok())
-        .cloned();
+    let status_message = get_attr(
+        item,
+        attrs.status_message,
+        TaskAttrNames::SNAKE.status_message,
+    )
+    .or_else(|| get_attr(item, TaskAttrNames::CAMEL.status_message, ""))
+    .and_then(|v| v.as_s().ok())
+    .cloned();
 
     let created_at = get_attr(item, attrs.created_at, TaskAttrNames::SNAKE.created_at)
         .or_else(|| get_attr(item, TaskAttrNames::CAMEL.created_at, ""))
@@ -313,34 +321,50 @@ fn item_to_task_record(
         .ok_or_else(|| TaskStorageError::SerializationError("Missing created_at".to_string()))?
         .clone();
 
-    let last_updated_at = get_attr(item, attrs.last_updated_at, TaskAttrNames::SNAKE.last_updated_at)
-        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.last_updated_at, ""))
-        .and_then(|v| v.as_s().ok())
-        .ok_or_else(|| TaskStorageError::SerializationError("Missing last_updated_at".to_string()))?
-        .clone();
+    let last_updated_at = get_attr(
+        item,
+        attrs.last_updated_at,
+        TaskAttrNames::SNAKE.last_updated_at,
+    )
+    .or_else(|| get_attr(item, TaskAttrNames::CAMEL.last_updated_at, ""))
+    .and_then(|v| v.as_s().ok())
+    .ok_or_else(|| TaskStorageError::SerializationError("Missing last_updated_at".to_string()))?
+    .clone();
 
     let ttl = item
         .get("ttl")
         .and_then(|v| v.as_n().ok())
         .and_then(|n| n.parse::<i64>().ok());
 
-    let poll_interval = get_attr(item, attrs.poll_interval, TaskAttrNames::SNAKE.poll_interval)
-        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.poll_interval, ""))
-        .and_then(|v| v.as_n().ok())
-        .and_then(|n| n.parse::<u64>().ok());
+    let poll_interval = get_attr(
+        item,
+        attrs.poll_interval,
+        TaskAttrNames::SNAKE.poll_interval,
+    )
+    .or_else(|| get_attr(item, TaskAttrNames::CAMEL.poll_interval, ""))
+    .and_then(|v| v.as_n().ok())
+    .and_then(|n| n.parse::<u64>().ok());
 
-    let original_method = get_attr(item, attrs.original_method, TaskAttrNames::SNAKE.original_method)
-        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.original_method, ""))
-        .and_then(|v| v.as_s().ok())
-        .ok_or_else(|| TaskStorageError::SerializationError("Missing original_method".to_string()))?
-        .clone();
+    let original_method = get_attr(
+        item,
+        attrs.original_method,
+        TaskAttrNames::SNAKE.original_method,
+    )
+    .or_else(|| get_attr(item, TaskAttrNames::CAMEL.original_method, ""))
+    .and_then(|v| v.as_s().ok())
+    .ok_or_else(|| TaskStorageError::SerializationError("Missing original_method".to_string()))?
+    .clone();
 
-    let original_params = get_attr(item, attrs.original_params, TaskAttrNames::SNAKE.original_params)
-        .or_else(|| get_attr(item, TaskAttrNames::CAMEL.original_params, ""))
-        .and_then(|v| v.as_s().ok())
-        .map(|s| serde_json::from_str(s))
-        .transpose()
-        .map_err(|e| TaskStorageError::SerializationError(e.to_string()))?;
+    let original_params = get_attr(
+        item,
+        attrs.original_params,
+        TaskAttrNames::SNAKE.original_params,
+    )
+    .or_else(|| get_attr(item, TaskAttrNames::CAMEL.original_params, ""))
+    .and_then(|v| v.as_s().ok())
+    .map(|s| serde_json::from_str(s))
+    .transpose()
+    .map_err(|e| TaskStorageError::SerializationError(e.to_string()))?;
 
     let result = item
         .get("result")
@@ -510,7 +534,10 @@ impl DynamoDbTaskStorage {
         };
 
         let attrs = self.attrs();
-        info!("Creating DynamoDB table: {} (naming: {:?})", self.config.table_name, self.naming);
+        info!(
+            "Creating DynamoDB table: {} (naming: {:?})",
+            self.config.table_name, self.naming
+        );
 
         let key_schema = vec![
             KeySchemaElement::builder()
@@ -696,7 +723,10 @@ impl DynamoDbTaskStorage {
         use aws_sdk_dynamodb::types::TimeToLiveSpecification;
 
         let attrs = self.attrs();
-        info!("Enabling TTL on DynamoDB table: {} (attribute: {})", self.config.table_name, attrs.ttl_epoch);
+        info!(
+            "Enabling TTL on DynamoDB table: {} (attribute: {})",
+            self.config.table_name, attrs.ttl_epoch
+        );
 
         let ttl_spec = TimeToLiveSpecification::builder()
             .attribute_name(attrs.ttl_epoch)
@@ -1135,11 +1165,17 @@ impl TaskStorage for DynamoDbTaskStorage {
 
             if let Some(ref msg) = status_message {
                 update_expr.push_str(", #status_message = :msg");
-                expr_names.insert("#status_message".to_string(), task_attrs.status_message.to_string());
+                expr_names.insert(
+                    "#status_message".to_string(),
+                    task_attrs.status_message.to_string(),
+                );
                 expr_values.insert(":msg".to_string(), AttributeValue::S(msg.clone()));
             } else {
                 update_expr.push_str(" REMOVE #status_message");
-                expr_names.insert("#status_message".to_string(), task_attrs.status_message.to_string());
+                expr_names.insert(
+                    "#status_message".to_string(),
+                    task_attrs.status_message.to_string(),
+                );
             }
 
             let key = HashMap::from([(
@@ -1860,7 +1896,10 @@ mod tests {
             )
             .build();
 
-        assert_eq!(detect_naming_convention(&table), NamingConvention::SnakeCase);
+        assert_eq!(
+            detect_naming_convention(&table),
+            NamingConvention::SnakeCase
+        );
     }
 
     #[tokio::test]
@@ -1877,7 +1916,10 @@ mod tests {
             )
             .build();
 
-        assert_eq!(detect_naming_convention(&table), NamingConvention::CamelCase);
+        assert_eq!(
+            detect_naming_convention(&table),
+            NamingConvention::CamelCase
+        );
     }
 
     #[tokio::test]
@@ -1895,7 +1937,10 @@ mod tests {
             )
             .build();
 
-        assert_eq!(detect_naming_convention(&table), NamingConvention::CamelCase);
+        assert_eq!(
+            detect_naming_convention(&table),
+            NamingConvention::CamelCase
+        );
     }
 
     #[tokio::test]

@@ -1,0 +1,7 @@
+{
+    "invokeCompletionStatus": "Success",
+    "requestId": "req-789",
+    "httpMethod": "POST",
+    "path": "/mcp",
+    "headers": {"Content-Type": "application/json"}
+}

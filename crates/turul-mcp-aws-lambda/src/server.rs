@@ -73,6 +73,8 @@ pub struct LambdaMcpServer {
     cors_config: Option<CorsConfig>,
     /// Middleware stack for request/response interception
     middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
+    /// Custom route registry (e.g., .well-known endpoints)
+    route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     /// Optional task runtime for MCP task support
     task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
 }
@@ -102,6 +104,7 @@ impl LambdaMcpServer {
         stream_config: StreamConfig,
         #[cfg(feature = "cors")] cors_config: Option<CorsConfig>,
         middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
+        route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
         task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
     ) -> Self {
         // Create session manager with server capabilities
@@ -136,6 +139,7 @@ impl LambdaMcpServer {
             #[cfg(feature = "cors")]
             cors_config,
             middleware_stack,
+            route_registry,
             task_runtime,
         }
     }
@@ -255,6 +259,7 @@ impl LambdaMcpServer {
             self.capabilities.clone(),
             middleware_stack,
             self.enable_sse,
+            Arc::clone(&self.route_registry),
         ))
     }
 

@@ -220,7 +220,10 @@ mod tests {
         assert!(result.is_ok());
 
         let generated = result.unwrap().to_string();
-        assert!(generated.contains("Live System Status"), "title should appear in generated code");
+        assert!(
+            generated.contains("Live System Status"),
+            "title should appear in generated code"
+        );
         assert!(generated.contains("Some"), "title should be Some(...)");
     }
 
@@ -240,6 +243,9 @@ mod tests {
 
         let generated = result.unwrap().to_string();
         // title() should return None
-        assert!(generated.contains("None"), "title without attribute should be None");
+        assert!(
+            generated.contains("None"),
+            "title without attribute should be None"
+        );
     }
 }

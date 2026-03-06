@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.9] - 2026-03-06
+
+### Added
+
+- **Lambda streaming event classification** (`turul-mcp-aws-lambda`): Three-way classification of raw Lambda runtime payloads via `classify_runtime_event()` — distinguishes API Gateway events, streaming completion invocations, and unrecognized payloads. Prevents ERROR logs and CloudWatch Lambda Error metrics from completion invocations.
+- **`run_streaming()` public API**: Replaces `lambda_http::run_with_streaming_response()` for MCP Lambda servers. Gracefully acknowledges completion invocations (200 + `debug` log) and unrecognized payloads (200 + `warn` log) instead of failing deserialization.
+- **Testable surfacing contract**: `handle_runtime_payload()` returns typed `HandleResult { response, event_type }` for observability; `event_log_level()` maps event types to tracing levels — both independently testable without log capture.
+- **OAuth resource server foundation** (`turul-http-mcp-server`): Bearer token middleware, route registry, request-scoped extensions on `SessionContext` for auth claims propagation.
+- 25 classification/action-path/contract tests with `include_str!` fixture files for API Gateway v1/v2, streaming completion variants, and precedence edge cases.
+
+### Fixed
+
+- **Benchmark compilation**: `SessionContext` struct initializers in `performance-testing` benchmarks updated for new `extensions` field.
+
 ## [0.3.8] - 2026-03-05
 
 ### Fixed
@@ -369,7 +383,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.8...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.9...HEAD
+[0.3.9]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.7...v0.3.8
 [0.3.7]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.6...v0.3.7
 [0.3.6]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.5...v0.3.6

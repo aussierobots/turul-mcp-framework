@@ -13,7 +13,10 @@ use turul_mcp_server::{McpResult, SessionContext};
 // ─── Derive-macro tool ───────────────────────────────────────────────────────
 
 #[derive(McpTool, Clone)]
-#[tool(name = "derive_mixed_params", description = "Tool with mixed param types")]
+#[tool(
+    name = "derive_mixed_params",
+    description = "Tool with mixed param types"
+)]
 #[allow(dead_code)]
 struct DeriveMixedParams {
     #[param(description = "A required string")]
@@ -43,7 +46,10 @@ impl DeriveMixedParams {
 
 // ─── Function-attribute tool ─────────────────────────────────────────────────
 
-#[mcp_tool(name = "attr_mixed_params", description = "Attr tool with mixed param types")]
+#[mcp_tool(
+    name = "attr_mixed_params",
+    description = "Attr tool with mixed param types"
+)]
 async fn attr_mixed_params(
     name: String,
     active: Option<bool>,
@@ -133,11 +139,23 @@ fn derive_tool_required_fields() {
     };
 
     assert!(is_required(&tool, "name"), "String should be required");
-    assert!(!is_required(&tool, "active"), "Option<bool> should not be required");
-    assert!(!is_required(&tool, "count"), "Option<u32> should not be required");
-    assert!(!is_required(&tool, "score"), "Option<f64> should not be required");
+    assert!(
+        !is_required(&tool, "active"),
+        "Option<bool> should not be required"
+    );
+    assert!(
+        !is_required(&tool, "count"),
+        "Option<u32> should not be required"
+    );
+    assert!(
+        !is_required(&tool, "score"),
+        "Option<f64> should not be required"
+    );
     assert!(is_required(&tool, "tags"), "Vec<String> should be required");
-    assert!(!is_required(&tool, "labels"), "Option<Vec<String>> should not be required");
+    assert!(
+        !is_required(&tool, "labels"),
+        "Option<Vec<String>> should not be required"
+    );
 }
 
 #[test]
@@ -181,8 +199,14 @@ fn qualified_path_required_fields() {
         maybe_items: None,
     };
 
-    assert!(!is_required(&tool, "flag"), "std::option::Option<bool> should not be required");
-    assert!(is_required(&tool, "items"), "std::vec::Vec<String> should be required");
+    assert!(
+        !is_required(&tool, "flag"),
+        "std::option::Option<bool> should not be required"
+    );
+    assert!(
+        is_required(&tool, "items"),
+        "std::vec::Vec<String> should be required"
+    );
     assert!(
         !is_required(&tool, "maybe_items"),
         "std::option::Option<Vec<String>> should not be required"

@@ -82,7 +82,10 @@ pub struct LambdaMcpServerBuilder {
     resources: HashMap<String, Arc<dyn McpResource>>,
 
     /// Template resources registered with the server (auto-detected from URI)
-    template_resources: Vec<(turul_mcp_server::uri_template::UriTemplate, Arc<dyn McpResource>)>,
+    template_resources: Vec<(
+        turul_mcp_server::uri_template::UriTemplate,
+        Arc<dyn McpResource>,
+    )>,
 
     /// Prompts registered with the server
     prompts: HashMap<String, Arc<dyn McpPrompt>>,
@@ -132,6 +135,9 @@ pub struct LambdaMcpServerBuilder {
 
     /// Middleware stack for request/response interception
     middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
+
+    /// Custom route registry (e.g., .well-known endpoints)
+    route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
 
     /// Optional task runtime for MCP task support
     task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
@@ -259,6 +265,7 @@ impl LambdaMcpServerBuilder {
             server_config: ServerConfig::default(),
             stream_config: StreamConfig::default(),
             middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack::new(),
+            route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
             task_runtime: None,
             task_recovery_timeout_ms: 300_000, // 5 minutes
             #[cfg(feature = "cors")]
@@ -803,6 +810,18 @@ impl LambdaMcpServerBuilder {
         self
     }
 
+    /// Register a custom HTTP route (e.g., `.well-known` endpoints)
+    pub fn route(
+        mut self,
+        path: &str,
+        handler: Arc<dyn turul_http_mcp_server::RouteHandler>,
+    ) -> Self {
+        Arc::get_mut(&mut self.route_registry)
+            .expect("route_registry must not be shared during build")
+            .add_route(path, handler);
+        self
+    }
+
     /// Configure server settings
     pub fn server_config(mut self, config: ServerConfig) -> Self {
         self.server_config = config;
@@ -1029,8 +1048,8 @@ impl LambdaMcpServerBuilder {
 
             // Populate resources/templates/list handler with template resources
             if !self.template_resources.is_empty() {
-                let templates_handler = ResourceTemplatesHandler::new()
-                    .with_templates(self.template_resources.clone());
+                let templates_handler =
+                    ResourceTemplatesHandler::new().with_templates(self.template_resources.clone());
                 handlers.insert(
                     "resources/templates/list".to_string(),
                     Arc::new(templates_handler),
@@ -1073,6 +1092,7 @@ impl LambdaMcpServerBuilder {
             #[cfg(feature = "cors")]
             self.cors_config,
             self.middleware_stack,
+            self.route_registry,
             self.task_runtime,
         ))
     }
@@ -1659,7 +1679,8 @@ mod tests {
             &self,
             _params: Option<serde_json::Value>,
             _session: Option<&turul_mcp_server::SessionContext>,
-        ) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+        ) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>>
+        {
             use turul_mcp_protocol::resources::ResourceContent;
             Ok(vec![ResourceContent::text("file:///test.txt", "test")])
         }
@@ -1719,12 +1740,10 @@ mod tests {
             &self,
             _params: Option<serde_json::Value>,
             _session: Option<&turul_mcp_server::SessionContext>,
-        ) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>> {
+        ) -> turul_mcp_server::McpResult<Vec<turul_mcp_protocol::resources::ResourceContent>>
+        {
             use turul_mcp_protocol::resources::ResourceContent;
-            Ok(vec![ResourceContent::text(
-                "agent://agents/test",
-                "{}",
-            )])
+            Ok(vec![ResourceContent::text("agent://agents/test", "{}")])
         }
     }
 

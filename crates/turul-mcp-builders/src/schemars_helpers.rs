@@ -380,14 +380,11 @@ impl ToolSchemaExt for ToolSchema {
                     .collect()
             });
 
-        let required = obj
-            .get("required")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            });
+        let required = obj.get("required").and_then(|v| v.as_array()).map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        });
 
         // Preserve remaining top-level fields (description, title, additionalProperties, etc.)
         let reserved = [
@@ -555,12 +552,11 @@ mod tests {
         let json_schema = schema_for!(String);
         let result = ToolSchema::from_schemars(json_schema);
 
+        assert!(result.is_err(), "Non-object root schema should be rejected");
         assert!(
-            result.is_err(),
-            "Non-object root schema should be rejected"
+            result
+                .unwrap_err()
+                .contains("ToolSchema requires an object schema")
         );
-        assert!(result
-            .unwrap_err()
-            .contains("ToolSchema requires an object schema"));
     }
 }

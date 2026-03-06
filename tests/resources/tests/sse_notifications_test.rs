@@ -251,7 +251,9 @@ async fn test_sse_notification_format_compliance() {
                     info!("✅ Valid SSE data line: {}", line);
 
                     // If it's JSON data, validate structure
-                    if let Some(json_part) = line.strip_prefix("data:").map(|s| s.trim()) && json_part.starts_with('{') {
+                    if let Some(json_part) = line.strip_prefix("data:").map(|s| s.trim())
+                        && json_part.starts_with('{')
+                    {
                         match serde_json::from_str::<serde_json::Value>(json_part) {
                             Ok(parsed) => {
                                 info!("✅ Valid JSON notification: {:?}", parsed);

@@ -153,6 +153,7 @@ fn tool_execution_benchmarks(c: &mut Criterion) {
                 is_initialized: Arc::new(|| Box::pin(async { true })),
                 send_notification: Arc::new(|_| Box::pin(async {})),
                 broadcaster: None,
+                extensions: std::collections::HashMap::new(),
             };
 
             let args = json!({"value": black_box(1)});

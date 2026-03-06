@@ -13,10 +13,10 @@ use crate::transport::{BoxedTransport, TransportFactory};
 
 // Re-export protocol types for convenience
 use turul_mcp_protocol::meta::Cursor;
+use turul_mcp_protocol::resources::{ListResourceTemplatesResult, ResourceTemplate};
 use turul_mcp_protocol::tasks::{
     CancelTaskResult, CreateTaskResult, GetTaskResult, ListTasksResult, Task,
 };
-use turul_mcp_protocol::resources::{ListResourceTemplatesResult, ResourceTemplate};
 use turul_mcp_protocol::{
     CallToolResult, GetPromptResult, InitializeResult, ListPromptsResult, ListResourcesResult,
     ListToolsResult, Prompt, ReadResourceResult, Resource, Tool, ToolResult,
@@ -122,7 +122,8 @@ impl McpClient {
                 let receiver = transport.start_event_listener().await?;
 
                 // Create response channel for sending JSON-RPC responses back
-                let (response_tx, mut response_rx) = tokio::sync::mpsc::unbounded_channel::<serde_json::Value>();
+                let (response_tx, mut response_rx) =
+                    tokio::sync::mpsc::unbounded_channel::<serde_json::Value>();
 
                 let mut stream_handler = self.stream_handler.lock().await;
                 stream_handler.set_receiver(receiver);
@@ -1253,10 +1254,7 @@ mod tests {
         {
             let handler = client.stream_handler().await;
             handler.on_request(|request| {
-                let method = request
-                    .get("method")
-                    .and_then(|m| m.as_str())
-                    .unwrap_or("");
+                let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
                 match method {
                     "sampling/createMessage" => Ok(json!({
                         "role": "assistant",
@@ -1286,10 +1284,8 @@ mod tests {
             loop {
                 let notifs = notifications.lock().await;
                 // Skip the first notification (notifications/initialized from connect())
-                let responses: Vec<&Value> = notifs
-                    .iter()
-                    .filter(|n| n.get("id").is_some())
-                    .collect();
+                let responses: Vec<&Value> =
+                    notifs.iter().filter(|n| n.get("id").is_some()).collect();
                 if !responses.is_empty() {
                     return responses[0].clone();
                 }
@@ -1342,10 +1338,8 @@ mod tests {
         let response = tokio::time::timeout(std::time::Duration::from_secs(2), async {
             loop {
                 let notifs = notifications.lock().await;
-                let responses: Vec<&Value> = notifs
-                    .iter()
-                    .filter(|n| n.get("id").is_some())
-                    .collect();
+                let responses: Vec<&Value> =
+                    notifs.iter().filter(|n| n.get("id").is_some()).collect();
                 if !responses.is_empty() {
                     return responses[0].clone();
                 }
@@ -1359,10 +1353,12 @@ mod tests {
         assert_eq!(response["jsonrpc"], "2.0");
         assert_eq!(response["id"], 99);
         assert_eq!(response["error"]["code"], -32603);
-        assert!(response["error"]["message"]
-            .as_str()
-            .unwrap()
-            .contains("not supported"));
+        assert!(
+            response["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("not supported")
+        );
 
         client.disconnect().await.unwrap();
     }

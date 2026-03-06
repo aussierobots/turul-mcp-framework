@@ -178,22 +178,34 @@ mod tests {
             input_schema: ToolSchema,
         }
         impl HasBaseMetadata for TaskAwareTool {
-            fn name(&self) -> &str { "task_aware" }
+            fn name(&self) -> &str {
+                "task_aware"
+            }
         }
         impl HasDescription for TaskAwareTool {
-            fn description(&self) -> Option<&str> { Some("Has execution") }
+            fn description(&self) -> Option<&str> {
+                Some("Has execution")
+            }
         }
         impl HasInputSchema for TaskAwareTool {
-            fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+            fn input_schema(&self) -> &ToolSchema {
+                &self.input_schema
+            }
         }
         impl HasOutputSchema for TaskAwareTool {
-            fn output_schema(&self) -> Option<&ToolSchema> { None }
+            fn output_schema(&self) -> Option<&ToolSchema> {
+                None
+            }
         }
         impl HasAnnotations for TaskAwareTool {
-            fn annotations(&self) -> Option<&ToolAnnotations> { None }
+            fn annotations(&self) -> Option<&ToolAnnotations> {
+                None
+            }
         }
         impl HasToolMeta for TaskAwareTool {
-            fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> { None }
+            fn tool_meta(&self) -> Option<&HashMap<String, serde_json::Value>> {
+                None
+            }
         }
         impl HasIcons for TaskAwareTool {}
         impl HasExecution for TaskAwareTool {
@@ -205,16 +217,25 @@ mod tests {
         }
         #[async_trait]
         impl McpTool for TaskAwareTool {
-            async fn call(&self, _args: serde_json::Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+            async fn call(
+                &self,
+                _args: serde_json::Value,
+                _session: Option<SessionContext>,
+            ) -> McpResult<CallToolResult> {
                 Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
             }
         }
 
-        let tool = TaskAwareTool { input_schema: ToolSchema::object() };
+        let tool = TaskAwareTool {
+            input_schema: ToolSchema::object(),
+        };
         let descriptor = tool_to_descriptor(&tool);
 
         // Verify the execution field is populated
-        assert!(descriptor.execution.is_some(), "execution should be Some for task-aware tool");
+        assert!(
+            descriptor.execution.is_some(),
+            "execution should be Some for task-aware tool"
+        );
         let exec = descriptor.execution.clone().unwrap();
         assert_eq!(exec.task_support, Some(TaskSupport::Optional));
 
@@ -225,9 +246,15 @@ mod tests {
         // --- Tool without execution ---
         let plain_tool = TestTool::new();
         let plain_descriptor = tool_to_descriptor(&plain_tool);
-        assert!(plain_descriptor.execution.is_none(), "execution should be None for plain tool");
+        assert!(
+            plain_descriptor.execution.is_none(),
+            "execution should be None for plain tool"
+        );
 
         let plain_json = serde_json::to_value(&plain_descriptor).unwrap();
-        assert!(plain_json.get("execution").is_none(), "execution key should be absent in JSON");
+        assert!(
+            plain_json.get("execution").is_none(),
+            "execution key should be absent in JSON"
+        );
     }
 }

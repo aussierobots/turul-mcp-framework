@@ -1,0 +1,20 @@
+{
+    "resource": "/mcp",
+    "path": "/mcp",
+    "httpMethod": "POST",
+    "headers": {
+        "Content-Type": "application/json"
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":1}",
+    "isBase64Encoded": false,
+    "requestContext": {
+        "resourceId": "abc",
+        "resourcePath": "/mcp",
+        "httpMethod": "POST",
+        "requestId": "req-123",
+        "accountId": "123456789",
+        "stage": "prod",
+        "apiId": "api-123",
+        "identity": {}
+    }
+}

@@ -83,8 +83,8 @@ pub struct ToolMeta {
     pub name: String,
     pub description: String,
     pub output_type: Option<syn::Type>,
-    pub output_field: Option<String>,  // Custom field name for output
-    pub task_support: Option<String>,  // "optional" | "required" | "forbidden"
+    pub output_field: Option<String>, // Custom field name for output
+    pub task_support: Option<String>, // "optional" | "required" | "forbidden"
     pub title: Option<String>,        // → HasBaseMetadata::title()
     pub annotation_title: Option<String>, // → ToolAnnotations.title
     pub read_only: Option<bool>,
@@ -143,9 +143,11 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
                     let val = s.value();
                     match val.as_str() {
                         "optional" | "required" | "forbidden" => task_support = Some(val),
-                        _ => return Err(meta.error(
-                            "task_support must be \"optional\", \"required\", or \"forbidden\""
-                        )),
+                        _ => {
+                            return Err(meta.error(
+                                "task_support must be \"optional\", \"required\", or \"forbidden\"",
+                            ));
+                        }
                     }
                 } else if meta.path.is_ident("title") {
                     let value = meta.value()?;
@@ -307,8 +309,7 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                     if let syn::PathArguments::AngleBracketed(args) = &last_seg.arguments
                         && let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first()
                     {
-                        let items_schema =
-                            type_to_schema(inner_ty, &ParamMeta::default());
+                        let items_schema = type_to_schema(inner_ty, &ParamMeta::default());
                         return quote! {
                             turul_mcp_protocol::schema::JsonSchema::array(#items_schema) #description
                         };
@@ -332,8 +333,7 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                         turul_mcp_protocol::schema::JsonSchema::number() #description #min #max
                     }
                 }
-                "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize"
-                | "usize" => {
+                "i64" | "i32" | "i16" | "i8" | "u64" | "u32" | "u16" | "u8" | "isize" | "usize" => {
                     let min = param_meta.min.map(|m| {
                         let m_int = m as i64;
                         quote! { .with_minimum(#m_int as f64) }

@@ -463,11 +463,16 @@ fn test_tool_names_auto_determined() {
 
 /// Derive macro: tool with all annotations set
 #[derive(McpTool)]
-#[tool(name = "delete_file", description = "Delete a file",
-       title = "File Deleter",
-       annotation_title = "File Deletion",
-       read_only = false, destructive = true,
-       idempotent = true, open_world = false)]
+#[tool(
+    name = "delete_file",
+    description = "Delete a file",
+    title = "File Deleter",
+    annotation_title = "File Deletion",
+    read_only = false,
+    destructive = true,
+    idempotent = true,
+    open_world = false
+)]
 struct DeleteFileTool {
     #[param(description = "File path")]
     path: String,
@@ -508,9 +513,13 @@ impl ReaderTool {
 }
 
 /// Function macro: tool with annotations
-#[mcp_tool(name = "web_search", description = "Search the web",
-           title = "Web Search",
-           read_only = true, open_world = true)]
+#[mcp_tool(
+    name = "web_search",
+    description = "Search the web",
+    title = "Web Search",
+    read_only = true,
+    open_world = true
+)]
 async fn web_search(query: String) -> McpResult<String> {
     Ok(format!("Results for: {}", query))
 }
@@ -532,7 +541,10 @@ fn test_derive_annotations_appear_in_to_tool() {
     assert_eq!(tool_def.title.as_deref(), Some("File Deleter"));
 
     // annotations should be present
-    let annotations = tool_def.annotations.as_ref().expect("annotations should be Some");
+    let annotations = tool_def
+        .annotations
+        .as_ref()
+        .expect("annotations should be Some");
 
     // annotation_title = "File Deletion" → ToolAnnotations.title
     assert_eq!(annotations.title.as_deref(), Some("File Deletion"));
@@ -543,7 +555,9 @@ fn test_derive_annotations_appear_in_to_tool() {
 
     // Verify camelCase serialization
     let json = serde_json::to_value(&tool_def).unwrap();
-    let ann = json["annotations"].as_object().expect("annotations in JSON");
+    let ann = json["annotations"]
+        .as_object()
+        .expect("annotations in JSON");
     assert_eq!(ann.get("readOnlyHint"), Some(&json!(false)));
     assert_eq!(ann.get("destructiveHint"), Some(&json!(true)));
     assert_eq!(ann.get("idempotentHint"), Some(&json!(true)));
@@ -568,12 +582,13 @@ fn test_derive_no_annotations_returns_none() {
 
 #[test]
 fn test_derive_partial_annotations() {
-    let tool = ReaderTool {
-        key: String::new(),
-    };
+    let tool = ReaderTool { key: String::new() };
     let tool_def = tool.to_tool();
 
-    let annotations = tool_def.annotations.as_ref().expect("annotations should be Some");
+    let annotations = tool_def
+        .annotations
+        .as_ref()
+        .expect("annotations should be Some");
     assert_eq!(annotations.read_only_hint, Some(true));
     // Unset fields should be None
     assert!(annotations.destructive_hint.is_none());
@@ -591,7 +606,10 @@ fn test_function_macro_annotations_in_to_tool() {
     assert_eq!(tool_def.title.as_deref(), Some("Web Search"));
 
     // annotations should be present
-    let annotations = tool_def.annotations.as_ref().expect("annotations should be Some");
+    let annotations = tool_def
+        .annotations
+        .as_ref()
+        .expect("annotations should be Some");
     assert_eq!(annotations.read_only_hint, Some(true));
     assert_eq!(annotations.open_world_hint, Some(true));
     // Unset fields should be None
@@ -600,7 +618,9 @@ fn test_function_macro_annotations_in_to_tool() {
 
     // Verify camelCase serialization
     let json = serde_json::to_value(&tool_def).unwrap();
-    let ann = json["annotations"].as_object().expect("annotations in JSON");
+    let ann = json["annotations"]
+        .as_object()
+        .expect("annotations in JSON");
     assert_eq!(ann.get("readOnlyHint"), Some(&json!(true)));
     assert_eq!(ann.get("openWorldHint"), Some(&json!(true)));
 }
@@ -632,7 +652,10 @@ fn test_tool_macro_annotations_in_to_tool() {
 
     let tool_def = tool.to_tool();
 
-    let annotations = tool_def.annotations.as_ref().expect("annotations should be Some");
+    let annotations = tool_def
+        .annotations
+        .as_ref()
+        .expect("annotations should be Some");
     assert_eq!(annotations.read_only_hint, Some(true));
     assert_eq!(annotations.idempotent_hint, Some(true));
     assert_eq!(annotations.title.as_deref(), Some("Value Lookup"));
@@ -659,7 +682,10 @@ fn test_tool_macro_with_title() {
     let tool_def = tool.to_tool();
     assert_eq!(tool_def.title.as_deref(), Some("Named Lookup Tool"));
 
-    let annotations = tool_def.annotations.as_ref().expect("annotations should be Some");
+    let annotations = tool_def
+        .annotations
+        .as_ref()
+        .expect("annotations should be Some");
     assert_eq!(annotations.read_only_hint, Some(true));
 }
 

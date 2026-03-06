@@ -21,6 +21,7 @@ use http_body_util::{BodyExt, Full};
 use hyper::header::{ACCEPT, CONTENT_TYPE};
 use hyper::{Method, Request, Response, StatusCode};
 
+use crate::middleware::bearer::{extract_bearer_token, is_bearer_scheme};
 use chrono;
 use turul_mcp_json_rpc_server::{
     JsonRpcDispatcher,
@@ -368,6 +369,74 @@ impl SessionMcpHandler {
             }
         };
 
+        // --- Pre-session auth phase (D4) ---
+        // Run pre-session middleware (e.g., OAuth Bearer validation) BEFORE session creation
+        let pre_session_extensions = if self.middleware_stack.has_pre_session_middleware() {
+            let method_name = match &message {
+                JsonRpcMessage::Request(req) => req.method.as_str(),
+                JsonRpcMessage::Notification(notif) => notif.method.as_str(),
+            };
+            let bearer_token = headers
+                .get("authorization")
+                .and_then(|v| extract_bearer_token(v));
+            let mut pre_ctx = crate::middleware::RequestContext::new(method_name, None);
+            if let Some(ref token) = bearer_token {
+                pre_ctx.set_bearer_token(token.clone());
+            }
+            for (k, v) in &headers {
+                if k.eq_ignore_ascii_case("authorization") && is_bearer_scheme(v) {
+                    continue;
+                }
+                pre_ctx.add_metadata(k.clone(), serde_json::json!(v));
+            }
+            match self
+                .middleware_stack
+                .execute_before_session(&mut pre_ctx)
+                .await
+            {
+                Ok(()) => Some(pre_ctx.take_extensions()),
+                Err(crate::middleware::MiddlewareError::HttpChallenge {
+                    status,
+                    www_authenticate,
+                    body,
+                }) => {
+                    // Transport-level HTTP response — no session allocated
+                    let body_str = body.unwrap_or_default();
+                    return Ok(Response::builder()
+                        .status(StatusCode::from_u16(status).unwrap_or(StatusCode::UNAUTHORIZED))
+                        .header("WWW-Authenticate", &www_authenticate)
+                        .header(CONTENT_TYPE, "application/json")
+                        .body(convert_to_unified_body(Full::new(Bytes::from(body_str))))
+                        .unwrap());
+                }
+                Err(other_err) => {
+                    // Non-challenge pre-session errors → JSON-RPC error
+                    if let JsonRpcMessage::Request(ref req) = message {
+                        let response =
+                            Self::map_middleware_error_to_jsonrpc(other_err, req.id.clone());
+                        let response_json =
+                            serde_json::to_string(&response).unwrap_or_else(|_| "{}".to_string());
+                        return Ok(Response::builder()
+                            .status(StatusCode::OK)
+                            .header(CONTENT_TYPE, "application/json")
+                            .body(convert_to_unified_body(Full::new(Bytes::from(
+                                response_json,
+                            ))))
+                            .unwrap());
+                    } else {
+                        return Ok(Response::builder()
+                            .status(StatusCode::FORBIDDEN)
+                            .body(convert_to_unified_body(Full::new(Bytes::from(
+                                other_err.to_string(),
+                            ))))
+                            .unwrap());
+                    }
+                }
+            }
+        } else {
+            None
+        };
+
         // Handle the message using proper JSON-RPC enums
         let (message_result, response_session_id, method_name) = match message {
             JsonRpcMessage::Request(request) => {
@@ -402,6 +471,7 @@ impl SessionMcpHandler {
                                 metadata: std::collections::HashMap::new(),
                                 broadcaster: Some(broadcaster_any),
                                 timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                                extensions: std::collections::HashMap::new(),
                             };
 
                             // Run middleware pipeline and dispatch
@@ -411,6 +481,7 @@ impl SessionMcpHandler {
                                     request,
                                     headers.clone(),
                                     session_context,
+                                    pre_session_extensions.clone(),
                                 )
                                 .await;
 
@@ -446,6 +517,7 @@ impl SessionMcpHandler {
                             metadata: std::collections::HashMap::new(),
                             broadcaster: Some(broadcaster_any),
                             timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                            extensions: std::collections::HashMap::new(),
                         })
                     } else {
                         debug!("Processing request without session (lenient mode)");
@@ -454,8 +526,13 @@ impl SessionMcpHandler {
 
                     // Run middleware pipeline and dispatch
                     let (response, _stashed_injection) = if let Some(ctx) = session_context {
-                        self.run_middleware_and_dispatch(request, headers.clone(), ctx)
-                            .await
+                        self.run_middleware_and_dispatch(
+                            request,
+                            headers.clone(),
+                            ctx,
+                            pre_session_extensions.clone(),
+                        )
+                        .await
                     } else {
                         // No session - fast path (no middleware, just dispatch)
                         (self.dispatcher.handle_request(request).await, None)
@@ -496,6 +573,7 @@ impl SessionMcpHandler {
                         metadata: std::collections::HashMap::new(),
                         broadcaster: Some(broadcaster_any),
                         timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                        extensions: std::collections::HashMap::new(),
                     })
                 } else {
                     debug!("Processing notification without session (lenient mode)");
@@ -864,6 +942,7 @@ impl SessionMcpHandler {
         request: turul_mcp_json_rpc_server::JsonRpcRequest,
         headers: HashMap<String, String>,
         session: turul_mcp_json_rpc_server::SessionContext,
+        pre_session_extensions: Option<HashMap<String, serde_json::Value>>,
     ) -> (
         turul_mcp_json_rpc_server::JsonRpcMessage,
         Option<crate::middleware::SessionInjection>,
@@ -897,7 +976,18 @@ impl SessionMcpHandler {
         });
         let mut ctx = crate::middleware::RequestContext::new(&method, params);
 
+        // Seed extensions from pre-session phase (auth claims etc.)
+        if let Some(ext) = pre_session_extensions {
+            for (k, v) in ext {
+                ctx.set_extension(k, v);
+            }
+        }
+
         for (k, v) in normalized_headers {
+            // D5: Bearer scheme NEVER enters metadata
+            if k == "authorization" && is_bearer_scheme(&v) {
+                continue;
+            }
             ctx.add_metadata(k, serde_json::json!(v));
         }
 
@@ -933,6 +1023,10 @@ impl SessionMcpHandler {
                 }
             }
         }
+
+        // Thread extensions from RequestContext → JSON-RPC SessionContext (D3 canonical flow)
+        let mut session = session;
+        session.extensions = ctx.extensions().clone();
 
         // Dispatch the request
         let result = self
@@ -986,6 +1080,11 @@ impl SessionMcpHandler {
             MiddlewareError::InvalidRequest(msg) => (error_codes::INVALID_REQUEST, msg, None),
             MiddlewareError::Internal(msg) => (error_codes::INTERNAL_ERROR, msg, None),
             MiddlewareError::Custom { message, .. } => (error_codes::INTERNAL_ERROR, message, None),
+            MiddlewareError::HttpChallenge { .. } => {
+                unreachable!(
+                    "HttpChallenge must be caught at transport level before JSON-RPC dispatch"
+                )
+            }
         };
 
         let error_obj = if let Some(d) = data {

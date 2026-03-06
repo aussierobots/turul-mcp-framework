@@ -299,6 +299,7 @@ impl TestSessionBuilder {
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
                 .as_millis() as u64,
+            extensions: HashMap::new(),
         };
 
         // Convert to MCP SessionContext with storage integration

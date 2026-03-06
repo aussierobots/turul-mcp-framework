@@ -108,6 +108,7 @@ async fn test_lambda_handler_executes_middleware() {
         ServerCapabilities::default(),
         Arc::new(middleware_stack),
         false,
+        Arc::new(turul_http_mcp_server::RouteRegistry::new()),
     );
 
     // Create Lambda request
@@ -177,6 +178,7 @@ async fn test_lambda_middleware_error_short_circuits() {
         ServerCapabilities::default(),
         Arc::new(middleware_stack),
         false,
+        Arc::new(turul_http_mcp_server::RouteRegistry::new()),
     );
 
     // Create request
@@ -268,6 +270,7 @@ async fn test_lambda_middleware_parity_with_http() {
         ServerCapabilities::default(),
         Arc::new(middleware_stack),
         false,
+        Arc::new(turul_http_mcp_server::RouteRegistry::new()),
     );
 
     // Parity verified - Lambda handler uses same middleware as HTTP

@@ -54,6 +54,7 @@ pub mod middleware;
 pub mod notification_bridge;
 pub mod prelude;
 pub mod protocol;
+pub mod routes;
 pub mod server;
 pub mod session_handler;
 pub mod sse;
@@ -73,6 +74,7 @@ pub use notification_bridge::{
 pub use protocol::{
     McpProtocolVersion, extract_last_event_id, extract_protocol_version, extract_session_id,
 };
+pub use routes::{RouteBody, RouteHandler, RouteRegistry, RouteValidationError};
 /// HTTP MCP server implementation with builder pattern and configuration
 pub use server::{HttpMcpServer, HttpMcpServerBuilder, ServerConfig, ServerStats};
 /// Session-aware request handler with SSE streaming capabilities

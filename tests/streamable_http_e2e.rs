@@ -1935,12 +1935,7 @@ async fn test_terminated_session_rejects_requests() {
         .expect("Request failed");
 
     let get_status = get_response.status();
-    let get_body = get_response
-        .into_body()
-        .collect()
-        .await
-        .unwrap()
-        .to_bytes();
+    let get_body = get_response.into_body().collect().await.unwrap().to_bytes();
     let get_body_str = String::from_utf8_lossy(&get_body);
 
     assert_ne!(

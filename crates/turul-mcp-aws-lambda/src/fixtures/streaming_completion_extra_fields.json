@@ -1,0 +1,6 @@
+{
+    "invokeCompletionStatus": "Success",
+    "requestId": "abc-123",
+    "extra": "field",
+    "nested": {"a": 1}
+}
