@@ -328,16 +328,8 @@ impl TaskStorage for PostgresTaskStorage {
             .as_ref()
             .map(serde_json::to_value)
             .transpose()?;
-        let result_json = task
-            .result
-            .as_ref()
-            .map(serde_json::to_value)
-            .transpose()?;
-        let meta_json = task
-            .meta
-            .as_ref()
-            .map(serde_json::to_value)
-            .transpose()?;
+        let result_json = task.result.as_ref().map(serde_json::to_value).transpose()?;
+        let meta_json = task.meta.as_ref().map(serde_json::to_value).transpose()?;
 
         sqlx::query(
             r#"
@@ -392,16 +384,8 @@ impl TaskStorage for PostgresTaskStorage {
             .as_ref()
             .map(serde_json::to_value)
             .transpose()?;
-        let result_json = task
-            .result
-            .as_ref()
-            .map(serde_json::to_value)
-            .transpose()?;
-        let meta_json = task
-            .meta
-            .as_ref()
-            .map(serde_json::to_value)
-            .transpose()?;
+        let result_json = task.result.as_ref().map(serde_json::to_value).transpose()?;
+        let meta_json = task.meta.as_ref().map(serde_json::to_value).transpose()?;
 
         let rows_affected = sqlx::query(
             r#"

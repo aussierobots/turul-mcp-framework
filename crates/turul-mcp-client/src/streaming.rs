@@ -146,7 +146,9 @@ impl StreamHandler {
                         let request_id = request.get("id").filter(|id| !id.is_null()).cloned();
 
                         if request_id.is_none() {
-                            warn!("Received server request without valid id, treating as notification");
+                            warn!(
+                                "Received server request without valid id, treating as notification"
+                            );
                             if let Some(ref callback) = callbacks.request {
                                 let _ = callback(request);
                             }
@@ -394,13 +396,10 @@ mod tests {
         event_tx.send(ServerEvent::Request(request)).unwrap();
 
         // Verify response format
-        let response = tokio::time::timeout(
-            std::time::Duration::from_secs(1),
-            response_rx.recv(),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let response = tokio::time::timeout(std::time::Duration::from_secs(1), response_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
 
         assert_eq!(response["jsonrpc"], "2.0");
         assert_eq!(response["id"], "srv-1");
@@ -429,13 +428,10 @@ mod tests {
         });
         event_tx.send(ServerEvent::Request(request)).unwrap();
 
-        let response = tokio::time::timeout(
-            std::time::Duration::from_secs(1),
-            response_rx.recv(),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let response = tokio::time::timeout(std::time::Duration::from_secs(1), response_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
 
         assert_eq!(response["jsonrpc"], "2.0");
         assert_eq!(response["id"], 42);
@@ -463,13 +459,10 @@ mod tests {
         });
         event_tx.send(ServerEvent::Request(request)).unwrap();
 
-        let response = tokio::time::timeout(
-            std::time::Duration::from_secs(1),
-            response_rx.recv(),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let response = tokio::time::timeout(std::time::Duration::from_secs(1), response_rx.recv())
+            .await
+            .unwrap()
+            .unwrap();
 
         assert_eq!(response["jsonrpc"], "2.0");
         assert_eq!(response["id"], "req-99");
@@ -506,15 +499,18 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
         // Callback should have been called
-        assert!(*callback_called.lock(), "callback should be invoked even without id");
+        assert!(
+            *callback_called.lock(),
+            "callback should be invoked even without id"
+        );
 
         // But no response should be emitted
-        let result = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            response_rx.recv(),
-        )
-        .await;
-        assert!(result.is_err(), "no response should be sent for request without id");
+        let result =
+            tokio::time::timeout(std::time::Duration::from_millis(100), response_rx.recv()).await;
+        assert!(
+            result.is_err(),
+            "no response should be sent for request without id"
+        );
     }
 
     #[tokio::test]
@@ -541,11 +537,11 @@ mod tests {
 
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
 
-        let result = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            response_rx.recv(),
-        )
-        .await;
-        assert!(result.is_err(), "no response should be sent for request with null id");
+        let result =
+            tokio::time::timeout(std::time::Duration::from_millis(100), response_rx.recv()).await;
+        assert!(
+            result.is_err(),
+            "no response should be sent for request with null id"
+        );
     }
 }

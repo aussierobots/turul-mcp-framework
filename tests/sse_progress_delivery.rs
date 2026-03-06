@@ -38,10 +38,12 @@ async fn start_progress_test_server() -> Result<String, Box<dyn std::error::Erro
                 if let Some(broadcaster) =
                     broadcaster_any.downcast_ref::<SharedNotificationBroadcaster>()
                 {
-                    let progress_25 =
-                        ProgressNotification::new(format!("calc-{}", uuid::Uuid::now_v7().as_simple()), 25.0)
-                            .with_total(100.0)
-                            .with_message("Starting calculation".to_string());
+                    let progress_25 = ProgressNotification::new(
+                        format!("calc-{}", uuid::Uuid::now_v7().as_simple()),
+                        25.0,
+                    )
+                    .with_total(100.0)
+                    .with_message("Starting calculation".to_string());
                     let _ = broadcaster
                         .send_progress_notification(&session_ctx.session_id, progress_25)
                         .await;
@@ -59,10 +61,12 @@ async fn start_progress_test_server() -> Result<String, Box<dyn std::error::Erro
                 if let Some(broadcaster) =
                     broadcaster_any.downcast_ref::<SharedNotificationBroadcaster>()
                 {
-                    let progress_75 =
-                        ProgressNotification::new(format!("calc-{}", uuid::Uuid::now_v7().as_simple()), 75.0)
-                            .with_total(100.0)
-                            .with_message("Nearly complete".to_string());
+                    let progress_75 = ProgressNotification::new(
+                        format!("calc-{}", uuid::Uuid::now_v7().as_simple()),
+                        75.0,
+                    )
+                    .with_total(100.0)
+                    .with_message("Nearly complete".to_string());
                     let _ = broadcaster
                         .send_progress_notification(&session_ctx.session_id, progress_75)
                         .await;

@@ -459,10 +459,7 @@ fn print_test_results(results: &[TestResult], duration: Duration, detailed: bool
             );
 
             if detailed && let Some(details) = result.details.as_ref() {
-                println!(
-                    "    Details: {}",
-                    serde_json::to_string_pretty(details)?
-                );
+                println!("    Details: {}", serde_json::to_string_pretty(details)?);
             }
         }
     }

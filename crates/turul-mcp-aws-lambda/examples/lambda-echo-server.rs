@@ -14,7 +14,6 @@
 //! cargo lambda watch --package turul-mcp-aws-lambda --example lambda-echo-server
 //! ```
 
-use lambda_http::{run_with_streaming_response, service_fn};
 use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
 use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, SessionContext};
@@ -60,14 +59,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing::info!("🚀 Echo Lambda MCP server ready!");
     tracing::info!("📋 Available tools: ping (built-in), echo (custom)");
 
-    // Run with Lambda streaming response support
-    run_with_streaming_response(service_fn(move |req| {
-        let handler = handler.clone();
-        async move {
-            handler
-                .handle_streaming(req) // Use handle_streaming for proper SSE support
-                .await
-        }
-    }))
-    .await
+    // Run with streaming support — gracefully handles API Gateway completion invocations
+    turul_mcp_aws_lambda::run_streaming(handler).await
 }

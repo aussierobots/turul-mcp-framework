@@ -42,6 +42,9 @@ pub struct LambdaMcpHandler {
     #[allow(dead_code)]
     sse_enabled: bool,
 
+    /// Custom route registry (e.g., .well-known endpoints)
+    route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
+
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
     cors_config: Option<CorsConfig>,
@@ -90,6 +93,7 @@ impl LambdaMcpHandler {
             session_handler,
             streamable_handler,
             sse_enabled,
+            route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
             #[cfg(feature = "cors")]
             cors_config,
         }
@@ -134,6 +138,7 @@ impl LambdaMcpHandler {
             session_handler,
             streamable_handler,
             sse_enabled,
+            route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
             #[cfg(feature = "cors")]
             cors_config: None,
         }
@@ -150,6 +155,7 @@ impl LambdaMcpHandler {
         capabilities: ServerCapabilities,
         middleware_stack: Arc<turul_http_mcp_server::middleware::MiddlewareStack>,
         sse_enabled: bool,
+        route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     ) -> Self {
         // Create SessionMcpHandler with custom middleware
         let session_handler = SessionMcpHandler::with_shared_stream_manager(
@@ -175,6 +181,7 @@ impl LambdaMcpHandler {
             session_handler,
             streamable_handler,
             sse_enabled,
+            route_registry,
             #[cfg(feature = "cors")]
             cors_config: None,
         }
@@ -226,6 +233,47 @@ impl LambdaMcpHandler {
 
         // 🚀 DELEGATION: Convert Lambda request to hyper request
         let hyper_req = crate::adapter::lambda_to_hyper_request(req)?;
+
+        // Check custom routes (e.g., .well-known) before MCP delegation
+        let path = hyper_req.uri().path().to_string();
+        if !self.route_registry.is_empty() {
+            match self.route_registry.match_route(&path) {
+                Ok(Some(route_handler)) => {
+                    debug!("Custom route matched: {}", path);
+                    use http_body_util::BodyExt;
+                    let (parts, body) = hyper_req.into_parts();
+                    let boxed_req = hyper::Request::from_parts(parts, body.boxed_unsync());
+                    let route_resp = route_handler.handle(boxed_req).await;
+                    let mut lambda_resp =
+                        crate::adapter::hyper_to_lambda_response(route_resp).await?;
+                    #[cfg(feature = "cors")]
+                    if let Some(ref cors_config) = self.cors_config {
+                        inject_cors_headers(
+                            &mut lambda_resp,
+                            cors_config,
+                            request_origin.as_deref(),
+                        )?;
+                    }
+                    return Ok(lambda_resp);
+                }
+                Ok(None) => {} // No match, continue to MCP handler
+                Err(e) => {
+                    debug!("Route validation error: {}", e);
+                    let route_resp = e.into_response();
+                    let mut lambda_resp =
+                        crate::adapter::hyper_to_lambda_response(route_resp).await?;
+                    #[cfg(feature = "cors")]
+                    if let Some(ref cors_config) = self.cors_config {
+                        inject_cors_headers(
+                            &mut lambda_resp,
+                            cors_config,
+                            request_origin.as_deref(),
+                        )?;
+                    }
+                    return Ok(lambda_resp);
+                }
+            }
+        }
 
         // 🚀 DELEGATION: Use SessionMcpHandler for all business logic
         let hyper_resp = self
@@ -289,6 +337,25 @@ impl LambdaMcpHandler {
         // 🚀 DELEGATION: Convert Lambda request to hyper request
         let hyper_req = crate::adapter::lambda_to_hyper_request(req)
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+
+        // Check custom routes (e.g., .well-known) before MCP delegation
+        let path = hyper_req.uri().path().to_string();
+        if !self.route_registry.is_empty() {
+            match self.route_registry.match_route(&path) {
+                Ok(Some(route_handler)) => {
+                    debug!("Custom route matched (streaming): {}", path);
+                    use http_body_util::BodyExt;
+                    let (parts, body) = hyper_req.into_parts();
+                    let boxed_req = hyper::Request::from_parts(parts, body.boxed_unsync());
+                    return Ok(route_handler.handle(boxed_req).await);
+                }
+                Ok(None) => {} // No match, continue to MCP handler
+                Err(e) => {
+                    debug!("Route validation error (streaming): {}", e);
+                    return Ok(e.into_response());
+                }
+            }
+        }
 
         // 🚀 PROTOCOL ROUTING: Check protocol version and route to appropriate handler
         use turul_http_mcp_server::protocol::McpProtocolVersion;

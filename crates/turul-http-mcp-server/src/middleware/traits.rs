@@ -70,6 +70,21 @@ use turul_mcp_session_storage::SessionView;
 /// ```
 #[async_trait]
 pub trait McpMiddleware: Send + Sync {
+    /// Whether this middleware runs before session creation (pre-session phase)
+    ///
+    /// Pre-session middleware runs before any session lookup or creation.
+    /// This is required for OAuth 2.1 auth — unauthenticated requests must be
+    /// rejected before allocating a session.
+    ///
+    /// Pre-session middleware receives `session: None` in `before_dispatch()`
+    /// regardless of whether a session exists, since session lookup hasn't
+    /// occurred yet.
+    ///
+    /// Default: `false` (runs in normal post-session phase)
+    fn runs_before_session(&self) -> bool {
+        false
+    }
+
     /// Called before the MCP method handler executes
     ///
     /// # Parameters

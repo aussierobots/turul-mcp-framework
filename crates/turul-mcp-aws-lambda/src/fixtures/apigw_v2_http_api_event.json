@@ -1,0 +1,27 @@
+{
+    "version": "2.0",
+    "routeKey": "POST /mcp",
+    "rawPath": "/mcp",
+    "rawQueryString": "",
+    "headers": {
+        "content-type": "application/json"
+    },
+    "requestContext": {
+        "accountId": "123456789",
+        "apiId": "api-123",
+        "domainName": "api-123.execute-api.us-east-1.amazonaws.com",
+        "http": {
+            "method": "POST",
+            "path": "/mcp",
+            "protocol": "HTTP/1.1",
+            "sourceIp": "1.2.3.4",
+            "userAgent": "test"
+        },
+        "requestId": "req-456",
+        "stage": "$default",
+        "time": "01/Jan/2025:00:00:00 +0000",
+        "timeEpoch": 1735689600000
+    },
+    "body": "{\"jsonrpc\":\"2.0\",\"method\":\"initialize\",\"id\":1}",
+    "isBase64Encoded": false
+}

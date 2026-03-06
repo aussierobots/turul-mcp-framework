@@ -34,6 +34,15 @@ pub struct RequestContext<'a> {
 
     /// Transport-specific metadata (HTTP headers, Lambda event fields, etc.)
     metadata: Map<String, Value>,
+
+    /// Bearer token extracted from Authorization header (D5: isolated from metadata)
+    bearer_token: Option<String>,
+
+    /// Request-scoped extensions for passing data between middleware and tools (D3)
+    ///
+    /// Written by pre-session middleware (e.g., auth claims), threaded through
+    /// to `SessionContext.extensions` for tool access. Never persisted to storage.
+    extensions: HashMap<String, Value>,
 }
 
 impl<'a> RequestContext<'a> {
@@ -48,6 +57,8 @@ impl<'a> RequestContext<'a> {
             method,
             params,
             metadata: Map::new(),
+            bearer_token: None,
+            extensions: HashMap::new(),
         }
     }
 
@@ -84,6 +95,36 @@ impl<'a> RequestContext<'a> {
     /// ```
     pub fn add_metadata(&mut self, key: impl Into<String>, value: Value) {
         self.metadata.insert(key.into(), value);
+    }
+
+    /// Get the Bearer token (if extracted from Authorization header)
+    pub fn bearer_token(&self) -> Option<&str> {
+        self.bearer_token.as_deref()
+    }
+
+    /// Set the Bearer token (called by transport during extraction)
+    pub fn set_bearer_token(&mut self, token: String) {
+        self.bearer_token = Some(token);
+    }
+
+    /// Get request-scoped extensions (read-only)
+    pub fn extensions(&self) -> &HashMap<String, Value> {
+        &self.extensions
+    }
+
+    /// Set an extension value (used by middleware to pass data to tools)
+    pub fn set_extension(&mut self, key: impl Into<String>, value: Value) {
+        self.extensions.insert(key.into(), value);
+    }
+
+    /// Get an extension value by key
+    pub fn get_extension(&self, key: &str) -> Option<&Value> {
+        self.extensions.get(key)
+    }
+
+    /// Take ownership of extensions (used by transport to thread to SessionContext)
+    pub fn take_extensions(&mut self) -> HashMap<String, Value> {
+        std::mem::take(&mut self.extensions)
     }
 }
 

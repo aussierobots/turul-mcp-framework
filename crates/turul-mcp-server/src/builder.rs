@@ -8,10 +8,10 @@ use std::sync::Arc;
 
 use crate::handlers::*;
 use crate::resource::McpResource;
+use crate::tool::tool_to_descriptor;
 use crate::{
     McpCompletion, McpElicitation, McpLogger, McpNotification, McpPrompt, McpRoot, McpSampling,
 };
-use crate::tool::tool_to_descriptor;
 use crate::{McpServer, McpTool, Result};
 use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::initialize::*;
@@ -87,6 +87,9 @@ pub struct McpServerBuilder {
 
     /// Middleware stack for request/response interception
     middleware_stack: crate::middleware::MiddlewareStack,
+
+    /// Custom HTTP route registry (e.g., .well-known paths)
+    route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
 
     /// HTTP configuration (if enabled)
     #[cfg(feature = "http")]
@@ -220,7 +223,8 @@ impl McpServerBuilder {
             task_recovery_timeout_ms: 300_000, // Default: 5 minutes
             strict_lifecycle: false,           // Default: lenient mode for compatibility
             test_mode: false,                  // Default: production mode with security
-            middleware_stack: crate::middleware::MiddlewareStack::new(), // Default: empty middleware stack
+            middleware_stack: crate::middleware::MiddlewareStack::new(),
+            route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
             #[cfg(feature = "http")]
             bind_address: "127.0.0.1:8000".parse().unwrap(),
             #[cfg(feature = "http")]
@@ -448,6 +452,20 @@ impl McpServerBuilder {
     /// ```
     pub fn middleware(mut self, middleware: Arc<dyn crate::middleware::McpMiddleware>) -> Self {
         self.middleware_stack.push(middleware);
+        self
+    }
+
+    /// Register a custom HTTP route (e.g., `.well-known/oauth-protected-resource`)
+    ///
+    /// Routes are matched by exact path before returning 404.
+    pub fn route(
+        mut self,
+        path: &str,
+        handler: Arc<dyn turul_http_mcp_server::RouteHandler>,
+    ) -> Self {
+        Arc::get_mut(&mut self.route_registry)
+            .expect("route() must be called before build()")
+            .add_route(path, handler);
         self
     }
 
@@ -1435,8 +1453,7 @@ impl McpServerBuilder {
             for (name, tool) in &self.tools {
                 let descriptor = tool_to_descriptor(tool.as_ref());
                 if let Some(ref exec) = descriptor.execution
-                    && exec.task_support
-                        == Some(turul_mcp_protocol::tools::TaskSupport::Required)
+                    && exec.task_support == Some(turul_mcp_protocol::tools::TaskSupport::Required)
                 {
                     return Err(McpError::configuration(&format!(
                         "Tool '{}' has taskSupport=required but no task runtime is configured. \
@@ -1650,6 +1667,7 @@ impl McpServerBuilder {
             self.task_runtime,
             self.strict_lifecycle,
             self.middleware_stack,
+            self.route_registry,
             #[cfg(feature = "http")]
             self.bind_address,
             #[cfg(feature = "http")]
@@ -2221,22 +2239,34 @@ mod tests {
             input_schema: ToolSchema,
         }
         impl HasBaseMetadata for RequiredTaskTool {
-            fn name(&self) -> &str { "required_task" }
+            fn name(&self) -> &str {
+                "required_task"
+            }
         }
         impl HasDescription for RequiredTaskTool {
-            fn description(&self) -> Option<&str> { Some("Requires tasks") }
+            fn description(&self) -> Option<&str> {
+                Some("Requires tasks")
+            }
         }
         impl HasInputSchema for RequiredTaskTool {
-            fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+            fn input_schema(&self) -> &ToolSchema {
+                &self.input_schema
+            }
         }
         impl HasOutputSchema for RequiredTaskTool {
-            fn output_schema(&self) -> Option<&ToolSchema> { None }
+            fn output_schema(&self) -> Option<&ToolSchema> {
+                None
+            }
         }
         impl HasAnnotations for RequiredTaskTool {
-            fn annotations(&self) -> Option<&ToolAnnotations> { None }
+            fn annotations(&self) -> Option<&ToolAnnotations> {
+                None
+            }
         }
         impl HasToolMeta for RequiredTaskTool {
-            fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+            fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+                None
+            }
         }
         impl HasIcons for RequiredTaskTool {}
         impl HasExecution for RequiredTaskTool {
@@ -2248,21 +2278,40 @@ mod tests {
         }
         #[async_trait]
         impl McpTool for RequiredTaskTool {
-            async fn call(&self, _args: Value, _session: Option<SessionContext>) -> crate::McpResult<CallToolResult> {
-                Ok(CallToolResult::success(vec![turul_mcp_protocol::ToolResult::text("ok")]))
+            async fn call(
+                &self,
+                _args: Value,
+                _session: Option<SessionContext>,
+            ) -> crate::McpResult<CallToolResult> {
+                Ok(CallToolResult::success(vec![
+                    turul_mcp_protocol::ToolResult::text("ok"),
+                ]))
             }
         }
 
         // Build without task runtime — should fail
         let result = McpServerBuilder::new()
             .name("coherence-test")
-            .tool(RequiredTaskTool { input_schema: ToolSchema::object() })
+            .tool(RequiredTaskTool {
+                input_schema: ToolSchema::object(),
+            })
             .build();
 
-        assert!(result.is_err(), "build() should reject taskSupport=required without runtime");
+        assert!(
+            result.is_err(),
+            "build() should reject taskSupport=required without runtime"
+        );
         let err = format!("{}", result.unwrap_err());
-        assert!(err.contains("taskSupport=required"), "Error should mention taskSupport=required: {}", err);
-        assert!(err.contains("required_task"), "Error should mention tool name: {}", err);
+        assert!(
+            err.contains("taskSupport=required"),
+            "Error should mention taskSupport=required: {}",
+            err
+        );
+        assert!(
+            err.contains("required_task"),
+            "Error should mention tool name: {}",
+            err
+        );
     }
 
     /// Coherence guard: taskSupport=optional without runtime should succeed (optional is fine).
@@ -2274,22 +2323,34 @@ mod tests {
             input_schema: ToolSchema,
         }
         impl HasBaseMetadata for OptionalTaskTool {
-            fn name(&self) -> &str { "optional_task" }
+            fn name(&self) -> &str {
+                "optional_task"
+            }
         }
         impl HasDescription for OptionalTaskTool {
-            fn description(&self) -> Option<&str> { Some("Optional tasks") }
+            fn description(&self) -> Option<&str> {
+                Some("Optional tasks")
+            }
         }
         impl HasInputSchema for OptionalTaskTool {
-            fn input_schema(&self) -> &ToolSchema { &self.input_schema }
+            fn input_schema(&self) -> &ToolSchema {
+                &self.input_schema
+            }
         }
         impl HasOutputSchema for OptionalTaskTool {
-            fn output_schema(&self) -> Option<&ToolSchema> { None }
+            fn output_schema(&self) -> Option<&ToolSchema> {
+                None
+            }
         }
         impl HasAnnotations for OptionalTaskTool {
-            fn annotations(&self) -> Option<&ToolAnnotations> { None }
+            fn annotations(&self) -> Option<&ToolAnnotations> {
+                None
+            }
         }
         impl HasToolMeta for OptionalTaskTool {
-            fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+            fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+                None
+            }
         }
         impl HasIcons for OptionalTaskTool {}
         impl HasExecution for OptionalTaskTool {
@@ -2301,17 +2362,28 @@ mod tests {
         }
         #[async_trait]
         impl McpTool for OptionalTaskTool {
-            async fn call(&self, _args: Value, _session: Option<SessionContext>) -> crate::McpResult<CallToolResult> {
-                Ok(CallToolResult::success(vec![turul_mcp_protocol::ToolResult::text("ok")]))
+            async fn call(
+                &self,
+                _args: Value,
+                _session: Option<SessionContext>,
+            ) -> crate::McpResult<CallToolResult> {
+                Ok(CallToolResult::success(vec![
+                    turul_mcp_protocol::ToolResult::text("ok"),
+                ]))
             }
         }
 
         // Build without task runtime — should succeed (optional is fine)
         let result = McpServerBuilder::new()
             .name("coherence-optional-test")
-            .tool(OptionalTaskTool { input_schema: ToolSchema::object() })
+            .tool(OptionalTaskTool {
+                input_schema: ToolSchema::object(),
+            })
             .build();
 
-        assert!(result.is_ok(), "build() should allow taskSupport=optional without runtime");
+        assert!(
+            result.is_ok(),
+            "build() should allow taskSupport=optional without runtime"
+        );
     }
 }

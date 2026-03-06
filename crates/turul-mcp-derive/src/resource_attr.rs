@@ -382,9 +382,15 @@ mod tests {
         assert!(result.is_ok());
 
         let code = result.unwrap().to_string();
-        assert!(code.contains("My Resource Title"), "title should appear in generated code");
+        assert!(
+            code.contains("My Resource Title"),
+            "title should appear in generated code"
+        );
         // Should have explicit title() method in HasResourceMetadata
-        assert!(code.contains("fn title"), "should generate explicit title() method");
+        assert!(
+            code.contains("fn title"),
+            "should generate explicit title() method"
+        );
     }
 
     #[test]
@@ -401,7 +407,10 @@ mod tests {
 
         let code = result.unwrap().to_string();
         // Should have title() returning None
-        assert!(code.contains("fn title"), "should generate explicit title() method even without title attribute");
+        assert!(
+            code.contains("fn title"),
+            "should generate explicit title() method even without title attribute"
+        );
     }
 
     #[test]

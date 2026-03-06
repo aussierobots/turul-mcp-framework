@@ -42,6 +42,7 @@ fn create_session_context() -> SessionContext {
         is_initialized: Arc::new(|| Box::pin(async { true })),
         send_notification: Arc::new(|_| Box::pin(async {})),
         broadcaster: None,
+        extensions: std::collections::HashMap::new(),
     }
 }
 

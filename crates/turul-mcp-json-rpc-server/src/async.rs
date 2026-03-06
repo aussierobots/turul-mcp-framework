@@ -28,6 +28,12 @@ pub struct SessionContext {
     pub broadcaster: Option<Arc<dyn std::any::Any + Send + Sync>>,
     /// Session timestamp (Unix milliseconds)
     pub timestamp: u64,
+    /// Request-scoped extensions (auth claims, middleware data)
+    ///
+    /// Populated by transport layer from `RequestContext.extensions`.
+    /// Forwarded to `turul_mcp_server::SessionContext.extensions`.
+    /// Never persisted to session storage.
+    pub extensions: HashMap<String, Value>,
 }
 
 /// Trait for handling JSON-RPC method calls

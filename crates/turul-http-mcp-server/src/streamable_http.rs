@@ -405,10 +405,7 @@ impl StreamableHttpHandler {
         if *req.method() == Method::OPTIONS {
             return Response::builder()
                 .status(StatusCode::OK)
-                .header(
-                    "Access-Control-Allow-Methods",
-                    "GET, POST, DELETE, OPTIONS",
-                )
+                .header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
                 .header(
                     "Access-Control-Allow-Headers",
                     "Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id, Last-Event-ID",
@@ -719,6 +716,7 @@ impl StreamableHttpHandler {
                                 metadata: std::collections::HashMap::new(),
                                 broadcaster: Some(broadcaster_any),
                                 timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                                extensions: std::collections::HashMap::new(),
                             };
 
                             self.dispatcher
@@ -1058,7 +1056,7 @@ impl StreamableHttpHandler {
                 JsonRpcMessage::Request(request) => {
                     // Sessionless ping request: shared dispatch path
                     let (response, _) = self
-                        .run_middleware_and_dispatch(request, context.headers.clone(), None)
+                        .run_middleware_and_dispatch(request, context.headers.clone(), None, None)
                         .await;
                     let response_value =
                         serde_json::to_value(&response).unwrap_or(serde_json::json!({}));
@@ -1088,6 +1086,74 @@ impl StreamableHttpHandler {
                 }
             };
         }
+
+        // --- Pre-session auth phase (D4) ---
+        // Extract Bearer token using hardened parser (D6)
+        let bearer_token = context
+            .headers
+            .get("authorization")
+            .and_then(|v| extract_bearer_token(v));
+
+        // Run pre-session middleware if any are registered
+        let pre_session_extensions = if self.middleware_stack.has_pre_session_middleware() {
+            let method_name = match &message {
+                JsonRpcMessage::Request(req) => req.method.as_str(),
+                JsonRpcMessage::Notification(notif) => notif.method.as_str(),
+            };
+            let mut pre_ctx = crate::middleware::RequestContext::new(method_name, None);
+            if let Some(ref token) = bearer_token {
+                pre_ctx.set_bearer_token(token.clone());
+            }
+            // Copy headers to metadata, excluding Bearer authorization (D5)
+            for (k, v) in &context.headers {
+                if k.eq_ignore_ascii_case("authorization") && is_bearer_scheme(v) {
+                    continue;
+                }
+                pre_ctx.add_metadata(k.clone(), serde_json::json!(v));
+            }
+            match self
+                .middleware_stack
+                .execute_before_session(&mut pre_ctx)
+                .await
+            {
+                Ok(()) => Some(pre_ctx.take_extensions()),
+                Err(crate::middleware::MiddlewareError::HttpChallenge {
+                    status,
+                    www_authenticate,
+                    body,
+                }) => {
+                    return build_http_challenge_response(
+                        status,
+                        &www_authenticate,
+                        body.as_deref(),
+                        &context,
+                    );
+                }
+                Err(other_err) => {
+                    // Non-challenge pre-session errors → JSON-RPC error
+                    if let JsonRpcMessage::Request(ref req) = message {
+                        let response =
+                            Self::map_middleware_error_to_jsonrpc(other_err, req.id.clone());
+                        let response_value =
+                            serde_json::to_value(&response).unwrap_or(serde_json::json!({}));
+                        return StreamableResponse::Json(response_value)
+                            .into_boxed_response(&context);
+                    } else {
+                        // Notification — can't return JSON-RPC error, just reject
+                        return Response::builder()
+                            .status(StatusCode::FORBIDDEN)
+                            .body(
+                                Full::new(Bytes::from(other_err.to_string()))
+                                    .map_err(|never| match never {})
+                                    .boxed_unsync(),
+                            )
+                            .unwrap();
+                    }
+                }
+            }
+        } else {
+            None
+        };
 
         // Validate session requirements based on method
         let session_id = match &message {
@@ -1194,8 +1260,13 @@ impl StreamableHttpHandler {
                     "Processing streaming JSON-RPC request: method={}",
                     request.method
                 );
-                self.create_streaming_response(request, session_id, context)
-                    .await
+                self.create_streaming_response(
+                    request,
+                    session_id,
+                    context,
+                    pre_session_extensions.clone(),
+                )
+                .await
             }
             JsonRpcMessage::Notification(notification) => {
                 debug!(
@@ -1217,6 +1288,7 @@ impl StreamableHttpHandler {
                     metadata: std::collections::HashMap::new(),
                     broadcaster: Some(broadcaster_any),
                     timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                    extensions: std::collections::HashMap::new(),
                 };
 
                 // Process notification through dispatcher (notifications don't return responses)
@@ -1255,6 +1327,7 @@ impl StreamableHttpHandler {
         request: turul_mcp_json_rpc_server::JsonRpcRequest,
         session_id: String,
         context: StreamableHttpContext,
+        pre_session_extensions: Option<HashMap<String, serde_json::Value>>,
     ) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>> {
         debug!(
             "Creating streaming response for method: {}, session: {}",
@@ -1286,6 +1359,7 @@ impl StreamableHttpHandler {
             metadata: std::collections::HashMap::new(),
             broadcaster: Some(broadcaster_any),
             timestamp: chrono::Utc::now().timestamp_millis() as u64,
+            extensions: std::collections::HashMap::new(),
         };
 
         // Register streaming POST connection with StreamManager for progress events
@@ -1423,7 +1497,12 @@ impl StreamableHttpHandler {
             // Process actual request through middleware pipeline
             // Injection is applied immediately inside run_middleware_and_dispatch
             let (response, _) = self_clone
-                .run_middleware_and_dispatch(request, headers, Some(session_context))
+                .run_middleware_and_dispatch(
+                    request,
+                    headers,
+                    Some(session_context),
+                    pre_session_extensions,
+                )
                 .await;
 
             // Send final result - format depends on client type
@@ -1668,6 +1747,7 @@ impl StreamableHttpHandler {
         request: turul_mcp_json_rpc_server::JsonRpcRequest,
         headers: HashMap<String, String>,
         session: Option<turul_mcp_json_rpc_server::SessionContext>,
+        pre_session_extensions: Option<HashMap<String, serde_json::Value>>,
     ) -> (
         turul_mcp_json_rpc_server::JsonRpcMessage,
         Option<crate::middleware::SessionInjection>,
@@ -1702,7 +1782,18 @@ impl StreamableHttpHandler {
         });
         let mut ctx = crate::middleware::RequestContext::new(&method, params);
 
+        // Seed extensions from pre-session phase (auth claims etc.)
+        if let Some(ext) = pre_session_extensions {
+            for (k, v) in ext {
+                ctx.set_extension(k, v);
+            }
+        }
+
         for (k, v) in normalized_headers {
+            // D5: Bearer scheme NEVER enters metadata, even if token is malformed
+            if k == "authorization" && is_bearer_scheme(&v) {
+                continue;
+            }
             ctx.add_metadata(k, serde_json::json!(v));
         }
 
@@ -1730,7 +1821,9 @@ impl StreamableHttpHandler {
         };
 
         // Apply injection to session storage (only if session exists)
-        if !injection.is_empty() && let Some(ref sv) = session_view {
+        if !injection.is_empty()
+            && let Some(ref sv) = session_view
+        {
             for (key, value) in injection.state() {
                 if let Err(e) = sv.set_state(key, value.clone()).await {
                     tracing::warn!("Failed to apply injection state '{}': {}", key, e);
@@ -1742,6 +1835,12 @@ impl StreamableHttpHandler {
                 }
             }
         }
+
+        // Thread extensions from RequestContext → JSON-RPC SessionContext (D3 canonical flow)
+        let session = session.map(|mut s| {
+            s.extensions = ctx.extensions().clone();
+            s
+        });
 
         // Dispatch the request
         let result = if let Some(session_ctx) = session {
@@ -1796,6 +1895,11 @@ impl StreamableHttpHandler {
             MiddlewareError::InvalidRequest(msg) => (error_codes::INVALID_REQUEST, msg, None),
             MiddlewareError::Internal(msg) => (error_codes::INTERNAL_ERROR, msg, None),
             MiddlewareError::Custom { message, .. } => (error_codes::INTERNAL_ERROR, message, None),
+            MiddlewareError::HttpChallenge { .. } => {
+                unreachable!(
+                    "HttpChallenge must be caught at transport level before JSON-RPC dispatch"
+                )
+            }
         };
 
         let error_obj = if let Some(d) = data {
@@ -1816,6 +1920,33 @@ impl StreamableHttpHandler {
             turul_mcp_json_rpc_server::JsonRpcError::new(Some(request_id), error_obj),
         )
     }
+}
+
+use crate::middleware::bearer::{extract_bearer_token, is_bearer_scheme};
+
+/// Build an HTTP challenge response (401/403 with WWW-Authenticate header).
+///
+/// Returns a raw HTTP response — never enters the JSON-RPC layer.
+fn build_http_challenge_response(
+    status: u16,
+    www_authenticate: &str,
+    body: Option<&str>,
+    context: &StreamableHttpContext,
+) -> Response<http_body_util::combinators::UnsyncBoxBody<Bytes, hyper::Error>> {
+    let status_code = StatusCode::from_u16(status).unwrap_or(StatusCode::UNAUTHORIZED);
+    let body_bytes = body.unwrap_or("").to_string();
+
+    Response::builder()
+        .status(status_code)
+        .header("WWW-Authenticate", www_authenticate)
+        .header("Content-Type", "application/json")
+        .header("MCP-Protocol-Version", context.protocol_version.as_str())
+        .body(
+            http_body_util::Full::new(Bytes::from(body_bytes))
+                .map_err(|never| match never {})
+                .boxed_unsync(),
+        )
+        .unwrap()
 }
 
 #[cfg(test)]
@@ -1887,5 +2018,66 @@ mod tests {
         assert!(context.validate(&Method::POST).is_ok());
         // GET without session should fail
         assert!(context.validate(&Method::GET).is_err());
+    }
+
+    // Bearer extraction tests are in middleware::bearer::tests
+    // Transport-level integration tests:
+
+    #[test]
+    fn test_non_bearer_preserved_in_metadata() {
+        // T5: Non-bearer auth headers pass through, Bearer excluded
+        let mut ctx = crate::middleware::RequestContext::new("test/method", None);
+
+        let headers = vec![
+            (
+                "authorization".to_string(),
+                "Basic dXNlcjpwYXNz".to_string(),
+            ),
+            ("x-custom".to_string(), "value".to_string()),
+        ];
+
+        for (k, v) in &headers {
+            if k == "authorization" && is_bearer_scheme(v) {
+                continue;
+            }
+            ctx.add_metadata(k.clone(), serde_json::json!(v));
+        }
+
+        assert!(ctx.metadata().contains_key("authorization"));
+        assert!(ctx.metadata().contains_key("x-custom"));
+
+        // Bearer exclusion
+        let mut ctx2 = crate::middleware::RequestContext::new("test/method", None);
+        let bearer_headers = vec![
+            ("authorization".to_string(), "Bearer abc123".to_string()),
+            ("x-custom".to_string(), "value".to_string()),
+        ];
+
+        for (k, v) in &bearer_headers {
+            if k == "authorization" && is_bearer_scheme(v) {
+                continue;
+            }
+            ctx2.add_metadata(k.clone(), serde_json::json!(v));
+        }
+
+        assert!(!ctx2.metadata().contains_key("authorization"));
+        assert!(ctx2.metadata().contains_key("x-custom"));
+    }
+
+    #[test]
+    fn test_malformed_bearer_excluded_from_metadata() {
+        // T47: Even malformed Bearer tokens are excluded from metadata
+        let mut ctx = crate::middleware::RequestContext::new("test/method", None);
+
+        let headers = vec![("authorization".to_string(), "Bearer ".to_string())];
+
+        for (k, v) in &headers {
+            if k == "authorization" && is_bearer_scheme(v) {
+                continue;
+            }
+            ctx.add_metadata(k.clone(), serde_json::json!(v));
+        }
+
+        assert!(!ctx.metadata().contains_key("authorization"));
     }
 }

@@ -51,10 +51,12 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                     let val = s.value();
                     match val.as_str() {
                         "optional" | "required" | "forbidden" => task_support = Some(val),
-                        _ => return Err(syn::Error::new_spanned(
-                            s,
-                            "task_support must be \"optional\", \"required\", or \"forbidden\""
-                        )),
+                        _ => {
+                            return Err(syn::Error::new_spanned(
+                                s,
+                                "task_support must be \"optional\", \"required\", or \"forbidden\"",
+                            ));
+                        }
                     }
                 }
             }
@@ -78,7 +80,10 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                 {
                     read_only = Some(b.value);
                 } else {
-                    return Err(syn::Error::new_spanned(&nv.value, "read_only must be a boolean (true or false)"));
+                    return Err(syn::Error::new_spanned(
+                        &nv.value,
+                        "read_only must be a boolean (true or false)",
+                    ));
                 }
             }
             Meta::NameValue(nv) if nv.path.is_ident("destructive") => {
@@ -87,7 +92,10 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                 {
                     destructive = Some(b.value);
                 } else {
-                    return Err(syn::Error::new_spanned(&nv.value, "destructive must be a boolean (true or false)"));
+                    return Err(syn::Error::new_spanned(
+                        &nv.value,
+                        "destructive must be a boolean (true or false)",
+                    ));
                 }
             }
             Meta::NameValue(nv) if nv.path.is_ident("idempotent") => {
@@ -96,7 +104,10 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                 {
                     idempotent = Some(b.value);
                 } else {
-                    return Err(syn::Error::new_spanned(&nv.value, "idempotent must be a boolean (true or false)"));
+                    return Err(syn::Error::new_spanned(
+                        &nv.value,
+                        "idempotent must be a boolean (true or false)",
+                    ));
                 }
             }
             Meta::NameValue(nv) if nv.path.is_ident("open_world") => {
@@ -105,7 +116,10 @@ pub fn mcp_tool_impl(args: Punctuated<Meta, Token![,]>, input: ItemFn) -> Result
                 {
                     open_world = Some(b.value);
                 } else {
-                    return Err(syn::Error::new_spanned(&nv.value, "open_world must be a boolean (true or false)"));
+                    return Err(syn::Error::new_spanned(
+                        &nv.value,
+                        "open_world must be a boolean (true or false)",
+                    ));
                 }
             }
             _ => {}

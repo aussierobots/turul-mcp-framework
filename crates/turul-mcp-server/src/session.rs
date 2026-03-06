@@ -60,6 +60,11 @@ pub struct SessionContext {
     pub send_notification: Arc<dyn Fn(SessionEvent) -> BoxFuture<()> + Send + Sync>,
     /// NotificationBroadcaster for sending MCP-compliant notifications
     pub broadcaster: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    /// Request-scoped extensions (auth claims, middleware data)
+    ///
+    /// Populated by transport from `RequestContext.extensions` via JSON-RPC `SessionContext`.
+    /// Never persisted to session storage — exists only for the duration of one request.
+    pub extensions: HashMap<String, Value>,
 }
 
 impl SessionContext {
@@ -217,6 +222,7 @@ impl SessionContext {
             is_initialized,
             send_notification,
             broadcaster,
+            extensions: json_rpc_ctx.extensions,
         }
     }
 
@@ -228,6 +234,18 @@ impl SessionContext {
     /// Get the raw broadcaster (as Any) - for use by framework internals
     pub fn get_raw_broadcaster(&self) -> Option<Arc<dyn std::any::Any + Send + Sync>> {
         self.broadcaster.clone()
+    }
+
+    /// Get a request-scoped extension value by key
+    pub fn get_extension(&self, key: &str) -> Option<&Value> {
+        self.extensions.get(key)
+    }
+
+    /// Get a typed request-scoped extension value by key
+    pub fn get_typed_extension<T: serde::de::DeserializeOwned>(&self, key: &str) -> Option<T> {
+        self.extensions
+            .get(key)
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
     }
 
     /// Create from JSON-RPC server's SessionContext with proper NotificationBroadcaster integration (test helper)
@@ -314,6 +332,7 @@ impl SessionContext {
             is_initialized,
             send_notification,
             broadcaster: None,
+            extensions: HashMap::new(),
         }
     }
 
@@ -1591,6 +1610,7 @@ impl SessionManager {
             is_initialized,
             send_notification,
             broadcaster: None, // Old SessionManager doesn't have broadcaster
+            extensions: HashMap::new(),
         })
     }
 
@@ -1735,5 +1755,95 @@ mod tests {
         // Session should be expired now
         let result = manager.touch_session(&session_id).await;
         assert!(matches!(result, Err(SessionError::Expired(_))));
+    }
+
+    // T17: Extensions are not persisted to session storage
+    #[tokio::test]
+    async fn test_extensions_not_persisted_to_session_storage() {
+        let ctx = SessionContext::new_test();
+        // Extensions field exists but is empty by default
+        assert!(ctx.extensions.is_empty());
+        // Setting state works via storage, extensions are separate
+        (ctx.set_state)("key", json!("value")).await;
+        let val = (ctx.get_state)("key").await;
+        assert_eq!(val, Some(json!("value")));
+        // Extensions remain empty — they are never persisted
+        assert!(ctx.extensions.is_empty());
+    }
+
+    // T18: Extensions empty when no middleware
+    #[tokio::test]
+    async fn test_extensions_empty_when_no_middleware() {
+        let ctx = SessionContext::new_test();
+        assert!(ctx.extensions.is_empty());
+        assert!(ctx.get_extension("anything").is_none());
+    }
+
+    // T19: get_typed_extension deserialization
+    #[tokio::test]
+    async fn test_get_typed_extension_deserialization() {
+        #[derive(Debug, serde::Deserialize, PartialEq)]
+        struct TokenClaims {
+            sub: String,
+            iss: String,
+        }
+
+        let mut ctx = SessionContext::new_test();
+        ctx.extensions.insert(
+            "__turul_internal.auth_claims".to_string(),
+            json!({
+                "sub": "user-123",
+                "iss": "https://auth.example.com"
+            }),
+        );
+
+        // Typed deserialization
+        let claims: Option<TokenClaims> = ctx.get_typed_extension("__turul_internal.auth_claims");
+        assert!(claims.is_some());
+        let claims = claims.unwrap();
+        assert_eq!(claims.sub, "user-123");
+        assert_eq!(claims.iss, "https://auth.example.com");
+
+        // Non-existent key
+        let missing: Option<TokenClaims> = ctx.get_typed_extension("nonexistent");
+        assert!(missing.is_none());
+
+        // Wrong type
+        let wrong: Option<Vec<String>> = ctx.get_typed_extension("__turul_internal.auth_claims");
+        assert!(wrong.is_none());
+    }
+
+    // T16: Extensions thread from middleware to framework SessionContext
+    #[tokio::test]
+    async fn test_extensions_thread_from_json_rpc_to_framework() {
+        use turul_mcp_session_storage::InMemorySessionStorage;
+
+        let storage = Arc::new(InMemorySessionStorage::new());
+        storage
+            .create_session_with_id("test-session".to_string(), Default::default())
+            .await
+            .unwrap();
+
+        let mut json_rpc_ctx = turul_mcp_json_rpc_server::SessionContext {
+            session_id: "test-session".to_string(),
+            metadata: HashMap::new(),
+            broadcaster: None,
+            timestamp: 0,
+            extensions: HashMap::new(),
+        };
+
+        // Simulate what transport does: write claims into extensions
+        json_rpc_ctx.extensions.insert(
+            "__turul_internal.auth_claims".to_string(),
+            json!({"sub": "user-456"}),
+        );
+
+        let framework_ctx = SessionContext::from_json_rpc_with_broadcaster(json_rpc_ctx, storage);
+
+        // Verify extensions were copied through
+        assert_eq!(
+            framework_ctx.get_extension("__turul_internal.auth_claims"),
+            Some(&json!({"sub": "user-456"}))
+        );
     }
 }

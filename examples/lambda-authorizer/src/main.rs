@@ -117,7 +117,9 @@ fn extract_api_key(payload: &Value) -> Option<String> {
     // Fallback: REST v1 multiValueHeaders (values are arrays)
     if let Some(headers) = payload.get("multiValueHeaders").and_then(|v| v.as_object()) {
         for (key, value) in headers {
-            if key.eq_ignore_ascii_case("x-api-key") && let Some(first) = value.as_array().and_then(|arr| arr.first()) {
+            if key.eq_ignore_ascii_case("x-api-key")
+                && let Some(first) = value.as_array().and_then(|arr| arr.first())
+            {
                 return first.as_str().map(String::from);
             }
         }
@@ -149,7 +151,9 @@ fn extract_api_key_from_object(headers: Option<&Value>) -> Option<String> {
 /// Streamable HTTP which uses POST + GET + DELETE on the same endpoint.
 fn wildcard_method_arn(method_arn: &str) -> String {
     // Split on '/' to find the stage, then wildcard everything after it
-    if let Some(slash_pos) = method_arn.find('/') && let Some(second_slash) = method_arn[slash_pos + 1..].find('/') {
+    if let Some(slash_pos) = method_arn.find('/')
+        && let Some(second_slash) = method_arn[slash_pos + 1..].find('/')
+    {
         let prefix = &method_arn[..slash_pos + 1 + second_slash];
         return format!("{prefix}/*/*");
     }
@@ -280,10 +284,7 @@ async fn function_handler(event: LambdaEvent<Value>) -> Result<Value, Error> {
     // Look up the API key
     let user_info = match lookup_api_key(&api_key) {
         Some(info) => {
-            info!(
-                "Authorized: userId={}, role={}",
-                info.user_id, info.role
-            );
+            info!("Authorized: userId={}, role={}", info.user_id, info.role);
             info
         }
         None => {

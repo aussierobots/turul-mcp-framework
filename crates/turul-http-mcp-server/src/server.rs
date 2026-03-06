@@ -12,7 +12,7 @@ use hyper_util::rt::TokioIo;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};
 use turul_mcp_protocol::McpError;
@@ -71,6 +71,7 @@ pub struct HttpMcpServerBuilder {
     stream_config: StreamConfig,
     server_capabilities: Option<turul_mcp_protocol::ServerCapabilities>,
     middleware_stack: Arc<crate::middleware::MiddlewareStack>,
+    route_registry: Arc<crate::routes::RouteRegistry>,
 }
 
 impl HttpMcpServerBuilder {
@@ -83,6 +84,7 @@ impl HttpMcpServerBuilder {
             stream_config: StreamConfig::default(),
             server_capabilities: None,
             middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
+            route_registry: Arc::new(crate::routes::RouteRegistry::new()),
         }
     }
 }
@@ -99,6 +101,7 @@ impl HttpMcpServerBuilder {
             stream_config: StreamConfig::default(),
             server_capabilities: None,
             middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
+            route_registry: Arc::new(crate::routes::RouteRegistry::new()),
         }
     }
 
@@ -108,6 +111,12 @@ impl HttpMcpServerBuilder {
         middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     ) -> Self {
         self.middleware_stack = middleware_stack;
+        self
+    }
+
+    /// Set the route registry for custom HTTP paths (e.g., `.well-known`)
+    pub fn route_registry(mut self, registry: Arc<crate::routes::RouteRegistry>) -> Self {
+        self.route_registry = registry;
         self
     }
 
@@ -237,6 +246,7 @@ impl HttpMcpServerBuilder {
             stream_config: self.stream_config,
             stream_manager,
             streamable_handler,
+            route_registry: self.route_registry,
         }
     }
 }
@@ -258,6 +268,8 @@ pub struct HttpMcpServer {
     stream_manager: Arc<StreamManager>,
     // StreamableHttpHandler for MCP 2025-11-25 clients
     streamable_handler: StreamableHttpHandler,
+    // Custom route registry for paths like .well-known
+    route_registry: Arc<crate::routes::RouteRegistry>,
 }
 
 impl HttpMcpServer {
@@ -306,6 +318,7 @@ impl HttpMcpServer {
         let handler = McpRequestHandler {
             session_handler,
             streamable_handler: self.streamable_handler.clone(),
+            route_registry: Arc::clone(&self.route_registry),
         };
 
         loop {
@@ -377,6 +390,7 @@ impl HttpMcpServer {
 struct McpRequestHandler {
     session_handler: SessionMcpHandler,
     streamable_handler: StreamableHttpHandler,
+    route_registry: Arc<crate::routes::RouteRegistry>,
 }
 
 async fn handle_request(
@@ -456,15 +470,35 @@ async fn handle_request(
             }
         }
     } else {
-        // 404 for other paths
-        Ok(Response::builder()
-            .status(hyper::StatusCode::NOT_FOUND)
-            .body(
-                Full::new(Bytes::from("Not Found"))
-                    .map_err(|never| match never {})
-                    .boxed_unsync(),
-            )
-            .unwrap())
+        // Check custom routes (e.g., .well-known)
+        match handler.route_registry.match_route(path) {
+            Ok(Some(route_handler)) => {
+                debug!("Custom route matched: {}", path);
+                // Convert Incoming body to type-erased RouteBody for handler portability
+                let (parts, body) = req.into_parts();
+                let boxed_req = Request::from_parts(parts, body.boxed_unsync());
+                Ok(route_handler.handle(boxed_req).await)
+            }
+            Ok(None) => {
+                // 404 for other paths
+                Ok(Response::builder()
+                    .status(hyper::StatusCode::NOT_FOUND)
+                    .body(
+                        Full::new(Bytes::from("Not Found"))
+                            .map_err(|never| match never {})
+                            .boxed_unsync(),
+                    )
+                    .unwrap())
+            }
+            Err(validation_err) => {
+                // Path failed security validation — 400 Bad Request
+                warn!(
+                    "Route validation failed for path '{}': {}",
+                    path, validation_err
+                );
+                Ok(validation_err.into_response())
+            }
+        }
     };
 
     // Apply CORS if enabled

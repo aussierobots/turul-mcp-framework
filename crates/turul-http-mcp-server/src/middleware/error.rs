@@ -103,6 +103,22 @@ pub enum MiddlewareError {
         /// Human-readable message
         message: String,
     },
+
+    /// HTTP-level challenge response (401/403 with WWW-Authenticate header)
+    ///
+    /// Used for OAuth 2.1 Bearer token challenges. This variant is handled
+    /// exclusively at the transport level (pre-session phase) and produces
+    /// a raw HTTP response — it NEVER reaches `map_middleware_error_to_jsonrpc()`.
+    ///
+    /// An `unreachable!()` guard in that function catches programming errors.
+    HttpChallenge {
+        /// HTTP status code (401 or 403)
+        status: u16,
+        /// WWW-Authenticate header value (e.g., `Bearer realm="mcp", resource_metadata="..."`)
+        www_authenticate: String,
+        /// Optional JSON error body
+        body: Option<String>,
+    },
 }
 
 impl fmt::Display for MiddlewareError {
@@ -123,6 +139,11 @@ impl fmt::Display for MiddlewareError {
             Self::InvalidRequest(msg) => write!(f, "Invalid request: {}", msg),
             Self::Internal(msg) => write!(f, "Internal middleware error: {}", msg),
             Self::Custom { code, message } => write!(f, "{}: {}", code, message),
+            Self::HttpChallenge {
+                status,
+                www_authenticate,
+                ..
+            } => write!(f, "HTTP {} WWW-Authenticate: {}", status, www_authenticate),
         }
     }
 }
@@ -163,6 +184,30 @@ impl MiddlewareError {
         Self::Custom {
             code: code.into(),
             message: message.into(),
+        }
+    }
+
+    /// Create an HTTP challenge error (401/403 with WWW-Authenticate header)
+    ///
+    /// Used for OAuth 2.1 Bearer token challenges. Handled at transport level only.
+    pub fn http_challenge(status: u16, www_authenticate: impl Into<String>) -> Self {
+        Self::HttpChallenge {
+            status,
+            www_authenticate: www_authenticate.into(),
+            body: None,
+        }
+    }
+
+    /// Create an HTTP challenge error with a response body
+    pub fn http_challenge_with_body(
+        status: u16,
+        www_authenticate: impl Into<String>,
+        body: impl Into<String>,
+    ) -> Self {
+        Self::HttpChallenge {
+            status,
+            www_authenticate: www_authenticate.into(),
+            body: Some(body.into()),
         }
     }
 }
@@ -210,5 +255,66 @@ mod tests {
         let err3 = MiddlewareError::rate_limit("test", Some(60));
         let err4 = MiddlewareError::rate_limit("test", Some(60));
         assert_eq!(err3, err4);
+    }
+
+    #[test]
+    fn test_http_challenge_variant_display() {
+        let err = MiddlewareError::http_challenge(401, "Bearer realm=\"mcp\"");
+        assert_eq!(
+            err.to_string(),
+            "HTTP 401 WWW-Authenticate: Bearer realm=\"mcp\""
+        );
+
+        let err = MiddlewareError::http_challenge(403, "Bearer error=\"insufficient_scope\"");
+        assert_eq!(
+            err.to_string(),
+            "HTTP 403 WWW-Authenticate: Bearer error=\"insufficient_scope\""
+        );
+    }
+
+    #[test]
+    fn test_http_challenge_constructor() {
+        let err = MiddlewareError::http_challenge(401, "Bearer realm=\"mcp\"");
+        match &err {
+            MiddlewareError::HttpChallenge {
+                status,
+                www_authenticate,
+                body,
+            } => {
+                assert_eq!(*status, 401);
+                assert_eq!(www_authenticate, "Bearer realm=\"mcp\"");
+                assert!(body.is_none());
+            }
+            _ => panic!("Expected HttpChallenge variant"),
+        }
+
+        let err_with_body = MiddlewareError::http_challenge_with_body(
+            401,
+            "Bearer realm=\"mcp\"",
+            r#"{"error":"unauthorized"}"#,
+        );
+        match &err_with_body {
+            MiddlewareError::HttpChallenge {
+                status,
+                www_authenticate,
+                body,
+            } => {
+                assert_eq!(*status, 401);
+                assert_eq!(www_authenticate, "Bearer realm=\"mcp\"");
+                assert_eq!(body.as_deref(), Some(r#"{"error":"unauthorized"}"#));
+            }
+            _ => panic!("Expected HttpChallenge variant"),
+        }
+    }
+
+    #[test]
+    fn test_http_challenge_roundtrip_equality() {
+        let err1 = MiddlewareError::http_challenge(401, "Bearer realm=\"mcp\"");
+        let err2 = MiddlewareError::http_challenge(401, "Bearer realm=\"mcp\"");
+        assert_eq!(err1, err2);
+
+        let err3 = MiddlewareError::http_challenge(401, "Bearer realm=\"mcp\"");
+        let err4 = MiddlewareError::http_challenge(403, "Bearer realm=\"mcp\"");
+        assert_ne!(err3, err4);
     }
 }

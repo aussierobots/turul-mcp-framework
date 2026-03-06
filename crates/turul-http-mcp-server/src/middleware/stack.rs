@@ -81,6 +81,32 @@ impl MiddlewareStack {
         self.middleware.is_empty()
     }
 
+    /// Check if any middleware in the stack runs before session creation
+    pub fn has_pre_session_middleware(&self) -> bool {
+        self.middleware.iter().any(|m| m.runs_before_session())
+    }
+
+    /// Execute only pre-session middleware (those with `runs_before_session() == true`)
+    ///
+    /// Called by the transport layer before session lookup/creation.
+    /// Session is always `None` in this phase.
+    pub async fn execute_before_session(
+        &self,
+        ctx: &mut RequestContext<'_>,
+    ) -> Result<(), MiddlewareError> {
+        for middleware in &self.middleware {
+            if middleware.runs_before_session() {
+                let mut injection = SessionInjection::new();
+                middleware
+                    .before_dispatch(ctx, None, &mut injection)
+                    .await?;
+                // Pre-session injections are intentionally discarded —
+                // session doesn't exist yet. Use ctx.extensions instead.
+            }
+        }
+        Ok(())
+    }
+
     /// Execute all middleware before dispatch
     ///
     /// # Parameters
@@ -108,6 +134,11 @@ impl MiddlewareStack {
         let mut combined_injection = SessionInjection::new();
 
         for middleware in &self.middleware {
+            // Skip pre-session middleware — they already ran in execute_before_session()
+            if middleware.runs_before_session() {
+                continue;
+            }
+
             let mut injection = SessionInjection::new();
             middleware
                 .before_dispatch(ctx, session, &mut injection)

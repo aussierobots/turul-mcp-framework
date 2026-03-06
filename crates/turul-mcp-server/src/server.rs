@@ -42,6 +42,8 @@ pub struct McpServer {
     middleware_stack: crate::middleware::MiddlewareStack,
     /// Task runtime for long-running operations (None = tasks not supported)
     task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
+    /// Custom HTTP route registry
+    route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
 
     // HTTP configuration (if enabled)
     #[cfg(feature = "http")]
@@ -71,6 +73,7 @@ impl McpServer {
         task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
         strict_lifecycle: bool,
         middleware_stack: crate::middleware::MiddlewareStack,
+        route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
@@ -135,6 +138,7 @@ impl McpServer {
             instructions,
             strict_lifecycle,
             middleware_stack,
+            route_registry,
             #[cfg(feature = "http")]
             bind_address,
             #[cfg(feature = "http")]
@@ -250,6 +254,7 @@ impl McpServer {
                 // POST SSE remains at default (false) for compatibility
                 .server_capabilities(self.capabilities.clone()) // Pass server capabilities
                 .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
+                .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(
                     vec!["tools/list".to_string()],
@@ -438,6 +443,7 @@ impl McpServer {
                 // POST SSE remains at default (false) for compatibility
                 .server_capabilities(self.capabilities.clone()) // Pass server capabilities
                 .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
+                .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(
                     vec!["tools/list".to_string()],

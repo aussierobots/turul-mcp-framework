@@ -26,10 +26,7 @@ async fn test_server_request_response_pipeline_success() {
 
     // Simulate a sampling/createMessage callback
     handler.on_request(|request| {
-        let method = request
-            .get("method")
-            .and_then(|m| m.as_str())
-            .unwrap_or("");
+        let method = request.get("method").and_then(|m| m.as_str()).unwrap_or("");
         match method {
             "sampling/createMessage" => Ok(json!({
                 "role": "assistant",
@@ -58,18 +55,18 @@ async fn test_server_request_response_pipeline_success() {
         })))
         .unwrap();
 
-    let response = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        response_rx.recv(),
-    )
-    .await
-    .expect("timed out waiting for response")
-    .expect("channel closed");
+    let response = tokio::time::timeout(std::time::Duration::from_secs(2), response_rx.recv())
+        .await
+        .expect("timed out waiting for response")
+        .expect("channel closed");
 
     // Verify JSON-RPC 2.0 response structure
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], "srv-sampling-1");
-    assert!(response.get("error").is_none(), "should not have error field");
+    assert!(
+        response.get("error").is_none(),
+        "should not have error field"
+    );
 
     let result = &response["result"];
     assert_eq!(result["role"], "assistant");
@@ -110,17 +107,17 @@ async fn test_server_request_response_pipeline_error() {
         })))
         .unwrap();
 
-    let response = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
-        response_rx.recv(),
-    )
-    .await
-    .expect("timed out waiting for response")
-    .expect("channel closed");
+    let response = tokio::time::timeout(std::time::Duration::from_secs(2), response_rx.recv())
+        .await
+        .expect("timed out waiting for response")
+        .expect("channel closed");
 
     assert_eq!(response["jsonrpc"], "2.0");
     assert_eq!(response["id"], 42);
-    assert!(response.get("result").is_none(), "should not have result field");
+    assert!(
+        response.get("result").is_none(),
+        "should not have result field"
+    );
     assert_eq!(response["error"]["code"], -32603);
     assert!(
         response["error"]["message"]
@@ -152,7 +149,10 @@ async fn test_server_request_response_pipeline_multiple_requests() {
     handler.start().await.unwrap();
 
     // Send three requests with different id types
-    for (i, id) in [json!("alpha"), json!(99), json!("omega")].iter().enumerate() {
+    for (i, id) in [json!("alpha"), json!(99), json!("omega")]
+        .iter()
+        .enumerate()
+    {
         event_tx
             .send(ServerEvent::Request(json!({
                 "jsonrpc": "2.0",
@@ -166,13 +166,10 @@ async fn test_server_request_response_pipeline_multiple_requests() {
     // Collect three responses
     let mut responses = Vec::new();
     for _ in 0..3 {
-        let resp = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            response_rx.recv(),
-        )
-        .await
-        .expect("timed out")
-        .expect("channel closed");
+        let resp = tokio::time::timeout(std::time::Duration::from_secs(2), response_rx.recv())
+            .await
+            .expect("timed out")
+            .expect("channel closed");
         responses.push(resp);
     }
 
@@ -219,13 +216,13 @@ async fn test_response_event_does_not_trigger_callback() {
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
     // Callback should NOT have been called
-    assert!(!*callback_called.lock().unwrap(), "Response event should not trigger request callback");
+    assert!(
+        !*callback_called.lock().unwrap(),
+        "Response event should not trigger request callback"
+    );
 
     // No response should be emitted
-    let result = tokio::time::timeout(
-        std::time::Duration::from_millis(100),
-        response_rx.recv(),
-    )
-    .await;
+    let result =
+        tokio::time::timeout(std::time::Duration::from_millis(100), response_rx.recv()).await;
     assert!(result.is_err(), "Response event should not produce a reply");
 }

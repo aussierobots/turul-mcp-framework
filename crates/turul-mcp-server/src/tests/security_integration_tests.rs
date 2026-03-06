@@ -171,6 +171,7 @@ fn create_test_session() -> SessionContext {
         is_initialized: Arc::new(|| Box::pin(futures::future::ready(true))),
         send_notification: Arc::new(|_| Box::pin(futures::future::ready(()))),
         broadcaster: None,
+        extensions: std::collections::HashMap::new(),
     }
 }
 

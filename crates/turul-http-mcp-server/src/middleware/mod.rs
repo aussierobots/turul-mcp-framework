@@ -36,6 +36,7 @@
 //! }
 //! ```
 
+pub mod bearer;
 pub mod builtins;
 pub mod context;
 pub mod error;
@@ -43,6 +44,7 @@ pub mod session_view_adapter;
 pub mod stack;
 pub mod traits;
 
+pub use bearer::{extract_bearer_token, is_bearer_scheme};
 pub use context::{DispatcherResult, RequestContext, SessionInjection};
 pub use error::{MiddlewareError, error_codes};
 pub use session_view_adapter::StorageBackedSessionView;
