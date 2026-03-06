@@ -53,7 +53,8 @@ mod tests {
         let metadata = ProtectedResourceMetadata::new(
             "https://example.com/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
 
         let handler = WellKnownOAuthHandler::new(&metadata);
 
@@ -90,7 +91,8 @@ mod tests {
         let metadata = ProtectedResourceMetadata::new(
             "https://example.com/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
 
         // Same handler instance serves both forms (shared via Arc)
         let handler = WellKnownOAuthHandler::new(&metadata);

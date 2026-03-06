@@ -24,7 +24,7 @@
 //! let metadata = ProtectedResourceMetadata::new(
 //!     "https://example.com/mcp",
 //!     vec!["https://auth.example.com".to_string()],
-//! );
+//! ).unwrap();
 //!
 //! let (auth_middleware, routes) = oauth_resource_server(
 //!     metadata,

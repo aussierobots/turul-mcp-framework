@@ -106,7 +106,8 @@ mod tests {
         let metadata = ProtectedResourceMetadata::new(
             "https://example.com/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
 
         let middleware = OAuthResourceMiddleware::new(
             Arc::new(JwtValidator::new("http://localhost/jwks")),
@@ -122,7 +123,8 @@ mod tests {
         let metadata = ProtectedResourceMetadata::new(
             "https://example.com/mcp",
             vec!["https://auth.example.com".to_string()],
-        );
+        )
+        .unwrap();
 
         let middleware = OAuthResourceMiddleware::new(
             Arc::new(JwtValidator::new("http://localhost/jwks")),
