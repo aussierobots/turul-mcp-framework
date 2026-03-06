@@ -76,7 +76,7 @@ pub fn oauth_resource_server(
     metadata: ProtectedResourceMetadata,
     jwks_uri: &str,
 ) -> (Arc<OAuthResourceMiddleware>, Vec<RouteEntry>) {
-    let validator = Arc::new(JwtValidator::new(jwks_uri));
+    let validator = Arc::new(JwtValidator::new(jwks_uri, &metadata.resource));
     let middleware = Arc::new(OAuthResourceMiddleware::new(validator, metadata.clone()));
     let handler: Arc<dyn turul_http_mcp_server::routes::RouteHandler> =
         Arc::new(WellKnownOAuthHandler::new(&metadata));

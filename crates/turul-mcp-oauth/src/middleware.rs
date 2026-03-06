@@ -110,7 +110,7 @@ mod tests {
         .unwrap();
 
         let middleware = OAuthResourceMiddleware::new(
-            Arc::new(JwtValidator::new("http://localhost/jwks")),
+            Arc::new(JwtValidator::new("http://localhost/jwks", "https://example.com/mcp")),
             metadata,
         );
 
@@ -127,7 +127,7 @@ mod tests {
         .unwrap();
 
         let middleware = OAuthResourceMiddleware::new(
-            Arc::new(JwtValidator::new("http://localhost/jwks")),
+            Arc::new(JwtValidator::new("http://localhost/jwks", "https://example.com/mcp")),
             metadata,
         );
 
