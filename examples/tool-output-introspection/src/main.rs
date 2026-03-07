@@ -143,7 +143,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create server with tools using struct introspection
     let server = McpServer::builder()
         .name("tool-output-introspection-server")
-        .version("0.1.0")
+        .version("0.3.10")
         .tool(Calculator::default())
         .tool(TempConverter::default())
         .build()?;
