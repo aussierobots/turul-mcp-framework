@@ -1,7 +1,7 @@
 //! AWS Lambda MCP Server with Streaming SSE Support
 //!
 //! A complete streaming-enabled MCP server for AWS Lambda with:
-//! - Real-time SSE streaming (requires `run_with_streaming_response`)
+//! - Real-time SSE streaming via `turul_mcp_aws_lambda::run_streaming()`
 //! - turul-mcp-aws-lambda integration with "streaming" feature enabled
 //! - MCP 2025-11-25 compliance with proper SSE notifications
 //! - DynamoDB session storage with automatic table creation
@@ -10,22 +10,35 @@
 //!
 //! ## SSE Streaming Support
 //!
-//! This example demonstrates real-time SSE streaming in Lambda using:
-//! - `lambda_http::run_with_streaming_response` runtime
-//! - `handle_streaming()` method for streaming-compatible responses
-//! - StreamManager integration for proper SSE event delivery
+//! This example uses `run_streaming()` which handles API Gateway streaming
+//! completion invocations gracefully — no more ERROR logs or CloudWatch
+//! Lambda Error metrics from completion payloads.
 //!
 //! For non-streaming Lambda deployments, see `lambda-mcp-server` example.
+//!
+//! ## Custom Dispatch
+//!
+//! If you need pre-dispatch logic (e.g., `.well-known` routing), use
+//! `run_streaming_with()` instead:
+//!
+//! ```rust,ignore
+//! turul_mcp_aws_lambda::run_streaming_with(|request| async move {
+//!     if request.uri().path() == "/.well-known/oauth-authorization-server" {
+//!         return Ok(well_known_response());
+//!     }
+//!     let handler = HANDLER.get_or_try_init(|| async { create_handler().await }).await?;
+//!     handler.handle_streaming(request).await
+//! }).await
+//! ```
 
 mod session_aware_logging_demo;
 mod tools;
 
-use lambda_http::{Error, Request, run_with_streaming_response, service_fn};
+use lambda_http::Error;
 use std::env;
 use tokio::sync::OnceCell;
 use tracing::info;
 
-// HTTP body types for streaming
 // Framework imports
 use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
 use turul_mcp_session_storage::DynamoDbSessionStorage;
@@ -57,37 +70,15 @@ fn init_logging() {
             .init();
     }
 
-    info!("🚀 Logging initialized at level: {}", log_level);
+    info!("Logging initialized at level: {}", log_level);
 }
 
 /// Global handler instance - created once and reused across all Lambda invocations
 static HANDLER: OnceCell<turul_mcp_aws_lambda::LambdaMcpHandler> = OnceCell::const_new();
 
-/// Lambda handler function using turul-mcp-aws-lambda with streaming support
-async fn lambda_handler(
-    request: Request,
-) -> Result<
-    lambda_http::Response<http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>>,
-    Box<dyn std::error::Error + Send + Sync>,
-> {
-    info!(
-        "🌊 Lambda streaming MCP request: {} {}",
-        request.method(),
-        request.uri().path()
-    );
-
-    // Get or initialize handler (cached globally for performance)
-    let handler = HANDLER
-        .get_or_try_init(|| async { create_lambda_mcp_handler().await })
-        .await?;
-
-    // Process request through the Lambda MCP streaming handler
-    handler.handle_streaming(request).await
-}
-
 /// Create the Lambda MCP handler with AWS tools
 async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHandler, Error> {
-    info!("🔧 Creating Lambda MCP handler with AWS tools");
+    info!("Creating Lambda MCP handler with AWS tools");
 
     // Create DynamoDB session storage
     let storage = std::sync::Arc::new(
@@ -96,7 +87,7 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
             .map_err(|e| Error::from(format!("Failed to create DynamoDB storage: {}", e)))?,
     );
 
-    info!("💾 DynamoDB session storage initialized");
+    info!("DynamoDB session storage initialized");
 
     // Build Lambda MCP server with all AWS tools
     let server = LambdaMcpServerBuilder::new()
@@ -129,7 +120,7 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
         .await
         .map_err(|e| Error::from(format!("Failed to create Lambda MCP handler: {}", e)))?;
 
-    info!("✅ Lambda MCP handler created successfully");
+    info!("Lambda MCP handler created successfully");
     Ok(handler)
 }
 
@@ -138,17 +129,10 @@ async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHa
 async fn main() -> Result<(), Error> {
     init_logging();
 
-    info!("🚀 Starting AWS Lambda MCP Server with STREAMING support");
+    info!("Starting AWS Lambda MCP Server with STREAMING support");
     info!("Architecture: MCP 2025-11-25 Streamable HTTP compliance with real-time SSE");
-    info!("  - turul-mcp-aws-lambda integration with streaming feature");
-    info!("  - DynamoDB session storage");
-    info!("  - CORS support");
-    info!("  - POST /mcp - JSON-RPC requests");
-    info!("  - GET /mcp - Real-time SSE streaming (not snapshots)");
-    info!("  - OPTIONS * - CORS preflight");
-    info!("  - Lambda streaming response support enabled");
 
-    info!("📋 Environment variables:");
+    info!("Environment variables:");
     info!(
         "  - LOG_LEVEL: {}",
         env::var("LOG_LEVEL").unwrap_or("INFO".to_string())
@@ -162,19 +146,17 @@ async fn main() -> Result<(), Error> {
         env::var("MCP_SESSION_TABLE")
             .unwrap_or_else(|_| "(not set, using default 'mcp-sessions')".to_string())
     );
-    info!(
-        "  - MCP_SESSION_EVENT_TABLE: {}",
-        env::var("MCP_SESSION_EVENT_TABLE")
-            .unwrap_or_else(|_| "(not set, will use '{table_name}-events')".to_string())
-    );
 
     // Pre-initialize handler during startup (not on first request)
-    info!("⚙️  Pre-initializing MCP handler...");
+    info!("Pre-initializing MCP handler...");
     HANDLER
         .get_or_try_init(|| async { create_lambda_mcp_handler().await })
         .await?;
-    info!("🎯 Lambda handler ready and initialized");
+    let handler = HANDLER.get().unwrap().clone();
+    info!("Lambda handler ready and initialized");
 
-    // Run Lambda HTTP runtime with streaming response support
-    run_with_streaming_response(service_fn(lambda_handler)).await
+    // Run with framework's streaming entry point.
+    // This handles API Gateway completion invocations gracefully —
+    // no ERROR logs or Lambda Error metrics from completion payloads.
+    turul_mcp_aws_lambda::run_streaming(handler).await
 }

@@ -12,6 +12,7 @@ pub use crate::builder::LambdaMcpServerBuilder;
 pub use crate::error::{LambdaError, Result};
 pub use crate::handler::LambdaMcpHandler;
 pub use crate::server::LambdaMcpServer;
+pub use crate::{run_streaming, run_streaming_with};
 
 #[cfg(feature = "cors")]
 pub use crate::cors::CorsConfig;

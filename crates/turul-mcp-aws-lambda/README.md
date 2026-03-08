@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
 ### Real-time Streaming Lambda MCP Server
 
-For real-time SSE streaming, enable the `streaming` feature and use `handle_streaming()`:
+For real-time SSE streaming, enable the `streaming` feature and use `run_streaming()`:
 
 ```toml
 [dependencies]
@@ -97,26 +97,45 @@ turul-mcp-aws-lambda = { version = "0.3", features = ["streaming"] }
 ```
 
 ```rust
-use lambda_http::{run_with_streaming_response, service_fn};
 use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
 // ... same tool definition ...
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> Result<(), lambda_http::Error> {
     // ... same server setup ...
 
-    // Create handler for real-time streaming
     let handler = server.handler().await?;
 
-    // Run with Lambda streaming response support for real-time SSE
-    run_with_streaming_response(service_fn(move |req| {
-        let handler = handler.clone();
-        async move {
-            handler.handle_streaming(req).await
-        }
-    })).await
+    // run_streaming() handles API Gateway completion invocations gracefully —
+    // no ERROR logs or Lambda Error metrics from completion payloads.
+    turul_mcp_aws_lambda::run_streaming(handler).await
 }
 ```
+
+#### Custom Dispatch with `run_streaming_with()`
+
+When you need pre-dispatch logic (e.g., `.well-known` routing) that runs before
+the MCP handler, use `run_streaming_with()`:
+
+```rust
+turul_mcp_aws_lambda::run_streaming_with(|request| async move {
+    if request.uri().path() == "/.well-known/oauth-authorization-server" {
+        return Ok(well_known_response());
+    }
+    let handler = HANDLER.get_or_try_init(|| async { create_handler().await }).await?;
+    handler.handle_streaming(request).await
+}).await
+```
+
+Both entry points classify raw Lambda runtime payloads three ways:
+- **API Gateway events** — dispatched to your handler normally
+- **Streaming completion invocations** — acknowledged silently (debug log)
+- **Unrecognized payloads** — acknowledged with a warn log
+
+This fixes the ERROR logs and CloudWatch Lambda Error metrics caused by
+completion invocations when using `lambda_http::run_with_streaming_response()`
+directly. It does **not** claim to resolve all Lambda streaming timeout
+behavior — that remains a separate concern.
 
 ## Architecture
 

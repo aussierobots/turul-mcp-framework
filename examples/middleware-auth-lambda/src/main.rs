@@ -322,6 +322,9 @@ async fn main() -> Result<(), Error> {
 
     info!("🎯 Lambda handler ready with auth middleware");
 
-    // Run Lambda HTTP runtime
+    // Run Lambda HTTP runtime (non-streaming).
+    // For streaming with completion-invocation handling, use:
+    //   turul_mcp_aws_lambda::run_streaming(handler).await          // standard
+    //   turul_mcp_aws_lambda::run_streaming_with(my_dispatch).await  // custom dispatch
     run(service_fn(lambda_handler)).await
 }

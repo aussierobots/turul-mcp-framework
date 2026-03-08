@@ -49,6 +49,15 @@
 //!     turul_mcp_aws_lambda::run_streaming(handler).await
 //! }
 //! ```
+//!
+//! ## Streaming Entry Points
+//!
+//! Two entry points replace `lambda_http::run_with_streaming_response()`:
+//!
+//! - [`run_streaming()`] — standard path: pass a [`LambdaMcpHandler`] directly
+//! - [`run_streaming_with()`] — custom dispatch: provide your own closure for
+//!   pre-dispatch logic (e.g., `.well-known` routing) while still getting
+//!   completion-invocation handling for free
 
 pub mod adapter;
 pub mod builder;
@@ -241,6 +250,63 @@ pub async fn run_streaming(
                 handler.handle_streaming(req)
             })
             .await?;
+
+            match event_log_level(result.event_type) {
+                Some(level) if level == tracing::Level::WARN => {
+                    tracing::warn!(
+                        event_type = result.event_type,
+                        "Received unrecognized Lambda invocation payload"
+                    );
+                }
+                Some(_) => {
+                    tracing::debug!(
+                        event_type = result.event_type,
+                        "Acknowledging streaming completion"
+                    );
+                }
+                None => {}
+            }
+
+            Ok::<_, lambda_http::Error>(result.response)
+        }
+    }))
+    .await
+}
+
+/// Run a custom dispatch function with streaming response support.
+///
+/// Like [`run_streaming()`], but accepts a custom dispatch closure instead of
+/// a [`LambdaMcpHandler`]. Use this when you need pre-dispatch logic
+/// (e.g., `.well-known` routing) that runs before the MCP handler.
+///
+/// The dispatch closure is called once per API Gateway invocation. Streaming
+/// completion invocations and unrecognized payloads are acknowledged
+/// automatically without invoking the closure.
+///
+/// ## Usage
+///
+/// ```rust,ignore
+/// async fn lambda_handler(request: Request) -> Result<Response, Error> {
+///     // pre-dispatch logic here (e.g., .well-known short-circuit)
+///     let handler = HANDLER.get_or_try_init(|| async { ... }).await?;
+///     handler.handle_streaming(request).await
+/// }
+///
+/// turul_mcp_aws_lambda::run_streaming_with(lambda_handler).await
+/// ```
+pub async fn run_streaming_with<F, Fut>(dispatch: F) -> std::result::Result<(), lambda_http::Error>
+where
+    F: Fn(lambda_http::Request) -> Fut + Clone + Send + 'static,
+    Fut: std::future::Future<Output = std::result::Result<http::Response<StreamBody>, lambda_http::Error>>
+        + Send,
+{
+    use lambda_runtime::{LambdaEvent, service_fn};
+
+    lambda_runtime::run(service_fn(move |event: LambdaEvent<serde_json::Value>| {
+        let dispatch = dispatch.clone();
+        async move {
+            let result =
+                handle_runtime_payload(event.payload, event.context, dispatch).await?;
 
             match event_log_level(result.event_type) {
                 Some(level) if level == tracing::Level::WARN => {
@@ -734,5 +800,64 @@ mod streaming_completion_tests {
                 .get("Set-Cookie")
                 .is_none()
         );
+    }
+
+    // ── run_streaming_with dispatch tests ──
+
+    #[tokio::test]
+    async fn test_run_streaming_with_dispatches_apigw_events() {
+        let dispatched = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let dispatched_clone = dispatched.clone();
+
+        let dispatch = move |_req: lambda_http::Request| {
+            let d = dispatched_clone.clone();
+            async move {
+                d.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(empty_streaming_response())
+            }
+        };
+
+        let result = handle_runtime_payload(
+            load_fixture("apigw_v1"),
+            lambda_runtime::Context::default(),
+            dispatch,
+        )
+        .await
+        .expect("handle should succeed");
+
+        assert!(
+            dispatched.load(std::sync::atomic::Ordering::SeqCst),
+            "run_streaming_with dispatch must be called for API Gateway events"
+        );
+        assert_eq!(result.event_type, "api_gateway_event");
+    }
+
+    #[tokio::test]
+    async fn test_run_streaming_with_acks_completion_without_dispatch() {
+        let dispatched = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let dispatched_clone = dispatched.clone();
+
+        let dispatch = move |_req: lambda_http::Request| {
+            let d = dispatched_clone.clone();
+            async move {
+                d.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(empty_streaming_response())
+            }
+        };
+
+        let result = handle_runtime_payload(
+            load_fixture("completion_success"),
+            lambda_runtime::Context::default(),
+            dispatch,
+        )
+        .await
+        .expect("handle should succeed");
+
+        assert!(
+            !dispatched.load(std::sync::atomic::Ordering::SeqCst),
+            "run_streaming_with dispatch must NOT be called for completion events"
+        );
+        assert_eq!(result.event_type, "streaming_completion");
+        assert_eq!(result.response.metadata_prelude.status_code, 200);
     }
 }

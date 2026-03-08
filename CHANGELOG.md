@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.11] - 2026-03-09
+
+### Added
+
+- **`run_streaming_with()` custom dispatch** (`turul-mcp-aws-lambda`): Accepts a custom `Fn(Request) -> Future<Response>` closure for Lambda streaming, with the same completion-invocation handling as `run_streaming()`. Use this when you need pre-dispatch logic (e.g., `.well-known` routing) that runs before the MCP handler. Fixes completion-invocation ERROR logs for custom dispatch patterns; does not claim to resolve all Lambda streaming timeout behavior.
+- **Prelude re-exports**: `run_streaming` and `run_streaming_with` are now available via `turul_mcp_aws_lambda::prelude::*`.
+
+### Changed
+
+- **`lambda-mcp-server-streaming` example**: Refactored from raw `lambda_http::run_with_streaming_response(service_fn(...))` to `turul_mcp_aws_lambda::run_streaming()`, demonstrating the framework's recommended streaming entry point.
+
 ## [0.3.10] - 2026-03-07
 
 ### Changed
@@ -398,7 +409,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.10...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.11...HEAD
+[0.3.11]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.8...v0.3.9
 [0.3.8]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.7...v0.3.8
