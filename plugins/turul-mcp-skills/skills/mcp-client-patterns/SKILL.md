@@ -246,9 +246,25 @@ See [references/error-handling-guide.md](references/error-handling-guide.md) for
 7. **Using default `ClientInfo`** — server logs show generic "mcp-client"; set `name` and `version` for debuggability
 8. **Blocking inside async client operations** — use `tokio::time::sleep`, not `std::thread::sleep`
 
+## Authentication & Discovery
+
+This skill covers transport and lifecycle, not authentication. MCP clients that connect to OAuth-protected resource servers need to handle the authorization flow:
+
+1. **401 + WWW-Authenticate** — RS rejects unauthenticated requests with a `WWW-Authenticate: Bearer` header containing a `resource_metadata` URL
+2. **Protected Resource Metadata** — client fetches `/.well-known/oauth-protected-resource` from the RS to discover `authorization_servers`
+3. **AS Metadata** — client fetches `/.well-known/oauth-authorization-server` from the AS to discover endpoints
+4. **Authorization code + PKCE** — client runs the PKCE flow, including `resource` parameter at both `/authorize` and `/token`
+5. **Bearer token** — client includes the access token in subsequent RS requests
+
+The `turul-mcp-client` crate handles transport and session lifecycle. Token acquisition and header injection are the client application's responsibility.
+
+**See:** the `auth-patterns` skill for RS-side validation and the `authorization-server-patterns` skill for building a demo AS to test against.
+
 ## Beyond This Skill
 
 - **Server-side tool creation** — use the `tool-creation-patterns` skill
 - **Output schemas and structuredContent** — use the `output-schemas` skill
 - **Server configuration and builder** — see [CLAUDE.md — Basic Server](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#basic-server)
 - **MCP protocol compliance** — see [CLAUDE.md — MCP 2025-11-25 Compliance](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#mcp-2025-11-25-compliance)
+- **OAuth RS validation** — see the `auth-patterns` skill for `JwtValidator`, audience validation, and RFC 9728 metadata
+- **Demo Authorization Server** — see the `authorization-server-patterns` skill for building a test AS

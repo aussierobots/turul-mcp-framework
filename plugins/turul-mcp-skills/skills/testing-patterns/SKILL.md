@@ -278,6 +278,17 @@ Three tiers of documentation tests, balancing coverage vs speed:
 
 6. **Testing with raw JSON instead of framework APIs** — Use `tool.call(json!({...}), None)` for unit tests and `McpTestClient` for E2E. Avoid manually constructing JSON-RPC request objects.
 
+## Auth Coverage Limits
+
+The compliance modules described above cover JSON-RPC format, lifecycle handshake, capability advertisement, and tool behavior. They do **not** currently cover:
+
+- OAuth 2.1 authorization flows (401 challenges, token validation)
+- Protected Resource Metadata discovery (RFC 9728)
+- Bearer token rejection / WWW-Authenticate header correctness
+- Audience/scope validation behavior
+
+To test auth behavior, use the E2E testing pattern (`McpTestClient`) with `OAuthResourceMiddleware` registered on the server, and verify 401 responses for missing/invalid tokens manually. See the `auth-patterns` skill for middleware setup and the `authorization-server-patterns` skill for building a demo AS to test against.
+
 ## Beyond This Skill
 
 **Error handling in tests?** → See the `error-handling-patterns` skill for `McpError` variants and assertion patterns.
@@ -287,5 +298,7 @@ Three tiers of documentation tests, balancing coverage vs speed:
 **Task lifecycle testing?** → See the `task-patterns` skill for task state machine assertions and `TaskRuntime` configuration.
 
 **Lambda testing?** → See the `lambda-deployment` skill for local Lambda testing and DynamoDB test setup.
+
+**Auth testing?** → See the `auth-patterns` skill for `OAuthResourceMiddleware` setup and the `authorization-server-patterns` skill for a demo AS to test against.
 
 **Server configuration?** Use `McpServer::builder()`. See: [CLAUDE.md — Basic Server](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#basic-server)
