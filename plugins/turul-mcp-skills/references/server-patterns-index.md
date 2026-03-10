@@ -30,3 +30,5 @@ Pointer index to authoritative documentation for common Turul MCP Framework patt
 | Testing patterns | Unit tests, E2E tests (McpTestClient + TestServerManager), compliance tests, SSE testing, doctest strategy. | [testing-patterns skill](../skills/testing-patterns/SKILL.md) |
 | Elicitation workflows | ElicitationBuilder, schema primitives, multi-step workflows, ElicitationProvider, validation. | [elicitation-workflows skill](../skills/elicitation-workflows/SKILL.md) |
 | Session storage backends | SessionStorage trait, backend decision tree, event management, SSE resumability, error types. | [session-storage-backends skill](../skills/session-storage-backends/SKILL.md) |
+| Auth patterns | OAuth 2.1 RS, JWT validation, API key middleware, Lambda authorizer integration, RFC 9728 metadata. | [auth-patterns skill](../skills/auth-patterns/SKILL.md) |
+| Authorization Server patterns | Demo OAuth 2.1 AS: PKCE, JWKS, token issuance, DCR, client models, MCP interop (demo-grade). | [authorization-server-patterns skill](../skills/authorization-server-patterns/SKILL.md) |

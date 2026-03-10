@@ -2,7 +2,7 @@
 
 Skills and tools for building MCP servers and clients with the [Turul MCP Framework](https://github.com/aussierobots/turul-mcp-framework) (Rust).
 
-## What's Included (v0.5.0)
+## What's Included (v0.6.1)
 
 | Component | Type | Purpose |
 |---|---|---|
@@ -17,6 +17,8 @@ Skills and tools for building MCP servers and clients with the [Turul MCP Framew
 | `testing-patterns` | Skill | Unit tests, E2E tests, compliance tests, McpTestClient, TestServerManager, doctest strategy |
 | `elicitation-workflows` | Skill | ElicitationBuilder, schema primitives, multi-step workflows, ElicitationProvider, validation |
 | `session-storage-backends` | Skill | SessionStorage trait, backend decision tree, event management, SSE resumability, error types |
+| `auth-patterns` | Skill | OAuth 2.1 RS, JWT validation, API key middleware, Lambda authorizer, RFC 9728 metadata |
+| `authorization-server-patterns` | Skill | Demo OAuth 2.1 AS: PKCE flow, JWKS, token issuance, DCR, MCP interop (demo-grade) |
 | `/new-mcp-server` | Command | Scaffold a Turul MCP server project with storage backend selection and dual validation |
 | `/validate-mcp-server` | Command | Validate an existing Turul MCP server for correctness, compliance, and best practices |
 | `server-patterns-index` | Reference | Pointer index to CLAUDE.md/AGENTS.md authoritative sections |
@@ -78,7 +80,7 @@ Covers MCP task support for long-running tools:
 
 ### lambda-deployment
 
-Triggers on: "lambda", "LambdaMcpServerBuilder", "Lambda deployment", "lambda MCP server", "AWS Lambda MCP", "LambdaMcpHandler", "lambda cold start", "OnceCell handler", "lambda SSE", "run_with_streaming_response", "handle_streaming", "lambda CORS", "cors_allow_all_origins", "production_config", "development_config"
+Triggers on: "lambda", "LambdaMcpServerBuilder", "Lambda deployment", "lambda MCP server", "AWS Lambda MCP", "LambdaMcpHandler", "lambda cold start", "OnceCell handler", "lambda SSE", "run_streaming", "run_streaming_with", "handle_streaming", "lambda CORS", "cors_allow_all_origins", "production_config", "development_config"
 
 Guides you through deploying MCP servers on AWS Lambda:
 - **Builder** — `LambdaMcpServerBuilder` with all builder methods, feature flags, convenience presets
@@ -164,6 +166,34 @@ Covers the SessionStorage trait and backend architecture:
 - **Backend-specific gotchas** — DynamoDB 5-min TTL, SQLite `:memory:` pool isolation, PostgreSQL optimistic locking
 - Error types (`SessionStorageError`), background cleanup patterns, common mistakes
 
+### auth-patterns
+
+Triggers on: "OAuth", "authentication", "authorization", "JWT", "Bearer", "JwtValidator", "oauth_resource_server", "ProtectedResourceMetadata", "turul-mcp-oauth", "API key auth", "auth middleware", "token validation", "WWW-Authenticate", "audience validation", "OAuthResourceMiddleware", "TokenClaims", "JWKS", "RFC 9728"
+
+Covers authentication and authorization patterns for MCP servers:
+- **Decision tree** — OAuth 2.1 RS vs API key middleware vs Lambda authorizer
+- **OAuth 2.1 RS** — `ProtectedResourceMetadata`, `oauth_resource_server()`, `JwtValidator`, RFC 9728 metadata
+- **Audience validation** — Why it's mandatory, how `required_audience` works
+- **Token claims** — Reading `TokenClaims` in tools via `get_typed_extension()`
+- **JWKS caching** — Key rotation handling, rate-limited refresh, Lambda cold-start behavior
+- **API key middleware** — Simple alternative using `McpMiddleware`
+- **Lambda + OAuth** — `.route()` for `.well-known` endpoints, `run_streaming()` for standard streaming
+- Common mistakes, OAuthError variants, WWW-Authenticate header format
+
+### authorization-server-patterns
+
+Triggers on: "authorization server", "OAuth AS", "token issuer", "PKCE", "authorization code flow", "oauth-authorization-server", "DCR", "dynamic client registration", "CIMD", "client metadata", "demo auth server", "token endpoint", "authorize endpoint", "JWKS signing key", "access token issuance", "refresh token"
+
+Demo-grade patterns for building a standalone OAuth 2.1 Authorization Server:
+- **AS vs RS role separation** — what each side does, how they connect
+- **Required endpoints** — AS metadata, JWKS, /authorize, /token
+- **Client models** — pre-registered, DCR, CIMD (future standard)
+- **PKCE flow** — authorization code + S256 challenge/verifier
+- **Token issuance** — JWT access tokens, opaque refresh tokens, audience/scope validation
+- **Signing key management** — static demo key vs ephemeral (restart consequences)
+- **MCP interoperability** — client discovery chain, connecting demo AS to Turul RS
+- Common mistakes, redirect URI allowlisting, security boundaries
+
 ## Commands
 
 ### /new-mcp-server
@@ -189,6 +219,16 @@ Validates an existing Turul MCP server project:
 This plugin targets **turul-mcp-server v0.3** (MCP 2025-11-25).
 
 ## Changelog
+
+### v0.6.1
+- Added `authorization-server-patterns` skill: demo OAuth 2.1 AS with PKCE, JWKS, pre-registered clients, DCR, CIMD mention, MCP interop notes, 1 reference file, 2 example files
+- Added Authorization Server patterns row to `server-patterns-index`
+
+### v0.6.0
+- Added `auth-patterns` skill: OAuth 2.1 RS, JWT validation with JWKS caching, API key middleware, Lambda authorizer integration, RFC 9728 metadata, 1 reference file, 3 example files
+- Added Auth patterns row to `server-patterns-index`
+- Updated `lambda-deployment` stale `run_with_streaming_response` references to `run_streaming` / `run_streaming_with`
+- Updated streaming example, builder reference, and streaming modes guide for v0.3.11 API
 
 ### v0.5.0
 - Added `session-storage-backends` skill: SessionStorage trait, backend decision tree, event management for SSE resumability, error types, background cleanup, 3 example files

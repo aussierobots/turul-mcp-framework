@@ -5,13 +5,13 @@ A comprehensive Rust framework for building Model Context Protocol (MCP) servers
 ⚠️ **Beta Status** - Active development with ongoing feature enhancements. Full MCP 2025-11-25 compliance including task storage and runtime. Suitable for development and testing.
 
 ## 🧪 **Active Development** - Comprehensive Test Coverage
-**1560+ passing tests across workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
+**1729+ passing tests across workspace** • **Complete async SessionContext integration** • **Framework-native testing patterns**
 
 ## ✨ Key Highlights
 
-- **🏗️ 12 Framework Crates**: Complete MCP ecosystem with core framework, client library, task storage, and serverless support
+- **🏗️ 13 Framework Crates**: Complete MCP ecosystem with core framework, client library, task storage, and serverless support
 - **📚 58 Comprehensive Examples**: Real-world business applications and framework demonstration examples (all validated through comprehensive testing campaign)
-- **🧪 1560+ Development Tests**: Comprehensive test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
+- **🧪 1729+ Development Tests**: Comprehensive test suite with core framework tests, SessionContext integration tests, and framework-native integration tests
 - **⚡ Multiple Development Patterns**: Derive macros, function attributes, declarative macros, and manual implementation
 - **🌐 Transport Flexibility**: Streamable HTTP via StreamableHttpHandler with SSE streaming (stdio planned)
 - **☁️ Serverless Support**: AWS Lambda integration with streaming responses and SQS event processing
@@ -393,7 +393,7 @@ impl McpMiddleware for AuthMiddleware {
 - `examples/middleware-auth-lambda` - Full authorizer extraction pattern (V1 nested, V1 flat, V2)
 - Test events: V1 nested, V1 flat, V2 authorizer shapes (`test-events/`)
 
-### Core Framework (12 Crates)
+### Core Framework (13 Crates)
 - **`turul-mcp-server`** - High-level server builder with session management and task runtime
 - **`turul-mcp-client`** - Comprehensive client library with HTTP transport support
 - **`turul-http-mcp-server`** - HTTP/SSE transport with CORS and streaming
@@ -406,6 +406,7 @@ impl McpMiddleware for AuthMiddleware {
 - **`turul-mcp-session-storage`** - Session storage backends (SQLite, PostgreSQL, DynamoDB)
 - **`turul-mcp-task-storage`** - Task storage for long-running operations (InMemory, with pluggable backends)
 - **`turul-mcp-aws-lambda`** - AWS Lambda integration for serverless deployment
+- **`turul-mcp-oauth`** - OAuth 2.1 Resource Server support (JWT validation, Bearer middleware)
 
 ### Tasks Architecture ADRs
 
@@ -589,7 +590,7 @@ sam deploy --guided
 
 ### 🧪 **Comprehensive Test Coverage - Development Quality**
 
-**Framework Excellence**: 1560+ tests across all components with complete async SessionContext integration:
+**Framework Excellence**: 1729+ tests across all components with complete async SessionContext integration:
 
 - **✅ Core Framework Tests** - Protocol, server, client, derive macros
 - **✅ SessionContext Integration** - Full session state management
@@ -600,7 +601,7 @@ sam deploy --guided
 - **✅ Example Applications** - Real-world scenario validation
 
 ```bash
-# Run all tests - expect 1560+ passing
+# Run all tests - expect 1729+ passing
 cargo test --workspace
 
 # SessionContext integration tests
@@ -918,7 +919,7 @@ let content = client.read_resource("config://app.json").await?;
 
 ### Modern Architecture
 - **UUID v7** - Time-ordered IDs for better database performance and observability
-- **Workspace Dependencies** - Consistent dependency management across 12 core crates and 58 examples
+- **Workspace Dependencies** - Consistent dependency management across 13 core crates and 58 examples
 - **Rust 2024 Edition** - Latest language features and performance improvements
 - **Tokio/Hyper** - High-performance async runtime with HTTP/2 support
 
@@ -994,7 +995,7 @@ cargo build --release
 
 ### Running Tests
 
-The framework includes **1560+ comprehensive tests** covering all functionality. Test server binaries are **automatically built** when needed - no manual setup required.
+The framework includes **1729+ comprehensive tests** covering all functionality. Test server binaries are **automatically built** when needed - no manual setup required.
 
 ```bash
 # Run all tests (recommended - includes E2E integration tests)
@@ -1199,13 +1200,13 @@ This project is licensed under the MIT OR Apache-2.0 License - see the LICENSE f
 ### 🚧 Current Limitations
 
 **Transport & Streaming:**
-- **Lambda SSE**: Snapshot-based responses work reliably; real-time streaming requires `run_with_streaming_response`
+- **Lambda SSE**: Snapshot-based responses via `handle()`, real-time streaming via `run_streaming()` / `run_streaming_with()` with graceful completion-invocation handling
 - **Additional transport variants**: Streamable HTTP and legacy HTTP+SSE are supported; stdio remains planned
 - **CI Environment Testing**: SSE tests require port binding capabilities (graceful fallbacks implemented)
 
 **Features & Integration:**
 - **Resource Subscriptions**: `resources/subscribe` MCP spec feature planned for future implementation
-- **Authentication Middleware**: OAuth/JWT integration planned for future releases
+- **Authentication Middleware**: OAuth 2.1 Resource Server support via `turul-mcp-oauth` (JWT validation, Bearer token middleware, `.well-known` metadata)
 - **Cross-platform Compatibility**: Primarily tested on Linux development environments
 
 ### 📊 Areas for Enhancement
