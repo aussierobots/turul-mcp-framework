@@ -348,4 +348,6 @@ MiddlewareError::custom("CUSTOM_ERR", "Something specific")
 
 **Creating tools, resources, or prompts?** → See the `tool-creation-patterns` or `resource-prompt-patterns` skill.
 
+**OAuth / JWT authentication?** → See the `auth-patterns` skill for OAuth 2.1 RS, `JwtValidator`, audience validation, and RFC 9728 metadata.
+
 **Client-side workflows?** → See the `mcp-client-patterns` skill.
