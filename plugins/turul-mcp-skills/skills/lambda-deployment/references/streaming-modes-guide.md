@@ -10,8 +10,8 @@ All 4 combinations of `.sse()` and handler method work — none hang or crash. T
 |---|---|---|---|---|---|---|
 | 1 | `false` | `handle()` | `run()` | 405 | No SSE | No |
 | 2 | `true` | `handle()` | `run()` | Snapshot events | Snapshot SSE | **No** (snapshots) |
-| 3 | `false` | `handle_streaming()` | `run_with_streaming_response()` | 405 | No SSE | No |
-| 4 | `true` | `handle_streaming()` | `run_with_streaming_response()` | **Real-time stream** | **Real-time SSE** | **Yes** |
+| 3 | `false` | `handle_streaming()` | `run_streaming()` / `run_streaming_with()` | 405 | No SSE | No |
+| 4 | `true` | `handle_streaming()` | `run_streaming()` / `run_streaming_with()` | **Real-time stream** | **Real-time SSE** | **Yes** |
 
 **Combination 1**: Simplest. No SSE at all. Best for tools that return immediately.
 
@@ -19,7 +19,7 @@ All 4 combinations of `.sse()` and handler method work — none hang or crash. T
 
 **Combination 3**: Streaming runtime available but SSE endpoints are disabled. `handle_streaming()` processes POST requests normally; GET /mcp returns 405.
 
-**Combination 4**: Full real-time SSE. Requires the `streaming` Cargo feature + `run_with_streaming_response()` + `handle_streaming()`.
+**Combination 4**: Full real-time SSE. Requires the `streaming` Cargo feature + `run_streaming()` (or `run_streaming_with()`) + `handle_streaming()`.
 
 ## Protocol Version Routing
 

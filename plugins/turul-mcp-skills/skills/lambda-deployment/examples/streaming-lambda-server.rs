@@ -15,14 +15,17 @@
 // Key differences from minimal example:
 //   1. `streaming` feature enabled (implies `sse`)
 //   2. `.sse(true)` on builder (default when sse feature is on, but explicit for clarity)
-//   3. `handle_streaming()` instead of `handle()`
-//   4. `run_with_streaming_response()` instead of `run()`
-//   5. DynamoDB session storage for durability
+//   3. `run_streaming(handler)` instead of `run(service_fn(...))`
+//   4. DynamoDB session storage for durability
+//
+// For custom pre-dispatch logic (e.g., `.well-known` routing), use
+// `run_streaming_with(|req| async { handler.handle_streaming(req).await })`
+// instead of `run_streaming(handler)`.
 
-use lambda_http::{Error, Request, run_with_streaming_response, service_fn};
+use lambda_http::Error;
 use std::sync::Arc;
 use tokio::sync::OnceCell;
-use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
+use turul_mcp_aws_lambda::{LambdaMcpServerBuilder, run_streaming};
 use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, SessionContext};
 use turul_mcp_session_storage::DynamoDbSessionStorage;
@@ -68,21 +71,6 @@ async fn create_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHandler, Erro
     server.handler().await.map_err(|e| Error::from(e.to_string()))
 }
 
-// Return type: streaming body (not LambdaBody)
-async fn lambda_handler(
-    req: Request,
-) -> Result<
-    lambda_http::Response<http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>>,
-    Box<dyn std::error::Error + Send + Sync>,
-> {
-    let handler = HANDLER
-        .get_or_try_init(|| async { create_handler().await })
-        .await?;
-
-    // handle_streaming() instead of handle()
-    handler.handle_streaming(req).await
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Error> {
     tracing_subscriber::fmt()
@@ -92,10 +80,11 @@ async fn main() -> Result<(), Error> {
         .init();
 
     // Pre-initialize handler during startup
-    HANDLER
+    let handler = HANDLER
         .get_or_try_init(|| async { create_handler().await })
-        .await?;
+        .await?
+        .clone();
 
-    // run_with_streaming_response() instead of run()
-    run_with_streaming_response(service_fn(lambda_handler)).await
+    // run_streaming() handles completion invocations gracefully — no ERROR logs
+    run_streaming(handler).await
 }

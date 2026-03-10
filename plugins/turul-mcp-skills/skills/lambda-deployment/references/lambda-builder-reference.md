@@ -133,7 +133,7 @@ Created by `server.handler().await?`. Implements `Clone` — safe to share acros
 | Method | Return Type | Notes |
 |---|---|---|
 | `.handle(req)` | `Result<LambdaResponse<LambdaBody>>` | Snapshot mode. Error type: `LambdaError`. Use with `run()`. |
-| `.handle_streaming(req)` | `Result<Response<UnsyncBoxBody<Bytes, hyper::Error>>, Box<dyn Error + Send + Sync>>` | Streaming mode. Error type differs from `handle()`. Use with `run_with_streaming_response()`. |
+| `.handle_streaming(req)` | `Result<Response<UnsyncBoxBody<Bytes, hyper::Error>>, Box<dyn Error + Send + Sync>>` | Streaming mode. Error type differs from `handle()`. Use with `run_streaming()` or `run_streaming_with()`. |
 | `.get_stream_manager()` | `&Arc<StreamManager>` | Access SSE stream manager. |
 
 **Note:** `handle()` and `handle_streaming()` have **different error types**. Copy the exact return type from the examples when writing your `lambda_handler` function signature.
@@ -144,5 +144,5 @@ Created by `server.handler().await?`. Implements `Clone` — safe to share acros
 |---|---|---|
 | `cors` | Yes | CORS header injection. |
 | `sse` | Yes | SSE stream adaptation. |
-| `streaming` | No | Real SSE streaming (`run_with_streaming_response` + `handle_streaming`). Implies `sse`. |
+| `streaming` | No | Real SSE streaming (`run_streaming` / `run_streaming_with` + `handle_streaming`). Implies `sse`. |
 | `dynamodb` | No | DynamoDB session storage. Enables `turul-mcp-session-storage/dynamodb`. |

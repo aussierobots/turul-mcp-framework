@@ -4,8 +4,8 @@ description: >
   This skill should be used when the user asks about "lambda",
   "LambdaMcpServerBuilder", "Lambda deployment", "lambda MCP server",
   "AWS Lambda MCP", "LambdaMcpHandler", "lambda cold start",
-  "OnceCell handler", "lambda SSE", "run_with_streaming_response",
-  "handle_streaming", "lambda CORS", "cors_allow_all_origins",
+  "OnceCell handler", "lambda SSE", "run_streaming",
+  "run_streaming_with", "handle_streaming", "lambda CORS", "cors_allow_all_origins",
   "production_config", "development_config", "lambda-deployment",
   "lambda snapshot", "lambda streaming mode", or "LambdaMcpServer".
   Covers deploying MCP servers on AWS Lambda using the Turul MCP
@@ -88,7 +88,8 @@ let handler = HANDLER.get_or_try_init(|| async { create_handler().await }).await
 
 // Option B: Eager init in main() (faster first request, slower cold start)
 HANDLER.get_or_try_init(|| async { create_handler().await }).await?;
-run_with_streaming_response(service_fn(lambda_handler)).await
+let handler = HANDLER.get().unwrap().clone();
+turul_mcp_aws_lambda::run_streaming(handler).await
 ```
 
 ## Streaming vs Snapshot Mode
@@ -97,23 +98,30 @@ SSE is **enabled by default** (`sse` is a default feature). All 4 handler/runtim
 
 ```
 Need real-time SSE streaming?
-├─ Yes → .sse(true) + handle_streaming() + run_with_streaming_response()  ← REAL-TIME
-└─ No  → .sse(false) + handle() + run()                                   ← SNAPSHOT
+├─ Yes → .sse(true) + run_streaming(handler) or run_streaming_with(dispatch)  ← REAL-TIME
+└─ No  → .sse(false) + handle() + run()                                       ← SNAPSHOT
 ```
 
 | | Snapshot (`.sse(false)`) | Real-time (`.sse(true)` + streaming) |
 |---|---|---|
-| **Runtime** | `run(service_fn(...))` | `run_with_streaming_response(service_fn(...))` |
-| **Handler** | `handle()` | `handle_streaming()` |
+| **Runtime** | `run(service_fn(...))` | `run_streaming(handler)` or `run_streaming_with(dispatch)` |
+| **Handler** | `handle()` | `handle_streaming()` (called internally by `run_streaming`) |
 | **GET /mcp** | 405 Method Not Allowed | Real-time SSE event stream |
 | **Response body** | `LambdaBody` (buffered) | `UnsyncBoxBody<Bytes, hyper::Error>` (streaming) |
 | **Cargo feature** | default features sufficient | `streaming` feature required |
 | **Lambda cost** | Standard pricing | Higher (streaming response duration) |
+| **Completion invocations** | Handled by `lambda_http` | Handled gracefully (no ERROR logs) |
+
+**Two streaming entry points (v0.3.11+):**
+- `run_streaming(handler)` — pass a `LambdaMcpHandler` directly (standard path; handles `.well-known` and other registered routes via the built-in route registry)
+- `run_streaming_with(|req| async { ... })` — custom dispatch closure for pre-dispatch logic that isn't route-based (e.g., request logging, custom health checks)
+
+Both handle API Gateway streaming completion invocations gracefully — no ERROR logs or Lambda Error metrics from completion payloads.
 
 **Important nuances:**
 - `.sse(true)` with `handle()` works but returns SSE snapshots, not real-time streams
 - `handle_streaming()` with `.sse(false)` works but GET /mcp returns 405 (SSE endpoints disabled)
-- For **real-time SSE**, you need ALL THREE: `.sse(true)` + `handle_streaming()` + `run_with_streaming_response()` + `streaming` Cargo feature
+- For **real-time SSE**, you need: `.sse(true)` + `run_streaming()` or `run_streaming_with()` + `streaming` Cargo feature
 
 **See:** `references/streaming-modes-guide.md` for the full streaming deep-dive.
 
@@ -272,7 +280,7 @@ let server = LambdaMcpServerBuilder::new()
 
 1. **Using `InMemorySessionStorage` in production Lambda** — Sessions are lost when containers recycle. Use `DynamoDbSessionStorage` for persistence across invocations.
 
-2. **Using `handle()` with `.sse(true)` expecting real-time streaming** — `handle()` returns SSE snapshots, not real-time streams. For real-time SSE, use `handle_streaming()` + `run_with_streaming_response()` + the `streaming` Cargo feature.
+2. **Using `handle()` with `.sse(true)` expecting real-time streaming** — `handle()` returns SSE snapshots, not real-time streams. For real-time SSE, use `run_streaming(handler)` or `run_streaming_with(dispatch)` + the `streaming` Cargo feature.
 
 3. **Expecting `.sse(false)` as default behavior** — SSE is enabled by default when the `sse` feature is active (which it is in default features). Explicitly call `.sse(false)` if you don't want SSE.
 
@@ -280,7 +288,7 @@ let server = LambdaMcpServerBuilder::new()
 
 5. **Assuming `DynamoDbSessionStorage::new()` reads a table name env var** — It doesn't. The table name is hardcoded to `"mcp-sessions"` in `DynamoDbConfig::default()`. Use `DynamoDbSessionStorage::with_config()` to customize.
 
-6. **Using `.sse(true)` without the `streaming` Cargo feature** — SSE works but only as snapshots. The `streaming` feature is required for `run_with_streaming_response()` + `handle_streaming()` to provide real-time SSE.
+6. **Using `.sse(true)` without the `streaming` Cargo feature** — SSE works but only as snapshots. The `streaming` feature is required for `run_streaming()` / `run_streaming_with()` to provide real-time SSE.
 
 ## Beyond This Skill
 
