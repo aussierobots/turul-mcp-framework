@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("calculator_add_builder")
-        .version("0.3.11")
+        .version("0.3.12")
         .title("Calculator Add Builder Server")
         .instructions("Add two numbers using builder pattern (Level 3 - Runtime Flexibility)")
         .tool(add_tool)

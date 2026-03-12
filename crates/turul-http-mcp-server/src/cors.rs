@@ -11,11 +11,17 @@ impl CorsLayer {
         headers.insert("Access-Control-Allow-Origin", "*".parse().unwrap());
         headers.insert(
             "Access-Control-Allow-Methods",
-            "GET, POST, OPTIONS".parse().unwrap(),
+            "GET, POST, DELETE, OPTIONS".parse().unwrap(),
         );
         headers.insert(
             "Access-Control-Allow-Headers",
-            "Content-Type, Accept, Authorization".parse().unwrap(),
+            "Content-Type, Accept, Authorization, Mcp-Session-Id"
+                .parse()
+                .unwrap(),
+        );
+        headers.insert(
+            "Access-Control-Expose-Headers",
+            "Mcp-Session-Id".parse().unwrap(),
         );
         headers.insert("Access-Control-Max-Age", "86400".parse().unwrap());
     }
@@ -25,11 +31,17 @@ impl CorsLayer {
         headers.insert("Access-Control-Allow-Origin", origin.parse().unwrap());
         headers.insert(
             "Access-Control-Allow-Methods",
-            "GET, POST, OPTIONS".parse().unwrap(),
+            "GET, POST, DELETE, OPTIONS".parse().unwrap(),
         );
         headers.insert(
             "Access-Control-Allow-Headers",
-            "Content-Type, Accept, Authorization".parse().unwrap(),
+            "Content-Type, Accept, Authorization, Mcp-Session-Id"
+                .parse()
+                .unwrap(),
+        );
+        headers.insert(
+            "Access-Control-Expose-Headers",
+            "Mcp-Session-Id".parse().unwrap(),
         );
         headers.insert("Access-Control-Allow-Credentials", "true".parse().unwrap());
         headers.insert("Access-Control-Max-Age", "86400".parse().unwrap());
@@ -46,8 +58,22 @@ mod tests {
         CorsLayer::apply_cors_headers(&mut headers);
 
         assert_eq!(headers.get("Access-Control-Allow-Origin").unwrap(), "*");
-        assert!(headers.contains_key("Access-Control-Allow-Methods"));
-        assert!(headers.contains_key("Access-Control-Allow-Headers"));
+        assert!(headers
+            .get("Access-Control-Allow-Methods")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("DELETE"));
+        assert!(headers
+            .get("Access-Control-Allow-Headers")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("Mcp-Session-Id"));
+        assert_eq!(
+            headers.get("Access-Control-Expose-Headers").unwrap(),
+            "Mcp-Session-Id"
+        );
         assert!(headers.contains_key("Access-Control-Max-Age"));
     }
 
@@ -64,5 +90,15 @@ mod tests {
             headers.get("Access-Control-Allow-Credentials").unwrap(),
             "true"
         );
+        assert_eq!(
+            headers.get("Access-Control-Expose-Headers").unwrap(),
+            "Mcp-Session-Id"
+        );
+        assert!(headers
+            .get("Access-Control-Allow-Headers")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("Mcp-Session-Id"));
     }
 }

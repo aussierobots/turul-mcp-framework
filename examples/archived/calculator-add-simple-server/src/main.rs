@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting calculator_add_simple server (Level 1)");
     let server = McpServer::builder()
         .name("calculator_add_simple")
-        .version("0.3.11")
+        .version("0.3.12")
         .title("Calculator Add Simple Server")
         .instructions("Add two numbers using ultra-simple function macros (Level 1 - Zero Configuration)")
         .tool_fn(calculator_add)  // Framework auto-determines method from function name

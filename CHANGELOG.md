@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.12] - 2026-03-12
+
+### Fixed
+
+- **CORS: expose `Mcp-Session-Id` header for browser MCP clients** (`turul-http-mcp-server`): Browser-based MCP clients couldn't read the `Mcp-Session-Id` response header because CORS didn't expose it. Added `Access-Control-Expose-Headers: Mcp-Session-Id`, added `Mcp-Session-Id` to `Access-Control-Allow-Headers`, and added `DELETE` to `Access-Control-Allow-Methods` for session teardown. Applies to both wildcard and origin-specific CORS configurations.
+
 ## [0.3.11] - 2026-03-09
 
 ### Added
@@ -409,7 +415,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.11...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.12...HEAD
+[0.3.12]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.9...v0.3.10
 [0.3.9]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.8...v0.3.9
