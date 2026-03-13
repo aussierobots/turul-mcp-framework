@@ -130,6 +130,13 @@ async fn count_words(text: String) -> McpResult<WordCount> {
 2. POST /mcp with `notifications/initialized` → enable session (returns 202)
 3. Include `MCP-Session-ID` header in all subsequent requests
 
+**Session Status Codes (Streamable HTTP):**
+- Missing `Mcp-Session-Id` header → **401** (no session ID provided at all)
+- Nonexistent session ID → **404** (MCP spec: client must start fresh `initialize`)
+- Terminated session ID → **404** (MCP spec: treated same as nonexistent)
+- Auth token invalid/expired → **401** (OAuth middleware, separate from session)
+- Storage backend error → **500**
+
 **Testing:** All requests need valid Accept header (application/json, text/event-stream, or */*)
 
 ### MCP 2025-11-25 Compliance

@@ -371,3 +371,105 @@ async fn test_mcp_inspector_flow_with_combined_accept_header() {
 
     println!("✅ MCP Inspector flow test passed");
 }
+
+/// MCP 2025-11-25 spec: a fabricated/nonexistent session ID must return 404 Not Found,
+/// NOT 401 Unauthorized. 401 is reserved for auth failures; 404 tells the client
+/// to start a fresh initialize handshake.
+#[tokio::test]
+async fn test_nonexistent_session_returns_404() {
+    let server_url = start_test_server().await;
+    let client = reqwest::Client::new();
+
+    // Send tools/list with a fabricated session ID that was never created
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Session-Id", "00000000dead000000000000dead0000")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": 1
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        404,
+        "Nonexistent session must return 404 per MCP spec, not 401"
+    );
+}
+
+/// MCP 2025-11-25 spec: after a session is terminated (DELETE), subsequent requests
+/// with that session ID must return 404 Not Found.
+#[tokio::test]
+async fn test_terminated_session_returns_404() {
+    let server_url = start_test_server().await;
+    let client = reqwest::Client::new();
+
+    // Step 1: Initialize to get a session
+    let init_response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "id": 1,
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": { "name": "test-client", "version": "1.0.0" }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(init_response.status(), 200);
+    let session_id = init_response
+        .headers()
+        .get("Mcp-Session-Id")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    // Step 2: Terminate the session via DELETE
+    let delete_response = client
+        .delete(&server_url)
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Session-Id", &session_id)
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        delete_response.status() == 200 || delete_response.status() == 204,
+        "DELETE should succeed: got {}",
+        delete_response.status()
+    );
+
+    // Step 3: Use the terminated session — must get 404, not 401
+    let stale_response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Session-Id", &session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": 2
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        stale_response.status(),
+        404,
+        "Terminated session must return 404 per MCP spec, not 401"
+    );
+}

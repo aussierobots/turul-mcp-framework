@@ -255,6 +255,32 @@ impl StreamableHttpContext {
     }
 }
 
+/// Why session validation failed — determines the HTTP status code.
+///
+/// MCP 2025-11-25 spec: terminated or unknown sessions MUST return 404 Not Found.
+/// Missing `Mcp-Session-Id` header (a different code path) stays 401 Unauthorized.
+enum SessionValidationError {
+    /// Session ID not found or session has been terminated → 404 Not Found
+    NotFound(String),
+    /// Storage backend error → 500 Internal Server Error
+    StorageError(String),
+}
+
+impl SessionValidationError {
+    fn status_code(&self) -> StatusCode {
+        match self {
+            Self::NotFound(_) => StatusCode::NOT_FOUND,
+            Self::StorageError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    fn message(&self) -> &str {
+        match self {
+            Self::NotFound(msg) | Self::StorageError(msg) => msg,
+        }
+    }
+}
+
 /// Streamable HTTP response types
 pub enum StreamableResponse {
     /// Single JSON response
@@ -486,11 +512,12 @@ impl StreamableHttpHandler {
             Err(err) => {
                 error!(
                     "Session validation failed for streaming GET {}: {}",
-                    session_id, err
+                    session_id,
+                    err.message()
                 );
                 return StreamableResponse::Error {
-                    status: StatusCode::UNAUTHORIZED,
-                    message: format!("Session validation failed: {}", err),
+                    status: err.status_code(),
+                    message: format!("Session validation failed: {}", err.message()),
                 }
                 .into_boxed_response(&context);
             }
@@ -550,30 +577,40 @@ impl StreamableHttpHandler {
         }
     }
 
-    /// Validate that a session exists and is not terminated - do NOT create if missing
-    async fn validate_session_exists(&self, session_id: &str) -> std::result::Result<(), String> {
+    /// Validate that a session exists and is not terminated — do NOT create if missing.
+    ///
+    /// Returns typed errors so callers can map to the correct HTTP status:
+    /// - `NotFound` → 404 (MCP spec: terminated sessions MUST return 404)
+    /// - `StorageError` → 500
+    async fn validate_session_exists(
+        &self,
+        session_id: &str,
+    ) -> std::result::Result<(), SessionValidationError> {
         match self.session_storage.get_session(session_id).await {
             Ok(Some(session_info)) => {
                 if session_info.is_terminated() {
                     error!("Session '{}' has been terminated", session_id);
-                    return Err(format!(
+                    return Err(SessionValidationError::NotFound(format!(
                         "Session '{}' has been terminated. Create a new session to continue.",
                         session_id
-                    ));
+                    )));
                 }
                 debug!("Session validation successful: {}", session_id);
                 Ok(())
             }
             Ok(None) => {
                 error!("Session not found: {}", session_id);
-                Err(format!(
+                Err(SessionValidationError::NotFound(format!(
                     "Session '{}' not found. Sessions must be created via initialize request first.",
                     session_id
-                ))
+                )))
             }
             Err(err) => {
                 error!("Failed to validate session {}: {}", session_id, err);
-                Err(format!("Session validation failed: {}", err))
+                Err(SessionValidationError::StorageError(format!(
+                    "Session validation failed: {}",
+                    err
+                )))
             }
         }
     }
@@ -1159,11 +1196,12 @@ impl StreamableHttpHandler {
                     if let Err(err) = self.validate_session_exists(existing_id).await {
                         warn!(
                             "Invalid session ID {} during initialize: {}",
-                            existing_id, err
+                            existing_id,
+                            err.message()
                         );
                         return StreamableResponse::Error {
-                            status: StatusCode::UNAUTHORIZED,
-                            message: format!("Invalid or expired session: {}", err),
+                            status: err.status_code(),
+                            message: format!("Invalid or expired session: {}", err.message()),
                         }
                         .into_boxed_response(&context);
                     }
@@ -1199,16 +1237,17 @@ impl StreamableHttpHandler {
                 if let Some(existing_id) = &context.session_id {
                     // Validate existing session
                     if let Err(err) = self.validate_session_exists(existing_id).await {
-                        warn!("Invalid session ID {}: {}", existing_id, err);
+                        warn!("Invalid session ID {}: {}", existing_id, err.message());
                         return StreamableResponse::Error {
-                            status: StatusCode::UNAUTHORIZED,
-                            message: format!("Invalid or expired session: {}", err),
+                            status: err.status_code(),
+                            message: format!("Invalid or expired session: {}", err.message()),
                         }
                         .into_boxed_response(&context);
                     }
                     existing_id.clone()
                 } else {
-                    // Return 401 JSON-RPC error for missing session
+                    // Return 401 for missing header — this is NOT a stale session (404),
+                    // it's "no session ID provided at all"
                     let method_name = match &message {
                         JsonRpcMessage::Request(req) => &req.method,
                         JsonRpcMessage::Notification(notif) => &notif.method,
