@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.14] - 2026-03-14
+
 ### Fixed
 
 - **Stale/terminated sessions now return 404 per MCP spec** (`turul-http-mcp-server`): `StreamableHttpHandler` previously returned 401 Unauthorized for nonexistent or terminated session IDs. MCP 2025-11-25 requires 404 Not Found so clients know to create a fresh session (not re-authenticate). Missing `Mcp-Session-Id` header (no session ID at all) still returns 401. Storage backend errors return 500.
@@ -432,7 +434,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.13...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.14...HEAD
+[0.3.14]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.13...v0.3.14
 [0.3.13]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.10...v0.3.11
