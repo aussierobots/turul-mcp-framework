@@ -112,7 +112,7 @@ Need real-time SSE streaming?
 | **Lambda cost** | Standard pricing | Higher (streaming response duration) |
 | **Completion invocations** | Handled by `lambda_http` | Handled gracefully (no ERROR logs) |
 
-**Two streaming entry points (v0.3.12+):**
+**Two streaming entry points (v0.3.13+):**
 - `run_streaming(handler)` — pass a `LambdaMcpHandler` directly (standard path; handles `.well-known` and other registered routes via the built-in route registry)
 - `run_streaming_with(|req| async { ... })` — custom dispatch closure for pre-dispatch logic that isn't route-based (e.g., request logging, custom health checks)
 

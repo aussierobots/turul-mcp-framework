@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.13] - 2026-03-13
+
+### Changed
+
+- **CORS headers centralized behind constants** (`turul-http-mcp-server`): All CORS header values (`Allow-Methods`, `Allow-Headers`, `Expose-Headers`, `Max-Age`) are now defined as `pub(crate)` constants in `cors.rs`. Inline CORS headers removed from `options_response()`, `StreamableHttpHandler` OPTIONS handler, and `sse_response_headers()`. `CorsLayer::apply_cors_headers()` in `server.rs` is now the single source of truth.
+- **`enable_cors = false` now fully respected** (`turul-http-mcp-server`): Previously, inline OPTIONS handlers leaked partial CORS headers even when CORS was disabled. Now `enable_cors = false` produces zero CORS headers on all responses.
+
+### Removed
+
+- **`CorsLayer::apply_cors_headers_for_origin()`** (`turul-http-mcp-server`): Removed — was never wired into the server request pipeline and would be overwritten by the wildcard `apply_cors_headers()` in `server.rs`. For origin-restricted CORS, configure at the reverse proxy layer.
+- **`sse_response_headers()`** (`turul-http-mcp-server`): Removed — was never called by the framework. SSE responses are built inline by `StreamableHttpHandler` and `SessionMcpHandler`.
+- **Orphan test files** (`turul-http-mcp-server`): Deleted `http_transport_tests.rs` and `sse_tests.rs` — not compiled (missing from `tests/mod.rs`) with 93 compilation errors against the current API.
+
 ## [0.3.12] - 2026-03-12
 
 ### Fixed
@@ -415,7 +428,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.12...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.13...HEAD
+[0.3.13]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.11...v0.3.12
 [0.3.11]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.10...v0.3.11
 [0.3.10]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.9...v0.3.10

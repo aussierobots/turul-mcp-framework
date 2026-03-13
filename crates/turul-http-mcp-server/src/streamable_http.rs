@@ -401,16 +401,11 @@ impl StreamableHttpHandler {
             context.wants_sse_stream()
         );
 
-        // Handle OPTIONS preflight before validation (no Accept header required)
+        // Handle OPTIONS preflight before validation (no Accept header required).
+        // CORS headers are added by CorsLayer in server.rs — not here.
         if *req.method() == Method::OPTIONS {
             return Response::builder()
                 .status(StatusCode::OK)
-                .header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-                .header(
-                    "Access-Control-Allow-Headers",
-                    "Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id, Last-Event-ID",
-                )
-                .header("Access-Control-Max-Age", "86400")
                 .body(Full::new(Bytes::new()))
                 .unwrap()
                 .map(|body| body.map_err(|never| match never {}).boxed_unsync());

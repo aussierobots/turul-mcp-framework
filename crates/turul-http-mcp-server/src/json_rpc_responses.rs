@@ -130,25 +130,13 @@ pub fn bad_request_response(message: &str) -> Response<JsonRpcBody> {
 }
 
 /// Build HTTP response for OPTIONS preflight requests.
+///
+/// Returns a bare 200 OK with an empty body. CORS headers are added by
+/// [`CorsLayer::apply_cors_headers`] in `server.rs` when `enable_cors` is true.
 pub fn options_response() -> Response<JsonRpcBody> {
     Response::builder()
         .status(StatusCode::OK)
-        .header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-        .header(
-            "Access-Control-Allow-Headers",
-            "Content-Type, Accept, MCP-Protocol-Version, Mcp-Session-Id, Last-Event-ID",
-        )
-        .header("Access-Control-Max-Age", "86400")
         .body(Full::new(Bytes::new()))
         .unwrap()
 }
 
-/// Build HTTP response for SSE stream (proper headers for text/event-stream).
-pub fn sse_response_headers() -> http::response::Builder {
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "text/event-stream")
-        .header(header::CACHE_CONTROL, "no-cache")
-        .header("Connection", "keep-alive")
-        .header("Access-Control-Allow-Origin", "*")
-}

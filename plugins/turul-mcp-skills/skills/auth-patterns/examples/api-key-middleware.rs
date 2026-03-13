@@ -81,7 +81,7 @@ async fn main() -> McpResult<()> {
 
     let server = McpServer::builder()
         .name("api-key-server")
-        .version("0.3.12")
+        .version("0.3.13")
         .middleware(Arc::new(ApiKeyMiddleware { valid_keys: keys }))
         .tool(HelloTool::default())
         .build()?;

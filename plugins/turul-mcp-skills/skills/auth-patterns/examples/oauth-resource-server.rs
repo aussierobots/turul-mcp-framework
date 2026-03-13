@@ -86,7 +86,7 @@ async fn main() -> McpResult<()> {
     // 3. Build server with OAuth middleware
     let mut builder = McpServer::builder()
         .name("oauth-resource-server")
-        .version("0.3.12")
+        .version("0.3.13")
         .middleware(auth_middleware)
         .tool(WhoAmITool::default());
 
