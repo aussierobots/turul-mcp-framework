@@ -308,7 +308,7 @@ Before publishing a new version:
 
 1. **Workspace version**: Update `version` in `Cargo.toml` `[workspace.package]` and all internal crate dependency versions
 2. **Example server versions**: Update `.version("x.y.z")` strings in `examples/*/src/main.rs`
-3. **Plugin skill comments**: Update `// turul-mcp-server v0.x` version comments in `.claude/plugins/*/skills/*.md`
+3. **Plugin skill versions**: Skills use generic minor version (`v0.3`, not `v0.3.13`) — do NOT bump on patch releases. Only update when the minor version changes (e.g., `v0.3` → `v0.4`).
 4. **CHANGELOG.md**: Add release entry with date and comparison links
 5. **Stale version scan**: `grep -rn 'v0\.[0-9]\.[0-9]' plugins/ examples/ .claude/` — fix any outdated references
 6. **Publish order** (dependency-first):

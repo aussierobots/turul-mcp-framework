@@ -228,7 +228,7 @@ This plugin targets **turul-mcp-server v0.3** (MCP 2025-11-25).
 - Added `auth-patterns` skill: OAuth 2.1 RS, JWT validation with JWKS caching, API key middleware, Lambda authorizer integration, RFC 9728 metadata, 1 reference file, 3 example files
 - Added Auth patterns row to `server-patterns-index`
 - Updated `lambda-deployment` stale `run_with_streaming_response` references to `run_streaming` / `run_streaming_with`
-- Updated streaming example, builder reference, and streaming modes guide for v0.3.13 API
+- Updated streaming example, builder reference, and streaming modes guide for v0.3 API
 
 ### v0.5.0
 - Added `session-storage-backends` skill: SessionStorage trait, backend decision tree, event management for SSE resumability, error types, background cleanup, 3 example files
