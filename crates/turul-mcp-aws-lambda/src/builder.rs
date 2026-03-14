@@ -71,6 +71,7 @@ pub struct LambdaMcpServerBuilder {
     name: String,
     version: String,
     title: Option<String>,
+    icons: Option<Vec<turul_mcp_protocol::Icon>>,
 
     /// Server capabilities
     capabilities: ServerCapabilities,
@@ -243,6 +244,7 @@ impl LambdaMcpServerBuilder {
             name: "turul-mcp-aws-lambda".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
             title: None,
+            icons: None,
             capabilities,
             tools: HashMap::new(),
             resources: HashMap::new(),
@@ -288,6 +290,12 @@ impl LambdaMcpServerBuilder {
     /// Set the server title
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
+        self
+    }
+
+    /// Set icons for the server (displayed by MCP clients like Claude Desktop)
+    pub fn icons(mut self, icons: Vec<turul_mcp_protocol::Icon>) -> Self {
+        self.icons = Some(icons);
         self
     }
 
@@ -925,11 +933,13 @@ impl LambdaMcpServerBuilder {
             .unwrap_or_else(|| Arc::new(InMemorySessionStorage::new()));
 
         // Create implementation info
-        let implementation = if let Some(title) = self.title {
-            Implementation::new(&self.name, &self.version).with_title(title)
-        } else {
-            Implementation::new(&self.name, &self.version)
-        };
+        let mut implementation = Implementation::new(&self.name, &self.version);
+        if let Some(title) = self.title {
+            implementation = implementation.with_title(title);
+        }
+        if let Some(icons) = self.icons {
+            implementation = implementation.with_icons(icons);
+        }
 
         // Auto-detect and configure server capabilities based on registered components (same as McpServer)
         let mut capabilities = self.capabilities.clone();

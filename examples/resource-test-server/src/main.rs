@@ -1603,7 +1603,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("resource-test-server")
-        .version("0.3.14")
+        .version("0.3.15")
         .title("MCP Resource Test Server")
         .instructions(
             "Comprehensive test server providing various types of resources for E2E testing.\n\

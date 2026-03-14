@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.15] - 2026-03-14
+
+### Added
+
+- **`.icons()` builder method** (`turul-mcp-server`, `turul-mcp-aws-lambda`): Both `McpServerBuilder` and `LambdaMcpServerBuilder` now support `.icons(vec![...])` for setting server icons displayed by MCP clients (e.g., Claude Desktop). Use `Icon::new("https://...")` for URL icons or `Icon::data_uri("image/svg+xml", "<base64>")` for embedded data URIs.
+- **`Icon` in protocol prelude** (`turul-mcp-protocol-2025-11-25`): `Icon` is now re-exported via `turul_mcp_server::prelude::*` for convenience.
+
 ## [0.3.14] - 2026-03-14
 
 ### Fixed
@@ -434,7 +441,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.14...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.15...HEAD
+[0.3.15]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.14...v0.3.15
 [0.3.14]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.13...v0.3.14
 [0.3.13]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.12...v0.3.13
 [0.3.12]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.11...v0.3.12
