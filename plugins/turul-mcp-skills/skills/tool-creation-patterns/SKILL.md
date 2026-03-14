@@ -5,9 +5,11 @@ description: >
   "add a tool", "new tool", "which tool pattern", "compare tool patterns",
   "function macro vs derive", "mcp_tool macro", "#[mcp_tool]",
   "derive McpTool", "#[derive(McpTool)]", "ToolBuilder", "tool creation",
-  or "function macro tool". Covers choosing between function macro
-  (#[mcp_tool]), derive macro (#[derive(McpTool)]), and runtime builder
-  (ToolBuilder) patterns in the Turul MCP Framework (Rust).
+  "function macro tool", "server icon", "server branding", ".icons()",
+  "Icon::data_uri", or "server identity". Covers choosing between function
+  macro (#[mcp_tool]), derive macro (#[derive(McpTool)]), and runtime builder
+  (ToolBuilder) patterns, plus server identity (icons), in the Turul MCP
+  Framework (Rust).
 ---
 
 # Tool Creation Patterns — Turul MCP Framework
@@ -318,6 +320,31 @@ let tool = ToolBuilder::new("slow_tool")
 4. **Putting `Arc<DatabaseConnection>` as a derive macro struct field** — all struct fields become MCP parameters. Use `OnceLock` for shared state.
 5. **Creating `JsonRpcError` directly** — return `McpError` variants instead. See: [CLAUDE.md — Critical Error Handling Rules](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#critical-error-handling-rules)
 6. **Adding method strings** — framework auto-determines from types. See: [CLAUDE.md — Zero-Configuration Design](https://github.com/aussierobots/turul-mcp-framework/blob/main/CLAUDE.md#zero-configuration-design)
+
+## Server Identity (Icons)
+
+MCP clients (e.g., Claude Desktop) display server icons from `serverInfo.icons` in the initialize response. Use `.icons()` on the builder:
+
+```rust
+// turul-mcp-server v0.3
+use turul_mcp_server::prelude::*;
+
+// URL icon (requires hosting)
+let server = McpServer::builder()
+    .name("my-server")
+    .title("My Server")
+    .icons(vec![Icon::new("https://example.com/logo.png")])
+    .build()?;
+
+// Embedded data URI (no hosting needed — recommended)
+let server = McpServer::builder()
+    .name("my-server")
+    .title("My Server")
+    .icons(vec![Icon::data_uri("image/svg+xml", "<base64-encoded-svg>")])
+    .build()?;
+```
+
+Works on both `McpServer::builder()` and `LambdaMcpServer::builder()`. SVG data URIs are ideal — small size, scales perfectly, no external dependency.
 
 ## Beyond This Skill
 

@@ -145,6 +145,19 @@ loop {
 
 **Why `sleep` not `interval`**: `tokio::time::interval` fires immediately on the first tick, which can race with newly-created sessions in tests. `sleep` defers the first cleanup by the full interval.
 
+## Session Expiry Behavior
+
+When a session expires (TTL cleanup) or is terminated (client DELETE), subsequent requests with that session ID receive **HTTP 404 Not Found** (MCP 2025-11-25 Streamable HTTP). This tells the client to start a fresh `initialize` handshake — it is not an authentication error (401).
+
+| Session State | HTTP Status | Client Action |
+|---|---|---|
+| Active | 200 | Normal operation |
+| Terminated (DELETE) | 404 | Re-initialize |
+| Expired (TTL cleanup) | 404 | Re-initialize |
+| Never existed | 404 | Re-initialize |
+
+This applies to all storage backends equally — the HTTP transport layer checks session existence before dispatching.
+
 ## Common Mistakes
 
 1. **DynamoDB 5-minute TTL in production** — Default `session_ttl_minutes: 5` is for testing. Production deployments should set 60–1440+ minutes via `DynamoDbConfig { session_ttl_minutes: 1440, event_ttl_minutes: 1440, ..Default::default() }`.

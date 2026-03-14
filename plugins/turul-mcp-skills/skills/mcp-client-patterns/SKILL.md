@@ -233,6 +233,16 @@ Pass via `.with_config(config)` on `McpClientBuilder`.
 
 Use `RetryConfig::delay_for_attempt(n)` to calculate backoff delay with jitter.
 
+**Session status codes (MCP 2025-11-25 Streamable HTTP):**
+
+| HTTP Status | Meaning | Client Action |
+|---|---|---|
+| **401** | Missing or invalid auth token, OR missing `Mcp-Session-Id` header | Re-authenticate or add session header |
+| **404** | Session ID not found or terminated | Start fresh `initialize` handshake (do NOT re-authenticate) |
+| **500** | Server internal error | Retry with backoff |
+
+The 401 vs 404 distinction matters: 404 means "your session is gone, create a new one" — not an auth problem.
+
 See [references/error-handling-guide.md](references/error-handling-guide.md) for full variant catalog and retry patterns.
 
 ## Common Mistakes

@@ -2,7 +2,7 @@
 
 Skills and tools for building MCP servers and clients with the [Turul MCP Framework](https://github.com/aussierobots/turul-mcp-framework) (Rust).
 
-## What's Included (v0.6.1)
+## What's Included (v0.6.2)
 
 | Component | Type | Purpose |
 |---|---|---|
@@ -219,6 +219,13 @@ Validates an existing Turul MCP server project:
 This plugin targets **turul-mcp-server v0.3** (MCP 2025-11-25).
 
 ## Changelog
+
+### v0.6.2
+- Added server identity (icons) section to `tool-creation-patterns` skill with `.icons()` builder method, `Icon::data_uri()`, and trigger phrases
+- Added session 404 status code table to `mcp-client-patterns` error handling section (MCP 2025-11-25 compliance)
+- Added session expiry behavior section to `session-storage-backends` skill (terminated/expired → 404)
+- Added server icons row to `server-patterns-index` reference
+- Fixed `plugin.json` version mismatch (was 0.5.0, now 0.6.2)
 
 ### v0.6.1
 - Added `authorization-server-patterns` skill: demo OAuth 2.1 AS with PKCE, JWKS, pre-registered clients, DCR, CIMD mention, MCP interop notes, 1 reference file, 2 example files
