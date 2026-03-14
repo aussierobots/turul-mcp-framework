@@ -297,16 +297,16 @@ pub async fn run_streaming(
 pub async fn run_streaming_with<F, Fut>(dispatch: F) -> std::result::Result<(), lambda_http::Error>
 where
     F: Fn(lambda_http::Request) -> Fut + Clone + Send + 'static,
-    Fut: std::future::Future<Output = std::result::Result<http::Response<StreamBody>, lambda_http::Error>>
-        + Send,
+    Fut: std::future::Future<
+            Output = std::result::Result<http::Response<StreamBody>, lambda_http::Error>,
+        > + Send,
 {
     use lambda_runtime::{LambdaEvent, service_fn};
 
     lambda_runtime::run(service_fn(move |event: LambdaEvent<serde_json::Value>| {
         let dispatch = dispatch.clone();
         async move {
-            let result =
-                handle_runtime_payload(event.payload, event.context, dispatch).await?;
+            let result = handle_runtime_payload(event.payload, event.context, dispatch).await?;
 
             match event_log_level(result.event_type) {
                 Some(level) if level == tracing::Level::WARN => {

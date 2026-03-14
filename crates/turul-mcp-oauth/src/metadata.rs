@@ -372,38 +372,46 @@ mod tests {
 
     #[test]
     fn test_valid_https_resource() {
-        assert!(ProtectedResourceMetadata::new(
-            "https://example.com/mcp",
-            vec!["https://auth.example.com".to_string()],
-        )
-        .is_ok());
+        assert!(
+            ProtectedResourceMetadata::new(
+                "https://example.com/mcp",
+                vec!["https://auth.example.com".to_string()],
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn test_valid_http_resource() {
-        assert!(ProtectedResourceMetadata::new(
-            "http://localhost:8080/mcp",
-            vec!["http://localhost:9090".to_string()],
-        )
-        .is_ok());
+        assert!(
+            ProtectedResourceMetadata::new(
+                "http://localhost:8080/mcp",
+                vec!["http://localhost:9090".to_string()],
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn test_reject_missing_scheme() {
-        assert!(ProtectedResourceMetadata::new(
-            "example.com/mcp",
-            vec!["https://auth.example.com".to_string()],
-        )
-        .is_err());
+        assert!(
+            ProtectedResourceMetadata::new(
+                "example.com/mcp",
+                vec!["https://auth.example.com".to_string()],
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn test_reject_fragment_in_resource() {
-        assert!(ProtectedResourceMetadata::new(
-            "https://example.com/mcp#section",
-            vec!["https://auth.example.com".to_string()],
-        )
-        .is_err());
+        assert!(
+            ProtectedResourceMetadata::new(
+                "https://example.com/mcp#section",
+                vec!["https://auth.example.com".to_string()],
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -413,31 +421,37 @@ mod tests {
 
     #[test]
     fn test_reject_fragment_in_authorization_server() {
-        assert!(ProtectedResourceMetadata::new(
-            "https://example.com/mcp",
-            vec!["https://auth.example.com#frag".to_string()],
-        )
-        .is_err());
+        assert!(
+            ProtectedResourceMetadata::new(
+                "https://example.com/mcp",
+                vec!["https://auth.example.com#frag".to_string()],
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn test_reject_non_http_scheme() {
-        assert!(ProtectedResourceMetadata::new(
-            "ftp://example.com/mcp",
-            vec!["https://auth.example.com".to_string()],
-        )
-        .is_err());
+        assert!(
+            ProtectedResourceMetadata::new(
+                "ftp://example.com/mcp",
+                vec!["https://auth.example.com".to_string()],
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn test_multiple_valid_authorization_servers() {
-        assert!(ProtectedResourceMetadata::new(
-            "https://example.com/mcp",
-            vec![
-                "https://a1.example.com".to_string(),
-                "https://a2.example.com".to_string(),
-            ],
-        )
-        .is_ok());
+        assert!(
+            ProtectedResourceMetadata::new(
+                "https://example.com/mcp",
+                vec![
+                    "https://a1.example.com".to_string(),
+                    "https://a2.example.com".to_string(),
+                ],
+            )
+            .is_ok()
+        );
     }
 }

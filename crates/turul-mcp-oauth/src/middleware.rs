@@ -65,26 +65,22 @@ impl McpMiddleware for OAuthResourceMiddleware {
         _session: Option<&dyn SessionView>,
         _injection: &mut SessionInjection,
     ) -> Result<(), MiddlewareError> {
-        let token = ctx.bearer_token().ok_or_else(|| {
-            MiddlewareError::http_challenge(401, self.build_challenge(""))
-        })?;
+        let token = ctx
+            .bearer_token()
+            .ok_or_else(|| MiddlewareError::http_challenge(401, self.build_challenge("")))?;
 
         debug!("Validating Bearer token for method: {}", ctx.method());
 
-        let claims = self
-            .jwt_validator
-            .validate(token)
-            .await
-            .map_err(|e| {
-                debug!("Token validation failed: {}", e);
-                MiddlewareError::http_challenge(
-                    401,
-                    self.build_challenge(&format!(
-                        ", error=\"invalid_token\", error_description=\"{}\"",
-                        e
-                    )),
-                )
-            })?;
+        let claims = self.jwt_validator.validate(token).await.map_err(|e| {
+            debug!("Token validation failed: {}", e);
+            MiddlewareError::http_challenge(
+                401,
+                self.build_challenge(&format!(
+                    ", error=\"invalid_token\", error_description=\"{}\"",
+                    e
+                )),
+            )
+        })?;
 
         // Write claims into extensions for downstream tools
         ctx.set_extension(
@@ -119,7 +115,10 @@ mod tests {
         .unwrap();
 
         let middleware = OAuthResourceMiddleware::new(
-            Arc::new(JwtValidator::new("http://localhost/jwks", "https://example.com/mcp")),
+            Arc::new(JwtValidator::new(
+                "http://localhost/jwks",
+                "https://example.com/mcp",
+            )),
             metadata,
         );
 
@@ -136,7 +135,10 @@ mod tests {
         .unwrap();
 
         let middleware = OAuthResourceMiddleware::new(
-            Arc::new(JwtValidator::new("http://localhost/jwks", "https://example.com/mcp")),
+            Arc::new(JwtValidator::new(
+                "http://localhost/jwks",
+                "https://example.com/mcp",
+            )),
             metadata,
         );
 

@@ -139,4 +139,3 @@ pub fn options_response() -> Response<JsonRpcBody> {
         .body(Full::new(Bytes::new()))
         .unwrap()
 }
-

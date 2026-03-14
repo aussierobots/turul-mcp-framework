@@ -115,10 +115,7 @@ mod tests {
             headers.get("Access-Control-Expose-Headers").unwrap(),
             "Mcp-Session-Id"
         );
-        assert_eq!(
-            headers.get("Access-Control-Max-Age").unwrap(),
-            CORS_MAX_AGE
-        );
+        assert_eq!(headers.get("Access-Control-Max-Age").unwrap(), CORS_MAX_AGE);
 
         // Wildcard origin must NOT include credentials
         assert!(
