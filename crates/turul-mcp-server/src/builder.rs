@@ -15,7 +15,7 @@ use crate::{
 use crate::{McpServer, McpTool, Result};
 use turul_mcp_protocol::McpError;
 use turul_mcp_protocol::initialize::*;
-use turul_mcp_protocol::{Implementation, ServerCapabilities};
+use turul_mcp_protocol::{Icon, Implementation, ServerCapabilities};
 
 /// Builder for MCP servers
 pub struct McpServerBuilder {
@@ -23,6 +23,7 @@ pub struct McpServerBuilder {
     name: String,
     version: String,
     title: Option<String>,
+    icons: Option<Vec<Icon>>,
 
     /// Server capabilities
     capabilities: ServerCapabilities,
@@ -202,6 +203,7 @@ impl McpServerBuilder {
             name: "turul-mcp-server".to_string(),
             version: "1.0.0".to_string(),
             title: None,
+            icons: None,
             capabilities: ServerCapabilities::default(),
             tools,
             resources: HashMap::new(),
@@ -254,6 +256,24 @@ impl McpServerBuilder {
     /// Sets the human-readable server title
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
+        self
+    }
+
+    /// Sets icons for the server (displayed by MCP clients like Claude Desktop)
+    ///
+    /// ```rust,no_run
+    /// use turul_mcp_server::prelude::*;
+    ///
+    /// McpServer::builder()
+    ///     .name("my-server")
+    ///     .icons(vec![Icon::new("https://example.com/logo.png")])
+    ///     // or embed as data URI:
+    ///     // .icons(vec![Icon::data_uri("image/svg+xml", "<base64>")])
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    pub fn icons(mut self, icons: Vec<Icon>) -> Self {
+        self.icons = Some(icons);
         self
     }
 
@@ -1580,6 +1600,9 @@ impl McpServerBuilder {
         let mut implementation = Implementation::new(&self.name, &self.version);
         if let Some(title) = self.title {
             implementation = implementation.with_title(title);
+        }
+        if let Some(icons) = self.icons {
+            implementation = implementation.with_icons(icons);
         }
 
         // Add RootsHandler if roots were configured

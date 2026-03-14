@@ -42,6 +42,7 @@ pub use crate::completion::{CompleteParams, CompleteResult, CompletionReference}
 
 // Initialize types
 pub use crate::McpVersion;
+pub use crate::icons::Icon;
 pub use crate::initialize::{ClientCapabilities, Implementation, InitializeRequest};
 
 // Common types
