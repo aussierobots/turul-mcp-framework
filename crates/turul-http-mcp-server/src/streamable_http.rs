@@ -1329,17 +1329,44 @@ impl StreamableHttpHandler {
                 let dispatcher = Arc::clone(&self.dispatcher);
                 let notification_clone = notification.clone();
 
-                // Spawn task to handle notification asynchronously (notifications are fire-and-forget)
-                tokio::spawn(async move {
+                // notifications/initialized MUST be processed synchronously before
+                // returning 202 — otherwise the next request (tools/list) can race
+                // ahead of the is_initialized state write. Other notifications are
+                // fire-and-forget and can be processed asynchronously.
+                //
+                // Per MCP spec, notifications always return 202 even on failure.
+                // If processing fails, we log the error — the next request will
+                // fail with "session not initialized" which points operators to
+                // the initialization failure in logs.
+                if notification_clone.method == "notifications/initialized" {
                     if let Err(e) = dispatcher
-                        .handle_notification_with_context(notification_clone, Some(session_context))
+                        .handle_notification_with_context(
+                            notification_clone,
+                            Some(session_context),
+                        )
                         .await
                     {
-                        error!("Failed to process notification: {}", e);
+                        error!(
+                            "Failed to process notifications/initialized: {}. \
+                             Session will remain uninitialized — subsequent requests will fail.",
+                            e
+                        );
                     }
-                });
+                } else {
+                    tokio::spawn(async move {
+                        if let Err(e) = dispatcher
+                            .handle_notification_with_context(
+                                notification_clone,
+                                Some(session_context),
+                            )
+                            .await
+                        {
+                            error!("Failed to process notification: {}", e);
+                        }
+                    });
+                }
 
-                // Return 202 Accepted with MCP headers (notifications are accepted immediately)
+                // Return 202 Accepted with MCP headers
                 Response::builder()
                     .status(StatusCode::ACCEPTED)
                     .header("MCP-Protocol-Version", context.protocol_version.as_str())

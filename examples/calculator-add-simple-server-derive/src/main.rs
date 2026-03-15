@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting calculator_add_derive server");
     let server = McpServer::builder()
         .name("calculator_add_derive")
-        .version("0.3.19")
+        .version("0.3.20")
         .title("Calculator Add Derive Server")
         .instructions("Add two numbers using derive macro (Level 2)")
         .tool(CalculatorAddDeriveTool { a: 0.0, b: 0.0 })

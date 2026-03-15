@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.20] - 2026-03-16
+
+### Fixed
+
+- **P0: Lambda missing `notifications/initialized` handler** (`turul-mcp-aws-lambda`): Lambda server never registered `InitializedNotificationHandler`, making `strict_lifecycle: true` (default since v0.3.19) non-functional — clients could never complete the MCP handshake. Now registered identically to the HTTP server path.
+- **P1: Lambda `tools/list` not session-aware** (`turul-mcp-aws-lambda`): `ListToolsHandler` in Lambda was constructed without session manager, bypassing strict lifecycle checks. Now uses `new_with_session_manager()` consistent with the HTTP server.
+- **P1: Streamable HTTP notification race** (`turul-http-mcp-server`): `notifications/initialized` was processed asynchronously via `tokio::spawn`, returning 202 before `is_initialized` was set. If the client sent `tools/list` immediately after, the session would be rejected. Now processed synchronously for `notifications/initialized` specifically; other notifications remain async.
+
+### Added
+
+- **Lambda strict lifecycle E2E tests** (`turul-mcp-aws-lambda`): 4 new tests over `handle_streaming()` with `MCP-Protocol-Version: 2025-11-25` — full handshake, rejection before initialized (with `-32031` error code assertions), immediate post-initialized race proof, and lenient mode fallback.
+
 ## [0.3.19] - 2026-03-15
 
 ### Changed
@@ -478,7 +490,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.19...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.20...HEAD
+[0.3.20]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.19...v0.3.20
 [0.3.19]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.18...v0.3.19
 [0.3.18]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.17...v0.3.18
 [0.3.17]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.16...v0.3.17

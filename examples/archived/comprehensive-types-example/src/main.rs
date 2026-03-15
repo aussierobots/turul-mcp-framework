@@ -205,7 +205,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting comprehensive types example server");
     let server = McpServer::builder()
         .name("comprehensive_types_example")
-        .version("0.3.19")
+        .version("0.3.20")
         .title("Comprehensive Types Example Server")
         .instructions("Demonstrates various parameter and output types for MCP tools")
         .tool(MathOperationsTool {

@@ -818,4 +818,365 @@ mod tests {
         // Note: GET /mcp would provide real-time streaming events
         // This is the optimal configuration for real-time notifications
     }
+
+    // ── Strict lifecycle tests over handle_streaming() ────────────────
+
+    /// Helper: build a Lambda handler with strict lifecycle and a test tool via the builder.
+    async fn build_strict_streaming_handler() -> LambdaMcpHandler {
+        use crate::LambdaMcpServerBuilder;
+        use turul_mcp_session_storage::InMemorySessionStorage;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("lifecycle-test")
+            .version("1.0.0")
+            .tool(LifecycleTestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .sse(true)
+            .build()
+            .await
+            .expect("build should succeed");
+
+        server.handler().await.expect("handler should succeed")
+    }
+
+    // Test tool for lifecycle tests — satisfies all required traits
+    #[derive(Clone, Default)]
+    struct LifecycleTestTool;
+
+    impl turul_mcp_builders::traits::HasBaseMetadata for LifecycleTestTool {
+        fn name(&self) -> &str { "ping_tool" }
+    }
+    impl turul_mcp_builders::traits::HasDescription for LifecycleTestTool {
+        fn description(&self) -> Option<&str> { Some("test tool") }
+    }
+    impl turul_mcp_builders::traits::HasInputSchema for LifecycleTestTool {
+        fn input_schema(&self) -> &turul_mcp_protocol::ToolSchema {
+            static SCHEMA: std::sync::OnceLock<turul_mcp_protocol::ToolSchema> = std::sync::OnceLock::new();
+            SCHEMA.get_or_init(turul_mcp_protocol::ToolSchema::object)
+        }
+    }
+    impl turul_mcp_builders::traits::HasOutputSchema for LifecycleTestTool {
+        fn output_schema(&self) -> Option<&turul_mcp_protocol::ToolSchema> { None }
+    }
+    impl turul_mcp_builders::traits::HasAnnotations for LifecycleTestTool {
+        fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
+    }
+    impl turul_mcp_builders::traits::HasToolMeta for LifecycleTestTool {
+        fn tool_meta(&self) -> Option<&std::collections::HashMap<String, serde_json::Value>> { None }
+    }
+    impl turul_mcp_builders::traits::HasIcons for LifecycleTestTool {}
+    impl turul_mcp_builders::traits::HasExecution for LifecycleTestTool {}
+
+    #[async_trait::async_trait]
+    impl turul_mcp_server::McpTool for LifecycleTestTool {
+        async fn call(
+            &self,
+            _args: serde_json::Value,
+            _session: Option<turul_mcp_server::SessionContext>,
+        ) -> turul_mcp_server::McpResult<turul_mcp_protocol::tools::CallToolResult> {
+            Ok(turul_mcp_protocol::tools::CallToolResult::success(vec![
+                turul_mcp_protocol::tools::ToolResult::text("pong"),
+            ]))
+        }
+    }
+
+    /// Helper: create a Lambda POST request for handle_streaming()
+    fn streaming_mcp_request(body: &str, session_id: Option<&str>) -> LambdaRequest {
+        let mut builder = Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json, text/event-stream")
+            .header("MCP-Protocol-Version", "2025-11-25");
+
+        if let Some(sid) = session_id {
+            builder = builder.header("Mcp-Session-Id", sid);
+        }
+
+        builder
+            .body(LambdaBody::Text(body.to_string()))
+            .unwrap()
+    }
+
+    /// Helper: collect streaming response body into a string
+    async fn collect_streaming_body(
+        response: lambda_http::Response<
+            http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>,
+        >,
+    ) -> (http::StatusCode, String) {
+        use http_body_util::BodyExt;
+        let status = response.status();
+        let session_id = response
+            .headers()
+            .get("Mcp-Session-Id")
+            .and_then(|v| v.to_str().ok())
+            .map(String::from);
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .map(|c| c.to_bytes())
+            .unwrap_or_default();
+        let body_str = String::from_utf8_lossy(&body_bytes).to_string();
+        let _ = session_id; // available if needed
+        (status, body_str)
+    }
+
+    /// Helper: extract session ID from a streaming response
+    fn extract_session_id(
+        response: &lambda_http::Response<
+            http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>,
+        >,
+    ) -> Option<String> {
+        response
+            .headers()
+            .get("Mcp-Session-Id")
+            .and_then(|v| v.to_str().ok())
+            .map(String::from)
+    }
+
+    /// Helper: parse JSON from a response body (handles SSE "data: " prefix)
+    fn parse_response_json(body: &str) -> serde_json::Value {
+        // Strip SSE framing if present
+        let json_str = body
+            .lines()
+            .find(|line| line.starts_with("data: "))
+            .map(|line| &line[6..])
+            .unwrap_or(body.trim());
+        serde_json::from_str(json_str)
+            .unwrap_or_else(|e| panic!("Failed to parse JSON from body: {e}\nBody: {body}"))
+    }
+
+    /// P0: Full strict lifecycle handshake succeeds on handle_streaming()
+    #[tokio::test]
+    async fn test_lambda_streaming_strict_handshake_succeeds() {
+        let handler = build_strict_streaming_handler().await;
+
+        // Step 1: initialize
+        let init_req = streaming_mcp_request(
+            &serde_json::json!({
+                "jsonrpc": "2.0", "method": "initialize", "id": 1,
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": { "name": "test", "version": "1.0.0" }
+                }
+            }).to_string(),
+            None,
+        );
+        let init_resp = handler.handle_streaming(init_req).await.expect("initialize should succeed");
+        let session_id = extract_session_id(&init_resp).expect("must return session ID");
+        let (status, _body) = collect_streaming_body(init_resp).await;
+        assert_eq!(status, 200, "initialize should return 200");
+
+        // Step 2: notifications/initialized
+        let notif_req = streaming_mcp_request(
+            &serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+                "params": {}
+            }).to_string(),
+            Some(&session_id),
+        );
+        let notif_resp = handler.handle_streaming(notif_req).await.expect("notification should succeed");
+        let (status, _) = collect_streaming_body(notif_resp).await;
+        assert_eq!(status, 202, "notifications/initialized should return 202");
+
+        // Step 3: tools/list
+        let list_req = streaming_mcp_request(
+            &serde_json::json!({
+                "jsonrpc": "2.0", "method": "tools/list", "id": 2
+            }).to_string(),
+            Some(&session_id),
+        );
+        let list_resp = handler.handle_streaming(list_req).await.expect("tools/list should succeed");
+        let (status, body) = collect_streaming_body(list_resp).await;
+        assert_eq!(status, 200, "tools/list should return 200");
+        let json = parse_response_json(&body);
+        assert!(json["result"]["tools"].is_array(), "tools/list should return tools array: {json}");
+
+        // Step 4: tools/call
+        let call_req = streaming_mcp_request(
+            &serde_json::json!({
+                "jsonrpc": "2.0", "method": "tools/call", "id": 3,
+                "params": { "name": "ping_tool", "arguments": {} }
+            }).to_string(),
+            Some(&session_id),
+        );
+        let call_resp = handler.handle_streaming(call_req).await.expect("tools/call should succeed");
+        let (status, body) = collect_streaming_body(call_resp).await;
+        assert_eq!(status, 200, "tools/call should return 200");
+        let json = parse_response_json(&body);
+        assert!(json["result"].is_object(), "tools/call should return result: {json}");
+    }
+
+    /// P0: Strict lifecycle rejects both tools/list and tools/call before notifications/initialized
+    #[tokio::test]
+    async fn test_lambda_streaming_strict_rejects_before_initialized() {
+        let handler = build_strict_streaming_handler().await;
+
+        // Initialize to get session
+        let init_req = streaming_mcp_request(
+            &serde_json::json!({
+                "jsonrpc": "2.0", "method": "initialize", "id": 1,
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": { "name": "test", "version": "1.0.0" }
+                }
+            }).to_string(),
+            None,
+        );
+        let init_resp = handler.handle_streaming(init_req).await.unwrap();
+        let session_id = extract_session_id(&init_resp).unwrap();
+        let _ = collect_streaming_body(init_resp).await;
+
+        // tools/list without notifications/initialized — must fail
+        let list_req = streaming_mcp_request(
+            &serde_json::json!({
+                "jsonrpc": "2.0", "method": "tools/list", "id": 2
+            }).to_string(),
+            Some(&session_id),
+        );
+        let list_resp = handler.handle_streaming(list_req).await.unwrap();
+        let (_, body) = collect_streaming_body(list_resp).await;
+        let json = parse_response_json(&body);
+        assert!(json["error"].is_object(), "tools/list should return JSON-RPC error: {json}");
+        assert_eq!(
+            json["error"]["code"].as_i64().unwrap(),
+            -32031,
+            "tools/list must return SessionError code -32031, got: {json}"
+        );
+        assert!(
+            json["error"]["message"].as_str().unwrap().contains("notifications/initialized"),
+            "Error must mention notifications/initialized: {}",
+            json["error"]["message"]
+        );
+
+        // tools/call without notifications/initialized — must also fail
+        let call_req = streaming_mcp_request(
+            &serde_json::json!({
+                "jsonrpc": "2.0", "method": "tools/call", "id": 3,
+                "params": { "name": "ping_tool", "arguments": {} }
+            }).to_string(),
+            Some(&session_id),
+        );
+        let call_resp = handler.handle_streaming(call_req).await.unwrap();
+        let (_, body) = collect_streaming_body(call_resp).await;
+        let json = parse_response_json(&body);
+        assert!(json["error"].is_object(), "tools/call should return JSON-RPC error: {json}");
+        assert_eq!(
+            json["error"]["code"].as_i64().unwrap(),
+            -32031,
+            "tools/call must return SessionError code -32031, got: {json}"
+        );
+        assert!(
+            json["error"]["message"].as_str().unwrap().contains("notifications/initialized"),
+            "Error must mention notifications/initialized: {}",
+            json["error"]["message"]
+        );
+    }
+
+    /// P0: tools/list succeeds immediately after notifications/initialized (race fix proof)
+    #[tokio::test]
+    async fn test_lambda_streaming_initialized_is_effective_immediately() {
+        let handler = build_strict_streaming_handler().await;
+
+        // Initialize
+        let init_req = streaming_mcp_request(
+            &serde_json::json!({
+                "jsonrpc": "2.0", "method": "initialize", "id": 1,
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": { "name": "test", "version": "1.0.0" }
+                }
+            }).to_string(),
+            None,
+        );
+        let init_resp = handler.handle_streaming(init_req).await.unwrap();
+        let session_id = extract_session_id(&init_resp).unwrap();
+        let _ = collect_streaming_body(init_resp).await;
+
+        // notifications/initialized
+        let notif_req = streaming_mcp_request(
+            &serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/initialized",
+                "params": {}
+            }).to_string(),
+            Some(&session_id),
+        );
+        let notif_resp = handler.handle_streaming(notif_req).await.unwrap();
+        let (status, _) = collect_streaming_body(notif_resp).await;
+        assert_eq!(status, 202);
+
+        // Immediately — no delay — send tools/list
+        let list_req = streaming_mcp_request(
+            &serde_json::json!({
+                "jsonrpc": "2.0", "method": "tools/list", "id": 2
+            }).to_string(),
+            Some(&session_id),
+        );
+        let list_resp = handler.handle_streaming(list_req).await.unwrap();
+        let (status, body) = collect_streaming_body(list_resp).await;
+        assert_eq!(status, 200, "tools/list must succeed immediately after initialized");
+        let json = parse_response_json(&body);
+        assert!(
+            json["result"]["tools"].is_array(),
+            "Must return tools list, not error: {json}"
+        );
+    }
+
+    /// P1: Lenient mode allows operations without notifications/initialized
+    #[tokio::test]
+    async fn test_lambda_streaming_lenient_mode_allows_without_initialized() {
+        use crate::LambdaMcpServerBuilder;
+        use turul_mcp_session_storage::InMemorySessionStorage;
+
+        let server = LambdaMcpServerBuilder::new()
+            .name("lenient-test")
+            .version("1.0.0")
+            .tool(LifecycleTestTool)
+            .storage(Arc::new(InMemorySessionStorage::new()))
+            .strict_lifecycle(false) // lenient mode
+            .sse(true)
+            .build()
+            .await
+            .unwrap();
+
+        let handler = server.handler().await.unwrap();
+
+        // Initialize (no notifications/initialized)
+        let init_req = streaming_mcp_request(
+            &serde_json::json!({
+                "jsonrpc": "2.0", "method": "initialize", "id": 1,
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": { "name": "test", "version": "1.0.0" }
+                }
+            }).to_string(),
+            None,
+        );
+        let init_resp = handler.handle_streaming(init_req).await.unwrap();
+        let session_id = extract_session_id(&init_resp).unwrap();
+        let _ = collect_streaming_body(init_resp).await;
+
+        // Skip notifications/initialized — go straight to tools/list
+        let list_req = streaming_mcp_request(
+            &serde_json::json!({
+                "jsonrpc": "2.0", "method": "tools/list", "id": 2
+            }).to_string(),
+            Some(&session_id),
+        );
+        let list_resp = handler.handle_streaming(list_req).await.unwrap();
+        let (status, body) = collect_streaming_body(list_resp).await;
+        assert_eq!(status, 200, "Lenient mode should allow tools/list without initialized");
+        let json = parse_response_json(&body);
+        assert!(
+            json["result"]["tools"].is_array(),
+            "Must return tools list in lenient mode: {json}"
+        );
+    }
 }

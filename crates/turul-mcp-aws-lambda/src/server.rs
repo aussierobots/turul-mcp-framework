@@ -219,9 +219,14 @@ impl LambdaMcpServer {
         );
         dispatcher.register_method("initialize".to_string(), init_handler);
 
-        // Create tools/list handler (reuse MCP server handler)
+        // Create session-aware tools/list handler (reuse MCP server handler)
         use turul_mcp_server::ListToolsHandler;
-        let list_handler = ListToolsHandler::new(self.tools.clone(), self.task_runtime.is_some());
+        let list_handler = ListToolsHandler::new_with_session_manager(
+            self.tools.clone(),
+            self.session_manager.clone(),
+            self.strict_lifecycle,
+            self.task_runtime.is_some(),
+        );
         dispatcher.register_method("tools/list".to_string(), list_handler);
 
         // Create session-aware tool handler for tools/call (reuse MCP server handler)
@@ -246,6 +251,19 @@ impl LambdaMcpServer {
             );
             dispatcher.register_method(method.clone(), bridge_handler);
         }
+
+        // Register notifications/initialized handler — required for strict lifecycle.
+        // Without this, clients can never complete the MCP handshake.
+        use turul_mcp_server::handlers::InitializedNotificationHandler;
+        let initialized_handler =
+            InitializedNotificationHandler::new(self.session_manager.clone());
+        let initialized_bridge = SessionAwareMcpHandlerBridge::new(
+            Arc::new(initialized_handler),
+            self.session_manager.clone(),
+            self.strict_lifecycle,
+        );
+        dispatcher
+            .register_method("notifications/initialized".to_string(), initialized_bridge);
 
         // Create the Lambda handler with all components and middleware
         let middleware_stack = Arc::new(self.middleware_stack.clone());
