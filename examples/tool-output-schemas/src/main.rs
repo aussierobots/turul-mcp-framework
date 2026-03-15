@@ -190,7 +190,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create server with tools that use schemars
     let server = McpServer::builder()
         .name("tool-output-schemas-server")
-        .version("0.3.15")
+        .version("0.3.16")
         .tool(CalculatorDeriveTool::default())
         .tool(add_numbers())
         .tool(AnalyzeDataTool::default())

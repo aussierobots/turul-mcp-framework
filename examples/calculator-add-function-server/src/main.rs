@@ -26,7 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("calculator_add_function")
-        .version("0.3.15")
+        .version("0.3.16")
         .title("Calculator Add Function Server")
         .instructions("Add two numbers using function macro (Level 1 - Ultra Simple)")
         .tool_fn(calculator_add) // Perfect! Use the original function name

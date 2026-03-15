@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.16] - 2026-03-15
+
+### Added
+
+- **Fixed-size array `[T; N]` support in `#[mcp_tool]` schema generation** (`turul-mcp-derive`): `type_to_schema` now handles `[f64; 3]`, `[String; 2]`, `[i32; 4]`, etc. — generating `{"type": "array", "items": ..., "minItems": N, "maxItems": N}` instead of silently falling back to `"type": "string"`. Also handles `Option<[T; N]>`.
+- **`with_min_items()` / `with_max_items()` builder methods** (`turul-mcp-protocol-2025-11-25`): `JsonSchema::Array` now supports min/max item count constraints via builder chain.
+
+### Fixed
+
+- **E2E test expected 401 instead of 404 for nonexistent session** (`streamable_http_e2e.rs`): Updated `test_strict_lifecycle_enforcement_over_streamable_http` to expect 404 per MCP 2025-11-25 spec (regression from v0.3.14 session-404 fix).
+
 ## [0.3.15] - 2026-03-14
 
 ### Added
@@ -441,7 +452,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.15...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.16...HEAD
+[0.3.16]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.15...v0.3.16
 [0.3.15]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.14...v0.3.15
 [0.3.14]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.13...v0.3.14
 [0.3.13]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.12...v0.3.13

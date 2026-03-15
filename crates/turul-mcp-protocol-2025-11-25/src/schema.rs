@@ -261,6 +261,22 @@ impl JsonSchema {
         }
         self
     }
+
+    /// Set minimum number of items for array schema
+    pub fn with_min_items(mut self, min: u64) -> Self {
+        if let JsonSchema::Array { min_items, .. } = &mut self {
+            *min_items = Some(min);
+        }
+        self
+    }
+
+    /// Set maximum number of items for array schema
+    pub fn with_max_items(mut self, max: u64) -> Self {
+        if let JsonSchema::Array { max_items, .. } = &mut self {
+            *max_items = Some(max);
+        }
+        self
+    }
 }
 
 /// Converts common Rust types to JsonSchema
@@ -353,6 +369,30 @@ mod tests {
         let schema = JsonSchema::array(JsonSchema::string());
         let json = serde_json::to_string(&schema).unwrap();
         assert!(json.contains("array"));
+    }
+
+    #[test]
+    fn test_fixed_length_array_schema() {
+        let schema = JsonSchema::array(JsonSchema::number())
+            .with_min_items(3)
+            .with_max_items(3);
+        let json = serde_json::to_string(&schema).unwrap();
+        assert!(json.contains(r#""type":"array""#), "Must be array type");
+        assert!(json.contains(r#""minItems":3"#), "Must have minItems: {json}");
+        assert!(json.contains(r#""maxItems":3"#), "Must have maxItems: {json}");
+        assert!(
+            json.contains(r#""type":"number""#),
+            "Items must be number: {json}"
+        );
+    }
+
+    #[test]
+    fn test_min_max_items_ignored_on_non_array() {
+        // with_min_items/with_max_items should be no-ops on non-array schemas
+        let schema = JsonSchema::string().with_min_items(3).with_max_items(5);
+        let json = serde_json::to_string(&schema).unwrap();
+        assert!(!json.contains("minItems"), "String should not have minItems");
+        assert!(!json.contains("maxItems"), "String should not have maxItems");
     }
 
     #[test]

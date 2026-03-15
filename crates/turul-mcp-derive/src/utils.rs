@@ -359,6 +359,17 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                 }
             }
         }
+        // Fixed-size array [T; N] → array schema with minItems/maxItems
+        syn::Type::Array(array) => {
+            let items_schema = type_to_schema(&array.elem, &ParamMeta::default());
+            let len = &array.len;
+            quote! {
+                turul_mcp_protocol::schema::JsonSchema::array(#items_schema)
+                    .with_min_items(#len as u64)
+                    .with_max_items(#len as u64)
+                    #description
+            }
+        }
         _ => {
             quote! {
                 turul_mcp_protocol::schema::JsonSchema::string() #description

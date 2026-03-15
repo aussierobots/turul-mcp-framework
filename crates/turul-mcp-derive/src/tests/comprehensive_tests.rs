@@ -365,6 +365,86 @@ mod schema_generation_tests {
             "std::vec::Vec<String> should produce array schema, got: {schema_str}"
         );
     }
+
+    #[test]
+    fn test_fixed_array_f64_schema() {
+        let ty: Type = parse_quote! { [f64; 3] };
+        let meta = ParamMeta::default();
+
+        let schema = type_to_schema(&ty, &meta);
+        let schema_str = schema.to_string();
+
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::array"),
+            "[f64; 3] should produce array schema, got: {schema_str}"
+        );
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::number"),
+            "[f64; 3] items should be number schema, got: {schema_str}"
+        );
+        assert!(
+            contains_pattern(&schema_str, "with_min_items"),
+            "[f64; 3] should set min_items, got: {schema_str}"
+        );
+        assert!(
+            contains_pattern(&schema_str, "with_max_items"),
+            "[f64; 3] should set max_items, got: {schema_str}"
+        );
+    }
+
+    #[test]
+    fn test_fixed_array_string_schema() {
+        let ty: Type = parse_quote! { [String; 2] };
+        let meta = ParamMeta::default();
+
+        let schema = type_to_schema(&ty, &meta);
+        let schema_str = schema.to_string();
+
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::array"),
+            "[String; 2] should produce array schema, got: {schema_str}"
+        );
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::string"),
+            "[String; 2] items should be string schema, got: {schema_str}"
+        );
+    }
+
+    #[test]
+    fn test_fixed_array_i32_schema() {
+        let ty: Type = parse_quote! { [i32; 4] };
+        let meta = ParamMeta::default();
+
+        let schema = type_to_schema(&ty, &meta);
+        let schema_str = schema.to_string();
+
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::array"),
+            "[i32; 4] should produce array schema, got: {schema_str}"
+        );
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::integer"),
+            "[i32; 4] items should be integer schema, got: {schema_str}"
+        );
+    }
+
+    #[test]
+    fn test_option_fixed_array_schema() {
+        let ty: Type = parse_quote! { Option<[f64; 3]> };
+        let meta = ParamMeta::default();
+
+        let schema = type_to_schema(&ty, &meta);
+        let schema_str = schema.to_string();
+
+        assert!(
+            contains_pattern(&schema_str, "JsonSchema::array"),
+            "Option<[f64; 3]> should produce array schema, got: {schema_str}"
+        );
+        assert!(
+            contains_pattern(&schema_str, "with_min_items"),
+            "Option<[f64; 3]> should preserve min_items, got: {schema_str}"
+        );
+    }
 }
 
 /// Test suite for parameter extraction code generation

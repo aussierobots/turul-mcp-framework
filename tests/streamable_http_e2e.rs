@@ -1717,18 +1717,16 @@ async fn test_strict_lifecycle_enforcement_over_streamable_http() {
         .await
         .expect("Request failed");
 
-    // Streamable HTTP returns HTTP 401 for strict lifecycle violations
+    // MCP 2025-11-25 spec: nonexistent session ID → 404 Not Found
+    // (not 401 — that's for missing auth tokens, not stale sessions)
     assert_eq!(
         response.status(),
-        StatusCode::UNAUTHORIZED,
-        "Streamable HTTP should return 401 for lifecycle violations"
+        StatusCode::NOT_FOUND,
+        "Streamable HTTP should return 404 for nonexistent session per MCP spec"
     );
 
     println!(
-        "✅ Strict lifecycle enforcement confirmed over streamable HTTP - returns 401 for unauthorized requests"
-    );
-    println!(
-        "✅ This proves the SessionAwareMcpHandlerBridge is working correctly for both HTTP transports"
+        "✅ Strict lifecycle enforcement confirmed over streamable HTTP - returns 404 for nonexistent session"
     );
 }
 
