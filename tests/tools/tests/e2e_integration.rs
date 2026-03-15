@@ -470,20 +470,31 @@ async fn test_progress_tracker_with_notifications() {
     let sse_client = reqwest::Client::new();
     let sse_url = format!("http://127.0.0.1:{}/mcp", server.port());
 
+    // Use a channel to signal when the SSE HTTP response is received (200 OK).
+    // This confirms the server has opened the SSE stream and registered the
+    // subscription before we trigger tools/call.
+    let (ready_tx, ready_rx) = tokio::sync::oneshot::channel::<()>();
+
     let sse_handle = tokio::spawn(async move {
-        let mut response = sse_client
+        let response = sse_client
             .get(&sse_url)
             .header("Accept", "text/event-stream")
+            .header("MCP-Protocol-Version", "2025-11-25")
             .header("mcp-session-id", &session_id)
             .send()
             .await
             .expect("Failed to connect to SSE");
 
+        // Signal readiness as soon as we get the HTTP response (stream is open)
+        let _ = ready_tx.send(());
+        info!("✅ SSE stream opened (HTTP {})", response.status());
+
         let mut progress_events = Vec::new();
         let start = tokio::time::Instant::now();
+        let mut response = response;
 
-        // Listen for progress events for up to 4 seconds
-        while start.elapsed() < tokio::time::Duration::from_secs(4) && progress_events.len() < 3 {
+        // Listen for progress events for up to 6 seconds
+        while start.elapsed() < tokio::time::Duration::from_secs(6) && progress_events.len() < 3 {
             if let Some(chunk) = response.chunk().await.unwrap_or(None)
                 && let Ok(text) = String::from_utf8(chunk.to_vec())
                 && !text.trim().is_empty()
@@ -507,8 +518,17 @@ async fn test_progress_tracker_with_notifications() {
         progress_events
     });
 
-    // Wait a moment for SSE connection to establish
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    // Wait for SSE stream to open (HTTP response received)
+    tokio::time::timeout(
+        tokio::time::Duration::from_secs(3),
+        ready_rx,
+    )
+    .await
+    .expect("SSE connection did not open within 3 seconds")
+    .expect("SSE ready channel dropped");
+
+    // Brief yield to let the server register the SSE subscription
+    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
 
     // Now call a long-running progress tracker tool
     let _progress_result = client

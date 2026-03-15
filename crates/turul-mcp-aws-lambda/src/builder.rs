@@ -2032,7 +2032,8 @@ mod tests {
             .unwrap()
             .to_string();
 
-        // Send resources/read — should get a domain error, NOT "method not found"
+        // Send resources/read — should get a JSON-RPC error (handler registered),
+        // NOT a "method not found" error (handler missing)
         let read_req = http::Request::builder()
             .method("POST")
             .uri("/mcp")
@@ -2046,45 +2047,94 @@ mod tests {
             .unwrap();
         let read_resp = handler.handle(read_req).await.unwrap();
         let body = String::from_utf8_lossy(read_resp.body().as_ref()).to_string();
+        let json: serde_json::Value = serde_json::from_str(&body)
+            .unwrap_or_else(|e| panic!("Response must be valid JSON: {e}\nBody: {body}"));
 
-        // Must NOT be "method not found" — that would mean the handler isn't registered
+        // Must be a JSON-RPC error response with an error object
         assert!(
-            !body.contains("method not found") && !body.contains("Method not found"),
-            "resources/read must be registered (got method-not-found): {body}"
+            json["error"].is_object(),
+            "resources/read must return JSON-RPC error, got: {json}"
+        );
+        // The error code must NOT be -32601 (method not found) — that would mean
+        // the handler isn't registered. Any other error code (e.g., resource not found)
+        // proves the handler IS registered and executed.
+        let error_code = json["error"]["code"].as_i64().unwrap();
+        assert_ne!(
+            error_code, -32601,
+            "resources/read must be registered (got method-not-found -32601): {json}"
         );
     }
 
-    /// Verify resources/templates/list is NOT available when no templates exist.
+    /// Verify resources/templates/list is NOT dispatched when no templates exist.
     /// HTTP server only registers it conditionally — Lambda must match.
+    /// We prove absence by sending a request and verifying "method not found" (-32601).
     #[tokio::test]
     async fn test_resources_templates_list_absent_without_templates() {
+        use lambda_http::Body as LambdaBody;
+
         let server = LambdaMcpServerBuilder::new()
             .name("parity-test")
             .version("1.0.0")
             .tool(TestTool) // tools only, no templates
             .storage(Arc::new(InMemorySessionStorage::new()))
+            .strict_lifecycle(false) // skip handshake for this test
             .sse(false)
             .build()
             .await
             .unwrap();
 
-        // resources/templates capability should not be advertised
-        let caps = server.capabilities();
-        let has_templates = caps
-            .resources
-            .as_ref()
-            .and_then(|r| r.list_changed)
-            .unwrap_or(false);
-        // The real check: templates/list should not be in the capabilities
-        // when no template resources are registered.
-        // We verify through capabilities since we can't access handlers directly.
+        let handler = server.handler().await.unwrap();
+
+        // Initialize to get session
+        let init_req = http::Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .header("Content-Type", "application/json")
+            .header("MCP-Protocol-Version", "2025-11-25")
+            .body(LambdaBody::Text(serde_json::json!({
+                "jsonrpc": "2.0", "method": "initialize", "id": 1,
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": { "name": "test", "version": "1.0.0" }
+                }
+            }).to_string()))
+            .unwrap();
+        let init_resp = handler.handle(init_req).await.unwrap();
+        let session_id = init_resp
+            .headers()
+            .get("Mcp-Session-Id")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        // Send resources/templates/list — should get "method not found" (-32601)
+        // because no templates are registered
+        let tmpl_req = http::Request::builder()
+            .method("POST")
+            .uri("/mcp")
+            .header("Content-Type", "application/json")
+            .header("MCP-Protocol-Version", "2025-11-25")
+            .header("Mcp-Session-Id", &session_id)
+            .body(LambdaBody::Text(serde_json::json!({
+                "jsonrpc": "2.0", "method": "resources/templates/list", "id": 2
+            }).to_string()))
+            .unwrap();
+        let tmpl_resp = handler.handle(tmpl_req).await.unwrap();
+        let body = String::from_utf8_lossy(tmpl_resp.body().as_ref()).to_string();
+        let json: serde_json::Value = serde_json::from_str(&body)
+            .unwrap_or_else(|e| panic!("Response must be valid JSON: {e}\nBody: {body}"));
+
+        // Must be method not found — handler should NOT be registered without templates
         assert!(
-            caps.resources
-                .as_ref()
-                .map(|_| true)
-                .unwrap_or(false)
-                || !has_templates,
-            "Server with no templates should not expose template capability prominently"
+            json["error"].is_object(),
+            "resources/templates/list should return error without templates: {json}"
+        );
+        assert_eq!(
+            json["error"]["code"].as_i64().unwrap(),
+            -32601,
+            "resources/templates/list must be method-not-found (-32601) without templates: {json}"
         );
     }
 }
