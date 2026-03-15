@@ -40,7 +40,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_events_per_session: 1000,
         enable_backup: true,
         enable_encryption: true,
-        create_tables_if_missing: false, // Not creating, just connecting
+        verify_tables: true,
+            create_tables: false, // Not creating, just connecting
     };
 
     // Initialize DynamoDB session storage

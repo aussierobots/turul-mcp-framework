@@ -153,7 +153,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_events_per_session: 1000,
         enable_pooling_optimizations: true,
         statement_timeout_secs: 30,
-        create_tables_if_missing: true,
+        verify_tables: true,
+            create_tables: true,
     };
 
     info!(

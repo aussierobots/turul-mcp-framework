@@ -420,7 +420,8 @@ async fn main() -> Result<()> {
 
                 let config = SqliteConfig {
                     database_path: db_path,
-                    create_tables_if_missing: create_tables,
+                    verify_tables: create_tables,
+                    create_tables: create_tables,
                     ..Default::default()
                 };
                 if create_tables {
@@ -494,7 +495,8 @@ async fn main() -> Result<()> {
             {
                 info!("   Using DynamoDB session storage");
                 let config = DynamoDbConfig {
-                    create_tables_if_missing: create_tables,
+                    verify_tables: create_tables,
+                    create_tables: create_tables,
                     ..Default::default()
                 };
                 if create_tables {

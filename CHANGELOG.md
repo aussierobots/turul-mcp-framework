@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.18] - 2026-03-15
+
+### Changed
+
+- **`create_tables_if_missing` replaced with `verify_tables` + `create_tables`** (`turul-mcp-session-storage`, `turul-mcp-task-storage`): All 6 storage config structs (SQLite, PostgreSQL, DynamoDB × session + task) now use two granular flags. `verify_tables: false` (default) skips all startup verification — eliminates ~1,884 DynamoDB API calls/hour per Lambda server. `create_tables: true` creates tables when missing (only when `verify_tables: true`). **Breaking:** default changed from auto-create to skip-all. For first-time setup, use `verify_tables: true, create_tables: true`.
+
+### Fixed
+
+- **SQLite/PostgreSQL session storage now respect table verification flag** — previously called `migrate()` unconditionally, ignoring the config flag.
+
 ## [0.3.17] - 2026-03-15
 
 ### Added
@@ -458,7 +468,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.17...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.18...HEAD
+[0.3.18]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.17...v0.3.18
 [0.3.17]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.16...v0.3.17
 [0.3.16]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.15...v0.3.16
 [0.3.15]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.14...v0.3.15

@@ -5,7 +5,7 @@ This example demonstrates DynamoDB-backed session storage for MCP servers. It sh
 ## Features
 
 - **Session-scoped storage**: Each MCP session gets isolated key-value storage in DynamoDB
-- **Automatic table creation**: Tables are created automatically when `create_tables_if_missing: true`
+- **Automatic table creation**: Tables are created automatically when `verify_tables: true, create_tables: true`
 - **TTL cleanup**: Sessions and events automatically expire based on configured TTL
 - **AWS native**: Uses AWS SDK with proper IAM integration
 

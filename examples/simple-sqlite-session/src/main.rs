@@ -155,7 +155,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session_timeout_minutes: 30,
         cleanup_interval_minutes: 5,
         max_events_per_session: 500,
-        create_tables_if_missing: true,
+        verify_tables: true,
+            create_tables: true,
         create_database_if_missing: true,
     };
 

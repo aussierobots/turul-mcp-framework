@@ -154,7 +154,8 @@ let server = McpServer::builder().name("my-server").build()?;
 use turul_mcp_session_storage::{SqliteConfig, SqliteSessionStorage};
 let config = SqliteConfig {
     database_path: PathBuf::from("./sessions.db"),
-    create_tables_if_missing: true,
+    verify_tables: true,
+    create_tables: true,
     ..Default::default()
 };
 let storage = Arc::new(SqliteSessionStorage::with_config(config).await?);
@@ -167,7 +168,8 @@ let server = McpServer::builder()
 use turul_mcp_session_storage::{PostgresConfig, PostgresSessionStorage};
 let config = PostgresConfig {
     database_url: std::env::var("DATABASE_URL")?,
-    create_tables_if_missing: true,
+    verify_tables: true,
+    create_tables: true,
     ..Default::default()
 };
 let storage = Arc::new(PostgresSessionStorage::with_config(config).await?);
@@ -180,7 +182,8 @@ let server = McpServer::builder()
 use turul_mcp_session_storage::{DynamoDbConfig, DynamoDbSessionStorage};
 let config = DynamoDbConfig {
     table_name: "mcp-sessions".to_string(),
-    create_tables_if_missing: true,
+    verify_tables: true,
+    create_tables: true,
     ..Default::default()
 };
 let storage = Arc::new(DynamoDbSessionStorage::with_config(config).await?);
@@ -197,7 +200,8 @@ use turul_mcp_task_storage::{SqliteTaskConfig, SqliteTaskStorage};
 
 let config = SqliteTaskConfig {
     database_path: PathBuf::from("./tasks.db"),
-    create_tables_if_missing: true,
+    verify_tables: true,
+    create_tables: true,
     ..Default::default()
 };
 let storage = Arc::new(SqliteTaskStorage::with_config(config).await?);
@@ -225,7 +229,8 @@ See: [CLAUDE.md — Task Storage & Executor Architecture](https://github.com/aus
 | `session_timeout_minutes` | `u32` | `30` | Session TTL |
 | `cleanup_interval_minutes` | `u32` | `5` | Background cleanup interval |
 | `max_events_per_session` | `u32` | `1000` | Max stored events |
-| `create_tables_if_missing` | `bool` | `true` | Auto-create schema |
+| `verify_tables` | `bool` | `false` | Verify tables at startup |
+| `create_tables` | `bool` | `false` | Create tables if missing (requires `verify_tables`) |
 | `create_database_if_missing` | `bool` | `true` | Auto-create DB file |
 
 ### PostgresConfig (Session)
@@ -241,7 +246,8 @@ See: [CLAUDE.md — Task Storage & Executor Architecture](https://github.com/aus
 | `max_events_per_session` | `u32` | `1000` | Max stored events |
 | `enable_pooling_optimizations` | `bool` | `true` | Pool tuning |
 | `statement_timeout_secs` | `u32` | `30` | Query timeout |
-| `create_tables_if_missing` | `bool` | `true` | Auto-create schema |
+| `verify_tables` | `bool` | `false` | Verify tables at startup |
+| `create_tables` | `bool` | `false` | Create tables if missing (requires `verify_tables`) |
 
 ### DynamoDbConfig (Session)
 
@@ -254,6 +260,7 @@ See: [CLAUDE.md — Task Storage & Executor Architecture](https://github.com/aus
 | `max_events_per_session` | `u64` | `1000` | Max stored events |
 | `enable_backup` | `bool` | `true` | Point-in-time recovery |
 | `enable_encryption` | `bool` | `true` | Server-side encryption |
-| `create_tables_if_missing` | `bool` | `true` | Auto-create table |
+| `verify_tables` | `bool` | `false` | Verify tables at startup |
+| `create_tables` | `bool` | `false` | Create tables if missing (requires `verify_tables`) |
 
 > **Important:** DynamoDB TTL defaults are intentionally short (5 minutes) for framework testing. Production deployments should explicitly set `session_ttl_minutes` and `event_ttl_minutes` to appropriate values (e.g., 1440 for 24 hours).

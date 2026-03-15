@@ -146,7 +146,7 @@ let storage = Arc::new(
 
 Wire into the builder with `.storage(storage)`.
 
-**Note:** `DynamoDbSessionStorage::new()` does **not** read a `MCP_SESSION_TABLE` env var — table name is hardcoded to `"mcp-sessions"` in the default config. Use `with_config()` to customize. Auto-creates tables when `create_tables_if_missing: true` (default).
+**Note:** `DynamoDbSessionStorage::new()` does **not** read a `MCP_SESSION_TABLE` env var — table name is hardcoded to `"mcp-sessions"` in the default config. Use `with_config()` to customize. Default is `verify_tables: false` — tables are assumed to exist (managed by CloudFormation/Terraform). For first-time setup, use `verify_tables: true, create_tables: true`.
 
 ## CORS
 

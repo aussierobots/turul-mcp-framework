@@ -32,8 +32,12 @@ pub struct SqliteTaskConfig {
     pub max_tasks: usize,
     /// Default page size for list operations
     pub default_page_size: u32,
-    /// Allow table creation if tables don't exist
-    pub create_tables_if_missing: bool,
+    /// Verify table existence at startup and run migrations.
+    /// When false, tables are assumed to exist.
+    pub verify_tables: bool,
+    /// Create tables if they don't exist during verification.
+    /// Only has effect when `verify_tables` is true.
+    pub create_tables: bool,
     /// Create database file if it doesn't exist
     pub create_database_if_missing: bool,
 }
@@ -47,7 +51,8 @@ impl Default for SqliteTaskConfig {
             cleanup_interval_minutes: 5,
             max_tasks: 10_000,
             default_page_size: 50,
-            create_tables_if_missing: true,
+            verify_tables: false,
+            create_tables: false,
             create_database_if_missing: true,
         }
     }

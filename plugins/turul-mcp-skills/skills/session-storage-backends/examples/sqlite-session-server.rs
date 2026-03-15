@@ -21,7 +21,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         session_timeout_minutes: 60,    // Session TTL in minutes (default: 30)
         cleanup_interval_minutes: 10,   // Background cleanup interval (default: 5)
         max_events_per_session: 500,    // Max SSE events stored per session (default: 1000)
-        create_tables_if_missing: true, // Auto-create schema on first run (default: true)
+        verify_tables: true,
+        create_tables: true, // Auto-create schema on first run (default: true)
         create_database_if_missing: true, // Auto-create .db file (default: true)
         ..Default::default()
     };

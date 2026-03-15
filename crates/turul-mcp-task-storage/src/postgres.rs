@@ -33,8 +33,12 @@ pub struct PostgresTaskConfig {
     pub max_tasks: usize,
     /// Default page size for list operations
     pub default_page_size: u32,
-    /// Allow table creation if tables don't exist
-    pub create_tables_if_missing: bool,
+    /// Verify table existence at startup and run migrations.
+    /// When false, tables are assumed to exist.
+    pub verify_tables: bool,
+    /// Create tables if they don't exist during verification.
+    /// Only has effect when `verify_tables` is true.
+    pub create_tables: bool,
     /// Statement timeout in seconds
     pub statement_timeout_secs: u32,
 }
@@ -49,7 +53,8 @@ impl Default for PostgresTaskConfig {
             cleanup_interval_minutes: 5,
             max_tasks: 10_000,
             default_page_size: 50,
-            create_tables_if_missing: true,
+            verify_tables: false,
+            create_tables: false,
             statement_timeout_secs: 30,
         }
     }
@@ -92,7 +97,7 @@ impl PostgresTaskStorage {
 
         let storage = Self { pool, config };
 
-        if storage.config.create_tables_if_missing {
+        if storage.config.verify_tables {
             storage.migrate().await?;
         }
 
@@ -109,7 +114,7 @@ impl PostgresTaskStorage {
     ) -> Result<Self, TaskStorageError> {
         let storage = Self { pool, config };
 
-        if storage.config.create_tables_if_missing {
+        if storage.config.verify_tables {
             storage.migrate().await?;
         }
 
@@ -794,7 +799,8 @@ mod tests {
             database_url: std::env::var("TEST_DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://postgres:test@localhost:5432/test".to_string()),
             max_tasks: 10_000,
-            create_tables_if_missing: true,
+            verify_tables: true,
+            create_tables: true,
             ..PostgresTaskConfig::default()
         };
         PostgresTaskStorage::with_config(config).await
@@ -1167,7 +1173,8 @@ mod tests {
             database_url: std::env::var("TEST_DATABASE_URL")
                 .unwrap_or_else(|_| "postgres://postgres:test@localhost:5432/test".to_string()),
             max_tasks: 5,
-            create_tables_if_missing: true,
+            verify_tables: true,
+            create_tables: true,
             ..PostgresTaskConfig::default()
         };
         let storage = PostgresTaskStorage::with_config(config).await.unwrap();

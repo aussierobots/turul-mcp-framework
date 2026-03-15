@@ -208,7 +208,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         database_path: std::env::var("SQLITE_PATH")
             .map(PathBuf::from)
             .unwrap_or_else(|_| PathBuf::from("./sessions.db")),
-        create_tables_if_missing: true,
+        verify_tables: true,
+        create_tables: true,
         create_database_if_missing: true,
         ..Default::default()
     };
@@ -259,7 +260,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let postgres_config = PostgresConfig {
         database_url: std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "postgres://mcp:mcp_pass@localhost:5432/mcp_sessions".to_string()),
-        create_tables_if_missing: true,
+        verify_tables: true,
+        create_tables: true,
         ..Default::default()
     };
 
@@ -309,7 +311,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let dynamodb_config = DynamoDbConfig {
         table_name: std::env::var("MCP_SESSION_TABLE")
             .unwrap_or_else(|_| "mcp-sessions".to_string()),
-        create_tables_if_missing: true,
+        verify_tables: true,
+        create_tables: true,
         ..Default::default()
     };
 

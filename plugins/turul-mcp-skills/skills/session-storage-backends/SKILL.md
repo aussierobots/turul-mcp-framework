@@ -107,7 +107,7 @@ Server replays      → get_events_after(session_id, 2) → [event 3, ...]
 - **AWS-managed** — no server to operate, auto-scales
 - **Native TTL** — AWS handles expiration (no background cleanup task needed)
 - **Short default TTL** — `session_ttl_minutes: 5` and `event_ttl_minutes: 5` — **override for production** (e.g., 1440 for 24 hours)
-- **Auto-create tables** — `create_tables_if_missing: true` (default) creates tables + GSIs on first use
+- **Table verification** — `verify_tables: true, create_tables: true` verifies and creates tables + GSIs on first use. Default is `verify_tables: false` (skip verification for Lambda deployments)
 
 ## Error Types
 
@@ -164,7 +164,7 @@ This applies to all storage backends equally — the HTTP transport layer checks
 
 2. **SQLite `:memory:` with connection pools** — Each pool connection gets its own isolated database. For shared test databases, use `file:{uuid}?mode=memory&cache=shared` as the database path.
 
-3. **Forgetting `create_tables_if_missing: true`** — All backends default to `true`, but if you explicitly construct configs, ensure this is set. Without it, the first operation fails with a table-not-found error.
+3. **Forgetting `verify_tables: true` for first-time setup** — All backends default to `verify_tables: false` (optimized for Lambda). For first-time setup or development, use `verify_tables: true, create_tables: true` to auto-create tables.
 
 4. **Using InMemory in Lambda** — Lambda containers recycle unpredictably. Sessions stored in memory are lost. Use `DynamoDbSessionStorage` for persistence across invocations.
 

@@ -23,7 +23,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_events_per_session: 1000,   // Max SSE events per session (default: 1000)
         enable_backup: true,            // Point-in-time recovery (default: true)
         enable_encryption: true,        // Server-side encryption (default: true)
-        create_tables_if_missing: true, // Auto-create table + GSIs (default: true)
+        verify_tables: true,
+        create_tables: true, // Auto-create table + GSIs (default: true)
     };
 
     let storage = Arc::new(DynamoDbSessionStorage::with_config(config).await?);

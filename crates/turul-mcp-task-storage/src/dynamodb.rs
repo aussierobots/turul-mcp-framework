@@ -127,8 +127,12 @@ pub struct DynamoDbTaskConfig {
     pub region: String,
     /// Task TTL in minutes (for DynamoDB native TTL).
     pub task_ttl_minutes: u64,
-    /// Allow table creation if tables don't exist.
-    pub create_tables_if_missing: bool,
+    /// Verify table existence and schema at startup.
+    /// When false, tables are assumed to exist with CamelCase naming convention.
+    pub verify_tables: bool,
+    /// Create tables if they don't exist during verification.
+    /// Only has effect when `verify_tables` is true.
+    pub create_tables: bool,
     /// Maximum number of tasks (0 = unlimited).
     pub max_tasks: usize,
     /// Default page size for list operations.
@@ -141,7 +145,8 @@ impl Default for DynamoDbTaskConfig {
             table_name: "mcp-tasks".to_string(),
             region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             task_ttl_minutes: 60,
-            create_tables_if_missing: true,
+            verify_tables: false,
+            create_tables: false,
             max_tasks: 10_000,
             default_page_size: 50,
         }
@@ -428,7 +433,14 @@ impl DynamoDbTaskStorage {
                 naming: NamingConvention::CamelCase,
             };
 
-            storage.verify_table_schema().await?;
+            if config.verify_tables {
+                storage.verify_table_schema().await?;
+            } else {
+                info!(
+                    "Skipping table verification (verify_tables=false), using {:?} naming",
+                    storage.naming
+                );
+            }
 
             info!(
                 "DynamoDB task storage initialized successfully in region: {} (naming: {:?})",
@@ -502,7 +514,7 @@ impl DynamoDbTaskStorage {
                 }
             }
             Err(_err) => {
-                if self.config.create_tables_if_missing {
+                if self.config.create_tables {
                     warn!(
                         "Table '{}' does not exist, attempting to create it",
                         self.config.table_name
@@ -515,7 +527,7 @@ impl DynamoDbTaskStorage {
                     Ok(())
                 } else {
                     let error_msg = format!(
-                        "Table '{}' does not exist and create_tables_if_missing is false",
+                        "Table '{}' does not exist and create_tables is false.",
                         self.config.table_name
                     );
                     error!("{}", error_msg);
@@ -1747,7 +1759,8 @@ mod tests {
         assert_eq!(config.task_ttl_minutes, 60);
         assert_eq!(config.max_tasks, 10_000);
         assert_eq!(config.default_page_size, 50);
-        assert!(config.create_tables_if_missing);
+        assert!(!config.verify_tables);
+        assert!(!config.create_tables);
     }
 
     /// Helper to build a full test TaskRecord.

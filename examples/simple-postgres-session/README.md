@@ -6,7 +6,7 @@ This example demonstrates PostgreSQL-backed session storage for MCP servers. It 
 
 - **Session-scoped storage**: Each MCP session gets isolated key-value storage in PostgreSQL
 - **Multi-instance sharing**: Multiple server instances can share the same PostgreSQL database
-- **Automatic table creation**: Tables are created automatically when `create_tables_if_missing: true`
+- **Automatic table creation**: Tables are created automatically when `verify_tables: true, create_tables: true`
 - **ACID transactions**: PostgreSQL provides reliable data consistency
 
 ## Setup

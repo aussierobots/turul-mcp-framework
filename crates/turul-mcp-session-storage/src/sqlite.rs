@@ -50,8 +50,12 @@ pub struct SqliteConfig {
     pub cleanup_interval_minutes: u32,
     /// Maximum events to keep per session (for memory management)
     pub max_events_per_session: u32,
-    /// Allow table creation if tables don't exist
-    pub create_tables_if_missing: bool,
+    /// Verify table existence at startup and run migrations.
+    /// When false, tables are assumed to exist.
+    pub verify_tables: bool,
+    /// Create tables if they don't exist during verification.
+    /// Only has effect when `verify_tables` is true.
+    pub create_tables: bool,
     /// Create database file if it doesn't exist
     pub create_database_if_missing: bool,
 }
@@ -65,7 +69,8 @@ impl Default for SqliteConfig {
             session_timeout_minutes: 30,
             cleanup_interval_minutes: 5,
             max_events_per_session: 1000,
-            create_tables_if_missing: true, // SQLite defaults to creating tables
+            verify_tables: false,
+            create_tables: false,
             create_database_if_missing: true, // SQLite defaults to creating database
         }
     }
@@ -108,10 +113,13 @@ impl SqliteSessionStorage {
         // Create connection pool
         let pool = SqlitePool::connect_with(connect_options).await?;
 
+        let verify = config.verify_tables;
         let storage = Self { pool, config };
 
-        // Run database migrations
-        storage.migrate().await?;
+        // Run database migrations if verification is enabled
+        if verify {
+            storage.migrate().await?;
+        }
 
         // Start background cleanup task
         storage.start_cleanup_task().await;

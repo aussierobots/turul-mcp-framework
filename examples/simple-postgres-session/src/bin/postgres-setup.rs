@@ -34,7 +34,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_events_per_session: 1000,
         enable_pooling_optimizations: true,
         statement_timeout_secs: 30,
-        create_tables_if_missing: true, // Always true for setup
+        verify_tables: true,
+            create_tables: true, // Always true for setup
     };
 
     // Initialize PostgreSQL session storage (this will create tables)

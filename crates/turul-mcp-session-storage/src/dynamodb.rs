@@ -158,8 +158,15 @@ pub struct DynamoDbConfig {
     pub enable_backup: bool,
     /// Enable encryption at rest
     pub enable_encryption: bool,
-    /// Allow table creation if tables don't exist
-    pub create_tables_if_missing: bool,
+    /// Verify table existence and schema at startup (DescribeTable, DescribeTimeToLive).
+    /// When false, tables are assumed to exist with CamelCase naming convention.
+    /// Set to false for Lambda deployments where tables are managed by CloudFormation/Terraform.
+    pub verify_tables: bool,
+    /// Create tables if they don't exist during verification.
+    /// Only has effect when `verify_tables` is true.
+    /// When true and a table is missing: CreateTable + UpdateTimeToLive + wait for ACTIVE.
+    /// When false and a table is missing: returns TableNotFound error.
+    pub create_tables: bool,
 }
 
 impl Default for DynamoDbConfig {
@@ -172,7 +179,8 @@ impl Default for DynamoDbConfig {
             max_events_per_session: 1000,
             enable_backup: true,
             enable_encryption: true,
-            create_tables_if_missing: true,
+            verify_tables: false,
+            create_tables: false,
         }
     }
 }
@@ -261,8 +269,15 @@ impl DynamoDbSessionStorage {
                 event_naming: NamingConvention::CamelCase,
             };
 
-            // Verify table exists and has correct schema; detects naming convention
-            storage.verify_table_schema().await?;
+            if config.verify_tables {
+                // Verify table exists and has correct schema; detects naming convention
+                storage.verify_table_schema().await?;
+            } else {
+                info!(
+                    "Skipping table verification (verify_tables=false), using {:?} naming",
+                    storage.session_naming
+                );
+            }
 
             info!(
                 "DynamoDB session storage initialized successfully in region: {} (session naming: {:?}, event naming: {:?})",
@@ -338,7 +353,7 @@ impl DynamoDbSessionStorage {
                 }
             }
             Err(_err) => {
-                if self.config.create_tables_if_missing {
+                if self.config.create_tables {
                     warn!(
                         "Table '{}' does not exist, attempting to create it",
                         self.config.table_name
@@ -365,7 +380,7 @@ impl DynamoDbSessionStorage {
                     Ok(())
                 } else {
                     let error_msg = format!(
-                        "Table '{}' does not exist and create_tables_if_missing is false. Use --create-tables flag to enable table creation.",
+                        "Table '{}' does not exist and create_tables is false.",
                         self.config.table_name
                     );
                     error!("{}", error_msg);
@@ -782,9 +797,9 @@ impl DynamoDbSessionStorage {
                 }
             }
             Err(_) => {
-                if !self.config.create_tables_if_missing {
+                if !self.config.create_tables {
                     let error_msg = format!(
-                        "Events table '{}' does not exist and create_tables_if_missing is false. Use --create-tables flag to enable table creation.",
+                        "Events table '{}' does not exist and create_tables is false.",
                         event_table
                     );
                     error!("{}", error_msg);

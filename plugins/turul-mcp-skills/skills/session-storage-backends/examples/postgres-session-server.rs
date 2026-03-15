@@ -28,7 +28,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_events_per_session: 1000,       // Max SSE events per session (default: 1000)
         enable_pooling_optimizations: true,  // Pool tuning (default: true)
         statement_timeout_secs: 30,         // Query timeout (default: 30)
-        create_tables_if_missing: true,     // Auto-create schema (default: true)
+        verify_tables: true,
+        create_tables: true,     // Auto-create schema (default: true)
     };
 
     let storage = Arc::new(PostgresSessionStorage::with_config(config).await?);

@@ -220,7 +220,8 @@ let config = SqliteConfig {
     session_timeout_minutes: 60,       // 1 hour
     cleanup_interval_minutes: 5,       // 5 minutes
     max_events_per_session: 1000,
-    create_tables_if_missing: true,
+    verify_tables: true,
+    create_tables: true,
     ..Default::default()
 };
 
@@ -237,7 +238,8 @@ let config = PostgresConfig {
     session_timeout_minutes: 30,       // 30 minutes
     cleanup_interval_minutes: 10,      // 10 minutes
     max_connections: 10,
-    create_tables_if_missing: true,
+    verify_tables: true,
+    create_tables: true,
     ..Default::default()
 };
 
@@ -254,7 +256,8 @@ let config = DynamoDbConfig {
     region: "us-east-1".to_string(),
     session_ttl_minutes: 30,
     event_ttl_minutes: 60,
-    create_tables_if_missing: true,
+    verify_tables: true,
+    create_tables: true,
     ..Default::default()
 };
 
@@ -273,7 +276,8 @@ let storage = SqliteSessionStorage::with_config(SqliteConfig {
     session_timeout_minutes: 120,      // 2 hours
     cleanup_interval_minutes: 10,      // 10 minutes
     max_events_per_session: 5000,
-    create_tables_if_missing: true,
+    verify_tables: true,
+    create_tables: true,
     ..Default::default()
 }).await?;
 ```
