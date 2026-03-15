@@ -831,6 +831,7 @@ mod tests {
             .version("1.0.0")
             .tool(LifecycleTestTool)
             .storage(Arc::new(InMemorySessionStorage::new()))
+            .strict_lifecycle(true) // explicit — survives default changes
             .sse(true)
             .build()
             .await

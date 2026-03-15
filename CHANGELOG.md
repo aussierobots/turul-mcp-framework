@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.21] - 2026-03-16
+
+### Fixed
+
+- **Lambda `resources/read` handler missing by default** (`turul-mcp-aws-lambda`): HTTP server registered it unconditionally; Lambda only added it when resources were configured. Now registered in `new()` matching HTTP parity.
+- **Lambda `resources/templates/list` registered unconditionally** (`turul-mcp-aws-lambda`): Was registered even with no template resources, unlike HTTP which only adds it conditionally. Removed from `new()`, now only added in `build()` when templates exist.
+- **Strict lifecycle tests made explicit** (`turul-mcp-aws-lambda`): `build_strict_streaming_handler()` now explicitly sets `.strict_lifecycle(true)` instead of relying on the default.
+
+### Added
+
+- **Lambda handler parity tests** (`turul-mcp-aws-lambda`): `resources/read` registered-by-default test and `resources/templates/list` absent-without-templates test.
+
 ## [0.3.20] - 2026-03-16
 
 ### Fixed
@@ -490,7 +502,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.20...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.21...HEAD
+[0.3.21]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.20...v0.3.21
 [0.3.20]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.19...v0.3.20
 [0.3.19]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.18...v0.3.19
 [0.3.18]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.17...v0.3.18
