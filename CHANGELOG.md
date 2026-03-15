@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.17] - 2026-03-15
+
+### Added
+
+- **Custom struct input parameter schema via schemars** (`turul-mcp-derive`): Unknown types in `#[mcp_tool]` parameters (e.g., `Vec<ObserverPoint>`, `MyStruct`) now use `schemars::schema_for!()` to generate correct JSON Schema at runtime instead of falling back to `"type": "string"`. Requires the parameter type to derive `schemars::JsonSchema`. This fixes `Vec<CustomStruct>` parameters generating `{"type": "array", "items": {"type": "string"}}` — they now correctly produce `{"type": "array", "items": {"type": "object", "properties": {...}}}`.
+
 ## [0.3.16] - 2026-03-15
 
 ### Added
@@ -452,7 +458,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.16...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.17...HEAD
+[0.3.17]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.16...v0.3.17
 [0.3.16]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.15...v0.3.16
 [0.3.15]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.14...v0.3.15
 [0.3.14]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.13...v0.3.14

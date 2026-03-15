@@ -352,9 +352,27 @@ pub fn type_to_schema(ty: &syn::Type, param_meta: &ParamMeta) -> TokenStream {
                     }
                 }
                 _ => {
-                    // Unknown type — fall back to string
+                    // Unknown type — use schemars to generate schema at runtime.
+                    // REQUIRES: the type must derive schemars::JsonSchema.
+                    // If it doesn't, compilation fails with a clear error pointing here.
+                    let full_ty = &type_path.path;
                     quote! {
-                        turul_mcp_protocol::schema::JsonSchema::string() #description
+                        {
+                            let schemars_schema = turul_mcp_builders::schemars::schema_for!(#full_ty);
+                            let schema_value = serde_json::to_value(&schemars_schema)
+                                .expect("schemars schema should serialize to JSON");
+                            let definitions = schema_value.get("definitions")
+                                .or_else(|| schema_value.get("$defs"))
+                                .and_then(|v| v.as_object())
+                                .map(|obj| obj.iter()
+                                    .map(|(k, v)| (k.clone(), v.clone()))
+                                    .collect::<std::collections::HashMap<String, serde_json::Value>>())
+                                .unwrap_or_default();
+                            turul_mcp_builders::convert_value_to_json_schema_with_defs(
+                                &schema_value,
+                                &definitions,
+                            ) #description
+                        }
                     }
                 }
             }

@@ -39,3 +39,6 @@ mod test_schemars_derive;
 
 #[path = "../option_vec_input_schema_test.rs"]
 mod option_vec_input_schema_test;
+
+#[path = "../mcp_custom_struct_input_schema_test.rs"]
+mod mcp_custom_struct_input_schema_test;

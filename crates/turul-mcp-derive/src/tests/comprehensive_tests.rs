@@ -239,15 +239,22 @@ mod schema_generation_tests {
     }
 
     #[test]
-    fn test_unknown_type_fallback() {
+    fn test_unknown_type_uses_schemars() {
         let ty: Type = parse_quote! { MyCustomType };
         let meta = ParamMeta::default();
 
         let schema = type_to_schema(&ty, &meta);
         let schema_str = schema.to_string();
 
-        // Should fall back to string schema for unknown types
-        assert!(contains_pattern(&schema_str, "JsonSchema::string()"));
+        // Unknown path types should generate schemars-based schema code
+        assert!(
+            contains_pattern(&schema_str, "schemars"),
+            "Unknown types should use schemars for schema generation, got: {schema_str}"
+        );
+        assert!(
+            contains_pattern(&schema_str, "convert_value_to_json_schema_with_defs"),
+            "Should use the schemars-to-JsonSchema converter, got: {schema_str}"
+        );
     }
 
     #[test]
