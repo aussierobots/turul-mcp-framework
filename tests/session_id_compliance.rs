@@ -334,7 +334,29 @@ async fn test_mcp_inspector_flow_with_combined_accept_header() {
 
     println!("Session ID created: {}", session_id);
 
-    // 2. Now use that session ID for subsequent requests
+    // 2. Complete the MCP handshake — strict mode requires this
+    let initialized_response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json, text/event-stream")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Session-Id", session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {}
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        initialized_response.status() == 200 || initialized_response.status() == 202,
+        "notifications/initialized should succeed: got {}",
+        initialized_response.status()
+    );
+
+    // 3. Now use that session ID for subsequent requests
     let tools_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")

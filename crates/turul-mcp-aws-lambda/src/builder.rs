@@ -262,7 +262,7 @@ impl LambdaMcpServerBuilder {
             session_timeout_minutes: None,
             session_cleanup_interval_seconds: None,
             session_storage: None,
-            strict_lifecycle: false,
+            strict_lifecycle: true,  // MCP 2025-11-25: require notifications/initialized
             enable_sse: cfg!(feature = "sse"),
             server_config: ServerConfig::default(),
             stream_config: StreamConfig::default(),

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.19] - 2026-03-15
+
+### Changed
+
+- **Strict MCP lifecycle is now the default** (`turul-mcp-server`, `turul-mcp-aws-lambda`): Both `McpServerBuilder` and `LambdaMcpServerBuilder` now default to `strict_lifecycle: true`, requiring clients to send `notifications/initialized` after `initialize` before any other operations. This matches the MCP 2025-11-25 spec. Use `.strict_lifecycle(false)` for legacy clients that skip the notification.
+
+### Fixed
+
+- **Integration tests now perform full MCP handshake** — `mcp_behavioral_compliance`, `session_id_compliance`, and `sse_progress_delivery` tests updated to send `notifications/initialized` after `initialize`.
+
 ## [0.3.18] - 2026-03-15
 
 ### Changed
@@ -468,7 +478,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.18...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.19...HEAD
+[0.3.19]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.18...v0.3.19
 [0.3.18]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.17...v0.3.18
 [0.3.17]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.16...v0.3.17
 [0.3.16]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.15...v0.3.16

@@ -223,7 +223,7 @@ impl McpServerBuilder {
             session_storage: None,             // Default: InMemory storage
             task_runtime: None,                // Default: tasks not supported
             task_recovery_timeout_ms: 300_000, // Default: 5 minutes
-            strict_lifecycle: false,           // Default: lenient mode for compatibility
+            strict_lifecycle: true,            // MCP 2025-11-25: require notifications/initialized
             test_mode: false,                  // Default: production mode with security
             middleware_stack: crate::middleware::MiddlewareStack::new(),
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
@@ -1149,8 +1149,8 @@ impl McpServerBuilder {
     /// until the client sends `notifications/initialized` after receiving the
     /// initialize response.
     ///
-    /// **Default: false (lenient mode)** - for compatibility with existing clients
-    /// **Production: consider true** - for strict MCP spec compliance
+    /// **Default: true** - MCP 2025-11-25 spec requires the full handshake.
+    /// Set to `false` only for legacy clients that don't send `notifications/initialized`.
     ///
     /// # Example
     /// ```rust,no_run

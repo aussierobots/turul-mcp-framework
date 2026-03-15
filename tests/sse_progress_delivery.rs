@@ -150,6 +150,27 @@ async fn test_post_streaming_delivers_progress_before_result() {
         .to_str()
         .unwrap();
 
+    // Complete the MCP handshake — strict mode requires this
+    let initialized_response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Session-Id", session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {}
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert!(
+        initialized_response.status() == 200 || initialized_response.status() == 202,
+        "notifications/initialized should succeed: got {}",
+        initialized_response.status()
+    );
+
     // Make streaming POST request with SSE enabled
     let streaming_response = client
         .post(&server_url)
