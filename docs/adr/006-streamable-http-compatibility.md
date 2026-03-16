@@ -1,8 +1,8 @@
 # ADR-006: MCP Streamable HTTP Transport Compatibility Architecture
 
-**Status**: Accepted  
-**Date**: 2025-09-02  
-**Authors**: Claude Code via turul-mcp-framework development  
+**Status**: Accepted (amended 2026-03-16)
+**Date**: 2025-09-02
+**Authors**: Claude Code via turul-mcp-framework development
 
 ## Context
 
@@ -113,19 +113,41 @@ let server = McpServer::builder()
 
 | Client Accept Header | Mode | SSE Used? | Rationale |
 |---------------------|------|-----------|-----------|
-| `application/json, text/event-stream` | Compliant | Server choice | Full MCP 2025-06-18 compliance |
+| `application/json, text/event-stream` | Compliant | Method-dependent* | See Content-Type Negotiation Policy below |
 | `application/json` | JsonOnly | No | MCP Inspector compatibility |
-| `text/event-stream` | SseOnly | Yes* | Edge case support |
+| `text/event-stream` | SseOnly | Yes | Client demands SSE (Claude Desktop pattern) |
 | `*/*` | JsonOnly | No | Treated as JSON-only for safety |
 | Invalid/Empty | Invalid | No | Fallback to JSON |
 
-*Subject to server `enable_sse` configuration
+*See next section for method-level policy.
+
+### Content-Type Negotiation Policy (Added 2026-03-16)
+
+When the client sends `Accept: application/json, text/event-stream` (combined), the server uses `should_use_sse(method)` to choose the response format:
+
+| JSON-RPC Method | Response Content-Type | Rationale |
+|---|---|---|
+| `tools/call` | `text/event-stream` | May emit `notifications/progress` mid-stream |
+| `sampling/createMessage` | `text/event-stream` | May emit mid-stream events |
+| `elicitation/create` | `text/event-stream` | May emit mid-stream events |
+| All other methods | `application/json` | Guaranteed single-response, no mid-stream events |
+
+**This is a conservative transport heuristic, not a proven optimal policy.** Key limitations:
+
+1. **Method-level, not tool-level.** Every `tools/call` under combined Accept gets SSE — even simple tools that never call `notify_progress()`. The transport layer does not currently have per-tool progress metadata.
+2. **Architectural constraint, not fundamental.** Per-tool metadata (e.g., "this tool never emits progress") could be plumbed from the tool registry to the transport layer, enabling finer decisions. This is not implemented.
+3. **SSE framing cost.** Non-streaming `tools/call` responses pay unnecessary SSE framing overhead (`data: {json}\n\n` vs raw JSON) and may hit client/proxy SSE quirks.
+4. **Progress notifications are independent of tasks.** `notify_progress()` flows through the `StreamManager` as SSE events regardless of whether the server has a task runtime configured. Tasks are a separate system for background execution — they are not the right discriminator for this policy.
+
+**Implementation**: `StreamableHttpContext::should_use_sse()` in `crates/turul-http-mcp-server/src/streamable_http.rs`.
+
+**Test coverage**: `tests/content_type_negotiation.rs` — 4 tests asserting Content-Type matches body format for JSON-only, SSE-only, combined+tools/call, and combined+tools/list Accept patterns.
 
 ### Configuration Precedence
 
 1. **Server Configuration**: `enable_sse=false` disables all SSE usage
-2. **Accept Header Compliance**: Non-compliant headers force JSON responses  
-3. **Method Type**: Only `tools/call` methods use POST SSE (when conditions met)
+2. **Accept Header Compliance**: Non-compliant headers force JSON responses
+3. **Method Type**: `should_use_sse()` heuristic for combined Accept (see above)
 4. **Connection State**: Notifications require active GET SSE connections
 
 ## Benefits
@@ -257,6 +279,11 @@ For deployments requiring server-initiated notifications:
 - Architecture supports future MCP specification changes
 - Accept header logic can be extended for new content types
 - Configuration system scales to additional transport options
+
+### Per-Tool Content-Type Negotiation
+- The current method-based `should_use_sse()` heuristic could be refined with per-tool progress metadata
+- The tool registry knows whether a tool declares `task_support` or calls `notify_progress()` — plumbing this to the transport layer would allow `tools/call` responses for non-streaming tools to use `application/json` under combined Accept
+- This is an optimization, not a correctness fix — the current conservative policy is spec-compliant
 
 ### Client Ecosystem Maturity
 - As clients become more compliant, JsonOnly fallback usage should decrease

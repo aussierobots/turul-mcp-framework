@@ -1828,8 +1828,11 @@ impl SessionStorage for DynamoDbSessionStorage {
             // Store events in separate table: mcp-sessions-events
             let event_table = format!("{}-events", self.config.table_name);
 
-            // Create events table if it doesn't exist
-            self.ensure_events_table_exists(&event_table).await?;
+            // Only verify/create events table when verify_tables is enabled.
+            // When false, table is assumed to exist (managed by CloudFormation/Terraform).
+            if self.config.verify_tables {
+                self.ensure_events_table_exists(&event_table).await?;
+            }
 
             let data_json = serde_json::to_string(&event.data)
                 .map_err(|e| SessionStorageError::SerializationError(e.to_string()))?;
@@ -1916,8 +1919,9 @@ impl SessionStorage for DynamoDbSessionStorage {
 
             let event_table = format!("{}-events", self.config.table_name);
 
-            // Ensure the events table exists
-            self.ensure_events_table_exists(&event_table).await?;
+            if self.config.verify_tables {
+                self.ensure_events_table_exists(&event_table).await?;
+            }
 
             let ea = self.event_attrs();
 
@@ -2014,8 +2018,9 @@ impl SessionStorage for DynamoDbSessionStorage {
 
             let event_table = format!("{}-events", self.config.table_name);
 
-            // Ensure the events table exists
-            self.ensure_events_table_exists(&event_table).await?;
+            if self.config.verify_tables {
+                self.ensure_events_table_exists(&event_table).await?;
+            }
 
             let ea = self.event_attrs();
 
