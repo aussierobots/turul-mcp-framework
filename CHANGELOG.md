@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.22] - 2026-03-16
+
+### Fixed
+
+- **SSE wire-format test compliance** (`tests`): Replaced `strip_prefix("data: ").unwrap_or(...)` workaround in `session_id_compliance` test with explicit Content-Type assertion — tests now branch on the response's declared Content-Type instead of silently accepting both SSE and JSON formats.
+- **DynamoDB events table check** (`turul-mcp-session-storage`): `ensure_events_table_exists()` now skipped when `verify_tables` is false (table assumed to exist via CloudFormation/Terraform).
+
+### Added
+
+- **Content-Type negotiation policy** (`turul-http-mcp-server`): `StreamableHttpContext::should_use_sse()` — conservative method-level heuristic for combined `Accept: application/json, text/event-stream`. Non-streaming methods (`tools/list`, `resources/list`, etc.) return `application/json`; streaming-capable methods (`tools/call`, `sampling/createMessage`, `elicitation/create`) return `text/event-stream`.
+- **Content-Type negotiation tests** (`tests`): 4 new tests asserting wire-format consistency for JSON-only, SSE-only, combined+tools/call, and combined+tools/list Accept patterns.
+- **Test Compliance rule** (`CLAUDE.md`): Tests must assert wire-format compliance — never silently accept multiple formats.
+- **ADR-006 amendment**: Documented Content-Type negotiation policy, its architectural limitations, and the per-tool metadata improvement path.
+
 ## [0.3.21] - 2026-03-16
 
 ### Fixed
@@ -502,7 +516,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.21...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.22...HEAD
+[0.3.22]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.21...v0.3.22
 [0.3.21]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.20...v0.3.21
 [0.3.20]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.19...v0.3.20
 [0.3.19]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.18...v0.3.19
