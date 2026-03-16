@@ -199,31 +199,32 @@ impl StreamableHttpContext {
         self.wants_sse_stream
     }
 
-    /// Whether this request should use SSE framing for the response.
+    /// Conservative transport heuristic for SSE vs JSON response framing.
     ///
-    /// Transport policy heuristic (not a spec requirement):
-    /// - If client only accepts `text/event-stream` → SSE
-    /// - If client only accepts `application/json` → JSON (never SSE)
-    /// - If client accepts both → prefer JSON for methods that can never
-    ///   produce mid-stream events (list/read/get). Use SSE for `tools/call`
-    ///   and other methods where any tool _might_ call `notify_progress()`.
+    /// **Not a spec requirement** — the MCP spec allows either format when
+    /// the client accepts both. This is a compatibility-driven default:
     ///
-    /// **Limitation**: this is method-level, not tool-level. A simple
-    /// `tools/call` that never emits progress still gets SSE under combined
-    /// Accept, because the transport layer cannot know at response-header
-    /// time whether the specific tool will stream. HTTP requires Content-Type
-    /// before the body, so deferring the decision is not possible.
+    /// - Client only accepts `text/event-stream` → SSE
+    /// - Client only accepts `application/json` → JSON
+    /// - Client accepts both → SSE for `tools/call`, `sampling/createMessage`,
+    ///   `elicitation/create`; JSON for everything else
+    ///
+    /// **Limitation (architectural, not fundamental):** the heuristic operates
+    /// at method granularity, not per-tool. Every `tools/call` under combined
+    /// Accept gets SSE — even simple tools that never call `notify_progress()`.
+    /// The transport layer does not currently have per-tool progress metadata;
+    /// plumbing that information from the tool registry would allow a finer
+    /// decision but is not implemented. Non-streaming `tools/call` responses
+    /// pay the SSE framing cost and may hit client/proxy SSE quirks as a
+    /// result of this tradeoff.
     pub fn should_use_sse(&self, method: &str) -> bool {
         if !self.wants_sse_stream {
             return false;
         }
         if !self.accepts_json {
-            // Client only accepts SSE — must use SSE
             return true;
         }
-        // Client accepts both — use SSE for methods whose handlers may emit
-        // progress notifications or other mid-stream events. All other methods
-        // (list, read, get, etc.) are guaranteed single-response and get JSON.
+        // Conservative: assume any tools/call may emit mid-stream events
         matches!(
             method,
             "tools/call" | "sampling/createMessage" | "elicitation/create"
