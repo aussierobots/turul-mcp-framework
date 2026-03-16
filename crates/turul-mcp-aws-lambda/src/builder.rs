@@ -264,7 +264,7 @@ impl LambdaMcpServerBuilder {
             session_timeout_minutes: None,
             session_cleanup_interval_seconds: None,
             session_storage: None,
-            strict_lifecycle: true,  // MCP 2025-11-25: require notifications/initialized
+            strict_lifecycle: true, // MCP 2025-11-25: require notifications/initialized
             enable_sse: cfg!(feature = "sse"),
             server_config: ServerConfig::default(),
             stream_config: StreamConfig::default(),
@@ -2014,14 +2014,17 @@ mod tests {
             .uri("/mcp")
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2025-11-25")
-            .body(LambdaBody::Text(serde_json::json!({
-                "jsonrpc": "2.0", "method": "initialize", "id": 1,
-                "params": {
-                    "protocolVersion": "2025-11-25",
-                    "capabilities": {},
-                    "clientInfo": { "name": "test", "version": "1.0.0" }
-                }
-            }).to_string()))
+            .body(LambdaBody::Text(
+                serde_json::json!({
+                    "jsonrpc": "2.0", "method": "initialize", "id": 1,
+                    "params": {
+                        "protocolVersion": "2025-11-25",
+                        "capabilities": {},
+                        "clientInfo": { "name": "test", "version": "1.0.0" }
+                    }
+                })
+                .to_string(),
+            ))
             .unwrap();
         let init_resp = handler.handle(init_req).await.unwrap();
         let session_id = init_resp
@@ -2040,10 +2043,13 @@ mod tests {
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2025-11-25")
             .header("Mcp-Session-Id", &session_id)
-            .body(LambdaBody::Text(serde_json::json!({
-                "jsonrpc": "2.0", "method": "resources/read", "id": 2,
-                "params": { "uri": "file:///nonexistent" }
-            }).to_string()))
+            .body(LambdaBody::Text(
+                serde_json::json!({
+                    "jsonrpc": "2.0", "method": "resources/read", "id": 2,
+                    "params": { "uri": "file:///nonexistent" }
+                })
+                .to_string(),
+            ))
             .unwrap();
         let read_resp = handler.handle(read_req).await.unwrap();
         let body = String::from_utf8_lossy(read_resp.body().as_ref()).to_string();
@@ -2091,14 +2097,17 @@ mod tests {
             .uri("/mcp")
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2025-11-25")
-            .body(LambdaBody::Text(serde_json::json!({
-                "jsonrpc": "2.0", "method": "initialize", "id": 1,
-                "params": {
-                    "protocolVersion": "2025-11-25",
-                    "capabilities": {},
-                    "clientInfo": { "name": "test", "version": "1.0.0" }
-                }
-            }).to_string()))
+            .body(LambdaBody::Text(
+                serde_json::json!({
+                    "jsonrpc": "2.0", "method": "initialize", "id": 1,
+                    "params": {
+                        "protocolVersion": "2025-11-25",
+                        "capabilities": {},
+                        "clientInfo": { "name": "test", "version": "1.0.0" }
+                    }
+                })
+                .to_string(),
+            ))
             .unwrap();
         let init_resp = handler.handle(init_req).await.unwrap();
         let session_id = init_resp
@@ -2117,9 +2126,12 @@ mod tests {
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2025-11-25")
             .header("Mcp-Session-Id", &session_id)
-            .body(LambdaBody::Text(serde_json::json!({
-                "jsonrpc": "2.0", "method": "resources/templates/list", "id": 2
-            }).to_string()))
+            .body(LambdaBody::Text(
+                serde_json::json!({
+                    "jsonrpc": "2.0", "method": "resources/templates/list", "id": 2
+                })
+                .to_string(),
+            ))
             .unwrap();
         let tmpl_resp = handler.handle(tmpl_req).await.unwrap();
         let body = String::from_utf8_lossy(tmpl_resp.body().as_ref()).to_string();

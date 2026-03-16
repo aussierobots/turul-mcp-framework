@@ -147,7 +147,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         enable_backup: true,
         enable_encryption: true,
         verify_tables: true,
-            create_tables: true,
+        create_tables: true,
     };
 
     info!("AWS DynamoDB Configuration:");

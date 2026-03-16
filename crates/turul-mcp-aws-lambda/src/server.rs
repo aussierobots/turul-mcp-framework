@@ -255,15 +255,13 @@ impl LambdaMcpServer {
         // Register notifications/initialized handler — required for strict lifecycle.
         // Without this, clients can never complete the MCP handshake.
         use turul_mcp_server::handlers::InitializedNotificationHandler;
-        let initialized_handler =
-            InitializedNotificationHandler::new(self.session_manager.clone());
+        let initialized_handler = InitializedNotificationHandler::new(self.session_manager.clone());
         let initialized_bridge = SessionAwareMcpHandlerBridge::new(
             Arc::new(initialized_handler),
             self.session_manager.clone(),
             self.strict_lifecycle,
         );
-        dispatcher
-            .register_method("notifications/initialized".to_string(), initialized_bridge);
+        dispatcher.register_method("notifications/initialized".to_string(), initialized_bridge);
 
         // Create the Lambda handler with all components and middleware
         let middleware_stack = Arc::new(self.middleware_stack.clone());

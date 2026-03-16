@@ -171,10 +171,9 @@ impl StreamableHttpContext {
             .unwrap_or_default();
 
         let wants_sse_stream = accept_header.contains("text/event-stream");
-        let accepts_json = accept_header.contains("application/json")
-            || accept_header.contains("*/*");
-        let accepts_stream_frames = accepts_json
-            || accept_header.contains("text/event-stream");
+        let accepts_json =
+            accept_header.contains("application/json") || accept_header.contains("*/*");
+        let accepts_stream_frames = accepts_json || accept_header.contains("text/event-stream");
 
         // Collect additional headers for debugging/logging
         let mut header_map = HashMap::new();
@@ -1376,10 +1375,7 @@ impl StreamableHttpHandler {
                 // the initialization failure in logs.
                 if notification_clone.method == "notifications/initialized" {
                     if let Err(e) = dispatcher
-                        .handle_notification_with_context(
-                            notification_clone,
-                            Some(session_context),
-                        )
+                        .handle_notification_with_context(notification_clone, Some(session_context))
                         .await
                     {
                         error!(

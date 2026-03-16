@@ -154,7 +154,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         enable_pooling_optimizations: true,
         statement_timeout_secs: 30,
         verify_tables: true,
-            create_tables: true,
+        create_tables: true,
     };
 
     info!(

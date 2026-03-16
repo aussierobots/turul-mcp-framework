@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         enable_backup: true,
         enable_encryption: true,
         verify_tables: true,
-            create_tables: true, // Always true for setup
+        create_tables: true, // Always true for setup
     };
 
     // Initialize DynamoDB session storage

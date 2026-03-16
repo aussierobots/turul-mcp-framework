@@ -24,18 +24,21 @@ struct ObserverPoint {
 }
 
 /// Tool that takes Vec<CustomStruct> as parameter
-#[mcp_tool(name = "batch_observe", description = "Process batch of observer points")]
+#[mcp_tool(
+    name = "batch_observe",
+    description = "Process batch of observer points"
+)]
 async fn batch_observe(points: Vec<ObserverPoint>) -> McpResult<String> {
     Ok(format!("Processed {} points", points.len()))
 }
 
 /// Tool that takes a single CustomStruct as parameter
-#[mcp_tool(
-    name = "single_observe",
-    description = "Process single observer point"
-)]
+#[mcp_tool(name = "single_observe", description = "Process single observer point")]
 async fn single_observe(point: ObserverPoint) -> McpResult<String> {
-    Ok(format!("Observed at {}, {}", point.latitude, point.longitude))
+    Ok(format!(
+        "Observed at {}, {}",
+        point.latitude, point.longitude
+    ))
 }
 
 /// Tool that takes Option<CustomStruct>
@@ -43,10 +46,7 @@ async fn single_observe(point: ObserverPoint) -> McpResult<String> {
     name = "optional_observe",
     description = "Process optional observer point"
 )]
-async fn optional_observe(
-    name: String,
-    point: Option<ObserverPoint>,
-) -> McpResult<String> {
+async fn optional_observe(name: String, point: Option<ObserverPoint>) -> McpResult<String> {
     Ok(format!(
         "Observer {} at {:?}",
         name,

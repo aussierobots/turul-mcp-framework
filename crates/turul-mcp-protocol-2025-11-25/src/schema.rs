@@ -378,8 +378,14 @@ mod tests {
             .with_max_items(3);
         let json = serde_json::to_string(&schema).unwrap();
         assert!(json.contains(r#""type":"array""#), "Must be array type");
-        assert!(json.contains(r#""minItems":3"#), "Must have minItems: {json}");
-        assert!(json.contains(r#""maxItems":3"#), "Must have maxItems: {json}");
+        assert!(
+            json.contains(r#""minItems":3"#),
+            "Must have minItems: {json}"
+        );
+        assert!(
+            json.contains(r#""maxItems":3"#),
+            "Must have maxItems: {json}"
+        );
         assert!(
             json.contains(r#""type":"number""#),
             "Items must be number: {json}"
@@ -391,8 +397,14 @@ mod tests {
         // with_min_items/with_max_items should be no-ops on non-array schemas
         let schema = JsonSchema::string().with_min_items(3).with_max_items(5);
         let json = serde_json::to_string(&schema).unwrap();
-        assert!(!json.contains("minItems"), "String should not have minItems");
-        assert!(!json.contains("maxItems"), "String should not have maxItems");
+        assert!(
+            !json.contains("minItems"),
+            "String should not have minItems"
+        );
+        assert!(
+            !json.contains("maxItems"),
+            "String should not have maxItems"
+        );
     }
 
     #[test]

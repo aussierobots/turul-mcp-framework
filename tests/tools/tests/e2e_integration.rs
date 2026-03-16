@@ -519,13 +519,10 @@ async fn test_progress_tracker_with_notifications() {
     });
 
     // Wait for SSE stream to open (HTTP response received)
-    tokio::time::timeout(
-        tokio::time::Duration::from_secs(3),
-        ready_rx,
-    )
-    .await
-    .expect("SSE connection did not open within 3 seconds")
-    .expect("SSE ready channel dropped");
+    tokio::time::timeout(tokio::time::Duration::from_secs(3), ready_rx)
+        .await
+        .expect("SSE connection did not open within 3 seconds")
+        .expect("SSE ready channel dropped");
 
     // Brief yield to let the server register the SSE subscription
     tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;

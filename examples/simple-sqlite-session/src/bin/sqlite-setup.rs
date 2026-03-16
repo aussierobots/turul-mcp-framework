@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cleanup_interval_minutes: 5,
         max_events_per_session: 500,
         verify_tables: true,
-            create_tables: true,   // Always true for setup
+        create_tables: true,              // Always true for setup
         create_database_if_missing: true, // Always true for setup
     };
 
