@@ -378,16 +378,35 @@ async fn test_mcp_inspector_flow_with_combined_accept_header() {
         "tools/list should succeed with session ID"
     );
 
-    // Handle SSE response format (data: prefix)
+    // Assert Content-Type matches the Accept header we sent (includes text/event-stream)
+    let content_type = tools_response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+
     let response_text = tools_response.text().await.unwrap();
+    println!("Response Content-Type: {}", content_type);
     println!("Response body: {}", response_text);
 
-    // Parse SSE format: "data: {...json...}"
-    let json_content = response_text
-        .strip_prefix("data: ")
-        .unwrap_or(&response_text);
+    // Parse body according to the declared Content-Type
+    let tools_body: Value = if content_type.contains("text/event-stream") {
+        // SSE format: extract JSON from "data: {...}" lines
+        let json_str = response_text
+            .lines()
+            .find_map(|line| line.strip_prefix("data: "))
+            .expect("SSE response must contain at least one data: line");
+        serde_json::from_str(json_str).expect("SSE data line must contain valid JSON")
+    } else if content_type.contains("application/json") {
+        serde_json::from_str(&response_text).expect("JSON response must be valid JSON")
+    } else {
+        panic!(
+            "Unexpected Content-Type '{}' — expected text/event-stream or application/json",
+            content_type
+        );
+    };
 
-    let tools_body: Value = serde_json::from_str(json_content).unwrap();
     assert_eq!(tools_body["jsonrpc"], "2.0");
     assert!(tools_body["result"]["tools"].is_array());
 

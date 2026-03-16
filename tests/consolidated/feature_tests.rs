@@ -23,3 +23,6 @@ mod calculator_levels_integration;
 
 #[path = "../session_id_compliance.rs"]
 mod session_id_compliance;
+
+#[path = "../content_type_negotiation.rs"]
+mod content_type_negotiation;

@@ -137,6 +137,8 @@ pub struct StreamableHttpContext {
     pub session_id: Option<String>,
     /// Whether client wants SSE stream (text/event-stream)
     pub wants_sse_stream: bool,
+    /// Whether client also accepts JSON (application/json or */*)
+    pub accepts_json: bool,
     /// Whether client accepts stream frames (application/json, text/event-stream, or */*)
     pub accepts_stream_frames: bool,
     /// Additional request headers
@@ -169,9 +171,10 @@ impl StreamableHttpContext {
             .unwrap_or_default();
 
         let wants_sse_stream = accept_header.contains("text/event-stream");
-        let accepts_stream_frames = accept_header.contains("application/json")
-            || accept_header.contains("text/event-stream")
+        let accepts_json = accept_header.contains("application/json")
             || accept_header.contains("*/*");
+        let accepts_stream_frames = accepts_json
+            || accept_header.contains("text/event-stream");
 
         // Collect additional headers for debugging/logging
         let mut header_map = HashMap::new();
@@ -185,6 +188,7 @@ impl StreamableHttpContext {
             protocol_version,
             session_id,
             wants_sse_stream,
+            accepts_json,
             accepts_stream_frames,
             headers: header_map,
         }
@@ -193,6 +197,29 @@ impl StreamableHttpContext {
     /// Whether client wants SSE stream
     pub fn wants_sse_stream(&self) -> bool {
         self.wants_sse_stream
+    }
+
+    /// Whether this request should use SSE framing for the response.
+    ///
+    /// Transport policy heuristic (not a spec requirement):
+    /// - If client only accepts `text/event-stream` → SSE
+    /// - If client only accepts `application/json` → JSON (never SSE)
+    /// - If client accepts both → prefer JSON for methods that never produce
+    ///   streaming events (list/read/get). Use SSE for `tools/call` and other
+    ///   methods that may emit progress notifications mid-stream.
+    pub fn should_use_sse(&self, method: &str) -> bool {
+        if !self.wants_sse_stream {
+            return false;
+        }
+        if !self.accepts_json {
+            // Client only accepts SSE — must use SSE
+            return true;
+        }
+        // Client accepts both — use SSE only for methods that may stream events
+        matches!(
+            method,
+            "tools/call" | "sampling/createMessage" | "elicitation/create"
+        )
     }
 
     /// Whether client wants streaming POST responses
@@ -1424,7 +1451,8 @@ impl StreamableHttpHandler {
         };
 
         // Register streaming POST connection with StreamManager for progress events
-        let wants_sse = context.wants_sse_stream();
+        // Transport policy: prefer JSON for non-streaming methods when client accepts both
+        let wants_sse = context.should_use_sse(&request.method);
         let connection_id = format!("post-{}", uuid::Uuid::now_v7().as_simple());
 
         // Progress forwarding only for SSE clients
@@ -1684,8 +1712,8 @@ impl StreamableHttpHandler {
         });
 
         // Build response with MCP headers merged from context
-        // Set content type based on client preference
-        let content_type = if context.wants_sse_stream() {
+        // Content-Type must match the framing decision made by wants_sse above
+        let content_type = if wants_sse {
             "text/event-stream"
         } else {
             "application/json"
@@ -2056,6 +2084,7 @@ mod tests {
             protocol_version: McpProtocolVersion::V2025_06_18,
             session_id: Some("test-session".to_string()),
             wants_sse_stream: true,
+            accepts_json: true,
             accepts_stream_frames: true,
             headers: HashMap::new(),
         };

@@ -36,6 +36,14 @@ trait McpResourceV2 { ... }      // Avoid versioned APIs
 - **One obvious way to do it** - avoid multiple patterns for the same thing
 - **If it compiles and tests pass** - you probably fixed it correctly
 
+### Test Compliance
+
+**Tests validate the MCP spec and intended contract — never change tests to preserve buggy behavior.**
+
+- When code and tests disagree, verify against the MCP specification before changing either
+- Never silently accept multiple wire formats in tests (e.g., `.strip_prefix("data: ")` to handle both SSE and JSON) — assert the expected Content-Type and body format explicitly
+- Tests must assert wire-format compliance: Content-Type headers, HTTP status codes, JSON-RPC error codes, and response body shape
+
 ### Protocol Re-export Rule (MANDATORY)
 
 **NEVER reference versioned protocol crates directly.** Always use the `turul-mcp-protocol` re-export crate.
