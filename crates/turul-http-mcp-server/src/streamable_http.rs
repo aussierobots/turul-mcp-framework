@@ -204,9 +204,15 @@ impl StreamableHttpContext {
     /// Transport policy heuristic (not a spec requirement):
     /// - If client only accepts `text/event-stream` → SSE
     /// - If client only accepts `application/json` → JSON (never SSE)
-    /// - If client accepts both → prefer JSON for methods that never produce
-    ///   streaming events (list/read/get). Use SSE for `tools/call` and other
-    ///   methods that may emit progress notifications mid-stream.
+    /// - If client accepts both → prefer JSON for methods that can never
+    ///   produce mid-stream events (list/read/get). Use SSE for `tools/call`
+    ///   and other methods where any tool _might_ call `notify_progress()`.
+    ///
+    /// **Limitation**: this is method-level, not tool-level. A simple
+    /// `tools/call` that never emits progress still gets SSE under combined
+    /// Accept, because the transport layer cannot know at response-header
+    /// time whether the specific tool will stream. HTTP requires Content-Type
+    /// before the body, so deferring the decision is not possible.
     pub fn should_use_sse(&self, method: &str) -> bool {
         if !self.wants_sse_stream {
             return false;
@@ -215,7 +221,9 @@ impl StreamableHttpContext {
             // Client only accepts SSE — must use SSE
             return true;
         }
-        // Client accepts both — use SSE only for methods that may stream events
+        // Client accepts both — use SSE for methods whose handlers may emit
+        // progress notifications or other mid-stream events. All other methods
+        // (list, read, get, etc.) are guaranteed single-response and get JSON.
         matches!(
             method,
             "tools/call" | "sampling/createMessage" | "elicitation/create"

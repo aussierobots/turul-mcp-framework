@@ -232,10 +232,12 @@ async fn test_tools_call_sse_only_accept_returns_sse() {
     );
 }
 
-/// Combined Accept + `tools/call` (streaming-capable method) → SSE.
+/// Combined Accept + `tools/call` → SSE (conservative heuristic).
 ///
-/// `tools/call` may emit progress notifications mid-stream, so the server uses SSE
-/// even when the client accepts both formats.
+/// Any tool _might_ call `notify_progress()` mid-stream, and the transport layer
+/// cannot know at Content-Type decision time whether the specific tool will.
+/// So `tools/call` always gets SSE under combined Accept — even for simple tools
+/// that return a single result with no progress events.
 #[tokio::test]
 async fn test_tools_call_combined_accept_prefers_sse() {
     let server_url = start_negotiation_test_server().await;
