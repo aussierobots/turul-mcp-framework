@@ -280,6 +280,9 @@ impl McpClient {
             McpClientError::generic(format!("Failed to parse initialize response: {}", e))
         })?;
 
+        // Validate negotiated protocol version
+        SessionManager::validate_protocol_version(&init_response.protocol_version)?;
+
         // Validate server capabilities
         self.session
             .validate_server_capabilities(&init_response.capabilities)

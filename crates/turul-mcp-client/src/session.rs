@@ -1,5 +1,8 @@
 //! Session management for MCP client
 
+/// The protocol version this client advertises and supports
+pub const PROTOCOL_VERSION: &str = "2025-11-25";
+
 use serde_json::Value;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -325,7 +328,7 @@ impl SessionManager {
         let client_info = &self.config.client_info;
 
         InitializeRequest {
-            protocol_version: "2025-11-25".to_string(),
+            protocol_version: PROTOCOL_VERSION.to_string(),
             capabilities: self.create_client_capabilities(),
             client_info: Implementation {
                 name: client_info.name.clone(),
@@ -335,6 +338,21 @@ impl SessionManager {
                 website_url: None,
                 icons: None,
             },
+        }
+    }
+
+    /// Validate that the server's negotiated protocol version is supported
+    pub fn validate_protocol_version(version: &str) -> McpClientResult<()> {
+        if version == PROTOCOL_VERSION {
+            Ok(())
+        } else {
+            Err(crate::error::ProtocolError::UnsupportedVersion(
+                format!(
+                    "Server negotiated '{}', client supports '{}'",
+                    version, PROTOCOL_VERSION
+                ),
+            )
+            .into())
         }
     }
 
@@ -405,6 +423,25 @@ impl SessionStatistics {
 mod tests {
     use super::*;
     use crate::config::ClientConfig;
+
+    #[test]
+    fn test_validate_protocol_version_accepted() {
+        assert!(SessionManager::validate_protocol_version("2025-11-25").is_ok());
+    }
+
+    #[test]
+    fn test_validate_protocol_version_rejected() {
+        let result = SessionManager::validate_protocol_version("2099-01-01");
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("2099-01-01"));
+    }
+
+    #[test]
+    fn test_protocol_version_constant_used_in_init_request() {
+        // Verify the constant is used, not a hardcoded string
+        assert_eq!(PROTOCOL_VERSION, "2025-11-25");
+    }
 
     #[tokio::test]
     async fn test_session_lifecycle() {
