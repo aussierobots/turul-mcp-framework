@@ -209,9 +209,11 @@ impl HttpTransport {
                 stats.last_error = Some(format!("HTTP {}: {}", status, error_text));
             });
 
-            return Err(
-                TransportError::Http(format!("HTTP error {}: {}", status, error_text)).into(),
-            );
+            return Err(TransportError::HttpStatus {
+                status: status.as_u16(),
+                message: error_text,
+            }
+            .into());
         }
 
         // Capture session ID from response headers if present
@@ -391,9 +393,11 @@ impl HttpTransport {
                 stats.last_error = Some(format!("HTTP {}: {}", status, error_text));
             });
 
-            return Err(
-                TransportError::Http(format!("HTTP error {}: {}", status, error_text)).into(),
-            );
+            return Err(TransportError::HttpStatus {
+                status: status.as_u16(),
+                message: error_text,
+            }
+            .into());
         }
 
         // Capture session ID from response headers if present
@@ -654,10 +658,10 @@ impl Transport for HttpTransport {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            Err(TransportError::Http(format!(
-                "Notification failed with status {}: {}",
-                status, error_text
-            ))
+            Err(TransportError::HttpStatus {
+                status: status.as_u16(),
+                message: error_text,
+            }
             .into())
         }
     }

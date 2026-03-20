@@ -342,6 +342,18 @@ impl McpClient {
                 Err(e) => {
                     warn!(attempt = attempt, error = %e, "Request failed");
 
+                    // MCP spec: 404 means session unknown — must re-initialize
+                    if e.is_session_expired() {
+                        warn!("Session expired (HTTP 404) — attempting re-initialization");
+                        self.session.reset().await;
+                        if let Err(reinit_err) = self.initialize_session().await {
+                            warn!(error = %reinit_err, "Re-initialization failed");
+                            return Err(e);
+                        }
+                        // Retry the request with the new session
+                        continue;
+                    }
+
                     if !e.is_retryable() || !self.config.retry.should_retry(attempt + 1) {
                         return Err(e);
                     }

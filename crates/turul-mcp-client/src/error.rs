@@ -72,6 +72,9 @@ pub enum TransportError {
     #[error("Connection failed: {0}")]
     ConnectionFailed(String),
 
+    #[error("HTTP {status}: {message}")]
+    HttpStatus { status: u16, message: String },
+
     #[error("Transport closed unexpectedly")]
     Closed,
 }
@@ -165,6 +168,15 @@ impl McpClientError {
         }
     }
 
+    /// Check if this error indicates the session is expired/unknown (HTTP 404).
+    /// Per MCP spec, client MUST start a new session on 404.
+    pub fn is_session_expired(&self) -> bool {
+        matches!(
+            self,
+            Self::Transport(TransportError::HttpStatus { status: 404, .. })
+        )
+    }
+
     /// Check if the error is a protocol-level issue
     pub fn is_protocol_error(&self) -> bool {
         matches!(self, Self::Protocol(_))
@@ -192,4 +204,36 @@ macro_rules! client_error {
     ($($arg:tt)*) => {
         $crate::error::McpClientError::generic(format!($($arg)*))
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_404_is_session_expired() {
+        let err = McpClientError::Transport(TransportError::HttpStatus {
+            status: 404,
+            message: "Not Found".to_string(),
+        });
+        assert!(err.is_session_expired());
+    }
+
+    #[test]
+    fn test_500_is_not_session_expired() {
+        let err = McpClientError::Transport(TransportError::HttpStatus {
+            status: 500,
+            message: "Internal".to_string(),
+        });
+        assert!(!err.is_session_expired());
+    }
+
+    #[test]
+    fn test_http_status_error_display() {
+        let err = TransportError::HttpStatus {
+            status: 404,
+            message: "Not Found".to_string(),
+        };
+        assert_eq!(err.to_string(), "HTTP 404: Not Found");
+    }
 }
