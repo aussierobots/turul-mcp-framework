@@ -310,9 +310,13 @@ impl HttpTransport {
                             }
                         }
 
-                        // Progress notification - send via event channel or queue for later
+                        // Progress notification or server request - route accordingly
                         if json.get("method").is_some() {
-                            let event = ServerEvent::Notification(json.clone());
+                            let event = if json.get("id").is_some() && !json["id"].is_null() {
+                                ServerEvent::Request(json.clone())
+                            } else {
+                                ServerEvent::Notification(json.clone())
+                            };
                             if let Some(sender) = &self.event_sender {
                                 if sender.send(event.clone()).is_err() {
                                     // Channel closed, queue the event for future listeners
@@ -444,7 +448,7 @@ impl Transport for HttpTransport {
         TransportCapabilities {
             streaming: true,
             bidirectional: false,
-            server_events: false,
+            server_events: true,
             max_message_size: None,
             persistent: false,
         }
@@ -1276,5 +1280,35 @@ mod tests {
         let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let result = transport.test_handle_sse_stream(stream).await;
         assert!(result.is_err(), "Should fail when no final frame");
+    }
+
+    #[test]
+    fn test_http_transport_advertises_server_events() {
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let caps = transport.capabilities();
+        assert!(caps.server_events, "HttpTransport must advertise server_events");
+        assert!(!caps.bidirectional, "HTTP is not bidirectional");
+    }
+
+    #[tokio::test]
+    async fn test_server_request_routed_as_request_event() {
+        // A server-initiated request has both method AND id
+        let server_request = br#"{"jsonrpc":"2.0","id":"srv-1","method":"sampling/createMessage","params":{}}"#;
+        let stream = create_test_stream(vec![server_request.to_vec()]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        // This will fail to find a final response frame (the server request is not a response),
+        // but the frame should be queued as a Request event
+        let _ = transport.test_handle_byte_stream(stream).await;
+
+        let events = transport.queued_events.lock();
+        assert!(!events.is_empty(), "Server request should be queued");
+        match &events[0] {
+            crate::transport::ServerEvent::Request(val) => {
+                assert_eq!(val["method"], "sampling/createMessage");
+                assert_eq!(val["id"], "srv-1");
+            }
+            other => panic!("Expected ServerEvent::Request, got {:?}", other),
+        }
     }
 }
