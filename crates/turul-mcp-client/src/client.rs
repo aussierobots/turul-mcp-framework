@@ -1061,7 +1061,11 @@ impl McpClientBuilder {
 
     /// Set transport from URL
     pub fn with_url(mut self, url: &str) -> McpClientResult<Self> {
-        let transport = TransportFactory::from_url(url)?;
+        let transport: BoxedTransport = if let Some(ref config) = self.config {
+            Box::new(crate::transport::http::HttpTransport::with_config(url, &config.connection)?)
+        } else {
+            TransportFactory::from_url(url)?
+        };
         self.transport = Some(transport);
         Ok(self)
     }
