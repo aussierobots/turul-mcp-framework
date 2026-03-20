@@ -133,6 +133,9 @@ pub trait Transport: Send + Sync {
     /// Set the session ID to include in subsequent requests (MCP session management)
     fn set_session_id(&mut self, session_id: String);
 
+    /// Clear the session ID (used during 404 re-initialization)
+    fn clear_session_id(&mut self);
+
     /// Start listening for server events (if supported)
     async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver>;
 

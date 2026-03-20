@@ -9,7 +9,7 @@ use crate::config::ClientConfig;
 use crate::error::{McpClientError, McpClientResult, SessionError};
 use crate::session::{SessionManager, SessionState};
 use crate::streaming::StreamHandler;
-use crate::transport::{BoxedTransport, TransportFactory};
+use crate::transport::BoxedTransport;
 
 // Re-export protocol types for convenience
 use turul_mcp_protocol::meta::Cursor;
@@ -19,7 +19,7 @@ use turul_mcp_protocol::tasks::{
 };
 use turul_mcp_protocol::{
     CallToolResult, GetPromptResult, InitializeResult, ListPromptsResult, ListResourcesResult,
-    ListToolsResult, Prompt, ReadResourceResult, Resource, Tool, ToolResult,
+    ListToolsResult, Prompt, ReadResourceResult, Resource, Tool,
 };
 
 /// Main MCP client
@@ -265,9 +265,7 @@ impl McpClient {
             let mut transport = self.transport.lock().await;
             transport.set_session_id(session_id);
         } else {
-            return Err(McpClientError::generic(
-                "Server did not provide Mcp-Session-Id header during initialization",
-            ));
+            debug!("Server did not provide Mcp-Session-Id — stateless session (spec-valid)");
         }
 
         // Parse initialize response
@@ -281,6 +279,9 @@ impl McpClient {
         .map_err(|e| {
             McpClientError::generic(format!("Failed to parse initialize response: {}", e))
         })?;
+
+        // Validate negotiated protocol version
+        SessionManager::validate_protocol_version(&init_response.protocol_version)?;
 
         // Validate server capabilities
         self.session
@@ -340,6 +341,24 @@ impl McpClient {
                 }
                 Err(e) => {
                     warn!(attempt = attempt, error = %e, "Request failed");
+
+                    // MCP spec: 404 means session unknown — must re-initialize
+                    if e.is_session_expired() {
+                        warn!("Session expired (HTTP 404) — attempting re-initialization");
+                        self.session.reset().await;
+                        // Clear stale session ID from transport so initialize
+                        // request is sent without Mcp-Session-Id header
+                        {
+                            let mut transport = self.transport.lock().await;
+                            transport.clear_session_id();
+                        }
+                        if let Err(reinit_err) = self.initialize_session().await {
+                            warn!(error = %reinit_err, "Re-initialization failed");
+                            return Err(e);
+                        }
+                        // Retry the request with the new session
+                        continue;
+                    }
 
                     if !e.is_retryable() || !self.config.retry.should_retry(attempt + 1) {
                         return Err(e);
@@ -498,11 +517,7 @@ impl McpClient {
     }
 
     /// Call a tool
-    pub async fn call_tool(
-        &self,
-        name: &str,
-        arguments: Value,
-    ) -> McpClientResult<Vec<ToolResult>> {
+    pub async fn call_tool(&self, name: &str, arguments: Value) -> McpClientResult<CallToolResult> {
         debug!(tool = name, "Calling tool");
 
         let request = json!({
@@ -524,7 +539,7 @@ impl McpClient {
             is_error = call_response.is_error,
             "Tool call completed"
         );
-        Ok(call_response.content)
+        Ok(call_response)
     }
 
     /// List available resources
@@ -719,7 +734,7 @@ impl McpClient {
         &self,
         name: &str,
         arguments: Option<Value>,
-    ) -> McpClientResult<Vec<turul_mcp_protocol::PromptMessage>> {
+    ) -> McpClientResult<GetPromptResult> {
         debug!(prompt = name, "Getting prompt");
 
         let mut params = json!({
@@ -746,7 +761,7 @@ impl McpClient {
             message_count = prompt_response.messages.len(),
             "Prompt retrieved"
         );
-        Ok(prompt_response.messages)
+        Ok(prompt_response)
     }
 
     /// Send a ping to test connectivity
@@ -1028,6 +1043,7 @@ impl ToolCallResponse {
 /// Builder for creating MCP clients
 pub struct McpClientBuilder {
     transport: Option<BoxedTransport>,
+    url: Option<String>,
     config: Option<ClientConfig>,
 }
 
@@ -1036,35 +1052,75 @@ impl McpClientBuilder {
     pub fn new() -> Self {
         Self {
             transport: None,
+            url: None,
             config: None,
         }
     }
 
-    /// Set transport
+    /// Set transport directly (ConnectionConfig is NOT applied — caller owns the transport)
     pub fn with_transport(mut self, transport: BoxedTransport) -> Self {
         self.transport = Some(transport);
+        self.url = None; // explicit transport overrides URL
         self
     }
 
-    /// Set transport from URL
+    /// Set transport endpoint URL (transport constructed lazily in `build()` with config applied)
+    ///
+    /// Can be called before or after `with_config()` — config is applied at build time.
     pub fn with_url(mut self, url: &str) -> McpClientResult<Self> {
-        let transport = TransportFactory::from_url(url)?;
-        self.transport = Some(transport);
+        // Validate URL eagerly so errors surface at call site
+        let parsed = url::Url::parse(url).map_err(|e| {
+            crate::error::TransportError::ConnectionFailed(format!("Invalid URL: {}", e))
+        })?;
+        if !matches!(parsed.scheme(), "http" | "https") {
+            return Err(crate::error::TransportError::ConnectionFailed(format!(
+                "Invalid scheme: {}",
+                parsed.scheme()
+            ))
+            .into());
+        }
+        self.url = Some(url.to_string());
+        self.transport = None; // URL overrides explicit transport
         Ok(self)
     }
 
-    /// Set configuration
+    /// Set configuration (applied to transport at build time if using `with_url`)
     pub fn with_config(mut self, config: ClientConfig) -> Self {
         self.config = Some(config);
         self
     }
 
     /// Build the client
+    ///
+    /// If `with_url()` was used, the transport is constructed here with `ConnectionConfig` applied.
+    /// If `with_transport()` was used, the provided transport is used as-is.
     pub fn build(self) -> McpClient {
-        let transport = self
-            .transport
-            .expect("Transport must be set before building client");
         let config = self.config.unwrap_or_default();
+        let transport = if let Some(transport) = self.transport {
+            transport
+        } else if let Some(ref url) = self.url {
+            // Detect transport type from URL, then construct with config applied
+            let transport_type = crate::transport::detect_transport_type(url)
+                .expect("URL was validated in with_url() but detection failed");
+            match transport_type {
+                crate::transport::TransportType::Http => Box::new(
+                    crate::transport::http::HttpTransport::with_config(url, &config.connection)
+                        .expect(
+                            "URL was validated in with_url() but transport construction failed",
+                        ),
+                )
+                    as crate::transport::BoxedTransport,
+                crate::transport::TransportType::Sse => {
+                    // SSE is a legacy transport — ConnectionConfig not wired (no with_config)
+                    Box::new(
+                        crate::transport::sse::SseTransport::new(url)
+                            .expect("URL was validated in with_url() but SSE construction failed"),
+                    )
+                }
+            }
+        } else {
+            panic!("Transport must be set via with_transport() or with_url() before building");
+        };
 
         McpClient::new(transport, config)
     }
@@ -1215,6 +1271,8 @@ mod tests {
 
         fn set_session_id(&mut self, _session_id: String) {}
 
+        fn clear_session_id(&mut self) {}
+
         async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver> {
             self.event_rx
                 .take()
@@ -1361,5 +1419,571 @@ mod tests {
         );
 
         client.disconnect().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_builder_with_sse_url_yields_sse_transport() {
+        let client = McpClientBuilder::new()
+            .with_url("http://localhost:9999/sse")
+            .unwrap()
+            .build();
+        let status = client.connection_status().await;
+        assert_eq!(
+            status.transport_type,
+            crate::transport::TransportType::Sse,
+            "URL with /sse path must yield SSE transport"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_builder_with_mcp_url_yields_http_transport() {
+        let client = McpClientBuilder::new()
+            .with_url("http://localhost:9999/mcp")
+            .unwrap()
+            .build();
+        let status = client.connection_status().await;
+        assert_eq!(
+            status.transport_type,
+            crate::transport::TransportType::Http,
+            "Non-SSE URL must yield HTTP transport"
+        );
+    }
+
+    // ── StatefulMockTransport ──────────────────────────────────────────
+
+    use std::collections::VecDeque;
+    use std::sync::atomic::AtomicU32;
+
+    /// A mock transport that supports multi-step response sequences and call tracking.
+    /// Unlike `MockTransport` (which returns fixed responses), this transport pops
+    /// responses from queues, enabling tests that exercise full session lifecycles
+    /// (initialize → set session → requests → re-initialize on 404 → …).
+    #[allow(dead_code)]
+    struct StatefulMockTransport {
+        /// Sequence of responses for send_request_with_headers (initialize)
+        init_responses: Arc<std::sync::Mutex<VecDeque<McpClientResult<TransportResponse>>>>,
+        /// Sequence of responses for send_request (normal requests)
+        request_responses: Arc<std::sync::Mutex<VecDeque<McpClientResult<Value>>>>,
+        /// Tracks set_session_id calls in order
+        set_session_ids: Arc<std::sync::Mutex<Vec<String>>>,
+        /// Tracks clear_session_id call count
+        clear_count: Arc<AtomicU32>,
+        /// Event channel sender
+        event_tx: Option<mpsc::UnboundedSender<ServerEvent>>,
+        /// Event channel receiver (taken once by start_event_listener)
+        event_rx: Option<mpsc::UnboundedReceiver<ServerEvent>>,
+        /// Capabilities
+        caps: TransportCapabilities,
+        /// Connected flag
+        connected: bool,
+    }
+
+    impl StatefulMockTransport {
+        fn new() -> Self {
+            let (event_tx, event_rx) = mpsc::unbounded_channel();
+            Self {
+                init_responses: Arc::new(std::sync::Mutex::new(VecDeque::new())),
+                request_responses: Arc::new(std::sync::Mutex::new(VecDeque::new())),
+                set_session_ids: Arc::new(std::sync::Mutex::new(Vec::new())),
+                clear_count: Arc::new(AtomicU32::new(0)),
+                event_tx: Some(event_tx),
+                event_rx: Some(event_rx),
+                caps: TransportCapabilities {
+                    streaming: true,
+                    bidirectional: true,
+                    server_events: true,
+                    max_message_size: None,
+                    persistent: true,
+                },
+                connected: false,
+            }
+        }
+
+        #[allow(dead_code)]
+        fn push_init_response(&mut self, resp: McpClientResult<TransportResponse>) {
+            self.init_responses.lock().unwrap().push_back(resp);
+        }
+
+        fn push_request_response(&mut self, resp: McpClientResult<Value>) {
+            self.request_responses.lock().unwrap().push_back(resp);
+        }
+
+        /// Create a valid initialize TransportResponse with optional session ID header.
+        #[allow(dead_code)]
+        fn make_init_response(
+            session_id: Option<&str>,
+            protocol_version: &str,
+        ) -> TransportResponse {
+            let mut headers = HashMap::new();
+            if let Some(sid) = session_id {
+                headers.insert("mcp-session-id".to_string(), sid.to_string());
+            }
+            TransportResponse::new(
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_0",
+                    "result": {
+                        "protocolVersion": protocol_version,
+                        "capabilities": {
+                            "tools": { "listChanged": true }
+                        },
+                        "serverInfo": {
+                            "name": "stateful-mock",
+                            "version": "1.0.0"
+                        }
+                    }
+                }),
+                headers,
+            )
+        }
+    }
+
+    #[async_trait]
+    impl crate::transport::Transport for StatefulMockTransport {
+        fn transport_type(&self) -> TransportType {
+            TransportType::Http
+        }
+
+        fn capabilities(&self) -> TransportCapabilities {
+            self.caps.clone()
+        }
+
+        async fn connect(&mut self) -> McpClientResult<()> {
+            self.connected = true;
+            Ok(())
+        }
+
+        async fn disconnect(&mut self) -> McpClientResult<()> {
+            self.connected = false;
+            Ok(())
+        }
+
+        fn is_connected(&self) -> bool {
+            self.connected
+        }
+
+        async fn send_request(&mut self, _request: Value) -> McpClientResult<Value> {
+            self.request_responses
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| {
+                    Err(McpClientError::generic(
+                        "StatefulMockTransport: no more request responses queued",
+                    ))
+                })
+        }
+
+        async fn send_request_with_headers(
+            &mut self,
+            _request: Value,
+        ) -> McpClientResult<TransportResponse> {
+            self.init_responses
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| {
+                    Err(McpClientError::generic(
+                        "StatefulMockTransport: no more init responses queued",
+                    ))
+                })
+        }
+
+        async fn send_notification(&mut self, _notification: Value) -> McpClientResult<()> {
+            Ok(())
+        }
+
+        async fn send_delete(&mut self, _session_id: &str) -> McpClientResult<()> {
+            Ok(())
+        }
+
+        fn set_session_id(&mut self, session_id: String) {
+            self.set_session_ids.lock().unwrap().push(session_id);
+        }
+
+        fn clear_session_id(&mut self) {
+            self.clear_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+
+        async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver> {
+            self.event_rx
+                .take()
+                .ok_or_else(|| McpClientError::generic("Event listener already started"))
+        }
+
+        fn connection_info(&self) -> ConnectionInfo {
+            ConnectionInfo {
+                transport_type: TransportType::Http,
+                endpoint: "stateful-mock://test".to_string(),
+                connected: self.connected,
+                capabilities: self.caps.clone(),
+                metadata: Value::Null,
+            }
+        }
+
+        fn statistics(&self) -> TransportStatistics {
+            TransportStatistics::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_stateful_mock_transport_sequences() {
+        use crate::transport::Transport;
+
+        let mut transport = StatefulMockTransport::new();
+        transport.push_request_response(Ok(json!({"result": "first"})));
+        transport.push_request_response(Ok(json!({"result": "second"})));
+
+        let r1 = transport.send_request(json!({})).await.unwrap();
+        assert_eq!(r1["result"], "first");
+        let r2 = transport.send_request(json!({})).await.unwrap();
+        assert_eq!(r2["result"], "second");
+
+        // Queue exhausted → error
+        assert!(transport.send_request(json!({})).await.is_err());
+    }
+
+    // ── Session lifecycle tests ─────────────────────────────────────────
+
+    use crate::config::RetryConfig;
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+
+    /// Helper: build a fast-retry config (1 ms delays) with the given max_attempts.
+    fn fast_retry_config(max_attempts: u32) -> ClientConfig {
+        ClientConfig {
+            retry: RetryConfig {
+                max_attempts,
+                initial_delay: Duration::from_millis(1),
+                max_delay: Duration::from_millis(1),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    /// Test 2.1 — 404 recovery path resets session, clears stale transport session ID,
+    /// re-initializes with a fresh session, and retries the original request.
+    #[tokio::test]
+    async fn test_404_reinitialize_clears_stale_session_id() {
+        let mut transport = StatefulMockTransport::new();
+
+        // 1. Initial initialize → session "AAA"
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-AAA"),
+            "2025-11-25",
+        )));
+
+        // 2. First real request → 404 (session expired on server)
+        transport.push_request_response(Err(McpClientError::Transport(
+            crate::error::TransportError::HttpStatus {
+                status: 404,
+                message: "Not Found".to_string(),
+            },
+        )));
+
+        // 3. Re-initialize → session "BBB"
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-BBB"),
+            "2025-11-25",
+        )));
+
+        // 4. Retry request → success
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "result": { "tools": [] }
+        })));
+
+        let clear_count = transport.clear_count.clone();
+        let set_ids = transport.set_session_ids.clone();
+
+        let client = McpClient::new(Box::new(transport), fast_retry_config(3));
+        client.connect().await.unwrap();
+
+        // This should: fail with 404 → clear session → re-init → retry → succeed
+        let result = client.list_tools().await;
+        assert!(
+            result.is_ok(),
+            "Request should succeed after 404 re-initialization: {:?}",
+            result.err()
+        );
+
+        // Verify clear_session_id was called exactly once during 404 recovery
+        assert_eq!(
+            clear_count.load(Ordering::SeqCst),
+            1,
+            "clear_session_id must be called exactly once during 404 recovery"
+        );
+
+        // Verify new session ID was set after re-initialization
+        let ids = set_ids.lock().unwrap();
+        assert!(
+            ids.contains(&"session-BBB".to_string()),
+            "New session ID 'session-BBB' should be set after re-initialization, got: {:?}",
+            *ids
+        );
+    }
+
+    /// Test 2.1a — 404 on last retry attempt still recovers (re-init doesn't count
+    /// as a "retry" — the loop continues after successful re-init).
+    #[tokio::test]
+    async fn test_404_on_last_retry_attempt_still_recovers() {
+        let mut transport = StatefulMockTransport::new();
+
+        // Initial init
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-AAA"),
+            "2025-11-25",
+        )));
+        // 404 on first request
+        transport.push_request_response(Err(McpClientError::Transport(
+            crate::error::TransportError::HttpStatus {
+                status: 404,
+                message: "Not Found".to_string(),
+            },
+        )));
+        // Re-init
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-BBB"),
+            "2025-11-25",
+        )));
+        // Retry succeeds
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "result": { "tools": [] }
+        })));
+
+        let client = McpClient::new(Box::new(transport), fast_retry_config(2));
+        client.connect().await.unwrap();
+
+        let result = client.list_tools().await;
+        assert!(
+            result.is_ok(),
+            "404 recovery should work even with max_attempts=2: {:?}",
+            result.err()
+        );
+    }
+
+    /// Test 2.1b — When re-initialization after 404 fails, the original 404 error
+    /// is surfaced (not the re-init error).
+    #[tokio::test]
+    async fn test_404_reinit_failure_surfaces_original_error() {
+        let mut transport = StatefulMockTransport::new();
+
+        // Initial init
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-AAA"),
+            "2025-11-25",
+        )));
+        // 404
+        transport.push_request_response(Err(McpClientError::Transport(
+            crate::error::TransportError::HttpStatus {
+                status: 404,
+                message: "Session gone".to_string(),
+            },
+        )));
+        // Re-init FAILS
+        transport.push_init_response(Err(McpClientError::Transport(
+            crate::error::TransportError::ConnectionFailed("Connection refused".to_string()),
+        )));
+
+        let client = McpClient::new(Box::new(transport), fast_retry_config(3));
+        client.connect().await.unwrap();
+
+        let result = client.list_tools().await;
+        assert!(result.is_err());
+
+        // Should surface the original 404 error, not the reinit ConnectionFailed error
+        let err = result.unwrap_err();
+        assert!(
+            err.is_session_expired(),
+            "Should surface original 404 error, got: {}",
+            err
+        );
+    }
+
+    /// Test 2.2 — Server may omit Mcp-Session-Id header (stateless mode).
+    /// connect() must succeed and client must be ready.
+    #[tokio::test]
+    async fn test_optional_session_id_no_hard_failure() {
+        let mut transport = StatefulMockTransport::new();
+
+        // Init response WITHOUT session ID
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            None, // No session ID
+            "2025-11-25",
+        )));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        let result = client.connect().await;
+        assert!(
+            result.is_ok(),
+            "connect() must succeed without Mcp-Session-Id: {:?}",
+            result.err()
+        );
+        assert!(
+            client.is_ready().await,
+            "Client must be ready after stateless init"
+        );
+
+        let status = client.connection_status().await;
+        assert!(
+            status.session_id.is_none(),
+            "Session ID should be None for stateless server, got: {:?}",
+            status.session_id
+        );
+    }
+
+    /// Test 2.3 — Server returns an unsupported protocol version.
+    /// connect() must fail with an error mentioning both versions.
+    #[tokio::test]
+    async fn test_unsupported_protocol_version_rejected() {
+        let mut transport = StatefulMockTransport::new();
+
+        // Server returns unsupported version
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-123"),
+            "2099-01-01",
+        )));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        let result = client.connect().await;
+        assert!(
+            result.is_err(),
+            "connect() must fail for unsupported protocol version"
+        );
+
+        let err = result.unwrap_err();
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("2099-01-01"),
+            "Error should mention server's version '2099-01-01', got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("2025-11-25"),
+            "Error should mention supported version '2025-11-25', got: {}",
+            err_msg
+        );
+    }
+
+    // ── Error propagation tests ────────────────────────────────────────
+
+    /// Test 4.1 — JSON-RPC error response surfaces as `ServerError` with code, message, and data.
+    #[tokio::test]
+    async fn test_jsonrpc_error_surfaces_as_server_error_with_code_message_data() {
+        let mut transport = StatefulMockTransport::new();
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-1"),
+            "2025-11-25",
+        )));
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "error": {
+                "code": -32602,
+                "message": "Invalid params",
+                "data": {"detail": "missing field 'name'"}
+            }
+        })));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        client.connect().await.unwrap();
+
+        let result = client.list_tools().await;
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert_eq!(err.error_code(), Some(-32602));
+        assert!(err.to_string().contains("Invalid params"));
+        if let McpClientError::ServerError { data, .. } = &err {
+            assert!(data.is_some());
+            assert_eq!(data.as_ref().unwrap()["detail"], "missing field 'name'");
+        } else {
+            panic!("Expected ServerError, got: {:?}", err);
+        }
+    }
+
+    /// Test 4.2 — JSON-RPC error without `data` field: `data` must be `None`.
+    #[tokio::test]
+    async fn test_jsonrpc_error_without_data_field() {
+        let mut transport = StatefulMockTransport::new();
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-1"),
+            "2025-11-25",
+        )));
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "error": {
+                "code": -32600,
+                "message": "Invalid Request"
+            }
+        })));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        client.connect().await.unwrap();
+
+        let result = client.list_tools().await;
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert_eq!(err.error_code(), Some(-32600));
+        if let McpClientError::ServerError { data, .. } = &err {
+            assert!(data.is_none(), "data should be None when server omits it");
+        } else {
+            panic!("Expected ServerError, got: {:?}", err);
+        }
+    }
+
+    /// Test 4.3 — `call_tool` with a malformed response returns an error rather than panicking.
+    #[tokio::test]
+    async fn test_call_tool_malformed_response_returns_error() {
+        let mut transport = StatefulMockTransport::new();
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-1"),
+            "2025-11-25",
+        )));
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "result": {"unexpected": "shape"}
+        })));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        client.connect().await.unwrap();
+
+        let result = client.call_tool("test", json!({})).await;
+        assert!(
+            result.is_err(),
+            "Malformed response should return error, not panic"
+        );
+    }
+
+    /// Test 4.4 — `get_prompt` with a malformed response returns an error rather than panicking.
+    #[tokio::test]
+    async fn test_get_prompt_malformed_response_returns_error() {
+        let mut transport = StatefulMockTransport::new();
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-1"),
+            "2025-11-25",
+        )));
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "result": {"wrong": "format"}
+        })));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        client.connect().await.unwrap();
+
+        let result = client.get_prompt("test", None).await;
+        assert!(
+            result.is_err(),
+            "Malformed response should return error, not panic"
+        );
     }
 }

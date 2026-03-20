@@ -17,6 +17,9 @@ use crate::transport::{
     TransportStatistics, TransportType,
 };
 
+/// Accept header for MCP POST requests per spec (MUST include both media types)
+const MCP_POST_ACCEPT: &str = "application/json, text/event-stream";
+
 /// HTTP transport for MCP client (Streamable HTTP)
 #[derive(Debug)]
 pub struct HttpTransport {
@@ -71,6 +74,61 @@ impl HttpTransport {
         })
     }
 
+    /// Create HTTP transport with connection configuration applied
+    pub fn with_config(
+        endpoint: &str,
+        config: &crate::config::ConnectionConfig,
+    ) -> McpClientResult<Self> {
+        let url = Url::parse(endpoint)
+            .map_err(|e| TransportError::ConnectionFailed(format!("Invalid URL: {}", e)))?;
+
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err(TransportError::ConnectionFailed(format!(
+                "Invalid scheme for HTTP transport: {}",
+                url.scheme()
+            ))
+            .into());
+        }
+
+        let user_agent = config.user_agent.as_deref().unwrap_or("mcp-client/0.1.0");
+
+        let mut builder = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .user_agent(user_agent);
+
+        if !config.follow_redirects {
+            builder = builder.redirect(reqwest::redirect::Policy::none());
+        }
+
+        if let Some(ref headers) = config.headers {
+            let mut header_map = reqwest::header::HeaderMap::new();
+            for (k, v) in headers {
+                if let (Ok(name), Ok(value)) = (
+                    reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                    reqwest::header::HeaderValue::from_str(v),
+                ) {
+                    header_map.insert(name, value);
+                }
+            }
+            builder = builder.default_headers(header_map);
+        }
+
+        let client = builder
+            .build()
+            .map_err(|e| TransportError::Http(format!("Failed to create HTTP client: {}", e)))?;
+
+        Ok(Self {
+            client,
+            endpoint: url,
+            connected: AtomicBool::new(false),
+            request_counter: AtomicU64::new(0),
+            stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
+            event_sender: None,
+            queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
+            session_id: Arc::new(parking_lot::Mutex::new(None)),
+        })
+    }
+
     /// Create HTTP transport with custom client
     pub fn with_client(endpoint: &str, client: Client) -> McpClientResult<Self> {
         let url = Url::parse(endpoint)
@@ -92,6 +150,12 @@ impl HttpTransport {
     pub fn set_session_id(&mut self, session_id: String) {
         debug!("Setting session ID: {}", session_id);
         *self.session_id.lock() = Some(session_id);
+    }
+
+    /// Clear the session ID (used during 404 re-initialization)
+    pub fn clear_session_id(&mut self) {
+        debug!("Clearing session ID for re-initialization");
+        *self.session_id.lock() = None;
     }
 
     /// Generate unique request ID
@@ -120,6 +184,59 @@ impl HttpTransport {
         self.handle_byte_stream(stream).await
     }
 
+    /// Parse an SSE stream from a POST response.
+    /// Extracts JSON-RPC frames from `data:` lines, routes notifications
+    /// to event_sender, returns the final result/error frame.
+    async fn handle_sse_stream(&mut self, response: Response) -> McpClientResult<Value> {
+        use futures::StreamExt;
+        use tokio::io::AsyncBufReadExt;
+
+        let byte_stream = response.bytes_stream();
+        let reader = tokio_util::io::StreamReader::new(
+            byte_stream.map(|r| r.map_err(std::io::Error::other)),
+        );
+        let mut lines = tokio::io::BufReader::new(reader).lines();
+
+        parse_sse_lines(
+            &mut lines,
+            &self.event_sender,
+            &self.queued_events,
+            &self.stats,
+        )
+        .await
+    }
+
+    /// Test helper: Process an in-memory SSE byte stream
+    #[doc(hidden)]
+    pub async fn test_handle_sse_stream<S, B, E>(&mut self, stream: S) -> McpClientResult<Value>
+    where
+        S: Stream<Item = Result<B, E>> + Unpin,
+        B: AsRef<[u8]>,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        use futures::StreamExt;
+        use tokio::io::AsyncBufReadExt;
+
+        // Collect all bytes first (test helper — no streaming needed)
+        let mut buffer = Vec::new();
+        let mut stream = stream;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(|e| TransportError::Http(format!("Stream error: {}", e)))?;
+            buffer.extend_from_slice(chunk.as_ref());
+        }
+
+        let cursor = std::io::Cursor::new(buffer);
+        let mut lines = tokio::io::BufReader::new(cursor).lines();
+
+        parse_sse_lines(
+            &mut lines,
+            &self.event_sender,
+            &self.queued_events,
+            &self.stats,
+        )
+        .await
+    }
+
     /// Handle HTTP response
     async fn handle_response(&mut self, response: Response) -> McpClientResult<Value> {
         let status = response.status();
@@ -135,9 +252,11 @@ impl HttpTransport {
                 stats.last_error = Some(format!("HTTP {}: {}", status, error_text));
             });
 
-            return Err(
-                TransportError::Http(format!("HTTP error {}: {}", status, error_text)).into(),
-            );
+            return Err(TransportError::HttpStatus {
+                status: status.as_u16(),
+                message: error_text,
+            }
+            .into());
         }
 
         // Capture session ID from response headers if present
@@ -158,8 +277,7 @@ impl HttpTransport {
         if content_type.contains("application/json") {
             self.handle_json_stream(response).await
         } else if content_type.contains("text/event-stream") {
-            // Should not happen in send_request, but handle gracefully
-            Err(TransportError::Http("Unexpected SSE response in send_request".to_string()).into())
+            self.handle_sse_stream(response).await
         } else {
             Err(TransportError::Http(format!("Unsupported content type: {}", content_type)).into())
         }
@@ -224,22 +342,23 @@ impl HttpTransport {
                             if json.get("result").is_some() {
                                 self.update_stats(|stats| stats.responses_received += 1);
                                 return Ok(json); // Success response
-                            } else if let Some(error) = json.get("error") {
+                            } else if json.get("error").is_some() {
                                 self.update_stats(|stats| {
                                     stats.errors += 1;
-                                    stats.last_error = Some(format!("JSON-RPC error: {}", error));
+                                    stats.last_error =
+                                        json["error"]["message"].as_str().map(|s| s.to_string());
                                 });
-                                return Err(TransportError::Http(format!(
-                                    "Server error: {}",
-                                    error
-                                ))
-                                .into());
+                                return Ok(json); // Let client layer extract structured error
                             }
                         }
 
-                        // Progress notification - send via event channel or queue for later
+                        // Progress notification or server request - route accordingly
                         if json.get("method").is_some() {
-                            let event = ServerEvent::Notification(json.clone());
+                            let event = if json.get("id").is_some() && !json["id"].is_null() {
+                                ServerEvent::Request(json.clone())
+                            } else {
+                                ServerEvent::Notification(json.clone())
+                            };
                             if let Some(sender) = &self.event_sender {
                                 if sender.send(event.clone()).is_err() {
                                     // Channel closed, queue the event for future listeners
@@ -314,9 +433,11 @@ impl HttpTransport {
                 stats.last_error = Some(format!("HTTP {}: {}", status, error_text));
             });
 
-            return Err(
-                TransportError::Http(format!("HTTP error {}: {}", status, error_text)).into(),
-            );
+            return Err(TransportError::HttpStatus {
+                status: status.as_u16(),
+                message: error_text,
+            }
+            .into());
         }
 
         // Capture session ID from response headers if present
@@ -345,11 +466,7 @@ impl HttpTransport {
         let response_json = if content_type.contains("application/json") {
             self.handle_json_stream(response).await?
         } else if content_type.contains("text/event-stream") {
-            // Should not happen in send_request_with_headers, but handle gracefully
-            return Err(TransportError::Http(
-                "Unexpected SSE response in send_request_with_headers".to_string(),
-            )
-            .into());
+            self.handle_sse_stream(response).await?
         } else {
             return Err(TransportError::Http(format!(
                 "Unsupported content type: {}",
@@ -375,7 +492,7 @@ impl Transport for HttpTransport {
         TransportCapabilities {
             streaming: true,
             bidirectional: false,
-            server_events: false,
+            server_events: true,
             max_message_size: None,
             persistent: false,
         }
@@ -434,7 +551,7 @@ impl Transport for HttpTransport {
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
+            .header("Accept", MCP_POST_ACCEPT)
             .header("MCP-Protocol-Version", "2025-11-25");
 
         // Include session ID if we have one
@@ -500,7 +617,7 @@ impl Transport for HttpTransport {
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
+            .header("Accept", MCP_POST_ACCEPT)
             .header("MCP-Protocol-Version", "2025-11-25");
 
         // Include session ID if we have one
@@ -554,6 +671,7 @@ impl Transport for HttpTransport {
         let mut req_builder = self
             .client
             .post(self.endpoint.clone())
+            .header("Accept", MCP_POST_ACCEPT)
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2025-11-25");
 
@@ -581,10 +699,10 @@ impl Transport for HttpTransport {
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            Err(TransportError::Http(format!(
-                "Notification failed with status {}: {}",
-                status, error_text
-            ))
+            Err(TransportError::HttpStatus {
+                status: status.as_u16(),
+                message: error_text,
+            }
             .into())
         }
     }
@@ -902,9 +1020,58 @@ impl Transport for HttpTransport {
         *self.session_id.lock() = Some(session_id);
     }
 
+    fn clear_session_id(&mut self) {
+        debug!("HttpTransport: Clearing session ID for re-initialization");
+        *self.session_id.lock() = None;
+    }
+
     fn statistics(&self) -> TransportStatistics {
         self.stats.lock().clone()
     }
+}
+
+/// Parse SSE lines, route server requests/notifications, return final response frame.
+/// Extracted from handle_sse_stream for testability.
+async fn parse_sse_lines<R: tokio::io::AsyncBufRead + Unpin>(
+    lines: &mut tokio::io::Lines<R>,
+    event_sender: &Option<mpsc::UnboundedSender<ServerEvent>>,
+    queued_events: &Arc<parking_lot::Mutex<Vec<ServerEvent>>>,
+    stats: &Arc<parking_lot::Mutex<TransportStatistics>>,
+) -> McpClientResult<Value> {
+    while let Ok(Some(line)) = lines.next_line().await {
+        let data = line
+            .strip_prefix("data: ")
+            .or_else(|| line.strip_prefix("data:"));
+        let Some(data) = data else {
+            continue;
+        };
+        let Ok(json) = serde_json::from_str::<Value>(data) else {
+            continue;
+        };
+        // Final response frame — has id + result or error
+        if json.get("id").is_some() && (json.get("result").is_some() || json.get("error").is_some())
+        {
+            stats.lock().responses_received += 1;
+            return Ok(json);
+        }
+        // Server request or notification — route to event channel
+        if json.get("method").is_some() {
+            let event = if json.get("id").is_some() && !json["id"].is_null() {
+                ServerEvent::Request(json)
+            } else {
+                ServerEvent::Notification(json)
+            };
+            if let Some(sender) = event_sender {
+                if sender.send(event.clone()).is_err() {
+                    queued_events.lock().push(event);
+                }
+            } else {
+                queued_events.lock().push(event);
+            }
+        }
+    }
+
+    Err(TransportError::Http("SSE stream ended without final result".to_string()).into())
 }
 
 // Use parking_lot for better performance
@@ -955,6 +1122,12 @@ mod tests {
         assert_eq!(metadata["host"], "example.com");
         assert_eq!(metadata["port"], 8443);
         assert_eq!(metadata["path"], "/mcp/endpoint");
+    }
+
+    #[test]
+    fn test_accept_header_contains_both_media_types() {
+        assert!(MCP_POST_ACCEPT.contains("application/json"));
+        assert!(MCP_POST_ACCEPT.contains("text/event-stream"));
     }
 
     #[test]
@@ -1166,5 +1339,262 @@ mod tests {
             no_more_events.is_err(),
             "Should not have any more events after replay"
         );
+    }
+
+    #[tokio::test]
+    async fn test_handle_sse_post_response() {
+        let sse_body: &[u8] = b"event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{\"tools\":[]}}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+        assert!(
+            result.is_ok(),
+            "SSE POST response should parse successfully"
+        );
+        let json = result.unwrap();
+        assert_eq!(json["id"], "req_0");
+        assert!(json["result"]["tools"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_handle_sse_post_response_error() {
+        let sse_body: &[u8] = b"data: {\"jsonrpc\":\"2.0\",\"id\":\"req_1\",\"error\":{\"code\":-32600,\"message\":\"Invalid\"}}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+        assert!(result.is_ok());
+        let json = result.unwrap();
+        assert_eq!(json["error"]["code"], -32600);
+    }
+
+    #[tokio::test]
+    async fn test_handle_sse_post_no_final_frame() {
+        let sse_body: &[u8] =
+            b"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\"}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+        assert!(result.is_err(), "Should fail when no final frame");
+    }
+
+    #[test]
+    fn test_with_config_custom_headers() {
+        use std::collections::HashMap;
+        let mut headers = HashMap::new();
+        headers.insert("Authorization".to_string(), "Bearer test-token".to_string());
+
+        let config = crate::config::ConnectionConfig {
+            headers: Some(headers),
+            ..Default::default()
+        };
+
+        let transport = HttpTransport::with_config("http://localhost:9999/mcp", &config);
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn test_with_config_no_redirects() {
+        let config = crate::config::ConnectionConfig {
+            follow_redirects: false,
+            ..Default::default()
+        };
+
+        let transport = HttpTransport::with_config("http://localhost:9999/mcp", &config);
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn test_with_config_default() {
+        let config = crate::config::ConnectionConfig::default();
+        let transport = HttpTransport::with_config("http://localhost:9999/mcp", &config);
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn test_http_transport_advertises_server_events() {
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let caps = transport.capabilities();
+        assert!(
+            caps.server_events,
+            "HttpTransport must advertise server_events"
+        );
+        assert!(!caps.bidirectional, "HTTP is not bidirectional");
+    }
+
+    #[tokio::test]
+    async fn test_server_request_routed_as_request_event() {
+        // A server-initiated request has both method AND id
+        let server_request =
+            br#"{"jsonrpc":"2.0","id":"srv-1","method":"sampling/createMessage","params":{}}"#;
+        let stream = create_test_stream(vec![server_request.to_vec()]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        // This will fail to find a final response frame (the server request is not a response),
+        // but the frame should be queued as a Request event
+        let _ = transport.test_handle_byte_stream(stream).await;
+
+        let events = transport.queued_events.lock();
+        assert!(!events.is_empty(), "Server request should be queued");
+        match &events[0] {
+            crate::transport::ServerEvent::Request(val) => {
+                assert_eq!(val["method"], "sampling/createMessage");
+                assert_eq!(val["id"], "srv-1");
+            }
+            other => panic!("Expected ServerEvent::Request, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_jsonrpc_error_preserved_through_transport() {
+        let error_response = br#"{"jsonrpc":"2.0","id":"req_0","error":{"code":-32602,"message":"Invalid params","data":{"detail":"missing field"}}}"#;
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(error_response.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_byte_stream(stream).await;
+
+        assert!(
+            result.is_ok(),
+            "JSON-RPC error should pass through transport as Ok(Value)"
+        );
+        let json = result.unwrap();
+        assert_eq!(json["error"]["code"], -32602);
+        assert_eq!(json["error"]["message"], "Invalid params");
+        assert_eq!(json["error"]["data"]["detail"], "missing field");
+    }
+
+    #[tokio::test]
+    async fn test_sse_post_with_server_request_routed_correctly() {
+        let sse_data = b"data: {\"jsonrpc\":\"2.0\",\"id\":\"srv-99\",\"method\":\"sampling/createMessage\",\"params\":{}}\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{\"tools\":[]}}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_data.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+
+        assert!(result.is_ok());
+        let json = result.unwrap();
+        assert_eq!(
+            json["id"], "req_0",
+            "Should return the final response frame"
+        );
+
+        let events = transport.queued_events.lock();
+        assert_eq!(events.len(), 1, "Should have exactly one queued event");
+        match &events[0] {
+            ServerEvent::Request(val) => {
+                assert_eq!(val["id"], "srv-99");
+                assert_eq!(val["method"], "sampling/createMessage");
+            }
+            other => panic!("Expected ServerEvent::Request, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sse_post_with_notification_routed_correctly() {
+        let sse_data = b"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progress\":50}}\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{\"tools\":[]}}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_data.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+
+        assert!(result.is_ok());
+
+        let events = transport.queued_events.lock();
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            ServerEvent::Notification(val) => {
+                assert_eq!(val["method"], "notifications/progress");
+            }
+            other => panic!("Expected ServerEvent::Notification, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sse_data_field_without_space_after_colon() {
+        // SSE spec allows "data:{json}" without space after colon
+        let sse_body: &[u8] = b"data:{\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{}}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+        assert!(
+            result.is_ok(),
+            "SSE data field without space should be parseable: {:?}",
+            result.err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sse_post_no_duplicate_event_delivery() {
+        use tokio::io::AsyncBufReadExt;
+
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let queued = Arc::new(parking_lot::Mutex::new(Vec::new()));
+        let stats = Arc::new(parking_lot::Mutex::new(TransportStatistics::default()));
+
+        // SSE with one notification then final result
+        let sse_data = b"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{}}\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{}}\n\n";
+        let cursor = std::io::Cursor::new(sse_data.to_vec());
+        let mut lines = tokio::io::BufReader::new(cursor).lines();
+
+        let sender = Some(tx);
+        let _ = parse_sse_lines(&mut lines, &sender, &queued, &stats).await;
+
+        // Check: event should be in EITHER the channel OR queued_events, not both
+        let channel_event = rx.try_recv().ok();
+        let queued_events = queued.lock().clone();
+
+        let total = (if channel_event.is_some() { 1 } else { 0 }) + queued_events.len();
+        assert_eq!(
+            total,
+            1,
+            "Event should be delivered exactly once, not duplicated. Channel: {}, Queued: {}",
+            channel_event.is_some(),
+            queued_events.len()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_byte_stream_request_vs_notification_discrimination() {
+        // Server request (has method + id) followed by notification (method only) followed by final result
+        let frames = br#"{"jsonrpc":"2.0","id":"srv-1","method":"sampling/createMessage","params":{}}{"jsonrpc":"2.0","method":"notifications/progress","params":{"progress":50}}{"jsonrpc":"2.0","id":"req_0","result":{"tools":[]}}"#;
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(frames.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_byte_stream(stream).await;
+
+        assert!(result.is_ok());
+
+        let events = transport.queued_events.lock();
+        assert_eq!(
+            events.len(),
+            2,
+            "Should have both request and notification events"
+        );
+
+        // First event: server request
+        match &events[0] {
+            ServerEvent::Request(val) => {
+                assert_eq!(val["id"], "srv-1");
+                assert_eq!(val["method"], "sampling/createMessage");
+            }
+            other => panic!(
+                "Expected ServerEvent::Request as first event, got {:?}",
+                other
+            ),
+        }
+
+        // Second event: notification
+        match &events[1] {
+            ServerEvent::Notification(val) => {
+                assert_eq!(val["method"], "notifications/progress");
+            }
+            other => panic!(
+                "Expected ServerEvent::Notification as second event, got {:?}",
+                other
+            ),
+        }
     }
 }
