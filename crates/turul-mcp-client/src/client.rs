@@ -1643,4 +1643,230 @@ mod tests {
         // Queue exhausted → error
         assert!(transport.send_request(json!({})).await.is_err());
     }
+
+    // ── Session lifecycle tests ─────────────────────────────────────────
+
+    use crate::config::RetryConfig;
+    use std::sync::atomic::Ordering;
+    use std::time::Duration;
+
+    /// Helper: build a fast-retry config (1 ms delays) with the given max_attempts.
+    fn fast_retry_config(max_attempts: u32) -> ClientConfig {
+        ClientConfig {
+            retry: RetryConfig {
+                max_attempts,
+                initial_delay: Duration::from_millis(1),
+                max_delay: Duration::from_millis(1),
+                ..Default::default()
+            },
+            ..Default::default()
+        }
+    }
+
+    /// Test 2.1 — 404 recovery path resets session, clears stale transport session ID,
+    /// re-initializes with a fresh session, and retries the original request.
+    #[tokio::test]
+    async fn test_404_reinitialize_clears_stale_session_id() {
+        let mut transport = StatefulMockTransport::new();
+
+        // 1. Initial initialize → session "AAA"
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-AAA"),
+            "2025-11-25",
+        )));
+
+        // 2. First real request → 404 (session expired on server)
+        transport.push_request_response(Err(McpClientError::Transport(
+            crate::error::TransportError::HttpStatus {
+                status: 404,
+                message: "Not Found".to_string(),
+            },
+        )));
+
+        // 3. Re-initialize → session "BBB"
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-BBB"),
+            "2025-11-25",
+        )));
+
+        // 4. Retry request → success
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "result": { "tools": [] }
+        })));
+
+        let clear_count = transport.clear_count.clone();
+        let set_ids = transport.set_session_ids.clone();
+
+        let client = McpClient::new(Box::new(transport), fast_retry_config(3));
+        client.connect().await.unwrap();
+
+        // This should: fail with 404 → clear session → re-init → retry → succeed
+        let result = client.list_tools().await;
+        assert!(
+            result.is_ok(),
+            "Request should succeed after 404 re-initialization: {:?}",
+            result.err()
+        );
+
+        // Verify clear_session_id was called exactly once during 404 recovery
+        assert_eq!(
+            clear_count.load(Ordering::SeqCst),
+            1,
+            "clear_session_id must be called exactly once during 404 recovery"
+        );
+
+        // Verify new session ID was set after re-initialization
+        let ids = set_ids.lock().unwrap();
+        assert!(
+            ids.contains(&"session-BBB".to_string()),
+            "New session ID 'session-BBB' should be set after re-initialization, got: {:?}",
+            *ids
+        );
+    }
+
+    /// Test 2.1a — 404 on last retry attempt still recovers (re-init doesn't count
+    /// as a "retry" — the loop continues after successful re-init).
+    #[tokio::test]
+    async fn test_404_on_last_retry_attempt_still_recovers() {
+        let mut transport = StatefulMockTransport::new();
+
+        // Initial init
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-AAA"),
+            "2025-11-25",
+        )));
+        // 404 on first request
+        transport.push_request_response(Err(McpClientError::Transport(
+            crate::error::TransportError::HttpStatus {
+                status: 404,
+                message: "Not Found".to_string(),
+            },
+        )));
+        // Re-init
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-BBB"),
+            "2025-11-25",
+        )));
+        // Retry succeeds
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "result": { "tools": [] }
+        })));
+
+        let client = McpClient::new(Box::new(transport), fast_retry_config(2));
+        client.connect().await.unwrap();
+
+        let result = client.list_tools().await;
+        assert!(
+            result.is_ok(),
+            "404 recovery should work even with max_attempts=2: {:?}",
+            result.err()
+        );
+    }
+
+    /// Test 2.1b — When re-initialization after 404 fails, the original 404 error
+    /// is surfaced (not the re-init error).
+    #[tokio::test]
+    async fn test_404_reinit_failure_surfaces_original_error() {
+        let mut transport = StatefulMockTransport::new();
+
+        // Initial init
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-AAA"),
+            "2025-11-25",
+        )));
+        // 404
+        transport.push_request_response(Err(McpClientError::Transport(
+            crate::error::TransportError::HttpStatus {
+                status: 404,
+                message: "Session gone".to_string(),
+            },
+        )));
+        // Re-init FAILS
+        transport.push_init_response(Err(McpClientError::Transport(
+            crate::error::TransportError::ConnectionFailed("Connection refused".to_string()),
+        )));
+
+        let client = McpClient::new(Box::new(transport), fast_retry_config(3));
+        client.connect().await.unwrap();
+
+        let result = client.list_tools().await;
+        assert!(result.is_err());
+
+        // Should surface the original 404 error, not the reinit ConnectionFailed error
+        let err = result.unwrap_err();
+        assert!(
+            err.is_session_expired(),
+            "Should surface original 404 error, got: {}",
+            err
+        );
+    }
+
+    /// Test 2.2 — Server may omit Mcp-Session-Id header (stateless mode).
+    /// connect() must succeed and client must be ready.
+    #[tokio::test]
+    async fn test_optional_session_id_no_hard_failure() {
+        let mut transport = StatefulMockTransport::new();
+
+        // Init response WITHOUT session ID
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            None,        // No session ID
+            "2025-11-25",
+        )));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        let result = client.connect().await;
+        assert!(
+            result.is_ok(),
+            "connect() must succeed without Mcp-Session-Id: {:?}",
+            result.err()
+        );
+        assert!(
+            client.is_ready().await,
+            "Client must be ready after stateless init"
+        );
+
+        let status = client.connection_status().await;
+        assert!(
+            status.session_id.is_none(),
+            "Session ID should be None for stateless server, got: {:?}",
+            status.session_id
+        );
+    }
+
+    /// Test 2.3 — Server returns an unsupported protocol version.
+    /// connect() must fail with an error mentioning both versions.
+    #[tokio::test]
+    async fn test_unsupported_protocol_version_rejected() {
+        let mut transport = StatefulMockTransport::new();
+
+        // Server returns unsupported version
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-123"),
+            "2099-01-01",
+        )));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        let result = client.connect().await;
+        assert!(
+            result.is_err(),
+            "connect() must fail for unsupported protocol version"
+        );
+
+        let err = result.unwrap_err();
+        let err_msg = err.to_string();
+        assert!(
+            err_msg.contains("2099-01-01"),
+            "Error should mention server's version '2099-01-01', got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("2025-11-25"),
+            "Error should mention supported version '2025-11-25', got: {}",
+            err_msg
+        );
+    }
 }
