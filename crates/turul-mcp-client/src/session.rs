@@ -346,12 +346,10 @@ impl SessionManager {
         if version == PROTOCOL_VERSION {
             Ok(())
         } else {
-            Err(crate::error::ProtocolError::UnsupportedVersion(
-                format!(
-                    "Server negotiated '{}', client supports '{}'",
-                    version, PROTOCOL_VERSION
-                ),
-            )
+            Err(crate::error::ProtocolError::UnsupportedVersion(format!(
+                "Server negotiated '{}', client supports '{}'",
+                version, PROTOCOL_VERSION
+            ))
             .into())
         }
     }

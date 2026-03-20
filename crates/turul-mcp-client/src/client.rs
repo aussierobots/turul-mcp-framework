@@ -1813,7 +1813,7 @@ mod tests {
 
         // Init response WITHOUT session ID
         transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
-            None,        // No session ID
+            None, // No session ID
             "2025-11-25",
         )));
 
@@ -1957,7 +1957,10 @@ mod tests {
         client.connect().await.unwrap();
 
         let result = client.call_tool("test", json!({})).await;
-        assert!(result.is_err(), "Malformed response should return error, not panic");
+        assert!(
+            result.is_err(),
+            "Malformed response should return error, not panic"
+        );
     }
 
     /// Test 4.4 — `get_prompt` with a malformed response returns an error rather than panicking.
@@ -1978,6 +1981,9 @@ mod tests {
         client.connect().await.unwrap();
 
         let result = client.get_prompt("test", None).await;
-        assert!(result.is_err(), "Malformed response should return error, not panic");
+        assert!(
+            result.is_err(),
+            "Malformed response should return error, not panic"
+        );
     }
 }

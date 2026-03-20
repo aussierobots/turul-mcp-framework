@@ -8,8 +8,8 @@ use wiremock::matchers::{header, headers, method};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
 use turul_mcp_client::config::ConnectionConfig;
-use turul_mcp_client::transport::http::HttpTransport;
 use turul_mcp_client::transport::Transport;
+use turul_mcp_client::transport::http::HttpTransport;
 
 fn json_rpc_ok() -> serde_json::Value {
     serde_json::json!({
@@ -115,7 +115,10 @@ async fn test_accept_header_on_post_requests() {
     let mock_server = MockServer::start().await;
 
     Mock::given(method("POST"))
-        .and(headers("Accept", vec!["application/json", "text/event-stream"]))
+        .and(headers(
+            "Accept",
+            vec!["application/json", "text/event-stream"],
+        ))
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("Content-Type", "application/json")
@@ -125,8 +128,7 @@ async fn test_accept_header_on_post_requests() {
         .mount(&mock_server)
         .await;
 
-    let mut transport =
-        HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
+    let mut transport = HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
     transport.connect().await.unwrap();
 
     let _ = transport.send_request(ping_request()).await;
@@ -137,14 +139,16 @@ async fn test_notification_post_includes_accept_header() {
     let mock_server = MockServer::start().await;
 
     Mock::given(method("POST"))
-        .and(headers("Accept", vec!["application/json", "text/event-stream"]))
+        .and(headers(
+            "Accept",
+            vec!["application/json", "text/event-stream"],
+        ))
         .respond_with(ResponseTemplate::new(202))
         .expect(1)
         .mount(&mock_server)
         .await;
 
-    let mut transport =
-        HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
+    let mut transport = HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
     transport.connect().await.unwrap();
 
     let notification = serde_json::json!({
@@ -171,8 +175,7 @@ async fn test_mcp_protocol_version_header_on_requests() {
         .mount(&mock_server)
         .await;
 
-    let mut transport =
-        HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
+    let mut transport = HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
     transport.connect().await.unwrap();
 
     let _ = transport.send_request(ping_request()).await;

@@ -197,7 +197,13 @@ impl HttpTransport {
         );
         let mut lines = tokio::io::BufReader::new(reader).lines();
 
-        parse_sse_lines(&mut lines, &self.event_sender, &self.queued_events, &self.stats).await
+        parse_sse_lines(
+            &mut lines,
+            &self.event_sender,
+            &self.queued_events,
+            &self.stats,
+        )
+        .await
     }
 
     /// Test helper: Process an in-memory SSE byte stream
@@ -222,7 +228,13 @@ impl HttpTransport {
         let cursor = std::io::Cursor::new(buffer);
         let mut lines = tokio::io::BufReader::new(cursor).lines();
 
-        parse_sse_lines(&mut lines, &self.event_sender, &self.queued_events, &self.stats).await
+        parse_sse_lines(
+            &mut lines,
+            &self.event_sender,
+            &self.queued_events,
+            &self.stats,
+        )
+        .await
     }
 
     /// Handle HTTP response
@@ -1027,7 +1039,8 @@ async fn parse_sse_lines<R: tokio::io::AsyncBufRead + Unpin>(
     stats: &Arc<parking_lot::Mutex<TransportStatistics>>,
 ) -> McpClientResult<Value> {
     while let Ok(Some(line)) = lines.next_line().await {
-        let data = line.strip_prefix("data: ")
+        let data = line
+            .strip_prefix("data: ")
             .or_else(|| line.strip_prefix("data:"));
         let Some(data) = data else {
             continue;
@@ -1036,8 +1049,7 @@ async fn parse_sse_lines<R: tokio::io::AsyncBufRead + Unpin>(
             continue;
         };
         // Final response frame — has id + result or error
-        if json.get("id").is_some()
-            && (json.get("result").is_some() || json.get("error").is_some())
+        if json.get("id").is_some() && (json.get("result").is_some() || json.get("error").is_some())
         {
             stats.lock().responses_received += 1;
             return Ok(json);
@@ -1463,7 +1475,10 @@ mod tests {
 
         assert!(result.is_ok());
         let json = result.unwrap();
-        assert_eq!(json["id"], "req_0", "Should return the final response frame");
+        assert_eq!(
+            json["id"], "req_0",
+            "Should return the final response frame"
+        );
 
         let events = transport.queued_events.lock();
         assert_eq!(events.len(), 1, "Should have exactly one queued event");
@@ -1499,8 +1514,7 @@ mod tests {
     #[tokio::test]
     async fn test_sse_data_field_without_space_after_colon() {
         // SSE spec allows "data:{json}" without space after colon
-        let sse_body: &[u8] =
-            b"data:{\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{}}\n\n";
+        let sse_body: &[u8] = b"data:{\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{}}\n\n";
         let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
 
         let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
@@ -1534,7 +1548,8 @@ mod tests {
 
         let total = (if channel_event.is_some() { 1 } else { 0 }) + queued_events.len();
         assert_eq!(
-            total, 1,
+            total,
+            1,
             "Event should be delivered exactly once, not duplicated. Channel: {}, Queued: {}",
             channel_event.is_some(),
             queued_events.len()
@@ -1553,7 +1568,11 @@ mod tests {
         assert!(result.is_ok());
 
         let events = transport.queued_events.lock();
-        assert_eq!(events.len(), 2, "Should have both request and notification events");
+        assert_eq!(
+            events.len(),
+            2,
+            "Should have both request and notification events"
+        );
 
         // First event: server request
         match &events[0] {
@@ -1561,7 +1580,10 @@ mod tests {
                 assert_eq!(val["id"], "srv-1");
                 assert_eq!(val["method"], "sampling/createMessage");
             }
-            other => panic!("Expected ServerEvent::Request as first event, got {:?}", other),
+            other => panic!(
+                "Expected ServerEvent::Request as first event, got {:?}",
+                other
+            ),
         }
 
         // Second event: notification
@@ -1569,7 +1591,10 @@ mod tests {
             ServerEvent::Notification(val) => {
                 assert_eq!(val["method"], "notifications/progress");
             }
-            other => panic!("Expected ServerEvent::Notification as second event, got {:?}", other),
+            other => panic!(
+                "Expected ServerEvent::Notification as second event, got {:?}",
+                other
+            ),
         }
     }
 }
