@@ -265,9 +265,7 @@ impl McpClient {
             let mut transport = self.transport.lock().await;
             transport.set_session_id(session_id);
         } else {
-            return Err(McpClientError::generic(
-                "Server did not provide Mcp-Session-Id header during initialization",
-            ));
+            debug!("Server did not provide Mcp-Session-Id — stateless session (spec-valid)");
         }
 
         // Parse initialize response
