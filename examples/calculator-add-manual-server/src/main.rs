@@ -105,7 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting calculator_add_manual server (Level 4)");
     let server = McpServer::builder()
         .name("calculator_add_manual")
-        .version("0.3.23")
+        .version("0.3.24")
         .title("Calculator Add Manual Server")
         .instructions(
             "Add two numbers using fully manual implementation (Level 4 - Maximum Control)",

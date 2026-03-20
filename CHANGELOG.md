@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.24] - 2026-03-21
+
+### Fixed
+
+- **MCP client Accept header** (`turul-mcp-client`): POST requests now send `Accept: application/json, text/event-stream` per MCP spec. Notifications also include Accept header.
+- **MCP client SSE POST responses** (`turul-mcp-client`): Client can now parse `text/event-stream` responses to POST requests instead of rejecting them.
+- **MCP client session ID optional** (`turul-mcp-client`): Client no longer hard-fails when server doesn't return `Mcp-Session-Id` — stateless sessions are spec-valid.
+- **MCP client protocol version enforcement** (`turul-mcp-client`): Client rejects servers that negotiate unsupported protocol versions.
+- **MCP client 404 re-initialization** (`turul-mcp-client`): HTTP 404 triggers session reset, clears stale session ID from transport, and re-initializes.
+- **MCP client JSON-RPC error preservation** (`turul-mcp-client`): Error frames pass through transport preserving code/message/data instead of flattening to opaque strings.
+- **MCP client SSE double-routing** (`turul-mcp-client`): SSE path no longer duplicates events to both event channel and queue.
+- **MCP client SSE data field parsing** (`turul-mcp-client`): Accepts `data:` with or without space after colon per SSE spec.
+
+### Changed
+
+- **`call_tool()` return type** (`turul-mcp-client`): Returns `CallToolResult` instead of `Vec<ToolResult>` — preserves `is_error`, `structuredContent`, `_meta` fields. **Breaking:** callers need `.content` to get the previous `Vec<ToolResult>`.
+- **`get_prompt()` return type** (`turul-mcp-client`): Returns `GetPromptResult` instead of `Vec<PromptMessage>` — preserves `description`, `_meta` fields. **Breaking:** callers need `.messages` to get the previous `Vec<PromptMessage>`.
+- **`Transport` trait** (`turul-mcp-client`): Added required `clear_session_id()` method. **Breaking** for custom `Transport` implementations.
+
+### Added
+
+- **GET SSE listener for HttpTransport** (`turul-mcp-client`): `server_events: true` enables server-initiated requests/notifications over GET SSE stream.
+- **Server request routing** (`turul-mcp-client`): JSON-RPC frames with `method` + non-null `id` are routed as `ServerEvent::Request` (not `Notification`) in both SSE and JSON stream paths.
+- **`HttpTransport::with_config()`** (`turul-mcp-client`): Constructor that applies `ConnectionConfig` (custom headers, user-agent, redirect policy).
+- **`TransportError::HttpStatus`** (`turul-mcp-client`): Structured error variant preserving HTTP status code.
+- **Builder transport detection** (`turul-mcp-client`): `McpClientBuilder` defers transport construction to `build()` so `with_config()` works regardless of call order.
+- **21 behavioral tests** (`turul-mcp-client`): Protocol compliance, regression, and wire-level tests using `StatefulMockTransport` and `wiremock`.
+
 ## [0.3.23] - 2026-03-20
 
 ### Fixed

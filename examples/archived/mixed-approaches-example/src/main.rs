@@ -255,7 +255,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting mixed approaches example server");
     let server = McpServer::builder()
         .name("mixed_approaches_example")
-        .version("0.3.23")
+        .version("0.3.24")
         .title("Mixed Approaches Example Server")
         .instructions("Demonstrates both derive macro and manual trait implementation approaches")
         .tool(EchoDeriveTool {
