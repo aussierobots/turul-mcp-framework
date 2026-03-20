@@ -1491,6 +1491,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_sse_data_field_without_space_after_colon() {
+        // SSE spec allows "data:{json}" without space after colon
+        let sse_body: &[u8] =
+            b"data:{\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{}}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+        assert!(
+            result.is_ok(),
+            "SSE data field without space should be parseable: {:?}",
+            result.err()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sse_post_no_duplicate_event_delivery() {
+        use tokio::io::AsyncBufReadExt;
+
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let queued = Arc::new(parking_lot::Mutex::new(Vec::new()));
+        let stats = Arc::new(parking_lot::Mutex::new(TransportStatistics::default()));
+
+        // SSE with one notification then final result
+        let sse_data = b"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{}}\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{}}\n\n";
+        let cursor = std::io::Cursor::new(sse_data.to_vec());
+        let mut lines = tokio::io::BufReader::new(cursor).lines();
+
+        let sender = Some(tx);
+        let _ = parse_sse_lines(&mut lines, &sender, &queued, &stats).await;
+
+        // Check: event should be in EITHER the channel OR queued_events, not both
+        let channel_event = rx.try_recv().ok();
+        let queued_events = queued.lock().clone();
+
+        let total = (if channel_event.is_some() { 1 } else { 0 }) + queued_events.len();
+        assert_eq!(
+            total, 1,
+            "Event should be delivered exactly once, not duplicated. Channel: {}, Queued: {}",
+            channel_event.is_some(),
+            queued_events.len()
+        );
+    }
+
+    #[tokio::test]
     async fn test_byte_stream_request_vs_notification_discrimination() {
         // Server request (has method + id) followed by notification (method only) followed by final result
         let frames = br#"{"jsonrpc":"2.0","id":"srv-1","method":"sampling/createMessage","params":{}}{"jsonrpc":"2.0","method":"notifications/progress","params":{"progress":50}}{"jsonrpc":"2.0","id":"req_0","result":{"tools":[]}}"#;

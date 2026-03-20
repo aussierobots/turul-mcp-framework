@@ -133,6 +133,30 @@ async fn test_accept_header_on_post_requests() {
 }
 
 #[tokio::test]
+async fn test_notification_post_includes_accept_header() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(header("Accept", "application/json, text/event-stream"))
+        .respond_with(ResponseTemplate::new(202))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let mut transport =
+        HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
+    transport.connect().await.unwrap();
+
+    let notification = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "notifications/initialized",
+        "params": {}
+    });
+    let _ = transport.send_notification(notification).await;
+    // wiremock expect(1) will fail if Accept header is missing
+}
+
+#[tokio::test]
 async fn test_mcp_protocol_version_header_on_requests() {
     let mock_server = MockServer::start().await;
 
