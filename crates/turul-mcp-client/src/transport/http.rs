@@ -123,6 +123,77 @@ impl HttpTransport {
         self.handle_byte_stream(stream).await
     }
 
+    /// Parse an SSE stream from a POST response.
+    /// Extracts JSON-RPC frames from `data:` lines, routes notifications
+    /// to event_sender, returns the final result/error frame.
+    async fn handle_sse_stream(&mut self, response: Response) -> McpClientResult<Value> {
+        use futures::StreamExt;
+        use tokio::io::AsyncBufReadExt;
+
+        let byte_stream = response.bytes_stream();
+        let reader = tokio_util::io::StreamReader::new(
+            byte_stream.map(|r| r.map_err(std::io::Error::other)),
+        );
+        let mut lines = tokio::io::BufReader::new(reader).lines();
+
+        while let Ok(Some(line)) = lines.next_line().await {
+            let Some(data) = line.strip_prefix("data: ") else {
+                continue;
+            };
+            let Ok(json) = serde_json::from_str::<Value>(data) else {
+                continue;
+            };
+            // Final response frame — has id + result or error
+            if json.get("id").is_some()
+                && (json.get("result").is_some() || json.get("error").is_some())
+            {
+                self.update_stats(|stats| stats.responses_received += 1);
+                return Ok(json);
+            }
+            // Notification or progress — route to event channel
+            if json.get("method").is_some() {
+                let event = ServerEvent::Notification(json);
+                if let Some(sender) = &self.event_sender {
+                    let _ = sender.send(event.clone());
+                }
+                self.queued_events.lock().push(event);
+            }
+        }
+
+        Err(TransportError::Http("SSE stream ended without final result".to_string()).into())
+    }
+
+    /// Test helper: Process an in-memory SSE byte stream
+    #[doc(hidden)]
+    pub async fn test_handle_sse_stream<S, B, E>(&mut self, stream: S) -> McpClientResult<Value>
+    where
+        S: Stream<Item = Result<B, E>> + Unpin,
+        B: AsRef<[u8]>,
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        use futures::StreamExt;
+        let mut buffer = Vec::new();
+        let mut stream = stream;
+        while let Some(chunk) = stream.next().await {
+            let chunk =
+                chunk.map_err(|e| TransportError::Http(format!("Stream error: {}", e)))?;
+            buffer.extend_from_slice(chunk.as_ref());
+        }
+        let text = String::from_utf8_lossy(&buffer);
+        for line in text.lines() {
+            let Some(data) = line.strip_prefix("data: ") else {
+                continue;
+            };
+            if let Ok(json) = serde_json::from_str::<Value>(data)
+                && json.get("id").is_some()
+                && (json.get("result").is_some() || json.get("error").is_some())
+            {
+                return Ok(json);
+            }
+        }
+        Err(TransportError::Http("SSE stream ended without final result".to_string()).into())
+    }
+
     /// Handle HTTP response
     async fn handle_response(&mut self, response: Response) -> McpClientResult<Value> {
         let status = response.status();
@@ -161,8 +232,7 @@ impl HttpTransport {
         if content_type.contains("application/json") {
             self.handle_json_stream(response).await
         } else if content_type.contains("text/event-stream") {
-            // Should not happen in send_request, but handle gracefully
-            Err(TransportError::Http("Unexpected SSE response in send_request".to_string()).into())
+            self.handle_sse_stream(response).await
         } else {
             Err(TransportError::Http(format!("Unsupported content type: {}", content_type)).into())
         }
@@ -348,11 +418,7 @@ impl HttpTransport {
         let response_json = if content_type.contains("application/json") {
             self.handle_json_stream(response).await?
         } else if content_type.contains("text/event-stream") {
-            // Should not happen in send_request_with_headers, but handle gracefully
-            return Err(TransportError::Http(
-                "Unexpected SSE response in send_request_with_headers".to_string(),
-            )
-            .into());
+            self.handle_sse_stream(response).await?
         } else {
             return Err(TransportError::Http(format!(
                 "Unsupported content type: {}",
@@ -1175,5 +1241,40 @@ mod tests {
             no_more_events.is_err(),
             "Should not have any more events after replay"
         );
+    }
+
+    #[tokio::test]
+    async fn test_handle_sse_post_response() {
+        let sse_body: &[u8] = b"event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{\"tools\":[]}}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+        assert!(result.is_ok(), "SSE POST response should parse successfully");
+        let json = result.unwrap();
+        assert_eq!(json["id"], "req_0");
+        assert!(json["result"]["tools"].is_array());
+    }
+
+    #[tokio::test]
+    async fn test_handle_sse_post_response_error() {
+        let sse_body: &[u8] = b"data: {\"jsonrpc\":\"2.0\",\"id\":\"req_1\",\"error\":{\"code\":-32600,\"message\":\"Invalid\"}}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+        assert!(result.is_ok());
+        let json = result.unwrap();
+        assert_eq!(json["error"]["code"], -32600);
+    }
+
+    #[tokio::test]
+    async fn test_handle_sse_post_no_final_frame() {
+        let sse_body: &[u8] = b"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\"}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+        assert!(result.is_err(), "Should fail when no final frame");
     }
 }
