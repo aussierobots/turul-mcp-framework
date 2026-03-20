@@ -1446,4 +1446,79 @@ mod tests {
         assert_eq!(json["error"]["message"], "Invalid params");
         assert_eq!(json["error"]["data"]["detail"], "missing field");
     }
+
+    #[tokio::test]
+    async fn test_sse_post_with_server_request_routed_correctly() {
+        let sse_data = b"data: {\"jsonrpc\":\"2.0\",\"id\":\"srv-99\",\"method\":\"sampling/createMessage\",\"params\":{}}\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{\"tools\":[]}}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_data.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+
+        assert!(result.is_ok());
+        let json = result.unwrap();
+        assert_eq!(json["id"], "req_0", "Should return the final response frame");
+
+        let events = transport.queued_events.lock();
+        assert_eq!(events.len(), 1, "Should have exactly one queued event");
+        match &events[0] {
+            ServerEvent::Request(val) => {
+                assert_eq!(val["id"], "srv-99");
+                assert_eq!(val["method"], "sampling/createMessage");
+            }
+            other => panic!("Expected ServerEvent::Request, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sse_post_with_notification_routed_correctly() {
+        let sse_data = b"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progress\":50}}\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{\"tools\":[]}}\n\n";
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_data.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_sse_stream(stream).await;
+
+        assert!(result.is_ok());
+
+        let events = transport.queued_events.lock();
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            ServerEvent::Notification(val) => {
+                assert_eq!(val["method"], "notifications/progress");
+            }
+            other => panic!("Expected ServerEvent::Notification, got {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_byte_stream_request_vs_notification_discrimination() {
+        // Server request (has method + id) followed by notification (method only) followed by final result
+        let frames = br#"{"jsonrpc":"2.0","id":"srv-1","method":"sampling/createMessage","params":{}}{"jsonrpc":"2.0","method":"notifications/progress","params":{"progress":50}}{"jsonrpc":"2.0","id":"req_0","result":{"tools":[]}}"#;
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(frames.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_byte_stream(stream).await;
+
+        assert!(result.is_ok());
+
+        let events = transport.queued_events.lock();
+        assert_eq!(events.len(), 2, "Should have both request and notification events");
+
+        // First event: server request
+        match &events[0] {
+            ServerEvent::Request(val) => {
+                assert_eq!(val["id"], "srv-1");
+                assert_eq!(val["method"], "sampling/createMessage");
+            }
+            other => panic!("Expected ServerEvent::Request as first event, got {:?}", other),
+        }
+
+        // Second event: notification
+        match &events[1] {
+            ServerEvent::Notification(val) => {
+                assert_eq!(val["method"], "notifications/progress");
+            }
+            other => panic!("Expected ServerEvent::Notification as second event, got {:?}", other),
+        }
+    }
 }
