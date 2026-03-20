@@ -17,6 +17,9 @@ use crate::transport::{
     TransportStatistics, TransportType,
 };
 
+/// Accept header for MCP POST requests per spec (MUST include both media types)
+const MCP_POST_ACCEPT: &str = "application/json, text/event-stream";
+
 /// HTTP transport for MCP client (Streamable HTTP)
 #[derive(Debug)]
 pub struct HttpTransport {
@@ -434,7 +437,7 @@ impl Transport for HttpTransport {
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
+            .header("Accept", MCP_POST_ACCEPT)
             .header("MCP-Protocol-Version", "2025-11-25");
 
         // Include session ID if we have one
@@ -500,7 +503,7 @@ impl Transport for HttpTransport {
             .client
             .post(self.endpoint.clone())
             .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
+            .header("Accept", MCP_POST_ACCEPT)
             .header("MCP-Protocol-Version", "2025-11-25");
 
         // Include session ID if we have one
@@ -955,6 +958,12 @@ mod tests {
         assert_eq!(metadata["host"], "example.com");
         assert_eq!(metadata["port"], 8443);
         assert_eq!(metadata["path"], "/mcp/endpoint");
+    }
+
+    #[test]
+    fn test_accept_header_contains_both_media_types() {
+        assert!(MCP_POST_ACCEPT.contains("application/json"));
+        assert!(MCP_POST_ACCEPT.contains("text/event-stream"));
     }
 
     #[test]
