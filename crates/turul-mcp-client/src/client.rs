@@ -1869,4 +1869,115 @@ mod tests {
             err_msg
         );
     }
+
+    // ── Error propagation tests ────────────────────────────────────────
+
+    /// Test 4.1 — JSON-RPC error response surfaces as `ServerError` with code, message, and data.
+    #[tokio::test]
+    async fn test_jsonrpc_error_surfaces_as_server_error_with_code_message_data() {
+        let mut transport = StatefulMockTransport::new();
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-1"),
+            "2025-11-25",
+        )));
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "error": {
+                "code": -32602,
+                "message": "Invalid params",
+                "data": {"detail": "missing field 'name'"}
+            }
+        })));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        client.connect().await.unwrap();
+
+        let result = client.list_tools().await;
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert_eq!(err.error_code(), Some(-32602));
+        assert!(err.to_string().contains("Invalid params"));
+        if let McpClientError::ServerError { data, .. } = &err {
+            assert!(data.is_some());
+            assert_eq!(data.as_ref().unwrap()["detail"], "missing field 'name'");
+        } else {
+            panic!("Expected ServerError, got: {:?}", err);
+        }
+    }
+
+    /// Test 4.2 — JSON-RPC error without `data` field: `data` must be `None`.
+    #[tokio::test]
+    async fn test_jsonrpc_error_without_data_field() {
+        let mut transport = StatefulMockTransport::new();
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-1"),
+            "2025-11-25",
+        )));
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "error": {
+                "code": -32600,
+                "message": "Invalid Request"
+            }
+        })));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        client.connect().await.unwrap();
+
+        let result = client.list_tools().await;
+        assert!(result.is_err());
+
+        let err = result.unwrap_err();
+        assert_eq!(err.error_code(), Some(-32600));
+        if let McpClientError::ServerError { data, .. } = &err {
+            assert!(data.is_none(), "data should be None when server omits it");
+        } else {
+            panic!("Expected ServerError, got: {:?}", err);
+        }
+    }
+
+    /// Test 4.3 — `call_tool` with a malformed response returns an error rather than panicking.
+    #[tokio::test]
+    async fn test_call_tool_malformed_response_returns_error() {
+        let mut transport = StatefulMockTransport::new();
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-1"),
+            "2025-11-25",
+        )));
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "result": {"unexpected": "shape"}
+        })));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        client.connect().await.unwrap();
+
+        let result = client.call_tool("test", json!({})).await;
+        assert!(result.is_err(), "Malformed response should return error, not panic");
+    }
+
+    /// Test 4.4 — `get_prompt` with a malformed response returns an error rather than panicking.
+    #[tokio::test]
+    async fn test_get_prompt_malformed_response_returns_error() {
+        let mut transport = StatefulMockTransport::new();
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-1"),
+            "2025-11-25",
+        )));
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "result": {"wrong": "format"}
+        })));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        client.connect().await.unwrap();
+
+        let result = client.get_prompt("test", None).await;
+        assert!(result.is_err(), "Malformed response should return error, not panic");
+    }
 }
