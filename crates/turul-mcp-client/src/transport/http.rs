@@ -197,35 +197,7 @@ impl HttpTransport {
         );
         let mut lines = tokio::io::BufReader::new(reader).lines();
 
-        while let Ok(Some(line)) = lines.next_line().await {
-            let Some(data) = line.strip_prefix("data: ") else {
-                continue;
-            };
-            let Ok(json) = serde_json::from_str::<Value>(data) else {
-                continue;
-            };
-            // Final response frame — has id + result or error
-            if json.get("id").is_some()
-                && (json.get("result").is_some() || json.get("error").is_some())
-            {
-                self.update_stats(|stats| stats.responses_received += 1);
-                return Ok(json);
-            }
-            // Server request or notification — route to event channel
-            if json.get("method").is_some() {
-                let event = if json.get("id").is_some() && !json["id"].is_null() {
-                    ServerEvent::Request(json)
-                } else {
-                    ServerEvent::Notification(json)
-                };
-                if let Some(sender) = &self.event_sender {
-                    let _ = sender.send(event.clone());
-                }
-                self.queued_events.lock().push(event);
-            }
-        }
-
-        Err(TransportError::Http("SSE stream ended without final result".to_string()).into())
+        parse_sse_lines(&mut lines, &self.event_sender, &self.queued_events, &self.stats).await
     }
 
     /// Test helper: Process an in-memory SSE byte stream
@@ -237,25 +209,20 @@ impl HttpTransport {
         E: std::error::Error + Send + Sync + 'static,
     {
         use futures::StreamExt;
+        use tokio::io::AsyncBufReadExt;
+
+        // Collect all bytes first (test helper — no streaming needed)
         let mut buffer = Vec::new();
         let mut stream = stream;
         while let Some(chunk) = stream.next().await {
             let chunk = chunk.map_err(|e| TransportError::Http(format!("Stream error: {}", e)))?;
             buffer.extend_from_slice(chunk.as_ref());
         }
-        let text = String::from_utf8_lossy(&buffer);
-        for line in text.lines() {
-            let Some(data) = line.strip_prefix("data: ") else {
-                continue;
-            };
-            if let Ok(json) = serde_json::from_str::<Value>(data)
-                && json.get("id").is_some()
-                && (json.get("result").is_some() || json.get("error").is_some())
-            {
-                return Ok(json);
-            }
-        }
-        Err(TransportError::Http("SSE stream ended without final result".to_string()).into())
+
+        let cursor = std::io::Cursor::new(buffer);
+        let mut lines = tokio::io::BufReader::new(cursor).lines();
+
+        parse_sse_lines(&mut lines, &self.event_sender, &self.queued_events, &self.stats).await
     }
 
     /// Handle HTTP response
@@ -1048,6 +1015,47 @@ impl Transport for HttpTransport {
     fn statistics(&self) -> TransportStatistics {
         self.stats.lock().clone()
     }
+}
+
+/// Parse SSE lines, route server requests/notifications, return final response frame.
+/// Extracted from handle_sse_stream for testability.
+async fn parse_sse_lines<R: tokio::io::AsyncBufRead + Unpin>(
+    lines: &mut tokio::io::Lines<R>,
+    event_sender: &Option<mpsc::UnboundedSender<ServerEvent>>,
+    queued_events: &Arc<parking_lot::Mutex<Vec<ServerEvent>>>,
+    stats: &Arc<parking_lot::Mutex<TransportStatistics>>,
+) -> McpClientResult<Value> {
+    use tokio::io::AsyncBufReadExt;
+
+    while let Ok(Some(line)) = lines.next_line().await {
+        let Some(data) = line.strip_prefix("data: ") else {
+            continue;
+        };
+        let Ok(json) = serde_json::from_str::<Value>(data) else {
+            continue;
+        };
+        // Final response frame — has id + result or error
+        if json.get("id").is_some()
+            && (json.get("result").is_some() || json.get("error").is_some())
+        {
+            stats.lock().responses_received += 1;
+            return Ok(json);
+        }
+        // Server request or notification — route to event channel
+        if json.get("method").is_some() {
+            let event = if json.get("id").is_some() && !json["id"].is_null() {
+                ServerEvent::Request(json)
+            } else {
+                ServerEvent::Notification(json)
+            };
+            if let Some(sender) = event_sender {
+                let _ = sender.send(event.clone());
+            }
+            queued_events.lock().push(event);
+        }
+    }
+
+    Err(TransportError::Http("SSE stream ended without final result".to_string()).into())
 }
 
 // Use parking_lot for better performance
