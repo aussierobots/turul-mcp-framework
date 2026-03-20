@@ -75,7 +75,10 @@ impl HttpTransport {
     }
 
     /// Create HTTP transport with connection configuration applied
-    pub fn with_config(endpoint: &str, config: &crate::config::ConnectionConfig) -> McpClientResult<Self> {
+    pub fn with_config(
+        endpoint: &str,
+        config: &crate::config::ConnectionConfig,
+    ) -> McpClientResult<Self> {
         let url = Url::parse(endpoint)
             .map_err(|e| TransportError::ConnectionFailed(format!("Invalid URL: {}", e)))?;
 
@@ -87,8 +90,7 @@ impl HttpTransport {
             .into());
         }
 
-        let user_agent = config.user_agent.as_deref()
-            .unwrap_or("mcp-client/0.1.0");
+        let user_agent = config.user_agent.as_deref().unwrap_or("mcp-client/0.1.0");
 
         let mut builder = Client::builder()
             .timeout(Duration::from_secs(30))
@@ -111,7 +113,8 @@ impl HttpTransport {
             builder = builder.default_headers(header_map);
         }
 
-        let client = builder.build()
+        let client = builder
+            .build()
             .map_err(|e| TransportError::Http(format!("Failed to create HTTP client: {}", e)))?;
 
         Ok(Self {
@@ -147,6 +150,12 @@ impl HttpTransport {
     pub fn set_session_id(&mut self, session_id: String) {
         debug!("Setting session ID: {}", session_id);
         *self.session_id.lock() = Some(session_id);
+    }
+
+    /// Clear the session ID (used during 404 re-initialization)
+    pub fn clear_session_id(&mut self) {
+        debug!("Clearing session ID for re-initialization");
+        *self.session_id.lock() = None;
     }
 
     /// Generate unique request ID
@@ -202,9 +211,13 @@ impl HttpTransport {
                 self.update_stats(|stats| stats.responses_received += 1);
                 return Ok(json);
             }
-            // Notification or progress — route to event channel
+            // Server request or notification — route to event channel
             if json.get("method").is_some() {
-                let event = ServerEvent::Notification(json);
+                let event = if json.get("id").is_some() && !json["id"].is_null() {
+                    ServerEvent::Request(json)
+                } else {
+                    ServerEvent::Notification(json)
+                };
                 if let Some(sender) = &self.event_sender {
                     let _ = sender.send(event.clone());
                 }
@@ -227,8 +240,7 @@ impl HttpTransport {
         let mut buffer = Vec::new();
         let mut stream = stream;
         while let Some(chunk) = stream.next().await {
-            let chunk =
-                chunk.map_err(|e| TransportError::Http(format!("Stream error: {}", e)))?;
+            let chunk = chunk.map_err(|e| TransportError::Http(format!("Stream error: {}", e)))?;
             buffer.extend_from_slice(chunk.as_ref());
         }
         let text = String::from_utf8_lossy(&buffer);
@@ -354,9 +366,8 @@ impl HttpTransport {
                             } else if json.get("error").is_some() {
                                 self.update_stats(|stats| {
                                     stats.errors += 1;
-                                    stats.last_error = json["error"]["message"]
-                                        .as_str()
-                                        .map(|s| s.to_string());
+                                    stats.last_error =
+                                        json["error"]["message"].as_str().map(|s| s.to_string());
                                 });
                                 return Ok(json); // Let client layer extract structured error
                             }
@@ -490,7 +501,6 @@ impl HttpTransport {
             headers,
         ))
     }
-
 }
 
 #[async_trait]
@@ -1030,6 +1040,11 @@ impl Transport for HttpTransport {
         *self.session_id.lock() = Some(session_id);
     }
 
+    fn clear_session_id(&mut self) {
+        debug!("HttpTransport: Clearing session ID for re-initialization");
+        *self.session_id.lock() = None;
+    }
+
     fn statistics(&self) -> TransportStatistics {
         self.stats.lock().clone()
     }
@@ -1309,7 +1324,10 @@ mod tests {
 
         let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let result = transport.test_handle_sse_stream(stream).await;
-        assert!(result.is_ok(), "SSE POST response should parse successfully");
+        assert!(
+            result.is_ok(),
+            "SSE POST response should parse successfully"
+        );
         let json = result.unwrap();
         assert_eq!(json["id"], "req_0");
         assert!(json["result"]["tools"].is_array());
@@ -1329,7 +1347,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_sse_post_no_final_frame() {
-        let sse_body: &[u8] = b"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\"}\n\n";
+        let sse_body: &[u8] =
+            b"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\"}\n\n";
         let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
 
         let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
@@ -1374,14 +1393,18 @@ mod tests {
     fn test_http_transport_advertises_server_events() {
         let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let caps = transport.capabilities();
-        assert!(caps.server_events, "HttpTransport must advertise server_events");
+        assert!(
+            caps.server_events,
+            "HttpTransport must advertise server_events"
+        );
         assert!(!caps.bidirectional, "HTTP is not bidirectional");
     }
 
     #[tokio::test]
     async fn test_server_request_routed_as_request_event() {
         // A server-initiated request has both method AND id
-        let server_request = br#"{"jsonrpc":"2.0","id":"srv-1","method":"sampling/createMessage","params":{}}"#;
+        let server_request =
+            br#"{"jsonrpc":"2.0","id":"srv-1","method":"sampling/createMessage","params":{}}"#;
         let stream = create_test_stream(vec![server_request.to_vec()]);
 
         let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
@@ -1408,7 +1431,10 @@ mod tests {
         let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let result = transport.test_handle_byte_stream(stream).await;
 
-        assert!(result.is_ok(), "JSON-RPC error should pass through transport as Ok(Value)");
+        assert!(
+            result.is_ok(),
+            "JSON-RPC error should pass through transport as Ok(Value)"
+        );
         let json = result.unwrap();
         assert_eq!(json["error"]["code"], -32602);
         assert_eq!(json["error"]["message"], "Invalid params");

@@ -9,7 +9,7 @@ use crate::config::ClientConfig;
 use crate::error::{McpClientError, McpClientResult, SessionError};
 use crate::session::{SessionManager, SessionState};
 use crate::streaming::StreamHandler;
-use crate::transport::{BoxedTransport, TransportFactory};
+use crate::transport::BoxedTransport;
 
 // Re-export protocol types for convenience
 use turul_mcp_protocol::meta::Cursor;
@@ -346,6 +346,12 @@ impl McpClient {
                     if e.is_session_expired() {
                         warn!("Session expired (HTTP 404) — attempting re-initialization");
                         self.session.reset().await;
+                        // Clear stale session ID from transport so initialize
+                        // request is sent without Mcp-Session-Id header
+                        {
+                            let mut transport = self.transport.lock().await;
+                            transport.clear_session_id();
+                        }
                         if let Err(reinit_err) = self.initialize_session().await {
                             warn!(error = %reinit_err, "Re-initialization failed");
                             return Err(e);
@@ -511,11 +517,7 @@ impl McpClient {
     }
 
     /// Call a tool
-    pub async fn call_tool(
-        &self,
-        name: &str,
-        arguments: Value,
-    ) -> McpClientResult<CallToolResult> {
+    pub async fn call_tool(&self, name: &str, arguments: Value) -> McpClientResult<CallToolResult> {
         debug!(tool = name, "Calling tool");
 
         let request = json!({
@@ -1041,6 +1043,7 @@ impl ToolCallResponse {
 /// Builder for creating MCP clients
 pub struct McpClientBuilder {
     transport: Option<BoxedTransport>,
+    url: Option<String>,
     config: Option<ClientConfig>,
 }
 
@@ -1049,39 +1052,61 @@ impl McpClientBuilder {
     pub fn new() -> Self {
         Self {
             transport: None,
+            url: None,
             config: None,
         }
     }
 
-    /// Set transport
+    /// Set transport directly (ConnectionConfig is NOT applied — caller owns the transport)
     pub fn with_transport(mut self, transport: BoxedTransport) -> Self {
         self.transport = Some(transport);
+        self.url = None; // explicit transport overrides URL
         self
     }
 
-    /// Set transport from URL
+    /// Set transport endpoint URL (transport constructed lazily in `build()` with config applied)
+    ///
+    /// Can be called before or after `with_config()` — config is applied at build time.
     pub fn with_url(mut self, url: &str) -> McpClientResult<Self> {
-        let transport: BoxedTransport = if let Some(ref config) = self.config {
-            Box::new(crate::transport::http::HttpTransport::with_config(url, &config.connection)?)
-        } else {
-            TransportFactory::from_url(url)?
-        };
-        self.transport = Some(transport);
+        // Validate URL eagerly so errors surface at call site
+        let parsed = url::Url::parse(url).map_err(|e| {
+            crate::error::TransportError::ConnectionFailed(format!("Invalid URL: {}", e))
+        })?;
+        if !matches!(parsed.scheme(), "http" | "https") {
+            return Err(crate::error::TransportError::ConnectionFailed(format!(
+                "Invalid scheme: {}",
+                parsed.scheme()
+            ))
+            .into());
+        }
+        self.url = Some(url.to_string());
+        self.transport = None; // URL overrides explicit transport
         Ok(self)
     }
 
-    /// Set configuration
+    /// Set configuration (applied to transport at build time if using `with_url`)
     pub fn with_config(mut self, config: ClientConfig) -> Self {
         self.config = Some(config);
         self
     }
 
     /// Build the client
+    ///
+    /// If `with_url()` was used, the transport is constructed here with `ConnectionConfig` applied.
+    /// If `with_transport()` was used, the provided transport is used as-is.
     pub fn build(self) -> McpClient {
-        let transport = self
-            .transport
-            .expect("Transport must be set before building client");
         let config = self.config.unwrap_or_default();
+        let transport = if let Some(transport) = self.transport {
+            transport
+        } else if let Some(url) = self.url {
+            // Construct transport with config applied — URL was already validated in with_url()
+            Box::new(
+                crate::transport::http::HttpTransport::with_config(&url, &config.connection)
+                    .expect("URL was validated in with_url() but transport construction failed"),
+            )
+        } else {
+            panic!("Transport must be set via with_transport() or with_url() before building");
+        };
 
         McpClient::new(transport, config)
     }
@@ -1231,6 +1256,8 @@ mod tests {
         }
 
         fn set_session_id(&mut self, _session_id: String) {}
+
+        fn clear_session_id(&mut self) {}
 
         async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver> {
             self.event_rx

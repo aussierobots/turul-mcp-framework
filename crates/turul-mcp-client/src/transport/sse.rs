@@ -599,6 +599,11 @@ impl Transport for SseTransport {
         self.session_id = Some(session_id);
     }
 
+    fn clear_session_id(&mut self) {
+        debug!("SSE transport: Clearing session ID for re-initialization");
+        self.session_id = None;
+    }
+
     fn statistics(&self) -> TransportStatistics {
         self.stats.lock().clone()
     }
