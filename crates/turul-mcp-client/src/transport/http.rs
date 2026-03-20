@@ -74,6 +74,58 @@ impl HttpTransport {
         })
     }
 
+    /// Create HTTP transport with connection configuration applied
+    pub fn with_config(endpoint: &str, config: &crate::config::ConnectionConfig) -> McpClientResult<Self> {
+        let url = Url::parse(endpoint)
+            .map_err(|e| TransportError::ConnectionFailed(format!("Invalid URL: {}", e)))?;
+
+        if !matches!(url.scheme(), "http" | "https") {
+            return Err(TransportError::ConnectionFailed(format!(
+                "Invalid scheme for HTTP transport: {}",
+                url.scheme()
+            ))
+            .into());
+        }
+
+        let user_agent = config.user_agent.as_deref()
+            .unwrap_or("mcp-client/0.1.0");
+
+        let mut builder = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .user_agent(user_agent);
+
+        if !config.follow_redirects {
+            builder = builder.redirect(reqwest::redirect::Policy::none());
+        }
+
+        if let Some(ref headers) = config.headers {
+            let mut header_map = reqwest::header::HeaderMap::new();
+            for (k, v) in headers {
+                if let (Ok(name), Ok(value)) = (
+                    reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                    reqwest::header::HeaderValue::from_str(v),
+                ) {
+                    header_map.insert(name, value);
+                }
+            }
+            builder = builder.default_headers(header_map);
+        }
+
+        let client = builder.build()
+            .map_err(|e| TransportError::Http(format!("Failed to create HTTP client: {}", e)))?;
+
+        Ok(Self {
+            client,
+            endpoint: url,
+            connected: AtomicBool::new(false),
+            request_counter: AtomicU64::new(0),
+            stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
+            event_sender: None,
+            queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
+            session_id: Arc::new(parking_lot::Mutex::new(None)),
+        })
+    }
+
     /// Create HTTP transport with custom client
     pub fn with_client(endpoint: &str, client: Client) -> McpClientResult<Self> {
         let url = Url::parse(endpoint)
@@ -299,16 +351,14 @@ impl HttpTransport {
                             if json.get("result").is_some() {
                                 self.update_stats(|stats| stats.responses_received += 1);
                                 return Ok(json); // Success response
-                            } else if let Some(error) = json.get("error") {
+                            } else if json.get("error").is_some() {
                                 self.update_stats(|stats| {
                                     stats.errors += 1;
-                                    stats.last_error = Some(format!("JSON-RPC error: {}", error));
+                                    stats.last_error = json["error"]["message"]
+                                        .as_str()
+                                        .map(|s| s.to_string());
                                 });
-                                return Err(TransportError::Http(format!(
-                                    "Server error: {}",
-                                    error
-                                ))
-                                .into());
+                                return Ok(json); // Let client layer extract structured error
                             }
                         }
 
@@ -440,6 +490,7 @@ impl HttpTransport {
             headers,
         ))
     }
+
 }
 
 #[async_trait]
@@ -1287,6 +1338,39 @@ mod tests {
     }
 
     #[test]
+    fn test_with_config_custom_headers() {
+        use std::collections::HashMap;
+        let mut headers = HashMap::new();
+        headers.insert("Authorization".to_string(), "Bearer test-token".to_string());
+
+        let config = crate::config::ConnectionConfig {
+            headers: Some(headers),
+            ..Default::default()
+        };
+
+        let transport = HttpTransport::with_config("http://localhost:9999/mcp", &config);
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn test_with_config_no_redirects() {
+        let config = crate::config::ConnectionConfig {
+            follow_redirects: false,
+            ..Default::default()
+        };
+
+        let transport = HttpTransport::with_config("http://localhost:9999/mcp", &config);
+        assert!(transport.is_ok());
+    }
+
+    #[test]
+    fn test_with_config_default() {
+        let config = crate::config::ConnectionConfig::default();
+        let transport = HttpTransport::with_config("http://localhost:9999/mcp", &config);
+        assert!(transport.is_ok());
+    }
+
+    #[test]
     fn test_http_transport_advertises_server_events() {
         let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let caps = transport.capabilities();
@@ -1314,5 +1398,20 @@ mod tests {
             }
             other => panic!("Expected ServerEvent::Request, got {:?}", other),
         }
+    }
+
+    #[tokio::test]
+    async fn test_jsonrpc_error_preserved_through_transport() {
+        let error_response = br#"{"jsonrpc":"2.0","id":"req_0","error":{"code":-32602,"message":"Invalid params","data":{"detail":"missing field"}}}"#;
+        let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(error_response.to_vec())]);
+
+        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let result = transport.test_handle_byte_stream(stream).await;
+
+        assert!(result.is_ok(), "JSON-RPC error should pass through transport as Ok(Value)");
+        let json = result.unwrap();
+        assert_eq!(json["error"]["code"], -32602);
+        assert_eq!(json["error"]["message"], "Invalid params");
+        assert_eq!(json["error"]["data"]["detail"], "missing field");
     }
 }
