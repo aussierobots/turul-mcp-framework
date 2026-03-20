@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.23] - 2026-03-20
+
+### Fixed
+
+- **`after_dispatch` middleware mutations silently discarded** (`turul-http-mcp-server`): `DispatcherResult` was cloned into middleware, mutated, then the original `JsonRpcMessage` returned unchanged — mutations now applied back via `apply_dispatcher_result()`.
+- **`after_dispatch` middleware errors silently ignored** (`turul-http-mcp-server`): `let _ = execute_after(...)` swallowed `Err(MiddlewareError)` — errors now propagated through `map_middleware_error_to_jsonrpc()` with correct semantic error codes.
+
 ## [0.3.22] - 2026-03-16
 
 ### Fixed

@@ -314,6 +314,97 @@ mod tests {
         assert_eq!(log[0], "before_first");
     }
 
+    /// Middleware that filters tools from the response
+    struct ToolFilteringMiddleware;
+
+    #[async_trait]
+    impl McpMiddleware for ToolFilteringMiddleware {
+        async fn before_dispatch(
+            &self,
+            _ctx: &mut RequestContext<'_>,
+            _session: Option<&dyn SessionView>,
+            _injection: &mut SessionInjection,
+        ) -> Result<(), MiddlewareError> {
+            Ok(())
+        }
+
+        async fn after_dispatch(
+            &self,
+            _ctx: &RequestContext<'_>,
+            result: &mut DispatcherResult,
+        ) -> Result<(), MiddlewareError> {
+            if let DispatcherResult::Success(val) = result {
+                if let Some(tools) = val.get_mut("tools") {
+                    if let Some(arr) = tools.as_array_mut() {
+                        arr.retain(|t| t["name"] != "secret_tool");
+                    }
+                }
+            }
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_after_dispatch_success_mutation_visible() {
+        let mut stack = MiddlewareStack::new();
+        stack.push(Arc::new(ToolFilteringMiddleware));
+
+        let ctx = RequestContext::new("tools/list", None);
+        let mut result = DispatcherResult::Success(json!({
+            "tools": [
+                {"name": "public_tool"},
+                {"name": "secret_tool"},
+                {"name": "another_tool"}
+            ]
+        }));
+
+        stack.execute_after(&ctx, &mut result).await.unwrap();
+
+        let val = result.success().unwrap();
+        let tools = val["tools"].as_array().unwrap();
+        assert_eq!(tools.len(), 2);
+        assert!(tools.iter().all(|t| t["name"] != "secret_tool"));
+    }
+
+    #[tokio::test]
+    async fn test_after_dispatch_success_to_error_mutation_visible() {
+        struct RejectingMiddleware;
+
+        #[async_trait]
+        impl McpMiddleware for RejectingMiddleware {
+            async fn before_dispatch(
+                &self,
+                _ctx: &mut RequestContext<'_>,
+                _session: Option<&dyn SessionView>,
+                _injection: &mut SessionInjection,
+            ) -> Result<(), MiddlewareError> {
+                Ok(())
+            }
+
+            async fn after_dispatch(
+                &self,
+                _ctx: &RequestContext<'_>,
+                result: &mut DispatcherResult,
+            ) -> Result<(), MiddlewareError> {
+                if result.is_success() {
+                    *result = DispatcherResult::Error("rejected by policy".to_string());
+                }
+                Ok(())
+            }
+        }
+
+        let mut stack = MiddlewareStack::new();
+        stack.push(Arc::new(RejectingMiddleware));
+
+        let ctx = RequestContext::new("tools/list", None);
+        let mut result = DispatcherResult::Success(json!({"tools": []}));
+
+        stack.execute_after(&ctx, &mut result).await.unwrap();
+
+        assert!(result.is_error());
+        assert_eq!(result.error().unwrap(), "rejected by policy");
+    }
+
     #[tokio::test]
     async fn test_empty_stack() {
         let stack = MiddlewareStack::new();

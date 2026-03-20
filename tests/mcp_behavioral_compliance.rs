@@ -1572,3 +1572,444 @@ async fn test_rate_limiting_enforced_for_sessionless_ping() {
         "Rate limit error should use code -32003"
     );
 }
+
+// ─── after_dispatch middleware tests ───────────────────────────────────────────
+
+/// Middleware that filters `secret_tool` from tools/list responses in after_dispatch
+struct ToolFilteringMiddleware;
+
+#[async_trait]
+impl McpMiddleware for ToolFilteringMiddleware {
+    async fn before_dispatch(
+        &self,
+        _ctx: &mut RequestContext<'_>,
+        _session: Option<&dyn turul_mcp_session_storage::SessionView>,
+        _injection: &mut SessionInjection,
+    ) -> Result<(), MiddlewareError> {
+        Ok(())
+    }
+
+    async fn after_dispatch(
+        &self,
+        ctx: &RequestContext<'_>,
+        result: &mut DispatcherResult,
+    ) -> Result<(), MiddlewareError> {
+        if ctx.method() == "tools/list" {
+            if let DispatcherResult::Success(val) = result {
+                if let Some(tools) = val.get_mut("tools") {
+                    if let Some(arr) = tools.as_array_mut() {
+                        arr.retain(|t| t["name"] != "secret_tool");
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Middleware that replaces tools/list success with an error in after_dispatch
+struct ResponseBlockingMiddleware;
+
+#[async_trait]
+impl McpMiddleware for ResponseBlockingMiddleware {
+    async fn before_dispatch(
+        &self,
+        _ctx: &mut RequestContext<'_>,
+        _session: Option<&dyn turul_mcp_session_storage::SessionView>,
+        _injection: &mut SessionInjection,
+    ) -> Result<(), MiddlewareError> {
+        Ok(())
+    }
+
+    async fn after_dispatch(
+        &self,
+        ctx: &RequestContext<'_>,
+        result: &mut DispatcherResult,
+    ) -> Result<(), MiddlewareError> {
+        if ctx.method() == "tools/list" && result.is_success() {
+            *result = DispatcherResult::Error("blocked by policy".to_string());
+        }
+        Ok(())
+    }
+}
+
+/// Middleware that returns Err(MiddlewareError) from after_dispatch for tools/list
+struct AfterDispatchErrorMiddleware;
+
+#[async_trait]
+impl McpMiddleware for AfterDispatchErrorMiddleware {
+    async fn before_dispatch(
+        &self,
+        _ctx: &mut RequestContext<'_>,
+        _session: Option<&dyn turul_mcp_session_storage::SessionView>,
+        _injection: &mut SessionInjection,
+    ) -> Result<(), MiddlewareError> {
+        Ok(())
+    }
+
+    async fn after_dispatch(
+        &self,
+        ctx: &RequestContext<'_>,
+        _result: &mut DispatcherResult,
+    ) -> Result<(), MiddlewareError> {
+        if ctx.method() == "tools/list" {
+            return Err(MiddlewareError::Unauthorized(
+                "post-dispatch authorization failed".to_string(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Start a test server with an after_dispatch middleware
+async fn start_test_server_with_after_dispatch_middleware(
+    middleware: Arc<dyn McpMiddleware>,
+) -> String {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server_url = format!("http://127.0.0.1:{}/mcp", addr.port());
+    drop(listener);
+
+    use turul_mcp_derive::mcp_tool;
+    use turul_mcp_protocol::McpResult;
+
+    #[mcp_tool(name = "public_tool", description = "A public tool")]
+    async fn public_tool() -> McpResult<String> {
+        Ok("public".to_string())
+    }
+
+    #[mcp_tool(name = "secret_tool", description = "A secret tool")]
+    async fn secret_tool() -> McpResult<String> {
+        Ok("secret".to_string())
+    }
+
+    let session_storage = Arc::new(InMemorySessionStorage::new());
+    let server = McpServer::builder()
+        .name("after-dispatch-test-server")
+        .version("1.0.0")
+        .tool_fn(public_tool)
+        .tool_fn(secret_tool)
+        .with_session_storage(session_storage)
+        .middleware(middleware)
+        .bind_address(addr)
+        .build()
+        .unwrap();
+
+    tokio::spawn(async move {
+        if let Err(e) = server.run().await {
+            eprintln!("Test server error: {}", e);
+        }
+    });
+
+    sleep(Duration::from_millis(200)).await;
+    server_url
+}
+
+/// Initialize session for legacy (2024-11-05) transport
+async fn initialize_session_legacy(client: &reqwest::Client, server_url: &str) -> String {
+    let init_response = client
+        .post(server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2024-11-05")
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "initialize",
+            "id": 1,
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {
+                    "name": "after-dispatch-test",
+                    "version": "1.0.0"
+                }
+            }
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(init_response.status(), 200);
+
+    let session_id = init_response
+        .headers()
+        .get("Mcp-Session-Id")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    // Complete handshake
+    let _ = client
+        .post(server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2024-11-05")
+        .header("Mcp-Session-Id", &session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+            "params": {}
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    session_id
+}
+
+/// T-AD1: after_dispatch success mutation visible (Streamable HTTP)
+#[tokio::test]
+async fn test_after_dispatch_tool_filtering_streamable() {
+    let server_url =
+        start_test_server_with_after_dispatch_middleware(Arc::new(ToolFilteringMiddleware)).await;
+    let client = reqwest::Client::new();
+    let session_id = initialize_session(&client, &server_url).await;
+
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Session-Id", &session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": 2
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: Value = response.json().await.unwrap();
+
+    let tools = body["result"]["tools"].as_array().unwrap();
+    let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert!(
+        tool_names.contains(&"public_tool"),
+        "public_tool should remain"
+    );
+    assert!(
+        !tool_names.contains(&"secret_tool"),
+        "secret_tool should be filtered by after_dispatch middleware"
+    );
+}
+
+/// T-AD2: after_dispatch success→error mutation visible (Streamable HTTP)
+#[tokio::test]
+async fn test_after_dispatch_response_blocking_streamable() {
+    let server_url =
+        start_test_server_with_after_dispatch_middleware(Arc::new(ResponseBlockingMiddleware))
+            .await;
+    let client = reqwest::Client::new();
+    let session_id = initialize_session(&client, &server_url).await;
+
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Session-Id", &session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": 2
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: Value = response.json().await.unwrap();
+
+    assert!(
+        body["error"].is_object(),
+        "Response should be a JSON-RPC error after after_dispatch mutation, got: {}",
+        serde_json::to_string_pretty(&body).unwrap()
+    );
+    assert_eq!(
+        body["error"]["code"].as_i64().unwrap(),
+        -32603,
+        "Success→Error mutation should use INTERNAL_ERROR code"
+    );
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("blocked by policy")
+    );
+}
+
+/// T-AD3: after_dispatch success mutation visible (Legacy transport)
+#[tokio::test]
+async fn test_after_dispatch_tool_filtering_legacy() {
+    let server_url =
+        start_test_server_with_after_dispatch_middleware(Arc::new(ToolFilteringMiddleware)).await;
+    let client = reqwest::Client::new();
+    let session_id = initialize_session_legacy(&client, &server_url).await;
+
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2024-11-05")
+        .header("Mcp-Session-Id", &session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": 2
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: Value = response.json().await.unwrap();
+
+    let tools = body["result"]["tools"].as_array().unwrap();
+    let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    assert!(
+        tool_names.contains(&"public_tool"),
+        "public_tool should remain"
+    );
+    assert!(
+        !tool_names.contains(&"secret_tool"),
+        "secret_tool should be filtered by after_dispatch middleware"
+    );
+}
+
+/// T-AD4: after_dispatch success→error mutation visible (Legacy transport)
+#[tokio::test]
+async fn test_after_dispatch_response_blocking_legacy() {
+    let server_url =
+        start_test_server_with_after_dispatch_middleware(Arc::new(ResponseBlockingMiddleware))
+            .await;
+    let client = reqwest::Client::new();
+    let session_id = initialize_session_legacy(&client, &server_url).await;
+
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2024-11-05")
+        .header("Mcp-Session-Id", &session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": 2
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: Value = response.json().await.unwrap();
+
+    assert!(
+        body["error"].is_object(),
+        "Response should be a JSON-RPC error after after_dispatch mutation, got: {}",
+        serde_json::to_string_pretty(&body).unwrap()
+    );
+    assert_eq!(
+        body["error"]["code"].as_i64().unwrap(),
+        -32603,
+        "Success→Error mutation should use INTERNAL_ERROR code"
+    );
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("blocked by policy")
+    );
+}
+
+/// T-AD5: after_dispatch Err(MiddlewareError) propagation (Streamable HTTP)
+#[tokio::test]
+async fn test_after_dispatch_error_propagation_streamable() {
+    let server_url =
+        start_test_server_with_after_dispatch_middleware(Arc::new(AfterDispatchErrorMiddleware))
+            .await;
+    let client = reqwest::Client::new();
+    let session_id = initialize_session(&client, &server_url).await;
+
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2025-11-25")
+        .header("Mcp-Session-Id", &session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": 2
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: Value = response.json().await.unwrap();
+
+    assert!(
+        body["error"].is_object(),
+        "Response should be a JSON-RPC error from after_dispatch MiddlewareError, got: {}",
+        serde_json::to_string_pretty(&body).unwrap()
+    );
+    assert_eq!(
+        body["error"]["code"].as_i64().unwrap(),
+        -32002,
+        "Unauthorized MiddlewareError should produce -32002 error code"
+    );
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("post-dispatch authorization failed")
+    );
+}
+
+/// T-AD6: after_dispatch Err(MiddlewareError) propagation (Legacy transport)
+#[tokio::test]
+async fn test_after_dispatch_error_propagation_legacy() {
+    let server_url =
+        start_test_server_with_after_dispatch_middleware(Arc::new(AfterDispatchErrorMiddleware))
+            .await;
+    let client = reqwest::Client::new();
+    let session_id = initialize_session_legacy(&client, &server_url).await;
+
+    let response = client
+        .post(&server_url)
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .header("MCP-Protocol-Version", "2024-11-05")
+        .header("Mcp-Session-Id", &session_id)
+        .json(&json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": 2
+        }))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 200);
+    let body: Value = response.json().await.unwrap();
+
+    assert!(
+        body["error"].is_object(),
+        "Response should be a JSON-RPC error from after_dispatch MiddlewareError, got: {}",
+        serde_json::to_string_pretty(&body).unwrap()
+    );
+    assert_eq!(
+        body["error"]["code"].as_i64().unwrap(),
+        -32002,
+        "Unauthorized MiddlewareError should produce -32002 error code"
+    );
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("post-dispatch authorization failed")
+    );
+}

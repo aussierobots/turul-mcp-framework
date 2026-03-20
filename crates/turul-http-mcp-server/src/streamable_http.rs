@@ -1936,6 +1936,9 @@ impl StreamableHttpHandler {
             s
         });
 
+        // Save request ID before dispatch consumes the request
+        let request_id = request.id.clone();
+
         // Dispatch the request
         let result = if let Some(session_ctx) = session {
             self.dispatcher
@@ -1960,12 +1963,66 @@ impl StreamableHttpHandler {
             }
         };
 
-        let _ = self
+        match self
             .middleware_stack
             .execute_after(&ctx, &mut dispatcher_result)
-            .await;
+            .await
+        {
+            Ok(()) => {
+                let result = Self::apply_dispatcher_result(result, dispatcher_result);
+                (result, None)
+            }
+            Err(middleware_err) => (
+                Self::map_middleware_error_to_jsonrpc(middleware_err, request_id),
+                None,
+            ),
+        }
+    }
 
-        (result, None)
+    /// Apply potentially-mutated `DispatcherResult` back into the `JsonRpcMessage`.
+    ///
+    /// Handles all four mutation paths per the middleware contract:
+    /// - Success → Success: value mutated in place
+    /// - Success → Error: middleware rejected response (INTERNAL_ERROR -32603)
+    /// - Error → Success: middleware recovered (only when error has request ID)
+    /// - Error → Error: error message mutated
+    fn apply_dispatcher_result(
+        result: turul_mcp_json_rpc_server::JsonRpcMessage,
+        dispatcher_result: crate::middleware::DispatcherResult,
+    ) -> turul_mcp_json_rpc_server::JsonRpcMessage {
+        match dispatcher_result {
+            crate::middleware::DispatcherResult::Success(val) => match result {
+                turul_mcp_json_rpc_server::JsonRpcMessage::Response(mut resp) => {
+                    resp.result = turul_mcp_json_rpc_server::response::ResponseResult::Success(val);
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp)
+                }
+                turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
+                    // Error→Success recovery: only when error has a request ID
+                    match err.id {
+                        Some(id) => turul_mcp_json_rpc_server::JsonRpcMessage::Response(
+                            turul_mcp_json_rpc_server::response::JsonRpcResponse::success(id, val),
+                        ),
+                        None => turul_mcp_json_rpc_server::JsonRpcMessage::Error(err),
+                    }
+                }
+            },
+            crate::middleware::DispatcherResult::Error(msg) => match result {
+                turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Error(
+                        turul_mcp_json_rpc_server::error::JsonRpcError::new(
+                            Some(resp.id),
+                            turul_mcp_json_rpc_server::error::JsonRpcErrorObject::internal_error(
+                                Some(msg),
+                            ),
+                        ),
+                    )
+                }
+                turul_mcp_json_rpc_server::JsonRpcMessage::Error(mut err) => {
+                    err.error.message = msg;
+                    turul_mcp_json_rpc_server::JsonRpcMessage::Error(err)
+                }
+            },
+        }
     }
 
     /// Map MiddlewareError to JSON-RPC error with semantic error codes
