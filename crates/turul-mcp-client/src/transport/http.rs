@@ -1025,8 +1025,6 @@ async fn parse_sse_lines<R: tokio::io::AsyncBufRead + Unpin>(
     queued_events: &Arc<parking_lot::Mutex<Vec<ServerEvent>>>,
     stats: &Arc<parking_lot::Mutex<TransportStatistics>>,
 ) -> McpClientResult<Value> {
-    use tokio::io::AsyncBufReadExt;
-
     while let Ok(Some(line)) = lines.next_line().await {
         let Some(data) = line.strip_prefix("data: ") else {
             continue;

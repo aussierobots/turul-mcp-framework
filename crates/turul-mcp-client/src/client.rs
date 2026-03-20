@@ -1420,4 +1420,227 @@ mod tests {
 
         client.disconnect().await.unwrap();
     }
+
+    #[tokio::test]
+    async fn test_builder_with_sse_url_yields_sse_transport() {
+        let client = McpClientBuilder::new()
+            .with_url("http://localhost:9999/sse")
+            .unwrap()
+            .build();
+        let status = client.connection_status().await;
+        assert_eq!(
+            status.transport_type,
+            crate::transport::TransportType::Sse,
+            "URL with /sse path must yield SSE transport"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_builder_with_mcp_url_yields_http_transport() {
+        let client = McpClientBuilder::new()
+            .with_url("http://localhost:9999/mcp")
+            .unwrap()
+            .build();
+        let status = client.connection_status().await;
+        assert_eq!(
+            status.transport_type,
+            crate::transport::TransportType::Http,
+            "Non-SSE URL must yield HTTP transport"
+        );
+    }
+
+    // ── StatefulMockTransport ──────────────────────────────────────────
+
+    use std::collections::VecDeque;
+    use std::sync::atomic::AtomicU32;
+
+    /// A mock transport that supports multi-step response sequences and call tracking.
+    /// Unlike `MockTransport` (which returns fixed responses), this transport pops
+    /// responses from queues, enabling tests that exercise full session lifecycles
+    /// (initialize → set session → requests → re-initialize on 404 → …).
+    #[allow(dead_code)]
+    struct StatefulMockTransport {
+        /// Sequence of responses for send_request_with_headers (initialize)
+        init_responses: Arc<std::sync::Mutex<VecDeque<McpClientResult<TransportResponse>>>>,
+        /// Sequence of responses for send_request (normal requests)
+        request_responses: Arc<std::sync::Mutex<VecDeque<McpClientResult<Value>>>>,
+        /// Tracks set_session_id calls in order
+        set_session_ids: Arc<std::sync::Mutex<Vec<String>>>,
+        /// Tracks clear_session_id call count
+        clear_count: Arc<AtomicU32>,
+        /// Event channel sender
+        event_tx: Option<mpsc::UnboundedSender<ServerEvent>>,
+        /// Event channel receiver (taken once by start_event_listener)
+        event_rx: Option<mpsc::UnboundedReceiver<ServerEvent>>,
+        /// Capabilities
+        caps: TransportCapabilities,
+        /// Connected flag
+        connected: bool,
+    }
+
+    impl StatefulMockTransport {
+        fn new() -> Self {
+            let (event_tx, event_rx) = mpsc::unbounded_channel();
+            Self {
+                init_responses: Arc::new(std::sync::Mutex::new(VecDeque::new())),
+                request_responses: Arc::new(std::sync::Mutex::new(VecDeque::new())),
+                set_session_ids: Arc::new(std::sync::Mutex::new(Vec::new())),
+                clear_count: Arc::new(AtomicU32::new(0)),
+                event_tx: Some(event_tx),
+                event_rx: Some(event_rx),
+                caps: TransportCapabilities {
+                    streaming: true,
+                    bidirectional: true,
+                    server_events: true,
+                    max_message_size: None,
+                    persistent: true,
+                },
+                connected: false,
+            }
+        }
+
+        #[allow(dead_code)]
+        fn push_init_response(&mut self, resp: McpClientResult<TransportResponse>) {
+            self.init_responses.lock().unwrap().push_back(resp);
+        }
+
+        fn push_request_response(&mut self, resp: McpClientResult<Value>) {
+            self.request_responses.lock().unwrap().push_back(resp);
+        }
+
+        /// Create a valid initialize TransportResponse with optional session ID header.
+        #[allow(dead_code)]
+        fn make_init_response(
+            session_id: Option<&str>,
+            protocol_version: &str,
+        ) -> TransportResponse {
+            let mut headers = HashMap::new();
+            if let Some(sid) = session_id {
+                headers.insert("mcp-session-id".to_string(), sid.to_string());
+            }
+            TransportResponse::new(
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": "req_0",
+                    "result": {
+                        "protocolVersion": protocol_version,
+                        "capabilities": {
+                            "tools": { "listChanged": true }
+                        },
+                        "serverInfo": {
+                            "name": "stateful-mock",
+                            "version": "1.0.0"
+                        }
+                    }
+                }),
+                headers,
+            )
+        }
+    }
+
+    #[async_trait]
+    impl crate::transport::Transport for StatefulMockTransport {
+        fn transport_type(&self) -> TransportType {
+            TransportType::Http
+        }
+
+        fn capabilities(&self) -> TransportCapabilities {
+            self.caps.clone()
+        }
+
+        async fn connect(&mut self) -> McpClientResult<()> {
+            self.connected = true;
+            Ok(())
+        }
+
+        async fn disconnect(&mut self) -> McpClientResult<()> {
+            self.connected = false;
+            Ok(())
+        }
+
+        fn is_connected(&self) -> bool {
+            self.connected
+        }
+
+        async fn send_request(&mut self, _request: Value) -> McpClientResult<Value> {
+            self.request_responses
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| {
+                    Err(McpClientError::generic(
+                        "StatefulMockTransport: no more request responses queued",
+                    ))
+                })
+        }
+
+        async fn send_request_with_headers(
+            &mut self,
+            _request: Value,
+        ) -> McpClientResult<TransportResponse> {
+            self.init_responses
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| {
+                    Err(McpClientError::generic(
+                        "StatefulMockTransport: no more init responses queued",
+                    ))
+                })
+        }
+
+        async fn send_notification(&mut self, _notification: Value) -> McpClientResult<()> {
+            Ok(())
+        }
+
+        async fn send_delete(&mut self, _session_id: &str) -> McpClientResult<()> {
+            Ok(())
+        }
+
+        fn set_session_id(&mut self, session_id: String) {
+            self.set_session_ids.lock().unwrap().push(session_id);
+        }
+
+        fn clear_session_id(&mut self) {
+            self.clear_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+
+        async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver> {
+            self.event_rx
+                .take()
+                .ok_or_else(|| McpClientError::generic("Event listener already started"))
+        }
+
+        fn connection_info(&self) -> ConnectionInfo {
+            ConnectionInfo {
+                transport_type: TransportType::Http,
+                endpoint: "stateful-mock://test".to_string(),
+                connected: self.connected,
+                capabilities: self.caps.clone(),
+                metadata: Value::Null,
+            }
+        }
+
+        fn statistics(&self) -> TransportStatistics {
+            TransportStatistics::default()
+        }
+    }
+
+    #[tokio::test]
+    async fn test_stateful_mock_transport_sequences() {
+        use crate::transport::Transport;
+
+        let mut transport = StatefulMockTransport::new();
+        transport.push_request_response(Ok(json!({"result": "first"})));
+        transport.push_request_response(Ok(json!({"result": "second"})));
+
+        let r1 = transport.send_request(json!({})).await.unwrap();
+        assert_eq!(r1["result"], "first");
+        let r2 = transport.send_request(json!({})).await.unwrap();
+        assert_eq!(r2["result"], "second");
+
+        // Queue exhausted → error
+        assert!(transport.send_request(json!({})).await.is_err());
+    }
 }
