@@ -137,7 +137,7 @@ async fn test_notification_post_includes_accept_header() {
     let mock_server = MockServer::start().await;
 
     Mock::given(method("POST"))
-        .and(header("Accept", "application/json, text/event-stream"))
+        .and(headers("Accept", vec!["application/json", "text/event-stream"]))
         .respond_with(ResponseTemplate::new(202))
         .expect(1)
         .mount(&mock_server)

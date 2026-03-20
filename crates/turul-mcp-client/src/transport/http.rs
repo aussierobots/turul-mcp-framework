@@ -659,6 +659,7 @@ impl Transport for HttpTransport {
         let mut req_builder = self
             .client
             .post(self.endpoint.clone())
+            .header("Accept", MCP_POST_ACCEPT)
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2025-11-25");
 
@@ -1026,7 +1027,9 @@ async fn parse_sse_lines<R: tokio::io::AsyncBufRead + Unpin>(
     stats: &Arc<parking_lot::Mutex<TransportStatistics>>,
 ) -> McpClientResult<Value> {
     while let Ok(Some(line)) = lines.next_line().await {
-        let Some(data) = line.strip_prefix("data: ") else {
+        let data = line.strip_prefix("data: ")
+            .or_else(|| line.strip_prefix("data:"));
+        let Some(data) = data else {
             continue;
         };
         let Ok(json) = serde_json::from_str::<Value>(data) else {
@@ -1047,9 +1050,12 @@ async fn parse_sse_lines<R: tokio::io::AsyncBufRead + Unpin>(
                 ServerEvent::Notification(json)
             };
             if let Some(sender) = event_sender {
-                let _ = sender.send(event.clone());
+                if sender.send(event.clone()).is_err() {
+                    queued_events.lock().push(event);
+                }
+            } else {
+                queued_events.lock().push(event);
             }
-            queued_events.lock().push(event);
         }
     }
 
