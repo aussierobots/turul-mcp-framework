@@ -1098,12 +1098,26 @@ impl McpClientBuilder {
         let config = self.config.unwrap_or_default();
         let transport = if let Some(transport) = self.transport {
             transport
-        } else if let Some(url) = self.url {
-            // Construct transport with config applied — URL was already validated in with_url()
-            Box::new(
-                crate::transport::http::HttpTransport::with_config(&url, &config.connection)
-                    .expect("URL was validated in with_url() but transport construction failed"),
-            )
+        } else if let Some(ref url) = self.url {
+            // Detect transport type from URL, then construct with config applied
+            let transport_type = crate::transport::detect_transport_type(url)
+                .expect("URL was validated in with_url() but detection failed");
+            match transport_type {
+                crate::transport::TransportType::Http => Box::new(
+                    crate::transport::http::HttpTransport::with_config(url, &config.connection)
+                        .expect(
+                            "URL was validated in with_url() but transport construction failed",
+                        ),
+                )
+                    as crate::transport::BoxedTransport,
+                crate::transport::TransportType::Sse => {
+                    // SSE is a legacy transport — ConnectionConfig not wired (no with_config)
+                    Box::new(
+                        crate::transport::sse::SseTransport::new(url)
+                            .expect("URL was validated in with_url() but SSE construction failed"),
+                    )
+                }
+            }
         } else {
             panic!("Transport must be set via with_transport() or with_url() before building");
         };
