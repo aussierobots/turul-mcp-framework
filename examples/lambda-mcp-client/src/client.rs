@@ -31,11 +31,7 @@ pub struct ListToolsResult {
     pub tools: Vec<Tool>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct CallToolResult {
-    pub content: Vec<ToolResult>,
-    pub is_error: Option<bool>,
-}
+pub use turul_mcp_client::CallToolResult;
 
 /// Configuration for MCP client (simplified wrapper around framework config)
 #[derive(Debug, Clone)]
@@ -142,19 +138,16 @@ impl McpClient {
 
         let args = arguments.unwrap_or(json!({}));
 
-        let content = self
+        let result = self
             .framework_client
             .call_tool(name, args)
             .await
             .context("Framework call_tool failed")?;
 
         info!("✅ Tool '{}' executed successfully", name);
-        debug!("Tool result: {} content items", content.len());
+        debug!("Tool result: {} content items", result.content.len());
 
-        Ok(CallToolResult {
-            content,
-            is_error: Some(false),
-        })
+        Ok(result)
     }
 
     /// Send initialized notification using framework

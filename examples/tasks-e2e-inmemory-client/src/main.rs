@@ -157,7 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sync_result = client
         .call_tool("slow_add", json!({"a": 1, "b": 2, "delay_ms": 100}))
         .await?;
-    if !sync_result.is_empty() {
+    if !sync_result.content.is_empty() {
         pass("synchronous tools/call works without task augmentation");
     } else {
         fail("synchronous call", "returned empty result");

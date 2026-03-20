@@ -19,7 +19,7 @@ use turul_mcp_protocol::tasks::{
 };
 use turul_mcp_protocol::{
     CallToolResult, GetPromptResult, InitializeResult, ListPromptsResult, ListResourcesResult,
-    ListToolsResult, Prompt, ReadResourceResult, Resource, Tool, ToolResult,
+    ListToolsResult, Prompt, ReadResourceResult, Resource, Tool,
 };
 
 /// Main MCP client
@@ -515,7 +515,7 @@ impl McpClient {
         &self,
         name: &str,
         arguments: Value,
-    ) -> McpClientResult<Vec<ToolResult>> {
+    ) -> McpClientResult<CallToolResult> {
         debug!(tool = name, "Calling tool");
 
         let request = json!({
@@ -537,7 +537,7 @@ impl McpClient {
             is_error = call_response.is_error,
             "Tool call completed"
         );
-        Ok(call_response.content)
+        Ok(call_response)
     }
 
     /// List available resources
@@ -732,7 +732,7 @@ impl McpClient {
         &self,
         name: &str,
         arguments: Option<Value>,
-    ) -> McpClientResult<Vec<turul_mcp_protocol::PromptMessage>> {
+    ) -> McpClientResult<GetPromptResult> {
         debug!(prompt = name, "Getting prompt");
 
         let mut params = json!({
@@ -759,7 +759,7 @@ impl McpClient {
             message_count = prompt_response.messages.len(),
             "Prompt retrieved"
         );
-        Ok(prompt_response.messages)
+        Ok(prompt_response)
     }
 
     /// Send a ping to test connectivity
