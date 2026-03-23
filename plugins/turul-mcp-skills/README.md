@@ -187,7 +187,7 @@ Triggers on: "authorization server", "OAuth AS", "token issuer", "PKCE", "author
 Demo-grade patterns for building a standalone OAuth 2.1 Authorization Server:
 - **AS vs RS role separation** — what each side does, how they connect
 - **Required endpoints** — AS metadata, JWKS, /authorize, /token
-- **Client models** — pre-registered, DCR, CIMD (future standard)
+- **Client models** — pre-registered, DCR, CIMD (MCP 2025-11-25 supported)
 - **PKCE flow** — authorization code + S256 challenge/verifier
 - **Token issuance** — JWT access tokens, opaque refresh tokens, audience/scope validation
 - **Signing key management** — static demo key vs ephemeral (restart consequences)
@@ -228,7 +228,7 @@ This plugin targets **turul-mcp-server v0.3** (MCP 2025-11-25).
 - Fixed `plugin.json` version mismatch (was 0.5.0, now 0.6.2)
 
 ### v0.6.1
-- Added `authorization-server-patterns` skill: demo OAuth 2.1 AS with PKCE, JWKS, pre-registered clients, DCR, CIMD mention, MCP interop notes, 1 reference file, 2 example files
+- Added `authorization-server-patterns` skill: demo OAuth 2.1 AS with PKCE, JWKS, pre-registered clients, DCR, CIMD patterns, MCP interop notes, 1 reference file, 2 example files
 - Added Authorization Server patterns row to `server-patterns-index`
 
 ### v0.6.0

@@ -111,18 +111,30 @@ Clients register themselves at runtime via `POST /register` (RFC 7591):
 
 ### Client Identification via Metadata Document (CIMD)
 
-CIMD (draft standard) inverts the model: instead of registering at the AS, clients publish their own metadata document at a well-known URL, and the AS fetches it during authorization. This is the standards-preferred direction for MCP client identification.
-
-**This demo does not implement CIMD.** It's mentioned here so you know the landscape:
+CIMD inverts the model: instead of registering at the AS, clients publish their own metadata document at a well-known URL, and the AS fetches it during authorization. MCP 2025-11-25 specifies CIMD as a supported client identification mechanism alongside DCR.
 
 ```
 Client models (simplest → most dynamic):
 ├─ Pre-registered ── hardcoded or config-loaded (this skill)
 ├─ DCR ──────────── client self-registers at /register endpoint (this skill, optional)
-└─ CIMD ─────────── client publishes metadata, AS fetches it (future standard, not implemented)
+└─ CIMD ─────────── client publishes metadata, AS fetches it (this skill, optional)
 ```
 
-If you're building a production system, evaluate CIMD support in your chosen identity provider.
+**When to use:** production deployments where clients manage their own identity, or environments where a central registration endpoint is undesirable. CIMD and DCR can coexist — an AS can support both with a resolution precedence (e.g., pre-registered → CIMD → DCR fallback).
+
+**AS implementation requirements for CIMD:**
+
+1. **Advertise support** — set `client_id_metadata_document_supported: true` in AS metadata
+2. **Detect URL-form client_ids** — if `client_id` is a URL, treat it as a CIMD metadata document location
+3. **Fetch and validate** — retrieve the client metadata document, enforce size limits and SSRF protections
+4. **Exact-match `client_id`** — the `client_id` field in the fetched document must exactly match the URL used to fetch it
+5. **Exact-match `redirect_uris`** — no pattern matching, no wildcards
+6. **Cache with HTTP semantics** — respect `Cache-Control` / `Expires` headers from the metadata endpoint
+
+**Security considerations:**
+- Apply SSRF controls when fetching metadata (block private IPs, enforce HTTPS, set timeouts)
+- Enforce response size limits to prevent resource exhaustion
+- The CIMD draft allows ASes to impose policy restrictions (e.g., requiring specific `token_endpoint_auth_method` values)
 
 ## Signing Key Management
 

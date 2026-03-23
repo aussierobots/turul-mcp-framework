@@ -190,9 +190,9 @@ access token               POST /token
 |-------|-------------|-----------|--------------|
 | **Pre-registered** | At AS startup (config/hardcoded) | Client knows its client_id | Yes (default) |
 | **DCR** | Runtime via `POST /register` (RFC 7591) | Client receives client_id from AS | Yes (optional) |
-| **CIMD** | Client publishes metadata document; AS fetches it | AS discovers client metadata | No (future standard) |
+| **CIMD** | Client publishes metadata document; AS fetches it | AS discovers client metadata | Yes (optional) |
 
-Pre-registered is sufficient for most demo and local development scenarios. DCR is useful when testing with clients that aren't known at AS startup. CIMD is the emerging standards-preferred direction but is not implemented in the demo.
+Pre-registered is sufficient for most demo and local development scenarios. DCR is useful when testing with clients that aren't known at AS startup. CIMD is the MCP 2025-11-25 standards-preferred direction for client identification — an AS can support all three models with a resolution precedence (pre-registered → CIMD → DCR).
 
 ## Security Boundaries (demo vs production)
 
