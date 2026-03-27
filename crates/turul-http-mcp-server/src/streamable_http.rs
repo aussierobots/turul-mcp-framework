@@ -414,6 +414,7 @@ pub struct StreamableHttpHandler {
     stream_manager: Arc<crate::StreamManager>,
     server_capabilities: turul_mcp_protocol::ServerCapabilities,
     pub(crate) middleware_stack: Arc<crate::middleware::MiddlewareStack>,
+    tool_fingerprint: Option<String>,
 }
 
 impl StreamableHttpHandler {
@@ -424,6 +425,7 @@ impl StreamableHttpHandler {
         stream_manager: Arc<crate::StreamManager>,
         server_capabilities: turul_mcp_protocol::ServerCapabilities,
         middleware_stack: Arc<crate::middleware::MiddlewareStack>,
+        tool_fingerprint: Option<String>,
     ) -> Self {
         Self {
             config,
@@ -432,6 +434,7 @@ impl StreamableHttpHandler {
             stream_manager,
             server_capabilities,
             middleware_stack,
+            tool_fingerprint,
         }
     }
 
@@ -629,6 +632,31 @@ impl StreamableHttpHandler {
                         "Session '{}' has been terminated. Create a new session to continue.",
                         session_id
                     )));
+                }
+                // Check tool fingerprint — mismatch means server restarted with different tools
+                if let Some(ref current_fp) = self.tool_fingerprint {
+                    if let Some(stored_fp) = session_info.state.get("mcp:tool_fingerprint") {
+                        if stored_fp.as_str() != Some(current_fp.as_str()) {
+                            warn!(
+                                "Tool fingerprint mismatch for session '{}': server tools changed since session was created",
+                                session_id
+                            );
+                            return Err(SessionValidationError::NotFound(format!(
+                                "Session '{}' was created with a different server configuration. Please re-initialize.",
+                                session_id
+                            )));
+                        }
+                    } else {
+                        // Missing fingerprint (pre-feature sessions) → force re-init
+                        warn!(
+                            "Session '{}' has no tool fingerprint (legacy session), requiring re-initialization",
+                            session_id
+                        );
+                        return Err(SessionValidationError::NotFound(format!(
+                            "Session '{}' requires re-initialization for tool discovery.",
+                            session_id
+                        )));
+                    }
                 }
                 debug!("Session validation successful: {}", session_id);
                 Ok(())

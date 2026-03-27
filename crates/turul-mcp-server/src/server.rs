@@ -44,6 +44,8 @@ pub struct McpServer {
     task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
     /// Custom HTTP route registry
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
+    /// Stable fingerprint of the registered tool set for session versioning
+    tool_fingerprint: String,
 
     // HTTP configuration (if enabled)
     #[cfg(feature = "http")]
@@ -74,6 +76,7 @@ impl McpServer {
         strict_lifecycle: bool,
         middleware_stack: crate::middleware::MiddlewareStack,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
+        tool_fingerprint: String,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
@@ -139,6 +142,7 @@ impl McpServer {
             strict_lifecycle,
             middleware_stack,
             route_registry,
+            tool_fingerprint,
             #[cfg(feature = "http")]
             bind_address,
             #[cfg(feature = "http")]
@@ -240,6 +244,7 @@ impl McpServer {
             self.instructions.clone(),
             self.session_manager.clone(),
             self.strict_lifecycle,
+            self.tool_fingerprint.clone(),
         );
 
         // Build HTTP server with shared session storage from SessionManager
@@ -255,6 +260,7 @@ impl McpServer {
                 .server_capabilities(self.capabilities.clone()) // Pass server capabilities
                 .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
                 .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
+                .tool_fingerprint(self.tool_fingerprint.clone()) // Session versioning
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(
                     vec!["tools/list".to_string()],
@@ -429,6 +435,7 @@ impl McpServer {
             self.instructions.clone(),
             self.session_manager.clone(),
             self.strict_lifecycle,
+            self.tool_fingerprint.clone(),
         );
 
         // Build HTTP server with shared session storage from SessionManager
@@ -444,6 +451,7 @@ impl McpServer {
                 .server_capabilities(self.capabilities.clone()) // Pass server capabilities
                 .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
                 .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
+                .tool_fingerprint(self.tool_fingerprint.clone()) // Session versioning
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(
                     vec!["tools/list".to_string()],
@@ -682,6 +690,7 @@ pub struct SessionAwareInitializeHandler {
     instructions: Option<String>,
     session_manager: Arc<SessionManager>,
     strict_lifecycle: bool,
+    tool_fingerprint: String,
 }
 
 impl SessionAwareInitializeHandler {
@@ -691,6 +700,7 @@ impl SessionAwareInitializeHandler {
         instructions: Option<String>,
         session_manager: Arc<SessionManager>,
         strict_lifecycle: bool,
+        tool_fingerprint: String,
     ) -> Self {
         Self {
             implementation,
@@ -698,6 +708,7 @@ impl SessionAwareInitializeHandler {
             instructions,
             session_manager,
             strict_lifecycle,
+            tool_fingerprint,
         }
     }
 
@@ -949,6 +960,15 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
                 &session_id,
                 "negotiated_version",
                 serde_json::to_value(negotiated_version).map_err(McpError::SerializationError)?,
+            )
+            .await;
+
+        // Store tool fingerprint for session versioning across server restarts
+        self.session_manager
+            .set_session_state(
+                &session_id,
+                "mcp:tool_fingerprint",
+                serde_json::json!(self.tool_fingerprint),
             )
             .await;
 

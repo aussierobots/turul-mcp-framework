@@ -1080,6 +1080,9 @@ impl LambdaMcpServerBuilder {
             handlers.insert("resources/read".to_string(), Arc::new(read_handler));
         }
 
+        // Compute tool fingerprint before tools are moved
+        let tool_fingerprint = turul_mcp_server::compute_tool_fingerprint(&self.tools);
+
         // Create the Lambda server (stores all configuration like MCP server does)
         Ok(LambdaMcpServer::new(
             implementation,
@@ -1106,6 +1109,7 @@ impl LambdaMcpServerBuilder {
             self.middleware_stack,
             self.route_registry,
             self.task_runtime,
+            tool_fingerprint,
         ))
     }
 }

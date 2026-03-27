@@ -194,6 +194,8 @@ pub use task::runtime::TaskRuntime;
 pub use task::tokio_executor::TokioTaskExecutor;
 /// Tool trait for executable MCP functions
 pub use tool::McpTool;
+/// Stable fingerprint of the registered tool set for session versioning
+pub use tool::compute_tool_fingerprint;
 /// SessionView trait for middleware - re-exported from turul-mcp-session-storage
 pub use turul_mcp_session_storage::SessionView;
 

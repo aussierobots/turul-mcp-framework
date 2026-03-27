@@ -77,6 +77,8 @@ pub struct LambdaMcpServer {
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     /// Optional task runtime for MCP task support
     task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
+    /// Stable fingerprint of the registered tool set for session versioning
+    tool_fingerprint: String,
 }
 
 impl LambdaMcpServer {
@@ -106,6 +108,7 @@ impl LambdaMcpServer {
         middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
         task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
+        tool_fingerprint: String,
     ) -> Self {
         // Create session manager with server capabilities
         let session_manager = Arc::new(SessionManager::with_storage_and_timeouts(
@@ -141,6 +144,7 @@ impl LambdaMcpServer {
             middleware_stack,
             route_registry,
             task_runtime,
+            tool_fingerprint,
         }
     }
 
@@ -216,6 +220,7 @@ impl LambdaMcpServer {
             self.instructions.clone(),
             self.session_manager.clone(),
             self.strict_lifecycle,
+            self.tool_fingerprint.clone(),
         );
         dispatcher.register_method("initialize".to_string(), init_handler);
 
@@ -266,7 +271,7 @@ impl LambdaMcpServer {
         // Create the Lambda handler with all components and middleware
         let middleware_stack = Arc::new(self.middleware_stack.clone());
 
-        Ok(LambdaMcpHandler::with_middleware(
+        Ok(LambdaMcpHandler::with_middleware_and_fingerprint(
             self.server_config.clone(),
             Arc::new(dispatcher),
             self.session_storage.clone(),
@@ -276,6 +281,7 @@ impl LambdaMcpServer {
             middleware_stack,
             self.enable_sse,
             Arc::clone(&self.route_registry),
+            Some(self.tool_fingerprint.clone()),
         ))
     }
 

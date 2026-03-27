@@ -2,6 +2,9 @@
 //!
 //! This module defines the high-level trait for implementing MCP tools.
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use serde_json::Value;
 use turul_mcp_builders::prelude::*;
@@ -30,6 +33,42 @@ pub trait McpTool: ToolDefinition {
 /// for backward compatibility. New code should use tool.to_tool() directly.
 pub fn tool_to_descriptor(tool: &dyn McpTool) -> turul_mcp_protocol::Tool {
     tool.to_tool()
+}
+
+/// Compute a stable fingerprint of the tool set for session versioning.
+///
+/// Produces a deterministic 16-char hex string from the full serialized `Tool`
+/// descriptors (as returned by `tools/list`). Any change to any advertised field
+/// — name, description, inputSchema, outputSchema, annotations, title, icons,
+/// execution — produces a different fingerprint.
+///
+/// Uses FNV-1a (a fixed, well-known algorithm) instead of `DefaultHasher` which
+/// is not guaranteed stable across Rust versions or builds.
+pub fn compute_tool_fingerprint(tools: &HashMap<String, Arc<dyn McpTool>>) -> String {
+    let mut tool_names: Vec<&String> = tools.keys().collect();
+    tool_names.sort();
+    let mut canonical_parts: Vec<String> = Vec::with_capacity(tool_names.len());
+    for name in &tool_names {
+        let tool = &tools[*name];
+        let descriptor = tool_to_descriptor(tool.as_ref());
+        // Tool descriptors derive Serialize — failure here indicates a framework bug
+        // that would also break tools/list. Fail closed, not open.
+        let json = serde_json::to_string(&descriptor).unwrap_or_else(|e| {
+            panic!(
+                "Tool '{}' descriptor failed to serialize for fingerprint: {}",
+                name, e
+            )
+        });
+        canonical_parts.push(json);
+    }
+    let canonical = canonical_parts.join("\n");
+    // FNV-1a: stable, fixed algorithm — no external dependency
+    let mut hash: u64 = 0xcbf29ce484222325; // offset basis
+    for byte in canonical.as_bytes() {
+        hash ^= *byte as u64;
+        hash = hash.wrapping_mul(0x100000001b3); // prime
+    }
+    format!("{:016x}", hash)
 }
 
 #[cfg(test)]
@@ -256,5 +295,182 @@ mod tests {
             plain_json.get("execution").is_none(),
             "execution key should be absent in JSON"
         );
+    }
+
+    // ======================================================================
+    // Tool fingerprint tests
+    // ======================================================================
+
+    /// Helper: build a tool map from a slice of McpTool trait objects
+    fn tool_map(tools: Vec<Arc<dyn McpTool>>) -> HashMap<String, Arc<dyn McpTool>> {
+        tools
+            .into_iter()
+            .map(|t| (t.name().to_string(), t))
+            .collect()
+    }
+
+    /// A second test tool with different metadata for fingerprint comparison
+    struct AnotherTool;
+    impl HasBaseMetadata for AnotherTool {
+        fn name(&self) -> &str {
+            "another"
+        }
+    }
+    impl HasDescription for AnotherTool {
+        fn description(&self) -> Option<&str> {
+            Some("Another tool")
+        }
+    }
+    impl HasInputSchema for AnotherTool {
+        fn input_schema(&self) -> &ToolSchema {
+            static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+            SCHEMA.get_or_init(|| ToolSchema::object())
+        }
+    }
+    impl HasOutputSchema for AnotherTool {
+        fn output_schema(&self) -> Option<&ToolSchema> {
+            None
+        }
+    }
+    impl HasAnnotations for AnotherTool {
+        fn annotations(&self) -> Option<&ToolAnnotations> {
+            None
+        }
+    }
+    impl HasToolMeta for AnotherTool {
+        fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+            None
+        }
+    }
+    impl HasIcons for AnotherTool {}
+    impl HasExecution for AnotherTool {}
+    #[async_trait]
+    impl McpTool for AnotherTool {
+        async fn call(&self, _args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+            Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
+        }
+    }
+
+    #[test]
+    fn test_fingerprint_deterministic() {
+        let tools = tool_map(vec![Arc::new(TestTool::new()) as Arc<dyn McpTool>]);
+        let fp1 = compute_tool_fingerprint(&tools);
+        let fp2 = compute_tool_fingerprint(&tools);
+        assert_eq!(fp1, fp2, "Same tools must produce same fingerprint");
+        assert_eq!(fp1.len(), 16, "Fingerprint should be 16 hex chars");
+    }
+
+    #[test]
+    fn test_fingerprint_order_independent() {
+        // Insert in different orders — HashMap ordering varies but fingerprint should be stable
+        let mut tools_a = HashMap::new();
+        tools_a.insert("test".to_string(), Arc::new(TestTool::new()) as Arc<dyn McpTool>);
+        tools_a.insert("another".to_string(), Arc::new(AnotherTool) as Arc<dyn McpTool>);
+
+        let mut tools_b = HashMap::new();
+        tools_b.insert("another".to_string(), Arc::new(AnotherTool) as Arc<dyn McpTool>);
+        tools_b.insert("test".to_string(), Arc::new(TestTool::new()) as Arc<dyn McpTool>);
+
+        let fp_a = compute_tool_fingerprint(&tools_a);
+        let fp_b = compute_tool_fingerprint(&tools_b);
+        assert_eq!(fp_a, fp_b, "Tool insertion order must not affect fingerprint");
+    }
+
+    #[test]
+    fn test_fingerprint_changes_with_different_tools() {
+        let tools_1 = tool_map(vec![Arc::new(TestTool::new()) as Arc<dyn McpTool>]);
+        let tools_2 = tool_map(vec![Arc::new(AnotherTool) as Arc<dyn McpTool>]);
+        let fp_1 = compute_tool_fingerprint(&tools_1);
+        let fp_2 = compute_tool_fingerprint(&tools_2);
+        assert_ne!(fp_1, fp_2, "Different tools must produce different fingerprints");
+    }
+
+    #[test]
+    fn test_fingerprint_changes_with_added_tool() {
+        let tools_1 = tool_map(vec![Arc::new(TestTool::new()) as Arc<dyn McpTool>]);
+        let tools_2 = tool_map(vec![
+            Arc::new(TestTool::new()) as Arc<dyn McpTool>,
+            Arc::new(AnotherTool) as Arc<dyn McpTool>,
+        ]);
+        let fp_1 = compute_tool_fingerprint(&tools_1);
+        let fp_2 = compute_tool_fingerprint(&tools_2);
+        assert_ne!(fp_1, fp_2, "Adding a tool must change fingerprint");
+    }
+
+    #[test]
+    fn test_fingerprint_empty_tools() {
+        let tools = HashMap::new();
+        let fp = compute_tool_fingerprint(&tools);
+        assert_eq!(fp.len(), 16, "Empty tool set should still produce valid fingerprint");
+    }
+
+    /// Mandatory canonicalization test: same tool definition built via different paths
+    /// must produce the same fingerprint, validating that serde_json serialization
+    /// is deterministic for our struct types.
+    #[test]
+    fn test_fingerprint_canonicalization_stability() {
+        // Build TestTool twice via independent code paths
+        let tool_a = TestTool::new();
+        let tool_b = TestTool::new();
+
+        // Serialize independently and compare
+        let desc_a = tool_to_descriptor(&tool_a);
+        let desc_b = tool_to_descriptor(&tool_b);
+        let json_a = serde_json::to_string(&desc_a).unwrap();
+        let json_b = serde_json::to_string(&desc_b).unwrap();
+        assert_eq!(json_a, json_b, "Same tool built independently must serialize identically");
+
+        // Full fingerprint comparison
+        let tools_a = tool_map(vec![Arc::new(tool_a) as Arc<dyn McpTool>]);
+        let tools_b = tool_map(vec![Arc::new(tool_b) as Arc<dyn McpTool>]);
+        assert_eq!(
+            compute_tool_fingerprint(&tools_a),
+            compute_tool_fingerprint(&tools_b),
+            "Independently constructed identical tools must produce the same fingerprint"
+        );
+    }
+
+    /// Test that annotation changes affect the fingerprint
+    #[test]
+    fn test_fingerprint_changes_with_annotations() {
+        use turul_mcp_protocol::tools::ToolAnnotations;
+
+        struct AnnotatedTool {
+            annotations: Option<ToolAnnotations>,
+        }
+        impl HasBaseMetadata for AnnotatedTool {
+            fn name(&self) -> &str { "annotated" }
+        }
+        impl HasDescription for AnnotatedTool {
+            fn description(&self) -> Option<&str> { Some("test") }
+        }
+        impl HasInputSchema for AnnotatedTool {
+            fn input_schema(&self) -> &ToolSchema {
+                static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
+                SCHEMA.get_or_init(|| ToolSchema::object())
+            }
+        }
+        impl HasOutputSchema for AnnotatedTool { fn output_schema(&self) -> Option<&ToolSchema> { None } }
+        impl HasAnnotations for AnnotatedTool {
+            fn annotations(&self) -> Option<&ToolAnnotations> { self.annotations.as_ref() }
+        }
+        impl HasToolMeta for AnnotatedTool { fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None } }
+        impl HasIcons for AnnotatedTool {}
+        impl HasExecution for AnnotatedTool {}
+        #[async_trait]
+        impl McpTool for AnnotatedTool {
+            async fn call(&self, _args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+                Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
+            }
+        }
+
+        let tool_plain = Arc::new(AnnotatedTool { annotations: None }) as Arc<dyn McpTool>;
+        let tool_annotated = Arc::new(AnnotatedTool {
+            annotations: Some(ToolAnnotations::new().with_read_only_hint(true).with_destructive_hint(false)),
+        }) as Arc<dyn McpTool>;
+
+        let fp_plain = compute_tool_fingerprint(&tool_map(vec![tool_plain]));
+        let fp_annotated = compute_tool_fingerprint(&tool_map(vec![tool_annotated]));
+        assert_ne!(fp_plain, fp_annotated, "Annotation changes must affect fingerprint");
     }
 }

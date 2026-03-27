@@ -87,6 +87,7 @@ impl LambdaMcpHandler {
             stream_manager.clone(),
             capabilities.clone(),
             middleware_stack,
+            None, // No fingerprint in legacy constructor
         );
 
         Self {
@@ -132,6 +133,7 @@ impl LambdaMcpHandler {
             stream_manager,
             capabilities,
             middleware_stack,
+            None, // No fingerprint in legacy constructor
         );
 
         Self {
@@ -157,7 +159,35 @@ impl LambdaMcpHandler {
         sse_enabled: bool,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     ) -> Self {
-        // Create SessionMcpHandler with custom middleware
+        Self::with_middleware_and_fingerprint(
+            config,
+            dispatcher,
+            session_storage,
+            stream_manager,
+            stream_config,
+            capabilities,
+            middleware_stack,
+            sse_enabled,
+            route_registry,
+            None,
+        )
+    }
+
+    /// Create with custom middleware stack and tool fingerprint for session versioning
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_middleware_and_fingerprint(
+        config: ServerConfig,
+        dispatcher: Arc<JsonRpcDispatcher<McpError>>,
+        session_storage: Arc<BoxedSessionStorage>,
+        stream_manager: Arc<StreamManager>,
+        stream_config: StreamConfig,
+        capabilities: ServerCapabilities,
+        middleware_stack: Arc<turul_http_mcp_server::middleware::MiddlewareStack>,
+        sse_enabled: bool,
+        route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
+        tool_fingerprint: Option<String>,
+    ) -> Self {
+        // Create SessionMcpHandler with custom middleware and fingerprint
         let session_handler = SessionMcpHandler::with_shared_stream_manager(
             config.clone(),
             dispatcher.clone(),
@@ -165,9 +195,10 @@ impl LambdaMcpHandler {
             stream_config.clone(),
             stream_manager.clone(),
             middleware_stack.clone(),
-        );
+        )
+        .with_tool_fingerprint(tool_fingerprint.clone());
 
-        // Create StreamableHttpHandler with custom middleware
+        // Create StreamableHttpHandler with custom middleware and fingerprint
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(config),
             dispatcher,
@@ -175,6 +206,7 @@ impl LambdaMcpHandler {
             stream_manager,
             capabilities,
             middleware_stack,
+            tool_fingerprint,
         );
 
         Self {

@@ -1677,6 +1677,9 @@ impl McpServerBuilder {
             );
         }
 
+        // Compute tool fingerprint before tools are moved
+        let tool_fingerprint = crate::tool::compute_tool_fingerprint(&self.tools);
+
         // Create server
         Ok(McpServer::new(
             implementation,
@@ -1691,6 +1694,7 @@ impl McpServerBuilder {
             self.strict_lifecycle,
             self.middleware_stack,
             self.route_registry,
+            tool_fingerprint,
             #[cfg(feature = "http")]
             self.bind_address,
             #[cfg(feature = "http")]
