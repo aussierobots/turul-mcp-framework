@@ -80,8 +80,7 @@ impl McpServer {
         middleware_stack: crate::middleware::MiddlewareStack,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
         tool_fingerprint: String,
-        #[cfg(feature = "dynamic-tools")]
-        dynamic_tools: bool,
+        #[cfg(feature = "dynamic-tools")] dynamic_tools: bool,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
@@ -193,22 +192,34 @@ impl McpServer {
     /// New sessions get the updated fingerprint. Existing sessions with the old
     /// fingerprint are rejected on their next request (HTTP 404).
     #[cfg(feature = "dynamic-tools")]
-    pub async fn activate_tool(&self, name: &str) -> std::result::Result<bool, crate::tool_registry::ToolRegistryError> {
+    pub async fn activate_tool(
+        &self,
+        name: &str,
+    ) -> std::result::Result<bool, crate::tool_registry::ToolRegistryError> {
         match &self.tool_registry {
             Some(registry) => registry.activate_tool(name).await,
             None => Err(crate::tool_registry::ToolRegistryError::NotCompiled(
-                format!("Cannot activate tool '{}': server is not in DynamicInProcess mode", name),
+                format!(
+                    "Cannot activate tool '{}': server is not in DynamicInProcess mode",
+                    name
+                ),
             )),
         }
     }
 
     /// Deactivate a precompiled tool at runtime. Only available in `DynamicInProcess` mode.
     #[cfg(feature = "dynamic-tools")]
-    pub async fn deactivate_tool(&self, name: &str) -> std::result::Result<bool, crate::tool_registry::ToolRegistryError> {
+    pub async fn deactivate_tool(
+        &self,
+        name: &str,
+    ) -> std::result::Result<bool, crate::tool_registry::ToolRegistryError> {
         match &self.tool_registry {
             Some(registry) => registry.deactivate_tool(name).await,
             None => Err(crate::tool_registry::ToolRegistryError::NotCompiled(
-                format!("Cannot deactivate tool '{}': server is not in DynamicInProcess mode", name),
+                format!(
+                    "Cannot deactivate tool '{}': server is not in DynamicInProcess mode",
+                    name
+                ),
             )),
         }
     }
