@@ -177,6 +177,12 @@ impl ToolRegistry {
     }
 
     /// Get the set of all compiled tool names (active and inactive).
+    /// Get the configured check TTL (from TURUL_TOOL_CHECK_TTL_SECS, default 10s).
+    /// Used by both check_for_changes() and start_polling().
+    pub fn check_ttl(&self) -> std::time::Duration {
+        self.check_ttl
+    }
+
     pub fn compiled_tool_names(&self) -> Vec<String> {
         let mut names: Vec<String> = self.compiled_tools.keys().cloned().collect();
         names.sort();
