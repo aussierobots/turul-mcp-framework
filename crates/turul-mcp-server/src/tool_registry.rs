@@ -162,9 +162,14 @@ impl ToolRegistry {
     /// Broadcast `notifications/tools/list_changed` to all connected clients.
     /// Called AFTER the write lock is released (notification is best-effort, not atomic with mutation).
     async fn broadcast_notification(&self) {
-        let notification = turul_mcp_protocol::notifications::ToolListChangedNotification::new();
+        // Use JsonRpcNotification (includes "jsonrpc": "2.0") — NOT ToolListChangedNotification
+        // (which is a protocol-level type without the JSON-RPC envelope).
+        // Matches the pattern in session.rs:notify_tools_changed().
+        let notification = turul_mcp_protocol::JsonRpcNotification::new(
+            "notifications/tools/list_changed".to_string(),
+        );
         let data = serde_json::to_value(&notification).unwrap_or_else(|e| {
-            panic!("ToolListChangedNotification serialization must not fail: {}", e)
+            panic!("JsonRpcNotification serialization must not fail: {}", e)
         });
         self.session_manager
             .broadcast_event(crate::session::SessionEvent::Custom {
@@ -463,7 +468,13 @@ mod tests {
         if let crate::session::SessionEvent::Custom { event_type, data } = event {
             assert_eq!(event_type, "notifications/tools/list_changed");
 
-            // Assert exact MCP wire format fields
+            // Assert exact JSON-RPC 2.0 notification wire format:
+            // {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
+            assert_eq!(
+                data.get("jsonrpc").and_then(|j| j.as_str()),
+                Some("2.0"),
+                "Must contain jsonrpc: \"2.0\" per JSON-RPC 2.0 spec"
+            );
             assert_eq!(
                 data.get("method").and_then(|m| m.as_str()),
                 Some("notifications/tools/list_changed"),
@@ -471,7 +482,7 @@ mod tests {
             );
             assert!(
                 data.get("params").is_none() || data.get("params").unwrap().is_null(),
-                "No params field per ToolListChangedNotification::new()"
+                "No params field for list_changed notification"
             );
         } else {
             panic!("Expected SessionEvent::Custom, got {:?}", event);
