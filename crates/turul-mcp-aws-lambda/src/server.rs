@@ -127,9 +127,12 @@ impl LambdaMcpServer {
             std::time::Duration::from_secs(60),      // 1 minute cleanup interval
         ));
 
-        // Track whether explicit coordination storage was provided
+        // Coordination enabled only for shared backends (not InMemory)
         #[cfg(feature = "dynamic-tools")]
-        let coordination_enabled = server_state_storage.is_some();
+        let coordination_enabled = server_state_storage
+            .as_ref()
+            .map(|s| s.backend_name() != "InMemory")
+            .unwrap_or(false);
 
         // Create ToolRegistry when dynamic mode is enabled
         #[cfg(feature = "dynamic-tools")]

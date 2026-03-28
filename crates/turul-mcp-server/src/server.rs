@@ -139,8 +139,13 @@ impl McpServer {
             debug!("McpServer configured without session storage");
         }
 
+        // Coordination (sync/polling/check_for_changes) is enabled only for shared backends.
+        // InMemory has no external change source — coordination would be pointless.
         #[cfg(feature = "dynamic-tools")]
-        let coordination_enabled = server_state_storage.is_some();
+        let coordination_enabled = server_state_storage
+            .as_ref()
+            .map(|s| s.backend_name() != "InMemory")
+            .unwrap_or(false);
 
         #[cfg(feature = "dynamic-tools")]
         let tool_registry = if dynamic_tools {
@@ -218,8 +223,8 @@ impl McpServer {
     /// Activate a precompiled tool at runtime. Only available in `Dynamic` mode.
     ///
     /// Connected clients receive `notifications/tools/list_changed` via SSE.
-    /// New sessions get the updated fingerprint. Existing sessions with the old
-    /// fingerprint are rejected on their next request (HTTP 404).
+    /// Existing sessions continue — fingerprint is updated on next request.
+    /// `tools/list` reflects the change immediately via the live registry.
     #[cfg(feature = "dynamic-tools")]
     pub async fn activate_tool(
         &self,
