@@ -1,13 +1,13 @@
-//! E2E Transport Test: DynamicInProcess Tool Change Detection
+//! E2E Transport Test: Dynamic Tool Change Detection
 //!
-//! Proves the full ADR-023 DynamicInProcess contract over Streamable HTTP:
+//! Proves the full ADR-023 Dynamic contract over Streamable HTTP:
 //! 1. Client initializes and sees initial tool set (multiply active)
 //! 2. Tool is deactivated via `deactivate_multiply` → tool registry updated
 //! 3. Same session's next tools/list shows multiply absent, activate_multiply present
 //! 4. Re-initialization produces a new session with the same updated tool set
 //!
 //! Note: The HTTP handler's tool_fingerprint is static (set at build time) and does
-//! not change for DynamicInProcess mutations. Fingerprint-based 404 guards against
+//! not change for Dynamic mutations. Fingerprint-based 404 guards against
 //! cross-restart or cross-cluster staleness. In-process dynamic changes are signaled
 //! to clients via SSE notifications/tools/list_changed.
 //!
@@ -21,7 +21,7 @@ use tracing::info;
 #[tokio::test]
 async fn test_dynamic_tools_deactivation_causes_stale_session_404() {
     let _ = tracing_subscriber::fmt::try_init();
-    info!("Starting DynamicInProcess E2E test");
+    info!("Starting Dynamic E2E test");
 
     // Start dynamic-tools-server with multiply active
     let server = match TestServerManager::start_dynamic_tools_server().await {
@@ -74,9 +74,9 @@ async fn test_dynamic_tools_deactivation_causes_stale_session_404() {
     // Step 4: Next tools/list on the SAME session sees the updated tool set.
     //
     // Note: The tool_fingerprint on the HTTP handler is set once at build time and
-    // is NOT updated when DynamicInProcess tools change at runtime. The session's
+    // is NOT updated when Dynamic tools change at runtime. The session's
     // stored mcp:tool_fingerprint matches the handler's static fingerprint, so no
-    // mismatch (404) occurs. DynamicInProcess changes are signaled to clients via
+    // mismatch (404) occurs. Dynamic changes are signaled to clients via
     // SSE notifications/tools/list_changed; the fingerprint mechanism guards against
     // cross-restart or cross-cluster staleness, not in-process dynamic changes.
     let post_deactivation = client
@@ -188,7 +188,7 @@ async fn test_dynamic_tools_deactivation_causes_stale_session_404() {
         "Old session and fresh session must report identical tool sets after deactivation"
     );
 
-    info!("DynamicInProcess E2E test passed");
+    info!("Dynamic E2E test passed");
 }
 
 /// Test: server started with --multiply-inactive shows multiply absent
@@ -242,7 +242,7 @@ async fn test_dynamic_tools_server_startup_flag() {
     );
 }
 
-/// Test: tools.listChanged capability is true for DynamicInProcess
+/// Test: tools.listChanged capability is true for Dynamic
 #[tokio::test]
 async fn test_dynamic_tools_server_advertises_list_changed_true() {
     let _ = tracing_subscriber::fmt::try_init();
@@ -272,7 +272,7 @@ async fn test_dynamic_tools_server_advertises_list_changed_true() {
     assert_eq!(
         list_changed,
         Some(true),
-        "DynamicInProcess server MUST advertise tools.listChanged=true. Got: {:?}",
+        "Dynamic server MUST advertise tools.listChanged=true. Got: {:?}",
         capabilities.get("tools")
     );
 }

@@ -78,7 +78,7 @@ path = "derive_schemars_integration_test.rs"
 name = "derive_zero_config_output_schema_test"
 path = "derive_zero_config_output_schema_test.rs"
 
-# Dynamic tools E2E (DynamicInProcess transport proof)
+# Dynamic tools E2E (Dynamic mode transport proof)
 [[test]]
 name = "dynamic_tools_e2e"
 path = "dynamic_tools_e2e.rs"

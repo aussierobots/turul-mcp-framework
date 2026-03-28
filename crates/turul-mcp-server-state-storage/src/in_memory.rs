@@ -13,8 +13,8 @@ use crate::traits::{EntityState, RegistrySnapshot, ServerStateStorage};
 
 /// In-memory server state storage.
 ///
-/// Suitable for testing and single-process DynamicInProcess mode.
-/// NOT suitable for DynamicClustered multi-instance deployments.
+/// Suitable for testing and single-process Dynamic mode (default when no
+/// explicit storage is provided). NOT suitable for multi-instance coordination.
 pub struct InMemoryServerStateStorage {
     /// entity_type -> (entity_id -> EntityState)
     entities: RwLock<HashMap<String, HashMap<String, EntityState>>>,
