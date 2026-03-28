@@ -6,29 +6,44 @@
 
 ## Decision
 
-Two complementary mechanisms handle tool change detection at different layers:
+Two complementary mechanisms handle tool change detection at different layers. They serve different purposes and are not alternatives:
 
-### Phase A: Tool Fingerprint — Session Versioning
+- **Fingerprint** — correctness boundary. Guarantees clients refresh.
+- **Notification** — UX improvement. Faster discovery of changes.
 
-Pull-based stale session detection for restarts and redeploys.
+### Phase A: Tool Fingerprint — Correctness Boundary
 
-- FNV-1a hash of the full serialized `Tool` descriptor set, computed at build time
+Stale session detection for restarts, redeploys, and tool mutations.
+
+- FNV-1a hash of the full serialized `Tool` descriptor set, computed at build time (and recomputed on tool activation/deactivation in DynamicInProcess mode)
 - Stored per-session during `initialize`, validated on every request via `validate_session_exists()`
-- Mismatch returns HTTP 404, triggering client re-initialization
-- `tools.listChanged = false` — this is session versioning, not runtime notification
-- Works for all transports: Streamable HTTP, legacy JSON-RPC, Lambda
-- Always on (default `ToolChangeMode::FingerprintOnly`)
+- **Mismatch always returns HTTP 404** — regardless of mode, connection state, or notification status
+- Client re-initializes: new session with current fingerprint + fresh tools
+- This is the only mechanism that guarantees a fresh client view
 
-### Phase B: Dynamic Tool Registry — Live Notification
+### Phase B: Dynamic Tool Registry — UX Notification
 
 Push-based `notifications/tools/list_changed` for single-process HTTP servers.
 
 - `ToolChangeMode::DynamicInProcess` — explicit opt-in via builder, requires `dynamic-tools` Cargo feature
 - `ToolRegistry` activates/deactivates precompiled tools at runtime (not runtime plugin loading)
 - Handlers read from live registry instead of static snapshot
-- `tools.listChanged = true` — truthful: the server will emit notifications
+- `tools.listChanged = true` — truthful: the server emits notifications on tool changes
 - Notification emitted via `SessionManager.broadcast_event(SessionEvent::Custom)` — transport-agnostic
-- SSE bridge (`setup_sse_event_bridge`) delivers to connected clients with event persistence and Last-Event-ID replay
+- SSE bridge (`setup_sse_event_bridge`) delivers to connected clients via GET SSE stream
+
+**Notifications are advisory only.** They tell connected clients "tools changed" as an early warning. The client may hear about the change before hitting the 404. They still must re-initialize to continue safely.
+
+## Why Notifications Don't Replace 404
+
+We evaluated and rejected several alternatives to always-404:
+
+- **`has_connections()` as proof of receipt**: Connection presence is not proof that the client received or processed the specific notification. Rejected.
+- **Silent fingerprint advancement**: Advancing the session fingerprint without an explicit client refresh boundary means clients can operate with stale tool lists indefinitely. Rejected.
+- **Inline POST SSE notification**: Would create a second ad-hoc SSE delivery path bypassing the existing notification infrastructure. Rejected.
+- **Session-ack model**: Only advance fingerprint after `tools/list` call. Adds complexity for marginal gain. Deferred to future milestone.
+
+The strict model (always 404) is the simplest and most defensible correctness story.
 
 ## Configuration
 
@@ -42,35 +57,46 @@ pub enum ToolChangeMode {
 
 Capability mapping:
 
-| Mode | `listChanged` | Fingerprint | Live Notifications |
+| Mode | `listChanged` | Fingerprint 404 | Notifications |
 |------|---|---|---|
-| FingerprintOnly | false | Yes | No |
-| DynamicInProcess | true | Yes | Yes |
+| FingerprintOnly | false | Yes (always) | No |
+| DynamicInProcess | true | Yes (always) | Yes (advisory) |
 
 ## Architectural Boundaries
 
 **Transport boundary:** Core server emits `SessionEvent::Custom` via `SessionManager.broadcast_event()`. The HTTP layer's SSE event bridge handles delivery. No HTTP types in core server code.
 
-**Concurrency:** `RwLock<HashSet<String>>` for the active tool set. Read lock → clone `Arc<dyn McpTool>` → release lock → call tool. Lock is never held across await points. Matches existing `SessionManager` pattern.
+**Separation of concerns:** The fingerprint validation in `validate_session_exists()` never sends notifications. Notification delivery is the ToolRegistry's responsibility. These are separate code paths.
 
-**Lambda:** Excluded from Phase B at the type level. `LambdaMcpServerBuilder` does not expose `tool_change_mode()`. Lambda uses `FingerprintOnly` for stale session detection.
+**Concurrency:** `RwLock<ToolState>` holds both active tool set and fingerprint under a single lock. Read lock → clone `Arc<dyn McpTool>` → release lock → call tool. Lock is never held across await points.
 
-**Scope:** Phase B is single-process only. Multi-instance coordination (durable registry, cross-instance polling) is a separate future milestone requiring `ServerStateStorage` and an explicit consistency model.
+**Lambda:** Excluded from Phase B at the type level. `LambdaMcpServerBuilder` does not expose `tool_change_mode()`. Lambda uses `FingerprintOnly`.
+
+**Scope:** Phase B is single-process only. Multi-instance coordination is a separate future milestone.
 
 ## Notification Wire Format
 
-Exact payload emitted by `ToolRegistry` on mutation:
+Exact payload emitted by `ToolRegistry` on mutation. Uses `JsonRpcNotification` (not `ToolListChangedNotification` — protocol notification types are NOT wire-complete; they lack the `jsonrpc` field):
 
 ```json
 {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
 ```
 
-No `params` field. Uses `ToolListChangedNotification::new()` from the protocol crate.
+No `params` field.
+
+## Client Flow
+
+1. Tool changes on server → `ToolRegistry` broadcasts `notifications/tools/list_changed` to connected GET SSE clients
+2. Client receives notification (advisory — early warning)
+3. Client's next request → fingerprint mismatch → HTTP 404
+4. Client re-initializes → new session with current fingerprint + fresh `tools/list`
+
+Steps 1-2 are UX (faster discovery). Steps 3-4 are correctness (guaranteed refresh).
 
 ## Consequences
 
 - Servers using `FingerprintOnly` (default) have zero behavioral change from pre-feature baseline
-- Servers opting into `DynamicInProcess` get truthful `listChanged=true` and live notifications
+- Servers opting into `DynamicInProcess` get truthful `listChanged=true` and advisory notifications
 - `activate_tool()` / `deactivate_tool()` names communicate that this toggles precompiled tools, not runtime plugin loading
 - The `dynamic-tools` Cargo feature ensures zero compiled overhead when the feature is not used
-- Phase A fingerprint remains the safety net: even in `DynamicInProcess` mode, existing sessions with stale fingerprints get 404'd on next request
+- Fingerprint 404 is the correctness boundary in both modes — notifications do not change session validation behavior
