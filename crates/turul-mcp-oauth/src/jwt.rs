@@ -330,7 +330,7 @@ mod tests {
     use jsonwebtoken::{EncodingKey, Header};
 
     fn generate_rsa_keys() -> (EncodingKey, DecodingKey) {
-        let rsa_key = rsa::RsaPrivateKey::new(&mut rand::thread_rng(), 2048).unwrap();
+        let rsa_key = rsa::RsaPrivateKey::new(&mut rand::rng(), 2048).unwrap();
         let der = rsa::pkcs1::EncodeRsaPrivateKey::to_pkcs1_der(&rsa_key).unwrap();
         let encoding_key = EncodingKey::from_rsa_der(der.as_bytes());
 
