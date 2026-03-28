@@ -202,23 +202,26 @@ pub use tool::compute_tool_fingerprint;
 #[cfg(feature = "dynamic-tools")]
 pub use tool_registry::ToolRegistry;
 
-/// Configuration for how tool changes are detected and communicated
+/// Configuration for how tool changes are detected and communicated.
+///
+/// `Static` (default): no change detection, no fingerprint, no notifications.
+/// Dynamic modes: fingerprint tracking + live notifications (`listChanged=true`).
+/// Fingerprint check only runs when `listChanged=true`.
 #[derive(Debug, Clone, Default)]
 pub enum ToolChangeMode {
-    /// Fingerprint invalidation only. `listChanged=false`.
-    /// Detects stale sessions after redeploy. No live notifications.
-    /// This is the default and the shipped baseline.
+    /// Static tools. `listChanged=false`. No fingerprint check. No notifications.
+    /// Tools are fixed at build time. This is the default.
     #[default]
-    FingerprintOnly,
+    Static,
     /// Dynamic in-process registry. `listChanged=true`. Single-process only.
     /// Precompiled tools can be activated/deactivated at runtime.
+    /// Fingerprint tracks tool-version per session.
     /// Connected clients receive `notifications/tools/list_changed`.
     #[cfg(feature = "dynamic-tools")]
     DynamicInProcess,
     /// Dynamic clustered registry. `listChanged=true`. Multi-instance.
     /// Tool activation state stored in `ServerStateStorage` (DynamoDB/PostgreSQL/SQLite).
-    /// Cross-instance coordination via polling or storage-native events.
-    /// See ADR-023 Future Work section.
+    /// Cross-instance coordination via polling (EC2) or request-time check (Lambda).
     #[cfg(feature = "dynamic-clustered")]
     DynamicClustered,
 }

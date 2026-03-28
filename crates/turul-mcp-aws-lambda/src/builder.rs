@@ -279,7 +279,7 @@ impl LambdaMcpServerBuilder {
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
             task_runtime: None,
             task_recovery_timeout_ms: 300_000, // 5 minutes
-            tool_change_mode: turul_mcp_server::ToolChangeMode::FingerprintOnly,
+            tool_change_mode: turul_mcp_server::ToolChangeMode::Static,
             #[cfg(feature = "dynamic-clustered")]
             server_state_storage: None,
             #[cfg(feature = "cors")]
@@ -705,7 +705,7 @@ impl LambdaMcpServerBuilder {
 
     /// Set the tool change detection and notification mode.
     ///
-    /// - `FingerprintOnly` (default): Stale sessions detected by fingerprint mismatch
+    /// - `Static` (default): Stale sessions detected by fingerprint mismatch
     /// - `DynamicInProcess` (requires `dynamic-tools` feature): Runtime tool activation/deactivation
     /// - `DynamicClustered` (requires `dynamic-clustered` feature): Multi-instance coordination
     pub fn tool_change_mode(mut self, mode: turul_mcp_server::ToolChangeMode) -> Self {
@@ -1008,7 +1008,7 @@ impl LambdaMcpServerBuilder {
         if has_tools {
             let list_changed = !matches!(
                 self.tool_change_mode,
-                turul_mcp_server::ToolChangeMode::FingerprintOnly
+                turul_mcp_server::ToolChangeMode::Static
             );
             capabilities.tools = Some(turul_mcp_protocol::initialize::ToolsCapabilities {
                 list_changed: Some(list_changed),
@@ -1166,7 +1166,7 @@ impl LambdaMcpServerBuilder {
             self.task_runtime,
             tool_fingerprint,
             #[cfg(feature = "dynamic-tools")]
-            !matches!(self.tool_change_mode, turul_mcp_server::ToolChangeMode::FingerprintOnly),
+            !matches!(self.tool_change_mode, turul_mcp_server::ToolChangeMode::Static),
             #[cfg(feature = "dynamic-clustered")]
             self.server_state_storage,
         ))

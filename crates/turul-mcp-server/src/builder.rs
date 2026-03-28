@@ -107,7 +107,7 @@ pub struct McpServerBuilder {
     /// Validation errors collected during builder configuration
     validation_errors: Vec<String>,
 
-    /// Tool change detection mode (default: FingerprintOnly)
+    /// Tool change detection mode (default: Static)
     tool_change_mode: crate::ToolChangeMode,
 
     /// Server state storage for clustered dynamic tools
@@ -245,7 +245,7 @@ impl McpServerBuilder {
             #[cfg(feature = "http")]
             allow_unauthenticated_ping: None, // Default: use ServerConfig default (true)
             validation_errors: Vec::new(),
-            tool_change_mode: crate::ToolChangeMode::FingerprintOnly,
+            tool_change_mode: crate::ToolChangeMode::Static,
             #[cfg(feature = "dynamic-clustered")]
             server_state_storage: None,
         }
@@ -253,7 +253,7 @@ impl McpServerBuilder {
 
     /// Set the tool change detection mode.
     ///
-    /// - `FingerprintOnly` (default): Stale session detection via fingerprint. `listChanged=false`.
+    /// - `Static` (default): Stale session detection via fingerprint. `listChanged=false`.
     /// - `DynamicInProcess` (requires `dynamic-tools` feature): Runtime tool activation/deactivation
     ///   with live `notifications/tools/list_changed`. `listChanged=true`. Single-process only.
     pub fn tool_change_mode(mut self, mode: crate::ToolChangeMode) -> Self {
@@ -1553,7 +1553,7 @@ impl McpServerBuilder {
         // Tools capabilities — listChanged depends on ToolChangeMode
         if has_tools {
             let list_changed = match self.tool_change_mode {
-                crate::ToolChangeMode::FingerprintOnly => false,
+                crate::ToolChangeMode::Static => false,
                 #[cfg(feature = "dynamic-tools")]
                 crate::ToolChangeMode::DynamicInProcess => true,
                 #[cfg(feature = "dynamic-clustered")]
@@ -1725,8 +1725,13 @@ impl McpServerBuilder {
             );
         }
 
-        // Compute tool fingerprint before tools are moved
-        let tool_fingerprint = crate::tool::compute_tool_fingerprint(&self.tools);
+        // Compute tool fingerprint only for dynamic modes (listChanged=true)
+        // Static mode: no fingerprint check, no change detection
+        let tool_fingerprint = match self.tool_change_mode {
+            crate::ToolChangeMode::Static => String::new(),
+            #[cfg(feature = "dynamic-tools")]
+            _ => crate::tool::compute_tool_fingerprint(&self.tools),
+        };
 
         // Create server
         Ok(McpServer::new(
@@ -1744,7 +1749,7 @@ impl McpServerBuilder {
             self.route_registry,
             tool_fingerprint,
             #[cfg(feature = "dynamic-tools")]
-            !matches!(self.tool_change_mode, crate::ToolChangeMode::FingerprintOnly),
+            !matches!(self.tool_change_mode, crate::ToolChangeMode::Static),
             #[cfg(feature = "dynamic-clustered")]
             self.server_state_storage,
             #[cfg(feature = "http")]
@@ -2466,7 +2471,7 @@ mod tests {
         );
     }
 
-    /// ADR-023 capability truthfulness: FingerprintOnly mode advertises listChanged=false
+    /// ADR-023 capability truthfulness: Static mode advertises listChanged=false
     /// because the server cannot push notifications — clients must re-initialize.
     #[test]
     fn test_fingerprint_only_capability_list_changed_false() {

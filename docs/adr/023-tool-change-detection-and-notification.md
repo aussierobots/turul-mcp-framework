@@ -25,23 +25,22 @@ These are distinct concerns:
 
 If the session does not exist or is terminated, the request is rejected immediately. Fingerprint is NOT checked for invalid sessions.
 
-## Fingerprint — Tool Version Sync
+## Fingerprint — Tool Version Sync (Dynamic Modes Only)
 
-FNV-1a hash of the full serialized `Tool` descriptor set, computed once at server build time.
+FNV-1a hash of the full serialized `Tool` descriptor set. Only computed and checked when `listChanged=true` (dynamic modes).
 
 - Stored per-session during `initialize` as `mcp:tool_fingerprint`
 - Checked on every request via `validate_session_exists()` (after session existence check)
-- In the current implementation, because the HTTP handler fingerprint is build-time static, fingerprint mismatch occurs only across restart/redeploy boundaries, not from in-process mutations
 - **Mismatch does NOT invalidate the session** — it means tools changed since the session was created
-- On mismatch: stored fingerprint is updated to current, session continues
+- On mismatch: stored fingerprint is updated to current, `notifications/tools/list_changed` broadcast, session continues
 - 404 is ONLY for missing or terminated sessions, never for fingerprint mismatch
+- In the current implementation, the HTTP handler fingerprint is build-time static; mismatch occurs only across restart/redeploy boundaries, not from in-process mutations
 
-### FingerprintOnly mode
+### Static mode
 
-- `listChanged=false` — no live notification capability
-- Fingerprint mismatch: stored fingerprint updated silently, session continues
-- Client discovers new tools on their next `tools/list` call
-- No runtime tool mutation support
+- `listChanged=false` — no fingerprint check, no notifications
+- Tools are fixed at build time
+- No change detection of any kind
 
 ## Live Registry + Notification — Runtime Changes
 
@@ -54,7 +53,7 @@ FNV-1a hash of the full serialized `Tool` descriptor set, computed once at serve
 - **Session continues without disruption** — no 404, no re-initialization for runtime changes
 - Client calls `tools/list` to refresh after receiving notification
 - The handler's build-time fingerprint does not change on runtime mutations, so no fingerprint mismatch is triggered by activate/deactivate
-- Restart/redeploy with different compiled tools: fingerprint mismatch → 404 (same as FingerprintOnly)
+- Restart/redeploy with different compiled tools: fingerprint mismatch → 404 (same as Static)
 
 ### DynamicClustered mode
 
@@ -74,7 +73,7 @@ Extends DynamicInProcess with cross-instance coordination via shared `ServerStat
 
 ```rust
 pub enum ToolChangeMode {
-    FingerprintOnly,                     // Default. listChanged=false.
+    Static,                     // Default. listChanged=false.
     #[cfg(feature = "dynamic-tools")]
     DynamicInProcess,                    // Opt-in. listChanged=true. Single-process.
     #[cfg(feature = "dynamic-clustered")]
@@ -84,7 +83,7 @@ pub enum ToolChangeMode {
 
 | Mode | `listChanged` | Restart fingerprint | Runtime changes | EC2 | Lambda |
 |------|---|---|---|---|---|
-| FingerprintOnly | false | Updated silently | Not supported | Yes | Yes |
+| Static | false | Updated silently | Not supported | Yes | Yes |
 | DynamicInProcess | true | Updated + notification | Live registry + notification | Yes | N/A (single-process) |
 | DynamicClustered | true | Updated + notification | Live registry + notification | Polling (10s) | Request-time (5s TTL) |
 
@@ -135,7 +134,7 @@ Note: "Restart fingerprint" column describes what happens when a session's store
 
 **Concurrency:** `RwLock<ToolState>` holds active tool set + fingerprint under a single lock. Read lock → clone `Arc<dyn McpTool>` → release → call. Never hold lock across await points.
 
-**Lambda:** Participates in `DynamicClustered` via request-time change detection. `LambdaMcpServerBuilder` exposes `tool_change_mode()` and `server_state_storage()`. In `FingerprintOnly` mode (default), Lambda behaves as before. In `DynamicClustered` mode, Lambda checks shared storage on each request and delivers notifications via Streamable HTTP responses.
+**Lambda:** Participates in `DynamicClustered` via request-time change detection. `LambdaMcpServerBuilder` exposes `tool_change_mode()` and `server_state_storage()`. In `Static` mode (default), Lambda behaves as before. In `DynamicClustered` mode, Lambda checks shared storage on each request and delivers notifications via Streamable HTTP responses.
 
 ## Fingerprint Storage
 
@@ -167,7 +166,7 @@ Server-global state storage following the same pluggable-backend pattern as `tur
 
 ## Consequences
 
-- `FingerprintOnly` (default): zero behavioral change from pre-feature baseline
+- `Static` (default): zero behavioral change from pre-feature baseline
 - `DynamicInProcess`: live tool changes without session disruption, truthful `listChanged=true`
 - `DynamicClustered`: extends DynamicInProcess with shared storage and cross-instance polling
 - Fingerprint 404 handles deployment boundaries only

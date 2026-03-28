@@ -1113,14 +1113,17 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
             )
             .await;
 
-        // Store tool fingerprint for session versioning across server restarts
-        self.session_manager
-            .set_session_state(
-                &session_id,
-                "mcp:tool_fingerprint",
-                serde_json::json!(self.tool_fingerprint),
-            )
-            .await;
+        // Store tool fingerprint only for dynamic modes (listChanged=true)
+        // Static mode: no fingerprint, no change detection
+        if !self.tool_fingerprint.is_empty() {
+            self.session_manager
+                .set_session_state(
+                    &session_id,
+                    "mcp:tool_fingerprint",
+                    serde_json::json!(self.tool_fingerprint),
+                )
+                .await;
+        }
 
         // Store negotiated version before initialization (differs by mode)
 

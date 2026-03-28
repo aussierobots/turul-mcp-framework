@@ -125,7 +125,11 @@ impl HttpMcpServerBuilder {
 
     /// Set tool fingerprint for session versioning across server restarts
     pub fn tool_fingerprint(mut self, fingerprint: String) -> Self {
-        self.tool_fingerprint = Some(fingerprint);
+        if fingerprint.is_empty() {
+            self.tool_fingerprint = None; // Static mode: no fingerprint check
+        } else {
+            self.tool_fingerprint = Some(fingerprint);
+        }
         self
     }
 
