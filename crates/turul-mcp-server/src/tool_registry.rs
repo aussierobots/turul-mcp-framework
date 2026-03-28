@@ -351,10 +351,10 @@ impl ToolRegistry {
 
         match stored_fp {
             Some(fp) if fp != local_fp => {
-                info!("Dynamic: external tool change detected (stored={}, local={})", fp, local_fp);
+                debug!("Dynamic: external tool change detected (stored={}, local={})", fp, local_fp);
                 self.load_state_from_storage().await?;
                 self.broadcast_notification().await;
-                info!("Dynamic: tool state reloaded and clients notified");
+                debug!("Dynamic: tool state reloaded and clients notified");
                 Ok(true)
             }
             _ => Ok(false),
@@ -383,7 +383,7 @@ impl ToolRegistry {
                     Ok(Some(stored_fp)) => {
                         let local_fp = registry.fingerprint().await;
                         if stored_fp != local_fp {
-                            info!(
+                            debug!(
                                 "Dynamic: detected tool change from another instance (stored={}, local={})",
                                 stored_fp, local_fp
                             );
@@ -395,7 +395,7 @@ impl ToolRegistry {
                                 continue;
                             }
                             registry.broadcast_notification().await;
-                            info!(
+                            debug!(
                                 "Dynamic: tool state reloaded and clients notified"
                             );
                         }

@@ -344,7 +344,7 @@ impl McpServer {
                 // Start background polling for cross-instance changes
                 let poll_interval = registry.check_ttl();
                 let _poll_handle = registry.start_polling(poll_interval);
-                info!("Dynamic: started background polling (interval: {:?})", poll_interval);
+                debug!("Dynamic: started background polling (interval: {:?})", poll_interval);
             }
         }
 
@@ -569,7 +569,7 @@ impl McpServer {
                 // Start background polling for cross-instance changes
                 let poll_interval = registry.check_ttl();
                 let _poll_handle = registry.start_polling(poll_interval);
-                info!("Dynamic: started background polling (interval: {:?})", poll_interval);
+                debug!("Dynamic: started background polling (interval: {:?})", poll_interval);
             }
         }
 
