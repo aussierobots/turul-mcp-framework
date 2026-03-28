@@ -46,6 +46,11 @@ pub struct McpServer {
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     /// Stable fingerprint of the registered tool set for session versioning
     tool_fingerprint: String,
+    /// Tool change mode
+    tool_change_mode: crate::ToolChangeMode,
+    /// Dynamic tool registry (only in DynamicInProcess mode)
+    #[cfg(feature = "dynamic-tools")]
+    tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
 
     // HTTP configuration (if enabled)
     #[cfg(feature = "http")]
@@ -77,6 +82,7 @@ impl McpServer {
         middleware_stack: crate::middleware::MiddlewareStack,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
         tool_fingerprint: String,
+        tool_change_mode: crate::ToolChangeMode,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
@@ -130,6 +136,15 @@ impl McpServer {
             debug!("McpServer configured without session storage");
         }
 
+        // Create dynamic tool registry if DynamicInProcess mode
+        #[cfg(feature = "dynamic-tools")]
+        let tool_registry = match &tool_change_mode {
+            crate::ToolChangeMode::DynamicInProcess => Some(Arc::new(
+                crate::tool_registry::ToolRegistry::new(tools.clone(), session_manager.clone()),
+            )),
+            _ => None,
+        };
+
         Self {
             implementation,
             capabilities,
@@ -143,6 +158,9 @@ impl McpServer {
             middleware_stack,
             route_registry,
             tool_fingerprint,
+            tool_change_mode,
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry,
             #[cfg(feature = "http")]
             bind_address,
             #[cfg(feature = "http")]
@@ -168,6 +186,38 @@ impl McpServer {
     /// ```
     pub fn builder() -> McpServerBuilder {
         McpServerBuilder::new()
+    }
+
+    /// Activate a precompiled tool at runtime. Only available in `DynamicInProcess` mode.
+    ///
+    /// Connected clients receive `notifications/tools/list_changed` via SSE.
+    /// New sessions get the updated fingerprint. Existing sessions with the old
+    /// fingerprint are rejected on their next request (HTTP 404).
+    #[cfg(feature = "dynamic-tools")]
+    pub async fn activate_tool(&self, name: &str) -> std::result::Result<bool, crate::tool_registry::ToolRegistryError> {
+        match &self.tool_registry {
+            Some(registry) => registry.activate_tool(name).await,
+            None => Err(crate::tool_registry::ToolRegistryError::NotCompiled(
+                format!("Cannot activate tool '{}': server is not in DynamicInProcess mode", name),
+            )),
+        }
+    }
+
+    /// Deactivate a precompiled tool at runtime. Only available in `DynamicInProcess` mode.
+    #[cfg(feature = "dynamic-tools")]
+    pub async fn deactivate_tool(&self, name: &str) -> std::result::Result<bool, crate::tool_registry::ToolRegistryError> {
+        match &self.tool_registry {
+            Some(registry) => registry.deactivate_tool(name).await,
+            None => Err(crate::tool_registry::ToolRegistryError::NotCompiled(
+                format!("Cannot deactivate tool '{}': server is not in DynamicInProcess mode", name),
+            )),
+        }
+    }
+
+    /// Get the dynamic tool registry, if in DynamicInProcess mode.
+    #[cfg(feature = "dynamic-tools")]
+    pub fn tool_registry(&self) -> Option<&Arc<crate::tool_registry::ToolRegistry>> {
+        self.tool_registry.as_ref()
     }
 
     /// Get the server's configured capabilities
@@ -236,6 +286,10 @@ impl McpServer {
         if let Some(ref runtime) = self.task_runtime {
             tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
         }
+        #[cfg(feature = "dynamic-tools")]
+        if let Some(ref registry) = self.tool_registry {
+            tool_handler = tool_handler.with_tool_registry(Arc::clone(registry));
+        }
 
         // Create session-aware initialize handler
         let init_handler = SessionAwareInitializeHandler::new(
@@ -262,15 +316,19 @@ impl McpServer {
                 .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
                 .tool_fingerprint(self.tool_fingerprint.clone()) // Session versioning
                 .register_handler(vec!["initialize".to_string()], init_handler)
-                .register_handler(
-                    vec!["tools/list".to_string()],
-                    ListToolsHandler::new_with_session_manager(
+                .register_handler(vec!["tools/list".to_string()], {
+                    let mut lth = ListToolsHandler::new_with_session_manager(
                         self.tools.clone(),
                         self.session_manager.clone(),
                         self.strict_lifecycle,
                         self.task_runtime.is_some(),
-                    ),
-                )
+                    );
+                    #[cfg(feature = "dynamic-tools")]
+                    if let Some(ref registry) = self.tool_registry {
+                        lth = lth.with_tool_registry(Arc::clone(registry));
+                    }
+                    lth
+                })
                 .register_handler(vec!["tools/call".to_string()], tool_handler);
 
         // Pass allow_unauthenticated_ping config to HTTP layer
@@ -427,6 +485,10 @@ impl McpServer {
         if let Some(ref runtime) = self.task_runtime {
             tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
         }
+        #[cfg(feature = "dynamic-tools")]
+        if let Some(ref registry) = self.tool_registry {
+            tool_handler = tool_handler.with_tool_registry(Arc::clone(registry));
+        }
 
         // Create session-aware initialize handler
         let init_handler = SessionAwareInitializeHandler::new(
@@ -453,15 +515,19 @@ impl McpServer {
                 .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
                 .tool_fingerprint(self.tool_fingerprint.clone()) // Session versioning
                 .register_handler(vec!["initialize".to_string()], init_handler)
-                .register_handler(
-                    vec!["tools/list".to_string()],
-                    ListToolsHandler::new_with_session_manager(
+                .register_handler(vec!["tools/list".to_string()], {
+                    let mut lth = ListToolsHandler::new_with_session_manager(
                         self.tools.clone(),
                         self.session_manager.clone(),
                         self.strict_lifecycle,
                         self.task_runtime.is_some(),
-                    ),
-                )
+                    );
+                    #[cfg(feature = "dynamic-tools")]
+                    if let Some(ref registry) = self.tool_registry {
+                        lth = lth.with_tool_registry(Arc::clone(registry));
+                    }
+                    lth
+                })
                 .register_handler(vec!["tools/call".to_string()], tool_handler);
 
         // Pass allow_unauthenticated_ping config to HTTP layer
@@ -1045,6 +1111,8 @@ pub struct ListToolsHandler {
     session_manager: Option<Arc<SessionManager>>,
     strict_lifecycle: bool,
     has_tasks: bool,
+    #[cfg(feature = "dynamic-tools")]
+    tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
 }
 
 impl ListToolsHandler {
@@ -1054,6 +1122,8 @@ impl ListToolsHandler {
             session_manager: None,
             strict_lifecycle: false,
             has_tasks,
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry: None,
         }
     }
 
@@ -1068,7 +1138,16 @@ impl ListToolsHandler {
             session_manager: Some(session_manager),
             strict_lifecycle,
             has_tasks,
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry: None,
         }
+    }
+
+    /// Set a dynamic tool registry for DynamicInProcess mode.
+    #[cfg(feature = "dynamic-tools")]
+    pub fn with_tool_registry(mut self, registry: Arc<crate::tool_registry::ToolRegistry>) -> Self {
+        self.tool_registry = Some(registry);
+        self
     }
 }
 
@@ -1125,15 +1204,30 @@ impl JsonRpcHandler for ListToolsHandler {
         let cursor = list_params.cursor;
         debug!("Listing tools with cursor: {:?}", cursor);
 
-        // Convert tools to descriptors and sort by name for stable pagination
-        let mut tools: Vec<Tool> = self
-            .tools
-            .values()
-            .map(|tool| tool_to_descriptor(tool.as_ref()))
-            .collect();
-
-        // Sort by tool name to ensure stable ordering for pagination
-        tools.sort_by(|a, b| a.name.cmp(&b.name));
+        // Convert tools to descriptors and sort by name for stable pagination.
+        // In DynamicInProcess mode, read from live registry instead of static snapshot.
+        #[cfg(feature = "dynamic-tools")]
+        let mut tools: Vec<Tool> = if let Some(ref registry) = self.tool_registry {
+            registry.list_active_tools().await
+        } else {
+            let mut t: Vec<Tool> = self
+                .tools
+                .values()
+                .map(|tool| tool_to_descriptor(tool.as_ref()))
+                .collect();
+            t.sort_by(|a, b| a.name.cmp(&b.name));
+            t
+        };
+        #[cfg(not(feature = "dynamic-tools"))]
+        let mut tools: Vec<Tool> = {
+            let mut t: Vec<Tool> = self
+                .tools
+                .values()
+                .map(|tool| tool_to_descriptor(tool.as_ref()))
+                .collect();
+            t.sort_by(|a, b| a.name.cmp(&b.name));
+            t
+        };
 
         // Strip execution field when server has no task capability (truthful advertisement)
         if !self.has_tasks {
@@ -1243,6 +1337,8 @@ pub struct SessionAwareToolHandler {
     /// Optional task runtime — when present AND request has `params.task`,
     /// the handler creates a task and executes asynchronously.
     task_runtime: Option<Arc<crate::task::runtime::TaskRuntime>>,
+    #[cfg(feature = "dynamic-tools")]
+    tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
 }
 
 impl SessionAwareToolHandler {
@@ -1256,11 +1352,20 @@ impl SessionAwareToolHandler {
             session_manager,
             strict_lifecycle,
             task_runtime: None,
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry: None,
         }
     }
 
     pub fn with_task_runtime(mut self, runtime: Arc<crate::task::runtime::TaskRuntime>) -> Self {
         self.task_runtime = Some(runtime);
+        self
+    }
+
+    /// Set a dynamic tool registry for DynamicInProcess mode.
+    #[cfg(feature = "dynamic-tools")]
+    pub fn with_tool_registry(mut self, registry: Arc<crate::tool_registry::ToolRegistry>) -> Self {
+        self.tool_registry = Some(registry);
         self
     }
 }
@@ -1320,11 +1425,27 @@ impl JsonRpcHandler for SessionAwareToolHandler {
 
         let call_params: turul_mcp_protocol::tools::CallToolParams = extract_params(params)?;
 
-        // Find the tool
-        let tool = self
-            .tools
-            .get(&call_params.name)
-            .ok_or_else(|| McpError::ToolNotFound(call_params.name.clone()))?;
+        // Find the tool — from live registry in DynamicInProcess mode, or static map otherwise.
+        // In both cases, we clone the Arc and release any lock before the await boundary.
+        #[cfg(feature = "dynamic-tools")]
+        let tool: Arc<dyn McpTool> = if let Some(ref registry) = self.tool_registry {
+            registry
+                .get_tool(&call_params.name)
+                .await
+                .ok_or_else(|| McpError::ToolNotFound(call_params.name.clone()))?
+        } else {
+            Arc::clone(
+                self.tools
+                    .get(&call_params.name)
+                    .ok_or_else(|| McpError::ToolNotFound(call_params.name.clone()))?,
+            )
+        };
+        #[cfg(not(feature = "dynamic-tools"))]
+        let tool: Arc<dyn McpTool> = Arc::clone(
+            self.tools
+                .get(&call_params.name)
+                .ok_or_else(|| McpError::ToolNotFound(call_params.name.clone()))?,
+        );
 
         // Convert JSON-RPC SessionContext to MCP SessionContext for tool execution
         let mcp_session_context = if let Some(json_rpc_ctx) = session_context {
@@ -1428,7 +1549,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
             // The work closure is responsible for executing the tool AND persisting
             // the result to storage, so that tasks/result can retrieve it immediately
             // when the executor signals terminal status.
-            let tool = Arc::clone(tool);
+            let tool = Arc::clone(&tool);
             let runtime_for_work = Arc::clone(runtime);
             let task_id_for_work = task_id.clone();
 

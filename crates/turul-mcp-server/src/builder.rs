@@ -106,6 +106,9 @@ pub struct McpServerBuilder {
 
     /// Validation errors collected during builder configuration
     validation_errors: Vec<String>,
+
+    /// Tool change detection mode (default: FingerprintOnly)
+    tool_change_mode: crate::ToolChangeMode,
 }
 
 impl McpServerBuilder {
@@ -238,7 +241,18 @@ impl McpServerBuilder {
             #[cfg(feature = "http")]
             allow_unauthenticated_ping: None, // Default: use ServerConfig default (true)
             validation_errors: Vec::new(),
+            tool_change_mode: crate::ToolChangeMode::FingerprintOnly,
         }
+    }
+
+    /// Set the tool change detection mode.
+    ///
+    /// - `FingerprintOnly` (default): Stale session detection via fingerprint. `listChanged=false`.
+    /// - `DynamicInProcess` (requires `dynamic-tools` feature): Runtime tool activation/deactivation
+    ///   with live `notifications/tools/list_changed`. `listChanged=true`. Single-process only.
+    pub fn tool_change_mode(mut self, mode: crate::ToolChangeMode) -> Self {
+        self.tool_change_mode = mode;
+        self
     }
 
     /// Sets the server name for identification
@@ -1503,16 +1517,15 @@ impl McpServerBuilder {
         let has_logging = !self.loggers.is_empty();
         tracing::debug!("🔧 Has logging configured: {}", has_logging);
 
-        // Tools capabilities - support notifications only if tools are registered AND we have dynamic change sources
-        // Note: In current static framework, tool set is fixed at build time and doesn't change
-        // list_changed should only be true when dynamic change sources are wired, such as:
-        // - Hot-reload configuration systems
-        // - Admin APIs for runtime tool registration
-        // - Plugin systems with dynamic tool loading
+        // Tools capabilities — listChanged depends on ToolChangeMode
         if has_tools {
+            let list_changed = match self.tool_change_mode {
+                crate::ToolChangeMode::FingerprintOnly => false,
+                #[cfg(feature = "dynamic-tools")]
+                crate::ToolChangeMode::DynamicInProcess => true,
+            };
             self.capabilities.tools = Some(ToolsCapabilities {
-                // Static framework: no dynamic change sources = no list changes
-                list_changed: Some(false),
+                list_changed: Some(list_changed),
             });
         }
 
@@ -1695,6 +1708,7 @@ impl McpServerBuilder {
             self.middleware_stack,
             self.route_registry,
             tool_fingerprint,
+            self.tool_change_mode,
             #[cfg(feature = "http")]
             self.bind_address,
             #[cfg(feature = "http")]

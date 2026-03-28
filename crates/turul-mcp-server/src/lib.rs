@@ -131,6 +131,8 @@ pub mod server;
 pub mod session;
 pub mod task;
 pub mod tool;
+#[cfg(feature = "dynamic-tools")]
+pub mod tool_registry;
 // Re-export session storage from separate crate (breaks circular dependency)
 pub use turul_mcp_session_storage as session_storage;
 // Re-export task storage from separate crate
@@ -196,6 +198,25 @@ pub use task::tokio_executor::TokioTaskExecutor;
 pub use tool::McpTool;
 /// Stable fingerprint of the registered tool set for session versioning
 pub use tool::compute_tool_fingerprint;
+/// Runtime tool activation mode — controls fingerprint vs live notification behavior
+#[cfg(feature = "dynamic-tools")]
+pub use tool_registry::ToolRegistry;
+
+/// Configuration for how tool changes are detected and communicated
+#[derive(Debug, Clone, Default)]
+pub enum ToolChangeMode {
+    /// Fingerprint invalidation only. `listChanged=false`.
+    /// Detects stale sessions after redeploy. No live notifications.
+    /// This is the default and the shipped baseline.
+    #[default]
+    FingerprintOnly,
+    /// Dynamic in-process registry. `listChanged=true`. Single-process only.
+    /// Precompiled tools can be activated/deactivated at runtime.
+    /// Connected clients receive `notifications/tools/list_changed`.
+    #[cfg(feature = "dynamic-tools")]
+    DynamicInProcess,
+}
+
 /// SessionView trait for middleware - re-exported from turul-mcp-session-storage
 pub use turul_mcp_session_storage::SessionView;
 
