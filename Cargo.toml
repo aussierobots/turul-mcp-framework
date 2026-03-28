@@ -8,6 +8,7 @@ members = [
   "crates/turul-mcp-protocol",
   "crates/turul-mcp-session-storage",
   "crates/turul-mcp-task-storage",
+  "crates/turul-mcp-server-state-storage",
   "crates/turul-http-mcp-server",
   "crates/turul-mcp-server",
   "crates/turul-mcp-derive",
@@ -150,6 +151,7 @@ turul-mcp-protocol-2025-11-25 = { version = "0.3.24", path = "crates/turul-mcp-p
 turul-mcp-protocol = { version = "0.3.24", path = "crates/turul-mcp-protocol" }
 turul-mcp-session-storage = { version = "0.3.24", path = "crates/turul-mcp-session-storage" }
 turul-mcp-task-storage = { version = "0.3.24", path = "crates/turul-mcp-task-storage" }
+turul-mcp-server-state-storage = { version = "0.3.24", path = "crates/turul-mcp-server-state-storage" }
 turul-http-mcp-server = { version = "0.3.24", path = "crates/turul-http-mcp-server" }
 turul-mcp-server = { version = "0.3.24", path = "crates/turul-mcp-server" }
 turul-mcp-derive = { version = "0.3.24", path = "crates/turul-mcp-derive" }

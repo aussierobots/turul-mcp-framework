@@ -1,0 +1,39 @@
+[package]
+name = "turul-mcp-server-state-storage"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Server-global state storage for MCP entity registries (tools, resources, prompts) — pluggable backends for cross-instance coordination"
+
+[dependencies]
+# Core dependencies
+serde.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, optional = true }
+chrono = { workspace = true, features = ["serde"] }
+
+# Optional database support
+sqlx = { workspace = true, optional = true }
+
+# AWS SDK dependencies
+aws-config = { workspace = true, optional = true }
+aws-sdk-dynamodb = { workspace = true, optional = true }
+
+# DynamoDB cursor encoding
+base64 = { workspace = true, optional = true }
+
+[features]
+default = ["in-memory"]
+in-memory = ["tokio"]
+sqlite = ["sqlx", "tokio"]
+postgres = ["sqlx", "tokio"]
+dynamodb = ["aws-config", "aws-sdk-dynamodb", "tokio", "base64"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
