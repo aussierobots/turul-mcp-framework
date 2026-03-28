@@ -3,32 +3,44 @@
 //! Demonstrates runtime tool activation/deactivation with MCP-compliant
 //! `notifications/tools/list_changed` notifications.
 //!
-//! ## How to test
+//! ## Testing with curl (two terminals)
 //!
-//! 1. Start the server:
-//!    ```
-//!    cargo run -p dynamic-tools-server
-//!    ```
+//! Terminal 1 — Start server:
+//!   cargo run -p dynamic-tools-server
 //!
-//! 2. Connect with MCP Inspector at http://127.0.0.1:8484/mcp
+//! Terminal 2 — Initialize session:
+//!   curl -si -X POST http://127.0.0.1:8484/mcp \
+//!     -H "Content-Type: application/json" -H "Accept: application/json" \
+//!     -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
+//!   # Copy the Mcp-Session-Id from the response headers
 //!
-//! 3. After initializing, call `tools/list` — you should see 3 tools:
-//!    `add`, `multiply`, `greet`
+//! Terminal 2 — Complete handshake:
+//!   curl -s -X POST http://127.0.0.1:8484/mcp \
+//!     -H "Content-Type: application/json" -H "Accept: application/json" \
+//!     -H "Mcp-Session-Id: <ID>" \
+//!     -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
 //!
-//! 4. Wait 10 seconds — the server auto-deactivates `multiply`
-//!    → If you have an SSE stream open, you receive `notifications/tools/list_changed`
-//!    → Call `tools/list` again — `multiply` is gone
-//!    → Call `tools/call` for `multiply` — you get ToolNotFound error
+//! Terminal 2 — Open SSE stream for server notifications:
+//!   curl -N http://127.0.0.1:8484/mcp \
+//!     -H "Accept: text/event-stream" \
+//!     -H "Mcp-Session-Id: <ID>"
 //!
-//! 5. Wait 10 more seconds — the server auto-activates `multiply`
-//!    → Another `notifications/tools/list_changed` notification
-//!    → `multiply` reappears in `tools/list`
+//! Wait 15 seconds — 'multiply' will be deactivated.
+//! You should see on the SSE stream:
+//!   data: {"method":"notifications/tools/list_changed","jsonrpc":"2.0"}
+//!
+//! Terminal 3 — Verify tools/list changed:
+//!   curl -s -X POST http://127.0.0.1:8484/mcp \
+//!     -H "Content-Type: application/json" -H "Accept: application/json" \
+//!     -H "Mcp-Session-Id: <ID>" \
+//!     -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+//!   # Should show only 'add' and 'greet', no 'multiply'
+
+use std::sync::Arc;
 
 use tracing::info;
 use turul_mcp_derive::McpTool;
 use turul_mcp_server::{McpResult, McpServer, SessionContext, ToolChangeMode};
-
-// --- Tools that can be activated/deactivated ---
 
 #[derive(McpTool, Clone, Default)]
 #[tool(name = "add", description = "Add two numbers")]
@@ -38,8 +50,8 @@ struct AddTool {
 }
 
 impl AddTool {
-    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<f64> {
-        Ok(self.a + self.b)
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+        Ok(format!("{}", self.a + self.b))
     }
 }
 
@@ -51,8 +63,8 @@ struct MultiplyTool {
 }
 
 impl MultiplyTool {
-    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<f64> {
-        Ok(self.a * self.b)
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
+        Ok(format!("{}", self.a * self.b))
     }
 }
 
@@ -77,7 +89,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    info!("Starting Dynamic Tools Server on http://127.0.0.1:8484/mcp");
+    info!("=== Dynamic Tools Server ===");
+    info!("Endpoint: http://127.0.0.1:8484/mcp");
 
     let server = McpServer::builder()
         .name("dynamic-tools-demo")
@@ -89,31 +102,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .bind_address("127.0.0.1:8484".parse()?)
         .build()?;
 
-    info!("tools.listChanged = true");
-    info!("Connect with MCP Inspector, then watch for tool changes...");
-    info!("  - In 10s: 'multiply' will be deactivated");
-    info!("  - In 20s: 'multiply' will be reactivated");
-
-    // Get the tool registry for the demo task
     let registry = server
         .tool_registry()
-        .expect("DynamicInProcess mode must have a registry")
+        .expect("DynamicInProcess must have registry")
         .clone();
 
-    // Auto-demo: deactivate after 10s, reactivate after 20s
+    info!("tools.listChanged = true");
+    info!("Tools: add, multiply, greet");
+    info!("");
+    info!("Connect and open an SSE stream (see source for curl commands).");
+    info!("In 15s: 'multiply' deactivated. In 30s: 'multiply' reactivated.");
+
     tokio::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-        info!("--- Deactivating 'multiply' ---");
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+        info!(">>> Deactivating 'multiply' <<<");
         match registry.deactivate_tool("multiply").await {
-            Ok(true) => info!("'multiply' deactivated — notification sent to connected clients"),
+            Ok(true) => info!("'multiply' deactivated — notification sent"),
             Ok(false) => info!("'multiply' was already inactive"),
             Err(e) => info!("Failed: {}", e),
         }
 
-        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
-        info!("--- Activating 'multiply' ---");
+        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+        info!(">>> Activating 'multiply' <<<");
         match registry.activate_tool("multiply").await {
-            Ok(true) => info!("'multiply' activated — notification sent to connected clients"),
+            Ok(true) => info!("'multiply' activated — notification sent"),
             Ok(false) => info!("'multiply' was already active"),
             Err(e) => info!("Failed: {}", e),
         }
