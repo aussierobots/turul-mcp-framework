@@ -25,21 +25,22 @@ These are distinct concerns:
 
 If the session does not exist or is terminated, the request is rejected immediately. Fingerprint is NOT checked for invalid sessions.
 
-## Fingerprint — Restart/Redeploy Detection
+## Fingerprint — Tool Version Sync
 
 FNV-1a hash of the full serialized `Tool` descriptor set, computed once at server build time.
 
 - Stored per-session during `initialize` as `mcp:tool_fingerprint`
-- Validated on every request via `validate_session_exists()` (after session existence check)
+- Checked on every request via `validate_session_exists()` (after session existence check)
 - In the current implementation, because the HTTP handler fingerprint is build-time static, fingerprint mismatch occurs only across restart/redeploy boundaries, not from in-process mutations
-- **Mismatch → HTTP 404** — forces client re-initialization with fresh tools
-- The server **MUST NOT** update the stored fingerprint for an existing session
-- Only a fresh `initialize` writes the current fingerprint
+- **Mismatch does NOT invalidate the session** — it means tools changed since the session was created
+- On mismatch: stored fingerprint is updated to current, session continues
+- 404 is ONLY for missing or terminated sessions, never for fingerprint mismatch
 
 ### FingerprintOnly mode
 
 - `listChanged=false` — no live notification capability
-- Fingerprint mismatch → 404 is the only mechanism
+- Fingerprint mismatch: stored fingerprint updated silently, session continues
+- Client discovers new tools on their next `tools/list` call
 - No runtime tool mutation support
 
 ## Live Registry + Notification — Runtime Changes
@@ -81,20 +82,24 @@ pub enum ToolChangeMode {
 }
 ```
 
-| Mode | `listChanged` | Restart 404 | Runtime changes | EC2 | Lambda |
+| Mode | `listChanged` | Restart fingerprint | Runtime changes | EC2 | Lambda |
 |------|---|---|---|---|---|
-| FingerprintOnly | false | Yes | Not supported | Yes | Yes |
-| DynamicInProcess | true | Yes | Live registry + notification | Yes | N/A (single-process) |
-| DynamicClustered | true | Yes | Live registry + notification | Polling (10s) | Request-time (5s TTL) |
+| FingerprintOnly | false | Updated silently | Not supported | Yes | Yes |
+| DynamicInProcess | true | Updated + notification | Live registry + notification | Yes | N/A (single-process) |
+| DynamicClustered | true | Updated + notification | Live registry + notification | Polling (10s) | Request-time (5s TTL) |
+
+Note: "Restart fingerprint" column describes what happens when a session's stored fingerprint doesn't match the server's current fingerprint. The session is NEVER invalidated — fingerprint is updated and the session continues.
 
 ## Client Flows
 
 ### Restart/redeploy (all modes)
 
 1. Server restarts with different compiled tools → new build-time fingerprint
-2. Client's next request → session valid, fingerprint mismatch → HTTP 404
-3. Client auto-re-initializes → new session → fresh tools
-4. No manual reconnect needed
+2. Client's next request → session valid, fingerprint mismatch
+3. Stored fingerprint updated to current → session continues
+4. In dynamic modes: `notifications/tools/list_changed` broadcast
+5. Client calls `tools/list` → sees current tools
+6. No manual reconnect needed, no re-initialization needed
 
 ### In-process tool mutation (DynamicInProcess)
 
