@@ -45,22 +45,35 @@ We evaluated and rejected several alternatives to always-404:
 
 The strict model (always 404) is the simplest and most defensible correctness story.
 
+## Fingerprint Storage
+
+The fingerprint is **session-scoped compatibility metadata**, not global server state. It is stored per-session under the key `mcp:tool_fingerprint` in the session storage backend (InMemory, SQLite, PostgreSQL, DynamoDB).
+
+- **Written during `initialize`** (`crates/turul-mcp-server/src/server.rs`, `SessionAwareInitializeHandler`)
+- **Checked on every subsequent request** (`validate_session_exists()` in both HTTP handlers)
+- **Represents**: "what tool surface this session was initialized against"
+- **Compared against**: the server's current tool fingerprint (computed at build time or recomputed on mutation)
+
 ## Configuration
 
 ```rust
 pub enum ToolChangeMode {
     FingerprintOnly,                     // Default. listChanged=false.
     #[cfg(feature = "dynamic-tools")]
-    DynamicInProcess,                    // Opt-in. listChanged=true.
+    DynamicInProcess,                    // Opt-in. listChanged=true. Single-process only.
+    // DynamicClustered,                 // Reserved for future milestone. Multi-instance.
 }
 ```
 
 Capability mapping:
 
-| Mode | `listChanged` | Fingerprint 404 | Notifications |
-|------|---|---|---|
-| FingerprintOnly | false | Yes (always) | No |
-| DynamicInProcess | true | Yes (always) | Yes (advisory) |
+| Mode | `listChanged` | Fingerprint 404 | Notifications | Scope |
+|------|---|---|---|---|
+| FingerprintOnly | false | Yes (always) | No | All runtimes |
+| DynamicInProcess | true | Yes (always) | Yes (advisory) | Single-process HTTP |
+| DynamicClustered (future) | true | Yes (always)* | Yes (advisory) | Multi-instance |
+
+*Unless a future ADR explicitly introduces a session-ack refresh boundary.
 
 ## Architectural Boundaries
 
@@ -100,3 +113,42 @@ Steps 1-2 are UX (faster discovery). Steps 3-4 are correctness (guaranteed refre
 - `activate_tool()` / `deactivate_tool()` names communicate that this toggles precompiled tools, not runtime plugin loading
 - The `dynamic-tools` Cargo feature ensures zero compiled overhead when the feature is not used
 - Fingerprint 404 is the correctness boundary in both modes — notifications do not change session validation behavior
+
+## Future Work: DynamicClustered Mode
+
+`DynamicClustered` is a deferred future mode for multi-instance deployments. It is **not implemented** and reserved for a future milestone.
+
+### What It Would Provide
+
+- Shared active tool registry across server instances
+- Shared current tool fingerprint/version
+- Cross-instance coordination and invalidation
+- Truthful `tools.listChanged=true` across all instances
+- `notifications/tools/list_changed` emission from any instance reaching clients on any other instance
+
+### Key Design Constraint: Not Session State
+
+Session state (`mcp:tool_fingerprint`) is session-scoped compatibility metadata — it records what a specific client session was initialized against. **Clustered tool activation state is server-global, not session-scoped.** Storing the active tool registry in session state would conflate two different scopes, create duplication, and require expensive fan-out writes on every tool mutation.
+
+`DynamicClustered` requires a separate **server-global storage layer** (`ServerStateStorage` trait) with pluggable backends:
+
+- **InMemory** — for testing and single-process fallback
+- **SQLite** — for local durable mode
+- **PostgreSQL** — for shared relational deployments
+- **DynamoDB** — for serverless/AWS deployments
+
+This trait is separate from `SessionStorage` and has different lifecycle semantics.
+
+### Coordination Strategy
+
+Cross-instance delivery and convergence require an explicit coordination strategy. Options include:
+
+- **Polling** — each instance periodically checks shared storage for fingerprint changes (simple, bounded latency)
+- **Storage-native change events** — PostgreSQL `LISTEN/NOTIFY`, DynamoDB Streams (low latency, backend-specific)
+- **External pub/sub** — Redis, SNS, or similar (lowest latency, new infrastructure dependency)
+
+The choice of coordination strategy is not decided and will be determined when this mode is implemented.
+
+### Correctness Rule
+
+Unless a future ADR explicitly introduces a session-ack refresh boundary (e.g., advancing the session fingerprint only after a successful `tools/list` call), the current rule applies: **fingerprint mismatch always 404s.** `DynamicClustered` notifications remain advisory, same as `DynamicInProcess`.
