@@ -128,7 +128,7 @@ Steps 1-2 are UX (faster discovery). Steps 3-4 are correctness (guaranteed refre
 
 ## Future Work: DynamicClustered Mode
 
-`DynamicClustered` is a deferred future mode for multi-instance deployments. It is **not implemented** and reserved for a future milestone.
+`DynamicClustered` is a multi-instance deployment mode backed by the `turul-mcp-server-state-storage` crate. It extends `DynamicInProcess` with shared storage and cross-instance polling.
 
 ### What It Would Provide
 
@@ -178,7 +178,7 @@ Cross-instance delivery and convergence require an explicit coordination strateg
 - **Storage-native change events** — PostgreSQL `LISTEN/NOTIFY`, DynamoDB Streams (low latency, backend-specific)
 - **External pub/sub** — Redis, SNS, or similar (lowest latency, new infrastructure dependency)
 
-The choice of coordination strategy is not decided and will be determined when this mode is implemented.
+**Current implementation**: Polling (default 10-second interval). Each instance runs a background task via `ToolRegistry::start_polling()` that checks the shared storage fingerprint. On mismatch, it reloads the active tool set from storage and broadcasts `notifications/tools/list_changed` to connected clients. Storage-native events and external pub/sub remain options for future optimization.
 
 ### Correctness Rule
 
