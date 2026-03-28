@@ -749,4 +749,148 @@ mod tests {
              The notification is advisory only and does not bypass this."
         );
     }
+
+    // ===================================================================
+    // DynamicClustered tests (storage-backed registry)
+    // ===================================================================
+
+    #[cfg(feature = "dynamic-clustered")]
+    mod clustered_tests {
+        use super::*;
+
+        fn test_storage() -> Arc<dyn turul_mcp_server_state_storage::ServerStateStorage> {
+            Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new())
+        }
+
+        #[tokio::test]
+        async fn test_new_clustered_all_tools_active() {
+            let registry = ToolRegistry::new_clustered(
+                test_tools(),
+                test_session_manager(),
+                test_storage(),
+            );
+            let active = registry.list_active_tools().await;
+            assert_eq!(active.len(), 3);
+        }
+
+        #[tokio::test]
+        async fn test_sync_from_storage_initializes_empty_storage() {
+            let storage = test_storage();
+            let registry = ToolRegistry::new_clustered(
+                test_tools(),
+                test_session_manager(),
+                storage.clone(),
+            );
+
+            let result = registry.sync_from_storage().await.unwrap();
+            assert!(matches!(result, SyncResult::InitializedStorage));
+
+            // Storage should now have the fingerprint
+            let stored_fp = storage.get_fingerprint("tools").await.unwrap();
+            assert!(stored_fp.is_some());
+            assert_eq!(stored_fp.unwrap(), registry.fingerprint().await);
+        }
+
+        #[tokio::test]
+        async fn test_sync_from_storage_in_sync() {
+            let storage = test_storage();
+            let registry = ToolRegistry::new_clustered(
+                test_tools(),
+                test_session_manager(),
+                storage.clone(),
+            );
+
+            // First sync initializes storage
+            registry.sync_from_storage().await.unwrap();
+
+            // Second sync with same tools should be in sync
+            let registry2 = ToolRegistry::new_clustered(
+                test_tools(),
+                test_session_manager(),
+                storage.clone(),
+            );
+            let result = registry2.sync_from_storage().await.unwrap();
+            assert!(matches!(result, SyncResult::InSync));
+        }
+
+        #[tokio::test]
+        async fn test_sync_from_storage_detects_newer_tools() {
+            let storage = test_storage();
+
+            // First server writes its state
+            let registry1 = ToolRegistry::new_clustered(
+                test_tools(),
+                test_session_manager(),
+                storage.clone(),
+            );
+            registry1.sync_from_storage().await.unwrap();
+            let old_fp = storage.get_fingerprint("tools").await.unwrap().unwrap();
+
+            // Second server has different tools (simulate by deactivating one first)
+            // Create with only 2 of the 3 tools
+            let mut fewer_tools: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
+            fewer_tools.insert("alpha".to_string(), Arc::new(TestDynTool { tool_name: "alpha" }));
+            fewer_tools.insert("beta".to_string(), Arc::new(TestDynTool { tool_name: "beta" }));
+
+            let registry2 = ToolRegistry::new_clustered(
+                fewer_tools,
+                test_session_manager(),
+                storage.clone(),
+            );
+            let result = registry2.sync_from_storage().await.unwrap();
+
+            // Should detect mismatch and update storage
+            match result {
+                SyncResult::UpdatedStorage { old_fingerprint } => {
+                    assert_eq!(old_fingerprint, old_fp);
+                }
+                other => panic!("Expected UpdatedStorage, got {:?}", other),
+            }
+
+            // Storage fingerprint should now match the new server
+            let new_fp = storage.get_fingerprint("tools").await.unwrap().unwrap();
+            assert_eq!(new_fp, registry2.fingerprint().await);
+            assert_ne!(new_fp, old_fp);
+        }
+
+        #[tokio::test]
+        async fn test_activate_persists_to_storage() {
+            let storage = test_storage();
+            let registry = ToolRegistry::new_clustered(
+                test_tools(),
+                test_session_manager(),
+                storage.clone(),
+            );
+
+            // Deactivate then activate
+            registry.deactivate_tool("beta").await.unwrap();
+            registry.activate_tool("beta").await.unwrap();
+
+            // Storage should have beta as active
+            let state = storage.get_entity_state("tools", "beta").await.unwrap();
+            assert!(state.is_some());
+            assert!(state.unwrap().active);
+
+            // Fingerprint in storage should match in-memory
+            let stored_fp = storage.get_fingerprint("tools").await.unwrap();
+            assert_eq!(stored_fp, Some(registry.fingerprint().await));
+        }
+
+        #[tokio::test]
+        async fn test_deactivate_persists_to_storage() {
+            let storage = test_storage();
+            let registry = ToolRegistry::new_clustered(
+                test_tools(),
+                test_session_manager(),
+                storage.clone(),
+            );
+
+            registry.deactivate_tool("gamma").await.unwrap();
+
+            // Storage should have gamma as inactive
+            let state = storage.get_entity_state("tools", "gamma").await.unwrap();
+            assert!(state.is_some());
+            assert!(!state.unwrap().active);
+        }
+    }
 }
