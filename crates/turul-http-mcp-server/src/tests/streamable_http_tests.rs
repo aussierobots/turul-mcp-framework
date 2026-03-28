@@ -64,7 +64,7 @@ mod streamable_handler_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
-        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None);
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None, false);
 
         // Handler should be created successfully
         println!("Streamable HTTP handler created successfully");
@@ -80,7 +80,7 @@ mod streamable_handler_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
-        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None);
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None, false);
 
         // Handler should accept custom configuration
         println!("Streamable HTTP handler with custom config created");
@@ -98,7 +98,7 @@ mod protocol_version_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
-        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None);
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None, false);
 
         // Create HTTP/1.1 request
         let mut request = Request::builder()
@@ -123,7 +123,7 @@ mod protocol_version_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
-        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None);
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None, false);
 
         // Create HTTP/2 request
         let mut request = Request::builder()
@@ -277,7 +277,7 @@ mod connection_management_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
-        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None);
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None, false);
 
         // Create request with keep-alive headers
         let request = Request::builder()
@@ -297,7 +297,7 @@ mod connection_management_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
-        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None);
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None, false);
 
         // Create request with close connection
         let request = Request::builder()
@@ -317,7 +317,7 @@ mod connection_management_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
-        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None);
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None, false);
 
         // Simulate multiple requests on same connection
         let requests = vec![
@@ -459,7 +459,7 @@ mod error_recovery_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
-        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None);
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None, false);
 
         // Create request with malformed JSON
         let request = Request::builder()
@@ -481,7 +481,7 @@ mod error_recovery_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
-        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None);
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None, false);
 
         // Create oversized request
         let large_data = "x".repeat(2048);
@@ -501,7 +501,7 @@ mod error_recovery_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
-        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None);
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None, false);
 
         // Create request with unsupported method
         let request = Request::builder()
@@ -519,7 +519,7 @@ mod error_recovery_tests {
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::new());
         let session_storage = Arc::new(InMemorySessionStorage::new());
         let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
-        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None);
+        let handler = StreamableHttpHandler::new(Arc::new(config), dispatcher, session_storage, stream_manager, turul_mcp_protocol::ServerCapabilities::default(), Arc::new(crate::middleware::MiddlewareStack::new()), None, false);
 
         // Create request without content-type
         let request = Request::builder()

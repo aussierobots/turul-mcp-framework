@@ -324,7 +324,13 @@ impl McpServer {
                 .server_capabilities(self.capabilities.clone()) // Pass server capabilities
                 .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
                 .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
-                .tool_fingerprint(self.tool_fingerprint.clone()) // Session versioning
+                .tool_fingerprint(self.tool_fingerprint.clone())
+                .dynamic_tools({
+                    #[cfg(feature = "dynamic-tools")]
+                    { self.tool_registry.is_some() }
+                    #[cfg(not(feature = "dynamic-tools"))]
+                    { false }
+                })
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(vec!["tools/list".to_string()], {
                     let mut lth = ListToolsHandler::new_with_session_manager(
@@ -523,7 +529,13 @@ impl McpServer {
                 .server_capabilities(self.capabilities.clone()) // Pass server capabilities
                 .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
                 .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
-                .tool_fingerprint(self.tool_fingerprint.clone()) // Session versioning
+                .tool_fingerprint(self.tool_fingerprint.clone())
+                .dynamic_tools({
+                    #[cfg(feature = "dynamic-tools")]
+                    { self.tool_registry.is_some() }
+                    #[cfg(not(feature = "dynamic-tools"))]
+                    { false }
+                })
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(vec!["tools/list".to_string()], {
                     let mut lth = ListToolsHandler::new_with_session_manager(

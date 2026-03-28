@@ -87,7 +87,8 @@ impl LambdaMcpHandler {
             stream_manager.clone(),
             capabilities.clone(),
             middleware_stack,
-            None, // No fingerprint in legacy constructor
+            None,  // No fingerprint in legacy constructor
+            false, // Lambda: never dynamic
         );
 
         Self {
@@ -133,7 +134,8 @@ impl LambdaMcpHandler {
             stream_manager,
             capabilities,
             middleware_stack,
-            None, // No fingerprint in legacy constructor
+            None,  // No fingerprint in legacy constructor
+            false, // Lambda: never dynamic
         );
 
         Self {
@@ -207,6 +209,7 @@ impl LambdaMcpHandler {
             capabilities,
             middleware_stack,
             tool_fingerprint,
+            false, // Lambda: never dynamic
         );
 
         Self {
