@@ -6,71 +6,64 @@
 
 ## Decision
 
-Two complementary mechanisms handle tool change detection at different layers. They serve different purposes and are not alternatives:
+Two separate mechanisms handle tool changes at different boundaries:
 
-- **Fingerprint** — correctness boundary. Guarantees clients refresh.
-- **Notification** — UX improvement. Faster discovery of changes.
+- **Fingerprint** — restart/redeploy boundary. Detects compiled tool set changes.
+- **Live registry + notification** — runtime boundary. Handles in-process and cross-instance tool mutations.
 
-### Phase A: Tool Fingerprint — Restart/Redeploy Boundary
+These are separate code paths serving different purposes. They do not intersect.
 
-Stale session detection for **restarts and redeploys** (not in-process mutations).
+## Session Validation vs Tool Version Sync
 
-- FNV-1a hash of the full serialized `Tool` descriptor set, computed once at build time
-- The HTTP handler's fingerprint is **static for the lifetime of the server process**
-- Stored per-session during `initialize`, validated on every request via `validate_session_exists()`
-- **Mismatch returns HTTP 404** — forces client re-initialization
-- This catches sessions that span a server restart where the compiled tool set changed
+These are distinct concerns:
 
-### Mandatory Stale Session Rule (Restart/Redeploy)
+| Check | Purpose | When |
+|-------|---------|------|
+| Session existence | Is this `Mcp-Session-Id` valid? | Every request, first |
+| Session termination | Has this session been ended? | Every request, second |
+| Fingerprint comparison | Has the compiled tool set changed since this session was created? | Every request, after session is confirmed valid |
 
-On every request, if the session's stored `mcp:tool_fingerprint` differs from the HTTP handler's build-time fingerprint, the server **MUST** reject the request with HTTP 404. This applies regardless of:
+If the session does not exist or is terminated, the request is rejected immediately. Fingerprint is NOT checked for invalid sessions.
 
-- **Session persistence** — the session record may still exist in durable storage
-- **Connection state** — the client may have an active SSE stream
-- **Notification delivery** — a notification may have been sent or queued
+## Fingerprint — Restart/Redeploy Detection
 
-The server **MUST NOT** update the stored fingerprint for an existing stale session. The current fingerprint is written only during a fresh `initialize`.
+FNV-1a hash of the full serialized `Tool` descriptor set, computed once at server build time.
 
-**Scope**: This rule applies to **restart/redeploy scenarios** where the compiled tool set changes. It does NOT apply to in-process dynamic tool mutations (see Phase B).
+- Stored per-session during `initialize` as `mcp:tool_fingerprint`
+- Validated on every request via `validate_session_exists()` (after session existence check)
+- In the current implementation, because the HTTP handler fingerprint is build-time static, fingerprint mismatch occurs only across restart/redeploy boundaries, not from in-process mutations
+- **Mismatch → HTTP 404** — forces client re-initialization with fresh tools
+- The server **MUST NOT** update the stored fingerprint for an existing session
+- Only a fresh `initialize` writes the current fingerprint
 
-### Phase B: Dynamic Tool Registry — Live Tool Changes
+### FingerprintOnly mode
 
-Runtime tool activation/deactivation without session disruption.
+- `listChanged=false` — no live notification capability
+- Fingerprint mismatch → 404 is the only mechanism
+- No runtime tool mutation support
 
-- `ToolChangeMode::DynamicInProcess` — explicit opt-in via builder, requires `dynamic-tools` Cargo feature
-- `ToolRegistry` activates/deactivates precompiled tools at runtime (not runtime plugin loading)
-- Handlers read from the **live registry** — same session sees updated tools immediately
-- **No 404 for in-process mutations** — the handler's build-time fingerprint does not change when tools are activated/deactivated. Sessions continue without disruption.
-- `notifications/tools/list_changed` broadcast as advisory signal to connected clients
-- Client can call `tools/list` to get the current active tool set
+## Live Registry + Notification — Runtime Changes
 
-**Why no 404 for in-process changes**: Destroying all active sessions every time an admin toggles a tool would be overly disruptive. In-process changes are visible immediately via the live registry. The fingerprint 404 is reserved for restart/redeploy boundaries where the compiled tool set has changed.
-- `tools.listChanged = true` — truthful: the server emits notifications on tool changes
-- Notification emitted via `SessionManager.broadcast_event(SessionEvent::Custom)` — transport-agnostic
-- SSE bridge (`setup_sse_event_bridge`) delivers to connected clients via GET SSE stream
+### DynamicInProcess mode
 
-**Notifications are advisory.** They tell connected clients "tools changed" so the client can call `tools/list` to refresh. In DynamicInProcess mode, the same session continues to work — `tools/list` returns the live registry state.
+- `listChanged=true` — truthful: server emits `notifications/tools/list_changed`
+- `ToolRegistry` with `activate_tool()` / `deactivate_tool()` for precompiled tools
+- Handlers read from the live registry — same session sees updated tools immediately
+- `notifications/tools/list_changed` broadcast to connected clients as advisory signal
+- **Session continues without disruption** — no 404, no re-initialization for runtime changes
+- Client calls `tools/list` to refresh after receiving notification
+- The handler's build-time fingerprint does not change on runtime mutations, so no fingerprint mismatch is triggered by activate/deactivate
+- Restart/redeploy with different compiled tools: fingerprint mismatch → 404 (same as FingerprintOnly)
 
-## Two-Layer Model
+### DynamicClustered mode
 
-The fingerprint and the live registry serve different purposes:
+Extends DynamicInProcess with cross-instance coordination:
 
-| Scenario | Mechanism | Session impact |
-|----------|-----------|----------------|
-| **Restart/redeploy** (compiled tools changed) | Fingerprint mismatch → 404 | Session destroyed, client re-inits |
-| **In-process mutation** (activate/deactivate) | Live registry + notification | Session continues, tools/list updated |
-| **Cross-instance mutation** (DynamicClustered) | Polling + live registry + notification | Session continues on detecting instance |
-
-This split avoids unnecessarily destroying sessions for routine tool toggles while maintaining a hard boundary for deployment changes.
-
-## Fingerprint Storage
-
-The fingerprint is **session-scoped compatibility metadata**, not global server state. It is stored per-session under the key `mcp:tool_fingerprint` in the session storage backend (InMemory, SQLite, PostgreSQL, DynamoDB).
-
-- **Written during `initialize`** (`crates/turul-mcp-server/src/server.rs`, `SessionAwareInitializeHandler`)
-- **Checked on every subsequent request** (`validate_session_exists()` in both HTTP handlers)
-- **Represents**: "what tool surface this session was initialized against"
-- **Compared against**: the server's current tool fingerprint (computed at build time or recomputed on mutation)
+- Tool activation state stored in shared `ServerStateStorage` (SQLite, PostgreSQL, DynamoDB)
+- Background polling (default 10-second interval) via `ToolRegistry::start_polling()`
+- Each instance checks the shared storage fingerprint; on mismatch, reloads tool state and broadcasts `notifications/tools/list_changed` to its connected clients
+- Startup sync via `sync_from_storage()`: compares local fingerprint against storage, updates if newer, logs warning for other stale instances
+- Restart/redeploy: fingerprint mismatch → 404 (same as other modes)
 
 ## Configuration
 
@@ -78,127 +71,85 @@ The fingerprint is **session-scoped compatibility metadata**, not global server 
 pub enum ToolChangeMode {
     FingerprintOnly,                     // Default. listChanged=false.
     #[cfg(feature = "dynamic-tools")]
-    DynamicInProcess,                    // Opt-in. listChanged=true. Single-process only.
-    // DynamicClustered,                 // Reserved for future milestone. Multi-instance.
+    DynamicInProcess,                    // Opt-in. listChanged=true. Single-process.
+    #[cfg(feature = "dynamic-clustered")]
+    DynamicClustered,                    // Opt-in. listChanged=true. Multi-instance.
 }
 ```
 
-Capability mapping:
-
-| Mode | `listChanged` | Fingerprint 404 | Notifications | Scope |
+| Mode | `listChanged` | Restart 404 | Runtime changes | Scope |
 |------|---|---|---|---|
-| FingerprintOnly | false | Yes (always) | No | All runtimes |
-| DynamicInProcess | true | Yes (always) | Yes (advisory) | Single-process HTTP |
+| FingerprintOnly | false | Yes | Not supported | All runtimes |
+| DynamicInProcess | true | Yes | Live registry + notification | Single-process HTTP |
+| DynamicClustered | true | Yes | Live registry + notification + polling | Multi-instance |
 
-See [Future Work](#future-work-dynamicclustered-mode) for the deferred `DynamicClustered` multi-instance mode.
+## Client Flows
+
+### Restart/redeploy (all modes)
+
+1. Server restarts with different compiled tools → new build-time fingerprint
+2. Client's next request → session valid, fingerprint mismatch → HTTP 404
+3. Client auto-re-initializes → new session → fresh tools
+4. No manual reconnect needed
+
+### In-process tool mutation (DynamicInProcess)
+
+1. `activate_tool()` / `deactivate_tool()` → live registry updated
+2. `notifications/tools/list_changed` broadcast to connected clients
+3. Client receives notification → invalidates tool cache → calls `tools/list`
+4. Session continues — no disruption, no 404
+
+### Cross-instance mutation (DynamicClustered)
+
+1. Instance A changes tools → writes to shared storage
+2. Instance B's polling task detects fingerprint change → reloads from storage
+3. Instance B broadcasts `notifications/tools/list_changed` to its clients
+4. Clients refresh → see updated tools
+5. Session continues on all instances
 
 ## Architectural Boundaries
 
-**Transport boundary:** Core server emits `SessionEvent::Custom` via `SessionManager.broadcast_event()`. The HTTP layer's SSE event bridge handles delivery. No HTTP types in core server code.
+**Transport boundary:** Core server emits `SessionEvent::Custom` via `SessionManager.broadcast_event()`. HTTP SSE bridge handles delivery. No HTTP types in core server code.
 
-**Separation of concerns:** The fingerprint validation in `validate_session_exists()` never sends notifications. Notification delivery is the ToolRegistry's responsibility. These are separate code paths.
+**Separation of concerns:** `validate_session_exists()` checks session validity AND fingerprint, but never sends notifications. Notification delivery is `ToolRegistry`'s responsibility. These are separate code paths.
 
-**Concurrency:** `RwLock<ToolState>` holds both active tool set and fingerprint under a single lock. Read lock → clone `Arc<dyn McpTool>` → release lock → call tool. Lock is never held across await points.
+**Concurrency:** `RwLock<ToolState>` holds active tool set + fingerprint under a single lock. Read lock → clone `Arc<dyn McpTool>` → release → call. Never hold lock across await points.
 
-**Lambda:** Excluded from Phase B at the type level. `LambdaMcpServerBuilder` does not expose `tool_change_mode()`. Lambda uses `FingerprintOnly`.
+**Lambda:** Excluded from dynamic modes at the type level. `LambdaMcpServerBuilder` does not expose `tool_change_mode()`. Lambda uses `FingerprintOnly`.
 
-**Scope:** Phase B is single-process only. Multi-instance coordination is a separate future milestone.
+## Fingerprint Storage
+
+Session-scoped compatibility metadata, not global server state.
+
+- Key: `mcp:tool_fingerprint`
+- Written during `initialize` (`SessionAwareInitializeHandler`)
+- Compared against the handler's build-time static fingerprint
+- Not updated after initial write
 
 ## Notification Wire Format
 
-Exact payload emitted by `ToolRegistry` on mutation. Uses `JsonRpcNotification` (not `ToolListChangedNotification` — protocol notification types are NOT wire-complete; they lack the `jsonrpc` field):
+Uses `JsonRpcNotification` (not `ToolListChangedNotification` — protocol notification types lack the `jsonrpc` field):
 
 ```json
 {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
 ```
 
-No `params` field.
+## ServerStateStorage (DynamicClustered)
 
-## Client Flows
+Server-global state storage following the same pluggable-backend pattern as `turul-mcp-session-storage` and `turul-mcp-task-storage`.
 
-### In-process tool mutation (DynamicInProcess)
+- **InMemory** — test double only
+- **SQLite** — local durable mode
+- **PostgreSQL** — shared relational deployments
+- **DynamoDB** — serverless/AWS (camelCase attribute names)
 
-1. Admin calls `activate_tool()` / `deactivate_tool()` → live registry updated
-2. `ToolRegistry` broadcasts `notifications/tools/list_changed` to connected clients
-3. Client receives notification → calls `tools/list` → sees updated tool set
-4. **Session continues** — no 404, no re-initialization needed
-
-### Restart/redeploy (all modes)
-
-1. Server restarts with different compiled tools → new build-time fingerprint
-2. Client's next request → fingerprint mismatch → HTTP 404
-3. Client re-initializes → new session with current fingerprint + fresh `tools/list`
-4. **No manual reconnect needed** — client auto-re-initializes on 404
-
-### Cross-instance mutation (DynamicClustered)
-
-1. Instance A activates/deactivates a tool → writes to shared storage
-2. Instance B's polling task detects fingerprint change → reloads from storage
-3. Instance B broadcasts `notifications/tools/list_changed` to its connected clients
-4. Clients call `tools/list` → see updated tools
+**Generic, not tool-specific.** Same trait backs all entity types with `list_changed` notifications: tools, resources, prompts.
 
 ## Consequences
 
-- Servers using `FingerprintOnly` (default) have zero behavioral change from pre-feature baseline
-- Servers opting into `DynamicInProcess` get truthful `listChanged=true` and live tool changes without session disruption
-- `activate_tool()` / `deactivate_tool()` names communicate that this toggles precompiled tools, not runtime plugin loading
-- The `dynamic-tools` Cargo feature ensures zero compiled overhead when the feature is not used
-- Fingerprint 404 is the correctness boundary in both modes — notifications do not change session validation behavior
-
-## Future Work: DynamicClustered Mode
-
-`DynamicClustered` is a multi-instance deployment mode backed by the `turul-mcp-server-state-storage` crate. It extends `DynamicInProcess` with shared storage and cross-instance polling.
-
-### What It Would Provide
-
-- Shared active tool registry across server instances
-- Shared current tool fingerprint/version
-- Cross-instance coordination and invalidation
-- Truthful `tools.listChanged=true` across all instances
-- `notifications/tools/list_changed` emission from any instance reaching clients on any other instance
-
-### Key Design Constraint: Not Session State
-
-Session state (`mcp:tool_fingerprint`) is session-scoped compatibility metadata — it records what a specific client session was initialized against. **Clustered tool activation state is server-global, not session-scoped.** Storing the active tool registry in session state would conflate two different scopes, create duplication, and require expensive fan-out writes on every tool mutation.
-
-`DynamicClustered` requires a separate **server-global storage layer**, following the same pluggable-backend pattern as `turul-mcp-session-storage` and `turul-mcp-task-storage`. A new `ServerStateStorage` trait (or similar) would provide:
-
-- **SQLite** — for local durable mode / small deployments
-- **PostgreSQL** — for shared relational deployments
-- **DynamoDB** — for serverless/AWS deployments
-- **InMemory** — as a test double for the storage abstraction only (cannot satisfy clustered semantics across instances)
-
-This trait is separate from `SessionStorage` and has different lifecycle semantics. Session state is client-scoped; server state is instance-global and shared across the cluster.
-
-**`ServerStateStorage` is generic server-global state, not tool-specific.** While tools are the first consumer, the same storage and coordination pattern is intended to back all MCP entity types that support `list_changed` notifications:
-
-- `notifications/tools/list_changed` — tool activation registry
-- `notifications/resources/list_changed` — resource activation registry
-- `notifications/prompts/list_changed` — prompt activation registry
-
-Each entity type would store its own activation state and fingerprint in server-global storage. The storage trait should be designed as a general key-value store, not as a tool-only abstraction. Per-entity change notifications (`notifications/resources/updated`) are a different pattern and may require separate consideration.
-
-### Startup Behavior
-
-When a server instance starts in `DynamicClustered` mode, for each entity type (tools, resources, prompts):
-
-1. Compute local fingerprint from the compiled entity set
-2. Read the current fingerprint from shared storage
-3. If they differ: update shared storage with the new fingerprint (this instance has newer definitions)
-4. Other running instances that have not restarted should detect the fingerprint change (via coordination) and **issue a warning log** — they are serving a stale entity set until they restart or reload
-
-This handles rolling deployments where instances restart at different times.
-
-### Coordination Strategy
-
-Cross-instance delivery and convergence require an explicit coordination strategy. Options include:
-
-- **Polling** — each instance periodically checks shared storage for fingerprint changes (simple, bounded latency)
-- **Storage-native change events** — PostgreSQL `LISTEN/NOTIFY`, DynamoDB Streams (low latency, backend-specific)
-- **External pub/sub** — Redis, SNS, or similar (lowest latency, new infrastructure dependency)
-
-**Current implementation**: Polling (default 10-second interval). Each instance runs a background task via `ToolRegistry::start_polling()` that checks the shared storage fingerprint. On mismatch, it reloads the active tool set from storage and broadcasts `notifications/tools/list_changed` to connected clients. Storage-native events and external pub/sub remain options for future optimization.
-
-### Correctness Rule
-
-Unless a future ADR explicitly introduces a session-ack refresh boundary (e.g., advancing the session fingerprint only after a successful `tools/list` call), the current rule applies: **fingerprint mismatch always 404s.** `DynamicClustered` notifications remain advisory, same as `DynamicInProcess`.
+- `FingerprintOnly` (default): zero behavioral change from pre-feature baseline
+- `DynamicInProcess`: live tool changes without session disruption, truthful `listChanged=true`
+- `DynamicClustered`: extends DynamicInProcess with shared storage and cross-instance polling
+- Fingerprint 404 handles deployment boundaries only
+- Runtime mutations use the live registry — sessions are not disrupted
+- `dynamic-tools` / `dynamic-clustered` Cargo features ensure zero compiled overhead when disabled
