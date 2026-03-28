@@ -504,6 +504,38 @@ mod tests {
         }
     }
 
+    /// Test tool with a custom input schema (for HashMap property order testing)
+    struct SchemaTestTool {
+        tool_name: &'static str,
+        schema: turul_mcp_protocol::tools::ToolSchema,
+    }
+    impl HasBaseMetadata for SchemaTestTool {
+        fn name(&self) -> &str { self.tool_name }
+    }
+    impl HasDescription for SchemaTestTool {
+        fn description(&self) -> Option<&str> { Some("schema test tool") }
+    }
+    impl HasInputSchema for SchemaTestTool {
+        fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema { &self.schema }
+    }
+    impl HasOutputSchema for SchemaTestTool {
+        fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> { None }
+    }
+    impl HasAnnotations for SchemaTestTool {
+        fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
+    }
+    impl HasToolMeta for SchemaTestTool {
+        fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    }
+    impl HasIcons for SchemaTestTool {}
+    impl HasExecution for SchemaTestTool {}
+    #[async_trait]
+    impl McpTool for SchemaTestTool {
+        async fn call(&self, _args: Value, _session: Option<crate::session::SessionContext>) -> McpResult<CallToolResult> {
+            Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
+        }
+    }
+
     fn test_tools() -> HashMap<String, Arc<dyn McpTool>> {
         let mut tools: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
         tools.insert("alpha".to_string(), Arc::new(TestDynTool { tool_name: "alpha" }));
@@ -874,6 +906,70 @@ mod tests {
             );
             let result = registry2.sync_from_storage().await.unwrap();
             assert!(matches!(result, SyncResult::InSync));
+        }
+
+        /// Regression: two independently constructed registries with the same logical
+        /// tools (but different HashMap insertion orders) must produce the same fingerprint
+        /// and sync_from_storage() must NOT detect a mismatch. This is the registry-level
+        /// proof for the Lambda production bug where non-deterministic HashMap serialization
+        /// caused every cold start to trigger a spurious fingerprint mismatch.
+        #[tokio::test]
+        async fn test_independent_registries_same_tools_no_spurious_mismatch() {
+            use turul_mcp_protocol::schema::JsonSchema;
+            use turul_mcp_protocol::tools::ToolSchema;
+
+            // Build tools with HashMap properties in order A
+            let mut props_a = HashMap::new();
+            props_a.insert("name".to_string(), JsonSchema::string());
+            props_a.insert("age".to_string(), JsonSchema::number());
+            props_a.insert("active".to_string(), JsonSchema::boolean());
+
+            let mut tools_a: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
+            tools_a.insert("alpha".to_string(), Arc::new(TestDynTool { tool_name: "alpha" }));
+            tools_a.insert("complex".to_string(), Arc::new(SchemaTestTool {
+                tool_name: "complex",
+                schema: ToolSchema::object()
+                    .with_properties(props_a)
+                    .with_required(vec!["name".to_string()]),
+            }));
+
+            // Build tools with HashMap properties in order B (reversed insertion)
+            let mut props_b = HashMap::new();
+            props_b.insert("active".to_string(), JsonSchema::boolean());
+            props_b.insert("name".to_string(), JsonSchema::string());
+            props_b.insert("age".to_string(), JsonSchema::number());
+
+            let mut tools_b: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
+            tools_b.insert("complex".to_string(), Arc::new(SchemaTestTool {
+                tool_name: "complex",
+                schema: ToolSchema::object()
+                    .with_properties(props_b)
+                    .with_required(vec!["name".to_string()]),
+            }));
+            tools_b.insert("alpha".to_string(), Arc::new(TestDynTool { tool_name: "alpha" }));
+
+            let storage = test_storage();
+
+            // Registry A initializes storage
+            let registry_a = ToolRegistry::new(tools_a, test_session_manager(), storage.clone());
+            let result_a = registry_a.sync_from_storage().await.unwrap();
+            assert!(matches!(result_a, SyncResult::InitializedStorage));
+
+            // Registry B syncs — must be InSync, not LocalNewer
+            let registry_b = ToolRegistry::new(tools_b, test_session_manager(), storage.clone());
+            let result_b = registry_b.sync_from_storage().await.unwrap();
+            assert!(
+                matches!(result_b, SyncResult::InSync),
+                "Identically-configured registries with different HashMap order must sync as InSync, got {:?}",
+                result_b
+            );
+
+            // Fingerprints must be identical
+            assert_eq!(
+                registry_a.fingerprint().await,
+                registry_b.fingerprint().await,
+                "Same logical tools must produce same fingerprint regardless of HashMap insertion order"
+            );
         }
 
         #[tokio::test]

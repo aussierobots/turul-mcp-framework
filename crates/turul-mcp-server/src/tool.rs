@@ -44,6 +44,11 @@ pub fn tool_to_descriptor(tool: &dyn McpTool) -> turul_mcp_protocol::Tool {
 ///
 /// Uses FNV-1a (a fixed, well-known algorithm) instead of `DefaultHasher` which
 /// is not guaranteed stable across Rust versions or builds.
+///
+/// HashMap fields in Tool descriptors (e.g., `ToolSchema.properties`,
+/// `ToolSchema.additional`, nested `JsonSchema.properties`) have non-deterministic
+/// iteration order. The serialized JSON is canonicalized (all object keys sorted
+/// recursively) before hashing to ensure stability across processes and instances.
 pub fn compute_tool_fingerprint(tools: &HashMap<String, Arc<dyn McpTool>>) -> String {
     let mut tool_names: Vec<&String> = tools.keys().collect();
     tool_names.sort();
@@ -53,9 +58,16 @@ pub fn compute_tool_fingerprint(tools: &HashMap<String, Arc<dyn McpTool>>) -> St
         let descriptor = tool_to_descriptor(tool.as_ref());
         // Tool descriptors derive Serialize — failure here indicates a framework bug
         // that would also break tools/list. Fail closed, not open.
-        let json = serde_json::to_string(&descriptor).unwrap_or_else(|e| {
+        let value = serde_json::to_value(&descriptor).unwrap_or_else(|e| {
             panic!(
                 "Tool '{}' descriptor failed to serialize for fingerprint: {}",
+                name, e
+            )
+        });
+        let canonical_value = canonicalize_json(value);
+        let json = serde_json::to_string(&canonical_value).unwrap_or_else(|e| {
+            panic!(
+                "Tool '{}' canonical descriptor failed to re-serialize: {}",
                 name, e
             )
         });
@@ -69,6 +81,27 @@ pub fn compute_tool_fingerprint(tools: &HashMap<String, Arc<dyn McpTool>>) -> St
         hash = hash.wrapping_mul(0x100000001b3); // prime
     }
     format!("{:016x}", hash)
+}
+
+/// Recursively sort all object keys in a JSON value for deterministic serialization.
+/// HashMap iteration order is non-deterministic in Rust; this ensures identical
+/// logical structures always produce identical JSON strings.
+fn canonicalize_json(value: serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let sorted: serde_json::Map<String, serde_json::Value> = map
+                .into_iter()
+                .map(|(k, v)| (k, canonicalize_json(v)))
+                .collect::<std::collections::BTreeMap<_, _>>()
+                .into_iter()
+                .collect();
+            serde_json::Value::Object(sorted)
+        }
+        serde_json::Value::Array(arr) => {
+            serde_json::Value::Array(arr.into_iter().map(canonicalize_json).collect())
+        }
+        other => other,
+    }
 }
 
 #[cfg(test)]
@@ -428,6 +461,128 @@ mod tests {
             compute_tool_fingerprint(&tools_b),
             "Independently constructed identical tools must produce the same fingerprint"
         );
+    }
+
+    /// Regression: top-level properties in different HashMap insertion order must
+    /// produce identical fingerprints (canonicalization sorts object keys).
+    #[test]
+    fn test_fingerprint_stable_across_property_order() {
+        // Build two tools with the same properties inserted in different order
+        struct OrderTestTool {
+            input_schema: ToolSchema,
+        }
+        impl HasBaseMetadata for OrderTestTool { fn name(&self) -> &str { "order_test" } }
+        impl HasDescription for OrderTestTool { fn description(&self) -> Option<&str> { Some("test") } }
+        impl HasInputSchema for OrderTestTool { fn input_schema(&self) -> &ToolSchema { &self.input_schema } }
+        impl HasOutputSchema for OrderTestTool { fn output_schema(&self) -> Option<&ToolSchema> { None } }
+        impl HasAnnotations for OrderTestTool { fn annotations(&self) -> Option<&ToolAnnotations> { None } }
+        impl HasToolMeta for OrderTestTool { fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None } }
+        impl HasIcons for OrderTestTool {}
+        impl HasExecution for OrderTestTool {}
+        #[async_trait]
+        impl McpTool for OrderTestTool {
+            async fn call(&self, _args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+                Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
+            }
+        }
+
+        // Order A: a, b, c
+        let mut props_a = HashMap::new();
+        props_a.insert("alpha".to_string(), JsonSchema::string());
+        props_a.insert("beta".to_string(), JsonSchema::number());
+        props_a.insert("gamma".to_string(), JsonSchema::boolean());
+        let tool_a = Arc::new(OrderTestTool {
+            input_schema: ToolSchema::object().with_properties(props_a),
+        }) as Arc<dyn McpTool>;
+
+        // Order B: c, a, b (different insertion order)
+        let mut props_b = HashMap::new();
+        props_b.insert("gamma".to_string(), JsonSchema::boolean());
+        props_b.insert("alpha".to_string(), JsonSchema::string());
+        props_b.insert("beta".to_string(), JsonSchema::number());
+        let tool_b = Arc::new(OrderTestTool {
+            input_schema: ToolSchema::object().with_properties(props_b),
+        }) as Arc<dyn McpTool>;
+
+        let fp_a = compute_tool_fingerprint(&tool_map(vec![tool_a]));
+        let fp_b = compute_tool_fingerprint(&tool_map(vec![tool_b]));
+        assert_eq!(fp_a, fp_b, "Property insertion order must not affect fingerprint");
+    }
+
+    /// Regression: nested objects and additional fields with different HashMap
+    /// insertion orders must produce identical fingerprints.
+    #[test]
+    fn test_fingerprint_stable_across_nested_property_order() {
+        struct NestedTestTool {
+            input_schema: ToolSchema,
+        }
+        impl HasBaseMetadata for NestedTestTool { fn name(&self) -> &str { "nested_test" } }
+        impl HasDescription for NestedTestTool { fn description(&self) -> Option<&str> { Some("test") } }
+        impl HasInputSchema for NestedTestTool { fn input_schema(&self) -> &ToolSchema { &self.input_schema } }
+        impl HasOutputSchema for NestedTestTool { fn output_schema(&self) -> Option<&ToolSchema> { None } }
+        impl HasAnnotations for NestedTestTool { fn annotations(&self) -> Option<&ToolAnnotations> { None } }
+        impl HasToolMeta for NestedTestTool { fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None } }
+        impl HasIcons for NestedTestTool {}
+        impl HasExecution for NestedTestTool {}
+        #[async_trait]
+        impl McpTool for NestedTestTool {
+            async fn call(&self, _args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+                Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
+            }
+        }
+
+        // Helper: build a schema with same logical content but varied insertion order
+        fn build_schema(inner_order: &[(&str, JsonSchema)], outer_order: &[(&str, JsonSchema)], additional_order: &[(&str, serde_json::Value)]) -> ToolSchema {
+            let mut outer_props = HashMap::new();
+            for (k, v) in outer_order {
+                outer_props.insert(k.to_string(), v.clone());
+            }
+            let mut schema = ToolSchema::object().with_properties(outer_props);
+            let mut additional = HashMap::new();
+            for (k, v) in additional_order {
+                additional.insert(k.to_string(), v.clone());
+            }
+            schema.additional = additional;
+            let _ = inner_order; // inner order is baked into the nested JsonSchema below
+            schema
+        }
+
+        // Inner object with sub-properties
+        let mut inner_a = HashMap::new();
+        inner_a.insert("host".to_string(), JsonSchema::string());
+        inner_a.insert("port".to_string(), JsonSchema::number());
+        let nested_a = JsonSchema::object_with_properties(inner_a);
+
+        let mut inner_b = HashMap::new();
+        inner_b.insert("port".to_string(), JsonSchema::number());
+        inner_b.insert("host".to_string(), JsonSchema::string());
+        let nested_b = JsonSchema::object_with_properties(inner_b);
+
+        // Order A: outer=[config, enabled], additional=[x, y]
+        let tool_a = Arc::new(NestedTestTool {
+            input_schema: build_schema(&[], &[
+                ("config", nested_a),
+                ("enabled", JsonSchema::boolean()),
+            ], &[
+                ("x", serde_json::json!("extra_x")),
+                ("y", serde_json::json!("extra_y")),
+            ]),
+        }) as Arc<dyn McpTool>;
+
+        // Order B: outer=[enabled, config], additional=[y, x] (reversed at all levels)
+        let tool_b = Arc::new(NestedTestTool {
+            input_schema: build_schema(&[], &[
+                ("enabled", JsonSchema::boolean()),
+                ("config", nested_b),
+            ], &[
+                ("y", serde_json::json!("extra_y")),
+                ("x", serde_json::json!("extra_x")),
+            ]),
+        }) as Arc<dyn McpTool>;
+
+        let fp_a = compute_tool_fingerprint(&tool_map(vec![tool_a]));
+        let fp_b = compute_tool_fingerprint(&tool_map(vec![tool_b]));
+        assert_eq!(fp_a, fp_b, "Nested property and additional field order must not affect fingerprint");
     }
 
     /// Test that annotation changes affect the fingerprint

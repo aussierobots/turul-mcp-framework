@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.26] - 2026-03-29
+
+### Fixed
+
+- **Non-deterministic tool fingerprint** (`turul-mcp-server`): `compute_tool_fingerprint()` now canonicalizes JSON (recursive key sorting) before hashing. HashMap iteration order in `ToolSchema.properties`, `ToolSchema.additional`, and nested `JsonSchema.properties` caused different Lambda instances to compute different fingerprints for the same tool set, triggering spurious mismatch cycles on every cold start.
+
 ## [0.3.25] - 2026-03-29
 
 ### Added
