@@ -377,8 +377,66 @@ impl TestServerManager {
             "roots-server" => Some("roots-server"),
             "elicitation-server" => Some("elicitation-server"),
             "tasks-e2e-inmemory-server" => Some("tasks-e2e-inmemory-server"),
+            "dynamic-tools-server" => Some("dynamic-tools-server"),
             _ => None,
         }
+    }
+
+    /// Start a test server with additional CLI arguments
+    pub async fn start_with_args(
+        server_name: &str,
+        extra_args: &[&str],
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        // Build a combined args list: --port <port> + extra_args
+        let port = Self::find_available_port()
+            .ok_or("Failed to find available port")?;
+
+        let workspace_root =
+            find_workspace_root().map_err(|e| format!("Failed to find workspace root: {}", e))?;
+
+        let binary_path = workspace_root
+            .join("target")
+            .join("debug")
+            .join(server_name);
+
+        // Auto-build if needed
+        if !binary_path.exists() {
+            if let Some(package) = Self::server_package(server_name) {
+                let build_status = std::process::Command::new("cargo")
+                    .args(["build", "--package", package, "--bin", server_name])
+                    .current_dir(&workspace_root)
+                    .status();
+                match build_status {
+                    Ok(status) if status.success() => {}
+                    Ok(status) => {
+                        return Err(format!("Failed to build {} (exit: {:?})", server_name, status.code()).into());
+                    }
+                    Err(e) => {
+                        return Err(format!("Failed to build {}: {}", server_name, e).into());
+                    }
+                }
+            }
+        }
+
+        let mut cmd_args: Vec<String> = vec!["--port".to_string(), port.to_string()];
+        for arg in extra_args {
+            cmd_args.push(arg.to_string());
+        }
+
+        let server_process = Command::new(&binary_path)
+            .args(&cmd_args)
+            .current_dir(&workspace_root)
+            .spawn()
+            .map_err(|e| format!("Failed to start {}: {}", server_name, e))?;
+
+        // Wait for server to start (match the wait time in start())
+        tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+
+        Ok(Self {
+            server_process: Some(server_process),
+            port,
+            _server_name: server_name.to_string(),
+        })
     }
 
     /// Start a test server by name on random port with robust port allocation
@@ -522,6 +580,16 @@ impl TestServerManager {
     /// Start elicitation test server
     pub async fn start_elicitation_server() -> Result<Self, Box<dyn std::error::Error>> {
         Self::start("elicitation-server").await
+    }
+
+    pub async fn start_dynamic_tools_server() -> Result<Self, Box<dyn std::error::Error>> {
+        Self::start("dynamic-tools-server").await
+    }
+
+    /// Start dynamic-tools-server with multiply inactive at startup
+    pub async fn start_dynamic_tools_server_multiply_inactive(
+    ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::start_with_args("dynamic-tools-server", &["--multiply-inactive"]).await
     }
 
     pub fn port(&self) -> u16 {

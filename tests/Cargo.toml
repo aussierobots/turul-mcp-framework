@@ -78,6 +78,11 @@ path = "derive_schemars_integration_test.rs"
 name = "derive_zero_config_output_schema_test"
 path = "derive_zero_config_output_schema_test.rs"
 
+# Dynamic tools E2E (DynamicInProcess transport proof)
+[[test]]
+name = "dynamic_tools_e2e"
+path = "dynamic_tools_e2e.rs"
+
 # Tasks E2E integration test (uses tasks-e2e-inmemory-server binary)
 [[test]]
 name = "tasks_e2e_inmemory"

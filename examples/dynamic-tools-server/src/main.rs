@@ -124,10 +124,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
-    let multiply_active = !std::env::args().any(|a| a == "--multiply-inactive");
+    let args: Vec<String> = std::env::args().collect();
+    let multiply_active = !args.iter().any(|a| a == "--multiply-inactive");
+    let port: u16 = args
+        .windows(2)
+        .find(|w| w[0] == "--port")
+        .and_then(|w| w[1].parse().ok())
+        .unwrap_or(8484);
 
     info!("=== Dynamic Tools Server ===");
-    info!("Endpoint: http://127.0.0.1:8484/mcp");
+    info!("Endpoint: http://127.0.0.1:{}/mcp", port);
     info!("multiply starts {}", if multiply_active { "active" } else { "inactive" });
 
     let server = McpServer::builder()
@@ -139,7 +145,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .tool(GreetTool::default())
         .tool(ActivateMultiplyTool::default())
         .tool(DeactivateMultiplyTool::default())
-        .bind_address("127.0.0.1:8484".parse()?)
+        .bind_address(format!("127.0.0.1:{}", port).parse()?)
         .build()?;
 
     let registry = server
