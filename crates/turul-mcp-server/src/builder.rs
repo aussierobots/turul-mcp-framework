@@ -1523,6 +1523,8 @@ impl McpServerBuilder {
                 crate::ToolChangeMode::FingerprintOnly => false,
                 #[cfg(feature = "dynamic-tools")]
                 crate::ToolChangeMode::DynamicInProcess => true,
+                #[cfg(feature = "dynamic-clustered")]
+                crate::ToolChangeMode::DynamicClustered => true,
             };
             self.capabilities.tools = Some(ToolsCapabilities {
                 list_changed: Some(list_changed),

@@ -16,6 +16,7 @@ postgres = ["turul-mcp-session-storage/postgres"]
 sqlite = ["turul-mcp-session-storage/sqlite"]
 dynamodb = ["turul-mcp-session-storage/dynamodb"]
 dynamic-tools = []
+dynamic-clustered = ["dynamic-tools", "turul-mcp-server-state-storage"]
 test-utils = []
 
 [dependencies]
@@ -26,6 +27,7 @@ turul-mcp-session-storage.workspace = true
 turul-mcp-builders.workspace = true
 turul-mcp-task-storage.workspace = true
 turul-http-mcp-server = {workspace = true, optional = true}
+turul-mcp-server-state-storage = {workspace = true, optional = true}
 
 # Runtime utilities for task cancellation
 tokio-util = { workspace = true }

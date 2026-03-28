@@ -215,6 +215,12 @@ pub enum ToolChangeMode {
     /// Connected clients receive `notifications/tools/list_changed`.
     #[cfg(feature = "dynamic-tools")]
     DynamicInProcess,
+    /// Dynamic clustered registry. `listChanged=true`. Multi-instance.
+    /// Tool activation state stored in `ServerStateStorage` (DynamoDB/PostgreSQL/SQLite).
+    /// Cross-instance coordination via polling or storage-native events.
+    /// See ADR-023 Future Work section.
+    #[cfg(feature = "dynamic-clustered")]
+    DynamicClustered,
 }
 
 /// SessionView trait for middleware - re-exported from turul-mcp-session-storage
