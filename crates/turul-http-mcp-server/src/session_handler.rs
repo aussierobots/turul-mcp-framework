@@ -449,13 +449,17 @@ impl SessionMcpHandler {
         };
 
         // Handle the message using proper JSON-RPC enums
-        let (message_result, response_session_id, method_name) = match message {
-            JsonRpcMessage::Request(request) => {
-                debug!("Processing JSON-RPC request: method={}", request.method);
-                let method_name = request.method.clone();
+        // collected_notifications: events captured via temporary StreamManager connection
+        // during dispatch, used for inline POST SSE delivery
+        let (message_result, response_session_id, method_name, collected_notifications) =
+            match message {
+                JsonRpcMessage::Request(request) => {
+                    debug!("Processing JSON-RPC request: method={}", request.method);
+                    let method_name = request.method.clone();
 
-                // Special handling for initialize requests - they create new sessions
-                let (response, response_session_id) = if request.method == "initialize" {
+                    // Special handling for initialize requests - they create new sessions
+                    let (response, response_session_id, inline_notifications) =
+                        if request.method == "initialize" {
                     debug!(
                         "Handling initialize request - creating new session via session storage"
                     );
@@ -497,7 +501,7 @@ impl SessionMcpHandler {
                                 .await;
 
                             // Return the session ID created by session storage for the HTTP header
-                            (response, Some(session_info.session_id))
+                            (response, Some(session_info.session_id), Vec::new())
                         }
                         Err(err) => {
                             error!("Failed to create session during initialize: {}", err);
@@ -509,7 +513,7 @@ impl SessionMcpHandler {
                                     Some(error_msg),
                                 ),
                             );
-                            (error_response, None)
+                            (error_response, None, Vec::new())
                         }
                     }
                 } else {
@@ -558,6 +562,45 @@ impl SessionMcpHandler {
                         None
                     };
 
+                    // Register a temporary StreamManager connection BEFORE dispatch
+                    // so that notifications broadcast during tool execution are
+                    // captured inline rather than relying on a post-hoc storage read.
+                    let is_tool_call = method_name == "tools/call";
+                    let temp_connection = if is_tool_call {
+                        if let Some(ref sid) = session_id {
+                            let (notify_tx, notify_rx) =
+                                tokio::sync::mpsc::channel::<turul_mcp_session_storage::SseEvent>(
+                                    64,
+                                );
+                            let conn_id =
+                                format!("post-{}", uuid::Uuid::now_v7().as_simple());
+                            match self
+                                .stream_manager
+                                .register_streaming_connection(sid, conn_id.clone(), notify_tx)
+                                .await
+                            {
+                                Ok(()) => {
+                                    debug!(
+                                        "Registered temporary POST connection for tool call: session={}, connection={}",
+                                        sid, conn_id
+                                    );
+                                    Some((conn_id, notify_rx, sid.clone()))
+                                }
+                                Err(e) => {
+                                    debug!(
+                                        "Could not register temporary connection (non-fatal): {}",
+                                        e
+                                    );
+                                    None
+                                }
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
                     // Run middleware pipeline and dispatch
                     let (response, _stashed_injection) = if let Some(ctx) = session_context {
                         self.run_middleware_and_dispatch(
@@ -571,7 +614,25 @@ impl SessionMcpHandler {
                         // No session - fast path (no middleware, just dispatch)
                         (self.dispatcher.handle_request(request).await, None)
                     };
-                    (response, session_id)
+
+                    // Drain and unregister the temporary connection
+                    let mut inline_notifications = Vec::new();
+                    if let Some((conn_id, mut notify_rx, sid)) = temp_connection {
+                        while let Ok(event) = notify_rx.try_recv() {
+                            if event.event_type != "ping" && event.event_type != "keepalive" {
+                                debug!(
+                                    "Captured inline notification: session={}, event_type={}",
+                                    sid, event.event_type
+                                );
+                                inline_notifications.push(event);
+                            }
+                        }
+                        self.stream_manager
+                            .unregister_connection(&sid, &conn_id)
+                            .await;
+                    }
+
+                    (response, session_id, inline_notifications)
                 };
 
                 // Convert JsonRpcMessage to JsonRpcMessageResult
@@ -583,7 +644,12 @@ impl SessionMcpHandler {
                         JsonRpcMessageResult::Error(err)
                     }
                 };
-                (message_result, response_session_id, Some(method_name))
+                (
+                    message_result,
+                    response_session_id,
+                    Some(method_name),
+                    inline_notifications,
+                )
             }
             JsonRpcMessage::Notification(notification) => {
                 debug!(
@@ -626,6 +692,7 @@ impl SessionMcpHandler {
                     JsonRpcMessageResult::NoResponse,
                     session_id.clone(),
                     Some(method_name),
+                    Vec::new(),
                 )
             }
         };
@@ -659,19 +726,31 @@ impl SessionMcpHandler {
 
                 if should_use_sse && response_session_id.is_some() {
                     debug!(
-                        "📡 Creating POST SSE stream (mode: {:?}) for tool call with notifications",
-                        accept_mode
+                        "📡 Creating POST SSE stream (mode: {:?}) for tool call with {} inline notifications",
+                        accept_mode,
+                        collected_notifications.len()
                     );
-                    match self
-                        .stream_manager
-                        .create_post_sse_stream(
-                            response_session_id.clone().unwrap(),
-                            response.clone(), // Clone the response for SSE stream creation
-                        )
-                        .await
-                    {
+                    let sse_result = if !collected_notifications.is_empty() {
+                        // Use pre-collected notifications from the temporary connection
+                        self.stream_manager
+                            .create_post_sse_stream_with_notifications(
+                                response_session_id.clone().unwrap(),
+                                response.clone(),
+                                collected_notifications,
+                            )
+                            .await
+                    } else {
+                        // Fallback: read recent events from storage (legacy behavior)
+                        self.stream_manager
+                            .create_post_sse_stream(
+                                response_session_id.clone().unwrap(),
+                                response.clone(),
+                            )
+                            .await
+                    };
+                    match sse_result {
                         Ok(sse_response) => {
-                            debug!("✅ POST SSE stream created successfully");
+                            debug!("POST SSE stream created successfully");
                             Ok(sse_response
                                 .map(|body| body.map_err(|never| match never {}).boxed_unsync()))
                         }

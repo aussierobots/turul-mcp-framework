@@ -778,6 +778,83 @@ impl StreamManager {
             .unwrap())
     }
 
+    /// Create SSE stream for POST requests with pre-collected notification events.
+    ///
+    /// Unlike `create_post_sse_stream` which reads recent events from storage (racy),
+    /// this method uses events captured from a temporary StreamManager connection
+    /// that was registered during dispatch. This guarantees all notifications
+    /// generated during tool execution are included in the response.
+    pub async fn create_post_sse_stream_with_notifications(
+        &self,
+        session_id: String,
+        response: turul_mcp_json_rpc_server::JsonRpcResponse,
+        notifications: Vec<SseEvent>,
+    ) -> Result<
+        hyper::Response<
+            http_body_util::combinators::BoxBody<bytes::Bytes, std::convert::Infallible>,
+        >,
+        StreamError,
+    > {
+        debug!(
+            "Creating POST SSE stream for session: {} ({} inline notifications)",
+            session_id,
+            notifications.len()
+        );
+
+        let response_json = serde_json::to_string(&response).map_err(|e| {
+            StreamError::StorageError(format!("Failed to serialize response: {}", e))
+        })?;
+
+        let mut sse_frames = Vec::new();
+        let mut event_id_counter = 1;
+
+        // 1. Include pre-collected notifications from the temporary connection
+        for event in notifications {
+            if event.event_type != "ping" && event.event_type != "keepalive" {
+                let notification_sse = format!(
+                    "id: {}\nevent: message\ndata: {}\n\n",
+                    event_id_counter, event.data
+                );
+                debug!(
+                    "Including inline notification in POST SSE: id={}, method={}",
+                    event_id_counter, event.event_type
+                );
+                sse_frames.push(http_body::Frame::data(Bytes::from(notification_sse)));
+                event_id_counter += 1;
+            }
+        }
+
+        // 2. Add the JSON-RPC response as the final SSE event
+        let response_sse = format!(
+            "id: {}\nevent: message\ndata: {}\n\n",
+            event_id_counter, response_json
+        );
+        sse_frames.push(http_body::Frame::data(Bytes::from(response_sse)));
+
+        let stream = futures::stream::iter(
+            sse_frames
+                .into_iter()
+                .map(Ok::<_, std::convert::Infallible>),
+        );
+
+        let body = StreamBody::new(stream);
+        let boxed_body = http_body_util::combinators::BoxBody::new(body);
+
+        Ok(hyper::Response::builder()
+            .status(hyper::StatusCode::OK)
+            .header(hyper::header::CONTENT_TYPE, "text/event-stream")
+            .header(hyper::header::CACHE_CONTROL, "no-cache")
+            .header(
+                hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                &self.config.cors_origin,
+            )
+            .header("Connection", "keep-alive")
+            .header("X-Accel-Buffering", "no")
+            .header("Mcp-Session-Id", &session_id)
+            .body(boxed_body)
+            .unwrap())
+    }
+
     /// Subscribe a session to specific notification types
     pub async fn subscribe_to_notifications(
         &self,

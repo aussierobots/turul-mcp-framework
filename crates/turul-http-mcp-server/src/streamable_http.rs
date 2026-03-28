@@ -1517,12 +1517,36 @@ impl StreamableHttpHandler {
                 let session_id_clone = session_id.clone();
                 let connection_id_clone = connection_id.clone();
                 let stream_manager_clone = Arc::clone(&self.stream_manager);
+                let session_storage_clone = Arc::clone(&self.session_storage);
 
                 tokio::spawn(async move {
                     debug!(
                         "Starting progress forwarding task for session: {}",
                         session_id_clone
                     );
+
+                    // Replay stored events that were queued before this connection
+                    // was registered (e.g., from check_for_changes() in Lambda or
+                    // from the SSE event bridge). Without this, notifications stored
+                    // between request arrival and connection registration are lost.
+                    if let Ok(stored_events) = session_storage_clone
+                        .get_recent_events(&session_id_clone, 50)
+                        .await
+                    {
+                        for event in stored_events {
+                            if event.event_type != "ping" && event.event_type != "keepalive" {
+                                debug!(
+                                    "Replaying stored event to POST SSE: session={}, event_type={}",
+                                    session_id_clone, event.event_type
+                                );
+                                let sse_chunk = event.format();
+                                if sender_clone.send(Ok(Bytes::from(sse_chunk))).is_err() {
+                                    error!("Failed to replay stored event to POST response");
+                                    return;
+                                }
+                            }
+                        }
+                    }
 
                     // CRITICAL: Use select to handle both progress events AND explicit shutdown
                     loop {

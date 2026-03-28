@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tracing::info;
+use tracing::{debug, info};
 
 use turul_http_mcp_server::{ServerConfig, StreamConfig, StreamManager};
 use turul_mcp_protocol::{Implementation, ServerCapabilities};
@@ -255,6 +255,39 @@ impl LambdaMcpServer {
             self.session_storage.clone(),
             self.stream_config.clone(),
         ));
+
+        // Set up SSE event bridge between SessionManager and StreamManager.
+        // This ensures that events from ToolRegistry.broadcast_notification()
+        // (which go through SessionManager) are forwarded to StreamManager where
+        // registered POST SSE connections can receive them.
+        {
+            let bridge_stream_manager = Arc::clone(&stream_manager);
+            let mut global_events = self.session_manager.subscribe_all_session_events();
+
+            tokio::spawn(async move {
+                debug!("Lambda SSE Event Bridge: started");
+
+                while let Ok((session_id, event)) = global_events.recv().await {
+                    if let turul_mcp_server::session::SessionEvent::Custom {
+                        event_type,
+                        data,
+                    } = event
+                    {
+                        if let Err(e) = bridge_stream_manager
+                            .broadcast_to_session(&session_id, event_type, data)
+                            .await
+                        {
+                            debug!(
+                                "Lambda SSE Bridge: broadcast to session {} failed: {} (normal if no active connections)",
+                                session_id, e
+                            );
+                        }
+                    }
+                }
+
+                debug!("Lambda SSE Event Bridge: stopped");
+            });
+        }
 
         // Create JSON-RPC dispatcher
         use turul_mcp_json_rpc_server::JsonRpcDispatcher;
