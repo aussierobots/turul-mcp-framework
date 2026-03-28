@@ -22,6 +22,7 @@ async fn test_sampling_create_message_endpoint() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Call sampling/createMessage endpoint
     let create_request = create_message_request("Write a short story about space exploration", 500);
@@ -94,6 +95,7 @@ async fn test_sampling_different_models() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Test different types of requests to different sampling models
     let test_cases = vec![
@@ -146,6 +148,7 @@ async fn test_sampling_parameter_validation() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Test invalid maxTokens
     let invalid_request = json!({
@@ -230,6 +233,7 @@ async fn test_sampling_temperature_parameter() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Test different temperature values
     let temperature_tests = vec![0.0, 0.5, 1.0, 1.5];
@@ -320,6 +324,7 @@ async fn test_sampling_json_rpc_compliance() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     let create_request = create_message_request("Test JSON-RPC compliance", 100);
 
@@ -375,6 +380,7 @@ async fn test_sampling_capability_advertising() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     debug!("Initialize result: {:?}", init_result);
 
@@ -426,6 +432,7 @@ async fn test_sampling_session_continuity() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Test multiple sampling requests in the same session
     for i in 1..=3 {

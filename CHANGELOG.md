@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.25] - 2026-03-29
+
+### Added
+
+- **Dynamic tool activation** (`turul-mcp-server`): `ToolChangeMode::Dynamic` enables runtime `activate_tool()`/`deactivate_tool()` with MCP-compliant `notifications/tools/list_changed`. Requires `dynamic-tools` feature.
+- **ToolRegistry** (`turul-mcp-server`): Live registry for precompiled tools with `RwLock<ToolState>`, fingerprint tracking, and cross-instance coordination via `ServerStateStorage`.
+- **ServerStateStorage** (`turul-mcp-server-state-storage`): New crate with InMemory, SQLite, PostgreSQL, DynamoDB backends for cross-instance tool state coordination.
+- **Lambda dynamic tools** (`turul-mcp-aws-lambda`): `tool_change_mode()` and `server_state_storage()` on `LambdaMcpServerBuilder`. Request-time change detection with configurable TTL (`TURUL_TOOL_CHECK_TTL_SECS`, default 10s).
+- **Client tool change notifications** (`turul-mcp-client`): `refresh_tools()`, cached tool lists, `notifications/tools/list_changed` auto-invalidation.
+- **Dynamic tools example**: `examples/dynamic-tools-server` and `examples/dynamic-tools-test-client`.
+
+### Fixed
+
+- **POST SSE notification replay** (`turul-http-mcp-server`): Removed event replay from POST SSE responses — connection is registered before dispatch, so all events are delivered live. Prevents duplicate notification delivery.
+- **Derive macro zero-config output preservation** (`turul-mcp-derive`): `#[tool(output = Type)]` without `name`/`description` now correctly preserves the output type via `extract_tool_meta_partial()`. Previously, the fallback path discarded all attributes.
+- **OAuth dev-deps** (`turul-mcp-oauth`): Migrated to workspace dependency references. Updated `rsa` to 0.10, `jsonwebtoken` to 10 with `rust_crypto` feature.
+- **Test suite MCP handshake** (tests): Added missing `notifications/initialized` to all E2E test suites (prompts, resources, elicitation, roots, sampling, session validation).
+
+### Changed
+
+- **Workspace dependency rule**: All crate dependencies must use `workspace = true` references (added to CLAUDE.md).
+- **reqwest workspace default**: `default-features = false` at workspace level; crates opt-in to features individually.
+
 ## [0.3.24] - 2026-03-21
 
 ### Fixed

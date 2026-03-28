@@ -6,7 +6,9 @@ description: >
   "function macro vs derive", "mcp_tool macro", "#[mcp_tool]",
   "derive McpTool", "#[derive(McpTool)]", "ToolBuilder", "tool creation",
   "function macro tool", "server icon", "server branding", ".icons()",
-  "Icon::data_uri", or "server identity". Covers choosing between function
+  "Icon::data_uri", "server identity", "dynamic tools", "ToolChangeMode",
+  "activate_tool", "deactivate_tool", "ToolRegistry", "tool_change_mode",
+  or "notifications/tools/list_changed". Covers choosing between function
   macro (#[mcp_tool]), derive macro (#[derive(McpTool)]), and runtime builder
   (ToolBuilder) patterns, plus server identity (icons), in the Turul MCP
   Framework (Rust).
@@ -345,6 +347,34 @@ let server = McpServer::builder()
 ```
 
 Works on both `McpServer::builder()` and `LambdaMcpServer::builder()`. SVG data URIs are ideal — small size, scales perfectly, no external dependency.
+
+## Dynamic Tool Activation (Runtime)
+
+Tools registered at build time can be activated/deactivated at runtime using `ToolChangeMode::Dynamic`. Connected clients receive `notifications/tools/list_changed` automatically.
+
+```rust
+// turul-mcp-server v0.3 (requires `dynamic-tools` feature)
+use turul_mcp_server::{McpServer, ToolChangeMode};
+
+let server = McpServer::builder()
+    .name("my-server")
+    .tool_change_mode(ToolChangeMode::Dynamic)
+    .tool(AddTool::default())
+    .tool(MultiplyTool::default())
+    .build()?;
+
+// Access the registry to toggle tools at runtime
+let registry = server.tool_registry().expect("Dynamic mode has registry");
+registry.deactivate_tool("multiply").await?;   // Broadcasts notifications/tools/list_changed
+registry.activate_tool("multiply").await?;     // Broadcasts notifications/tools/list_changed
+```
+
+**Key points:**
+- Only precompiled tools (registered via `.tool()`) can be toggled — no hot-loading of new code
+- `Static` mode (default): `listChanged=false`, no registry, no notifications
+- `Dynamic` mode: `listChanged=true`, live registry, MCP-compliant notifications
+- For cross-instance coordination, add `.server_state_storage()` with a shared backend (PostgreSQL/DynamoDB)
+- See `examples/dynamic-tools-server` for a complete working example
 
 ## Beyond This Skill
 

@@ -76,6 +76,9 @@ struct Calculator;  // Framework → tools/call
 #[mcp_tool(method = "tools/call")]  // NO METHOD STRINGS!
 ```
 
+### Workspace Dependencies
+All crate dependencies MUST use `workspace = true` references. Declare versions in root `Cargo.toml` `[workspace.dependencies]`, reference with `.workspace = true` in crate `Cargo.toml`. Add crate-specific features inline: `hyper = { workspace = true, features = ["http1"] }`.
+
 ### API Conventions
 - **SessionContext**: Use `get_typed_state(key).await` and `set_typed_state(key, value).await?`
 - **Builder Pattern**: `McpServer::builder()` not `McpServerBuilder::new()`

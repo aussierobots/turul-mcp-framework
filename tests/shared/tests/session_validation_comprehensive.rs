@@ -27,6 +27,7 @@ async fn test_session_id_generation_and_persistence() {
         .initialize()
         .await
         .expect("Failed to initialize resource client");
+    resource_client.send_initialized_notification().await.expect("Failed to send initialized");
 
     let resource_session = resource_client
         .session_id()
@@ -58,6 +59,7 @@ async fn test_session_id_generation_and_persistence() {
         .initialize()
         .await
         .expect("Failed to initialize prompts client");
+    prompts_client.send_initialized_notification().await.expect("Failed to send initialized");
 
     let prompts_session = prompts_client
         .session_id()
@@ -81,6 +83,7 @@ async fn test_cross_request_session_consistency() {
     let mut client = McpTestClient::new(resource_server.port());
 
     client.initialize().await.expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
     let initial_session = client.session_id().unwrap().clone();
 
     // Make multiple requests and verify session remains consistent
@@ -133,14 +136,17 @@ async fn test_session_isolation_between_clients() {
         .initialize()
         .await
         .expect("Failed to initialize client1");
+    client1.send_initialized_notification().await.expect("Failed to send initialized");
     client2
         .initialize()
         .await
         .expect("Failed to initialize client2");
+    client2.send_initialized_notification().await.expect("Failed to send initialized");
     client3
         .initialize()
         .await
         .expect("Failed to initialize client3");
+    client3.send_initialized_notification().await.expect("Failed to send initialized");
 
     let session1 = client1.session_id().unwrap();
     let session2 = client2.session_id().unwrap();
@@ -186,6 +192,7 @@ async fn test_session_aware_resource_context() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Test session-aware resource multiple times
     for i in 1..=3 {
@@ -236,6 +243,7 @@ async fn test_session_aware_prompt_context() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Test session-aware prompt multiple times
     for i in 1..=3 {
@@ -288,6 +296,7 @@ async fn test_concurrent_session_operations() {
             .initialize()
             .await
             .expect("Failed to initialize client");
+        client.send_initialized_notification().await.expect("Failed to send initialized");
         clients.push(client);
     }
 
@@ -355,6 +364,7 @@ async fn test_session_header_propagation() {
 
     // Initialize and get session ID
     let init_result = client.initialize().await.expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
     let session_id = client.session_id().unwrap().clone();
 
     info!("Session established: {}", session_id);
@@ -418,6 +428,7 @@ async fn test_session_management_comprehensive() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
+    resource_client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Test prompts
     let mut prompts_client = McpTestClient::new(prompts_server.port());
@@ -425,6 +436,7 @@ async fn test_session_management_comprehensive() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    prompts_client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Run all session validation utilities
     SessionTestUtils::verify_session_consistency(&resource_client)

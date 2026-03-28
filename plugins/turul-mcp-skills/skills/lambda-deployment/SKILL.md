@@ -7,10 +7,11 @@ description: >
   "OnceCell handler", "lambda SSE", "run_streaming",
   "run_streaming_with", "handle_streaming", "lambda CORS", "cors_allow_all_origins",
   "production_config", "development_config", "lambda-deployment",
-  "lambda snapshot", "lambda streaming mode", or "LambdaMcpServer".
+  "lambda snapshot", "lambda streaming mode", "LambdaMcpServer",
+  "lambda dynamic tools", or "lambda tool_change_mode".
   Covers deploying MCP servers on AWS Lambda using the Turul MCP
   Framework (Rust): builder, cold-start caching, streaming vs snapshot,
-  DynamoDB storage, CORS, middleware, tasks, and logging.
+  DynamoDB storage, CORS, middleware, tasks, dynamic tools, and logging.
 ---
 
 # Lambda Deployment — Turul MCP Framework
@@ -210,6 +211,28 @@ On cold start, the handler automatically recovers stuck tasks (default timeout: 
 
 **See:** the `task-patterns` skill for task state machine, `task_support` attribute, and cancellation details.
 
+## Dynamic Tool Activation (Lambda)
+
+Lambda participates in `ToolChangeMode::Dynamic` via request-time change detection (no background polling):
+
+```rust
+// turul-mcp-server v0.3 (requires `dynamic-tools` feature)
+use turul_mcp_server::ToolChangeMode;
+use turul_mcp_server_state_storage::DynamoDbServerStateStorage;
+
+let server = LambdaMcpServerBuilder::new()
+    .name("dynamic-lambda")
+    .tool_change_mode(ToolChangeMode::Dynamic)
+    .server_state_storage(Arc::new(DynamoDbServerStateStorage::new().await?))
+    .tool(MyTool::default())
+    .build()
+    .await?;
+```
+
+**How it works:** On each request, if the cached tool fingerprint TTL (default 10s, configurable via `TURUL_TOOL_CHECK_TTL_SECS`) has expired, Lambda reads the current fingerprint from shared storage. On mismatch, it reloads tool state and broadcasts `notifications/tools/list_changed`. Cold starts always sync via `sync_from_storage()`.
+
+**Without `.server_state_storage()`**, an in-memory backend is used (single-process, no cross-instance coordination). Only DynamoDB and PostgreSQL enable cross-instance coordination.
+
 ## Environment Variables
 
 | Variable | Default | Purpose | Read by |
@@ -219,6 +242,7 @@ On cold start, the handler automatically recovers stuck tasks (default timeout: 
 | `MCP_CORS_ORIGINS` | (none) | CORS allowed origins | `.cors_from_env()` |
 | `MCP_CORS_CREDENTIALS` | (none) | CORS credentials | `.cors_from_env()` |
 | `MCP_CORS_MAX_AGE` | (none) | CORS max-age | `.cors_from_env()` |
+| `TURUL_TOOL_CHECK_TTL_SECS` | `10` | Dynamic tools fingerprint check interval | `ToolRegistry` |
 | `LOG_LEVEL` | `INFO` | tracing log level | tracing subscriber |
 
 **Note:** DynamoDB session table name is NOT configurable via env var — it defaults to `"mcp-sessions"` in `DynamoDbConfig::default()`. Use `with_config()` to customize.

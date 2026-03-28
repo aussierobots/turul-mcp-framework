@@ -110,7 +110,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.3.24"
+version = "0.3.25"
 edition = "2024"
 authors = ["Nick Hortovanyi <nick@aussierobots.com.au>"]
 license = "MIT OR Apache-2.0"
@@ -146,25 +146,25 @@ http-body = "1"
 bytes = "1"
 
 # Internal crate dependencies
-turul-mcp-json-rpc-server = { version = "0.3.24", path = "crates/turul-mcp-json-rpc-server" }
-turul-mcp-protocol-2025-06-18 = { version = "0.3.24", path = "crates/turul-mcp-protocol-2025-06-18" }
-turul-mcp-protocol-2025-11-25 = { version = "0.3.24", path = "crates/turul-mcp-protocol-2025-11-25" }
-turul-mcp-protocol = { version = "0.3.24", path = "crates/turul-mcp-protocol" }
-turul-mcp-session-storage = { version = "0.3.24", path = "crates/turul-mcp-session-storage" }
-turul-mcp-task-storage = { version = "0.3.24", path = "crates/turul-mcp-task-storage" }
-turul-mcp-server-state-storage = { version = "0.3.24", path = "crates/turul-mcp-server-state-storage" }
-turul-http-mcp-server = { version = "0.3.24", path = "crates/turul-http-mcp-server" }
-turul-mcp-server = { version = "0.3.24", path = "crates/turul-mcp-server" }
-turul-mcp-derive = { version = "0.3.24", path = "crates/turul-mcp-derive" }
-turul-mcp-client = { version = "0.3.24", path = "crates/turul-mcp-client" }
-turul-mcp-builders = { version = "0.3.24", path = "crates/turul-mcp-builders" }
-turul-mcp-aws-lambda = { version = "0.3.24", path = "crates/turul-mcp-aws-lambda" }
-turul-mcp-oauth = { version = "0.3.24", path = "crates/turul-mcp-oauth" }
+turul-mcp-json-rpc-server = { version = "0.3.25", path = "crates/turul-mcp-json-rpc-server" }
+turul-mcp-protocol-2025-06-18 = { version = "0.3.25", path = "crates/turul-mcp-protocol-2025-06-18" }
+turul-mcp-protocol-2025-11-25 = { version = "0.3.25", path = "crates/turul-mcp-protocol-2025-11-25" }
+turul-mcp-protocol = { version = "0.3.25", path = "crates/turul-mcp-protocol" }
+turul-mcp-session-storage = { version = "0.3.25", path = "crates/turul-mcp-session-storage" }
+turul-mcp-task-storage = { version = "0.3.25", path = "crates/turul-mcp-task-storage" }
+turul-mcp-server-state-storage = { version = "0.3.25", path = "crates/turul-mcp-server-state-storage" }
+turul-http-mcp-server = { version = "0.3.25", path = "crates/turul-http-mcp-server" }
+turul-mcp-server = { version = "0.3.25", path = "crates/turul-mcp-server" }
+turul-mcp-derive = { version = "0.3.25", path = "crates/turul-mcp-derive" }
+turul-mcp-client = { version = "0.3.25", path = "crates/turul-mcp-client" }
+turul-mcp-builders = { version = "0.3.25", path = "crates/turul-mcp-builders" }
+turul-mcp-aws-lambda = { version = "0.3.25", path = "crates/turul-mcp-aws-lambda" }
+turul-mcp-oauth = { version = "0.3.25", path = "crates/turul-mcp-oauth" }
 
 # Additional dependencies for examples and tests
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
-reqwest = { version = "0.13", features = ["json"] }
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
 chrono = { version = "0.4", features = ["serde"] }
 anyhow = "1.0"
 clap = { version = "4", features = ["derive"] }
@@ -193,6 +193,10 @@ lambda_runtime = "1"
 lambda_http = "1"
 lambda-web = "0.2"
 aws_lambda_events = "1"
+
+# Auth/Crypto dependencies
+jsonwebtoken = { version = "10", features = ["rust_crypto"] }
+rsa = "0.10.0-rc.17"
 
 # Other dependencies
 url = "2.5"

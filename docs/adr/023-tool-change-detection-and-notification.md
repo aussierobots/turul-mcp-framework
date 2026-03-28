@@ -66,7 +66,7 @@ When `.server_state_storage()` is provided with a **shared** backend (PostgreSQL
 
 **EC2 (long-lived) coordination:** Background polling (default 10-second interval) via `ToolRegistry::start_polling()`. Each instance checks the shared storage fingerprint; on mismatch, reloads tool state and broadcasts `notifications/tools/list_changed` to connected clients.
 
-**Lambda (ephemeral) coordination:** Request-time change detection via `ToolRegistry::check_for_changes()`. Lambda cannot run background polling. Instead, on each request, if the cached fingerprint TTL (default 5 seconds) has expired, Lambda reads the current fingerprint from shared storage (single DynamoDB GetItem). If it differs from the local cache, Lambda reloads the full tool state and broadcasts `notifications/tools/list_changed`. Cold starts always sync via `sync_from_storage()`.
+**Lambda (ephemeral) coordination:** Request-time change detection via `ToolRegistry::check_for_changes()`. Lambda cannot run background polling. Instead, on each request, if the cached fingerprint TTL (default 10 seconds, configurable via `TURUL_TOOL_CHECK_TTL_SECS`) has expired, Lambda reads the current fingerprint from shared storage (single DynamoDB GetItem). If it differs from the local cache, Lambda reloads the full tool state and broadcasts `notifications/tools/list_changed`. Cold starts always sync via `sync_from_storage()`.
 
 `listChanged=true` is truthful for both EC2 and Lambda — both detect tool changes and deliver notifications to connected clients during their respective interaction models.
 
@@ -86,7 +86,7 @@ Single feature: `dynamic-tools`. When enabled, `ToolChangeMode::Dynamic` becomes
 |------|---|---|---|---|
 | Static | false | Updated silently | Not supported | N/A |
 | Dynamic | true | Updated + notification | Live registry + notification | InMemory (default) or shared backend |
-| Dynamic + storage | true | Updated + notification | Live registry + notification | Polling (EC2, 10s) / Request-time (Lambda, 5s TTL) |
+| Dynamic + storage | true | Updated + notification | Live registry + notification | Polling (EC2, 10s) / Request-time (Lambda, 10s TTL) |
 
 Note: "Restart fingerprint" column describes what happens when a session's stored fingerprint doesn't match the server's current fingerprint. The session is NEVER invalidated — fingerprint is updated and the session continues.
 
@@ -132,6 +132,8 @@ Note: "Restart fingerprint" column describes what happens when a session's store
 **Transport boundary:** Core server emits `SessionEvent::Custom` via `SessionManager.broadcast_event()`. HTTP SSE bridge handles delivery. No HTTP types in core server code.
 
 **Separation of concerns:** `validate_session_exists()` checks session validity AND fingerprint, but never sends notifications. Notification delivery is `ToolRegistry`'s responsibility. These are separate code paths.
+
+**POST SSE notification delivery:** Notifications emitted during request dispatch (e.g., from `activate_tool()`/`deactivate_tool()`) are delivered inline on the POST SSE response via a temporary `StreamManager` connection registered before dispatch. No event replay is needed — the connection is live before the dispatch begins, so all events are delivered in real time. Stored events are for GET SSE resumability (Last-Event-ID) only.
 
 **Concurrency:** `RwLock<ToolState>` holds active tool set + fingerprint under a single lock. Read lock → clone `Arc<dyn McpTool>` → release → call. Never hold lock across await points.
 

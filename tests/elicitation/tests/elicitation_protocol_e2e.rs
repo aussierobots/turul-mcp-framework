@@ -20,6 +20,7 @@ async fn test_elicitation_onboarding_workflow() {
         .initialize_with_capabilities(elicitation_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // List available tools to find onboarding workflow tool
     let tools_result = client
@@ -116,6 +117,7 @@ async fn test_elicitation_compliance_forms() {
         .initialize_with_capabilities(elicitation_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // List tools to find compliance form tool
     let tools_result = client
@@ -205,6 +207,7 @@ async fn test_elicitation_preference_collection() {
         .initialize_with_capabilities(elicitation_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // List tools to find preference collection tool
     let tools_result = client
@@ -294,6 +297,7 @@ async fn test_elicitation_customer_surveys() {
         .initialize_with_capabilities(elicitation_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // List tools to find survey tool
     let tools_result = client
@@ -395,6 +399,7 @@ async fn test_elicitation_data_validation() {
         .initialize_with_capabilities(elicitation_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // List tools to find validation tool
     let tools_result = client
@@ -480,6 +485,7 @@ async fn test_elicitation_tool_schemas() {
         .initialize_with_capabilities(elicitation_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // List all tools and verify their schemas
     let tools_result = client
@@ -586,6 +592,7 @@ async fn test_elicitation_server_capabilities() {
         .initialize_with_capabilities(elicitation_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     debug!("Initialize result: {:?}", init_result);
 

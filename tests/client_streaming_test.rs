@@ -192,19 +192,21 @@ async fn test_error_response() -> Result<()> {
     let error_bytes = serde_json::to_vec(&error_response)?;
     let stream = create_test_stream(vec![error_bytes]);
 
-    // Process the stream - should result in an error
+    // Transport returns Ok(json) for JSON-RPC errors — client layer converts to Err
     let result = transport.test_handle_byte_stream(stream).await;
 
     assert!(
-        result.is_err(),
-        "Expected error response for nonexistent method"
+        result.is_ok(),
+        "Transport should return Ok for JSON-RPC error responses"
     );
-    let error_msg = result.unwrap_err().to_string();
+    let json = result.unwrap();
     assert!(
-        error_msg.contains("Server error"),
-        "Error should mention server error"
+        json.get("error").is_some(),
+        "Response should contain error field"
     );
-    info!("✅ Error response test passed with error: {}", error_msg);
+    let error_code = json["error"]["code"].as_i64().unwrap();
+    assert_eq!(error_code, -32601, "Should be method-not-found error code");
+    info!("✅ Error response test passed with error code: {}", error_code);
 
     Ok(())
 }
