@@ -36,10 +36,9 @@
 //!     -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
 //!   # Should show only 'add' and 'greet', no 'multiply'
 
-use std::sync::Arc;
-
 use tracing::info;
 use turul_mcp_derive::McpTool;
+use turul_mcp_protocol::tools::{CallToolResult, ToolResult};
 use turul_mcp_server::{McpResult, McpServer, SessionContext, ToolChangeMode};
 
 #[derive(McpTool, Clone, Default)]
@@ -50,8 +49,10 @@ struct AddTool {
 }
 
 impl AddTool {
-    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-        Ok(format!("{}", self.a + self.b))
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+        Ok(CallToolResult::success(vec![ToolResult::text(format!(
+            "{}", self.a + self.b
+        ))]))
     }
 }
 
@@ -63,8 +64,10 @@ struct MultiplyTool {
 }
 
 impl MultiplyTool {
-    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-        Ok(format!("{}", self.a * self.b))
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+        Ok(CallToolResult::success(vec![ToolResult::text(format!(
+            "{}", self.a * self.b
+        ))]))
     }
 }
 
@@ -75,8 +78,10 @@ struct GreetTool {
 }
 
 impl GreetTool {
-    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<String> {
-        Ok(format!("Hello, {}!", self.name))
+    async fn execute(&self, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+        Ok(CallToolResult::success(vec![ToolResult::text(format!(
+            "Hello, {}!", self.name
+        ))]))
     }
 }
 
