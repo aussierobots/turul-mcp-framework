@@ -20,11 +20,13 @@ pub mod traits;
 #[cfg(feature = "in-memory")]
 pub mod in_memory;
 
+#[cfg(feature = "sqlite")]
+pub mod sqlite;
+
+#[cfg(feature = "postgres")]
+pub mod postgres;
+
 // Future backends:
-// #[cfg(feature = "sqlite")]
-// pub mod sqlite;
-// #[cfg(feature = "postgres")]
-// pub mod postgres;
 // #[cfg(feature = "dynamodb")]
 // pub mod dynamodb;
 
@@ -34,3 +36,9 @@ pub use traits::{BoxedServerStateStorage, EntityState, RegistrySnapshot, ServerS
 
 #[cfg(feature = "in-memory")]
 pub use in_memory::InMemoryServerStateStorage;
+
+#[cfg(feature = "sqlite")]
+pub use sqlite::{SqliteServerStateConfig, SqliteServerStateStorage};
+
+#[cfg(feature = "postgres")]
+pub use postgres::{PostgresServerStateConfig, PostgresServerStateStorage};
