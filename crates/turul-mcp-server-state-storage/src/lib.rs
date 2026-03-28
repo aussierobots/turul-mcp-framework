@@ -26,9 +26,8 @@ pub mod sqlite;
 #[cfg(feature = "postgres")]
 pub mod postgres;
 
-// Future backends:
-// #[cfg(feature = "dynamodb")]
-// pub mod dynamodb;
+#[cfg(feature = "dynamodb")]
+pub mod dynamodb;
 
 // Re-exports
 pub use error::ServerStateError;
@@ -42,3 +41,6 @@ pub use sqlite::{SqliteServerStateConfig, SqliteServerStateStorage};
 
 #[cfg(feature = "postgres")]
 pub use postgres::{PostgresServerStateConfig, PostgresServerStateStorage};
+
+#[cfg(feature = "dynamodb")]
+pub use dynamodb::{DynamoDbServerStateConfig, DynamoDbServerStateStorage};
