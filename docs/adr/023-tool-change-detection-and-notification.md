@@ -57,13 +57,17 @@ FNV-1a hash of the full serialized `Tool` descriptor set, computed once at serve
 
 ### DynamicClustered mode
 
-Extends DynamicInProcess with cross-instance coordination:
+Extends DynamicInProcess with cross-instance coordination via shared `ServerStateStorage`:
 
-- Tool activation state stored in shared `ServerStateStorage` (SQLite, PostgreSQL, DynamoDB)
-- Background polling (default 10-second interval) via `ToolRegistry::start_polling()`
-- Each instance checks the shared storage fingerprint; on mismatch, reloads tool state and broadcasts `notifications/tools/list_changed` to its connected clients
+- Tool activation state stored in shared storage (SQLite, PostgreSQL, DynamoDB)
 - Startup sync via `sync_from_storage()`: compares local fingerprint against storage, updates if newer, logs warning for other stale instances
 - Restart/redeploy: fingerprint mismatch → 404 (same as other modes)
+
+**EC2 (long-lived) coordination:** Background polling (default 10-second interval) via `ToolRegistry::start_polling()`. Each instance checks the shared storage fingerprint; on mismatch, reloads tool state and broadcasts `notifications/tools/list_changed` to connected clients.
+
+**Lambda (ephemeral) coordination:** Request-time change detection via `ToolRegistry::check_for_changes()`. Lambda cannot run background polling. Instead, on each request, if the cached fingerprint TTL (default 5 seconds) has expired, Lambda reads the current fingerprint from shared storage (single DynamoDB GetItem). If it differs from the local cache, Lambda reloads the full tool state and broadcasts `notifications/tools/list_changed`. Cold starts always sync via `sync_from_storage()`.
+
+`listChanged=true` is truthful for both EC2 and Lambda — both detect tool changes and deliver notifications to connected clients during their respective interaction models.
 
 ## Configuration
 
@@ -77,11 +81,11 @@ pub enum ToolChangeMode {
 }
 ```
 
-| Mode | `listChanged` | Restart 404 | Runtime changes | Scope |
-|------|---|---|---|---|
-| FingerprintOnly | false | Yes | Not supported | All runtimes |
-| DynamicInProcess | true | Yes | Live registry + notification | Single-process HTTP |
-| DynamicClustered | true | Yes | Live registry + notification + polling | Multi-instance |
+| Mode | `listChanged` | Restart 404 | Runtime changes | EC2 | Lambda |
+|------|---|---|---|---|---|
+| FingerprintOnly | false | Yes | Not supported | Yes | Yes |
+| DynamicInProcess | true | Yes | Live registry + notification | Yes | N/A (single-process) |
+| DynamicClustered | true | Yes | Live registry + notification | Polling (10s) | Request-time (5s TTL) |
 
 ## Client Flows
 
@@ -99,13 +103,24 @@ pub enum ToolChangeMode {
 3. Client receives notification → invalidates tool cache → calls `tools/list`
 4. Session continues — no disruption, no 404
 
-### Cross-instance mutation (DynamicClustered)
+### Cross-instance mutation — EC2 (DynamicClustered)
 
 1. Instance A changes tools → writes to shared storage
-2. Instance B's polling task detects fingerprint change → reloads from storage
+2. Instance B's polling task (10s) detects fingerprint change → reloads from storage
 3. Instance B broadcasts `notifications/tools/list_changed` to its clients
 4. Clients refresh → see updated tools
 5. Session continues on all instances
+
+### Cross-instance mutation — Lambda (DynamicClustered)
+
+1. EC2 or another Lambda changes tools → writes to shared storage
+2. Client sends next POST to Lambda with `Mcp-Session-Id`
+3. Lambda loads session from DynamoDB — valid
+4. Lambda checks cached tool fingerprint (TTL-based) against shared storage
+5. Fingerprint changed → Lambda reloads tool state from storage
+6. Lambda broadcasts `notifications/tools/list_changed`
+7. Request processed with current tool state
+8. Client receives notification → refreshes tools
 
 ## Architectural Boundaries
 
@@ -115,9 +130,7 @@ pub enum ToolChangeMode {
 
 **Concurrency:** `RwLock<ToolState>` holds active tool set + fingerprint under a single lock. Read lock → clone `Arc<dyn McpTool>` → release → call. Never hold lock across await points.
 
-**Lambda:** Currently excluded from dynamic modes at the type level. `LambdaMcpServerBuilder` does not expose `tool_change_mode()`. Lambda uses `FingerprintOnly`.
-
-**Open production requirement:** Determine whether Lambda must participate in `DynamicClustered` live notifications for production deployments (Lambda + EC2 with shared DynamoDB). If yes, this requires a dedicated design for Lambda-in-cluster coordination — including server-global state model, change detection cadence, notification delivery under Streamable HTTP, and cost/latency tradeoffs for per-request shared-store reads. This should be a fresh design proposal, not a patch to the current architecture.
+**Lambda:** Participates in `DynamicClustered` via request-time change detection. `LambdaMcpServerBuilder` exposes `tool_change_mode()` and `server_state_storage()`. In `FingerprintOnly` mode (default), Lambda behaves as before. In `DynamicClustered` mode, Lambda checks shared storage on each request and delivers notifications via Streamable HTTP responses.
 
 ## Fingerprint Storage
 
