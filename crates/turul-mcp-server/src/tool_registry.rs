@@ -335,6 +335,37 @@ impl ToolRegistry {
         }
     }
 
+    /// Check shared storage for external fingerprint changes (request-time detection).
+    ///
+    /// Compares the local fingerprint against the stored fingerprint. If they differ,
+    /// reloads the active tool set from storage and broadcasts a change notification.
+    ///
+    /// Returns `Ok(true)` if a change was detected and applied, `Ok(false)` if in sync.
+    ///
+    /// Designed for Lambda / request-driven environments where background polling
+    /// is not available — call this at the start of each request instead.
+    #[cfg(feature = "dynamic-clustered")]
+    pub async fn check_for_changes(&self) -> Result<bool, ToolRegistryError> {
+        let storage = self.server_state.as_ref()
+            .ok_or_else(|| ToolRegistryError::StorageError("No server state storage configured".to_string()))?;
+
+        let stored_fp = storage.get_fingerprint("tools").await
+            .map_err(|e| ToolRegistryError::StorageError(e.to_string()))?;
+
+        let local_fp = self.fingerprint().await;
+
+        match stored_fp {
+            Some(fp) if fp != local_fp => {
+                info!("DynamicClustered: external tool change detected (stored={}, local={})", fp, local_fp);
+                self.load_state_from_storage().await?;
+                self.broadcast_notification().await;
+                info!("DynamicClustered: tool state reloaded and clients notified");
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+
     /// Start a background polling task that periodically checks shared storage
     /// for fingerprint changes from other instances.
     ///
@@ -1026,6 +1057,74 @@ mod tests {
             let state = storage.get_entity_state("tools", "gamma").await.unwrap();
             assert!(state.is_some());
             assert!(!state.unwrap().active);
+        }
+
+        #[tokio::test]
+        async fn test_check_for_changes_detects_external_change() {
+            let storage = test_storage();
+            let registry = ToolRegistry::new_clustered(
+                test_tools(),
+                test_session_manager(),
+                storage.clone(),
+            );
+
+            // Sync initial state to storage
+            registry.sync_from_storage().await.unwrap();
+            let initial_fp = registry.fingerprint().await;
+
+            // Simulate another instance deactivating gamma directly in storage
+            let entity = turul_mcp_server_state_storage::EntityState {
+                entity_id: "gamma".to_string(),
+                active: false,
+                metadata: None,
+                updated_at: chrono::Utc::now().to_rfc3339(),
+            };
+            storage
+                .set_entity_state("tools", "gamma", entity)
+                .await
+                .unwrap();
+            storage
+                .set_fingerprint("tools", "external_change".to_string())
+                .await
+                .unwrap();
+
+            // check_for_changes should detect the external change
+            let changed = registry.check_for_changes().await.unwrap();
+            assert!(changed, "check_for_changes must return true when storage fingerprint differs");
+
+            // Local fingerprint should have been recomputed from the new active set
+            let new_fp = registry.fingerprint().await;
+            assert_ne!(new_fp, initial_fp, "Fingerprint must change after reload");
+
+            // gamma should now be inactive
+            let active = registry.list_active_tools().await;
+            assert_eq!(active.len(), 2, "gamma should have been deactivated by external change");
+            assert!(
+                active.iter().all(|t| t.name != "gamma"),
+                "gamma should not be in the active tool list"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_check_for_changes_noop_when_matching() {
+            let storage = test_storage();
+            let registry = ToolRegistry::new_clustered(
+                test_tools(),
+                test_session_manager(),
+                storage.clone(),
+            );
+
+            // Sync initial state to storage so fingerprints match
+            registry.sync_from_storage().await.unwrap();
+            let initial_fp = registry.fingerprint().await;
+
+            // check_for_changes should detect no change
+            let changed = registry.check_for_changes().await.unwrap();
+            assert!(!changed, "check_for_changes must return false when fingerprints match");
+
+            // Fingerprint and active tools should be unchanged
+            assert_eq!(registry.fingerprint().await, initial_fp);
+            assert_eq!(registry.list_active_tools().await.len(), 3);
         }
     }
 }
