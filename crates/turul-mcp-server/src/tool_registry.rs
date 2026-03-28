@@ -556,4 +556,25 @@ mod tests {
         // get_tool returns None for all
         assert!(registry.get_tool("alpha").await.is_none());
     }
+
+    /// ADR-023 MUST: Notification support does NOT bypass stale session rejection.
+    /// Even after a notification is emitted, the server's fingerprint changes,
+    /// meaning existing sessions have a stale fingerprint and MUST be rejected.
+    #[tokio::test]
+    async fn test_notification_does_not_prevent_fingerprint_change() {
+        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let fp_before = registry.fingerprint().await;
+
+        // Deactivate a tool — this sends a notification AND changes the fingerprint
+        registry.deactivate_tool("beta").await.unwrap();
+        let fp_after = registry.fingerprint().await;
+
+        // Fingerprint MUST have changed — existing sessions with fp_before are now stale
+        assert_ne!(
+            fp_before, fp_after,
+            "After tool mutation, fingerprint MUST change. \
+             Existing sessions with the old fingerprint MUST be rejected (404). \
+             The notification is advisory only and does not bypass this."
+        );
+    }
 }

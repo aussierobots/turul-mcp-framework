@@ -2428,4 +2428,32 @@ mod tests {
             "build() should allow taskSupport=optional without runtime"
         );
     }
+
+    /// ADR-023 capability truthfulness: FingerprintOnly mode advertises listChanged=false
+    /// because the server cannot push notifications — clients must re-initialize.
+    #[test]
+    fn test_fingerprint_only_capability_list_changed_false() {
+        let server = McpServerBuilder::new()
+            .name("test")
+            .tool(TestTool::new())
+            .build()
+            .unwrap();
+        let tools_cap = server.capabilities.tools.as_ref().unwrap();
+        assert_eq!(tools_cap.list_changed, Some(false));
+    }
+
+    /// ADR-023 capability truthfulness: DynamicInProcess mode advertises listChanged=true
+    /// because the ToolRegistry can push notifications/tools/list_changed via SSE.
+    #[cfg(feature = "dynamic-tools")]
+    #[test]
+    fn test_dynamic_in_process_capability_list_changed_true() {
+        let server = McpServerBuilder::new()
+            .name("test")
+            .tool_change_mode(crate::ToolChangeMode::DynamicInProcess)
+            .tool(TestTool::new())
+            .build()
+            .unwrap();
+        let tools_cap = server.capabilities.tools.as_ref().unwrap();
+        assert_eq!(tools_cap.list_changed, Some(true));
+    }
 }
