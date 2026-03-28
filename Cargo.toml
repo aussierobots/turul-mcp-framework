@@ -32,6 +32,7 @@ members = [
   "examples/derive-macro-server",
   "examples/dynamic-resource-server",
   "examples/dynamic-tools-server",
+  "examples/dynamic-tools-test-client",
   "examples/elicitation-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
