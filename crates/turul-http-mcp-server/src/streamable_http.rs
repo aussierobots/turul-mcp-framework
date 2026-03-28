@@ -415,7 +415,6 @@ pub struct StreamableHttpHandler {
     server_capabilities: turul_mcp_protocol::ServerCapabilities,
     pub(crate) middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     tool_fingerprint: Option<String>,
-    dynamic_tools: bool,
 }
 
 impl StreamableHttpHandler {
@@ -427,7 +426,6 @@ impl StreamableHttpHandler {
         server_capabilities: turul_mcp_protocol::ServerCapabilities,
         middleware_stack: Arc<crate::middleware::MiddlewareStack>,
         tool_fingerprint: Option<String>,
-        dynamic_tools: bool,
     ) -> Self {
         Self {
             config,
@@ -437,7 +435,6 @@ impl StreamableHttpHandler {
             server_capabilities,
             middleware_stack,
             tool_fingerprint,
-            dynamic_tools,
         }
     }
 
@@ -640,41 +637,15 @@ impl StreamableHttpHandler {
                 if let Some(ref current_fp) = self.tool_fingerprint {
                     if let Some(stored_fp) = session_info.state.get("mcp:tool_fingerprint") {
                         if stored_fp.as_str() != Some(current_fp.as_str()) {
-                            if self.dynamic_tools {
-                                // DynamicInProcess: try to notify via existing broadcast path
-                                let notification = turul_mcp_protocol::JsonRpcNotification::new(
-                                    "notifications/tools/list_changed".to_string(),
-                                );
-                                let data = serde_json::to_value(&notification).unwrap_or_default();
-                                match self.stream_manager.broadcast_to_session(
-                                    session_id,
-                                    "notifications/tools/list_changed".to_string(),
-                                    data,
-                                ).await {
-                                    Ok(_) => {
-                                        // Notification delivered — update fingerprint
-                                        let _ = self.session_storage
-                                            .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
-                                            .await;
-                                        debug!("Tool change notification sent to session '{}', fingerprint updated", session_id);
-                                    }
-                                    Err(_) => {
-                                        // Can't deliver — fall back to 404
-                                        warn!("Tool fingerprint mismatch for session '{}': cannot deliver notification", session_id);
-                                        return Err(SessionValidationError::NotFound(format!(
-                                            "Session '{}' tools changed and notification could not be delivered. Please re-initialize.",
-                                            session_id
-                                        )));
-                                    }
-                                }
-                            } else {
-                                // FingerprintOnly: hard reject (correctness boundary)
-                                warn!("Tool fingerprint mismatch for session '{}'", session_id);
-                                return Err(SessionValidationError::NotFound(format!(
-                                    "Session '{}' was created with a different server configuration. Please re-initialize.",
-                                    session_id
-                                )));
-                            }
+                            // Fingerprint mismatch → always 404 (both FingerprintOnly and DynamicInProcess).
+                            // In DynamicInProcess, notifications/tools/list_changed is sent proactively
+                            // by the ToolRegistry as UX/early warning. The 404 is the correctness boundary
+                            // that guarantees clients refresh via re-initialization.
+                            warn!("Tool fingerprint mismatch for session '{}'", session_id);
+                            return Err(SessionValidationError::NotFound(format!(
+                                "Session '{}' was created with a different server configuration. Please re-initialize.",
+                                session_id
+                            )));
                         }
                     } else {
                         // Missing fingerprint (pre-feature sessions) → force re-init always

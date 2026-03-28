@@ -154,7 +154,6 @@ pub struct SessionMcpHandler {
     pub(crate) stream_manager: Arc<StreamManager>,
     pub(crate) middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     pub(crate) tool_fingerprint: Option<String>,
-    pub(crate) dynamic_tools: bool,
 }
 
 impl Clone for SessionMcpHandler {
@@ -167,7 +166,6 @@ impl Clone for SessionMcpHandler {
             stream_manager: Arc::clone(&self.stream_manager),
             middleware_stack: Arc::clone(&self.middleware_stack),
             tool_fingerprint: self.tool_fingerprint.clone(),
-            dynamic_tools: self.dynamic_tools,
         }
     }
 }
@@ -202,7 +200,6 @@ impl SessionMcpHandler {
             stream_manager,
             middleware_stack,
             tool_fingerprint: None,
-            dynamic_tools: false,
         }
     }
 
@@ -229,15 +226,7 @@ impl SessionMcpHandler {
             stream_manager,
             middleware_stack,
             tool_fingerprint: None,
-            dynamic_tools: false,
         }
-    }
-
-    /// Set dynamic tools mode (DynamicInProcess). When true, fingerprint mismatches
-    /// notify via SSE instead of 404ing the session.
-    pub fn with_dynamic_tools(mut self, dynamic: bool) -> Self {
-        self.dynamic_tools = dynamic;
-        self
     }
 
     /// Set tool fingerprint for session versioning across server restarts
@@ -969,39 +958,11 @@ impl SessionMcpHandler {
                 if let Some(ref current_fp) = self.tool_fingerprint {
                     if let Some(stored_fp) = session_info.state.get("mcp:tool_fingerprint") {
                         if stored_fp.as_str() != Some(current_fp.as_str()) {
-                            if self.dynamic_tools {
-                                // DynamicInProcess: try to notify via existing broadcast path
-                                let notification = turul_mcp_protocol::JsonRpcNotification::new(
-                                    "notifications/tools/list_changed".to_string(),
-                                );
-                                let data = serde_json::to_value(&notification).unwrap_or_default();
-                                match self.stream_manager.broadcast_to_session(
-                                    session_id,
-                                    "notifications/tools/list_changed".to_string(),
-                                    data,
-                                ).await {
-                                    Ok(_) => {
-                                        let _ = self.session_storage
-                                            .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
-                                            .await;
-                                        debug!("Tool change notification sent to session '{}', fingerprint updated", session_id);
-                                    }
-                                    Err(_) => {
-                                        warn!("Tool fingerprint mismatch for session '{}': cannot deliver notification", session_id);
-                                        return Err(crate::HttpMcpError::InvalidRequest(format!(
-                                            "Session '{}' tools changed and notification could not be delivered. Please re-initialize.",
-                                            session_id
-                                        )));
-                                    }
-                                }
-                            } else {
-                                // FingerprintOnly: hard reject
-                                warn!("Tool fingerprint mismatch for session '{}'", session_id);
-                                return Err(crate::HttpMcpError::InvalidRequest(format!(
-                                    "Session '{}' was created with a different server configuration. Please re-initialize.",
-                                    session_id
-                                )));
-                            }
+                            warn!("Tool fingerprint mismatch for session '{}'", session_id);
+                            return Err(crate::HttpMcpError::InvalidRequest(format!(
+                                "Session '{}' was created with a different server configuration. Please re-initialize.",
+                                session_id
+                            )));
                         }
                     } else {
                         // Missing fingerprint (legacy) → always force re-init

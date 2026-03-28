@@ -73,7 +73,6 @@ pub struct HttpMcpServerBuilder {
     middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     route_registry: Arc<crate::routes::RouteRegistry>,
     tool_fingerprint: Option<String>,
-    dynamic_tools: bool,
 }
 
 impl HttpMcpServerBuilder {
@@ -88,7 +87,6 @@ impl HttpMcpServerBuilder {
             middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
             route_registry: Arc::new(crate::routes::RouteRegistry::new()),
             tool_fingerprint: None,
-            dynamic_tools: false,
         }
     }
 }
@@ -107,7 +105,6 @@ impl HttpMcpServerBuilder {
             middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
             route_registry: Arc::new(crate::routes::RouteRegistry::new()),
             tool_fingerprint: None,
-            dynamic_tools: false,
         }
     }
 
@@ -123,13 +120,6 @@ impl HttpMcpServerBuilder {
     /// Set the route registry for custom HTTP paths (e.g., `.well-known`)
     pub fn route_registry(mut self, registry: Arc<crate::routes::RouteRegistry>) -> Self {
         self.route_registry = registry;
-        self
-    }
-
-    /// Set dynamic tools mode. When true (DynamicInProcess), fingerprint mismatches
-    /// notify via SSE instead of 404ing the session.
-    pub fn dynamic_tools(mut self, dynamic: bool) -> Self {
-        self.dynamic_tools = dynamic;
         self
     }
 
@@ -257,7 +247,6 @@ impl HttpMcpServerBuilder {
             self.server_capabilities.unwrap_or_default(),
             Arc::clone(&middleware_stack),
             self.tool_fingerprint.clone(),
-            self.dynamic_tools,
         );
 
         HttpMcpServer {
@@ -269,7 +258,6 @@ impl HttpMcpServerBuilder {
             streamable_handler,
             route_registry: self.route_registry,
             tool_fingerprint: self.tool_fingerprint,
-            dynamic_tools: self.dynamic_tools,
         }
     }
 }
@@ -295,8 +283,6 @@ pub struct HttpMcpServer {
     route_registry: Arc<crate::routes::RouteRegistry>,
     // Tool fingerprint for session versioning (shared with both handlers)
     tool_fingerprint: Option<String>,
-    // Dynamic tools mode (DynamicInProcess)
-    dynamic_tools: bool,
 }
 
 impl HttpMcpServer {
@@ -340,8 +326,7 @@ impl HttpMcpServer {
             Arc::clone(&self.stream_manager),
             Arc::clone(&self.streamable_handler.middleware_stack),
         )
-        .with_tool_fingerprint(self.tool_fingerprint.clone())
-        .with_dynamic_tools(self.dynamic_tools);
+        .with_tool_fingerprint(self.tool_fingerprint.clone());
 
         // Create combined handler that routes based on protocol version
         let handler = McpRequestHandler {
