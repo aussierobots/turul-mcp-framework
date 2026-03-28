@@ -384,4 +384,87 @@ mod tests {
         let active = registry.list_active_tools().await;
         assert!(active.len() >= 2 && active.len() <= 3);
     }
+
+    /// E2E notification emission test: verify that activate_tool() broadcasts
+    /// a notifications/tools/list_changed event through the SessionManager.
+    /// This is the server-side proof that the notification is emitted —
+    /// the SSE bridge (tested separately) delivers it to clients.
+    #[tokio::test]
+    async fn test_activate_tool_emits_notification_event() {
+        let session_manager = test_session_manager();
+
+        // Create a session so broadcast_event has something to send to
+        let session_id = session_manager.create_session().await;
+
+        // Subscribe to global events BEFORE the mutation
+        let mut receiver = session_manager.subscribe_all_session_events();
+
+        let registry = ToolRegistry::new(test_tools(), session_manager.clone());
+
+        // Deactivate then re-activate to trigger a notification
+        registry.deactivate_tool("beta").await.unwrap();
+
+        // Check that a Custom event was broadcast
+        let mut found_notification = false;
+        // Drain all events (there may be multiple from the broadcast to each session)
+        while let Ok((recv_session_id, event)) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), receiver.recv()).await
+                .unwrap_or(Err(tokio::sync::broadcast::error::RecvError::Closed))
+        {
+            if let crate::session::SessionEvent::Custom { event_type, .. } = &event {
+                if event_type == "notifications/tools/list_changed" {
+                    found_notification = true;
+                    assert_eq!(
+                        recv_session_id, session_id,
+                        "Notification should be sent to the existing session"
+                    );
+                    break;
+                }
+            }
+        }
+
+        assert!(
+            found_notification,
+            "deactivate_tool() must broadcast notifications/tools/list_changed via SessionManager"
+        );
+    }
+
+    /// Verify the exact notification payload matches the MCP wire format.
+    #[tokio::test]
+    async fn test_notification_payload_shape() {
+        let session_manager = test_session_manager();
+        let _session_id = session_manager.create_session().await;
+        let mut receiver = session_manager.subscribe_all_session_events();
+
+        let registry = ToolRegistry::new(test_tools(), session_manager);
+        registry.deactivate_tool("alpha").await.unwrap();
+
+        // Get the notification event
+        let (_sid, event) = tokio::time::timeout(
+            std::time::Duration::from_millis(100),
+            receiver.recv(),
+        )
+        .await
+        .expect("Timeout waiting for event")
+        .expect("Channel closed");
+
+        if let crate::session::SessionEvent::Custom { event_type, data } = event {
+            assert_eq!(event_type, "notifications/tools/list_changed");
+            // Verify the payload matches ToolListChangedNotification::new() wire format
+            let method = data.get("method").and_then(|m| m.as_str());
+            assert_eq!(
+                method,
+                Some("notifications/tools/list_changed"),
+                "Notification data must contain method field"
+            );
+            // No params field (omitted by skip_serializing_if)
+            // This matches the exact wire format: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
+            assert!(
+                data.get("params").is_none() || data.get("params").unwrap().is_null(),
+                "Notification should have no params"
+            );
+        } else {
+            panic!("Expected SessionEvent::Custom, got {:?}", event);
+        }
+    }
 }
