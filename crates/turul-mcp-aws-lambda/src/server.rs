@@ -127,11 +127,12 @@ impl LambdaMcpServer {
             std::time::Duration::from_secs(60),      // 1 minute cleanup interval
         ));
 
-        // Coordination enabled only for shared backends (not InMemory)
+        // Coordination enabled only for shared backends that can be accessed by multiple instances.
+        // InMemory and SQLite are local-only. Only PostgreSQL and DynamoDB are shared.
         #[cfg(feature = "dynamic-tools")]
         let coordination_enabled = server_state_storage
             .as_ref()
-            .map(|s| s.backend_name() != "InMemory")
+            .map(|s| matches!(s.backend_name(), "PostgreSQL" | "DynamoDB"))
             .unwrap_or(false);
 
         // Create ToolRegistry when dynamic mode is enabled

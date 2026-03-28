@@ -139,12 +139,13 @@ impl McpServer {
             debug!("McpServer configured without session storage");
         }
 
-        // Coordination (sync/polling/check_for_changes) is enabled only for shared backends.
-        // InMemory has no external change source — coordination would be pointless.
+        // Coordination (sync/polling/check_for_changes) is enabled only for shared backends
+        // that can be accessed by multiple instances. InMemory and SQLite are local-only.
+        // Only PostgreSQL and DynamoDB are shared/coordination-capable.
         #[cfg(feature = "dynamic-tools")]
         let coordination_enabled = server_state_storage
             .as_ref()
-            .map(|s| s.backend_name() != "InMemory")
+            .map(|s| matches!(s.backend_name(), "PostgreSQL" | "DynamoDB"))
             .unwrap_or(false);
 
         #[cfg(feature = "dynamic-tools")]

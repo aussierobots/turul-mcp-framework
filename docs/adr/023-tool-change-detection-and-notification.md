@@ -57,11 +57,12 @@ FNV-1a hash of the full serialized `Tool` descriptor set. Only computed and chec
 
 ### Cross-instance coordination (optional)
 
-When `.server_state_storage()` is provided with Dynamic mode, cross-instance coordination is enabled:
+When `.server_state_storage()` is provided with a **shared** backend (PostgreSQL or DynamoDB), cross-instance coordination is enabled:
 
-- Tool activation state stored in shared storage (SQLite, PostgreSQL, DynamoDB)
+- Tool activation state stored in shared storage accessible by all instances
 - Startup sync via `sync_from_storage()`: compares local fingerprint against storage, updates if newer, logs warning for other stale instances
 - Without explicit storage, an in-memory backend is used automatically (single-process, no coordination)
+- SQLite is a local durable backend — it persists tool state across restarts but does NOT enable cross-instance coordination (same as InMemory for coordination purposes)
 
 **EC2 (long-lived) coordination:** Background polling (default 10-second interval) via `ToolRegistry::start_polling()`. Each instance checks the shared storage fingerprint; on mismatch, reloads tool state and broadcasts `notifications/tools/list_changed` to connected clients.
 
