@@ -2,7 +2,6 @@
 name = "resource-test-server"
 version.workspace = true
 edition.workspace = true
-authors = ["Nick <nick@aussierobots.com.au>"]
 description = "MCP Resource Test Server - Comprehensive test resources for E2E validation"
 license = "MIT OR Apache-2.0"
 

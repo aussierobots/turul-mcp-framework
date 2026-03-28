@@ -1708,7 +1708,8 @@ impl McpServerBuilder {
             self.middleware_stack,
             self.route_registry,
             tool_fingerprint,
-            self.tool_change_mode,
+            #[cfg(feature = "dynamic-tools")]
+            matches!(self.tool_change_mode, crate::ToolChangeMode::DynamicInProcess),
             #[cfg(feature = "http")]
             self.bind_address,
             #[cfg(feature = "http")]

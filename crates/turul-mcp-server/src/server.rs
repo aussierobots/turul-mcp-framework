@@ -46,8 +46,6 @@ pub struct McpServer {
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     /// Stable fingerprint of the registered tool set for session versioning
     tool_fingerprint: String,
-    /// Tool change mode
-    tool_change_mode: crate::ToolChangeMode,
     /// Dynamic tool registry (only in DynamicInProcess mode)
     #[cfg(feature = "dynamic-tools")]
     tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
@@ -82,7 +80,8 @@ impl McpServer {
         middleware_stack: crate::middleware::MiddlewareStack,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
         tool_fingerprint: String,
-        tool_change_mode: crate::ToolChangeMode,
+        #[cfg(feature = "dynamic-tools")]
+        dynamic_tools: bool,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
@@ -136,13 +135,14 @@ impl McpServer {
             debug!("McpServer configured without session storage");
         }
 
-        // Create dynamic tool registry if DynamicInProcess mode
         #[cfg(feature = "dynamic-tools")]
-        let tool_registry = match &tool_change_mode {
-            crate::ToolChangeMode::DynamicInProcess => Some(Arc::new(
-                crate::tool_registry::ToolRegistry::new(tools.clone(), session_manager.clone()),
-            )),
-            _ => None,
+        let tool_registry = if dynamic_tools {
+            Some(Arc::new(crate::tool_registry::ToolRegistry::new(
+                tools.clone(),
+                session_manager.clone(),
+            )))
+        } else {
+            None
         };
 
         Self {
@@ -158,7 +158,6 @@ impl McpServer {
             middleware_stack,
             route_registry,
             tool_fingerprint,
-            tool_change_mode,
             #[cfg(feature = "dynamic-tools")]
             tool_registry,
             #[cfg(feature = "http")]
