@@ -30,6 +30,7 @@ members = [
   "examples/comprehensive-server",
   "examples/derive-macro-server",
   "examples/dynamic-resource-server",
+  "examples/dynamic-tools-server",
   "examples/elicitation-server",
   "examples/function-macro-server",
   "examples/function-resource-server",
