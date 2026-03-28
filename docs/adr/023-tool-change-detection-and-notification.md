@@ -21,6 +21,19 @@ Stale session detection for restarts, redeploys, and tool mutations.
 - Client re-initializes: new session with current fingerprint + fresh tools
 - This is the only mechanism that guarantees a fresh client view
 
+### Mandatory Stale Session Rule
+
+On every request, if the session's stored `mcp:tool_fingerprint` differs from the server's current tool fingerprint, the server **MUST** treat the session as stale and reject the request with HTTP 404. This requirement applies regardless of:
+
+- **Session persistence** — the session record may still exist in durable storage
+- **Connection state** — the client may have an active SSE stream
+- **Notification delivery** — a `notifications/tools/list_changed` may have been sent or queued
+- **Tool change mode** — applies to both `FingerprintOnly` and `DynamicInProcess`
+
+The server **MUST NOT** update the stored fingerprint for an existing stale session. The current fingerprint is written only during a fresh `initialize` for a new session.
+
+This rule ensures that no client can continue operating with a stale tool list. The only way to cross the refresh boundary is re-initialization.
+
 ### Phase B: Dynamic Tool Registry — UX Notification
 
 Push-based `notifications/tools/list_changed` for single-process HTTP servers.
