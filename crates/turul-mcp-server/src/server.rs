@@ -879,7 +879,7 @@ impl SessionAwareInitializeHandler {
         // All other capabilities (tools, resources, prompts, etc.) are version-independent
         // in terms of their basic functionality.
 
-        info!(
+        debug!(
             "Server capabilities adjusted for protocol version {}",
             version
         );
@@ -1087,7 +1087,7 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
                 session_id, negotiated_version
             );
         } else {
-            info!(
+            debug!(
                 "⏳ Session {} created and ready for client with protocol version {} (strict mode - waiting for notifications/initialized)",
                 session_id, negotiated_version
             );

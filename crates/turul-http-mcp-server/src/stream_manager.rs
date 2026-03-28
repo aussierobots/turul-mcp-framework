@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{RwLock, mpsc};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 use turul_mcp_session_storage::SseEvent;
 
@@ -489,7 +489,7 @@ impl StreamManager {
     ) -> Result<u64, StreamError> {
         // Check subscription filtering first
         let is_subscribed = self.is_subscribed(session_id, &event_type).await;
-        info!(
+        debug!(
             "🔍 Subscription check: session={}, event_type={}, is_subscribed={}",
             session_id, event_type, is_subscribed
         );
