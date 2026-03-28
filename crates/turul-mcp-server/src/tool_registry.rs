@@ -39,6 +39,10 @@ pub struct ToolRegistry {
     /// Server-global storage for cross-instance coordination.
     /// Activate/deactivate operations persist to shared storage.
     server_state: Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
+    /// TTL cache for check_for_changes() — avoids hitting storage on every request.
+    /// Default 10 seconds, configurable via TURUL_TOOL_CHECK_TTL_SECS env var.
+    last_check: RwLock<Option<std::time::Instant>>,
+    check_ttl: std::time::Duration,
 }
 
 /// Active tool set and its corresponding fingerprint, kept consistent under one lock.
@@ -60,6 +64,12 @@ impl ToolRegistry {
         let active: HashSet<String> = compiled_tools.keys().cloned().collect();
         let fingerprint = Self::compute_fingerprint_for(&compiled_tools, &active);
 
+        // TTL for check_for_changes() — default 10 seconds, configurable via env var
+        let check_ttl_secs: u64 = std::env::var("TURUL_TOOL_CHECK_TTL_SECS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(10);
+
         Self {
             compiled_tools,
             state: RwLock::new(ToolState {
@@ -68,6 +78,8 @@ impl ToolRegistry {
             }),
             session_manager,
             server_state,
+            last_check: RwLock::new(None),
+            check_ttl: std::time::Duration::from_secs(check_ttl_secs),
         }
     }
 
@@ -302,16 +314,32 @@ impl ToolRegistry {
 
     /// Check shared storage for external fingerprint changes (request-time detection).
     ///
-    /// Compares the local fingerprint against the stored fingerprint. If they differ,
-    /// reloads the active tool set from storage and broadcasts a change notification.
+    /// Uses a TTL cache (default 10s, configurable via `TURUL_TOOL_CHECK_TTL_SECS`)
+    /// to avoid hitting storage on every request. Returns immediately if the cache
+    /// is still fresh.
     ///
-    /// Returns `Ok(true)` if a change was detected and applied, `Ok(false)` if in sync.
+    /// Returns `Ok(true)` if a change was detected and applied, `Ok(false)` if in sync
+    /// or if the cache TTL has not expired.
     ///
     /// Designed for Lambda / request-driven environments where background polling
     /// is not available — call this at the start of each request instead.
     pub async fn check_for_changes(&self) -> Result<bool, ToolRegistryError> {
+        // TTL check — skip storage read if cache is fresh
+        {
+            let last = self.last_check.read().await;
+            if let Some(instant) = *last {
+                if instant.elapsed() < self.check_ttl {
+                    return Ok(false);
+                }
+            }
+        }
+
+        // Cache expired — check storage
         let stored_fp = self.server_state.get_fingerprint("tools").await
             .map_err(|e| ToolRegistryError::StorageError(e.to_string()))?;
+
+        // Update last check timestamp
+        *self.last_check.write().await = Some(std::time::Instant::now());
 
         let local_fp = self.fingerprint().await;
 
