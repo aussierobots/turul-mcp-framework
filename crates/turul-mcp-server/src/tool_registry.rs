@@ -335,6 +335,59 @@ impl ToolRegistry {
         }
     }
 
+    /// Start a background polling task that periodically checks shared storage
+    /// for fingerprint changes from other instances.
+    ///
+    /// When a change is detected, reloads the active tool set from storage and
+    /// broadcasts `notifications/tools/list_changed` to connected clients.
+    ///
+    /// Returns a `JoinHandle` that can be used to abort the polling task on shutdown.
+    #[cfg(feature = "dynamic-clustered")]
+    pub fn start_polling(
+        self: &Arc<Self>,
+        interval: std::time::Duration,
+    ) -> tokio::task::JoinHandle<()> {
+        let registry = Arc::clone(self);
+        tokio::spawn(async move {
+            // Use sleep instead of interval to avoid the immediate first tick
+            // (tokio::time::interval fires immediately on the first tick)
+            loop {
+                tokio::time::sleep(interval).await;
+
+                if let Some(ref storage) = registry.server_state {
+                    match storage.get_fingerprint("tools").await {
+                        Ok(Some(stored_fp)) => {
+                            let local_fp = registry.fingerprint().await;
+                            if stored_fp != local_fp {
+                                info!(
+                                    "DynamicClustered: detected tool change from another instance (stored={}, local={})",
+                                    stored_fp, local_fp
+                                );
+                                if let Err(e) = registry.load_state_from_storage().await {
+                                    warn!(
+                                        "Failed to reload tool state from storage: {}",
+                                        e
+                                    );
+                                    continue;
+                                }
+                                registry.broadcast_notification().await;
+                                info!(
+                                    "DynamicClustered: tool state reloaded and clients notified"
+                                );
+                            }
+                        }
+                        Ok(None) => {
+                            debug!("No fingerprint in storage yet");
+                        }
+                        Err(e) => {
+                            warn!("Failed to check storage fingerprint: {}", e);
+                        }
+                    }
+                }
+            }
+        })
+    }
+
     /// Compute fingerprint for a given active tool subset.
     fn compute_fingerprint_for(
         compiled: &HashMap<String, Arc<dyn McpTool>>,
@@ -874,6 +927,88 @@ mod tests {
             // Fingerprint in storage should match in-memory
             let stored_fp = storage.get_fingerprint("tools").await.unwrap();
             assert_eq!(stored_fp, Some(registry.fingerprint().await));
+        }
+
+        #[tokio::test]
+        async fn test_polling_detects_external_fingerprint_change() {
+            let storage = test_storage();
+            let registry = Arc::new(ToolRegistry::new_clustered(
+                test_tools(),
+                test_session_manager(),
+                storage.clone(),
+            ));
+
+            // Sync initial state to storage
+            registry.sync_from_storage().await.unwrap();
+            let initial_fp = registry.fingerprint().await;
+
+            // Simulate another instance deactivating a tool directly in storage
+            let entity = turul_mcp_server_state_storage::EntityState {
+                entity_id: "gamma".to_string(),
+                active: false,
+                metadata: None,
+                updated_at: chrono::Utc::now().to_rfc3339(),
+            };
+            storage
+                .set_entity_state("tools", "gamma", entity)
+                .await
+                .unwrap();
+            // Write a new fingerprint that differs from local
+            storage
+                .set_fingerprint("tools", "external_change".to_string())
+                .await
+                .unwrap();
+
+            // Start polling with very short interval
+            let handle = registry.start_polling(std::time::Duration::from_millis(50));
+
+            // Wait for poll to detect change
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+            // Local fingerprint should have been updated (recomputed from new active set)
+            let new_fp = registry.fingerprint().await;
+            assert_ne!(
+                new_fp, initial_fp,
+                "Polling should detect external fingerprint change and reload state"
+            );
+
+            // gamma should now be inactive
+            let active = registry.list_active_tools().await;
+            assert_eq!(active.len(), 2, "gamma should have been deactivated by external change");
+            assert!(
+                active.iter().all(|t| t.name != "gamma"),
+                "gamma should not be in the active tool list"
+            );
+
+            handle.abort();
+        }
+
+        #[tokio::test]
+        async fn test_polling_noop_when_fingerprints_match() {
+            let storage = test_storage();
+            let registry = Arc::new(ToolRegistry::new_clustered(
+                test_tools(),
+                test_session_manager(),
+                storage.clone(),
+            ));
+
+            // Sync initial state
+            registry.sync_from_storage().await.unwrap();
+            let initial_fp = registry.fingerprint().await;
+
+            // Start polling — fingerprints match, so nothing should change
+            let handle = registry.start_polling(std::time::Duration::from_millis(50));
+
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+            let fp_after = registry.fingerprint().await;
+            assert_eq!(
+                fp_after, initial_fp,
+                "Fingerprint should remain unchanged when storage matches"
+            );
+            assert_eq!(registry.list_active_tools().await.len(), 3);
+
+            handle.abort();
         }
 
         #[tokio::test]

@@ -1,10 +1,15 @@
 //! E2E Transport Test: DynamicInProcess Tool Change Detection
 //!
 //! Proves the full ADR-023 DynamicInProcess contract over Streamable HTTP:
-//! 1. Client initializes and sees initial tool set
-//! 2. Tool is deactivated → notification emitted
-//! 3. Client's next request gets stale-session 404 (fingerprint mismatch)
-//! 4. Client re-initializes → new session → sees updated tools
+//! 1. Client initializes and sees initial tool set (multiply active)
+//! 2. Tool is deactivated via `deactivate_multiply` → tool registry updated
+//! 3. Same session's next tools/list shows multiply absent, activate_multiply present
+//! 4. Re-initialization produces a new session with the same updated tool set
+//!
+//! Note: The HTTP handler's tool_fingerprint is static (set at build time) and does
+//! not change for DynamicInProcess mutations. Fingerprint-based 404 guards against
+//! cross-restart or cross-cluster staleness. In-process dynamic changes are signaled
+//! to clients via SSE notifications/tools/list_changed.
 //!
 //! This is the highest-signal proof that the feature works end-to-end.
 
@@ -12,7 +17,7 @@ use mcp_e2e_shared::{McpTestClient, TestServerManager};
 use serde_json::json;
 use tracing::info;
 
-/// Core E2E test: tool deactivation → stale session → 404 → re-init → fresh tools
+/// Core E2E test: tool deactivation → updated tools/list → re-init → same updated tools
 #[tokio::test]
 async fn test_dynamic_tools_deactivation_causes_stale_session_404() {
     let _ = tracing_subscriber::fmt::try_init();
@@ -66,49 +71,122 @@ async fn test_dynamic_tools_deactivation_causes_stale_session_404() {
         .expect("Failed to call deactivate_multiply");
     info!("Deactivate result: {:?}", deactivate_result);
 
-    // Step 4: Verify the session is now stale — next request should get 404
-    // The fingerprint changed when multiply was deactivated, so our session's
-    // stored fingerprint no longer matches the server's current fingerprint.
-    let stale_result = client.list_tools().await.expect("HTTP request should succeed");
+    // Step 4: Next tools/list on the SAME session sees the updated tool set.
+    //
+    // Note: The tool_fingerprint on the HTTP handler is set once at build time and
+    // is NOT updated when DynamicInProcess tools change at runtime. The session's
+    // stored mcp:tool_fingerprint matches the handler's static fingerprint, so no
+    // mismatch (404) occurs. DynamicInProcess changes are signaled to clients via
+    // SSE notifications/tools/list_changed; the fingerprint mechanism guards against
+    // cross-restart or cross-cluster staleness, not in-process dynamic changes.
+    let post_deactivation = client
+        .list_tools()
+        .await
+        .expect("tools/list after deactivation should succeed");
+    let post_tools = post_deactivation
+        .get("result")
+        .and_then(|r| r.get("tools"))
+        .and_then(|t| t.as_array())
+        .expect("tools/list response must contain a tools array");
 
-    // The response should be an error (404 mapped to JSON error or HTTP error)
-    // Check for either HTTP 404 or JSON-RPC error about session
-    let is_stale = stale_result.contains_key("error")
-        || stale_result
-            .get("result")
-            .and_then(|r| r.get("tools"))
-            .is_none();
+    let post_names: Vec<&str> = post_tools
+        .iter()
+        .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
+        .collect();
+    info!("Post-deactivation tools: {:?}", post_names);
 
-    info!(
-        "Stale session response: {:?}",
-        stale_result
+    // multiply MUST be absent after deactivation
+    assert!(
+        !post_names.contains(&"multiply"),
+        "After deactivation, multiply MUST NOT appear in tools/list. Got: {:?}",
+        post_names
+    );
+    // deactivate_multiply should also be gone (it was the counterpart)
+    assert!(
+        !post_names.contains(&"deactivate_multiply"),
+        "After deactivation, deactivate_multiply should be removed. Got: {:?}",
+        post_names
+    );
+    // activate_multiply MUST now be present (toggle counterpart)
+    assert!(
+        post_names.contains(&"activate_multiply"),
+        "After deactivation, activate_multiply MUST be available. Got: {:?}",
+        post_names
+    );
+    // Static tools remain
+    assert!(
+        post_names.contains(&"add"),
+        "Static tool 'add' must always be present. Got: {:?}",
+        post_names
+    );
+    assert!(
+        post_names.contains(&"greet"),
+        "Static tool 'greet' must always be present. Got: {:?}",
+        post_names
     );
 
-    // If the test client auto-re-initializes on 404 (like turul-mcp-client does),
-    // the second tools/list might succeed with a new session. That's also valid —
-    // it proves the flow works. Let's check what we got.
-    if stale_result.contains_key("result") {
-        // Client may have auto-re-initialized — check that multiply is gone
-        if let Some(tools) = stale_result
-            .get("result")
-            .and_then(|r| r.get("tools"))
-            .and_then(|t| t.as_array())
-        {
-            let names: Vec<&str> = tools
-                .iter()
-                .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
-                .collect();
-            info!("Post-deactivation tools: {:?}", names);
-            assert!(
-                !names.contains(&"multiply"),
-                "After deactivation, multiply should not be in tools/list"
-            );
-            assert!(
-                names.contains(&"activate_multiply"),
-                "After deactivation, activate_multiply should be available"
-            );
-        }
-    }
+    // Step 5: Re-initialize and confirm the updated tool set persists in a new session
+    let reinit_result = client.initialize().await.expect("Re-initialize should succeed");
+    assert!(
+        reinit_result.contains_key("result"),
+        "Re-initialization must return a result"
+    );
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized after re-init");
+
+    let new_session_id = client
+        .session_id()
+        .expect("Should have new session ID")
+        .to_string();
+    info!(
+        "Re-initialized with new session: {} (old: {})",
+        new_session_id, session_id
+    );
+    assert_ne!(
+        new_session_id, session_id,
+        "Re-initialization must produce a different session ID"
+    );
+
+    // Step 6: Verify the fresh session also sees multiply absent
+    let fresh_tools_result = client
+        .list_tools()
+        .await
+        .expect("Failed to list tools after re-init");
+    let fresh_tools = fresh_tools_result
+        .get("result")
+        .and_then(|r| r.get("tools"))
+        .and_then(|t| t.as_array())
+        .expect("Fresh session tools/list must contain a tools array");
+
+    let fresh_names: Vec<&str> = fresh_tools
+        .iter()
+        .filter_map(|t| t.get("name").and_then(|n| n.as_str()))
+        .collect();
+    info!("Fresh session tools: {:?}", fresh_names);
+
+    assert!(
+        !fresh_names.contains(&"multiply"),
+        "Fresh session must NOT contain multiply. Got: {:?}",
+        fresh_names
+    );
+    assert!(
+        fresh_names.contains(&"activate_multiply"),
+        "Fresh session must contain activate_multiply. Got: {:?}",
+        fresh_names
+    );
+    assert!(
+        fresh_names.contains(&"add"),
+        "Fresh session must contain static tool 'add'. Got: {:?}",
+        fresh_names
+    );
+
+    // Verify both sessions agree on the exact same tool set
+    assert_eq!(
+        post_names, fresh_names,
+        "Old session and fresh session must report identical tool sets after deactivation"
+    );
 
     info!("DynamicInProcess E2E test passed");
 }

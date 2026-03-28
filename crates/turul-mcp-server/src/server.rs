@@ -330,6 +330,11 @@ impl McpServer {
                     error!("DynamicClustered: failed to sync with shared storage: {}. Continuing with local state.", e);
                 }
             }
+
+            // Start background polling for cross-instance changes
+            let poll_interval = std::time::Duration::from_secs(10);
+            let _poll_handle = registry.start_polling(poll_interval);
+            info!("DynamicClustered: started background polling (interval: {:?})", poll_interval);
         }
 
         // Create session-aware tool handler (with optional task runtime for async execution)
@@ -548,6 +553,11 @@ impl McpServer {
                     error!("DynamicClustered: failed to sync with shared storage: {}. Continuing with local state.", e);
                 }
             }
+
+            // Start background polling for cross-instance changes
+            let poll_interval = std::time::Duration::from_secs(10);
+            let _poll_handle = registry.start_polling(poll_interval);
+            info!("DynamicClustered: started background polling (interval: {:?})", poll_interval);
         }
 
         // Create session-aware tool handler (with optional task runtime for async execution)
