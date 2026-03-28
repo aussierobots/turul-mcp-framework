@@ -115,7 +115,9 @@ pub enum ToolChangeMode {
 
 **Concurrency:** `RwLock<ToolState>` holds active tool set + fingerprint under a single lock. Read lock → clone `Arc<dyn McpTool>` → release → call. Never hold lock across await points.
 
-**Lambda:** Excluded from dynamic modes at the type level. `LambdaMcpServerBuilder` does not expose `tool_change_mode()`. Lambda uses `FingerprintOnly`.
+**Lambda:** Currently excluded from dynamic modes at the type level. `LambdaMcpServerBuilder` does not expose `tool_change_mode()`. Lambda uses `FingerprintOnly`.
+
+**Open production requirement:** Determine whether Lambda must participate in `DynamicClustered` live notifications for production deployments (Lambda + EC2 with shared DynamoDB). If yes, this requires a dedicated design for Lambda-in-cluster coordination — including server-global state model, change detection cadence, notification delivery under Streamable HTTP, and cost/latency tradeoffs for per-request shared-store reads. This should be a fresh design proposal, not a patch to the current architecture.
 
 ## Fingerprint Storage
 
