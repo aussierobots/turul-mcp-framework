@@ -131,6 +131,8 @@ pub mod server;
 pub mod session;
 pub mod task;
 pub mod tool;
+#[cfg(feature = "dynamic-tools")]
+pub mod tool_registry;
 // Re-export session storage from separate crate (breaks circular dependency)
 pub use turul_mcp_session_storage as session_storage;
 // Re-export task storage from separate crate
@@ -194,6 +196,38 @@ pub use task::runtime::TaskRuntime;
 pub use task::tokio_executor::TokioTaskExecutor;
 /// Tool trait for executable MCP functions
 pub use tool::McpTool;
+/// Stable fingerprint of the registered tool set for session versioning
+pub use tool::compute_tool_fingerprint;
+/// Runtime tool activation mode — controls fingerprint vs live notification behavior
+#[cfg(feature = "dynamic-tools")]
+pub use tool_registry::ToolRegistry;
+
+/// Configuration for how tool changes are detected and communicated.
+///
+/// `Static` (default): no change detection, no fingerprint, no notifications.
+/// `Dynamic`: fingerprint tracking + live notifications (`listChanged=true`).
+/// Fingerprint check only runs when `listChanged=true`.
+///
+/// When `Dynamic` is used with `.server_state_storage()`, cross-instance
+/// coordination is enabled (polling on EC2, request-time check on Lambda).
+/// Without explicit storage, an in-memory backend is used automatically.
+#[derive(Debug, Clone, Default)]
+pub enum ToolChangeMode {
+    /// Static tools. `listChanged=false`. No fingerprint check. No notifications.
+    /// Tools are fixed at build time. This is the default.
+    #[default]
+    Static,
+    /// Dynamic tool registry. `listChanged=true`.
+    /// Precompiled tools can be activated/deactivated at runtime.
+    /// Fingerprint tracks tool-version per session.
+    /// Connected clients receive `notifications/tools/list_changed`.
+    ///
+    /// When paired with `.server_state_storage()`, enables multi-instance
+    /// coordination via shared `ServerStateStorage` (DynamoDB/PostgreSQL/SQLite).
+    #[cfg(feature = "dynamic-tools")]
+    Dynamic,
+}
+
 /// SessionView trait for middleware - re-exported from turul-mcp-session-storage
 pub use turul_mcp_session_storage::SessionView;
 

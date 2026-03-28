@@ -855,7 +855,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create server with comprehensive tool collection (with strict lifecycle for testing)
     let server = McpServer::builder()
         .name("tools-test-server")
-        .version("0.3.24")
+        .version("0.3.25")
         .title("MCP Tools Test Server")
         .instructions("Comprehensive test tools for E2E validation")
         .with_strict_lifecycle() // Enable strict lifecycle enforcement for E2E testing

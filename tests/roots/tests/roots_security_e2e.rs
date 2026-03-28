@@ -21,6 +21,7 @@ async fn test_roots_access_control_boundaries() {
         .initialize_with_capabilities(roots_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Get the list of available roots to understand boundaries
     let roots_result = client
@@ -112,6 +113,7 @@ async fn test_roots_file_operation_security() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Get available tools to see if we have file operation tools
     let tools_result = client
@@ -234,6 +236,7 @@ async fn test_roots_path_traversal_protection() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Get available tools
     let tools_result = client
@@ -346,6 +349,7 @@ async fn test_roots_permission_levels() {
         .initialize_with_capabilities(TestFixtures::tools_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Get available tools
     let tools_result = client
@@ -488,6 +492,7 @@ async fn test_roots_uri_validation() {
         .initialize_with_capabilities(roots_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Get roots to validate URI formats
     let roots_result = client
@@ -558,6 +563,7 @@ async fn test_roots_security_headers() {
         .initialize_with_capabilities(roots_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Make request and check response headers if accessible
     let roots_result = client

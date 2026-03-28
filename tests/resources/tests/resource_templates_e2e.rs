@@ -23,6 +23,7 @@ async fn test_resource_templates_list_endpoint() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Call resources/templates/list endpoint
     let templates_result = client
@@ -132,6 +133,7 @@ async fn test_resource_templates_list_with_pagination() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Test pagination with cursor parameter
     let paginated_result = client
@@ -192,6 +194,7 @@ async fn test_resource_templates_structure_validation() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     let templates_result = client
         .make_request("resources/templates/list", json!({}), 12)
@@ -264,6 +267,7 @@ async fn test_resource_templates_uri_variable_patterns() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     let templates_result = client
         .make_request("resources/templates/list", json!({}), 13)
@@ -356,6 +360,7 @@ async fn test_resource_templates_json_rpc_compliance() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     let templates_result = client
         .make_request("resources/templates/list", json!({}), 14)
@@ -409,6 +414,7 @@ async fn test_resource_templates_error_handling() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Test with invalid parameters (if any)
     let invalid_result = client

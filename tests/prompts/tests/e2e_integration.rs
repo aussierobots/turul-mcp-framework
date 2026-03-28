@@ -26,6 +26,7 @@ async fn test_mcp_initialize_session() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Verify response structure
     TestFixtures::verify_initialization_response(&result);
@@ -54,6 +55,7 @@ async fn test_prompts_list() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
     let result = client.list_prompts().await.expect("Failed to list prompts");
 
     // Verify response structure using shared test fixtures
@@ -95,6 +97,7 @@ async fn test_simple_string_prompt_get() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     let args = TestFixtures::create_string_args();
     let result = client
@@ -137,6 +140,7 @@ async fn test_complex_prompt_get() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     let args = TestFixtures::create_template_args();
     let result = client
@@ -178,6 +182,7 @@ async fn test_number_prompt_get() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     let args = TestFixtures::create_number_args();
     let result = client
@@ -220,6 +225,7 @@ async fn test_boolean_prompt_get() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     let args = TestFixtures::create_boolean_args();
     let result = client
@@ -267,6 +273,7 @@ async fn test_prompt_with_missing_arguments() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Try to get a prompt that requires arguments without providing them
     let result = client
@@ -303,6 +310,7 @@ async fn test_nonexistent_prompt() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     let result = client
         .get_prompt("nonexistent_prompt", None)
@@ -333,6 +341,7 @@ async fn test_sse_notifications() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Test SSE notifications
     let events = client

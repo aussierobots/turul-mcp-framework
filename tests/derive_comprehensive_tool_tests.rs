@@ -7,6 +7,7 @@ use turul_mcp_server::{McpResult, McpTool as McpToolTrait, SessionContext};
 
 /// Test tool returning f64 (number)
 #[derive(McpTool)]
+#[tool(output = f64)]
 struct NumberTool {
     #[param(description = "Input value")]
     value: f64,
@@ -20,6 +21,7 @@ impl NumberTool {
 
 /// Test tool returning String
 #[derive(McpTool)]
+#[tool(output = String)]
 struct StringTool {
     #[param(description = "Input text")]
     text: String,
@@ -33,6 +35,7 @@ impl StringTool {
 
 /// Test tool returning bool
 #[derive(McpTool)]
+#[tool(output = bool)]
 struct BooleanTool {
     #[param(description = "Input number")]
     number: i32,
@@ -46,6 +49,7 @@ impl BooleanTool {
 
 /// Test tool returning Vec<i32> (array)
 #[derive(McpTool)]
+#[tool(output = Vec<i32>)]
 struct ArrayTool {
     #[param(description = "Array size")]
     size: u32,
@@ -58,7 +62,7 @@ impl ArrayTool {
 }
 
 /// Test tool returning custom struct (object)
-#[derive(serde::Serialize)]
+#[derive(serde::Serialize, schemars::JsonSchema)]
 struct CustomResult {
     message: String,
     count: u32,
@@ -66,6 +70,7 @@ struct CustomResult {
 }
 
 #[derive(McpTool)]
+#[tool(output = CustomResult)]
 struct ObjectTool {
     #[param(description = "Message text")]
     message: String,
@@ -234,14 +239,14 @@ async fn test_object_tool_execution_and_schema() {
     assert!(response.structured_content.is_some());
     if let Some(structured) = response.structured_content {
         let obj = structured.as_object().unwrap();
-        // Zero-config struct outputs use "output" as default field name
-        assert!(obj.contains_key("output"));
+        // With output = CustomResult, field name is camelCase of struct name
+        assert!(obj.contains_key("customResult"), "Expected 'customResult' field, got keys: {:?}", obj.keys().collect::<Vec<_>>());
         let expected_result = json!({
             "message": "test",
             "count": 42,
             "success": true
         });
-        assert_eq!(obj["output"], expected_result);
+        assert_eq!(obj["customResult"], expected_result);
     }
 
     // Should have MCP-compliant object output schema after execution
@@ -346,10 +351,10 @@ async fn test_struct_output_uses_struct_name_as_field() {
     if let Some(structured) = response.structured_content {
         let obj = structured.as_object().unwrap();
 
-        // Zero-config struct outputs use "output" as default field name
+        // With output = CustomResult, field name is camelCase of struct name
         assert!(
-            obj.contains_key("output"),
-            "Expected 'output' field for zero-config struct output, got keys: {:?}",
+            obj.contains_key("customResult"),
+            "Expected 'customResult' field for struct output, got keys: {:?}",
             obj.keys().collect::<Vec<_>>()
         );
 
@@ -358,7 +363,7 @@ async fn test_struct_output_uses_struct_name_as_field() {
             "count": 42,
             "success": true
         });
-        assert_eq!(obj["output"], expected_result);
+        assert_eq!(obj["customResult"], expected_result);
     }
 }
 

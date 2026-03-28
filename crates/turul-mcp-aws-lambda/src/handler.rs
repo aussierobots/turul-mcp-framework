@@ -45,6 +45,10 @@ pub struct LambdaMcpHandler {
     /// Custom route registry (e.g., .well-known endpoints)
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
 
+    /// Dynamic tool registry for request-time change detection
+    #[cfg(feature = "dynamic-tools")]
+    tool_registry: Option<Arc<turul_mcp_server::ToolRegistry>>,
+
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
     cors_config: Option<CorsConfig>,
@@ -87,6 +91,7 @@ impl LambdaMcpHandler {
             stream_manager.clone(),
             capabilities.clone(),
             middleware_stack,
+            None, // No fingerprint in legacy constructor
         );
 
         Self {
@@ -94,6 +99,8 @@ impl LambdaMcpHandler {
             streamable_handler,
             sse_enabled,
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry: None,
             #[cfg(feature = "cors")]
             cors_config,
         }
@@ -132,6 +139,7 @@ impl LambdaMcpHandler {
             stream_manager,
             capabilities,
             middleware_stack,
+            None, // No fingerprint in legacy constructor
         );
 
         Self {
@@ -139,6 +147,8 @@ impl LambdaMcpHandler {
             streamable_handler,
             sse_enabled,
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry: None,
             #[cfg(feature = "cors")]
             cors_config: None,
         }
@@ -157,7 +167,35 @@ impl LambdaMcpHandler {
         sse_enabled: bool,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     ) -> Self {
-        // Create SessionMcpHandler with custom middleware
+        Self::with_middleware_and_fingerprint(
+            config,
+            dispatcher,
+            session_storage,
+            stream_manager,
+            stream_config,
+            capabilities,
+            middleware_stack,
+            sse_enabled,
+            route_registry,
+            None,
+        )
+    }
+
+    /// Create with custom middleware stack and tool fingerprint for session versioning
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_middleware_and_fingerprint(
+        config: ServerConfig,
+        dispatcher: Arc<JsonRpcDispatcher<McpError>>,
+        session_storage: Arc<BoxedSessionStorage>,
+        stream_manager: Arc<StreamManager>,
+        stream_config: StreamConfig,
+        capabilities: ServerCapabilities,
+        middleware_stack: Arc<turul_http_mcp_server::middleware::MiddlewareStack>,
+        sse_enabled: bool,
+        route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
+        tool_fingerprint: Option<String>,
+    ) -> Self {
+        // Create SessionMcpHandler with custom middleware and fingerprint
         let session_handler = SessionMcpHandler::with_shared_stream_manager(
             config.clone(),
             dispatcher.clone(),
@@ -165,9 +203,10 @@ impl LambdaMcpHandler {
             stream_config.clone(),
             stream_manager.clone(),
             middleware_stack.clone(),
-        );
+        )
+        .with_tool_fingerprint(tool_fingerprint.clone());
 
-        // Create StreamableHttpHandler with custom middleware
+        // Create StreamableHttpHandler with custom middleware and fingerprint
         let streamable_handler = StreamableHttpHandler::new(
             Arc::new(config),
             dispatcher,
@@ -175,6 +214,7 @@ impl LambdaMcpHandler {
             stream_manager,
             capabilities,
             middleware_stack,
+            tool_fingerprint,
         );
 
         Self {
@@ -182,9 +222,18 @@ impl LambdaMcpHandler {
             streamable_handler,
             sse_enabled,
             route_registry,
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry: None,
             #[cfg(feature = "cors")]
             cors_config: None,
         }
+    }
+
+    /// Set a dynamic tool registry for request-time change detection.
+    #[cfg(feature = "dynamic-tools")]
+    pub fn with_tool_registry(mut self, registry: Arc<turul_mcp_server::ToolRegistry>) -> Self {
+        self.tool_registry = Some(registry);
+        self
     }
 
     /// Set CORS configuration
@@ -229,6 +278,14 @@ impl LambdaMcpHandler {
         {
             debug!("Handling CORS preflight request");
             return create_preflight_response(cors_config, request_origin.as_deref());
+        }
+
+        // Check for remote tool changes (Dynamic mode with coordination)
+        #[cfg(feature = "dynamic-tools")]
+        if let Some(ref registry) = self.tool_registry {
+            if let Err(e) = registry.check_for_changes().await {
+                tracing::warn!(error = %e, "Failed to check for tool changes");
+            }
         }
 
         // 🚀 DELEGATION: Convert Lambda request to hyper request
@@ -332,6 +389,14 @@ impl LambdaMcpHandler {
 
             // Convert LambdaResponse<LambdaBody> to streaming response
             return Ok(self.convert_lambda_response_to_streaming(preflight_response));
+        }
+
+        // Check for remote tool changes (Dynamic mode with coordination)
+        #[cfg(feature = "dynamic-tools")]
+        if let Some(ref registry) = self.tool_registry {
+            if let Err(e) = registry.check_for_changes().await {
+                tracing::warn!(error = %e, "Failed to check for tool changes (streaming)");
+            }
         }
 
         // 🚀 DELEGATION: Convert Lambda request to hyper request

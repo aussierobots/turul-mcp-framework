@@ -163,6 +163,7 @@ async fn test_mcp_response_structure_compliance() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize with server");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Test real resources/list response structure
     let resources_response = client

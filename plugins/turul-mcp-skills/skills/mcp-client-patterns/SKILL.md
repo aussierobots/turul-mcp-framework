@@ -5,10 +5,11 @@ description: >
   "McpClient", "McpClientBuilder", "connect to MCP server",
   "HttpTransport", "SseTransport", "tool call from client",
   "client session", "client task workflow", "ToolCallResponse",
-  "client error handling", "disconnect", or "client configuration".
+  "client error handling", "disconnect", "client configuration",
+  "refresh_tools", "tool change notification", or "list_changed client".
   Covers transport selection, connection lifecycle, tool/resource/prompt
-  invocation, task workflows, and error handling for the Turul MCP Client
-  (turul-mcp-client crate, Rust).
+  invocation, task workflows, tool change notifications, and error handling
+  for the Turul MCP Client (turul-mcp-client crate, Rust).
 ---
 
 # Turul MCP Client Patterns
@@ -105,13 +106,13 @@ These are the most frequently used methods. For the full API surface, see the `M
 | `is_ready()` | `&self` | `bool` |
 | `list_tools()` | `&self` | `McpClientResult<Vec<Tool>>` |
 | `list_tools_paginated(cursor)` | `Option<Cursor>` | `McpClientResult<ListToolsResult>` |
-| `call_tool(name, args)` | `&str, Value` | `McpClientResult<Vec<ToolResult>>` |
+| `call_tool(name, args)` | `&str, Value` | `McpClientResult<CallToolResult>` |
 | `call_tool_with_task(name, args, ttl)` | `&str, Value, Option<i64>` | `McpClientResult<ToolCallResponse>` |
 | `list_resources()` | `&self` | `McpClientResult<Vec<Resource>>` |
 | `list_resource_templates()` | `&self` | `McpClientResult<Vec<ResourceTemplate>>` |
 | `read_resource(uri)` | `&str` | `McpClientResult<Vec<ResourceContent>>` |
 | `list_prompts()` | `&self` | `McpClientResult<Vec<Prompt>>` |
-| `get_prompt(name, args)` | `&str, Option<Value>` | `McpClientResult<Vec<PromptMessage>>` |
+| `get_prompt(name, args)` | `&str, Option<Value>` | `McpClientResult<GetPromptResult>` |
 | `get_task(id)` | `&str` | `McpClientResult<Task>` |
 | `get_task_result(id)` | `&str` | `McpClientResult<Value>` (blocks until terminal) |
 | `cancel_task(id)` | `&str` | `McpClientResult<Task>` |
@@ -244,6 +245,22 @@ Use `RetryConfig::delay_for_attempt(n)` to calculate backoff delay with jitter.
 The 401 vs 404 distinction matters: 404 means "your session is gone, create a new one" — not an auth problem.
 
 See [references/error-handling-guide.md](references/error-handling-guide.md) for full variant catalog and retry patterns.
+
+## Tool Change Notifications
+
+When a server uses `ToolChangeMode::Dynamic`, clients receive `notifications/tools/list_changed`. The client caches tools and auto-invalidates on notification:
+
+```rust
+// turul-mcp-client v0.3
+// list_tools() returns cached tools; refresh_tools() forces a fresh tools/list call
+let tools = client.list_tools().await?;         // Cached (fast)
+let tools = client.refresh_tools().await?;      // Forces fresh fetch
+
+// After server emits notifications/tools/list_changed,
+// the next list_tools() call automatically fetches fresh data.
+```
+
+For a complete dynamic tools E2E example, see `examples/dynamic-tools-test-client`.
 
 ## Common Mistakes
 

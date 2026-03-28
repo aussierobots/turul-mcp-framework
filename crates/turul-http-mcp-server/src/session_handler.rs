@@ -12,7 +12,7 @@ use std::convert::Infallible;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use bytes::Bytes;
 use futures::Stream;
@@ -153,6 +153,7 @@ pub struct SessionMcpHandler {
     // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance with internal session management
     pub(crate) stream_manager: Arc<StreamManager>,
     pub(crate) middleware_stack: Arc<crate::middleware::MiddlewareStack>,
+    pub(crate) tool_fingerprint: Option<String>,
 }
 
 impl Clone for SessionMcpHandler {
@@ -164,6 +165,7 @@ impl Clone for SessionMcpHandler {
             stream_config: self.stream_config.clone(),
             stream_manager: Arc::clone(&self.stream_manager),
             middleware_stack: Arc::clone(&self.middleware_stack),
+            tool_fingerprint: self.tool_fingerprint.clone(),
         }
     }
 }
@@ -197,6 +199,7 @@ impl SessionMcpHandler {
             stream_config,
             stream_manager,
             middleware_stack,
+            tool_fingerprint: None,
         }
     }
 
@@ -222,7 +225,14 @@ impl SessionMcpHandler {
             stream_config,
             stream_manager,
             middleware_stack,
+            tool_fingerprint: None,
         }
+    }
+
+    /// Set tool fingerprint for session versioning across server restarts
+    pub fn with_tool_fingerprint(mut self, fingerprint: Option<String>) -> Self {
+        self.tool_fingerprint = fingerprint;
+        self
     }
 
     /// Get access to the StreamManager for notifications
@@ -439,13 +449,17 @@ impl SessionMcpHandler {
         };
 
         // Handle the message using proper JSON-RPC enums
-        let (message_result, response_session_id, method_name) = match message {
-            JsonRpcMessage::Request(request) => {
-                debug!("Processing JSON-RPC request: method={}", request.method);
-                let method_name = request.method.clone();
+        // collected_notifications: events captured via temporary StreamManager connection
+        // during dispatch, used for inline POST SSE delivery
+        let (message_result, response_session_id, method_name, collected_notifications) =
+            match message {
+                JsonRpcMessage::Request(request) => {
+                    debug!("Processing JSON-RPC request: method={}", request.method);
+                    let method_name = request.method.clone();
 
-                // Special handling for initialize requests - they create new sessions
-                let (response, response_session_id) = if request.method == "initialize" {
+                    // Special handling for initialize requests - they create new sessions
+                    let (response, response_session_id, inline_notifications) =
+                        if request.method == "initialize" {
                     debug!(
                         "Handling initialize request - creating new session via session storage"
                     );
@@ -487,7 +501,7 @@ impl SessionMcpHandler {
                                 .await;
 
                             // Return the session ID created by session storage for the HTTP header
-                            (response, Some(session_info.session_id))
+                            (response, Some(session_info.session_id), Vec::new())
                         }
                         Err(err) => {
                             error!("Failed to create session during initialize: {}", err);
@@ -499,12 +513,35 @@ impl SessionMcpHandler {
                                     Some(error_msg),
                                 ),
                             );
-                            (error_response, None)
+                            (error_response, None, Vec::new())
                         }
                     }
                 } else {
-                    // For non-initialize requests, create session context if session ID is provided
-                    // Let server-level handlers decide whether to enforce session requirements
+                    // For non-initialize requests, validate session exists and fingerprint matches.
+                    // Returns HTTP 404 (not JSON-RPC error) — session validation is transport-level,
+                    // matching StreamableHttpHandler's behavior for cross-transport consistency.
+                    if let Some(ref session_id_str) = session_id {
+                        if let Err(err) = self.validate_session_exists(session_id_str).await {
+                            warn!(
+                                "Session validation failed for session '{}': {}",
+                                session_id_str, err
+                            );
+                            let body = serde_json::json!({
+                                "error": {
+                                    "code": 404,
+                                    "message": format!("Session validation failed: {}", err)
+                                }
+                            })
+                            .to_string();
+                            return Ok(Response::builder()
+                                .status(StatusCode::NOT_FOUND)
+                                .header(CONTENT_TYPE, "application/json")
+                                .body(convert_to_unified_body(Full::new(Bytes::from(body))))
+                                .unwrap());
+                        }
+                    }
+
+                    // Create session context if session ID is provided
                     let session_context = if let Some(ref session_id_str) = session_id {
                         debug!("Processing request with session: {}", session_id_str);
                         let broadcaster: SharedNotificationBroadcaster =
@@ -525,6 +562,45 @@ impl SessionMcpHandler {
                         None
                     };
 
+                    // Register a temporary StreamManager connection BEFORE dispatch
+                    // so that notifications broadcast during tool execution are
+                    // captured inline rather than relying on a post-hoc storage read.
+                    let is_tool_call = method_name == "tools/call";
+                    let temp_connection = if is_tool_call {
+                        if let Some(ref sid) = session_id {
+                            let (notify_tx, notify_rx) =
+                                tokio::sync::mpsc::channel::<turul_mcp_session_storage::SseEvent>(
+                                    64,
+                                );
+                            let conn_id =
+                                format!("post-{}", uuid::Uuid::now_v7().as_simple());
+                            match self
+                                .stream_manager
+                                .register_streaming_connection(sid, conn_id.clone(), notify_tx)
+                                .await
+                            {
+                                Ok(()) => {
+                                    debug!(
+                                        "Registered temporary POST connection for tool call: session={}, connection={}",
+                                        sid, conn_id
+                                    );
+                                    Some((conn_id, notify_rx, sid.clone()))
+                                }
+                                Err(e) => {
+                                    debug!(
+                                        "Could not register temporary connection (non-fatal): {}",
+                                        e
+                                    );
+                                    None
+                                }
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
                     // Run middleware pipeline and dispatch
                     let (response, _stashed_injection) = if let Some(ctx) = session_context {
                         self.run_middleware_and_dispatch(
@@ -538,7 +614,25 @@ impl SessionMcpHandler {
                         // No session - fast path (no middleware, just dispatch)
                         (self.dispatcher.handle_request(request).await, None)
                     };
-                    (response, session_id)
+
+                    // Drain and unregister the temporary connection
+                    let mut inline_notifications = Vec::new();
+                    if let Some((conn_id, mut notify_rx, sid)) = temp_connection {
+                        while let Ok(event) = notify_rx.try_recv() {
+                            if event.event_type != "ping" && event.event_type != "keepalive" {
+                                debug!(
+                                    "Captured inline notification: session={}, event_type={}",
+                                    sid, event.event_type
+                                );
+                                inline_notifications.push(event);
+                            }
+                        }
+                        self.stream_manager
+                            .unregister_connection(&sid, &conn_id)
+                            .await;
+                    }
+
+                    (response, session_id, inline_notifications)
                 };
 
                 // Convert JsonRpcMessage to JsonRpcMessageResult
@@ -550,7 +644,12 @@ impl SessionMcpHandler {
                         JsonRpcMessageResult::Error(err)
                     }
                 };
-                (message_result, response_session_id, Some(method_name))
+                (
+                    message_result,
+                    response_session_id,
+                    Some(method_name),
+                    inline_notifications,
+                )
             }
             JsonRpcMessage::Notification(notification) => {
                 debug!(
@@ -593,6 +692,7 @@ impl SessionMcpHandler {
                     JsonRpcMessageResult::NoResponse,
                     session_id.clone(),
                     Some(method_name),
+                    Vec::new(),
                 )
             }
         };
@@ -626,19 +726,31 @@ impl SessionMcpHandler {
 
                 if should_use_sse && response_session_id.is_some() {
                     debug!(
-                        "📡 Creating POST SSE stream (mode: {:?}) for tool call with notifications",
-                        accept_mode
+                        "📡 Creating POST SSE stream (mode: {:?}) for tool call with {} inline notifications",
+                        accept_mode,
+                        collected_notifications.len()
                     );
-                    match self
-                        .stream_manager
-                        .create_post_sse_stream(
-                            response_session_id.clone().unwrap(),
-                            response.clone(), // Clone the response for SSE stream creation
-                        )
-                        .await
-                    {
+                    let sse_result = if !collected_notifications.is_empty() {
+                        // Use pre-collected notifications from the temporary connection
+                        self.stream_manager
+                            .create_post_sse_stream_with_notifications(
+                                response_session_id.clone().unwrap(),
+                                response.clone(),
+                                collected_notifications,
+                            )
+                            .await
+                    } else {
+                        // Fallback: read recent events from storage (legacy behavior)
+                        self.stream_manager
+                            .create_post_sse_stream(
+                                response_session_id.clone().unwrap(),
+                                response.clone(),
+                            )
+                            .await
+                    };
+                    match sse_result {
                         Ok(sse_response) => {
-                            debug!("✅ POST SSE stream created successfully");
+                            debug!("POST SSE stream created successfully");
                             Ok(sse_response
                                 .map(|body| body.map_err(|never| match never {}).boxed_unsync()))
                         }
@@ -748,21 +860,26 @@ impl SessionMcpHandler {
             }
         };
 
-        // Validate session exists (do NOT create if missing)
+        // Validate session exists (do NOT create if missing).
+        // Returns HTTP 404 (not JSON-RPC error) — session validation is transport-level,
+        // matching StreamableHttpHandler's behavior for cross-transport consistency.
         if let Err(err) = self.validate_session_exists(&session_id).await {
-            error!(
-                "Session validation failed for Session ID {}: {}",
+            warn!(
+                "Session validation failed for session '{}': {}",
                 session_id, err
             );
-            let error = JsonRpcError::new(
-                None,
-                JsonRpcErrorObject::server_error(
-                    -32003,
-                    &format!("Session validation failed: {}", err),
-                    None,
-                ),
-            );
-            return jsonrpc_error_to_unified_body(error);
+            let body = serde_json::json!({
+                "error": {
+                    "code": 404,
+                    "message": format!("Session validation failed: {}", err)
+                }
+            })
+            .to_string();
+            return Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .header("content-type", "application/json")
+                .body(convert_to_unified_body(Full::new(Bytes::from(body))))
+                .unwrap());
         }
 
         // Extract Last-Event-ID for resumability
@@ -915,6 +1032,26 @@ impl SessionMcpHandler {
                         "Session '{}' has been terminated. Create a new session to continue.",
                         session_id
                     )));
+                }
+                // Check tool fingerprint — mismatch means tools changed, not session invalid
+                if let Some(ref current_fp) = self.tool_fingerprint {
+                    if let Some(stored_fp) = session_info.state.get("mcp:tool_fingerprint") {
+                        if stored_fp.as_str() != Some(current_fp.as_str()) {
+                            info!(
+                                "Tool fingerprint updated for session '{}' (tools changed since session created)",
+                                session_id
+                            );
+                            let _ = self.session_storage
+                                .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
+                                .await;
+                        }
+                    } else {
+                        // Missing fingerprint (legacy session) — store current
+                        info!("Session '{}' has no tool fingerprint, storing current", session_id);
+                        let _ = self.session_storage
+                            .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
+                            .await;
+                    }
                 }
                 debug!("Session validation successful: {}", session_id);
                 Ok(())
@@ -1202,6 +1339,242 @@ mod tests {
             err_msg.to_lowercase().contains("terminated"),
             "Error must mention 'terminated', got: {}",
             err_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn test_fingerprint_mismatch_updates_and_continues() {
+        let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
+            Arc::new(InMemorySessionStorage::new());
+
+        let session = storage
+            .create_session(turul_mcp_protocol::ServerCapabilities::default())
+            .await
+            .unwrap();
+        let session_id = session.session_id.clone();
+        storage
+            .set_session_state(&session_id, "mcp:tool_fingerprint", serde_json::json!("fp_v1"))
+            .await
+            .unwrap();
+
+        // Handler with DIFFERENT fingerprint
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::default());
+        let handler = SessionMcpHandler::with_storage(
+            crate::server::ServerConfig::default(),
+            dispatcher,
+            storage.clone(),
+            crate::stream_manager::StreamConfig::default(),
+            Arc::new(crate::middleware::MiddlewareStack::new()),
+        )
+        .with_tool_fingerprint(Some("fp_v2".to_string()));
+
+        // Session continues — NOT rejected
+        let result = handler.validate_session_exists(&session_id).await;
+        assert!(result.is_ok(), "Fingerprint mismatch must NOT reject session");
+
+        // Stored fingerprint updated to current
+        let stored_fp = storage
+            .get_session_state(&session_id, "mcp:tool_fingerprint")
+            .await
+            .unwrap();
+        assert_eq!(
+            stored_fp.and_then(|v| v.as_str().map(String::from)),
+            Some("fp_v2".to_string()),
+            "Stored fingerprint must be updated to current"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_session_accepts_matching_fingerprint() {
+        let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
+            Arc::new(InMemorySessionStorage::new());
+
+        // Create session with fingerprint "v1"
+        let session = storage
+            .create_session(turul_mcp_protocol::ServerCapabilities::default())
+            .await
+            .unwrap();
+        let session_id = session.session_id.clone();
+        storage
+            .set_session_state(&session_id, "mcp:tool_fingerprint", serde_json::json!("fp_v1"))
+            .await
+            .unwrap();
+
+        // Handler with MATCHING fingerprint
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::default());
+        let handler = SessionMcpHandler::with_storage(
+            crate::server::ServerConfig::default(),
+            dispatcher,
+            storage,
+            crate::stream_manager::StreamConfig::default(),
+            Arc::new(crate::middleware::MiddlewareStack::new()),
+        )
+        .with_tool_fingerprint(Some("fp_v1".to_string()));
+
+        let result = handler.validate_session_exists(&session_id).await;
+        assert!(result.is_ok(), "Matching fingerprint should accept session");
+    }
+
+    #[tokio::test]
+    async fn test_legacy_session_without_fingerprint_gets_current_stored() {
+        let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
+            Arc::new(InMemorySessionStorage::new());
+
+        // Create session WITHOUT fingerprint (pre-feature session)
+        let session = storage
+            .create_session(turul_mcp_protocol::ServerCapabilities::default())
+            .await
+            .unwrap();
+        let session_id = session.session_id.clone();
+        // Deliberately do NOT set mcp:tool_fingerprint
+
+        // Handler WITH fingerprint
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::default());
+        let handler = SessionMcpHandler::with_storage(
+            crate::server::ServerConfig::default(),
+            dispatcher,
+            storage.clone(),
+            crate::stream_manager::StreamConfig::default(),
+            Arc::new(crate::middleware::MiddlewareStack::new()),
+        )
+        .with_tool_fingerprint(Some("current_fp".to_string()));
+
+        // Session continues — NOT rejected
+        let result = handler.validate_session_exists(&session_id).await;
+        assert!(result.is_ok(), "Legacy session must NOT be rejected");
+
+        // Current fingerprint now stored
+        let stored_fp = storage
+            .get_session_state(&session_id, "mcp:tool_fingerprint")
+            .await
+            .unwrap();
+        assert_eq!(
+            stored_fp.and_then(|v| v.as_str().map(String::from)),
+            Some("current_fp".to_string()),
+            "Current fingerprint must be stored for legacy session"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_validate_session_skips_fingerprint_when_handler_has_none() {
+        let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
+            Arc::new(InMemorySessionStorage::new());
+
+        // Create session without fingerprint
+        let session = storage
+            .create_session(turul_mcp_protocol::ServerCapabilities::default())
+            .await
+            .unwrap();
+        let session_id = session.session_id.clone();
+
+        // Handler WITHOUT fingerprint (backward compatible)
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::default());
+        let handler = SessionMcpHandler::with_storage(
+            crate::server::ServerConfig::default(),
+            dispatcher,
+            storage,
+            crate::stream_manager::StreamConfig::default(),
+            Arc::new(crate::middleware::MiddlewareStack::new()),
+        );
+        // tool_fingerprint defaults to None
+
+        let result = handler.validate_session_exists(&session_id).await;
+        assert!(result.is_ok(), "Handler without fingerprint should accept all sessions");
+    }
+
+    // ===================================================================
+    // Fingerprint update tests (fingerprint mismatch = update, not reject)
+    // ===================================================================
+
+    /// When a persisted session has a different fingerprint (e.g., after server restart),
+    /// the session continues and the stored fingerprint is updated to current.
+    #[tokio::test]
+    async fn test_persisted_session_fingerprint_updated_on_mismatch() {
+        let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
+            Arc::new(InMemorySessionStorage::new());
+
+        let session = storage
+            .create_session(turul_mcp_protocol::ServerCapabilities::default())
+            .await
+            .unwrap();
+        let session_id = session.session_id.clone();
+        storage
+            .set_session_state(&session_id, "mcp:tool_fingerprint", serde_json::json!("deploy_v1"))
+            .await
+            .unwrap();
+
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::default());
+        let handler = SessionMcpHandler::with_storage(
+            crate::server::ServerConfig::default(),
+            dispatcher,
+            storage.clone(),
+            crate::stream_manager::StreamConfig::default(),
+            Arc::new(crate::middleware::MiddlewareStack::new()),
+        )
+        .with_tool_fingerprint(Some("deploy_v2".to_string()));
+
+        // Session continues — fingerprint updated
+        let result = handler.validate_session_exists(&session_id).await;
+        assert!(result.is_ok(), "Session must continue on fingerprint mismatch");
+
+        // Stored fingerprint updated to current
+        let stored_fp = storage
+            .get_session_state(&session_id, "mcp:tool_fingerprint")
+            .await
+            .unwrap();
+        assert_eq!(
+            stored_fp.and_then(|v| v.as_str().map(String::from)),
+            Some("deploy_v2".to_string()),
+            "Stored fingerprint must be updated to server's current"
+        );
+
+        // Session still in storage
+        let still_stored = storage.get_session(&session_id).await.unwrap();
+        assert!(still_stored.is_some(), "Session must remain in storage");
+    }
+
+    /// Second request after fingerprint update should proceed without issues
+    #[tokio::test]
+    async fn test_fingerprint_update_is_idempotent() {
+        let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
+            Arc::new(InMemorySessionStorage::new());
+
+        let session = storage
+            .create_session(turul_mcp_protocol::ServerCapabilities::default())
+            .await
+            .unwrap();
+        let session_id = session.session_id.clone();
+        storage
+            .set_session_state(&session_id, "mcp:tool_fingerprint", serde_json::json!("old_fp"))
+            .await
+            .unwrap();
+
+        let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::default());
+        let handler = SessionMcpHandler::with_storage(
+            crate::server::ServerConfig::default(),
+            dispatcher,
+            storage.clone(),
+            crate::stream_manager::StreamConfig::default(),
+            Arc::new(crate::middleware::MiddlewareStack::new()),
+        )
+        .with_tool_fingerprint(Some("new_fp".to_string()));
+
+        // First request: mismatch, fingerprint updated, session continues
+        let result = handler.validate_session_exists(&session_id).await;
+        assert!(result.is_ok(), "First request with mismatch should succeed");
+
+        // Second request: fingerprints now match, should proceed normally
+        let result2 = handler.validate_session_exists(&session_id).await;
+        assert!(result2.is_ok(), "Second request should proceed (fingerprints match)");
+
+        // Fingerprint is current
+        let stored_fp = storage
+            .get_session_state(&session_id, "mcp:tool_fingerprint")
+            .await
+            .unwrap();
+        assert_eq!(
+            stored_fp.and_then(|v| v.as_str().map(String::from)),
+            Some("new_fp".to_string()),
         );
     }
 }

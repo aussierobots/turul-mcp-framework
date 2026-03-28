@@ -145,6 +145,13 @@ pub struct LambdaMcpServerBuilder {
     /// Recovery timeout for stuck tasks (milliseconds)
     task_recovery_timeout_ms: u64,
 
+    /// Tool change detection and notification mode
+    tool_change_mode: turul_mcp_server::ToolChangeMode,
+
+    /// Server state storage for cross-instance coordination (optional)
+    #[cfg(feature = "dynamic-tools")]
+    server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
+
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
     cors_config: Option<CorsConfig>,
@@ -272,6 +279,9 @@ impl LambdaMcpServerBuilder {
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
             task_runtime: None,
             task_recovery_timeout_ms: 300_000, // 5 minutes
+            tool_change_mode: turul_mcp_server::ToolChangeMode::Static,
+            #[cfg(feature = "dynamic-tools")]
+            server_state_storage: None,
             #[cfg(feature = "cors")]
             cors_config: None,
         }
@@ -690,6 +700,36 @@ impl LambdaMcpServerBuilder {
     }
 
     // =============================================================================
+    // DYNAMIC TOOLS CONFIGURATION
+    // =============================================================================
+
+    /// Set the tool change detection and notification mode.
+    ///
+    /// - `Static` (default): No change detection, no fingerprint, no notifications. `listChanged=false`.
+    /// - `Dynamic` (requires `dynamic-tools` feature): Runtime tool activation/deactivation
+    ///   with live `notifications/tools/list_changed`. `listChanged=true`.
+    ///   Optionally pair with `.server_state_storage()` for cross-instance coordination.
+    pub fn tool_change_mode(mut self, mode: turul_mcp_server::ToolChangeMode) -> Self {
+        self.tool_change_mode = mode;
+        self
+    }
+
+    /// Set the server state storage backend for cross-instance coordination.
+    ///
+    /// When provided with `ToolChangeMode::Dynamic`, tool activation state is
+    /// persisted to this backend so multiple server instances share the same
+    /// view of which tools are active. Without this, an in-memory backend is
+    /// used automatically (suitable for single-process deployments).
+    #[cfg(feature = "dynamic-tools")]
+    pub fn server_state_storage(
+        mut self,
+        storage: Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
+    ) -> Self {
+        self.server_state_storage = Some(storage);
+        self
+    }
+
+    // =============================================================================
     // SESSION AND CONFIGURATION METHODS
     // =============================================================================
 
@@ -925,6 +965,9 @@ impl LambdaMcpServerBuilder {
             ));
         }
 
+        // No coherence guard needed: Dynamic mode uses InMemory storage by default
+        // when no explicit server_state_storage is provided.
+
         // Note: SSE behavior depends on which handler method is used:
         // - handle(): Works with run(), but SSE responses may not stream properly
         // - handle_streaming(): Works with run_with_streaming_response() for real SSE streaming
@@ -953,10 +996,14 @@ impl LambdaMcpServerBuilder {
         let has_logging = !self.loggers.is_empty();
         tracing::debug!("🔧 Has logging configured: {}", has_logging);
 
-        // Tools capabilities - truthful reporting (only set if tools are registered)
+        // Tools capabilities — listChanged depends on ToolChangeMode
         if has_tools {
+            let list_changed = !matches!(
+                self.tool_change_mode,
+                turul_mcp_server::ToolChangeMode::Static
+            );
             capabilities.tools = Some(turul_mcp_protocol::initialize::ToolsCapabilities {
-                list_changed: Some(false), // Static framework: no dynamic change sources
+                list_changed: Some(list_changed),
             });
         }
 
@@ -1080,6 +1127,9 @@ impl LambdaMcpServerBuilder {
             handlers.insert("resources/read".to_string(), Arc::new(read_handler));
         }
 
+        // Compute tool fingerprint before tools are moved
+        let tool_fingerprint = turul_mcp_server::compute_tool_fingerprint(&self.tools);
+
         // Create the Lambda server (stores all configuration like MCP server does)
         Ok(LambdaMcpServer::new(
             implementation,
@@ -1106,6 +1156,11 @@ impl LambdaMcpServerBuilder {
             self.middleware_stack,
             self.route_registry,
             self.task_runtime,
+            tool_fingerprint,
+            #[cfg(feature = "dynamic-tools")]
+            !matches!(self.tool_change_mode, turul_mcp_server::ToolChangeMode::Static),
+            #[cfg(feature = "dynamic-tools")]
+            self.server_state_storage,
         ))
     }
 }

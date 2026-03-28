@@ -11,7 +11,7 @@
 
 use async_trait::async_trait;
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::StreamManager;
 use turul_mcp_json_rpc_server::JsonRpcNotification;
@@ -389,7 +389,7 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
             .await
         {
             Ok(event_id) => {
-                info!(
+                debug!(
                     "✅ Sent JSON-RPC notification: session={}, method={}, event_id={}",
                     session_id, notification.method, event_id
                 );

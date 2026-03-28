@@ -106,6 +106,13 @@ pub struct McpServerBuilder {
 
     /// Validation errors collected during builder configuration
     validation_errors: Vec<String>,
+
+    /// Tool change detection mode (default: Static)
+    tool_change_mode: crate::ToolChangeMode,
+
+    /// Server state storage for cross-instance coordination (optional)
+    #[cfg(feature = "dynamic-tools")]
+    server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
 }
 
 impl McpServerBuilder {
@@ -238,7 +245,36 @@ impl McpServerBuilder {
             #[cfg(feature = "http")]
             allow_unauthenticated_ping: None, // Default: use ServerConfig default (true)
             validation_errors: Vec::new(),
+            tool_change_mode: crate::ToolChangeMode::Static,
+            #[cfg(feature = "dynamic-tools")]
+            server_state_storage: None,
         }
+    }
+
+    /// Set the tool change detection mode.
+    ///
+    /// - `Static` (default): No change detection, no fingerprint, no notifications. `listChanged=false`.
+    /// - `Dynamic` (requires `dynamic-tools` feature): Runtime tool activation/deactivation
+    ///   with live `notifications/tools/list_changed`. `listChanged=true`.
+    ///   Optionally pair with `.server_state_storage()` for cross-instance coordination.
+    pub fn tool_change_mode(mut self, mode: crate::ToolChangeMode) -> Self {
+        self.tool_change_mode = mode;
+        self
+    }
+
+    /// Set the server state storage backend for cross-instance coordination.
+    ///
+    /// When provided with `ToolChangeMode::Dynamic`, tool activation state is
+    /// persisted to this backend so multiple server instances share the same
+    /// view of which tools are active. Without this, an in-memory backend is
+    /// used automatically (suitable for single-process deployments).
+    #[cfg(feature = "dynamic-tools")]
+    pub fn server_state_storage(
+        mut self,
+        storage: Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
+    ) -> Self {
+        self.server_state_storage = Some(storage);
+        self
     }
 
     /// Sets the server name for identification
@@ -1468,6 +1504,9 @@ impl McpServerBuilder {
             )));
         }
 
+        // No coherence guard needed: Dynamic mode uses InMemory storage by default
+        // when no explicit server_state_storage is provided.
+
         // Coherence guard: reject taskSupport=required without task runtime
         if self.task_runtime.is_none() {
             for (name, tool) in &self.tools {
@@ -1503,16 +1542,15 @@ impl McpServerBuilder {
         let has_logging = !self.loggers.is_empty();
         tracing::debug!("🔧 Has logging configured: {}", has_logging);
 
-        // Tools capabilities - support notifications only if tools are registered AND we have dynamic change sources
-        // Note: In current static framework, tool set is fixed at build time and doesn't change
-        // list_changed should only be true when dynamic change sources are wired, such as:
-        // - Hot-reload configuration systems
-        // - Admin APIs for runtime tool registration
-        // - Plugin systems with dynamic tool loading
+        // Tools capabilities — listChanged depends on ToolChangeMode
         if has_tools {
+            let list_changed = match self.tool_change_mode {
+                crate::ToolChangeMode::Static => false,
+                #[cfg(feature = "dynamic-tools")]
+                crate::ToolChangeMode::Dynamic => true,
+            };
             self.capabilities.tools = Some(ToolsCapabilities {
-                // Static framework: no dynamic change sources = no list changes
-                list_changed: Some(false),
+                list_changed: Some(list_changed),
             });
         }
 
@@ -1677,6 +1715,14 @@ impl McpServerBuilder {
             );
         }
 
+        // Compute tool fingerprint only for dynamic modes (listChanged=true)
+        // Static mode: no fingerprint check, no change detection
+        let tool_fingerprint = match self.tool_change_mode {
+            crate::ToolChangeMode::Static => String::new(),
+            #[cfg(feature = "dynamic-tools")]
+            _ => crate::tool::compute_tool_fingerprint(&self.tools),
+        };
+
         // Create server
         Ok(McpServer::new(
             implementation,
@@ -1691,6 +1737,11 @@ impl McpServerBuilder {
             self.strict_lifecycle,
             self.middleware_stack,
             self.route_registry,
+            tool_fingerprint,
+            #[cfg(feature = "dynamic-tools")]
+            !matches!(self.tool_change_mode, crate::ToolChangeMode::Static),
+            #[cfg(feature = "dynamic-tools")]
+            self.server_state_storage,
             #[cfg(feature = "http")]
             self.bind_address,
             #[cfg(feature = "http")]
@@ -2408,5 +2459,33 @@ mod tests {
             result.is_ok(),
             "build() should allow taskSupport=optional without runtime"
         );
+    }
+
+    /// ADR-023 capability truthfulness: Static mode advertises listChanged=false
+    /// because the server cannot push notifications — clients must re-initialize.
+    #[test]
+    fn test_fingerprint_only_capability_list_changed_false() {
+        let server = McpServerBuilder::new()
+            .name("test")
+            .tool(TestTool::new())
+            .build()
+            .unwrap();
+        let tools_cap = server.capabilities.tools.as_ref().unwrap();
+        assert_eq!(tools_cap.list_changed, Some(false));
+    }
+
+    /// ADR-023 capability truthfulness: Dynamic mode advertises listChanged=true
+    /// because the ToolRegistry can push notifications/tools/list_changed via SSE.
+    #[cfg(feature = "dynamic-tools")]
+    #[test]
+    fn test_dynamic_capability_list_changed_true() {
+        let server = McpServerBuilder::new()
+            .name("test")
+            .tool_change_mode(crate::ToolChangeMode::Dynamic)
+            .tool(TestTool::new())
+            .build()
+            .unwrap();
+        let tools_cap = server.capabilities.tools.as_ref().unwrap();
+        assert_eq!(tools_cap.list_changed, Some(true));
     }
 }

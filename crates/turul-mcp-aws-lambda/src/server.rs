@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tracing::info;
+use tracing::{debug, info};
 
 use turul_http_mcp_server::{ServerConfig, StreamConfig, StreamManager};
 use turul_mcp_protocol::{Implementation, ServerCapabilities};
@@ -77,6 +77,14 @@ pub struct LambdaMcpServer {
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     /// Optional task runtime for MCP task support
     task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
+    /// Stable fingerprint of the registered tool set for session versioning
+    tool_fingerprint: String,
+    /// Dynamic tool registry (only in Dynamic mode)
+    #[cfg(feature = "dynamic-tools")]
+    tool_registry: Option<Arc<turul_mcp_server::ToolRegistry>>,
+    /// Whether cross-instance coordination is enabled (explicit storage was provided)
+    #[cfg(feature = "dynamic-tools")]
+    coordination_enabled: bool,
 }
 
 impl LambdaMcpServer {
@@ -106,6 +114,10 @@ impl LambdaMcpServer {
         middleware_stack: turul_http_mcp_server::middleware::MiddlewareStack,
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
         task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
+        tool_fingerprint: String,
+        #[cfg(feature = "dynamic-tools")] dynamic_tools: bool,
+        #[cfg(feature = "dynamic-tools")]
+        server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
     ) -> Self {
         // Create session manager with server capabilities
         let session_manager = Arc::new(SessionManager::with_storage_and_timeouts(
@@ -114,6 +126,29 @@ impl LambdaMcpServer {
             std::time::Duration::from_secs(30 * 60), // 30 minutes default
             std::time::Duration::from_secs(60),      // 1 minute cleanup interval
         ));
+
+        // Coordination enabled only for shared backends that can be accessed by multiple instances.
+        // InMemory and SQLite are local-only. Only PostgreSQL and DynamoDB are shared.
+        #[cfg(feature = "dynamic-tools")]
+        let coordination_enabled = server_state_storage
+            .as_ref()
+            .map(|s| matches!(s.backend_name(), "PostgreSQL" | "DynamoDB"))
+            .unwrap_or(false);
+
+        // Create ToolRegistry when dynamic mode is enabled
+        #[cfg(feature = "dynamic-tools")]
+        let tool_registry = if dynamic_tools {
+            let storage = server_state_storage.unwrap_or_else(|| {
+                Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new())
+            });
+            Some(Arc::new(turul_mcp_server::ToolRegistry::new(
+                tools.clone(),
+                session_manager.clone(),
+                storage,
+            )))
+        } else {
+            None
+        };
 
         Self {
             implementation,
@@ -141,6 +176,11 @@ impl LambdaMcpServer {
             middleware_stack,
             route_registry,
             task_runtime,
+            tool_fingerprint,
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry,
+            #[cfg(feature = "dynamic-tools")]
+            coordination_enabled,
         }
     }
 
@@ -180,6 +220,22 @@ impl LambdaMcpServer {
         // Start session cleanup task (same as MCP server)
         let _cleanup_task = self.session_manager.clone().start_cleanup_task();
 
+        // Sync tool registry with shared storage on startup (coordination mode only)
+        #[cfg(feature = "dynamic-tools")]
+        if self.coordination_enabled {
+            if let Some(ref registry) = self.tool_registry {
+                use tracing::warn;
+                match registry.sync_from_storage().await {
+                    Ok(_) => {
+                        info!("Dynamic: synced tool registry with shared storage");
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Dynamic: failed to sync with shared storage on cold start");
+                    }
+                }
+            }
+        }
+
         // Cold-start recovery: handler() is called once per Lambda cold start from main().
         // The returned LambdaMcpHandler is Clone'd for each request — recovery runs exactly once.
         if let Some(ref runtime) = self.task_runtime {
@@ -204,6 +260,39 @@ impl LambdaMcpServer {
             self.stream_config.clone(),
         ));
 
+        // Set up SSE event bridge between SessionManager and StreamManager.
+        // This ensures that events from ToolRegistry.broadcast_notification()
+        // (which go through SessionManager) are forwarded to StreamManager where
+        // registered POST SSE connections can receive them.
+        {
+            let bridge_stream_manager = Arc::clone(&stream_manager);
+            let mut global_events = self.session_manager.subscribe_all_session_events();
+
+            tokio::spawn(async move {
+                debug!("Lambda SSE Event Bridge: started");
+
+                while let Ok((session_id, event)) = global_events.recv().await {
+                    if let turul_mcp_server::session::SessionEvent::Custom {
+                        event_type,
+                        data,
+                    } = event
+                    {
+                        if let Err(e) = bridge_stream_manager
+                            .broadcast_to_session(&session_id, event_type, data)
+                            .await
+                        {
+                            debug!(
+                                "Lambda SSE Bridge: broadcast to session {} failed: {} (normal if no active connections)",
+                                session_id, e
+                            );
+                        }
+                    }
+                }
+
+                debug!("Lambda SSE Event Bridge: stopped");
+            });
+        }
+
         // Create JSON-RPC dispatcher
         use turul_mcp_json_rpc_server::JsonRpcDispatcher;
         let mut dispatcher = JsonRpcDispatcher::new();
@@ -216,17 +305,22 @@ impl LambdaMcpServer {
             self.instructions.clone(),
             self.session_manager.clone(),
             self.strict_lifecycle,
+            self.tool_fingerprint.clone(),
         );
         dispatcher.register_method("initialize".to_string(), init_handler);
 
         // Create session-aware tools/list handler (reuse MCP server handler)
         use turul_mcp_server::ListToolsHandler;
-        let list_handler = ListToolsHandler::new_with_session_manager(
+        let mut list_handler = ListToolsHandler::new_with_session_manager(
             self.tools.clone(),
             self.session_manager.clone(),
             self.strict_lifecycle,
             self.task_runtime.is_some(),
         );
+        #[cfg(feature = "dynamic-tools")]
+        if let Some(ref registry) = self.tool_registry {
+            list_handler = list_handler.with_tool_registry(Arc::clone(registry));
+        }
         dispatcher.register_method("tools/list".to_string(), list_handler);
 
         // Create session-aware tool handler for tools/call (reuse MCP server handler)
@@ -238,6 +332,10 @@ impl LambdaMcpServer {
         );
         if let Some(ref runtime) = self.task_runtime {
             tool_handler = tool_handler.with_task_runtime(Arc::clone(runtime));
+        }
+        #[cfg(feature = "dynamic-tools")]
+        if let Some(ref registry) = self.tool_registry {
+            tool_handler = tool_handler.with_tool_registry(Arc::clone(registry));
         }
         dispatcher.register_method("tools/call".to_string(), tool_handler);
 
@@ -266,7 +364,7 @@ impl LambdaMcpServer {
         // Create the Lambda handler with all components and middleware
         let middleware_stack = Arc::new(self.middleware_stack.clone());
 
-        Ok(LambdaMcpHandler::with_middleware(
+        let handler = LambdaMcpHandler::with_middleware_and_fingerprint(
             self.server_config.clone(),
             Arc::new(dispatcher),
             self.session_storage.clone(),
@@ -276,7 +374,17 @@ impl LambdaMcpServer {
             middleware_stack,
             self.enable_sse,
             Arc::clone(&self.route_registry),
-        ))
+            Some(self.tool_fingerprint.clone()),
+        );
+
+        #[cfg(feature = "dynamic-tools")]
+        let handler = if let Some(ref registry) = self.tool_registry {
+            handler.with_tool_registry(Arc::clone(registry))
+        } else {
+            handler
+        };
+
+        Ok(handler)
     }
 
     /// Get information about the session storage backend

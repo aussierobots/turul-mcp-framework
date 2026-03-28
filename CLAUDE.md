@@ -76,6 +76,9 @@ struct Calculator;  // Framework → tools/call
 #[mcp_tool(method = "tools/call")]  // NO METHOD STRINGS!
 ```
 
+### Workspace Dependencies
+All crate dependencies MUST use `workspace = true` references. Declare versions in root `Cargo.toml` `[workspace.dependencies]`, reference with `.workspace = true` in crate `Cargo.toml`. Add crate-specific features inline: `hyper = { workspace = true, features = ["http1"] }`.
+
 ### API Conventions
 - **SessionContext**: Use `get_typed_state(key).await` and `set_typed_state(key, value).await?`
 - **Builder Pattern**: `McpServer::builder()` not `McpServerBuilder::new()`
@@ -94,6 +97,22 @@ additional_properties: Option<bool>,
 // WRONG - Never serialize as snake_case
 additional_properties: Option<bool>,  // becomes "additional_properties"
 ```
+
+### Notification Wire Format: Always Use JsonRpcNotification
+
+**CRITICAL**: Protocol notification types (e.g., `ToolListChangedNotification`, `ResourceListChangedNotification`) are **NOT wire-complete**. They contain MCP-specific fields (`method`, `params`) but lack the required `jsonrpc: "2.0"` envelope.
+
+```rust
+// CORRECT — wire-complete JSON-RPC notification for transport:
+let notification = JsonRpcNotification::new("notifications/tools/list_changed".to_string());
+// Serializes to: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
+
+// WRONG — missing jsonrpc field, will fail client-side validation:
+let notification = ToolListChangedNotification::new();
+// Serializes to: {"method":"notifications/tools/list_changed"}  ← BROKEN
+```
+
+This applies to ALL notification types sent via SSE/HTTP transport. The protocol `*Notification` types are for parsing/type safety, not for direct wire emission.
 
 ### Critical Error Handling Rules
 

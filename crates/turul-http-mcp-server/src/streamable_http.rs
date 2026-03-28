@@ -20,7 +20,7 @@ use http_body_util::{BodyExt, Full};
 use hyper::header::{ACCEPT, CONTENT_TYPE};
 use hyper::{HeaderMap, Method, Request, Response, StatusCode};
 use serde_json::Value;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 use turul_mcp_session_storage::SessionView;
 
 use crate::ServerConfig;
@@ -414,6 +414,7 @@ pub struct StreamableHttpHandler {
     stream_manager: Arc<crate::StreamManager>,
     server_capabilities: turul_mcp_protocol::ServerCapabilities,
     pub(crate) middleware_stack: Arc<crate::middleware::MiddlewareStack>,
+    tool_fingerprint: Option<String>,
 }
 
 impl StreamableHttpHandler {
@@ -424,6 +425,7 @@ impl StreamableHttpHandler {
         stream_manager: Arc<crate::StreamManager>,
         server_capabilities: turul_mcp_protocol::ServerCapabilities,
         middleware_stack: Arc<crate::middleware::MiddlewareStack>,
+        tool_fingerprint: Option<String>,
     ) -> Self {
         Self {
             config,
@@ -432,6 +434,7 @@ impl StreamableHttpHandler {
             stream_manager,
             server_capabilities,
             middleware_stack,
+            tool_fingerprint,
         }
     }
 
@@ -629,6 +632,33 @@ impl StreamableHttpHandler {
                         "Session '{}' has been terminated. Create a new session to continue.",
                         session_id
                     )));
+                }
+                // Check tool fingerprint — mismatch means tools changed
+                if let Some(ref current_fp) = self.tool_fingerprint {
+                    if let Some(stored_fp) = session_info.state.get("mcp:tool_fingerprint") {
+                        if stored_fp.as_str() != Some(current_fp.as_str()) {
+                            // Fingerprint mismatch — tools changed since this session was created.
+                            // Session is still valid. Update the stored fingerprint and continue.
+                            // The client will discover new tools on their next tools/list call.
+                            // In dynamic modes, a notification is also broadcast.
+                            info!(
+                                "Tool fingerprint updated for session '{}' (tools changed since session created)",
+                                session_id
+                            );
+                            let _ = self.session_storage
+                                .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
+                                .await;
+                        }
+                    } else {
+                        // Missing fingerprint (pre-feature sessions) — store current fingerprint
+                        info!(
+                            "Session '{}' has no tool fingerprint, storing current",
+                            session_id
+                        );
+                        let _ = self.session_storage
+                            .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
+                            .await;
+                    }
                 }
                 debug!("Session validation successful: {}", session_id);
                 Ok(())
@@ -1494,6 +1524,11 @@ impl StreamableHttpHandler {
                         "Starting progress forwarding task for session: {}",
                         session_id_clone
                     );
+
+                    // No replay needed: the POST SSE connection is registered BEFORE
+                    // dispatch, so all events emitted during request execution are
+                    // delivered live via progress_tx. Replay would double-deliver them.
+                    // (GET SSE resumability uses Last-Event-ID separately.)
 
                     // CRITICAL: Use select to handle both progress events AND explicit shutdown
                     loop {

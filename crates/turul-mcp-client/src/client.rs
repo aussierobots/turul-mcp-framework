@@ -2,6 +2,7 @@
 
 use serde_json::{Value, json};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
@@ -22,6 +23,12 @@ use turul_mcp_protocol::{
     ListToolsResult, Prompt, ReadResourceResult, Resource, Tool,
 };
 
+/// Callback type for receiving server notifications.
+///
+/// The callback receives the notification method (e.g., `"notifications/tools/list_changed"`)
+/// and the optional params object.
+pub type NotificationCallback = Arc<dyn Fn(&str, Option<&Value>) + Send + Sync>;
+
 /// Main MCP client
 pub struct McpClient {
     /// Transport layer
@@ -36,6 +43,14 @@ pub struct McpClient {
     request_counter: Arc<std::sync::atomic::AtomicU64>,
     /// Handle for the response consumer task (sends JSON-RPC responses back to server)
     response_consumer_handle: Arc<parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    /// Cached tool list (invalidated by `notifications/tools/list_changed`)
+    cached_tools: Arc<RwLock<Option<Vec<Tool>>>>,
+    /// Cached resource list (invalidated by `notifications/resources/list_changed`)
+    cached_resources: Arc<RwLock<Option<Vec<Resource>>>>,
+    /// Cached prompt list (invalidated by `notifications/prompts/list_changed`)
+    cached_prompts: Arc<RwLock<Option<Vec<Prompt>>>>,
+    /// User-supplied notification callback
+    notification_callback: Option<NotificationCallback>,
 }
 
 impl Drop for McpClient {
@@ -91,6 +106,15 @@ impl Drop for McpClient {
 impl McpClient {
     /// Create a new MCP client with the given transport
     pub fn new(transport: BoxedTransport, config: ClientConfig) -> Self {
+        Self::new_with_callback(transport, config, None)
+    }
+
+    /// Create a new MCP client with an optional notification callback
+    fn new_with_callback(
+        transport: BoxedTransport,
+        config: ClientConfig,
+        notification_callback: Option<NotificationCallback>,
+    ) -> Self {
         let session = Arc::new(SessionManager::new(config.clone()));
 
         Self {
@@ -100,6 +124,10 @@ impl McpClient {
             stream_handler: Arc::new(tokio::sync::Mutex::new(StreamHandler::new())),
             request_counter: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             response_consumer_handle: Arc::new(parking_lot::Mutex::new(None)),
+            cached_tools: Arc::new(RwLock::new(None)),
+            cached_resources: Arc::new(RwLock::new(None)),
+            cached_prompts: Arc::new(RwLock::new(None)),
+            notification_callback,
         }
     }
 
@@ -128,6 +156,59 @@ impl McpClient {
                 let mut stream_handler = self.stream_handler.lock().await;
                 stream_handler.set_receiver(receiver);
                 stream_handler.set_response_sender(response_tx);
+
+                // Register internal notification handler for list_changed signals
+                {
+                    let cached_tools = Arc::clone(&self.cached_tools);
+                    let cached_resources = Arc::clone(&self.cached_resources);
+                    let cached_prompts = Arc::clone(&self.cached_prompts);
+                    let user_callback = self.notification_callback.clone();
+
+                    stream_handler.on_notification(move |notification| {
+                        let method = notification
+                            .get("method")
+                            .and_then(|m| m.as_str())
+                            .unwrap_or("");
+                        let params = notification.get("params");
+
+                        match method {
+                            "notifications/tools/list_changed" => {
+                                info!("Server sent notifications/tools/list_changed — invalidating tool cache");
+                                // Invalidate synchronously using try_write to avoid async in sync callback
+                                if let Ok(mut cache) = cached_tools.try_write() {
+                                    *cache = None;
+                                } else {
+                                    warn!("Could not acquire tool cache write lock for invalidation");
+                                }
+                            }
+                            "notifications/resources/list_changed" => {
+                                info!("Server sent notifications/resources/list_changed — invalidating resource cache");
+                                if let Ok(mut cache) = cached_resources.try_write() {
+                                    *cache = None;
+                                } else {
+                                    warn!("Could not acquire resource cache write lock for invalidation");
+                                }
+                            }
+                            "notifications/prompts/list_changed" => {
+                                info!("Server sent notifications/prompts/list_changed — invalidating prompt cache");
+                                if let Ok(mut cache) = cached_prompts.try_write() {
+                                    *cache = None;
+                                } else {
+                                    warn!("Could not acquire prompt cache write lock for invalidation");
+                                }
+                            }
+                            _ => {
+                                debug!(method = method, "Received server notification");
+                            }
+                        }
+
+                        // Forward to user callback if registered
+                        if let Some(ref cb) = user_callback {
+                            cb(method, params);
+                        }
+                    });
+                }
+
                 stream_handler.start().await?;
 
                 // Spawn consumer task that drains the channel and sends responses
@@ -465,9 +546,48 @@ impl McpClient {
         Ok(())
     }
 
-    /// List available tools
+    /// List available tools (returns cached result if available)
+    ///
+    /// The cache is automatically invalidated when the server sends a
+    /// `notifications/tools/list_changed` notification. Use [`refresh_tools`](Self::refresh_tools)
+    /// to force a fresh fetch.
     pub async fn list_tools(&self) -> McpClientResult<Vec<Tool>> {
-        debug!("Listing tools");
+        // Return cached tools if available
+        {
+            let cache = self.cached_tools.read().await;
+            if let Some(ref tools) = *cache {
+                debug!(count = tools.len(), "Returning cached tools");
+                return Ok(tools.clone());
+            }
+        }
+
+        let tools = self.fetch_tools().await?;
+
+        // Update cache
+        {
+            let mut cache = self.cached_tools.write().await;
+            *cache = Some(tools.clone());
+        }
+
+        Ok(tools)
+    }
+
+    /// Force a fresh fetch of tools from the server, bypassing and updating the cache.
+    pub async fn refresh_tools(&self) -> McpClientResult<Vec<Tool>> {
+        let tools = self.fetch_tools().await?;
+
+        // Update cache
+        {
+            let mut cache = self.cached_tools.write().await;
+            *cache = Some(tools.clone());
+        }
+
+        Ok(tools)
+    }
+
+    /// Fetch tools from the server (no cache interaction).
+    async fn fetch_tools(&self) -> McpClientResult<Vec<Tool>> {
+        debug!("Fetching tools from server");
 
         let request = json!({
             "jsonrpc": "2.0",
@@ -542,9 +662,41 @@ impl McpClient {
         Ok(call_response)
     }
 
-    /// List available resources
+    /// List available resources (returns cached result if available)
+    ///
+    /// The cache is automatically invalidated when the server sends a
+    /// `notifications/resources/list_changed` notification. Use
+    /// [`refresh_resources`](Self::refresh_resources) to force a fresh fetch.
     pub async fn list_resources(&self) -> McpClientResult<Vec<Resource>> {
-        debug!("Listing resources");
+        {
+            let cache = self.cached_resources.read().await;
+            if let Some(ref resources) = *cache {
+                debug!(count = resources.len(), "Returning cached resources");
+                return Ok(resources.clone());
+            }
+        }
+
+        let resources = self.fetch_resources().await?;
+        {
+            let mut cache = self.cached_resources.write().await;
+            *cache = Some(resources.clone());
+        }
+        Ok(resources)
+    }
+
+    /// Force a fresh fetch of resources from the server, bypassing and updating the cache.
+    pub async fn refresh_resources(&self) -> McpClientResult<Vec<Resource>> {
+        let resources = self.fetch_resources().await?;
+        {
+            let mut cache = self.cached_resources.write().await;
+            *cache = Some(resources.clone());
+        }
+        Ok(resources)
+    }
+
+    /// Fetch resources from the server (no cache interaction).
+    async fn fetch_resources(&self) -> McpClientResult<Vec<Resource>> {
+        debug!("Fetching resources from server");
 
         let request = json!({
             "jsonrpc": "2.0",
@@ -678,9 +830,41 @@ impl McpClient {
         Ok(templates_response)
     }
 
-    /// List available prompts
+    /// List available prompts (returns cached result if available)
+    ///
+    /// The cache is automatically invalidated when the server sends a
+    /// `notifications/prompts/list_changed` notification. Use
+    /// [`refresh_prompts`](Self::refresh_prompts) to force a fresh fetch.
     pub async fn list_prompts(&self) -> McpClientResult<Vec<Prompt>> {
-        debug!("Listing prompts");
+        {
+            let cache = self.cached_prompts.read().await;
+            if let Some(ref prompts) = *cache {
+                debug!(count = prompts.len(), "Returning cached prompts");
+                return Ok(prompts.clone());
+            }
+        }
+
+        let prompts = self.fetch_prompts().await?;
+        {
+            let mut cache = self.cached_prompts.write().await;
+            *cache = Some(prompts.clone());
+        }
+        Ok(prompts)
+    }
+
+    /// Force a fresh fetch of prompts from the server, bypassing and updating the cache.
+    pub async fn refresh_prompts(&self) -> McpClientResult<Vec<Prompt>> {
+        let prompts = self.fetch_prompts().await?;
+        {
+            let mut cache = self.cached_prompts.write().await;
+            *cache = Some(prompts.clone());
+        }
+        Ok(prompts)
+    }
+
+    /// Fetch prompts from the server (no cache interaction).
+    async fn fetch_prompts(&self) -> McpClientResult<Vec<Prompt>> {
+        debug!("Fetching prompts from server");
 
         let request = json!({
             "jsonrpc": "2.0",
@@ -962,6 +1146,17 @@ impl McpClient {
         self.stream_handler.lock().await
     }
 
+    /// Invalidate all cached lists (tools, resources, prompts).
+    ///
+    /// The next call to `list_tools()`, `list_resources()`, or `list_prompts()`
+    /// will fetch fresh data from the server.
+    pub async fn invalidate_caches(&self) {
+        *self.cached_tools.write().await = None;
+        *self.cached_resources.write().await = None;
+        *self.cached_prompts.write().await = None;
+        debug!("All list caches invalidated");
+    }
+
     /// Get session information
     pub async fn session_info(&self) -> crate::session::SessionInfo {
         self.session.session_info().await
@@ -1045,6 +1240,7 @@ pub struct McpClientBuilder {
     transport: Option<BoxedTransport>,
     url: Option<String>,
     config: Option<ClientConfig>,
+    notification_callback: Option<NotificationCallback>,
 }
 
 impl McpClientBuilder {
@@ -1054,6 +1250,7 @@ impl McpClientBuilder {
             transport: None,
             url: None,
             config: None,
+            notification_callback: None,
         }
     }
 
@@ -1090,6 +1287,22 @@ impl McpClientBuilder {
         self
     }
 
+    /// Register a callback for server notifications.
+    ///
+    /// The callback fires for every server notification, including
+    /// `notifications/tools/list_changed`, `notifications/resources/list_changed`,
+    /// and `notifications/prompts/list_changed`.
+    ///
+    /// Note: The built-in cache invalidation for `list_changed` notifications
+    /// always runs regardless of whether a user callback is registered.
+    pub fn on_notification<F>(mut self, callback: F) -> Self
+    where
+        F: Fn(&str, Option<&Value>) + Send + Sync + 'static,
+    {
+        self.notification_callback = Some(Arc::new(callback));
+        self
+    }
+
     /// Build the client
     ///
     /// If `with_url()` was used, the transport is constructed here with `ConnectionConfig` applied.
@@ -1122,7 +1335,7 @@ impl McpClientBuilder {
             panic!("Transport must be set via with_transport() or with_url() before building");
         };
 
-        McpClient::new(transport, config)
+        McpClient::new_with_callback(transport, config, self.notification_callback)
     }
 }
 
@@ -1985,5 +2198,276 @@ mod tests {
             result.is_err(),
             "Malformed response should return error, not panic"
         );
+    }
+
+    // ── Cache and notification tests ─────────────────────────────────────
+
+    /// Test: list_tools() caches results and returns cached data on second call.
+    #[tokio::test]
+    async fn test_list_tools_caches_result() {
+        let mut transport = StatefulMockTransport::new();
+
+        // Init
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-1"),
+            "2025-11-25",
+        )));
+
+        // First list_tools call
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "result": {
+                "tools": [
+                    {"name": "tool_a", "description": "Tool A", "inputSchema": {"type": "object"}}
+                ]
+            }
+        })));
+
+        // No second response queued — if list_tools makes a second request, it will error
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        client.connect().await.unwrap();
+
+        let tools1 = client.list_tools().await.unwrap();
+        assert_eq!(tools1.len(), 1);
+        assert_eq!(tools1[0].name, "tool_a");
+
+        // Second call should use cache (no network request)
+        let tools2 = client.list_tools().await.unwrap();
+        assert_eq!(tools2.len(), 1);
+        assert_eq!(tools2[0].name, "tool_a");
+    }
+
+    /// Test: notifications/tools/list_changed invalidates the tool cache.
+    #[tokio::test]
+    async fn test_tools_list_changed_notification_invalidates_cache() {
+        let (mock, _notifications) = MockTransport::new();
+        let event_sender = mock.event_sender();
+
+        let client = McpClientBuilder::new()
+            .with_transport(Box::new(mock))
+            .build();
+
+        client.connect().await.unwrap();
+
+        // Manually populate the tool cache
+        {
+            let mut cache = client.cached_tools.write().await;
+            *cache = Some(vec![]);
+        }
+
+        // Verify cache is populated
+        assert!(client.cached_tools.read().await.is_some());
+
+        // Send notifications/tools/list_changed
+        event_sender
+            .send(ServerEvent::Notification(json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/tools/list_changed"
+            })))
+            .unwrap();
+
+        // Wait for the notification to be processed
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        // Cache should be invalidated
+        assert!(
+            client.cached_tools.read().await.is_none(),
+            "Tool cache should be invalidated after notifications/tools/list_changed"
+        );
+    }
+
+    /// Test: notifications/resources/list_changed invalidates the resource cache.
+    #[tokio::test]
+    async fn test_resources_list_changed_notification_invalidates_cache() {
+        let (mock, _notifications) = MockTransport::new();
+        let event_sender = mock.event_sender();
+
+        let client = McpClientBuilder::new()
+            .with_transport(Box::new(mock))
+            .build();
+
+        client.connect().await.unwrap();
+
+        // Populate resource cache
+        {
+            let mut cache = client.cached_resources.write().await;
+            *cache = Some(vec![]);
+        }
+
+        assert!(client.cached_resources.read().await.is_some());
+
+        event_sender
+            .send(ServerEvent::Notification(json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/resources/list_changed"
+            })))
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        assert!(
+            client.cached_resources.read().await.is_none(),
+            "Resource cache should be invalidated after notifications/resources/list_changed"
+        );
+    }
+
+    /// Test: notifications/prompts/list_changed invalidates the prompt cache.
+    #[tokio::test]
+    async fn test_prompts_list_changed_notification_invalidates_cache() {
+        let (mock, _notifications) = MockTransport::new();
+        let event_sender = mock.event_sender();
+
+        let client = McpClientBuilder::new()
+            .with_transport(Box::new(mock))
+            .build();
+
+        client.connect().await.unwrap();
+
+        // Populate prompt cache
+        {
+            let mut cache = client.cached_prompts.write().await;
+            *cache = Some(vec![]);
+        }
+
+        assert!(client.cached_prompts.read().await.is_some());
+
+        event_sender
+            .send(ServerEvent::Notification(json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/prompts/list_changed"
+            })))
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        assert!(
+            client.cached_prompts.read().await.is_none(),
+            "Prompt cache should be invalidated after notifications/prompts/list_changed"
+        );
+    }
+
+    /// Test: User notification callback is invoked on server notifications.
+    #[tokio::test]
+    async fn test_user_notification_callback_fires() {
+        let (mock, _notifications) = MockTransport::new();
+        let event_sender = mock.event_sender();
+
+        let received_methods = Arc::new(parking_lot::Mutex::new(Vec::<String>::new()));
+        let received_methods_clone = Arc::clone(&received_methods);
+
+        let client = McpClientBuilder::new()
+            .with_transport(Box::new(mock))
+            .on_notification(move |method, _params| {
+                received_methods_clone.lock().push(method.to_string());
+            })
+            .build();
+
+        client.connect().await.unwrap();
+
+        // Send a tools/list_changed notification
+        event_sender
+            .send(ServerEvent::Notification(json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/tools/list_changed"
+            })))
+            .unwrap();
+
+        // Send a custom notification
+        event_sender
+            .send(ServerEvent::Notification(json!({
+                "jsonrpc": "2.0",
+                "method": "notifications/custom/event",
+                "params": {"key": "value"}
+            })))
+            .unwrap();
+
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        let methods = received_methods.lock();
+        assert!(
+            methods.contains(&"notifications/tools/list_changed".to_string()),
+            "User callback should receive tools/list_changed, got: {:?}",
+            *methods
+        );
+        assert!(
+            methods.contains(&"notifications/custom/event".to_string()),
+            "User callback should receive custom notifications, got: {:?}",
+            *methods
+        );
+    }
+
+    /// Test: refresh_tools() bypasses cache.
+    #[tokio::test]
+    async fn test_refresh_tools_bypasses_cache() {
+        let mut transport = StatefulMockTransport::new();
+
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-1"),
+            "2025-11-25",
+        )));
+
+        // First list_tools
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "result": {
+                "tools": [
+                    {"name": "tool_a", "description": "Tool A", "inputSchema": {"type": "object"}}
+                ]
+            }
+        })));
+
+        // refresh_tools response (different tools)
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_2",
+            "result": {
+                "tools": [
+                    {"name": "tool_a", "description": "Tool A", "inputSchema": {"type": "object"}},
+                    {"name": "tool_b", "description": "Tool B", "inputSchema": {"type": "object"}}
+                ]
+            }
+        })));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        client.connect().await.unwrap();
+
+        let tools1 = client.list_tools().await.unwrap();
+        assert_eq!(tools1.len(), 1);
+
+        // refresh_tools should hit the server, not cache
+        let tools2 = client.refresh_tools().await.unwrap();
+        assert_eq!(tools2.len(), 2);
+
+        // Subsequent list_tools should return new cache
+        let tools3 = client.list_tools().await.unwrap();
+        assert_eq!(tools3.len(), 2);
+    }
+
+    /// Test: invalidate_caches() clears all caches.
+    #[tokio::test]
+    async fn test_invalidate_caches_clears_all() {
+        let mut transport = StatefulMockTransport::new();
+
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-1"),
+            "2025-11-25",
+        )));
+
+        let client = McpClient::new(Box::new(transport), ClientConfig::default());
+        client.connect().await.unwrap();
+
+        // Populate all caches manually
+        *client.cached_tools.write().await = Some(vec![]);
+        *client.cached_resources.write().await = Some(vec![]);
+        *client.cached_prompts.write().await = Some(vec![]);
+
+        client.invalidate_caches().await;
+
+        assert!(client.cached_tools.read().await.is_none());
+        assert!(client.cached_resources.read().await.is_none());
+        assert!(client.cached_prompts.read().await.is_none());
     }
 }

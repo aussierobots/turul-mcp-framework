@@ -21,6 +21,7 @@ async fn test_sampling_large_message_handling() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Create a large input message (10KB)
     let large_content = "x".repeat(10240);
@@ -75,6 +76,7 @@ async fn test_sampling_multiple_user_messages() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Create request with conversation history
     let conversation_request = json!({
@@ -143,6 +145,7 @@ async fn test_sampling_system_message_handling() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // MCP 2025-11-25: Role enum only supports "user" and "assistant" (no "system")
     // A request with "system" role should be rejected as an invalid parameter
@@ -193,6 +196,7 @@ async fn test_sampling_edge_case_parameters() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Test edge case parameters
     let edge_cases = vec![
@@ -269,6 +273,7 @@ async fn test_sampling_malformed_messages() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Test malformed message structures
     let malformed_cases = vec![
@@ -343,6 +348,7 @@ async fn test_sampling_concurrent_requests() {
             .initialize_with_capabilities(sampling_capabilities())
             .await
             .unwrap();
+        client.send_initialized_notification().await.unwrap();
         clients.push(client);
     }
 
@@ -411,6 +417,7 @@ async fn test_sampling_unicode_content() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Test Unicode content
     let unicode_content = "Hello! 👋 こんにちは 🌍 Привет 🇺🇳 مرحبا ⭐ Ελληνικά 🎯 Español";
@@ -455,10 +462,12 @@ async fn test_sampling_session_isolation() {
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client1.send_initialized_notification().await.unwrap();
     client2
         .initialize_with_capabilities(sampling_capabilities())
         .await
         .unwrap();
+    client2.send_initialized_notification().await.unwrap();
 
     // Send requests from different sessions
     let request1 = create_message_request("Request from session 1", 100);

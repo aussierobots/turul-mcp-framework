@@ -69,6 +69,7 @@ mod basic_tests {
             stream_manager,
             turul_mcp_protocol::ServerCapabilities::default(),
             middleware_stack,
+            None,
         );
 
         // Handler should be created successfully
@@ -270,6 +271,7 @@ mod concurrency_tests {
                     stream_manager,
                     turul_mcp_protocol::ServerCapabilities::default(),
                     middleware_stack,
+                    None,
                 );
                 format!("Handler {} created", i)
             });
@@ -406,6 +408,7 @@ mod performance_tests {
                 stream_manager,
                 turul_mcp_protocol::ServerCapabilities::default(),
                 middleware_stack,
+                None,
             );
             handlers.push(handler);
         }

@@ -3,7 +3,6 @@ name = "mcp-tools-tests"
 version.workspace = true
 edition.workspace = true
 autotests = false
-authors = ["Nick <nick@aussierobots.com.au>"]
 description = "MCP Tools Protocol Integration Tests"
 license = "MIT OR Apache-2.0"
 publish = false

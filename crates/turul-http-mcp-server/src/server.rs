@@ -72,6 +72,7 @@ pub struct HttpMcpServerBuilder {
     server_capabilities: Option<turul_mcp_protocol::ServerCapabilities>,
     middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     route_registry: Arc<crate::routes::RouteRegistry>,
+    tool_fingerprint: Option<String>,
 }
 
 impl HttpMcpServerBuilder {
@@ -85,6 +86,7 @@ impl HttpMcpServerBuilder {
             server_capabilities: None,
             middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
             route_registry: Arc::new(crate::routes::RouteRegistry::new()),
+            tool_fingerprint: None,
         }
     }
 }
@@ -102,6 +104,7 @@ impl HttpMcpServerBuilder {
             server_capabilities: None,
             middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
             route_registry: Arc::new(crate::routes::RouteRegistry::new()),
+            tool_fingerprint: None,
         }
     }
 
@@ -117,6 +120,16 @@ impl HttpMcpServerBuilder {
     /// Set the route registry for custom HTTP paths (e.g., `.well-known`)
     pub fn route_registry(mut self, registry: Arc<crate::routes::RouteRegistry>) -> Self {
         self.route_registry = registry;
+        self
+    }
+
+    /// Set tool fingerprint for session versioning across server restarts
+    pub fn tool_fingerprint(mut self, fingerprint: String) -> Self {
+        if fingerprint.is_empty() {
+            self.tool_fingerprint = None; // Static mode: no fingerprint check
+        } else {
+            self.tool_fingerprint = Some(fingerprint);
+        }
         self
     }
 
@@ -237,6 +250,7 @@ impl HttpMcpServerBuilder {
             Arc::clone(&stream_manager),
             self.server_capabilities.unwrap_or_default(),
             Arc::clone(&middleware_stack),
+            self.tool_fingerprint.clone(),
         );
 
         HttpMcpServer {
@@ -247,6 +261,7 @@ impl HttpMcpServerBuilder {
             stream_manager,
             streamable_handler,
             route_registry: self.route_registry,
+            tool_fingerprint: self.tool_fingerprint,
         }
     }
 }
@@ -270,6 +285,8 @@ pub struct HttpMcpServer {
     streamable_handler: StreamableHttpHandler,
     // Custom route registry for paths like .well-known
     route_registry: Arc<crate::routes::RouteRegistry>,
+    // Tool fingerprint for session versioning (shared with both handlers)
+    tool_fingerprint: Option<String>,
 }
 
 impl HttpMcpServer {
@@ -312,7 +329,8 @@ impl HttpMcpServer {
             self.stream_config.clone(),
             Arc::clone(&self.stream_manager),
             Arc::clone(&self.streamable_handler.middleware_stack),
-        );
+        )
+        .with_tool_fingerprint(self.tool_fingerprint.clone());
 
         // Create combined handler that routes based on protocol version
         let handler = McpRequestHandler {

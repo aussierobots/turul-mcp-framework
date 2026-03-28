@@ -2,7 +2,6 @@
 name = "prompts-test-server"
 version.workspace = true
 edition.workspace = true
-authors = ["Nick <nick@aussierobots.com.au>"]
 description = "MCP Prompts Test Server - Comprehensive test prompts for E2E validation"
 license = "MIT OR Apache-2.0"
 

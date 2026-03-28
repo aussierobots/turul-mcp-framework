@@ -25,6 +25,7 @@ async fn test_sse_prompts_connection_establishment() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Test SSE stream connection
     let events = client
@@ -70,6 +71,7 @@ async fn test_sse_prompts_list_changed_notification() {
         }))
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Trigger potential prompt list operations
     let _list_result = client.list_prompts().await.expect("Failed to list prompts");
@@ -112,6 +114,7 @@ async fn test_sse_prompt_operations_notifications() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Perform prompt operations that might generate notifications
     let _list_result = client.list_prompts().await;
@@ -158,11 +161,13 @@ async fn test_sse_prompts_session_isolation() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize client1");
+    client1.send_initialized_notification().await.expect("Failed to send initialized");
 
     client2
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize client2");
+    client2.send_initialized_notification().await.expect("Failed to send initialized");
 
     let events1 = client1
         .test_sse_notifications()
@@ -215,6 +220,7 @@ async fn test_sse_prompts_notification_format_compliance() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Collect events
     let events = client
@@ -267,6 +273,7 @@ async fn test_sse_prompts_error_handling_notifications() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Trigger operations that might cause notifications
     let _error_result = client.get_prompt("nonexistent_prompt", None).await;
@@ -304,6 +311,7 @@ async fn test_sse_prompts_with_session_aware_operations() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Perform session-aware prompt operations
     let mut args = std::collections::HashMap::new();
@@ -346,6 +354,7 @@ async fn test_sse_prompts_concurrent_operations() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Perform multiple operations
     let _ = client.list_prompts().await;

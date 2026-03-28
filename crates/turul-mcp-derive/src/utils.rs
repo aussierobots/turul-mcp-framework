@@ -222,6 +222,92 @@ pub fn extract_tool_meta(attrs: &[Attribute]) -> Result<ToolMeta> {
     })
 }
 
+/// Partial tool meta — extracts whatever attributes exist without requiring name/description.
+/// Used by zero-config derive when #[tool(...)] has output/annotations but no name/description.
+pub struct PartialToolMeta {
+    pub output_type: Option<syn::Type>,
+    pub output_field: Option<String>,
+    pub task_support: Option<String>,
+    pub title: Option<String>,
+    pub annotation_title: Option<String>,
+    pub read_only: Option<bool>,
+    pub destructive: Option<bool>,
+    pub idempotent: Option<bool>,
+    pub open_world: Option<bool>,
+}
+
+pub fn extract_tool_meta_partial(attrs: &[Attribute]) -> PartialToolMeta {
+    let mut output_type = None;
+    let mut output_field = None;
+    let mut task_support = None;
+    let mut title = None;
+    let mut annotation_title = None;
+    let mut read_only = None;
+    let mut destructive = None;
+    let mut idempotent = None;
+    let mut open_world = None;
+
+    for attr in attrs {
+        if attr.path().is_ident("tool") {
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("output") {
+                    let value = meta.value()?;
+                    let ty: syn::Type = value.parse()?;
+                    output_type = Some(ty);
+                } else if meta.path.is_ident("field") || meta.path.is_ident("output_field") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    output_field = Some(s.value());
+                } else if meta.path.is_ident("task_support") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    task_support = Some(s.value());
+                } else if meta.path.is_ident("title") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    title = Some(s.value());
+                } else if meta.path.is_ident("annotation_title") {
+                    let value = meta.value()?;
+                    let s: syn::LitStr = value.parse()?;
+                    annotation_title = Some(s.value());
+                } else if meta.path.is_ident("read_only") {
+                    let value = meta.value()?;
+                    let b: syn::LitBool = value.parse()?;
+                    read_only = Some(b.value());
+                } else if meta.path.is_ident("destructive") {
+                    let value = meta.value()?;
+                    let b: syn::LitBool = value.parse()?;
+                    destructive = Some(b.value());
+                } else if meta.path.is_ident("idempotent") {
+                    let value = meta.value()?;
+                    let b: syn::LitBool = value.parse()?;
+                    idempotent = Some(b.value());
+                } else if meta.path.is_ident("open_world") {
+                    let value = meta.value()?;
+                    let b: syn::LitBool = value.parse()?;
+                    open_world = Some(b.value());
+                } else {
+                    // Skip name/description — we don't need them here
+                    let _ = meta.value().and_then(|v| v.parse::<syn::LitStr>());
+                }
+                Ok(())
+            });
+        }
+    }
+
+    PartialToolMeta {
+        output_type,
+        output_field,
+        task_support,
+        title,
+        annotation_title,
+        read_only,
+        destructive,
+        idempotent,
+        open_world,
+    }
+}
+
 /// Extract parameter metadata from field attributes
 #[derive(Debug, Default)]
 pub struct ParamMeta {

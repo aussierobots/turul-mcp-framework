@@ -20,6 +20,7 @@ async fn test_resource_initialization_with_shared_utils() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     TestFixtures::verify_initialization_response(&result);
     assert!(client.session_id().is_some());
@@ -39,6 +40,7 @@ async fn test_resource_list_with_shared_utils() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     let result = client
         .list_resources()
@@ -83,6 +85,7 @@ async fn test_resource_memory_read_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     let result = client
         .read_resource("file:///memory/data.json")
@@ -111,6 +114,7 @@ async fn test_resource_error_handling_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     let result = client
         .read_resource("file:///error/not_found.txt")
@@ -136,6 +140,7 @@ async fn test_session_consistency_resources() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     SessionTestUtils::verify_session_consistency(&client)
         .await
@@ -153,6 +158,7 @@ async fn test_session_aware_resource_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     SessionTestUtils::test_session_aware_resource(&client)
         .await
@@ -173,6 +179,7 @@ async fn test_resource_subscription_with_shared_utils() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     let result = client
         .subscribe_resource("subscribe://updates")
@@ -204,6 +211,7 @@ async fn test_sse_notifications_resources_with_shared_utils() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     // Subscribe to notifications first
     let _subscribe_result = client.subscribe_resource("notify://trigger").await;
@@ -251,6 +259,7 @@ async fn test_multiple_resource_types_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
+    client.send_initialized_notification().await.expect("Failed to send initialized");
 
     let test_resources = vec![
         ("file:///tmp/test.txt", "file"),

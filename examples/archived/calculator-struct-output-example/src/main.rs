@@ -250,7 +250,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting calculator struct output example server");
     let server = McpServer::builder()
         .name("calculator_struct_output")
-        .version("0.3.24")
+        .version("0.3.25")
         .title("Calculator Struct Output Example Server")
         .instructions("Demonstrates struct-based output_type with derive macros for complex calculation results")
         .tool(CalculatorStructTool {

@@ -1513,7 +1513,14 @@ impl SessionManager {
         let sessions = self.sessions.read().await;
         for (session_id, session) in sessions.iter() {
             if let Err(e) = session.send_event(event.clone()) {
-                warn!("Failed to send event to session {}: {}", session_id, e);
+                debug!("Per-session event send failed for {}: {} (normal if no active listener)", session_id, e);
+            }
+            // Also forward to global event broadcaster for SSE bridging
+            if let Err(e) = self
+                .global_event_sender
+                .send((session_id.to_string(), event.clone()))
+            {
+                debug!("Global event broadcast failed (no listeners): {}", e);
             }
         }
     }

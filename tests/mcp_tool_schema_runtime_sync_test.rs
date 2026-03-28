@@ -51,6 +51,7 @@ impl CountAnnouncementsTool {
 #[tool(
     name = "custom_calculator",
     description = "Calculator with custom result field",
+    output = f64,
     output_field = "calculationResult"
 )]
 struct CustomCalculatorTool {
@@ -76,7 +77,8 @@ impl CustomCalculatorTool {
 #[derive(McpTool, Clone)]
 #[tool(
     name = "default_output_tool",
-    description = "Tool using default output field"
+    description = "Tool using default output field",
+    output = String
 )]
 struct DefaultOutputTool {
     #[param(description = "Input value")]
@@ -516,28 +518,13 @@ async fn test_zero_config_tool_uses_output_field() {
         text: "hello world".to_string(),
     };
 
-    // Test 1: Verify schema uses "output" field
+    // Test 1: Zero-config derive tools have no output schema (derive macros
+    // cannot inspect execute() return type — output = Type attribute is required)
     let schema = tool.output_schema();
     assert!(
-        schema.is_some(),
-        "Zero-config tool should have output schema"
+        schema.is_none(),
+        "Zero-config derive tool should NOT have output schema (cannot inspect return type)"
     );
-
-    if let Some(schema) = schema {
-        println!("Zero-config tool schema: {:#?}", schema);
-
-        if let Some(properties) = &schema.properties {
-            assert!(
-                properties.contains_key("output"),
-                "Zero-config tool schema should contain 'output' field, got properties: {:?}",
-                properties.keys().collect::<Vec<_>>()
-            );
-            assert!(
-                !properties.contains_key("countData"),
-                "Zero-config tool schema should NOT contain camelCase struct name"
-            );
-        }
-    }
 
     // Test 2: Verify runtime also uses "output" field
     let args = json!({"text": "hello world"});

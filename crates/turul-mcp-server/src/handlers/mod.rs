@@ -802,7 +802,7 @@ impl McpHandler for LoggingHandler {
         // Set the level
         session_ctx.set_logging_level(set_level_params.level).await;
 
-        tracing::info!(
+        tracing::debug!(
             "🎯 Set logging level for session {}: {:?}",
             session_ctx.session_id,
             set_level_params.level
@@ -1383,10 +1383,10 @@ impl McpHandler for InitializedNotificationHandler {
         params: Option<Value>,
         session: Option<SessionContext>,
     ) -> McpResult<Value> {
-        tracing::info!("📨 Received notifications/initialized: {:?}", params);
+        tracing::debug!("📨 Received notifications/initialized: {:?}", params);
 
         if let Some(session_ctx) = session {
-            tracing::info!(
+            tracing::debug!(
                 "🔄 Processing notifications/initialized for session: {}",
                 session_ctx.session_id
             );
@@ -1457,7 +1457,7 @@ impl McpHandler for InitializedNotificationHandler {
                         )));
                     }
 
-                    tracing::info!(
+                    tracing::debug!(
                         "✅ Session {} successfully initialized after receiving notifications/initialized",
                         session_ctx.session_id
                     );

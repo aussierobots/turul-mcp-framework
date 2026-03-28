@@ -56,23 +56,27 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
     // AUTO-DETERMINE tool name from struct name (ZERO CONFIGURATION!)
     let auto_name = auto_determine_tool_name(name.to_string());
 
-    // Try to extract attributes, but use auto-determined values as defaults
+    // Try to extract attributes, but use auto-determined values as defaults.
+    // extract_tool_meta requires name+description; if missing, we parse partial
+    // attributes (e.g., output, annotations) and fill in auto-determined defaults.
     let tool_meta = match extract_tool_meta(&input.attrs) {
         Ok(meta) => meta,
         Err(_) => {
-            // No attributes found - use zero-configuration defaults
+            // extract_tool_meta failed (likely missing name/description).
+            // Re-parse attributes to salvage output, annotations, etc.
+            let partial = crate::utils::extract_tool_meta_partial(&input.attrs);
             crate::utils::ToolMeta {
                 name: auto_name,
                 description: camel_to_readable(&name.to_string()),
-                output_type: None,
-                output_field: None,
-                task_support: None,
-                title: None,
-                annotation_title: None,
-                read_only: None,
-                destructive: None,
-                idempotent: None,
-                open_world: None,
+                output_type: partial.output_type,
+                output_field: partial.output_field,
+                task_support: partial.task_support,
+                title: partial.title,
+                annotation_title: partial.annotation_title,
+                read_only: partial.read_only,
+                destructive: partial.destructive,
+                idempotent: partial.idempotent,
+                open_world: partial.open_world,
             }
         }
     };
@@ -186,10 +190,15 @@ pub fn derive_mcp_tool_impl(input: DeriveInput) -> Result<TokenStream> {
         // User specified output type - use auto-detection (schemars if available, else introspection)
         generate_output_schema_auto(output_type, &runtime_field_name, Some(&input))
     } else {
-        // Zero-config case - treat as Self for introspection
-        // This allows tools to return Self and get detailed schemas automatically
-        let self_type: syn::Type = syn::parse_quote!(Self);
-        generate_output_schema_auto(&self_type, &runtime_field_name, Some(&input))
+        // Zero-config: no output schema. The derive macro cannot inspect the
+        // execute() method's return type (it only receives the struct definition).
+        // Previously this introspected Self, which incorrectly used input fields as
+        // the output schema. Use #[tool(output = Type)] for explicit output schemas.
+        quote! {
+            fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
+                None
+            }
+        }
     };
 
     // Generate HasExecution impl based on task_support attribute

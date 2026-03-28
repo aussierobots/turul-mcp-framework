@@ -20,6 +20,7 @@ async fn test_roots_list_endpoint() {
         .initialize_with_capabilities(roots_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Call roots/list endpoint
     let roots_result = client
@@ -88,6 +89,7 @@ async fn test_roots_list_with_pagination() {
         .initialize_with_capabilities(roots_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Test pagination with cursor parameter
     let paginated_result = client
@@ -147,6 +149,7 @@ async fn test_roots_structure_validation() {
         .initialize_with_capabilities(roots_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     let roots_result = client
         .make_request("roots/list", json!({}), 52)
@@ -216,6 +219,7 @@ async fn test_roots_json_rpc_compliance() {
         .initialize_with_capabilities(roots_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     let roots_result = client
         .make_request("roots/list", json!({}), 53)
@@ -269,6 +273,7 @@ async fn test_roots_capability_advertising() {
         .initialize_with_capabilities(roots_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     debug!("Initialize result: {:?}", init_result);
 
@@ -323,6 +328,7 @@ async fn test_roots_error_handling() {
         .initialize_with_capabilities(roots_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Test with invalid parameters (if any)
     let invalid_result = client
@@ -382,6 +388,7 @@ async fn test_roots_session_continuity() {
         .initialize_with_capabilities(roots_capabilities())
         .await
         .unwrap();
+    client.send_initialized_notification().await.unwrap();
 
     // Test multiple roots requests in the same session
     for i in 1..=3 {
@@ -425,6 +432,7 @@ async fn test_roots_concurrent_access() {
             .initialize_with_capabilities(roots_capabilities())
             .await
             .unwrap();
+        client.send_initialized_notification().await.unwrap();
         clients.push(client);
     }
 
