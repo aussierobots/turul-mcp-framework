@@ -71,9 +71,8 @@ Capability mapping:
 |------|---|---|---|---|
 | FingerprintOnly | false | Yes (always) | No | All runtimes |
 | DynamicInProcess | true | Yes (always) | Yes (advisory) | Single-process HTTP |
-| DynamicClustered (future) | true | Yes (always)* | Yes (advisory) | Multi-instance |
 
-*Unless a future ADR explicitly introduces a session-ack refresh boundary.
+See [Future Work](#future-work-dynamicclustered-mode) for the deferred `DynamicClustered` multi-instance mode.
 
 ## Architectural Boundaries
 
@@ -130,14 +129,25 @@ Steps 1-2 are UX (faster discovery). Steps 3-4 are correctness (guaranteed refre
 
 Session state (`mcp:tool_fingerprint`) is session-scoped compatibility metadata — it records what a specific client session was initialized against. **Clustered tool activation state is server-global, not session-scoped.** Storing the active tool registry in session state would conflate two different scopes, create duplication, and require expensive fan-out writes on every tool mutation.
 
-`DynamicClustered` requires a separate **server-global storage layer** (`ServerStateStorage` trait) with pluggable backends:
+`DynamicClustered` requires a separate **server-global storage layer**, following the same pluggable-backend pattern as `turul-mcp-session-storage` and `turul-mcp-task-storage`. A new `ServerStateStorage` trait (or similar) would provide:
 
-- **InMemory** — for testing and single-process fallback
-- **SQLite** — for local durable mode
+- **SQLite** — for local durable mode / small deployments
 - **PostgreSQL** — for shared relational deployments
 - **DynamoDB** — for serverless/AWS deployments
+- **InMemory** — as a test double for the storage abstraction only (cannot satisfy clustered semantics across instances)
 
-This trait is separate from `SessionStorage` and has different lifecycle semantics.
+This trait is separate from `SessionStorage` and has different lifecycle semantics. Session state is client-scoped; server state is instance-global and shared across the cluster.
+
+### Startup Behavior
+
+When a server instance starts in `DynamicClustered` mode:
+
+1. Compute local tool fingerprint from compiled tools
+2. Read the current fingerprint from shared storage
+3. If they differ: update shared storage with the new fingerprint (this instance has newer tools)
+4. Other running instances that have not restarted should detect the fingerprint change (via polling or events) and **issue a warning log** — they are now serving a stale tool set until they restart or reload
+
+This handles rolling deployments where instances restart at different times.
 
 ### Coordination Strategy
 
