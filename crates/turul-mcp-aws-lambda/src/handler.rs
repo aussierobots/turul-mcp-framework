@@ -45,6 +45,10 @@ pub struct LambdaMcpHandler {
     /// Custom route registry (e.g., .well-known endpoints)
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
 
+    /// Dynamic tool registry for request-time change detection
+    #[cfg(feature = "dynamic-tools")]
+    tool_registry: Option<Arc<turul_mcp_server::ToolRegistry>>,
+
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
     cors_config: Option<CorsConfig>,
@@ -95,6 +99,8 @@ impl LambdaMcpHandler {
             streamable_handler,
             sse_enabled,
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry: None,
             #[cfg(feature = "cors")]
             cors_config,
         }
@@ -141,6 +147,8 @@ impl LambdaMcpHandler {
             streamable_handler,
             sse_enabled,
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry: None,
             #[cfg(feature = "cors")]
             cors_config: None,
         }
@@ -214,9 +222,18 @@ impl LambdaMcpHandler {
             streamable_handler,
             sse_enabled,
             route_registry,
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry: None,
             #[cfg(feature = "cors")]
             cors_config: None,
         }
+    }
+
+    /// Set a dynamic tool registry for request-time change detection.
+    #[cfg(feature = "dynamic-tools")]
+    pub fn with_tool_registry(mut self, registry: Arc<turul_mcp_server::ToolRegistry>) -> Self {
+        self.tool_registry = Some(registry);
+        self
     }
 
     /// Set CORS configuration
@@ -261,6 +278,14 @@ impl LambdaMcpHandler {
         {
             debug!("Handling CORS preflight request");
             return create_preflight_response(cors_config, request_origin.as_deref());
+        }
+
+        // Check for remote tool changes (DynamicClustered mode)
+        #[cfg(feature = "dynamic-clustered")]
+        if let Some(ref registry) = self.tool_registry {
+            if let Err(e) = registry.check_for_changes().await {
+                tracing::warn!(error = %e, "Failed to check for tool changes");
+            }
         }
 
         // 🚀 DELEGATION: Convert Lambda request to hyper request
@@ -364,6 +389,14 @@ impl LambdaMcpHandler {
 
             // Convert LambdaResponse<LambdaBody> to streaming response
             return Ok(self.convert_lambda_response_to_streaming(preflight_response));
+        }
+
+        // Check for remote tool changes (DynamicClustered mode)
+        #[cfg(feature = "dynamic-clustered")]
+        if let Some(ref registry) = self.tool_registry {
+            if let Err(e) = registry.check_for_changes().await {
+                tracing::warn!(error = %e, "Failed to check for tool changes (streaming)");
+            }
         }
 
         // 🚀 DELEGATION: Convert Lambda request to hyper request

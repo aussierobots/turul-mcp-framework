@@ -15,6 +15,8 @@ cors = []                                         # CORS header injection for La
 sse = []                                          # Server-Sent Events stream adaptation
 streaming = ["sse"]                               # Enable real SSE streaming with run_with_streaming_response
 dynamodb = ["turul-mcp-session-storage/dynamodb"] # DynamoDB session storage
+dynamic-tools = ["turul-mcp-server/dynamic-tools"]
+dynamic-clustered = ["dynamic-tools", "turul-mcp-server/dynamic-clustered", "turul-mcp-server-state-storage"]
 
 [dependencies]
 # Core MCP framework
@@ -25,6 +27,7 @@ turul-mcp-protocol = { workspace = true }
 turul-mcp-builders = { workspace = true }
 turul-mcp-session-storage = { workspace = true }
 turul-mcp-derive = { workspace = true }
+turul-mcp-server-state-storage = { workspace = true, optional = true }
 
 # AWS Lambda runtime
 lambda_http = { workspace = true }

@@ -145,6 +145,13 @@ pub struct LambdaMcpServerBuilder {
     /// Recovery timeout for stuck tasks (milliseconds)
     task_recovery_timeout_ms: u64,
 
+    /// Tool change detection and notification mode
+    tool_change_mode: turul_mcp_server::ToolChangeMode,
+
+    /// Server state storage for clustered dynamic tools
+    #[cfg(feature = "dynamic-clustered")]
+    server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
+
     /// CORS configuration (if enabled)
     #[cfg(feature = "cors")]
     cors_config: Option<CorsConfig>,
@@ -272,6 +279,9 @@ impl LambdaMcpServerBuilder {
             route_registry: Arc::new(turul_http_mcp_server::RouteRegistry::new()),
             task_runtime: None,
             task_recovery_timeout_ms: 300_000, // 5 minutes
+            tool_change_mode: turul_mcp_server::ToolChangeMode::FingerprintOnly,
+            #[cfg(feature = "dynamic-clustered")]
+            server_state_storage: None,
             #[cfg(feature = "cors")]
             cors_config: None,
         }
@@ -690,6 +700,33 @@ impl LambdaMcpServerBuilder {
     }
 
     // =============================================================================
+    // DYNAMIC TOOLS CONFIGURATION
+    // =============================================================================
+
+    /// Set the tool change detection and notification mode.
+    ///
+    /// - `FingerprintOnly` (default): Stale sessions detected by fingerprint mismatch
+    /// - `DynamicInProcess` (requires `dynamic-tools` feature): Runtime tool activation/deactivation
+    /// - `DynamicClustered` (requires `dynamic-clustered` feature): Multi-instance coordination
+    pub fn tool_change_mode(mut self, mode: turul_mcp_server::ToolChangeMode) -> Self {
+        self.tool_change_mode = mode;
+        self
+    }
+
+    /// Set the server state storage backend for `DynamicClustered` mode.
+    ///
+    /// Required when `tool_change_mode` is `DynamicClustered`. Tool activation
+    /// state is persisted in this storage for cross-instance coordination.
+    #[cfg(feature = "dynamic-clustered")]
+    pub fn server_state_storage(
+        mut self,
+        storage: Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
+    ) -> Self {
+        self.server_state_storage = Some(storage);
+        self
+    }
+
+    // =============================================================================
     // SESSION AND CONFIGURATION METHODS
     // =============================================================================
 
@@ -925,6 +962,20 @@ impl LambdaMcpServerBuilder {
             ));
         }
 
+        // Coherence guard: reject DynamicClustered without server_state_storage
+        #[cfg(feature = "dynamic-clustered")]
+        if matches!(
+            self.tool_change_mode,
+            turul_mcp_server::ToolChangeMode::DynamicClustered
+        ) && self.server_state_storage.is_none()
+        {
+            return Err(crate::error::LambdaError::Configuration(
+                "ToolChangeMode::DynamicClustered requires a server_state_storage backend. \
+                 Use .server_state_storage(storage) on the builder."
+                    .to_string(),
+            ));
+        }
+
         // Note: SSE behavior depends on which handler method is used:
         // - handle(): Works with run(), but SSE responses may not stream properly
         // - handle_streaming(): Works with run_with_streaming_response() for real SSE streaming
@@ -953,10 +1004,14 @@ impl LambdaMcpServerBuilder {
         let has_logging = !self.loggers.is_empty();
         tracing::debug!("🔧 Has logging configured: {}", has_logging);
 
-        // Tools capabilities - truthful reporting (only set if tools are registered)
+        // Tools capabilities — listChanged depends on ToolChangeMode
         if has_tools {
+            let list_changed = !matches!(
+                self.tool_change_mode,
+                turul_mcp_server::ToolChangeMode::FingerprintOnly
+            );
             capabilities.tools = Some(turul_mcp_protocol::initialize::ToolsCapabilities {
-                list_changed: Some(false), // Static framework: no dynamic change sources
+                list_changed: Some(list_changed),
             });
         }
 
@@ -1110,6 +1165,10 @@ impl LambdaMcpServerBuilder {
             self.route_registry,
             self.task_runtime,
             tool_fingerprint,
+            #[cfg(feature = "dynamic-tools")]
+            !matches!(self.tool_change_mode, turul_mcp_server::ToolChangeMode::FingerprintOnly),
+            #[cfg(feature = "dynamic-clustered")]
+            self.server_state_storage,
         ))
     }
 }
