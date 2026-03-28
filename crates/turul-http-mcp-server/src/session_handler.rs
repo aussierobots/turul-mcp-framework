@@ -12,7 +12,7 @@ use std::convert::Infallible;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use bytes::Bytes;
 use futures::Stream;
@@ -1033,23 +1033,24 @@ impl SessionMcpHandler {
                         session_id
                     )));
                 }
-                // Check tool fingerprint — mismatch means tools changed
+                // Check tool fingerprint — mismatch means tools changed, not session invalid
                 if let Some(ref current_fp) = self.tool_fingerprint {
                     if let Some(stored_fp) = session_info.state.get("mcp:tool_fingerprint") {
                         if stored_fp.as_str() != Some(current_fp.as_str()) {
-                            warn!("Tool fingerprint mismatch for session '{}'", session_id);
-                            return Err(crate::HttpMcpError::InvalidRequest(format!(
-                                "Session '{}' was created with a different server configuration. Please re-initialize.",
+                            info!(
+                                "Tool fingerprint updated for session '{}' (tools changed since session created)",
                                 session_id
-                            )));
+                            );
+                            let _ = self.session_storage
+                                .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
+                                .await;
                         }
                     } else {
-                        // Missing fingerprint (legacy) → always force re-init
-                        warn!("Session '{}' has no tool fingerprint (legacy session)", session_id);
-                        return Err(crate::HttpMcpError::InvalidRequest(format!(
-                            "Session '{}' requires re-initialization for tool discovery.",
-                            session_id
-                        )));
+                        // Missing fingerprint (legacy session) — store current
+                        info!("Session '{}' has no tool fingerprint, storing current", session_id);
+                        let _ = self.session_storage
+                            .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
+                            .await;
                     }
                 }
                 debug!("Session validation successful: {}", session_id);
@@ -1342,11 +1343,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_validate_session_rejects_fingerprint_mismatch() {
+    async fn test_fingerprint_mismatch_updates_and_continues() {
         let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
             Arc::new(InMemorySessionStorage::new());
 
-        // Create session with fingerprint "v1"
         let session = storage
             .create_session(turul_mcp_protocol::ServerCapabilities::default())
             .await
@@ -1357,24 +1357,30 @@ mod tests {
             .await
             .unwrap();
 
-        // Handler with DIFFERENT fingerprint "v2"
+        // Handler with DIFFERENT fingerprint
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::default());
         let handler = SessionMcpHandler::with_storage(
             crate::server::ServerConfig::default(),
             dispatcher,
-            storage,
+            storage.clone(),
             crate::stream_manager::StreamConfig::default(),
             Arc::new(crate::middleware::MiddlewareStack::new()),
         )
         .with_tool_fingerprint(Some("fp_v2".to_string()));
 
+        // Session continues — NOT rejected
         let result = handler.validate_session_exists(&session_id).await;
-        assert!(result.is_err(), "Fingerprint mismatch must reject session");
-        let err_msg = format!("{}", result.unwrap_err());
-        assert!(
-            err_msg.contains("different server configuration"),
-            "Error must mention configuration change, got: {}",
-            err_msg
+        assert!(result.is_ok(), "Fingerprint mismatch must NOT reject session");
+
+        // Stored fingerprint updated to current
+        let stored_fp = storage
+            .get_session_state(&session_id, "mcp:tool_fingerprint")
+            .await
+            .unwrap();
+        assert_eq!(
+            stored_fp.and_then(|v| v.as_str().map(String::from)),
+            Some("fp_v2".to_string()),
+            "Stored fingerprint must be updated to current"
         );
     }
 
@@ -1410,11 +1416,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_validate_session_rejects_legacy_session_without_fingerprint() {
+    async fn test_legacy_session_without_fingerprint_gets_current_stored() {
         let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
             Arc::new(InMemorySessionStorage::new());
 
-        // Create session WITHOUT fingerprint (simulates pre-feature session)
+        // Create session WITHOUT fingerprint (pre-feature session)
         let session = storage
             .create_session(turul_mcp_protocol::ServerCapabilities::default())
             .await
@@ -1422,24 +1428,30 @@ mod tests {
         let session_id = session.session_id.clone();
         // Deliberately do NOT set mcp:tool_fingerprint
 
-        // Handler WITH fingerprint enabled
+        // Handler WITH fingerprint
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::default());
         let handler = SessionMcpHandler::with_storage(
             crate::server::ServerConfig::default(),
             dispatcher,
-            storage,
+            storage.clone(),
             crate::stream_manager::StreamConfig::default(),
             Arc::new(crate::middleware::MiddlewareStack::new()),
         )
         .with_tool_fingerprint(Some("current_fp".to_string()));
 
+        // Session continues — NOT rejected
         let result = handler.validate_session_exists(&session_id).await;
-        assert!(result.is_err(), "Legacy session without fingerprint must be rejected");
-        let err_msg = format!("{}", result.unwrap_err());
-        assert!(
-            err_msg.contains("re-initialization"),
-            "Error must mention re-initialization, got: {}",
-            err_msg
+        assert!(result.is_ok(), "Legacy session must NOT be rejected");
+
+        // Current fingerprint now stored
+        let stored_fp = storage
+            .get_session_state(&session_id, "mcp:tool_fingerprint")
+            .await
+            .unwrap();
+        assert_eq!(
+            stored_fp.and_then(|v| v.as_str().map(String::from)),
+            Some("current_fp".to_string()),
+            "Current fingerprint must be stored for legacy session"
         );
     }
 
@@ -1471,19 +1483,16 @@ mod tests {
     }
 
     // ===================================================================
-    // ADR-023 Mandatory Stale Session Rule tests
+    // Fingerprint update tests (fingerprint mismatch = update, not reject)
     // ===================================================================
 
-    /// ADR-023 MUST: "if the session's stored mcp:tool_fingerprint differs from the
-    /// server's current tool fingerprint, the server MUST treat the session as stale
-    /// and reject the request with HTTP 404. This requirement applies regardless of
-    /// session persistence — the session record may still exist in durable storage"
+    /// When a persisted session has a different fingerprint (e.g., after server restart),
+    /// the session continues and the stored fingerprint is updated to current.
     #[tokio::test]
-    async fn test_stale_session_rejected_even_when_persisted_in_storage() {
+    async fn test_persisted_session_fingerprint_updated_on_mismatch() {
         let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
             Arc::new(InMemorySessionStorage::new());
 
-        // Create session with old fingerprint — simulates session surviving a restart
         let session = storage
             .create_session(turul_mcp_protocol::ServerCapabilities::default())
             .await
@@ -1494,11 +1503,6 @@ mod tests {
             .await
             .unwrap();
 
-        // Verify session exists in storage
-        let stored = storage.get_session(&session_id).await.unwrap();
-        assert!(stored.is_some(), "Session must exist in storage before test");
-
-        // Handler with NEW fingerprint (server restarted with different tools)
         let dispatcher = Arc::new(JsonRpcDispatcher::<McpError>::default());
         let handler = SessionMcpHandler::with_storage(
             crate::server::ServerConfig::default(),
@@ -1509,23 +1513,29 @@ mod tests {
         )
         .with_tool_fingerprint(Some("deploy_v2".to_string()));
 
-        // Session is rejected despite existing in storage
+        // Session continues — fingerprint updated
         let result = handler.validate_session_exists(&session_id).await;
-        assert!(result.is_err(), "Stale session MUST be rejected even when persisted");
+        assert!(result.is_ok(), "Session must continue on fingerprint mismatch");
 
-        // Session still exists in storage (not deleted — just rejected)
-        let still_stored = storage.get_session(&session_id).await.unwrap();
-        assert!(
-            still_stored.is_some(),
-            "Rejected session MUST NOT be deleted from storage (expires via TTL)"
+        // Stored fingerprint updated to current
+        let stored_fp = storage
+            .get_session_state(&session_id, "mcp:tool_fingerprint")
+            .await
+            .unwrap();
+        assert_eq!(
+            stored_fp.and_then(|v| v.as_str().map(String::from)),
+            Some("deploy_v2".to_string()),
+            "Stored fingerprint must be updated to server's current"
         );
+
+        // Session still in storage
+        let still_stored = storage.get_session(&session_id).await.unwrap();
+        assert!(still_stored.is_some(), "Session must remain in storage");
     }
 
-    /// ADR-023 MUST: "The server MUST NOT update the stored fingerprint for an
-    /// existing stale session. The current fingerprint is written only during a
-    /// fresh initialize for a new session."
+    /// Second request after fingerprint update should proceed without issues
     #[tokio::test]
-    async fn test_stale_session_fingerprint_not_updated_on_rejection() {
+    async fn test_fingerprint_update_is_idempotent() {
         let storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
             Arc::new(InMemorySessionStorage::new());
 
@@ -1549,19 +1559,22 @@ mod tests {
         )
         .with_tool_fingerprint(Some("new_fp".to_string()));
 
-        // Request is rejected (404)
+        // First request: mismatch, fingerprint updated, session continues
         let result = handler.validate_session_exists(&session_id).await;
-        assert!(result.is_err());
+        assert!(result.is_ok(), "First request with mismatch should succeed");
 
-        // Stored fingerprint MUST NOT have been updated
+        // Second request: fingerprints now match, should proceed normally
+        let result2 = handler.validate_session_exists(&session_id).await;
+        assert!(result2.is_ok(), "Second request should proceed (fingerprints match)");
+
+        // Fingerprint is current
         let stored_fp = storage
             .get_session_state(&session_id, "mcp:tool_fingerprint")
             .await
             .unwrap();
         assert_eq!(
             stored_fp.and_then(|v| v.as_str().map(String::from)),
-            Some("old_fp".to_string()),
-            "Server MUST NOT update stored fingerprint for stale session"
+            Some("new_fp".to_string()),
         );
     }
 }
