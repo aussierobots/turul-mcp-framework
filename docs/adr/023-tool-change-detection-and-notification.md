@@ -138,14 +138,22 @@ Session state (`mcp:tool_fingerprint`) is session-scoped compatibility metadata 
 
 This trait is separate from `SessionStorage` and has different lifecycle semantics. Session state is client-scoped; server state is instance-global and shared across the cluster.
 
+**`ServerStateStorage` is generic server-global state, not tool-specific.** While tools are the first consumer, the same storage and coordination pattern is intended to back all MCP entity types that support `list_changed` notifications:
+
+- `notifications/tools/list_changed` — tool activation registry
+- `notifications/resources/list_changed` — resource activation registry
+- `notifications/prompts/list_changed` — prompt activation registry
+
+Each entity type would store its own activation state and fingerprint in server-global storage. The storage trait should be designed as a general key-value store, not as a tool-only abstraction. Per-entity change notifications (`notifications/resources/updated`) are a different pattern and may require separate consideration.
+
 ### Startup Behavior
 
-When a server instance starts in `DynamicClustered` mode:
+When a server instance starts in `DynamicClustered` mode, for each entity type (tools, resources, prompts):
 
-1. Compute local tool fingerprint from compiled tools
+1. Compute local fingerprint from the compiled entity set
 2. Read the current fingerprint from shared storage
-3. If they differ: update shared storage with the new fingerprint (this instance has newer tools)
-4. Other running instances that have not restarted should detect the fingerprint change (via polling or events) and **issue a warning log** — they are now serving a stale tool set until they restart or reload
+3. If they differ: update shared storage with the new fingerprint (this instance has newer definitions)
+4. Other running instances that have not restarted should detect the fingerprint change (via coordination) and **issue a warning log** — they are serving a stale entity set until they restart or reload
 
 This handles rolling deployments where instances restart at different times.
 
