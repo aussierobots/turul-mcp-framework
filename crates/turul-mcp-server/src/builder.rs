@@ -109,6 +109,10 @@ pub struct McpServerBuilder {
 
     /// Tool change detection mode (default: FingerprintOnly)
     tool_change_mode: crate::ToolChangeMode,
+
+    /// Server state storage for clustered dynamic tools
+    #[cfg(feature = "dynamic-clustered")]
+    server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
 }
 
 impl McpServerBuilder {
@@ -242,6 +246,8 @@ impl McpServerBuilder {
             allow_unauthenticated_ping: None, // Default: use ServerConfig default (true)
             validation_errors: Vec::new(),
             tool_change_mode: crate::ToolChangeMode::FingerprintOnly,
+            #[cfg(feature = "dynamic-clustered")]
+            server_state_storage: None,
         }
     }
 
@@ -252,6 +258,20 @@ impl McpServerBuilder {
     ///   with live `notifications/tools/list_changed`. `listChanged=true`. Single-process only.
     pub fn tool_change_mode(mut self, mode: crate::ToolChangeMode) -> Self {
         self.tool_change_mode = mode;
+        self
+    }
+
+    /// Set the server state storage backend for clustered dynamic tools.
+    ///
+    /// Required when `tool_change_mode` is `DynamicClustered`. Tool activation
+    /// state is persisted to this backend so multiple server instances share
+    /// the same view of which tools are active.
+    #[cfg(feature = "dynamic-clustered")]
+    pub fn server_state_storage(
+        mut self,
+        storage: Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
+    ) -> Self {
+        self.server_state_storage = Some(storage);
         self
     }
 
@@ -1482,6 +1502,19 @@ impl McpServerBuilder {
             )));
         }
 
+        // Coherence guard: reject DynamicClustered without server_state_storage
+        #[cfg(feature = "dynamic-clustered")]
+        if matches!(
+            self.tool_change_mode,
+            crate::ToolChangeMode::DynamicClustered
+        ) && self.server_state_storage.is_none()
+        {
+            return Err(McpError::configuration(
+                "ToolChangeMode::DynamicClustered requires a server_state_storage backend. \
+                 Use .server_state_storage(storage) on the builder.",
+            ));
+        }
+
         // Coherence guard: reject taskSupport=required without task runtime
         if self.task_runtime.is_none() {
             for (name, tool) in &self.tools {
@@ -1711,7 +1744,9 @@ impl McpServerBuilder {
             self.route_registry,
             tool_fingerprint,
             #[cfg(feature = "dynamic-tools")]
-            matches!(self.tool_change_mode, crate::ToolChangeMode::DynamicInProcess),
+            !matches!(self.tool_change_mode, crate::ToolChangeMode::FingerprintOnly),
+            #[cfg(feature = "dynamic-clustered")]
+            self.server_state_storage,
             #[cfg(feature = "http")]
             self.bind_address,
             #[cfg(feature = "http")]

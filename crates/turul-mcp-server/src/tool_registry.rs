@@ -12,6 +12,8 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 use tracing::{debug, info};
+#[cfg(feature = "dynamic-clustered")]
+use tracing::warn;
 
 use crate::session::SessionManager;
 use crate::tool::{McpTool, compute_tool_fingerprint, tool_to_descriptor};
@@ -34,6 +36,10 @@ pub struct ToolRegistry {
     state: RwLock<ToolState>,
     /// SessionManager for broadcasting change events (transport-agnostic)
     session_manager: Arc<SessionManager>,
+    /// Optional server-global storage for DynamicClustered mode.
+    /// When present, activate/deactivate persist to shared storage for cross-instance coordination.
+    #[cfg(feature = "dynamic-clustered")]
+    server_state: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
 }
 
 /// Active tool set and its corresponding fingerprint, kept consistent under one lock.
@@ -58,6 +64,32 @@ impl ToolRegistry {
                 fingerprint,
             }),
             session_manager,
+            #[cfg(feature = "dynamic-clustered")]
+            server_state: None,
+        }
+    }
+
+    /// Create a new registry with server state storage for DynamicClustered mode.
+    ///
+    /// All compiled tools start active (same as `new()`), but activate/deactivate
+    /// operations also persist to the shared storage backend.
+    #[cfg(feature = "dynamic-clustered")]
+    pub fn new_clustered(
+        compiled_tools: HashMap<String, Arc<dyn McpTool>>,
+        session_manager: Arc<SessionManager>,
+        server_state: Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
+    ) -> Self {
+        let active: HashSet<String> = compiled_tools.keys().cloned().collect();
+        let fingerprint = Self::compute_fingerprint_for(&compiled_tools, &active);
+
+        Self {
+            compiled_tools,
+            state: RwLock::new(ToolState {
+                active,
+                fingerprint,
+            }),
+            session_manager,
+            server_state: Some(server_state),
         }
     }
 
@@ -84,6 +116,9 @@ impl ToolRegistry {
         if changed {
             self.broadcast_notification().await;
             info!("Tool '{}' activated", name);
+
+            #[cfg(feature = "dynamic-clustered")]
+            self.persist_entity_change(name, true).await;
         } else {
             debug!("Tool '{}' already active", name);
         }
@@ -114,6 +149,9 @@ impl ToolRegistry {
         if changed {
             self.broadcast_notification().await;
             info!("Tool '{}' deactivated", name);
+
+            #[cfg(feature = "dynamic-clustered")]
+            self.persist_entity_change(name, false).await;
         } else {
             debug!("Tool '{}' already inactive", name);
         }
@@ -179,6 +217,124 @@ impl ToolRegistry {
             .await;
     }
 
+    /// Sync local tool state against shared storage on startup.
+    ///
+    /// Compares the local fingerprint (from compiled tools) against the stored
+    /// fingerprint. If they differ, this instance's state wins and is written
+    /// to storage. If they match, the active set from storage is loaded into
+    /// the in-memory registry.
+    #[cfg(feature = "dynamic-clustered")]
+    pub async fn sync_from_storage(&self) -> Result<SyncResult, ToolRegistryError> {
+        let storage = self
+            .server_state
+            .as_ref()
+            .ok_or_else(|| ToolRegistryError::StorageError("No server state storage configured".to_string()))?;
+
+        // 1. Compute local fingerprint from compiled tools
+        let local_fp = self.fingerprint().await;
+
+        // 2. Read stored fingerprint
+        let stored_fp = storage
+            .get_fingerprint("tools")
+            .await
+            .map_err(|e| ToolRegistryError::StorageError(e.to_string()))?;
+
+        // 3. Compare
+        match stored_fp {
+            None => {
+                // First server to start — write our state to storage
+                self.write_state_to_storage().await?;
+                Ok(SyncResult::InitializedStorage)
+            }
+            Some(stored) if stored == local_fp => {
+                // Fingerprints match — load active set from storage
+                self.load_state_from_storage().await?;
+                Ok(SyncResult::InSync)
+            }
+            Some(stored) => {
+                // Different — this instance has newer tools
+                warn!(
+                    "Tool fingerprint mismatch: local={}, storage={}. Updating storage.",
+                    local_fp, stored
+                );
+                self.write_state_to_storage().await?;
+                Ok(SyncResult::UpdatedStorage {
+                    old_fingerprint: stored,
+                })
+            }
+        }
+    }
+
+    /// Write the current in-memory active set and fingerprint to shared storage.
+    #[cfg(feature = "dynamic-clustered")]
+    async fn write_state_to_storage(&self) -> Result<(), ToolRegistryError> {
+        let storage = self.server_state.as_ref().unwrap();
+        let state = self.state.read().await;
+
+        // Write each active tool
+        for name in &state.active {
+            let entity = turul_mcp_server_state_storage::EntityState {
+                entity_id: name.clone(),
+                active: true,
+                metadata: None,
+                updated_at: chrono::Utc::now().to_rfc3339(),
+            };
+            storage
+                .set_entity_state("tools", name, entity)
+                .await
+                .map_err(|e| ToolRegistryError::StorageError(e.to_string()))?;
+        }
+
+        // Write fingerprint
+        storage
+            .set_fingerprint("tools", state.fingerprint.clone())
+            .await
+            .map_err(|e| ToolRegistryError::StorageError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Load the active set from shared storage into the in-memory registry.
+    #[cfg(feature = "dynamic-clustered")]
+    async fn load_state_from_storage(&self) -> Result<(), ToolRegistryError> {
+        let storage = self.server_state.as_ref().unwrap();
+
+        // Read active entities from storage
+        let active_ids = storage
+            .get_active_entities("tools")
+            .await
+            .map_err(|e| ToolRegistryError::StorageError(e.to_string()))?;
+
+        // Update in-memory state
+        let mut state = self.state.write().await;
+        state.active = active_ids.into_iter().collect();
+        state.fingerprint = Self::compute_fingerprint_for(&self.compiled_tools, &state.active);
+
+        Ok(())
+    }
+
+    /// Persist a single entity activation/deactivation change to shared storage.
+    /// Best-effort: logs warnings on failure rather than propagating errors.
+    #[cfg(feature = "dynamic-clustered")]
+    async fn persist_entity_change(&self, name: &str, active: bool) {
+        if let Some(ref storage) = self.server_state {
+            let entity = turul_mcp_server_state_storage::EntityState {
+                entity_id: name.to_string(),
+                active,
+                metadata: None,
+                updated_at: chrono::Utc::now().to_rfc3339(),
+            };
+            if let Err(e) = storage.set_entity_state("tools", name, entity).await {
+                warn!("Failed to persist tool state to storage: {}", e);
+            }
+            // Update fingerprint in storage
+            let fp = self.fingerprint().await;
+            if let Err(e) = storage.set_fingerprint("tools", fp).await {
+                warn!("Failed to persist fingerprint to storage: {}", e);
+            }
+        }
+    }
+
     /// Compute fingerprint for a given active tool subset.
     fn compute_fingerprint_for(
         compiled: &HashMap<String, Arc<dyn McpTool>>,
@@ -198,6 +354,22 @@ impl ToolRegistry {
 pub enum ToolRegistryError {
     #[error("Tool '{0}' is not a compiled tool — cannot activate/deactivate tools that were not registered at build time")]
     NotCompiled(String),
+
+    #[cfg(feature = "dynamic-clustered")]
+    #[error("Storage error: {0}")]
+    StorageError(String),
+}
+
+/// Result of syncing local tool state against shared storage.
+#[cfg(feature = "dynamic-clustered")]
+#[derive(Debug)]
+pub enum SyncResult {
+    /// First server to start — wrote local state to storage.
+    InitializedStorage,
+    /// Fingerprints match — loaded active set from storage.
+    InSync,
+    /// Fingerprint mismatch — updated storage with local state.
+    UpdatedStorage { old_fingerprint: String },
 }
 
 #[cfg(test)]

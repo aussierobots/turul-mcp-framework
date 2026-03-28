@@ -81,6 +81,8 @@ impl McpServer {
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
         tool_fingerprint: String,
         #[cfg(feature = "dynamic-tools")] dynamic_tools: bool,
+        #[cfg(feature = "dynamic-clustered")]
+        server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
@@ -136,9 +138,11 @@ impl McpServer {
 
         #[cfg(feature = "dynamic-tools")]
         let tool_registry = if dynamic_tools {
-            Some(Arc::new(crate::tool_registry::ToolRegistry::new(
+            Some(Arc::new(Self::create_tool_registry(
                 tools.clone(),
                 session_manager.clone(),
+                #[cfg(feature = "dynamic-clustered")]
+                server_state_storage,
             )))
         } else {
             None
@@ -184,6 +188,28 @@ impl McpServer {
     /// ```
     pub fn builder() -> McpServerBuilder {
         McpServerBuilder::new()
+    }
+
+    /// Create a `ToolRegistry`, choosing `new_clustered` when storage is provided.
+    #[cfg(feature = "dynamic-tools")]
+    fn create_tool_registry(
+        compiled_tools: HashMap<String, Arc<dyn McpTool>>,
+        session_manager: Arc<SessionManager>,
+        #[cfg(feature = "dynamic-clustered")]
+        server_state_storage: Option<
+            Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
+        >,
+    ) -> crate::tool_registry::ToolRegistry {
+        #[cfg(feature = "dynamic-clustered")]
+        if let Some(storage) = server_state_storage {
+            return crate::tool_registry::ToolRegistry::new_clustered(
+                compiled_tools,
+                session_manager,
+                storage,
+            );
+        }
+
+        crate::tool_registry::ToolRegistry::new(compiled_tools, session_manager)
     }
 
     /// Activate a precompiled tool at runtime. Only available in `DynamicInProcess` mode.
