@@ -313,6 +313,25 @@ impl McpServer {
             }
         }
 
+        // Sync tool registry with shared storage on startup (rolling deployment support)
+        #[cfg(feature = "dynamic-clustered")]
+        if let Some(ref registry) = self.tool_registry {
+            match registry.sync_from_storage().await {
+                Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
+                    info!("DynamicClustered: initialized shared storage with local tool state");
+                }
+                Ok(crate::tool_registry::SyncResult::InSync) => {
+                    info!("DynamicClustered: local tools match shared storage");
+                }
+                Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
+                    warn!("DynamicClustered: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.", old_fingerprint);
+                }
+                Err(e) => {
+                    error!("DynamicClustered: failed to sync with shared storage: {}. Continuing with local state.", e);
+                }
+            }
+        }
+
         // Create session-aware tool handler (with optional task runtime for async execution)
         let mut tool_handler = SessionAwareToolHandler::new(
             self.tools.clone(),
@@ -509,6 +528,25 @@ impl McpServer {
                     warn!(error = %e, "Failed to recover stuck tasks on startup");
                 }
                 _ => {}
+            }
+        }
+
+        // Sync tool registry with shared storage on startup (rolling deployment support)
+        #[cfg(feature = "dynamic-clustered")]
+        if let Some(ref registry) = self.tool_registry {
+            match registry.sync_from_storage().await {
+                Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
+                    info!("DynamicClustered: initialized shared storage with local tool state");
+                }
+                Ok(crate::tool_registry::SyncResult::InSync) => {
+                    info!("DynamicClustered: local tools match shared storage");
+                }
+                Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
+                    warn!("DynamicClustered: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.", old_fingerprint);
+                }
+                Err(e) => {
+                    error!("DynamicClustered: failed to sync with shared storage: {}. Continuing with local state.", e);
+                }
             }
         }
 
