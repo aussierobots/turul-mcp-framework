@@ -5,15 +5,15 @@
 //! receive `notifications/tools/list_changed` via SSE.
 //!
 //! This module is gated behind the `dynamic-tools` feature flag.
-//! Only for single-process, long-lived HTTP servers.
+//! Supports both single-process and multi-instance deployments.
+//! When constructed with shared `ServerStateStorage`, enables cross-instance
+//! coordination via polling (EC2) or request-time checks (Lambda).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use tokio::sync::RwLock;
-use tracing::{debug, info};
-#[cfg(feature = "dynamic-clustered")]
-use tracing::warn;
+use tracing::{debug, info, warn};
 
 use crate::session::SessionManager;
 use crate::tool::{McpTool, compute_tool_fingerprint, tool_to_descriptor};
@@ -36,10 +36,9 @@ pub struct ToolRegistry {
     state: RwLock<ToolState>,
     /// SessionManager for broadcasting change events (transport-agnostic)
     session_manager: Arc<SessionManager>,
-    /// Optional server-global storage for DynamicClustered mode.
-    /// When present, activate/deactivate persist to shared storage for cross-instance coordination.
-    #[cfg(feature = "dynamic-clustered")]
-    server_state: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
+    /// Server-global storage for cross-instance coordination.
+    /// Activate/deactivate operations persist to shared storage.
+    server_state: Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
 }
 
 /// Active tool set and its corresponding fingerprint, kept consistent under one lock.
@@ -50,31 +49,10 @@ struct ToolState {
 
 impl ToolRegistry {
     /// Create a new registry with all compiled tools initially active.
-    pub fn new(
-        compiled_tools: HashMap<String, Arc<dyn McpTool>>,
-        session_manager: Arc<SessionManager>,
-    ) -> Self {
-        let active: HashSet<String> = compiled_tools.keys().cloned().collect();
-        let fingerprint = Self::compute_fingerprint_for(&compiled_tools, &active);
-
-        Self {
-            compiled_tools,
-            state: RwLock::new(ToolState {
-                active,
-                fingerprint,
-            }),
-            session_manager,
-            #[cfg(feature = "dynamic-clustered")]
-            server_state: None,
-        }
-    }
-
-    /// Create a new registry with server state storage for DynamicClustered mode.
     ///
-    /// All compiled tools start active (same as `new()`), but activate/deactivate
-    /// operations also persist to the shared storage backend.
-    #[cfg(feature = "dynamic-clustered")]
-    pub fn new_clustered(
+    /// All activate/deactivate operations persist to the provided storage backend
+    /// for cross-instance coordination.
+    pub fn new(
         compiled_tools: HashMap<String, Arc<dyn McpTool>>,
         session_manager: Arc<SessionManager>,
         server_state: Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
@@ -89,7 +67,7 @@ impl ToolRegistry {
                 fingerprint,
             }),
             session_manager,
-            server_state: Some(server_state),
+            server_state,
         }
     }
 
@@ -116,8 +94,6 @@ impl ToolRegistry {
         if changed {
             self.broadcast_notification().await;
             info!("Tool '{}' activated", name);
-
-            #[cfg(feature = "dynamic-clustered")]
             self.persist_entity_change(name, true).await;
         } else {
             debug!("Tool '{}' already active", name);
@@ -149,8 +125,6 @@ impl ToolRegistry {
         if changed {
             self.broadcast_notification().await;
             info!("Tool '{}' deactivated", name);
-
-            #[cfg(feature = "dynamic-clustered")]
             self.persist_entity_change(name, false).await;
         } else {
             debug!("Tool '{}' already inactive", name);
@@ -223,12 +197,8 @@ impl ToolRegistry {
     /// fingerprint. If they differ, this instance's state wins and is written
     /// to storage. If they match, the active set from storage is loaded into
     /// the in-memory registry.
-    #[cfg(feature = "dynamic-clustered")]
     pub async fn sync_from_storage(&self) -> Result<SyncResult, ToolRegistryError> {
-        let storage = self
-            .server_state
-            .as_ref()
-            .ok_or_else(|| ToolRegistryError::StorageError("No server state storage configured".to_string()))?;
+        let storage = &self.server_state;
 
         // 1. Compute local fingerprint from compiled tools
         let local_fp = self.fingerprint().await;
@@ -266,9 +236,8 @@ impl ToolRegistry {
     }
 
     /// Write the current in-memory active set and fingerprint to shared storage.
-    #[cfg(feature = "dynamic-clustered")]
     async fn write_state_to_storage(&self) -> Result<(), ToolRegistryError> {
-        let storage = self.server_state.as_ref().unwrap();
+        let storage = &self.server_state;
         let state = self.state.read().await;
 
         // Write each active tool
@@ -295,9 +264,8 @@ impl ToolRegistry {
     }
 
     /// Load the active set from shared storage into the in-memory registry.
-    #[cfg(feature = "dynamic-clustered")]
     async fn load_state_from_storage(&self) -> Result<(), ToolRegistryError> {
-        let storage = self.server_state.as_ref().unwrap();
+        let storage = &self.server_state;
 
         // Read active entities from storage
         let active_ids = storage
@@ -315,23 +283,20 @@ impl ToolRegistry {
 
     /// Persist a single entity activation/deactivation change to shared storage.
     /// Best-effort: logs warnings on failure rather than propagating errors.
-    #[cfg(feature = "dynamic-clustered")]
     async fn persist_entity_change(&self, name: &str, active: bool) {
-        if let Some(ref storage) = self.server_state {
-            let entity = turul_mcp_server_state_storage::EntityState {
-                entity_id: name.to_string(),
-                active,
-                metadata: None,
-                updated_at: chrono::Utc::now().to_rfc3339(),
-            };
-            if let Err(e) = storage.set_entity_state("tools", name, entity).await {
-                warn!("Failed to persist tool state to storage: {}", e);
-            }
-            // Update fingerprint in storage
-            let fp = self.fingerprint().await;
-            if let Err(e) = storage.set_fingerprint("tools", fp).await {
-                warn!("Failed to persist fingerprint to storage: {}", e);
-            }
+        let entity = turul_mcp_server_state_storage::EntityState {
+            entity_id: name.to_string(),
+            active,
+            metadata: None,
+            updated_at: chrono::Utc::now().to_rfc3339(),
+        };
+        if let Err(e) = self.server_state.set_entity_state("tools", name, entity).await {
+            warn!("Failed to persist tool state to storage: {}", e);
+        }
+        // Update fingerprint in storage
+        let fp = self.fingerprint().await;
+        if let Err(e) = self.server_state.set_fingerprint("tools", fp).await {
+            warn!("Failed to persist fingerprint to storage: {}", e);
         }
     }
 
@@ -344,22 +309,18 @@ impl ToolRegistry {
     ///
     /// Designed for Lambda / request-driven environments where background polling
     /// is not available — call this at the start of each request instead.
-    #[cfg(feature = "dynamic-clustered")]
     pub async fn check_for_changes(&self) -> Result<bool, ToolRegistryError> {
-        let storage = self.server_state.as_ref()
-            .ok_or_else(|| ToolRegistryError::StorageError("No server state storage configured".to_string()))?;
-
-        let stored_fp = storage.get_fingerprint("tools").await
+        let stored_fp = self.server_state.get_fingerprint("tools").await
             .map_err(|e| ToolRegistryError::StorageError(e.to_string()))?;
 
         let local_fp = self.fingerprint().await;
 
         match stored_fp {
             Some(fp) if fp != local_fp => {
-                info!("DynamicClustered: external tool change detected (stored={}, local={})", fp, local_fp);
+                info!("Dynamic: external tool change detected (stored={}, local={})", fp, local_fp);
                 self.load_state_from_storage().await?;
                 self.broadcast_notification().await;
-                info!("DynamicClustered: tool state reloaded and clients notified");
+                info!("Dynamic: tool state reloaded and clients notified");
                 Ok(true)
             }
             _ => Ok(false),
@@ -373,7 +334,6 @@ impl ToolRegistry {
     /// broadcasts `notifications/tools/list_changed` to connected clients.
     ///
     /// Returns a `JoinHandle` that can be used to abort the polling task on shutdown.
-    #[cfg(feature = "dynamic-clustered")]
     pub fn start_polling(
         self: &Arc<Self>,
         interval: std::time::Duration,
@@ -385,34 +345,32 @@ impl ToolRegistry {
             loop {
                 tokio::time::sleep(interval).await;
 
-                if let Some(ref storage) = registry.server_state {
-                    match storage.get_fingerprint("tools").await {
-                        Ok(Some(stored_fp)) => {
-                            let local_fp = registry.fingerprint().await;
-                            if stored_fp != local_fp {
-                                info!(
-                                    "DynamicClustered: detected tool change from another instance (stored={}, local={})",
-                                    stored_fp, local_fp
+                match registry.server_state.get_fingerprint("tools").await {
+                    Ok(Some(stored_fp)) => {
+                        let local_fp = registry.fingerprint().await;
+                        if stored_fp != local_fp {
+                            info!(
+                                "Dynamic: detected tool change from another instance (stored={}, local={})",
+                                stored_fp, local_fp
+                            );
+                            if let Err(e) = registry.load_state_from_storage().await {
+                                warn!(
+                                    "Failed to reload tool state from storage: {}",
+                                    e
                                 );
-                                if let Err(e) = registry.load_state_from_storage().await {
-                                    warn!(
-                                        "Failed to reload tool state from storage: {}",
-                                        e
-                                    );
-                                    continue;
-                                }
-                                registry.broadcast_notification().await;
-                                info!(
-                                    "DynamicClustered: tool state reloaded and clients notified"
-                                );
+                                continue;
                             }
+                            registry.broadcast_notification().await;
+                            info!(
+                                "Dynamic: tool state reloaded and clients notified"
+                            );
                         }
-                        Ok(None) => {
-                            debug!("No fingerprint in storage yet");
-                        }
-                        Err(e) => {
-                            warn!("Failed to check storage fingerprint: {}", e);
-                        }
+                    }
+                    Ok(None) => {
+                        debug!("No fingerprint in storage yet");
+                    }
+                    Err(e) => {
+                        warn!("Failed to check storage fingerprint: {}", e);
                     }
                 }
             }
@@ -439,13 +397,11 @@ pub enum ToolRegistryError {
     #[error("Tool '{0}' is not a compiled tool — cannot activate/deactivate tools that were not registered at build time")]
     NotCompiled(String),
 
-    #[cfg(feature = "dynamic-clustered")]
     #[error("Storage error: {0}")]
     StorageError(String),
 }
 
 /// Result of syncing local tool state against shared storage.
-#[cfg(feature = "dynamic-clustered")]
 #[derive(Debug)]
 pub enum SyncResult {
     /// First server to start — wrote local state to storage.
@@ -528,16 +484,24 @@ mod tests {
         ))
     }
 
+    fn test_storage() -> Arc<dyn turul_mcp_server_state_storage::ServerStateStorage> {
+        Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new())
+    }
+
+    fn test_registry() -> ToolRegistry {
+        ToolRegistry::new(test_tools(), test_session_manager(), test_storage())
+    }
+
     #[tokio::test]
     async fn test_all_tools_active_by_default() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         let active = registry.list_active_tools().await;
         assert_eq!(active.len(), 3);
     }
 
     #[tokio::test]
     async fn test_deactivate_tool() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
 
         let result = registry.deactivate_tool("beta").await.unwrap();
         assert!(result, "beta should have been deactivated");
@@ -549,7 +513,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_activate_tool() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
 
         registry.deactivate_tool("beta").await.unwrap();
         assert_eq!(registry.list_active_tools().await.len(), 2);
@@ -561,14 +525,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_activate_already_active() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         let result = registry.activate_tool("alpha").await.unwrap();
         assert!(!result, "alpha was already active");
     }
 
     #[tokio::test]
     async fn test_deactivate_already_inactive() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         registry.deactivate_tool("beta").await.unwrap();
         let result = registry.deactivate_tool("beta").await.unwrap();
         assert!(!result, "beta was already inactive");
@@ -576,7 +540,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_activate_nonexistent_tool_errors() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         let result = registry.activate_tool("nonexistent").await;
         assert!(result.is_err());
         assert!(matches!(result.unwrap_err(), ToolRegistryError::NotCompiled(_)));
@@ -584,21 +548,21 @@ mod tests {
 
     #[tokio::test]
     async fn test_deactivate_nonexistent_tool_errors() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         let result = registry.deactivate_tool("nonexistent").await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_get_tool_active() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         let tool = registry.get_tool("alpha").await;
         assert!(tool.is_some());
     }
 
     #[tokio::test]
     async fn test_get_tool_inactive() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         registry.deactivate_tool("alpha").await.unwrap();
         let tool = registry.get_tool("alpha").await;
         assert!(tool.is_none(), "Inactive tool should return None");
@@ -606,7 +570,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fingerprint_changes_on_mutation() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         let fp_before = registry.fingerprint().await;
 
         registry.deactivate_tool("beta").await.unwrap();
@@ -617,7 +581,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_fingerprint_stable_without_mutation() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         let fp1 = registry.fingerprint().await;
         let fp2 = registry.fingerprint().await;
         assert_eq!(fp1, fp2);
@@ -625,14 +589,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_compiled_tool_names() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         let names = registry.compiled_tool_names();
         assert_eq!(names, vec!["alpha", "beta", "gamma"]);
     }
 
     #[tokio::test]
     async fn test_concurrent_operations() {
-        let registry = Arc::new(ToolRegistry::new(test_tools(), test_session_manager()));
+        let registry = Arc::new(test_registry());
         let mut handles = Vec::new();
 
         for i in 0..20 {
@@ -672,7 +636,7 @@ mod tests {
         // Subscribe to global events BEFORE the mutation
         let mut receiver = session_manager.subscribe_all_session_events();
 
-        let registry = ToolRegistry::new(test_tools(), session_manager.clone());
+        let registry = ToolRegistry::new(test_tools(), session_manager.clone(), test_storage());
 
         // Deactivate then re-activate to trigger a notification
         registry.deactivate_tool("beta").await.unwrap();
@@ -710,7 +674,7 @@ mod tests {
         let _session_id = session_manager.create_session().await;
         let mut receiver = session_manager.subscribe_all_session_events();
 
-        let registry = ToolRegistry::new(test_tools(), session_manager);
+        let registry = ToolRegistry::new(test_tools(), session_manager, test_storage());
         registry.deactivate_tool("alpha").await.unwrap();
 
         let (_sid, event) = tokio::time::timeout(
@@ -751,7 +715,7 @@ mod tests {
         let session_manager = test_session_manager();
         let _session_id = session_manager.create_session().await;
 
-        let registry = ToolRegistry::new(test_tools(), session_manager.clone());
+        let registry = ToolRegistry::new(test_tools(), session_manager.clone(), test_storage());
         registry.deactivate_tool("beta").await.unwrap();
 
         // Now subscribe and re-activate
@@ -777,7 +741,7 @@ mod tests {
     /// Fingerprint round-trip: deactivate → reactivate → same fingerprint
     #[tokio::test]
     async fn test_fingerprint_round_trip() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         let fp_initial = registry.fingerprint().await;
 
         registry.deactivate_tool("beta").await.unwrap();
@@ -795,7 +759,7 @@ mod tests {
     /// Empty active set is a valid state
     #[tokio::test]
     async fn test_deactivate_all_tools() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         let fp_full = registry.fingerprint().await;
 
         registry.deactivate_tool("alpha").await.unwrap();
@@ -818,7 +782,7 @@ mod tests {
     /// meaning existing sessions have a stale fingerprint and MUST be rejected.
     #[tokio::test]
     async fn test_notification_does_not_prevent_fingerprint_change() {
-        let registry = ToolRegistry::new(test_tools(), test_session_manager());
+        let registry = test_registry();
         let fp_before = registry.fingerprint().await;
 
         // Deactivate a tool — this sends a notification AND changes the fingerprint
@@ -835,32 +799,13 @@ mod tests {
     }
 
     // ===================================================================
-    // DynamicClustered tests (storage-backed registry)
+    // Storage-backed coordination tests
     // ===================================================================
-
-    #[cfg(feature = "dynamic-clustered")]
-    mod clustered_tests {
-        use super::*;
-
-        fn test_storage() -> Arc<dyn turul_mcp_server_state_storage::ServerStateStorage> {
-            Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new())
-        }
-
-        #[tokio::test]
-        async fn test_new_clustered_all_tools_active() {
-            let registry = ToolRegistry::new_clustered(
-                test_tools(),
-                test_session_manager(),
-                test_storage(),
-            );
-            let active = registry.list_active_tools().await;
-            assert_eq!(active.len(), 3);
-        }
 
         #[tokio::test]
         async fn test_sync_from_storage_initializes_empty_storage() {
             let storage = test_storage();
-            let registry = ToolRegistry::new_clustered(
+            let registry = ToolRegistry::new(
                 test_tools(),
                 test_session_manager(),
                 storage.clone(),
@@ -878,7 +823,7 @@ mod tests {
         #[tokio::test]
         async fn test_sync_from_storage_in_sync() {
             let storage = test_storage();
-            let registry = ToolRegistry::new_clustered(
+            let registry = ToolRegistry::new(
                 test_tools(),
                 test_session_manager(),
                 storage.clone(),
@@ -888,7 +833,7 @@ mod tests {
             registry.sync_from_storage().await.unwrap();
 
             // Second sync with same tools should be in sync
-            let registry2 = ToolRegistry::new_clustered(
+            let registry2 = ToolRegistry::new(
                 test_tools(),
                 test_session_manager(),
                 storage.clone(),
@@ -902,7 +847,7 @@ mod tests {
             let storage = test_storage();
 
             // First server writes its state
-            let registry1 = ToolRegistry::new_clustered(
+            let registry1 = ToolRegistry::new(
                 test_tools(),
                 test_session_manager(),
                 storage.clone(),
@@ -916,7 +861,7 @@ mod tests {
             fewer_tools.insert("alpha".to_string(), Arc::new(TestDynTool { tool_name: "alpha" }));
             fewer_tools.insert("beta".to_string(), Arc::new(TestDynTool { tool_name: "beta" }));
 
-            let registry2 = ToolRegistry::new_clustered(
+            let registry2 = ToolRegistry::new(
                 fewer_tools,
                 test_session_manager(),
                 storage.clone(),
@@ -940,7 +885,7 @@ mod tests {
         #[tokio::test]
         async fn test_activate_persists_to_storage() {
             let storage = test_storage();
-            let registry = ToolRegistry::new_clustered(
+            let registry = ToolRegistry::new(
                 test_tools(),
                 test_session_manager(),
                 storage.clone(),
@@ -963,7 +908,7 @@ mod tests {
         #[tokio::test]
         async fn test_polling_detects_external_fingerprint_change() {
             let storage = test_storage();
-            let registry = Arc::new(ToolRegistry::new_clustered(
+            let registry = Arc::new(ToolRegistry::new(
                 test_tools(),
                 test_session_manager(),
                 storage.clone(),
@@ -1017,7 +962,7 @@ mod tests {
         #[tokio::test]
         async fn test_polling_noop_when_fingerprints_match() {
             let storage = test_storage();
-            let registry = Arc::new(ToolRegistry::new_clustered(
+            let registry = Arc::new(ToolRegistry::new(
                 test_tools(),
                 test_session_manager(),
                 storage.clone(),
@@ -1045,7 +990,7 @@ mod tests {
         #[tokio::test]
         async fn test_deactivate_persists_to_storage() {
             let storage = test_storage();
-            let registry = ToolRegistry::new_clustered(
+            let registry = ToolRegistry::new(
                 test_tools(),
                 test_session_manager(),
                 storage.clone(),
@@ -1062,7 +1007,7 @@ mod tests {
         #[tokio::test]
         async fn test_check_for_changes_detects_external_change() {
             let storage = test_storage();
-            let registry = ToolRegistry::new_clustered(
+            let registry = ToolRegistry::new(
                 test_tools(),
                 test_session_manager(),
                 storage.clone(),
@@ -1108,7 +1053,7 @@ mod tests {
         #[tokio::test]
         async fn test_check_for_changes_noop_when_matching() {
             let storage = test_storage();
-            let registry = ToolRegistry::new_clustered(
+            let registry = ToolRegistry::new(
                 test_tools(),
                 test_session_manager(),
                 storage.clone(),
@@ -1126,5 +1071,4 @@ mod tests {
             assert_eq!(registry.fingerprint().await, initial_fp);
             assert_eq!(registry.list_active_tools().await.len(), 3);
         }
-    }
 }

@@ -46,9 +46,12 @@ pub struct McpServer {
     route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
     /// Stable fingerprint of the registered tool set for session versioning
     tool_fingerprint: String,
-    /// Dynamic tool registry (only in DynamicInProcess mode)
+    /// Dynamic tool registry (only in Dynamic mode)
     #[cfg(feature = "dynamic-tools")]
     tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
+    /// Whether cross-instance coordination is enabled (explicit storage was provided)
+    #[cfg(feature = "dynamic-tools")]
+    coordination_enabled: bool,
 
     // HTTP configuration (if enabled)
     #[cfg(feature = "http")]
@@ -81,7 +84,7 @@ impl McpServer {
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
         tool_fingerprint: String,
         #[cfg(feature = "dynamic-tools")] dynamic_tools: bool,
-        #[cfg(feature = "dynamic-clustered")]
+        #[cfg(feature = "dynamic-tools")]
         server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
@@ -137,11 +140,13 @@ impl McpServer {
         }
 
         #[cfg(feature = "dynamic-tools")]
+        let coordination_enabled = server_state_storage.is_some();
+
+        #[cfg(feature = "dynamic-tools")]
         let tool_registry = if dynamic_tools {
             Some(Arc::new(Self::create_tool_registry(
                 tools.clone(),
                 session_manager.clone(),
-                #[cfg(feature = "dynamic-clustered")]
                 server_state_storage,
             )))
         } else {
@@ -163,6 +168,8 @@ impl McpServer {
             tool_fingerprint,
             #[cfg(feature = "dynamic-tools")]
             tool_registry,
+            #[cfg(feature = "dynamic-tools")]
+            coordination_enabled,
             #[cfg(feature = "http")]
             bind_address,
             #[cfg(feature = "http")]
@@ -190,29 +197,25 @@ impl McpServer {
         McpServerBuilder::new()
     }
 
-    /// Create a `ToolRegistry`, choosing `new_clustered` when storage is provided.
+    /// Create a `ToolRegistry` with optional shared storage for coordination.
+    ///
+    /// If explicit storage is provided, it is used for cross-instance coordination.
+    /// Otherwise, an in-memory backend is created automatically.
     #[cfg(feature = "dynamic-tools")]
     fn create_tool_registry(
         compiled_tools: HashMap<String, Arc<dyn McpTool>>,
         session_manager: Arc<SessionManager>,
-        #[cfg(feature = "dynamic-clustered")]
         server_state_storage: Option<
             Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
         >,
     ) -> crate::tool_registry::ToolRegistry {
-        #[cfg(feature = "dynamic-clustered")]
-        if let Some(storage) = server_state_storage {
-            return crate::tool_registry::ToolRegistry::new_clustered(
-                compiled_tools,
-                session_manager,
-                storage,
-            );
-        }
-
-        crate::tool_registry::ToolRegistry::new(compiled_tools, session_manager)
+        let storage = server_state_storage.unwrap_or_else(|| {
+            Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new())
+        });
+        crate::tool_registry::ToolRegistry::new(compiled_tools, session_manager, storage)
     }
 
-    /// Activate a precompiled tool at runtime. Only available in `DynamicInProcess` mode.
+    /// Activate a precompiled tool at runtime. Only available in `Dynamic` mode.
     ///
     /// Connected clients receive `notifications/tools/list_changed` via SSE.
     /// New sessions get the updated fingerprint. Existing sessions with the old
@@ -226,14 +229,14 @@ impl McpServer {
             Some(registry) => registry.activate_tool(name).await,
             None => Err(crate::tool_registry::ToolRegistryError::NotCompiled(
                 format!(
-                    "Cannot activate tool '{}': server is not in DynamicInProcess mode",
+                    "Cannot activate tool '{}': server is not in Dynamic mode",
                     name
                 ),
             )),
         }
     }
 
-    /// Deactivate a precompiled tool at runtime. Only available in `DynamicInProcess` mode.
+    /// Deactivate a precompiled tool at runtime. Only available in `Dynamic` mode.
     #[cfg(feature = "dynamic-tools")]
     pub async fn deactivate_tool(
         &self,
@@ -243,14 +246,14 @@ impl McpServer {
             Some(registry) => registry.deactivate_tool(name).await,
             None => Err(crate::tool_registry::ToolRegistryError::NotCompiled(
                 format!(
-                    "Cannot deactivate tool '{}': server is not in DynamicInProcess mode",
+                    "Cannot deactivate tool '{}': server is not in Dynamic mode",
                     name
                 ),
             )),
         }
     }
 
-    /// Get the dynamic tool registry, if in DynamicInProcess mode.
+    /// Get the dynamic tool registry, if in Dynamic mode.
     #[cfg(feature = "dynamic-tools")]
     pub fn tool_registry(&self) -> Option<&Arc<crate::tool_registry::ToolRegistry>> {
         self.tool_registry.as_ref()
@@ -313,28 +316,30 @@ impl McpServer {
             }
         }
 
-        // Sync tool registry with shared storage on startup (rolling deployment support)
-        #[cfg(feature = "dynamic-clustered")]
-        if let Some(ref registry) = self.tool_registry {
-            match registry.sync_from_storage().await {
-                Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
-                    info!("DynamicClustered: initialized shared storage with local tool state");
+        // Sync tool registry with shared storage on startup (coordination mode only)
+        #[cfg(feature = "dynamic-tools")]
+        if self.coordination_enabled {
+            if let Some(ref registry) = self.tool_registry {
+                match registry.sync_from_storage().await {
+                    Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
+                        info!("Dynamic: initialized shared storage with local tool state");
+                    }
+                    Ok(crate::tool_registry::SyncResult::InSync) => {
+                        info!("Dynamic: local tools match shared storage");
+                    }
+                    Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
+                        warn!("Dynamic: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.", old_fingerprint);
+                    }
+                    Err(e) => {
+                        error!("Dynamic: failed to sync with shared storage: {}. Continuing with local state.", e);
+                    }
                 }
-                Ok(crate::tool_registry::SyncResult::InSync) => {
-                    info!("DynamicClustered: local tools match shared storage");
-                }
-                Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
-                    warn!("DynamicClustered: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.", old_fingerprint);
-                }
-                Err(e) => {
-                    error!("DynamicClustered: failed to sync with shared storage: {}. Continuing with local state.", e);
-                }
-            }
 
-            // Start background polling for cross-instance changes
-            let poll_interval = std::time::Duration::from_secs(10);
-            let _poll_handle = registry.start_polling(poll_interval);
-            info!("DynamicClustered: started background polling (interval: {:?})", poll_interval);
+                // Start background polling for cross-instance changes
+                let poll_interval = std::time::Duration::from_secs(10);
+                let _poll_handle = registry.start_polling(poll_interval);
+                info!("Dynamic: started background polling (interval: {:?})", poll_interval);
+            }
         }
 
         // Create session-aware tool handler (with optional task runtime for async execution)
@@ -536,28 +541,30 @@ impl McpServer {
             }
         }
 
-        // Sync tool registry with shared storage on startup (rolling deployment support)
-        #[cfg(feature = "dynamic-clustered")]
-        if let Some(ref registry) = self.tool_registry {
-            match registry.sync_from_storage().await {
-                Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
-                    info!("DynamicClustered: initialized shared storage with local tool state");
+        // Sync tool registry with shared storage on startup (coordination mode only)
+        #[cfg(feature = "dynamic-tools")]
+        if self.coordination_enabled {
+            if let Some(ref registry) = self.tool_registry {
+                match registry.sync_from_storage().await {
+                    Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
+                        info!("Dynamic: initialized shared storage with local tool state");
+                    }
+                    Ok(crate::tool_registry::SyncResult::InSync) => {
+                        info!("Dynamic: local tools match shared storage");
+                    }
+                    Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
+                        warn!("Dynamic: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.", old_fingerprint);
+                    }
+                    Err(e) => {
+                        error!("Dynamic: failed to sync with shared storage: {}. Continuing with local state.", e);
+                    }
                 }
-                Ok(crate::tool_registry::SyncResult::InSync) => {
-                    info!("DynamicClustered: local tools match shared storage");
-                }
-                Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
-                    warn!("DynamicClustered: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.", old_fingerprint);
-                }
-                Err(e) => {
-                    error!("DynamicClustered: failed to sync with shared storage: {}. Continuing with local state.", e);
-                }
-            }
 
-            // Start background polling for cross-instance changes
-            let poll_interval = std::time::Duration::from_secs(10);
-            let _poll_handle = registry.start_polling(poll_interval);
-            info!("DynamicClustered: started background polling (interval: {:?})", poll_interval);
+                // Start background polling for cross-instance changes
+                let poll_interval = std::time::Duration::from_secs(10);
+                let _poll_handle = registry.start_polling(poll_interval);
+                info!("Dynamic: started background polling (interval: {:?})", poll_interval);
+            }
         }
 
         // Create session-aware tool handler (with optional task runtime for async execution)
@@ -1230,7 +1237,7 @@ impl ListToolsHandler {
         }
     }
 
-    /// Set a dynamic tool registry for DynamicInProcess mode.
+    /// Set a dynamic tool registry for Dynamic mode.
     #[cfg(feature = "dynamic-tools")]
     pub fn with_tool_registry(mut self, registry: Arc<crate::tool_registry::ToolRegistry>) -> Self {
         self.tool_registry = Some(registry);
@@ -1292,7 +1299,7 @@ impl JsonRpcHandler for ListToolsHandler {
         debug!("Listing tools with cursor: {:?}", cursor);
 
         // Convert tools to descriptors and sort by name for stable pagination.
-        // In DynamicInProcess mode, read from live registry instead of static snapshot.
+        // In Dynamic mode, read from live registry instead of static snapshot.
         #[cfg(feature = "dynamic-tools")]
         let mut tools: Vec<Tool> = if let Some(ref registry) = self.tool_registry {
             registry.list_active_tools().await
@@ -1449,7 +1456,7 @@ impl SessionAwareToolHandler {
         self
     }
 
-    /// Set a dynamic tool registry for DynamicInProcess mode.
+    /// Set a dynamic tool registry for Dynamic mode.
     #[cfg(feature = "dynamic-tools")]
     pub fn with_tool_registry(mut self, registry: Arc<crate::tool_registry::ToolRegistry>) -> Self {
         self.tool_registry = Some(registry);
@@ -1512,7 +1519,7 @@ impl JsonRpcHandler for SessionAwareToolHandler {
 
         let call_params: turul_mcp_protocol::tools::CallToolParams = extract_params(params)?;
 
-        // Find the tool — from live registry in DynamicInProcess mode, or static map otherwise.
+        // Find the tool — from live registry in Dynamic mode, or static map otherwise.
         // In both cases, we clone the Arc and release any lock before the await boundary.
         #[cfg(feature = "dynamic-tools")]
         let tool: Arc<dyn McpTool> = if let Some(ref registry) = self.tool_registry {

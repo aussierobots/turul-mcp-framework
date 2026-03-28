@@ -79,9 +79,12 @@ pub struct LambdaMcpServer {
     task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
     /// Stable fingerprint of the registered tool set for session versioning
     tool_fingerprint: String,
-    /// Dynamic tool registry (only in DynamicInProcess/DynamicClustered mode)
+    /// Dynamic tool registry (only in Dynamic mode)
     #[cfg(feature = "dynamic-tools")]
     tool_registry: Option<Arc<turul_mcp_server::ToolRegistry>>,
+    /// Whether cross-instance coordination is enabled (explicit storage was provided)
+    #[cfg(feature = "dynamic-tools")]
+    coordination_enabled: bool,
 }
 
 impl LambdaMcpServer {
@@ -113,7 +116,7 @@ impl LambdaMcpServer {
         task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
         tool_fingerprint: String,
         #[cfg(feature = "dynamic-tools")] dynamic_tools: bool,
-        #[cfg(feature = "dynamic-clustered")]
+        #[cfg(feature = "dynamic-tools")]
         server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
     ) -> Self {
         // Create session manager with server capabilities
@@ -124,27 +127,20 @@ impl LambdaMcpServer {
             std::time::Duration::from_secs(60),      // 1 minute cleanup interval
         ));
 
+        // Track whether explicit coordination storage was provided
+        #[cfg(feature = "dynamic-tools")]
+        let coordination_enabled = server_state_storage.is_some();
+
         // Create ToolRegistry when dynamic mode is enabled
         #[cfg(feature = "dynamic-tools")]
         let tool_registry = if dynamic_tools {
-            #[cfg(feature = "dynamic-clustered")]
-            if let Some(storage) = server_state_storage {
-                Some(Arc::new(turul_mcp_server::ToolRegistry::new_clustered(
-                    tools.clone(),
-                    session_manager.clone(),
-                    storage,
-                )))
-            } else {
-                Some(Arc::new(turul_mcp_server::ToolRegistry::new(
-                    tools.clone(),
-                    session_manager.clone(),
-                )))
-            }
-
-            #[cfg(not(feature = "dynamic-clustered"))]
+            let storage = server_state_storage.unwrap_or_else(|| {
+                Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new())
+            });
             Some(Arc::new(turul_mcp_server::ToolRegistry::new(
                 tools.clone(),
                 session_manager.clone(),
+                storage,
             )))
         } else {
             None
@@ -179,6 +175,8 @@ impl LambdaMcpServer {
             tool_fingerprint,
             #[cfg(feature = "dynamic-tools")]
             tool_registry,
+            #[cfg(feature = "dynamic-tools")]
+            coordination_enabled,
         }
     }
 
@@ -218,16 +216,18 @@ impl LambdaMcpServer {
         // Start session cleanup task (same as MCP server)
         let _cleanup_task = self.session_manager.clone().start_cleanup_task();
 
-        // Sync tool registry with shared storage on startup (rolling deployment support)
-        #[cfg(feature = "dynamic-clustered")]
-        if let Some(ref registry) = self.tool_registry {
-            use tracing::warn;
-            match registry.sync_from_storage().await {
-                Ok(_) => {
-                    info!("DynamicClustered: synced tool registry with shared storage");
-                }
-                Err(e) => {
-                    warn!(error = %e, "DynamicClustered: failed to sync with shared storage on cold start");
+        // Sync tool registry with shared storage on startup (coordination mode only)
+        #[cfg(feature = "dynamic-tools")]
+        if self.coordination_enabled {
+            if let Some(ref registry) = self.tool_registry {
+                use tracing::warn;
+                match registry.sync_from_storage().await {
+                    Ok(_) => {
+                        info!("Dynamic: synced tool registry with shared storage");
+                    }
+                    Err(e) => {
+                        warn!(error = %e, "Dynamic: failed to sync with shared storage on cold start");
+                    }
                 }
             }
         }

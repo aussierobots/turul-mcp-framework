@@ -25,9 +25,9 @@ These are distinct concerns:
 
 If the session does not exist or is terminated, the request is rejected immediately. Fingerprint is NOT checked for invalid sessions.
 
-## Fingerprint — Tool Version Sync (Dynamic Modes Only)
+## Fingerprint — Tool Version Sync (Dynamic Mode Only)
 
-FNV-1a hash of the full serialized `Tool` descriptor set. Only computed and checked when `listChanged=true` (dynamic modes).
+FNV-1a hash of the full serialized `Tool` descriptor set. Only computed and checked when `listChanged=true` (Dynamic mode).
 
 - Stored per-session during `initialize` as `mcp:tool_fingerprint`
 - Checked on every request via `validate_session_exists()` (after session existence check)
@@ -44,7 +44,7 @@ FNV-1a hash of the full serialized `Tool` descriptor set. Only computed and chec
 
 ## Live Registry + Notification — Runtime Changes
 
-### DynamicInProcess mode
+### Dynamic mode
 
 - `listChanged=true` — truthful: server emits `notifications/tools/list_changed`
 - `ToolRegistry` with `activate_tool()` / `deactivate_tool()` for precompiled tools
@@ -53,15 +53,15 @@ FNV-1a hash of the full serialized `Tool` descriptor set. Only computed and chec
 - **Session continues without disruption** — no 404, no re-initialization for runtime changes
 - Client calls `tools/list` to refresh after receiving notification
 - The handler's build-time fingerprint does not change on runtime mutations, so no fingerprint mismatch is triggered by activate/deactivate
-- Restart/redeploy with different compiled tools: fingerprint mismatch → 404 (same as Static)
+- Restart/redeploy with different compiled tools: fingerprint mismatch triggers update + notification (same as Static)
 
-### DynamicClustered mode
+### Cross-instance coordination (optional)
 
-Extends DynamicInProcess with cross-instance coordination via shared `ServerStateStorage`:
+When `.server_state_storage()` is provided with Dynamic mode, cross-instance coordination is enabled:
 
 - Tool activation state stored in shared storage (SQLite, PostgreSQL, DynamoDB)
 - Startup sync via `sync_from_storage()`: compares local fingerprint against storage, updates if newer, logs warning for other stale instances
-- Restart/redeploy: fingerprint mismatch → 404 (same as other modes)
+- Without explicit storage, an in-memory backend is used automatically (single-process, no coordination)
 
 **EC2 (long-lived) coordination:** Background polling (default 10-second interval) via `ToolRegistry::start_polling()`. Each instance checks the shared storage fingerprint; on mismatch, reloads tool state and broadcasts `notifications/tools/list_changed` to connected clients.
 
@@ -75,17 +75,17 @@ Extends DynamicInProcess with cross-instance coordination via shared `ServerStat
 pub enum ToolChangeMode {
     Static,                     // Default. listChanged=false.
     #[cfg(feature = "dynamic-tools")]
-    DynamicInProcess,                    // Opt-in. listChanged=true. Single-process.
-    #[cfg(feature = "dynamic-clustered")]
-    DynamicClustered,                    // Opt-in. listChanged=true. Multi-instance.
+    Dynamic,                    // Opt-in. listChanged=true.
 }
 ```
 
-| Mode | `listChanged` | Restart fingerprint | Runtime changes | EC2 | Lambda |
-|------|---|---|---|---|---|
-| Static | false | Updated silently | Not supported | Yes | Yes |
-| DynamicInProcess | true | Updated + notification | Live registry + notification | Yes | N/A (single-process) |
-| DynamicClustered | true | Updated + notification | Live registry + notification | Polling (10s) | Request-time (5s TTL) |
+Single feature: `dynamic-tools`. When enabled, `ToolChangeMode::Dynamic` becomes available. Cross-instance coordination is conditional on providing explicit `.server_state_storage()` — without it, an in-memory backend is used automatically.
+
+| Mode | `listChanged` | Restart fingerprint | Runtime changes | Coordination |
+|------|---|---|---|---|
+| Static | false | Updated silently | Not supported | N/A |
+| Dynamic | true | Updated + notification | Live registry + notification | InMemory (default) or shared backend |
+| Dynamic + storage | true | Updated + notification | Live registry + notification | Polling (EC2, 10s) / Request-time (Lambda, 5s TTL) |
 
 Note: "Restart fingerprint" column describes what happens when a session's stored fingerprint doesn't match the server's current fingerprint. The session is NEVER invalidated — fingerprint is updated and the session continues.
 
@@ -96,18 +96,18 @@ Note: "Restart fingerprint" column describes what happens when a session's store
 1. Server restarts with different compiled tools → new build-time fingerprint
 2. Client's next request → session valid, fingerprint mismatch
 3. Stored fingerprint updated to current → session continues
-4. In dynamic modes: `notifications/tools/list_changed` broadcast
+4. In Dynamic mode: `notifications/tools/list_changed` broadcast
 5. Client calls `tools/list` → sees current tools
 6. No manual reconnect needed, no re-initialization needed
 
-### In-process tool mutation (DynamicInProcess)
+### In-process tool mutation (Dynamic)
 
 1. `activate_tool()` / `deactivate_tool()` → live registry updated
 2. `notifications/tools/list_changed` broadcast to connected clients
 3. Client receives notification → invalidates tool cache → calls `tools/list`
 4. Session continues — no disruption, no 404
 
-### Cross-instance mutation — EC2 (DynamicClustered)
+### Cross-instance mutation — EC2 (Dynamic + storage)
 
 1. Instance A changes tools → writes to shared storage
 2. Instance B's polling task (10s) detects fingerprint change → reloads from storage
@@ -115,7 +115,7 @@ Note: "Restart fingerprint" column describes what happens when a session's store
 4. Clients refresh → see updated tools
 5. Session continues on all instances
 
-### Cross-instance mutation — Lambda (DynamicClustered)
+### Cross-instance mutation — Lambda (Dynamic + storage)
 
 1. EC2 or another Lambda changes tools → writes to shared storage
 2. Client sends next POST to Lambda with `Mcp-Session-Id`
@@ -134,7 +134,7 @@ Note: "Restart fingerprint" column describes what happens when a session's store
 
 **Concurrency:** `RwLock<ToolState>` holds active tool set + fingerprint under a single lock. Read lock → clone `Arc<dyn McpTool>` → release → call. Never hold lock across await points.
 
-**Lambda:** Participates in `DynamicClustered` via request-time change detection. `LambdaMcpServerBuilder` exposes `tool_change_mode()` and `server_state_storage()`. In `Static` mode (default), Lambda behaves as before. In `DynamicClustered` mode, Lambda checks shared storage on each request and delivers notifications via Streamable HTTP responses.
+**Lambda:** Participates in Dynamic mode via request-time change detection. `LambdaMcpServerBuilder` exposes `tool_change_mode()` and `server_state_storage()`. In `Static` mode (default), Lambda behaves as before. In `Dynamic` mode with storage, Lambda checks shared storage on each request and delivers notifications via Streamable HTTP responses.
 
 ## Fingerprint Storage
 
@@ -153,11 +153,11 @@ Uses `JsonRpcNotification` (not `ToolListChangedNotification` — protocol notif
 {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
 ```
 
-## ServerStateStorage (DynamicClustered)
+## ServerStateStorage
 
 Server-global state storage following the same pluggable-backend pattern as `turul-mcp-session-storage` and `turul-mcp-task-storage`.
 
-- **InMemory** — test double only
+- **InMemory** — default for single-process Dynamic mode
 - **SQLite** — local durable mode
 - **PostgreSQL** — shared relational deployments
 - **DynamoDB** — serverless/AWS (camelCase attribute names)
@@ -167,8 +167,8 @@ Server-global state storage following the same pluggable-backend pattern as `tur
 ## Consequences
 
 - `Static` (default): zero behavioral change from pre-feature baseline
-- `DynamicInProcess`: live tool changes without session disruption, truthful `listChanged=true`
-- `DynamicClustered`: extends DynamicInProcess with shared storage and cross-instance polling
-- Fingerprint 404 handles deployment boundaries only
+- `Dynamic`: live tool changes without session disruption, truthful `listChanged=true`
+- `Dynamic` + storage: extends with shared storage and cross-instance polling/request-time checks
+- Fingerprint mismatch triggers update + notification, never session invalidation
 - Runtime mutations use the live registry — sessions are not disrupted
-- `dynamic-tools` / `dynamic-clustered` Cargo features ensure zero compiled overhead when disabled
+- Single `dynamic-tools` Cargo feature ensures zero compiled overhead when disabled

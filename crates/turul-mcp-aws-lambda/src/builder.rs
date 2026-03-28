@@ -148,8 +148,8 @@ pub struct LambdaMcpServerBuilder {
     /// Tool change detection and notification mode
     tool_change_mode: turul_mcp_server::ToolChangeMode,
 
-    /// Server state storage for clustered dynamic tools
-    #[cfg(feature = "dynamic-clustered")]
+    /// Server state storage for cross-instance coordination (optional)
+    #[cfg(feature = "dynamic-tools")]
     server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
 
     /// CORS configuration (if enabled)
@@ -280,7 +280,7 @@ impl LambdaMcpServerBuilder {
             task_runtime: None,
             task_recovery_timeout_ms: 300_000, // 5 minutes
             tool_change_mode: turul_mcp_server::ToolChangeMode::Static,
-            #[cfg(feature = "dynamic-clustered")]
+            #[cfg(feature = "dynamic-tools")]
             server_state_storage: None,
             #[cfg(feature = "cors")]
             cors_config: None,
@@ -705,19 +705,22 @@ impl LambdaMcpServerBuilder {
 
     /// Set the tool change detection and notification mode.
     ///
-    /// - `Static` (default): Stale sessions detected by fingerprint mismatch
-    /// - `DynamicInProcess` (requires `dynamic-tools` feature): Runtime tool activation/deactivation
-    /// - `DynamicClustered` (requires `dynamic-clustered` feature): Multi-instance coordination
+    /// - `Static` (default): No change detection, no fingerprint, no notifications. `listChanged=false`.
+    /// - `Dynamic` (requires `dynamic-tools` feature): Runtime tool activation/deactivation
+    ///   with live `notifications/tools/list_changed`. `listChanged=true`.
+    ///   Optionally pair with `.server_state_storage()` for cross-instance coordination.
     pub fn tool_change_mode(mut self, mode: turul_mcp_server::ToolChangeMode) -> Self {
         self.tool_change_mode = mode;
         self
     }
 
-    /// Set the server state storage backend for `DynamicClustered` mode.
+    /// Set the server state storage backend for cross-instance coordination.
     ///
-    /// Required when `tool_change_mode` is `DynamicClustered`. Tool activation
-    /// state is persisted in this storage for cross-instance coordination.
-    #[cfg(feature = "dynamic-clustered")]
+    /// When provided with `ToolChangeMode::Dynamic`, tool activation state is
+    /// persisted to this backend so multiple server instances share the same
+    /// view of which tools are active. Without this, an in-memory backend is
+    /// used automatically (suitable for single-process deployments).
+    #[cfg(feature = "dynamic-tools")]
     pub fn server_state_storage(
         mut self,
         storage: Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
@@ -962,19 +965,8 @@ impl LambdaMcpServerBuilder {
             ));
         }
 
-        // Coherence guard: reject DynamicClustered without server_state_storage
-        #[cfg(feature = "dynamic-clustered")]
-        if matches!(
-            self.tool_change_mode,
-            turul_mcp_server::ToolChangeMode::DynamicClustered
-        ) && self.server_state_storage.is_none()
-        {
-            return Err(crate::error::LambdaError::Configuration(
-                "ToolChangeMode::DynamicClustered requires a server_state_storage backend. \
-                 Use .server_state_storage(storage) on the builder."
-                    .to_string(),
-            ));
-        }
+        // No coherence guard needed: Dynamic mode uses InMemory storage by default
+        // when no explicit server_state_storage is provided.
 
         // Note: SSE behavior depends on which handler method is used:
         // - handle(): Works with run(), but SSE responses may not stream properly
@@ -1167,7 +1159,7 @@ impl LambdaMcpServerBuilder {
             tool_fingerprint,
             #[cfg(feature = "dynamic-tools")]
             !matches!(self.tool_change_mode, turul_mcp_server::ToolChangeMode::Static),
-            #[cfg(feature = "dynamic-clustered")]
+            #[cfg(feature = "dynamic-tools")]
             self.server_state_storage,
         ))
     }

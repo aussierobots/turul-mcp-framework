@@ -205,25 +205,27 @@ pub use tool_registry::ToolRegistry;
 /// Configuration for how tool changes are detected and communicated.
 ///
 /// `Static` (default): no change detection, no fingerprint, no notifications.
-/// Dynamic modes: fingerprint tracking + live notifications (`listChanged=true`).
+/// `Dynamic`: fingerprint tracking + live notifications (`listChanged=true`).
 /// Fingerprint check only runs when `listChanged=true`.
+///
+/// When `Dynamic` is used with `.server_state_storage()`, cross-instance
+/// coordination is enabled (polling on EC2, request-time check on Lambda).
+/// Without explicit storage, an in-memory backend is used automatically.
 #[derive(Debug, Clone, Default)]
 pub enum ToolChangeMode {
     /// Static tools. `listChanged=false`. No fingerprint check. No notifications.
     /// Tools are fixed at build time. This is the default.
     #[default]
     Static,
-    /// Dynamic in-process registry. `listChanged=true`. Single-process only.
+    /// Dynamic tool registry. `listChanged=true`.
     /// Precompiled tools can be activated/deactivated at runtime.
     /// Fingerprint tracks tool-version per session.
     /// Connected clients receive `notifications/tools/list_changed`.
+    ///
+    /// When paired with `.server_state_storage()`, enables multi-instance
+    /// coordination via shared `ServerStateStorage` (DynamoDB/PostgreSQL/SQLite).
     #[cfg(feature = "dynamic-tools")]
-    DynamicInProcess,
-    /// Dynamic clustered registry. `listChanged=true`. Multi-instance.
-    /// Tool activation state stored in `ServerStateStorage` (DynamoDB/PostgreSQL/SQLite).
-    /// Cross-instance coordination via polling (EC2) or request-time check (Lambda).
-    #[cfg(feature = "dynamic-clustered")]
-    DynamicClustered,
+    Dynamic,
 }
 
 /// SessionView trait for middleware - re-exported from turul-mcp-session-storage

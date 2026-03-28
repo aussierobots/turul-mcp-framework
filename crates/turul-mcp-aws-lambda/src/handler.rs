@@ -280,8 +280,8 @@ impl LambdaMcpHandler {
             return create_preflight_response(cors_config, request_origin.as_deref());
         }
 
-        // Check for remote tool changes (DynamicClustered mode)
-        #[cfg(feature = "dynamic-clustered")]
+        // Check for remote tool changes (Dynamic mode with coordination)
+        #[cfg(feature = "dynamic-tools")]
         if let Some(ref registry) = self.tool_registry {
             if let Err(e) = registry.check_for_changes().await {
                 tracing::warn!(error = %e, "Failed to check for tool changes");
@@ -391,8 +391,8 @@ impl LambdaMcpHandler {
             return Ok(self.convert_lambda_response_to_streaming(preflight_response));
         }
 
-        // Check for remote tool changes (DynamicClustered mode)
-        #[cfg(feature = "dynamic-clustered")]
+        // Check for remote tool changes (Dynamic mode with coordination)
+        #[cfg(feature = "dynamic-tools")]
         if let Some(ref registry) = self.tool_registry {
             if let Err(e) = registry.check_for_changes().await {
                 tracing::warn!(error = %e, "Failed to check for tool changes (streaming)");

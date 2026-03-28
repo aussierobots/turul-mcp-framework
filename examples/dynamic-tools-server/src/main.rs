@@ -139,7 +139,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = McpServer::builder()
         .name("dynamic-tools-demo")
         .version("0.1.0")
-        .tool_change_mode(ToolChangeMode::DynamicInProcess)
+        .tool_change_mode(ToolChangeMode::Dynamic)
         .tool(AddTool::default())
         .tool(MultiplyTool::default())
         .tool(GreetTool::default())
@@ -150,7 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let registry = server
         .tool_registry()
-        .expect("DynamicInProcess must have registry")
+        .expect("Dynamic must have registry")
         .clone();
 
     // Store registry globally so toggle tools can access it

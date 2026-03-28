@@ -110,8 +110,8 @@ pub struct McpServerBuilder {
     /// Tool change detection mode (default: Static)
     tool_change_mode: crate::ToolChangeMode,
 
-    /// Server state storage for clustered dynamic tools
-    #[cfg(feature = "dynamic-clustered")]
+    /// Server state storage for cross-instance coordination (optional)
+    #[cfg(feature = "dynamic-tools")]
     server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
 }
 
@@ -246,27 +246,29 @@ impl McpServerBuilder {
             allow_unauthenticated_ping: None, // Default: use ServerConfig default (true)
             validation_errors: Vec::new(),
             tool_change_mode: crate::ToolChangeMode::Static,
-            #[cfg(feature = "dynamic-clustered")]
+            #[cfg(feature = "dynamic-tools")]
             server_state_storage: None,
         }
     }
 
     /// Set the tool change detection mode.
     ///
-    /// - `Static` (default): Stale session detection via fingerprint. `listChanged=false`.
-    /// - `DynamicInProcess` (requires `dynamic-tools` feature): Runtime tool activation/deactivation
-    ///   with live `notifications/tools/list_changed`. `listChanged=true`. Single-process only.
+    /// - `Static` (default): No change detection, no fingerprint, no notifications. `listChanged=false`.
+    /// - `Dynamic` (requires `dynamic-tools` feature): Runtime tool activation/deactivation
+    ///   with live `notifications/tools/list_changed`. `listChanged=true`.
+    ///   Optionally pair with `.server_state_storage()` for cross-instance coordination.
     pub fn tool_change_mode(mut self, mode: crate::ToolChangeMode) -> Self {
         self.tool_change_mode = mode;
         self
     }
 
-    /// Set the server state storage backend for clustered dynamic tools.
+    /// Set the server state storage backend for cross-instance coordination.
     ///
-    /// Required when `tool_change_mode` is `DynamicClustered`. Tool activation
-    /// state is persisted to this backend so multiple server instances share
-    /// the same view of which tools are active.
-    #[cfg(feature = "dynamic-clustered")]
+    /// When provided with `ToolChangeMode::Dynamic`, tool activation state is
+    /// persisted to this backend so multiple server instances share the same
+    /// view of which tools are active. Without this, an in-memory backend is
+    /// used automatically (suitable for single-process deployments).
+    #[cfg(feature = "dynamic-tools")]
     pub fn server_state_storage(
         mut self,
         storage: Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
@@ -1502,18 +1504,8 @@ impl McpServerBuilder {
             )));
         }
 
-        // Coherence guard: reject DynamicClustered without server_state_storage
-        #[cfg(feature = "dynamic-clustered")]
-        if matches!(
-            self.tool_change_mode,
-            crate::ToolChangeMode::DynamicClustered
-        ) && self.server_state_storage.is_none()
-        {
-            return Err(McpError::configuration(
-                "ToolChangeMode::DynamicClustered requires a server_state_storage backend. \
-                 Use .server_state_storage(storage) on the builder.",
-            ));
-        }
+        // No coherence guard needed: Dynamic mode uses InMemory storage by default
+        // when no explicit server_state_storage is provided.
 
         // Coherence guard: reject taskSupport=required without task runtime
         if self.task_runtime.is_none() {
@@ -1555,9 +1547,7 @@ impl McpServerBuilder {
             let list_changed = match self.tool_change_mode {
                 crate::ToolChangeMode::Static => false,
                 #[cfg(feature = "dynamic-tools")]
-                crate::ToolChangeMode::DynamicInProcess => true,
-                #[cfg(feature = "dynamic-clustered")]
-                crate::ToolChangeMode::DynamicClustered => true,
+                crate::ToolChangeMode::Dynamic => true,
             };
             self.capabilities.tools = Some(ToolsCapabilities {
                 list_changed: Some(list_changed),
@@ -1750,7 +1740,7 @@ impl McpServerBuilder {
             tool_fingerprint,
             #[cfg(feature = "dynamic-tools")]
             !matches!(self.tool_change_mode, crate::ToolChangeMode::Static),
-            #[cfg(feature = "dynamic-clustered")]
+            #[cfg(feature = "dynamic-tools")]
             self.server_state_storage,
             #[cfg(feature = "http")]
             self.bind_address,
@@ -2484,14 +2474,14 @@ mod tests {
         assert_eq!(tools_cap.list_changed, Some(false));
     }
 
-    /// ADR-023 capability truthfulness: DynamicInProcess mode advertises listChanged=true
+    /// ADR-023 capability truthfulness: Dynamic mode advertises listChanged=true
     /// because the ToolRegistry can push notifications/tools/list_changed via SSE.
     #[cfg(feature = "dynamic-tools")]
     #[test]
-    fn test_dynamic_in_process_capability_list_changed_true() {
+    fn test_dynamic_capability_list_changed_true() {
         let server = McpServerBuilder::new()
             .name("test")
-            .tool_change_mode(crate::ToolChangeMode::DynamicInProcess)
+            .tool_change_mode(crate::ToolChangeMode::Dynamic)
             .tool(TestTool::new())
             .build()
             .unwrap();
