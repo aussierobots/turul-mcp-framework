@@ -74,7 +74,10 @@ impl Notification {
 
 // ==== Specific Notification Types Following MCP Specification ====
 
-/// Method: "notifications/resources/list_changed" (per MCP spec)
+/// MCP notification payload for "notifications/resources/list_changed".
+///
+/// **WARNING: Not wire-complete.** See [`ToolListChangedNotification`] for details.
+/// Use `JsonRpcNotification::new("notifications/resources/list_changed")` for transport.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceListChangedNotification {
@@ -105,7 +108,19 @@ impl ResourceListChangedNotification {
     }
 }
 
-/// Method: "notifications/tools/list_changed" (per MCP spec)
+/// MCP notification payload for "notifications/tools/list_changed".
+///
+/// **WARNING: This is NOT a wire-complete JSON-RPC message.** It contains only the
+/// MCP-specific fields (`method`, `params`), NOT the `jsonrpc: "2.0"` envelope required
+/// for transport. To send on the wire, wrap in `JsonRpcNotification`:
+///
+/// ```rust,ignore
+/// // CORRECT — wire-complete:
+/// let wire_msg = JsonRpcNotification::new("notifications/tools/list_changed".to_string());
+///
+/// // WRONG — missing jsonrpc field, will fail client validation:
+/// let payload = ToolListChangedNotification::new(); // NOT wire-complete
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolListChangedNotification {
@@ -136,7 +151,10 @@ impl ToolListChangedNotification {
     }
 }
 
-/// Method: "notifications/prompts/list_changed" (per MCP spec)
+/// MCP notification payload for "notifications/prompts/list_changed".
+///
+/// **WARNING: Not wire-complete.** See [`ToolListChangedNotification`] for details.
+/// Use `JsonRpcNotification::new("notifications/prompts/list_changed")` for transport.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptListChangedNotification {
@@ -167,7 +185,10 @@ impl PromptListChangedNotification {
     }
 }
 
-/// Method: "notifications/roots/list_changed" (per MCP spec)
+/// MCP notification payload for "notifications/roots/list_changed".
+///
+/// **WARNING: Not wire-complete.** See [`ToolListChangedNotification`] for details.
+/// Use `JsonRpcNotification::new("notifications/roots/list_changed")` for transport.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RootsListChangedNotification {

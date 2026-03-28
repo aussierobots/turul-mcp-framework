@@ -95,6 +95,22 @@ additional_properties: Option<bool>,
 additional_properties: Option<bool>,  // becomes "additional_properties"
 ```
 
+### Notification Wire Format: Always Use JsonRpcNotification
+
+**CRITICAL**: Protocol notification types (e.g., `ToolListChangedNotification`, `ResourceListChangedNotification`) are **NOT wire-complete**. They contain MCP-specific fields (`method`, `params`) but lack the required `jsonrpc: "2.0"` envelope.
+
+```rust
+// CORRECT — wire-complete JSON-RPC notification for transport:
+let notification = JsonRpcNotification::new("notifications/tools/list_changed".to_string());
+// Serializes to: {"jsonrpc":"2.0","method":"notifications/tools/list_changed"}
+
+// WRONG — missing jsonrpc field, will fail client-side validation:
+let notification = ToolListChangedNotification::new();
+// Serializes to: {"method":"notifications/tools/list_changed"}  ← BROKEN
+```
+
+This applies to ALL notification types sent via SSE/HTTP transport. The protocol `*Notification` types are for parsing/type safety, not for direct wire emission.
+
 ### Critical Error Handling Rules
 
 **MANDATORY**: Handlers return domain errors only. Dispatcher owns protocol conversion.
