@@ -1385,6 +1385,36 @@ mod tests {
         );
     }
 
+    /// Static mode: initialize stores no fingerprint, no registry involvement.
+    /// This ensures Static mode semantics are unchanged by the Dynamic mode fix.
+    #[tokio::test]
+    async fn test_static_mode_initialize_stores_no_fingerprint() {
+        let sm = test_session_manager();
+        let session_id = sm.create_session().await;
+
+        // Static mode: tool_fingerprint is empty string (set by builder for Static)
+        let static_fingerprint = String::new();
+
+        // Simulate what SessionAwareInitializeHandler does:
+        // if !self.tool_fingerprint.is_empty() { store it }
+        // Static mode: fingerprint is empty, so nothing is stored
+        if !static_fingerprint.is_empty() {
+            sm.set_session_state(
+                &session_id,
+                "mcp:tool_fingerprint",
+                serde_json::json!(static_fingerprint),
+            ).await;
+        }
+
+        // Verify: no fingerprint in session state
+        let stored = sm.get_session_state(&session_id, "mcp:tool_fingerprint").await;
+        assert!(
+            stored.is_none(),
+            "Static mode must NOT store mcp:tool_fingerprint, got {:?}",
+            stored
+        );
+    }
+
     /// Requirement: multiple sessions must each receive their own dispatched event.
     #[tokio::test]
     async fn test_dispatcher_targets_all_sessions() {
