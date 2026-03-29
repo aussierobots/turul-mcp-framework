@@ -260,31 +260,59 @@ impl LambdaMcpServer {
             self.stream_config.clone(),
         ));
 
-        // Set up SSE event bridge between SessionManager and StreamManager.
-        // This ensures that events from ToolRegistry.broadcast_notification()
-        // (which go through SessionManager) are forwarded to StreamManager where
-        // registered POST SSE connections can receive them.
+        // Install awaited event dispatcher for guaranteed persistence.
+        // Custom events are persisted via StreamManager on the request path,
+        // not via the detached bridge task.
         {
-            let bridge_stream_manager = Arc::clone(&stream_manager);
+            use turul_mcp_server::SessionEventDispatcher;
+
+            struct LambdaEventDispatcher {
+                stream_manager: Arc<StreamManager>,
+            }
+
+            #[async_trait::async_trait]
+            impl SessionEventDispatcher for LambdaEventDispatcher {
+                async fn dispatch_to_session(
+                    &self,
+                    session_id: &str,
+                    event_type: String,
+                    data: serde_json::Value,
+                ) -> std::result::Result<(), String> {
+                    self.stream_manager
+                        .broadcast_to_session(session_id, event_type, data)
+                        .await
+                        .map(|_| ())
+                        .map_err(|e| e.to_string())
+                }
+            }
+
+            let dispatcher = Arc::new(LambdaEventDispatcher {
+                stream_manager: Arc::clone(&stream_manager),
+            });
+            self.session_manager.set_event_dispatcher(dispatcher).await;
+            debug!("Lambda event dispatcher installed (guaranteed persistence for Custom events)");
+        }
+
+        // SSE event bridge — observer-only for Custom events.
+        // The dispatcher above handles persistence on the request path.
+        {
             let mut global_events = self.session_manager.subscribe_all_session_events();
 
             tokio::spawn(async move {
-                debug!("Lambda SSE Event Bridge: started");
+                debug!("Lambda SSE Event Bridge: started (observer-only for Custom events)");
 
                 while let Ok((session_id, event)) = global_events.recv().await {
-                    if let turul_mcp_server::session::SessionEvent::Custom {
-                        event_type,
-                        data,
-                    } = event
-                    {
-                        if let Err(e) = bridge_stream_manager
-                            .broadcast_to_session(&session_id, event_type, data)
-                            .await
-                        {
+                    match event {
+                        turul_mcp_server::session::SessionEvent::Custom {
+                            ref event_type, ..
+                        } => {
                             debug!(
-                                "Lambda SSE Bridge: broadcast to session {} failed: {} (normal if no active connections)",
-                                session_id, e
+                                "Lambda SSE Bridge: observed custom event '{}' for session {} (dispatcher handles persistence)",
+                                event_type, session_id
                             );
+                        }
+                        _ => {
+                            debug!("Lambda SSE Bridge: non-custom event for session {}", session_id);
                         }
                     }
                 }

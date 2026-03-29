@@ -13,6 +13,31 @@ use async_trait::async_trait;
 use tracing::{debug, error, info, warn};
 
 use crate::handlers::McpHandler;
+use crate::session::SessionEventDispatcher;
+
+/// Event dispatcher backed by StreamManager for guaranteed persistence + live delivery.
+/// Used by `SessionManager::broadcast_event()` to persist Custom events on the request path.
+#[cfg(feature = "http")]
+struct StreamManagerEventDispatcher {
+    stream_manager: Arc<turul_http_mcp_server::StreamManager>,
+}
+
+#[cfg(feature = "http")]
+#[async_trait]
+impl SessionEventDispatcher for StreamManagerEventDispatcher {
+    async fn dispatch_to_session(
+        &self,
+        session_id: &str,
+        event_type: String,
+        data: serde_json::Value,
+    ) -> std::result::Result<(), String> {
+        self.stream_manager
+            .broadcast_to_session(session_id, event_type, data)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+}
 use crate::session::{SessionContext, SessionManager};
 use crate::{McpServerBuilder, McpTool, Result, tool::tool_to_descriptor};
 use turul_mcp_json_rpc_server::JsonRpcHandler;
@@ -436,7 +461,10 @@ impl McpServer {
         if self.enable_sse {
             debug!("SSE support enabled with integrated session management");
 
-            // Set up event forwarding bridge between SessionManager and StreamManager
+            // Install awaited event dispatcher for guaranteed persistence
+            self.install_event_dispatcher(&http_server).await;
+
+            // Set up event forwarding bridge (observer-only for Custom events)
             self.setup_sse_event_bridge(&http_server).await;
         }
 
@@ -459,7 +487,23 @@ impl McpServer {
         Ok(())
     }
 
-    /// Set up event forwarding bridge between SessionManager and StreamManager
+    /// Install the awaited event dispatcher backed by StreamManager.
+    /// This makes `broadcast_event()` persist Custom events synchronously
+    /// on the request path, rather than relying on the detached bridge task.
+    #[cfg(feature = "http")]
+    async fn install_event_dispatcher(
+        &self,
+        http_server: &turul_http_mcp_server::HttpMcpServer,
+    ) {
+        let stream_manager = http_server.get_stream_manager();
+        let dispatcher = Arc::new(StreamManagerEventDispatcher { stream_manager });
+        self.session_manager.set_event_dispatcher(dispatcher).await;
+        debug!("Event dispatcher installed (guaranteed persistence for Custom events)");
+    }
+
+    /// Set up event forwarding bridge between SessionManager and StreamManager.
+    /// With the event dispatcher installed, Custom events are observer-only here —
+    /// the dispatcher handles persistence on the request path.
     async fn setup_sse_event_bridge(&self, http_server: &turul_http_mcp_server::HttpMcpServer) {
         debug!("🌉 Setting up SSE event bridge between SessionManager and StreamManager");
 
@@ -475,28 +519,15 @@ impl McpServer {
                     session_id, event
                 );
 
-                // Convert SessionEvent to StreamManager event format
+                // Observer-only for Custom events — the awaited dispatcher in
+                // broadcast_event() handles persistence on the request path.
+                // The bridge remains for passive observation and non-Custom events.
                 match event {
-                    crate::session::SessionEvent::Custom { event_type, data } => {
+                    crate::session::SessionEvent::Custom { ref event_type, .. } => {
                         debug!(
-                            "📤 SSE Bridge: Broadcasting custom event '{}' to StreamManager",
-                            event_type
+                            "📡 SSE Bridge: observed custom event '{}' for session {} (dispatcher handles persistence)",
+                            event_type, session_id
                         );
-
-                        if let Err(e) = stream_manager
-                            .broadcast_to_session(&session_id, event_type, data)
-                            .await
-                        {
-                            error!(
-                                "❌ SSE Bridge: Failed to broadcast to session {}: {}",
-                                session_id, e
-                            );
-                        } else {
-                            debug!(
-                                "✅ SSE Bridge: Successfully broadcast to session {}",
-                                session_id
-                            );
-                        }
                     }
                     other_event => {
                         debug!("⏭ SSE Bridge: Skipping non-custom event: {:?}", other_event);

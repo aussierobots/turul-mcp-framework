@@ -183,7 +183,7 @@ pub use server::{
     SessionAwareToolHandler,
 };
 /// Session management and context for stateful operations
-pub use session::{SessionContext, SessionEvent, SessionManager};
+pub use session::{SessionContext, SessionEvent, SessionEventDispatcher, SessionManager};
 /// Task executor abstraction for pluggable execution backends
 pub use task::executor::{TaskExecutor, TaskHandle};
 /// Task handlers for tasks/get, tasks/list, tasks/cancel, tasks/result
