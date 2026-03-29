@@ -174,8 +174,8 @@ impl Default for DynamoDbConfig {
         Self {
             table_name: "mcp-sessions".to_string(),
             region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
-            session_ttl_minutes: 5, // Default 5 minutes - override in config if needed
-            event_ttl_minutes: 5,   // Default 5 minutes - override in config if needed
+            session_ttl_minutes: 30, // Default 30 minutes
+            event_ttl_minutes: 30,  // Default 30 minutes
             max_events_per_session: 1000,
             enable_backup: true,
             enable_encryption: true,
