@@ -299,6 +299,8 @@ enum SessionValidationError {
     NotFound(String),
     /// Storage backend error → 500 Internal Server Error
     StorageError(String),
+    /// Mandatory notification persistence failed → 500 Internal Server Error
+    NotificationFailed(String),
 }
 
 impl SessionValidationError {
@@ -306,12 +308,13 @@ impl SessionValidationError {
         match self {
             Self::NotFound(_) => StatusCode::NOT_FOUND,
             Self::StorageError(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::NotificationFailed(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
     fn message(&self) -> &str {
         match self {
-            Self::NotFound(msg) | Self::StorageError(msg) => msg,
+            Self::NotFound(msg) | Self::StorageError(msg) | Self::NotificationFailed(msg) => msg,
         }
     }
 }
@@ -415,6 +418,7 @@ pub struct StreamableHttpHandler {
     server_capabilities: turul_mcp_protocol::ServerCapabilities,
     pub(crate) middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     tool_fingerprint: Option<String>,
+    tool_notifier: Option<Arc<dyn crate::ToolChangeNotifier>>,
 }
 
 impl StreamableHttpHandler {
@@ -435,7 +439,14 @@ impl StreamableHttpHandler {
             server_capabilities,
             middleware_stack,
             tool_fingerprint,
+            tool_notifier: None,
         }
+    }
+
+    /// Set the tool change notifier for restart/redeploy fingerprint mismatch notifications.
+    pub fn with_tool_notifier(mut self, notifier: Arc<dyn crate::ToolChangeNotifier>) -> Self {
+        self.tool_notifier = Some(notifier);
+        self
     }
 
     /// Handle incoming HTTP request with streamable HTTP support
@@ -639,8 +650,6 @@ impl StreamableHttpHandler {
                         if stored_fp.as_str() != Some(current_fp.as_str()) {
                             // Fingerprint mismatch — tools changed since this session was created.
                             // Session is still valid. Update the stored fingerprint and continue.
-                            // The client will discover new tools on their next tools/list call.
-                            // In dynamic modes, a notification is also broadcast.
                             info!(
                                 "Tool fingerprint updated for session '{}' (tools changed since session created)",
                                 session_id
@@ -648,6 +657,15 @@ impl StreamableHttpHandler {
                             let _ = self.session_storage
                                 .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
                                 .await;
+
+                            // Emit notifications/tools/list_changed via the notifier
+                            // (backed by SessionManager → dispatcher → guaranteed persistence)
+                            if let Some(ref notifier) = self.tool_notifier {
+                                notifier.notify_tools_changed(session_id).await
+                                    .map_err(|e| SessionValidationError::NotificationFailed(
+                                        format!("session {}: {}", session_id, e)
+                                    ))?;
+                            }
                         }
                     } else {
                         // Missing fingerprint (pre-feature sessions) — store current fingerprint

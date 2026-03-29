@@ -1507,37 +1507,44 @@ impl SessionManager {
         std::cmp::max(storage_removed, memory_removed)
     }
 
-    /// Send event to specific session
+    /// Send event to a specific session with guaranteed persistence for Custom events.
+    ///
+    /// Returns `Err` if the session does not exist or if dispatcher persistence fails
+    /// for Custom events. Non-custom events are best-effort after the existence check.
     pub async fn send_event_to_session(
         &self,
         session_id: &str,
         event: SessionEvent,
-    ) -> Result<(), SessionError> {
-        let sessions = self.sessions.read().await;
-        if let Some(session) = sessions.get(session_id) {
-            // Send to the specific session
-            session
-                .send_event(event.clone())
-                .map_err(SessionError::InvalidData)?;
-
-            // Also forward to global event broadcaster for SSE bridging
-            debug!(
-                "🌐 Forwarding event to global broadcaster: session={}, event={:?}",
-                session_id, event
-            );
-            if let Err(e) = self
-                .global_event_sender
-                .send((session_id.to_string(), event))
-            {
-                debug!("⚠️ Global event broadcast failed (no listeners): {}", e);
-            } else {
-                debug!("✅ Global event broadcast succeeded");
+    ) -> std::result::Result<(), String> {
+        // Phase 1: Fire in-memory listener (session must exist)
+        {
+            let sessions = self.sessions.read().await;
+            match sessions.get(session_id) {
+                Some(session) => {
+                    let _ = session.send_event(event.clone());
+                }
+                None => {
+                    return Err(format!("Session not found: {}", session_id));
+                }
             }
-
-            Ok(())
-        } else {
-            Err(SessionError::NotFound(session_id.to_string()))
         }
+
+        // Phase 2: Awaited dispatcher for Custom events (mandatory persistence)
+        if let SessionEvent::Custom { ref event_type, ref data } = event {
+            let dispatcher = self.event_dispatcher.read().await.clone();
+            if let Some(ref dispatcher) = dispatcher {
+                dispatcher.dispatch_to_session(
+                    session_id,
+                    event_type.clone(),
+                    data.clone(),
+                ).await?;
+            }
+        }
+
+        // Phase 3: Global channel (observer-only)
+        let _ = self.global_event_sender.send((session_id.to_string(), event));
+
+        Ok(())
     }
 
     /// Broadcast event to all sessions.

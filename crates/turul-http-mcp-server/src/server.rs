@@ -73,6 +73,7 @@ pub struct HttpMcpServerBuilder {
     middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     route_registry: Arc<crate::routes::RouteRegistry>,
     tool_fingerprint: Option<String>,
+    tool_notifier: Option<Arc<dyn crate::ToolChangeNotifier>>,
 }
 
 impl HttpMcpServerBuilder {
@@ -87,6 +88,7 @@ impl HttpMcpServerBuilder {
             middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
             route_registry: Arc::new(crate::routes::RouteRegistry::new()),
             tool_fingerprint: None,
+            tool_notifier: None,
         }
     }
 }
@@ -105,6 +107,7 @@ impl HttpMcpServerBuilder {
             middleware_stack: Arc::new(crate::middleware::MiddlewareStack::new()),
             route_registry: Arc::new(crate::routes::RouteRegistry::new()),
             tool_fingerprint: None,
+            tool_notifier: None,
         }
     }
 
@@ -130,6 +133,12 @@ impl HttpMcpServerBuilder {
         } else {
             self.tool_fingerprint = Some(fingerprint);
         }
+        self
+    }
+
+    /// Set the tool change notifier for restart/redeploy fingerprint mismatch.
+    pub fn tool_notifier(mut self, notifier: Arc<dyn crate::ToolChangeNotifier>) -> Self {
+        self.tool_notifier = Some(notifier);
         self
     }
 
@@ -243,7 +252,7 @@ impl HttpMcpServerBuilder {
         let middleware_stack = self.middleware_stack;
 
         // Create StreamableHttpHandler for MCP 2025-11-25 support
-        let streamable_handler = StreamableHttpHandler::new(
+        let mut streamable_handler = StreamableHttpHandler::new(
             Arc::new(self.config.clone()),
             Arc::clone(&dispatcher),
             Arc::clone(&session_storage),
@@ -252,6 +261,9 @@ impl HttpMcpServerBuilder {
             Arc::clone(&middleware_stack),
             self.tool_fingerprint.clone(),
         );
+        if let Some(ref notifier) = self.tool_notifier {
+            streamable_handler = streamable_handler.with_tool_notifier(Arc::clone(notifier));
+        }
 
         HttpMcpServer {
             config: self.config,
@@ -262,6 +274,7 @@ impl HttpMcpServerBuilder {
             streamable_handler,
             route_registry: self.route_registry,
             tool_fingerprint: self.tool_fingerprint,
+            tool_notifier: self.tool_notifier,
         }
     }
 }
@@ -287,6 +300,8 @@ pub struct HttpMcpServer {
     route_registry: Arc<crate::routes::RouteRegistry>,
     // Tool fingerprint for session versioning (shared with both handlers)
     tool_fingerprint: Option<String>,
+    // Tool change notifier for restart/redeploy fingerprint mismatch
+    tool_notifier: Option<Arc<dyn crate::ToolChangeNotifier>>,
 }
 
 impl HttpMcpServer {
@@ -322,7 +337,7 @@ impl HttpMcpServer {
 
         // ✅ CORRECTED ARCHITECTURE: Create single SessionMcpHandler instance outside the loop
         // Use the same middleware stack as streamable_handler (both handlers share it)
-        let session_handler = SessionMcpHandler::with_shared_stream_manager(
+        let mut session_handler = SessionMcpHandler::with_shared_stream_manager(
             self.config.clone(),
             Arc::clone(&self.dispatcher),
             Arc::clone(&self.session_storage),
@@ -331,6 +346,9 @@ impl HttpMcpServer {
             Arc::clone(&self.streamable_handler.middleware_stack),
         )
         .with_tool_fingerprint(self.tool_fingerprint.clone());
+        if let Some(ref notifier) = self.tool_notifier {
+            session_handler = session_handler.with_tool_notifier(Arc::clone(notifier));
+        }
 
         // Create combined handler that routes based on protocol version
         let handler = McpRequestHandler {

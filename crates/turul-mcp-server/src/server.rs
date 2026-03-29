@@ -38,6 +38,31 @@ impl SessionEventDispatcher for StreamManagerEventDispatcher {
             .map_err(|e| e.to_string())
     }
 }
+/// Tool change notifier backed by SessionManager for restart/redeploy fingerprint mismatch.
+/// Constructs the JSON-RPC notification payload centrally (same as ToolRegistry::broadcast_notification).
+#[cfg(feature = "http")]
+struct SessionManagerToolNotifier {
+    session_manager: Arc<crate::session::SessionManager>,
+}
+
+#[cfg(feature = "http")]
+#[async_trait]
+impl turul_http_mcp_server::ToolChangeNotifier for SessionManagerToolNotifier {
+    async fn notify_tools_changed(&self, session_id: &str) -> std::result::Result<(), String> {
+        let notification = turul_mcp_protocol::JsonRpcNotification::new(
+            "notifications/tools/list_changed".to_string(),
+        );
+        let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;
+        self.session_manager.send_event_to_session(
+            session_id,
+            crate::session::SessionEvent::Custom {
+                event_type: "notifications/tools/list_changed".to_string(),
+                data,
+            },
+        ).await
+    }
+}
+
 use crate::session::{SessionContext, SessionManager};
 use crate::{McpServerBuilder, McpTool, Result, tool::tool_to_descriptor};
 use turul_mcp_json_rpc_server::JsonRpcHandler;
@@ -415,6 +440,9 @@ impl McpServer {
                 .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
                 .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
                 .tool_fingerprint(self.tool_fingerprint.clone())
+                .tool_notifier(Arc::new(SessionManagerToolNotifier {
+                    session_manager: Arc::clone(&self.session_manager),
+                }))
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(vec!["tools/list".to_string()], {
                     let mut lth = ListToolsHandler::new_with_session_manager(
@@ -649,6 +677,9 @@ impl McpServer {
                 .with_middleware_stack(Arc::new(self.middleware_stack.clone())) // Pass middleware stack
                 .route_registry(Arc::clone(&self.route_registry)) // Pass custom routes
                 .tool_fingerprint(self.tool_fingerprint.clone())
+                .tool_notifier(Arc::new(SessionManagerToolNotifier {
+                    session_manager: Arc::clone(&self.session_manager),
+                }))
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(vec!["tools/list".to_string()], {
                     let mut lth = ListToolsHandler::new_with_session_manager(

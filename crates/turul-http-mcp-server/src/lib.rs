@@ -83,6 +83,15 @@ pub use session_handler::{SessionMcpHandler, SessionSseStream};
 pub use stream_manager::{StreamConfig, StreamError, StreamManager, StreamStats};
 pub use streamable_http::{StreamableHttpContext, StreamableHttpHandler};
 
+/// Awaitable notifier for tool change events (restart/redeploy fingerprint mismatch).
+/// Implemented by the server layer (backed by SessionManager → dispatcher).
+/// Used by HTTP handlers to persist `notifications/tools/list_changed` through
+/// the session architecture, not directly via StreamManager.
+#[async_trait::async_trait]
+pub trait ToolChangeNotifier: Send + Sync {
+    async fn notify_tools_changed(&self, session_id: &str) -> std::result::Result<(), String>;
+}
+
 // Re-export foundational types
 /// JSON-RPC 2.0 dispatcher and handler trait for protocol operations
 pub use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler};

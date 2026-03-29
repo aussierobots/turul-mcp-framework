@@ -344,6 +344,13 @@ cargo test -p turul-mcp-framework-integration-tests --test e2e_tests
 
 **Why**: Incremental compilation caches string literals/errors across crates.
 
+### Scope Discipline
+
+- **Stay inside the approved plan and stated requirement** — do not broaden scope by changing adjacent contracts, tests, or semantics unless directly required
+- **If a fix forces unrelated API behavior changes or test expectation changes, stop and reassess** — that's a signal you're modifying the wrong layer
+- **If scope or architecture becomes ambiguous, stop and ask** — do not improvise
+- **`replace_all` edits must be scoped precisely** — never use `replace_all` on patterns that appear in unrelated code paths
+
 ## Before Modifying Core Crates
 
 - **Impact Analysis**: All examples, tests, user code affected?

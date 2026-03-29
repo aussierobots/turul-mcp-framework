@@ -375,21 +375,19 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
             .query()
             .table_name(&self.table_name)
             .key_condition_expression("entityType = :et")
-            .filter_expression("active = :active AND entityId <> :fp")
+            .filter_expression("active = :active")
             .expression_attribute_values(":et", AttributeValue::S(entity_type.to_string()))
             .expression_attribute_values(":active", AttributeValue::Bool(true))
-            .expression_attribute_values(
-                ":fp",
-                AttributeValue::S(FINGERPRINT_ENTITY_ID.to_string()),
-            )
             .send()
             .await
             .map_err(Self::dynamo_err_debug)?;
 
+        // Exclude the #fingerprint record (it's not an entity)
         let entities = result
             .items()
             .iter()
             .filter_map(|item| Self::get_s(item, "entityId"))
+            .filter(|id| id != FINGERPRINT_ENTITY_ID)
             .collect();
 
         Ok(entities)

@@ -150,10 +150,10 @@ pub struct SessionMcpHandler {
     pub(crate) dispatcher: Arc<JsonRpcDispatcher<McpError>>,
     pub(crate) session_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage>,
     pub(crate) stream_config: StreamConfig,
-    // ✅ CORRECTED ARCHITECTURE: Single shared StreamManager instance with internal session management
     pub(crate) stream_manager: Arc<StreamManager>,
     pub(crate) middleware_stack: Arc<crate::middleware::MiddlewareStack>,
     pub(crate) tool_fingerprint: Option<String>,
+    pub(crate) tool_notifier: Option<Arc<dyn crate::ToolChangeNotifier>>,
 }
 
 impl Clone for SessionMcpHandler {
@@ -166,6 +166,7 @@ impl Clone for SessionMcpHandler {
             stream_manager: Arc::clone(&self.stream_manager),
             middleware_stack: Arc::clone(&self.middleware_stack),
             tool_fingerprint: self.tool_fingerprint.clone(),
+            tool_notifier: self.tool_notifier.clone(),
         }
     }
 }
@@ -200,6 +201,7 @@ impl SessionMcpHandler {
             stream_manager,
             middleware_stack,
             tool_fingerprint: None,
+            tool_notifier: None,
         }
     }
 
@@ -226,12 +228,19 @@ impl SessionMcpHandler {
             stream_manager,
             middleware_stack,
             tool_fingerprint: None,
+            tool_notifier: None,
         }
     }
 
     /// Set tool fingerprint for session versioning across server restarts
     pub fn with_tool_fingerprint(mut self, fingerprint: Option<String>) -> Self {
         self.tool_fingerprint = fingerprint;
+        self
+    }
+
+    /// Set the tool change notifier for restart/redeploy fingerprint mismatch notifications.
+    pub fn with_tool_notifier(mut self, notifier: Arc<dyn crate::ToolChangeNotifier>) -> Self {
+        self.tool_notifier = Some(notifier);
         self
     }
 
@@ -1044,6 +1053,16 @@ impl SessionMcpHandler {
                             let _ = self.session_storage
                                 .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
                                 .await;
+
+                            // Emit via notifier (backed by SessionManager → dispatcher)
+                            if let Some(ref notifier) = self.tool_notifier {
+                                notifier.notify_tools_changed(session_id).await
+                                    .map_err(|e| crate::HttpMcpError::Mcp(
+                                        McpError::tool_execution(&format!(
+                                            "Notification persistence failed for session {}: {}", session_id, e
+                                        ))
+                                    ))?;
+                            }
                         }
                     } else {
                         // Missing fingerprint (legacy session) — store current

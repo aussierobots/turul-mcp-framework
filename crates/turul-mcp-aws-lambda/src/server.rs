@@ -411,6 +411,33 @@ impl LambdaMcpServer {
             Some(self.tool_fingerprint.clone()),
         );
 
+        // Wire tool change notifier for restart/redeploy fingerprint mismatch.
+        // Uses SessionManager → send_event_to_session() → dispatcher → guaranteed persistence.
+        let handler = {
+            struct LambdaToolNotifier {
+                session_manager: Arc<turul_mcp_server::SessionManager>,
+            }
+            #[async_trait::async_trait]
+            impl turul_http_mcp_server::ToolChangeNotifier for LambdaToolNotifier {
+                async fn notify_tools_changed(&self, session_id: &str) -> std::result::Result<(), String> {
+                    let notification = turul_mcp_protocol::JsonRpcNotification::new(
+                        "notifications/tools/list_changed".to_string(),
+                    );
+                    let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;
+                    self.session_manager.send_event_to_session(
+                        session_id,
+                        turul_mcp_server::SessionEvent::Custom {
+                            event_type: "notifications/tools/list_changed".to_string(),
+                            data,
+                        },
+                    ).await
+                }
+            }
+            handler.with_tool_notifier(Arc::new(LambdaToolNotifier {
+                session_manager: Arc::clone(&self.session_manager),
+            }))
+        };
+
         #[cfg(feature = "dynamic-tools")]
         let handler = if let Some(ref registry) = self.tool_registry {
             handler.with_tool_registry(Arc::clone(registry))

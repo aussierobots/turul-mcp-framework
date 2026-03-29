@@ -229,6 +229,13 @@ impl LambdaMcpHandler {
         }
     }
 
+    /// Set the tool change notifier for restart/redeploy fingerprint mismatch notifications.
+    pub fn with_tool_notifier(mut self, notifier: Arc<dyn turul_http_mcp_server::ToolChangeNotifier>) -> Self {
+        self.session_handler = self.session_handler.with_tool_notifier(Arc::clone(&notifier));
+        self.streamable_handler = self.streamable_handler.with_tool_notifier(notifier);
+        self
+    }
+
     /// Set a dynamic tool registry for request-time change detection.
     #[cfg(feature = "dynamic-tools")]
     pub fn with_tool_registry(mut self, registry: Arc<turul_mcp_server::ToolRegistry>) -> Self {
