@@ -412,7 +412,8 @@ impl LambdaMcpServer {
         );
 
         // Wire tool change notifier for restart/redeploy fingerprint mismatch.
-        // Uses SessionManager → send_event_to_session() → dispatcher → guaranteed persistence.
+        // Uses SessionManager → dispatch_custom_event() → dispatcher → guaranteed persistence.
+        // dispatch_custom_event is storage-backed and does NOT depend on the in-memory session cache.
         let handler = {
             struct LambdaToolNotifier {
                 session_manager: Arc<turul_mcp_server::SessionManager>,
@@ -424,12 +425,10 @@ impl LambdaMcpServer {
                         "notifications/tools/list_changed".to_string(),
                     );
                     let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;
-                    self.session_manager.send_event_to_session(
+                    self.session_manager.dispatch_custom_event(
                         session_id,
-                        turul_mcp_server::SessionEvent::Custom {
-                            event_type: "notifications/tools/list_changed".to_string(),
-                            data,
-                        },
+                        "notifications/tools/list_changed".to_string(),
+                        data,
                     ).await
                 }
             }

@@ -578,3 +578,230 @@ async fn test_dispatcher_failure_propagates_to_caller() {
         tool_changed
     );
 }
+
+// ---------------------------------------------------------------------------
+// Distributed session tests — sessions exist in storage but NOT in cache
+// ---------------------------------------------------------------------------
+
+/// Prove: a session that exists in storage but NOT in SessionManager's
+/// in-memory cache still receives a per-session Custom event via dispatch_custom_event().
+#[tokio::test]
+async fn test_uncached_session_receives_per_session_custom_event() {
+    let session_storage = Arc::new(InMemorySessionStorage::new());
+
+    // Create session directly in storage — NOT through SessionManager
+    use turul_mcp_session_storage::SessionStorage;
+    let session_info = session_storage
+        .create_session(turul_mcp_protocol::ServerCapabilities::default())
+        .await
+        .expect("Should create session in storage");
+    let session_id = session_info.session_id.clone();
+
+    // SessionManager does NOT have this session in its cache
+    let session_manager = Arc::new(SessionManager::with_storage(
+        session_storage.clone(),
+        turul_mcp_protocol::ServerCapabilities::default(),
+    ));
+
+    // Install dispatcher backed by real StreamManager + same storage
+    let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+    let dispatcher = Arc::new(TestEventDispatcher { stream_manager });
+    session_manager.set_event_dispatcher(dispatcher).await;
+
+    // dispatch_custom_event should bypass cache and persist via dispatcher
+    let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        "notifications/tools/list_changed".to_string(),
+    );
+    let data = serde_json::to_value(&notification).unwrap();
+
+    let result = session_manager
+        .dispatch_custom_event(&session_id, "notifications/tools/list_changed".to_string(), data)
+        .await;
+    assert!(result.is_ok(), "dispatch_custom_event should succeed for uncached-but-real session");
+
+    // Event MUST be in storage
+    let events = session_storage
+        .get_recent_events(&session_id, 10)
+        .await
+        .unwrap();
+    let tool_changed = events
+        .iter()
+        .filter(|e| e.event_type == "notifications/tools/list_changed")
+        .count();
+    assert_eq!(tool_changed, 1, "Exactly 1 event for uncached session, got {}", tool_changed);
+}
+
+/// Prove: broadcast_event() reaches sessions that exist in storage but NOT in the cache.
+#[tokio::test]
+async fn test_broadcast_reaches_storage_backed_uncached_sessions() {
+    let session_storage = Arc::new(InMemorySessionStorage::new());
+
+    // Create session directly in storage — NOT through SessionManager
+    use turul_mcp_session_storage::SessionStorage;
+    let session_info = session_storage
+        .create_session(turul_mcp_protocol::ServerCapabilities::default())
+        .await
+        .expect("Should create session in storage");
+    let session_id = session_info.session_id.clone();
+
+    // SessionManager with empty cache
+    let session_manager = Arc::new(SessionManager::with_storage(
+        session_storage.clone(),
+        turul_mcp_protocol::ServerCapabilities::default(),
+    ));
+
+    let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+    let dispatcher = Arc::new(TestEventDispatcher { stream_manager });
+    session_manager.set_event_dispatcher(dispatcher).await;
+
+    // broadcast_event should enumerate from storage, not cache
+    let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        "notifications/tools/list_changed".to_string(),
+    );
+    let data = serde_json::to_value(&notification).unwrap();
+
+    let result = session_manager
+        .broadcast_event(turul_mcp_server::SessionEvent::Custom {
+            event_type: "notifications/tools/list_changed".to_string(),
+            data,
+        })
+        .await;
+    assert!(result.is_ok(), "broadcast_event should succeed with uncached storage sessions");
+
+    // Event MUST be in storage for the uncached session
+    let events = session_storage
+        .get_recent_events(&session_id, 10)
+        .await
+        .unwrap();
+    let tool_changed = events
+        .iter()
+        .filter(|e| e.event_type == "notifications/tools/list_changed")
+        .count();
+    assert_eq!(tool_changed, 1, "Broadcast must reach uncached session, got {}", tool_changed);
+}
+
+/// Prove: dispatch_custom_event for a nonexistent session succeeds (storage accepts any session_id).
+#[tokio::test]
+async fn test_dispatch_to_nonexistent_session_succeeds() {
+    let session_storage = Arc::new(InMemorySessionStorage::new());
+    let session_manager = Arc::new(SessionManager::with_storage(
+        session_storage.clone(),
+        turul_mcp_protocol::ServerCapabilities::default(),
+    ));
+
+    let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+    let dispatcher = Arc::new(TestEventDispatcher { stream_manager });
+    session_manager.set_event_dispatcher(dispatcher).await;
+
+    let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        "notifications/tools/list_changed".to_string(),
+    );
+    let data = serde_json::to_value(&notification).unwrap();
+
+    // InMemory store_event() creates events list on the fly for any session_id
+    let result = session_manager
+        .dispatch_custom_event("does-not-exist-anywhere", "notifications/tools/list_changed".to_string(), data)
+        .await;
+    assert!(result.is_ok(), "dispatch_custom_event succeeds for nonexistent session (storage accepts any session_id)");
+}
+
+/// Prove: broadcast_event() propagates storage enumeration failure, not silent cache fallback.
+#[tokio::test]
+async fn test_broadcast_storage_enumeration_failure_propagates() {
+    use turul_mcp_session_storage::{SessionStorageError, SseEvent};
+
+    /// Minimal storage wrapper that fails on list_sessions() only.
+    struct FailingListStorage {
+        inner: Arc<InMemorySessionStorage>,
+    }
+
+    #[async_trait]
+    impl turul_mcp_session_storage::SessionStorage for FailingListStorage {
+        type Error = SessionStorageError;
+
+        async fn create_session(&self, caps: turul_mcp_protocol::ServerCapabilities) -> std::result::Result<turul_mcp_session_storage::SessionInfo, Self::Error> {
+            self.inner.create_session(caps).await
+        }
+        async fn create_session_with_id(&self, id: String, caps: turul_mcp_protocol::ServerCapabilities) -> std::result::Result<turul_mcp_session_storage::SessionInfo, Self::Error> {
+            self.inner.create_session_with_id(id, caps).await
+        }
+        async fn get_session(&self, id: &str) -> std::result::Result<Option<turul_mcp_session_storage::SessionInfo>, Self::Error> {
+            self.inner.get_session(id).await
+        }
+        async fn update_session(&self, info: turul_mcp_session_storage::SessionInfo) -> std::result::Result<(), Self::Error> {
+            self.inner.update_session(info).await
+        }
+        async fn delete_session(&self, id: &str) -> std::result::Result<bool, Self::Error> {
+            self.inner.delete_session(id).await
+        }
+        async fn list_sessions(&self) -> std::result::Result<Vec<String>, Self::Error> {
+            Err(SessionStorageError::DatabaseError("simulated list_sessions failure".to_string()))
+        }
+        async fn session_count(&self) -> std::result::Result<usize, Self::Error> {
+            self.inner.session_count().await
+        }
+        async fn set_session_state(&self, id: &str, key: &str, value: serde_json::Value) -> std::result::Result<(), Self::Error> {
+            self.inner.set_session_state(id, key, value).await
+        }
+        async fn get_session_state(&self, id: &str, key: &str) -> std::result::Result<Option<serde_json::Value>, Self::Error> {
+            self.inner.get_session_state(id, key).await
+        }
+        async fn remove_session_state(&self, id: &str, key: &str) -> std::result::Result<Option<serde_json::Value>, Self::Error> {
+            self.inner.remove_session_state(id, key).await
+        }
+        async fn expire_sessions(&self, older_than: std::time::SystemTime) -> std::result::Result<Vec<String>, Self::Error> {
+            self.inner.expire_sessions(older_than).await
+        }
+        async fn store_event(&self, session_id: &str, event: SseEvent) -> std::result::Result<SseEvent, Self::Error> {
+            self.inner.store_event(session_id, event).await
+        }
+        async fn get_events_after(&self, session_id: &str, after_event_id: u64) -> std::result::Result<Vec<SseEvent>, Self::Error> {
+            self.inner.get_events_after(session_id, after_event_id).await
+        }
+        async fn get_recent_events(&self, session_id: &str, limit: usize) -> std::result::Result<Vec<SseEvent>, Self::Error> {
+            self.inner.get_recent_events(session_id, limit).await
+        }
+        async fn delete_events_before(&self, session_id: &str, before_event_id: u64) -> std::result::Result<u64, Self::Error> {
+            self.inner.delete_events_before(session_id, before_event_id).await
+        }
+        async fn event_count(&self) -> std::result::Result<usize, Self::Error> {
+            self.inner.event_count().await
+        }
+        async fn maintenance(&self) -> std::result::Result<(), Self::Error> {
+            self.inner.maintenance().await
+        }
+        fn backend_name(&self) -> &'static str { "failing-test" }
+    }
+
+    let inner = Arc::new(InMemorySessionStorage::new());
+    let failing_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> = Arc::new(FailingListStorage { inner });
+
+    let session_manager = Arc::new(SessionManager::with_storage(
+        failing_storage,
+        turul_mcp_protocol::ServerCapabilities::default(),
+    ));
+
+    // Dispatcher installed but list_sessions will fail
+    let real_storage = Arc::new(InMemorySessionStorage::new());
+    let stream_manager = Arc::new(StreamManager::new(real_storage));
+    let dispatcher = Arc::new(TestEventDispatcher { stream_manager });
+    session_manager.set_event_dispatcher(dispatcher).await;
+
+    let notification = turul_mcp_protocol::JsonRpcNotification::new(
+        "notifications/tools/list_changed".to_string(),
+    );
+    let data = serde_json::to_value(&notification).unwrap();
+
+    let result = session_manager
+        .broadcast_event(turul_mcp_server::SessionEvent::Custom {
+            event_type: "notifications/tools/list_changed".to_string(),
+            data,
+        })
+        .await;
+
+    assert!(result.is_err(), "broadcast_event must propagate storage enumeration failure");
+    assert!(
+        result.unwrap_err().contains("simulated list_sessions failure"),
+        "Error must surface the storage failure"
+    );
+}

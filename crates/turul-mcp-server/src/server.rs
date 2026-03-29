@@ -53,12 +53,10 @@ impl turul_http_mcp_server::ToolChangeNotifier for SessionManagerToolNotifier {
             "notifications/tools/list_changed".to_string(),
         );
         let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;
-        self.session_manager.send_event_to_session(
+        self.session_manager.dispatch_custom_event(
             session_id,
-            crate::session::SessionEvent::Custom {
-                event_type: "notifications/tools/list_changed".to_string(),
-                data,
-            },
+            "notifications/tools/list_changed".to_string(),
+            data,
         ).await
     }
 }

@@ -124,10 +124,15 @@ When `.server_state_storage()` is provided with a **shared** backend (PostgreSQL
 ```
 Emitter (ToolRegistry, SessionContext, etc.)
   → SessionManager::broadcast_event()
-    Phase 1: collect session IDs, fire in-memory listeners (under read lock)
-    Phase 2: clone dispatcher Arc, drop lock, await dispatch per-session
-      → StreamManager::broadcast_to_session() → store_event() + live delivery (AWAITED)
+    Phase 1: fire in-memory listeners for cached sessions (under read lock, drop lock)
+    Phase 2: for Custom events — enumerate targets from storage.list_sessions(),
+             filter terminated, dispatch per-session via awaited dispatcher
+             → StreamManager::broadcast_to_session() → store_event() + live delivery
     Phase 3: fire global broadcast channel (observer-only, tests/debugging)
+
+Per-session (ToolChangeNotifier, restart/redeploy):
+  → SessionManager::dispatch_custom_event(session_id, event_type, data)
+    → dispatcher.dispatch_to_session() (storage-backed, not cache-gated)
 ```
 
 The dispatcher is:
@@ -143,6 +148,53 @@ The existing SSE bridge task (spawned during server construction) is **observer-
 ### No duplicate persistence
 
 One authoritative persistence path: the awaited dispatcher. The bridge does not re-persist Custom events. Exactly 1 stored event per notification per session.
+
+## Distributed Session Notification Targeting
+
+### Session Identity Hierarchy
+
+| Concept | Where | Purpose |
+|---|---|---|
+| **Stored session** | DynamoDB / PostgreSQL / SQLite | Source of truth for session existence |
+| **Attached session** | `SessionManager.sessions` HashMap | Instance-local listeners/channels |
+| **Notification target** | Derived from storage | Which sessions receive persisted Custom events |
+
+Storage is authoritative. The in-memory cache (`SessionManager.sessions`) is an instance-local optimization for listener fan-out. HTTP handlers create sessions via `session_storage.create_session()` — the `SessionManager.sessions` cache is NOT populated for these sessions. Lambda Instance B handling a session created by Instance A has an empty cache.
+
+### Notification Target Resolution
+
+**Per-session** (restart/redeploy fingerprint mismatch):
+- Entry: `dispatch_custom_event(session_id, event_type, data)` on `SessionManager`
+- Storage-backed — does NOT require session to be in the in-memory cache
+- Caller is responsible for verifying session exists in storage (via `validate_session_exists()`)
+- In-memory listener fired best-effort if session happens to be cached
+
+**All-session** (runtime tool mutation, `check_for_changes()`):
+- Entry: `broadcast_event()` on `SessionManager`
+- For `SessionEvent::Custom`: calls `storage.list_sessions()` to enumerate all session IDs from the storage backend, filters terminated sessions, dispatches to each
+- For non-Custom events: uses in-memory cache only (best-effort, no persistence guarantee)
+
+**Existing `send_event_to_session()`** — unchanged:
+- Cache-backed, returns error if session not in cache
+- Used by callers that know the session is attached (e.g., SessionContext callbacks)
+
+### Nonexistent Session Behavior
+
+`dispatch_custom_event()` does not validate session existence — the caller is responsible. If called with a session_id that does not exist in storage, the dispatcher calls `StreamManager::broadcast_to_session()` which calls `store_event()`. The InMemory storage backend creates an events list for any session_id on the fly; DynamoDB PutItem also succeeds for arbitrary session IDs. This is current behavior and is accepted: notification persistence targets the events table directly, and orphaned events are cleaned up by TTL/maintenance.
+
+### Performance
+
+`list_sessions()` on DynamoDB is a table Scan. Acceptable for tool mutation events (rare: activate/deactivate, fingerprint mismatch) but not per-request. `check_for_changes()` TTL gating (default 10s) prevents this from running on every request.
+
+Filtering terminated sessions requires N+1 queries (1 list + N get_session). Acceptable for typical MCP deployments (tens to low hundreds of sessions). For high-session-count deployments, a future `list_active_session_ids()` could filter at the query level.
+
+### Lambda Lifecycle
+
+1. Cold start: empty `SessionManager.sessions` cache. `sync_from_storage()` loads tool state.
+2. Request arrives: `check_for_changes()` detects fingerprint mismatch (TTL-gated).
+3. `broadcast_event()` calls `storage.list_sessions()` → finds all sessions in DynamoDB → dispatches notifications.
+4. `validate_session_exists()` also detects fingerprint mismatch → calls `ToolChangeNotifier` → `dispatch_custom_event(session_id)` → persists via dispatcher.
+5. Notification persisted in DynamoDB events table before Lambda invocation returns.
 
 ## Configuration
 

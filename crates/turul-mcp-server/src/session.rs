@@ -1547,41 +1547,75 @@ impl SessionManager {
         Ok(())
     }
 
+    /// Dispatch a Custom event to a specific session via the installed dispatcher.
+    /// Storage-backed — does NOT require the session to be in the in-memory cache.
+    /// The caller is responsible for verifying the session exists in storage
+    /// (e.g., via `validate_session_exists()`).
+    /// Returns `Err` if dispatcher persistence fails.
+    pub async fn dispatch_custom_event(
+        &self,
+        session_id: &str,
+        event_type: String,
+        data: serde_json::Value,
+    ) -> std::result::Result<(), String> {
+        // In-memory listener (best-effort if session is cached)
+        {
+            let sessions = self.sessions.read().await;
+            if let Some(session) = sessions.get(session_id) {
+                let event = SessionEvent::Custom { event_type: event_type.clone(), data: data.clone() };
+                let _ = session.send_event(event);
+            }
+        }
+
+        // Dispatcher (mandatory — storage-backed, not cache-gated)
+        let dispatcher = self.event_dispatcher.read().await.clone();
+        if let Some(ref dispatcher) = dispatcher {
+            dispatcher.dispatch_to_session(session_id, event_type, data).await?;
+        }
+
+        Ok(())
+    }
+
+    /// Broadcast event to all sessions.
     /// Broadcast event to all sessions.
     ///
-    /// For `SessionEvent::Custom` events, if a `SessionEventDispatcher` is installed,
-    /// persistence + live delivery are awaited on the request path before returning.
-    /// The global broadcast channel remains for passive observers (tests, debugging)
-    /// but is NOT the persistence path.
-    /// Broadcast event to all sessions.
+    /// For `SessionEvent::Custom`: uses `storage.list_sessions()` to enumerate targets
+    /// from the storage backend (not the in-memory cache). Filters terminated sessions.
+    /// Returns `Err` if storage enumeration or any session dispatch fails.
     ///
-    /// For `SessionEvent::Custom`: if a dispatcher is installed, persistence + delivery
-    /// are awaited on the request path. Returns `Err` if any session dispatch fails —
-    /// callers MUST handle this if persistence is mandatory (e.g., tool change notifications).
-    ///
-    /// For all other event types: best-effort only, always returns `Ok(())`.
+    /// For non-Custom events: uses in-memory cache only, best-effort, always returns `Ok(())`.
     pub async fn broadcast_event(&self, event: SessionEvent) -> std::result::Result<(), String> {
-        // Phase 1: Under read lock — collect session IDs + fire in-memory listeners
-        let session_ids: Vec<String> = {
+        // Phase 1: In-memory listeners (cache-local, best-effort)
+        let cached_ids: Vec<String> = {
             let sessions = self.sessions.read().await;
             let mut ids = Vec::with_capacity(sessions.len());
             for (session_id, session) in sessions.iter() {
-                if let Err(e) = session.send_event(event.clone()) {
-                    debug!("Per-session event send failed for {}: {} (normal if no active listener)", session_id, e);
-                }
+                let _ = session.send_event(event.clone());
                 ids.push(session_id.clone());
             }
             ids
-            // Read lock dropped here
         };
 
-        // Phase 2: No lock held — dispatch Custom events via awaited dispatcher
-        // Errors are collected and returned — mandatory persistence is enforced.
+        // Phase 2: Storage-backed targeting for Custom events
         let mut dispatch_errors: Vec<String> = Vec::new();
         if let SessionEvent::Custom { ref event_type, ref data } = event {
             let dispatcher = self.event_dispatcher.read().await.clone();
             if let Some(ref dispatcher) = dispatcher {
-                for session_id in &session_ids {
+                // Enumerate ALL sessions from storage — not the in-memory cache
+                let all_ids = self.storage.list_sessions().await
+                    .map_err(|e| format!("Failed to list sessions from storage: {}", e))?;
+
+                // Filter terminated sessions
+                let mut targets = Vec::new();
+                for sid in &all_ids {
+                    if let Ok(Some(info)) = self.storage.get_session(sid).await {
+                        if !info.is_terminated() {
+                            targets.push(sid.clone());
+                        }
+                    }
+                }
+
+                for session_id in &targets {
                     if let Err(e) = dispatcher.dispatch_to_session(
                         session_id,
                         event_type.clone(),
@@ -1593,8 +1627,8 @@ impl SessionManager {
             }
         }
 
-        // Phase 3: Global broadcast channel — observer-only (tests, passive consumers)
-        for session_id in &session_ids {
+        // Phase 3: Global broadcast channel — observer-only (cache-local, tests/debugging)
+        for session_id in &cached_ids {
             if let Err(e) = self.global_event_sender
                 .send((session_id.clone(), event.clone()))
             {
