@@ -94,6 +94,13 @@ impl DynamoDbServerStateStorage {
         Self { client, table_name }
     }
 
+    /// Convert an AWS SDK error to a ServerStateError with full error chain.
+    /// Uses Debug formatting ({:?}) instead of Display to surface the error code,
+    /// message, HTTP status, and request ID — not just generic "service error".
+    fn dynamo_err_debug(e: impl std::fmt::Debug) -> ServerStateError {
+        ServerStateError::DatabaseError(format!("{e:?}"))
+    }
+
     /// Ensure the table exists, creating it if necessary.
     async fn ensure_table(&self) -> Result<(), ServerStateError> {
         match self
@@ -160,12 +167,12 @@ impl DynamoDbServerStateStorage {
                 .attribute_name("entityType")
                 .key_type(KeyType::Hash)
                 .build()
-                .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?,
+                .map_err(Self::dynamo_err_debug)?,
             KeySchemaElement::builder()
                 .attribute_name("entityId")
                 .key_type(KeyType::Range)
                 .build()
-                .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?,
+                .map_err(Self::dynamo_err_debug)?,
         ];
 
         let attribute_definitions = vec![
@@ -173,12 +180,12 @@ impl DynamoDbServerStateStorage {
                 .attribute_name("entityType")
                 .attribute_type(ScalarAttributeType::S)
                 .build()
-                .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?,
+                .map_err(Self::dynamo_err_debug)?,
             AttributeDefinition::builder()
                 .attribute_name("entityId")
                 .attribute_type(ScalarAttributeType::S)
                 .build()
-                .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?,
+                .map_err(Self::dynamo_err_debug)?,
         ];
 
         match self
@@ -303,7 +310,7 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
             .key("entityId", AttributeValue::S(entity_id.to_string()))
             .send()
             .await
-            .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?;
+            .map_err(Self::dynamo_err_debug)?;
 
         Ok(result.item().and_then(Self::item_to_entity_state))
     }
@@ -333,7 +340,7 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
         request
             .send()
             .await
-            .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?;
+            .map_err(Self::dynamo_err_debug)?;
 
         Ok(())
     }
@@ -352,7 +359,7 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
             .key("entityId", AttributeValue::S(entity_id.to_string()))
             .send()
             .await
-            .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?;
+            .map_err(Self::dynamo_err_debug)?;
 
         Ok(())
     }
@@ -377,7 +384,7 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
             )
             .send()
             .await
-            .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?;
+            .map_err(Self::dynamo_err_debug)?;
 
         let entities = result
             .items()
@@ -405,7 +412,7 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
             )
             .send()
             .await
-            .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?;
+            .map_err(Self::dynamo_err_debug)?;
 
         Ok(result
             .item()
@@ -433,7 +440,7 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
             .item("updatedAt", AttributeValue::S(now))
             .send()
             .await
-            .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?;
+            .map_err(Self::dynamo_err_debug)?;
 
         Ok(())
     }
