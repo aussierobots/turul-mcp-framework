@@ -2258,7 +2258,7 @@ mod tests {
         let expected_region =
             std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string());
         assert_eq!(config.region, expected_region);
-        assert_eq!(config.session_ttl_minutes, 5);
+        assert_eq!(config.session_ttl_minutes, 30);
     }
 
     #[tokio::test]

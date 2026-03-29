@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.30] - 2026-03-29
+
+### Fixed
+
+- **DynamoDB `get_active_entities` filter** (`turul-mcp-server-state-storage`): Removed `entityId` (sort key) from `filter_expression` — DynamoDB rejects primary key attributes in filter expressions. Now uses application-level filtering.
+- **Restart/redeploy notification persistence** (`turul-http-mcp-server`): Fingerprint mismatch in `validate_session_exists()` now emits `notifications/tools/list_changed` through the `ToolChangeNotifier` → `SessionManager` → dispatcher architecture. Failure propagates (500), not warn-and-continue.
+- **DynamoDB TTL defaults** (`turul-mcp-session-storage`): Session and event TTL defaults increased from 5 to 30 minutes.
+
+### Added
+
+- **`ToolChangeNotifier` trait** (`turul-http-mcp-server`): Awaitable callback for restart/redeploy fingerprint mismatch notifications. Implemented by the server layer via `SessionManager::send_event_to_session()`.
+- **`send_event_to_session()` with dispatcher** (`turul-mcp-server`): Per-session event dispatch with guaranteed persistence for Custom events. Retains NotFound error for missing sessions.
+
 ## [0.3.29] - 2026-03-29
 
 ### Added
