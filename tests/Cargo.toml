@@ -11,6 +11,7 @@ turul-mcp-protocol = { workspace = true }
 turul-mcp-builders = { workspace = true }
 turul-mcp-json-rpc-server = { workspace = true }
 turul-mcp-session-storage = { workspace = true }
+turul-mcp-server-state-storage = { workspace = true }
 turul-http-mcp-server = { workspace = true }
 turul-mcp-client = { workspace = true }
 turul-mcp-aws-lambda = { workspace = true }
@@ -87,3 +88,8 @@ path = "dynamic_tools_e2e.rs"
 [[test]]
 name = "tasks_e2e_inmemory"
 path = "tasks_e2e_inmemory.rs"
+
+# SessionEventDispatcher persistence proof (real StreamManager + real storage)
+[[test]]
+name = "event_dispatcher_persistence"
+path = "event_dispatcher_persistence.rs"

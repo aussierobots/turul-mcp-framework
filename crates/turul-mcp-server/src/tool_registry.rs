@@ -1201,4 +1201,159 @@ mod tests {
             assert_eq!(registry.fingerprint().await, initial_fp);
             assert_eq!(registry.list_active_tools().await.len(), 3);
         }
+
+    // ===================================================================
+    // SessionEventDispatcher guaranteed persistence tests
+    // ===================================================================
+
+    /// Test dispatcher that records all dispatched events for assertion.
+    struct RecordingDispatcher {
+        events: tokio::sync::Mutex<Vec<(String, String, serde_json::Value)>>,
+    }
+
+    impl RecordingDispatcher {
+        fn new() -> Self {
+            Self {
+                events: tokio::sync::Mutex::new(Vec::new()),
+            }
+        }
+
+        async fn event_count(&self) -> usize {
+            self.events.lock().await.len()
+        }
+
+        async fn events_for_type(&self, event_type: &str) -> Vec<(String, String, serde_json::Value)> {
+            self.events.lock().await.iter()
+                .filter(|(_, et, _)| et == event_type)
+                .cloned()
+                .collect()
+        }
+    }
+
+    #[async_trait]
+    impl crate::session::SessionEventDispatcher for RecordingDispatcher {
+        async fn dispatch_to_session(
+            &self,
+            session_id: &str,
+            event_type: String,
+            data: serde_json::Value,
+        ) -> std::result::Result<(), String> {
+            self.events.lock().await.push((
+                session_id.to_string(),
+                event_type,
+                data,
+            ));
+            Ok(())
+        }
+    }
+
+    fn test_session_manager_with_dispatcher() -> (Arc<SessionManager>, Arc<RecordingDispatcher>) {
+        let sm = Arc::new(SessionManager::new(
+            turul_mcp_protocol::ServerCapabilities::default(),
+        ));
+        let dispatcher = Arc::new(RecordingDispatcher::new());
+        (sm, dispatcher)
+    }
+
+    /// Requirement: deactivate_tool() MUST persist exactly 1 event before returning.
+    #[tokio::test]
+    async fn test_deactivate_stores_exactly_one_event() {
+        let (sm, dispatcher) = test_session_manager_with_dispatcher();
+        sm.set_event_dispatcher(dispatcher.clone()).await;
+
+        // Create a session so broadcast_event has targets
+        let _session_id = sm.create_session().await;
+
+        let registry = ToolRegistry::new(test_tools(), sm, test_storage());
+        registry.deactivate_tool("beta").await.unwrap();
+
+        let events = dispatcher.events_for_type("notifications/tools/list_changed").await;
+        assert_eq!(
+            events.len(), 1,
+            "deactivate_tool must persist exactly 1 notification, got {}",
+            events.len()
+        );
+    }
+
+    /// Requirement: activate_tool() MUST persist exactly 1 event before returning.
+    #[tokio::test]
+    async fn test_activate_stores_exactly_one_event() {
+        let (sm, dispatcher) = test_session_manager_with_dispatcher();
+        sm.set_event_dispatcher(dispatcher.clone()).await;
+
+        let _session_id = sm.create_session().await;
+
+        let registry = ToolRegistry::new(test_tools(), sm, test_storage());
+        // Deactivate first (without dispatcher — to avoid counting that event)
+        // Actually the dispatcher is already installed, so deactivate will also produce an event.
+        // Reset by checking count after activate.
+        registry.deactivate_tool("beta").await.unwrap();
+        let count_after_deactivate = dispatcher.event_count().await;
+
+        registry.activate_tool("beta").await.unwrap();
+        let count_after_activate = dispatcher.event_count().await;
+
+        assert_eq!(
+            count_after_activate - count_after_deactivate, 1,
+            "activate_tool must persist exactly 1 additional notification"
+        );
+    }
+
+    /// Requirement: check_for_changes() MUST persist exactly 1 event per session
+    /// when fingerprint mismatch is detected.
+    #[tokio::test]
+    async fn test_check_for_changes_stores_event_before_return() {
+        let storage = test_storage();
+        let (sm, dispatcher) = test_session_manager_with_dispatcher();
+        sm.set_event_dispatcher(dispatcher.clone()).await;
+
+        let _session_id = sm.create_session().await;
+
+        // Registry A writes initial state to storage
+        let registry_a = ToolRegistry::new(test_tools(), test_session_manager(), storage.clone());
+        registry_a.sync_from_storage().await.unwrap();
+
+        // Registry A deactivates a tool → writes new fingerprint to storage
+        registry_a.deactivate_tool("gamma").await.unwrap();
+        // Write the updated state to storage
+        registry_a.sync_from_storage().await.unwrap();
+
+        // Registry B has all 3 tools active (different fingerprint from storage)
+        let registry_b = ToolRegistry::new(test_tools(), sm, storage.clone());
+
+        // check_for_changes should detect mismatch and persist notification
+        let changed = registry_b.check_for_changes().await.unwrap();
+        assert!(changed, "Should detect fingerprint mismatch");
+
+        let events = dispatcher.events_for_type("notifications/tools/list_changed").await;
+        assert_eq!(
+            events.len(), 1,
+            "check_for_changes must persist exactly 1 notification before returning, got {}",
+            events.len()
+        );
+    }
+
+    /// Requirement: multiple sessions must each receive their own dispatched event.
+    #[tokio::test]
+    async fn test_dispatcher_targets_all_sessions() {
+        let (sm, dispatcher) = test_session_manager_with_dispatcher();
+        sm.set_event_dispatcher(dispatcher.clone()).await;
+
+        let session_a = sm.create_session().await;
+        let session_b = sm.create_session().await;
+
+        let registry = ToolRegistry::new(test_tools(), sm, test_storage());
+        registry.deactivate_tool("alpha").await.unwrap();
+
+        let events = dispatcher.events_for_type("notifications/tools/list_changed").await;
+        assert_eq!(
+            events.len(), 2,
+            "Should dispatch to both sessions, got {}",
+            events.len()
+        );
+
+        let session_ids: Vec<&str> = events.iter().map(|(s, _, _)| s.as_str()).collect();
+        assert!(session_ids.contains(&session_a.as_str()), "Should dispatch to session A");
+        assert!(session_ids.contains(&session_b.as_str()), "Should dispatch to session B");
+    }
 }
