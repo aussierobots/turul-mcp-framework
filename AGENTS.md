@@ -208,6 +208,9 @@
   - where the current boundary is broken,
   - and why smaller fixes are insufficient.
 - If a plan proposes changing a core event path, include the exact files and the specific authoritative flow before coding.
+- Stay inside the approved plan and stated requirement. Do not broaden scope by changing adjacent contracts, tests, or semantics unless the change is directly required by the approved fix.
+- If implementation starts forcing unrelated API behavior changes, altered test expectations, or new architectural branches, stop and reassess instead of improvising.
+- If there is real ambiguity about scope, architecture, or whether a change is still on-plan, stop and ask for clarification rather than guessing.
 
 ### Critic Review Mode (Architecture + Best Practices + MCP Compliance)
 - Default stance for review-only requests: **no code changes** unless the user explicitly asks for a patch.
