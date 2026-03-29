@@ -1546,7 +1546,14 @@ impl SessionManager {
     /// persistence + live delivery are awaited on the request path before returning.
     /// The global broadcast channel remains for passive observers (tests, debugging)
     /// but is NOT the persistence path.
-    pub async fn broadcast_event(&self, event: SessionEvent) {
+    /// Broadcast event to all sessions.
+    ///
+    /// For `SessionEvent::Custom`: if a dispatcher is installed, persistence + delivery
+    /// are awaited on the request path. Returns `Err` if any session dispatch fails —
+    /// callers MUST handle this if persistence is mandatory (e.g., tool change notifications).
+    ///
+    /// For all other event types: best-effort only, always returns `Ok(())`.
+    pub async fn broadcast_event(&self, event: SessionEvent) -> std::result::Result<(), String> {
         // Phase 1: Under read lock — collect session IDs + fire in-memory listeners
         let session_ids: Vec<String> = {
             let sessions = self.sessions.read().await;
@@ -1562,8 +1569,9 @@ impl SessionManager {
         };
 
         // Phase 2: No lock held — dispatch Custom events via awaited dispatcher
+        // Errors are collected and returned — mandatory persistence is enforced.
+        let mut dispatch_errors: Vec<String> = Vec::new();
         if let SessionEvent::Custom { ref event_type, ref data } = event {
-            // Clone the Arc out of the RwLock to avoid holding it across awaits
             let dispatcher = self.event_dispatcher.read().await.clone();
             if let Some(ref dispatcher) = dispatcher {
                 for session_id in &session_ids {
@@ -1572,7 +1580,7 @@ impl SessionManager {
                         event_type.clone(),
                         data.clone(),
                     ).await {
-                        debug!("Event dispatch to session {} failed: {}", session_id, e);
+                        dispatch_errors.push(format!("session {}: {}", session_id, e));
                     }
                 }
             }
@@ -1585,6 +1593,12 @@ impl SessionManager {
             {
                 debug!("Global event broadcast failed (no listeners): {}", e);
             }
+        }
+
+        if dispatch_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(dispatch_errors.join("; "))
         }
     }
 

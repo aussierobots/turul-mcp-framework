@@ -506,3 +506,59 @@ async fn test_check_for_changes_real_persistence() {
         tool_changed
     );
 }
+
+/// Prove: dispatcher failure propagates to the caller — no silent success
+/// when mandatory persistence fails.
+#[tokio::test]
+async fn test_dispatcher_failure_propagates_to_caller() {
+    // Create a dispatcher that always fails
+    struct FailingDispatcher;
+
+    #[async_trait]
+    impl SessionEventDispatcher for FailingDispatcher {
+        async fn dispatch_to_session(
+            &self,
+            _session_id: &str,
+            _event_type: String,
+            _data: serde_json::Value,
+        ) -> Result<(), String> {
+            Err("simulated storage failure".to_string())
+        }
+    }
+
+    let session_storage = Arc::new(InMemorySessionStorage::new());
+    let session_manager = Arc::new(SessionManager::with_storage(
+        session_storage.clone(),
+        turul_mcp_protocol::ServerCapabilities::default(),
+    ));
+
+    // Install the failing dispatcher
+    session_manager
+        .set_event_dispatcher(Arc::new(FailingDispatcher))
+        .await;
+
+    let _session_id = session_manager.create_session().await;
+
+    let server_state = Arc::new(
+        turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
+    );
+    let registry = turul_mcp_server::ToolRegistry::new(
+        make_tools(),
+        session_manager,
+        server_state,
+    );
+
+    // deactivate_tool MUST return Err when dispatcher fails
+    let result = registry.deactivate_tool("beta").await;
+    assert!(
+        result.is_err(),
+        "deactivate_tool must fail when mandatory notification persistence fails"
+    );
+
+    let err = result.unwrap_err().to_string();
+    assert!(
+        err.contains("simulated storage failure"),
+        "Error must surface the dispatcher failure, got: {}",
+        err
+    );
+}

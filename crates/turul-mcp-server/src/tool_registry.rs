@@ -104,7 +104,7 @@ impl ToolRegistry {
         }; // write lock released here — active set + fingerprint are consistent
 
         if changed {
-            self.broadcast_notification().await;
+            self.broadcast_notification().await?;
             info!("Tool '{}' activated", name);
             self.persist_entity_change(name, true).await;
         } else {
@@ -135,7 +135,7 @@ impl ToolRegistry {
         }; // write lock released here — active set + fingerprint are consistent
 
         if changed {
-            self.broadcast_notification().await;
+            self.broadcast_notification().await?;
             info!("Tool '{}' deactivated", name);
             self.persist_entity_change(name, false).await;
         } else {
@@ -190,11 +190,9 @@ impl ToolRegistry {
     }
 
     /// Broadcast `notifications/tools/list_changed` to all connected clients.
-    /// Called AFTER the write lock is released (notification is best-effort, not atomic with mutation).
-    async fn broadcast_notification(&self) {
-        // Use JsonRpcNotification (includes "jsonrpc": "2.0") — NOT ToolListChangedNotification
-        // (which is a protocol-level type without the JSON-RPC envelope).
-        // Matches the pattern in session.rs:notify_tools_changed().
+    /// Called AFTER the write lock is released.
+    /// Returns `Err(NotificationFailed)` if mandatory persistence fails.
+    async fn broadcast_notification(&self) -> Result<(), ToolRegistryError> {
         let notification = turul_mcp_protocol::JsonRpcNotification::new(
             "notifications/tools/list_changed".to_string(),
         );
@@ -206,7 +204,8 @@ impl ToolRegistry {
                 event_type: "notifications/tools/list_changed".to_string(),
                 data,
             })
-            .await;
+            .await
+            .map_err(ToolRegistryError::NotificationFailed)
     }
 
     /// Sync local tool state against shared storage on startup.
@@ -353,7 +352,7 @@ impl ToolRegistry {
             Some(fp) if fp != local_fp => {
                 debug!("Dynamic: external tool change detected (stored={}, local={})", fp, local_fp);
                 self.load_state_from_storage().await?;
-                self.broadcast_notification().await;
+                self.broadcast_notification().await?;
                 debug!("Dynamic: tool state reloaded and clients notified");
                 Ok(true)
             }
@@ -394,7 +393,9 @@ impl ToolRegistry {
                                 );
                                 continue;
                             }
-                            registry.broadcast_notification().await;
+                            if let Err(e) = registry.broadcast_notification().await {
+                                warn!("Failed to persist tool change notification: {}", e);
+                            }
                             debug!(
                                 "Dynamic: tool state reloaded and clients notified"
                             );
@@ -433,6 +434,9 @@ pub enum ToolRegistryError {
 
     #[error("Storage error: {0}")]
     StorageError(String),
+
+    #[error("Notification persistence failed: {0}")]
+    NotificationFailed(String),
 }
 
 /// Result of syncing local tool state against shared storage.

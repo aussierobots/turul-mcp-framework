@@ -522,9 +522,9 @@ impl McpServer {
                     session_id, event
                 );
 
-                // Observer-only for Custom events — the awaited dispatcher in
-                // broadcast_event() handles persistence on the request path.
-                // The bridge remains for passive observation and non-Custom events.
+                // Observer-only — the awaited dispatcher in broadcast_event()
+                // handles persistence for Custom events on the request path.
+                // This bridge logs events for debugging but does not persist or forward.
                 match event {
                     crate::session::SessionEvent::Custom { ref event_type, .. } => {
                         debug!(

@@ -4,14 +4,12 @@
 //! 1. Client initializes and sees initial tool set (multiply active)
 //! 2. Tool is deactivated via `deactivate_multiply` → tool registry updated
 //! 3. Same session's next tools/list shows multiply absent, activate_multiply present
-//! 4. Re-initialization produces a new session with the same updated tool set
+//! 4. Re-initialization produces a new session with the current live tool set
 //!
-//! Note: The HTTP handler's tool_fingerprint is static (set at build time) and does
-//! not change for Dynamic mutations. Fingerprint-based 404 guards against
-//! cross-restart or cross-cluster staleness. In-process dynamic changes are signaled
-//! to clients via SSE notifications/tools/list_changed.
-//!
-//! This is the highest-signal proof that the feature works end-to-end.
+//! In Dynamic mode, the initialize handler uses the live ToolRegistry fingerprint,
+//! so new sessions always get the current tool-state baseline — no spurious mismatch.
+//! notifications/tools/list_changed is persisted to session event storage via the
+//! SessionEventDispatcher before the emitting function returns.
 
 use mcp_e2e_shared::{McpTestClient, TestServerManager};
 use serde_json::json;
