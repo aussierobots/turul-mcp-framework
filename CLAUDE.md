@@ -79,6 +79,22 @@ struct Calculator;  // Framework → tools/call
 ### Workspace Dependencies
 All crate dependencies MUST use `workspace = true` references. Declare versions in root `Cargo.toml` `[workspace.dependencies]`, reference with `.workspace = true` in crate `Cargo.toml`. Add crate-specific features inline: `hyper = { workspace = true, features = ["http1"] }`.
 
+### Feature Flags — Storage Backends
+Default features: `["http", "sse"]` — in-memory only, no backend deps compiled. Storage backends are opt-in:
+
+```toml
+# In-memory only (default)
+turul-mcp-server = "0.3"
+
+# With DynamoDB backends
+turul-mcp-server = { version = "0.3", features = ["dynamodb"] }
+
+# With DynamoDB + dynamic tools
+turul-mcp-server = { version = "0.3", features = ["dynamodb", "dynamic-tools"] }
+```
+
+Backend features (`sqlite`, `postgres`, `dynamodb`) forward to both `turul-mcp-session-storage` AND `turul-mcp-task-storage`. When `dynamic-tools` is enabled, they also forward to `turul-mcp-server-state-storage` via weak dep syntax (`?/`).
+
 ### API Conventions
 - **SessionContext**: Use `get_typed_state(key).await` and `set_typed_state(key, value).await?`
 - **Builder Pattern**: `McpServer::builder()` not `McpServerBuilder::new()`
@@ -113,6 +129,17 @@ let notification = ToolListChangedNotification::new();
 ```
 
 This applies to ALL notification types sent via SSE/HTTP transport. The protocol `*Notification` types are for parsing/type safety, not for direct wire emission.
+
+### Notification Persistence Architecture
+
+**SessionManager is the single event bus.** All notification emitters (ToolRegistry, SessionContext) go through `SessionManager::broadcast_event()`. Guaranteed persistence is provided by the `SessionEventDispatcher` — an awaited trait installed at the SessionManager layer, not at individual emitters.
+
+- `broadcast_event()` collects session IDs (under read lock), drops the lock, then awaits the dispatcher per-session
+- The dispatcher calls `StreamManager::broadcast_to_session()` which persists to session event storage AND delivers to active connections
+- The SSE bridge task is observer-only for Custom events — NOT the persistence path
+- Without a dispatcher (e.g., no HTTP server), events are best-effort only (in-memory channels)
+
+**Do NOT add notification sinks or persistence hooks to individual emitters** — that splits the event architecture into competing delivery paths.
 
 ### Critical Error Handling Rules
 

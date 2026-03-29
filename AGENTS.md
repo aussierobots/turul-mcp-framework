@@ -165,6 +165,50 @@
 - Boundaries: do not modify core framework areas unless explicitly requested. The ~9 areas are Tools, Resources, Prompts, Sampling, Completion, Logging, Roots, Elicitation, and Notifications.
  - Extensions: if introducing truly non-standard fields, document them clearly, keep optional, and ensure baseline compliance without them.
 
+### Complexity Control
+- Default to the smallest design that satisfies the current requirement.
+- Do not introduce new modes, traits, crates, storage abstractions, polling loops, caches, or transport-specific branches unless the current task demonstrably requires them.
+- Prefer one authoritative path for a behavior over parallel or fallback paths that can drift or duplicate work.
+- Separate clearly:
+  - current implemented behavior,
+  - intended architecture,
+  - and deferred future work.
+  Do not describe future architecture as if it is already implemented.
+- When a requirement can be satisfied by narrowing an existing path, prefer that over adding a second path.
+
+### Proof Before Expansion
+- Green tests do **not** prove there are no implementation/behavior gaps; they only prove the covered scenarios.
+- If a production symptom is reported, require a targeted regression test for that exact scenario before claiming the issue is closed.
+- Do not treat broad test counts or “all tests pass” as proof of architectural correctness.
+- When behavior depends on async ordering, detached tasks, or storage replay, require one explicit test for the timing boundary being discussed.
+- If a docs or ADR update states a behavior, ensure there is either:
+  - an automated test proving it, or
+  - an explicit note that it is intended behavior with an implementation gap still open.
+
+### Eventing & Notification Architecture
+- Treat `SessionManager` as the central session-event bus unless the user explicitly requests a different architecture.
+- Do not add emitter-specific persistence or delivery paths when the same behavior should flow through the shared session event architecture.
+- Best-effort detached tasks are not acceptable for mandatory persistence guarantees.
+- If persistence before request completion is required, the persistence step must be on the awaited request path.
+- Avoid duplicate notification paths. If a new authoritative persistence/delivery path is introduced, explicitly redefine older paths as observer-only or remove them.
+- For notification changes, verify all three concerns separately:
+  - storage persistence,
+  - live delivery,
+  - duplicate suppression / single authoritative path.
+
+### Planning Discipline
+- Plans must distinguish:
+  - mandatory now,
+  - optional later,
+  - and deferred future work.
+- Do not merge immediate bug fixes, observability improvements, and larger architectural redesigns into one undifferentiated plan.
+- For architecture changes, state explicitly:
+  - what the current code already does,
+  - what exact invariant is missing,
+  - where the current boundary is broken,
+  - and why smaller fixes are insufficient.
+- If a plan proposes changing a core event path, include the exact files and the specific authoritative flow before coding.
+
 ### Critic Review Mode (Architecture + Best Practices + MCP Compliance)
 - Default stance for review-only requests: **no code changes** unless the user explicitly asks for a patch.
 - Review output should prioritize findings over summaries:

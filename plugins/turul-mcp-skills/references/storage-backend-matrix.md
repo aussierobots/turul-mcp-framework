@@ -43,45 +43,40 @@ All backends pass the same parity test suite ensuring session isolation, TTL enf
 | PostgreSQL | `postgres` | `sqlx`, `tokio` |
 | DynamoDB | `dynamodb` | `aws-sdk-dynamodb`, `aws-config`, `tokio`, `base64` |
 
-> **Note:** The server crate's backend features propagate only to `turul-mcp-session-storage`. For task storage, add `turul-mcp-task-storage` as a separate dependency with matching features.
+> **Note:** Since v0.3.27, the server crate's backend features forward to BOTH `turul-mcp-session-storage` AND `turul-mcp-task-storage`. You do NOT need to add them as separate dependencies with matching features — one feature on `turul-mcp-server` enables the backend everywhere. For `turul-mcp-server-state-storage` (dynamic tools), the backend feature is forwarded via weak dependency syntax when `dynamic-tools` is also enabled.
 
 ### Server Crate (`turul-mcp-server`)
 
-Enable the matching feature on `turul-mcp-server` as well: `http`, `sse`, plus the backend name.
+Default features: `["http", "sse"]` — in-memory only, no backend deps compiled.
 
-| Backend | `turul-mcp-server` features |
-|---|---|
-| InMemory | `["http", "sse"]` |
-| SQLite | `["http", "sse", "sqlite"]` |
-| PostgreSQL | `["http", "sse", "postgres"]` |
-| DynamoDB | `["http", "sse", "dynamodb"]` |
+| Backend | `turul-mcp-server` features | Forwards to |
+|---|---|---|
+| InMemory | (default) | — |
+| SQLite | `["sqlite"]` | session-storage + task-storage |
+| PostgreSQL | `["postgres"]` | session-storage + task-storage |
+| DynamoDB | `["dynamodb"]` | session-storage + task-storage |
+| Dynamic tools | `["dynamic-tools"]` | server-state-storage (in-memory) |
+| Dynamic + DynamoDB | `["dynamodb", "dynamic-tools"]` | all three storage crates |
 
 ## Cargo.toml Patterns
 
-### InMemory (default -- no extra config)
+### InMemory (default — no extra config)
 
 ```toml
 [dependencies]
 turul-mcp-server = "0.3"
-# InMemory is the default; no storage crate needed
+# Default features: http + sse + in-memory storage. No backend deps compiled.
 ```
-
-> **Note:** The server crate's default features include `["http", "sse", "sqlite", "postgres", "dynamodb"]`, which pulls in all backend dependencies. For minimal compile times, use `default-features = false, features = ["http", "sse"]`.
 
 ### SQLite
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.3", features = ["http", "sse", "sqlite"] }
+turul-mcp-server = { version = "0.3", features = ["sqlite"] }
 turul-mcp-session-storage = { version = "0.3", features = ["sqlite"] }
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio-rustls"] }
 ```
 
-For task storage, add:
-
-```toml
-turul-mcp-task-storage = { version = "0.3", features = ["sqlite"] }
-```
+The `sqlite` feature on `turul-mcp-server` enables SQLite for both session and task storage automatically.
 
 See: [examples/simple-sqlite-session](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples/simple-sqlite-session)
 
@@ -89,15 +84,8 @@ See: [examples/simple-sqlite-session](https://github.com/aussierobots/turul-mcp-
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.3", features = ["http", "sse", "postgres"] }
+turul-mcp-server = { version = "0.3", features = ["postgres"] }
 turul-mcp-session-storage = { version = "0.3", features = ["postgres"] }
-sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls"] }
-```
-
-For task storage, add:
-
-```toml
-turul-mcp-task-storage = { version = "0.3", features = ["postgres"] }
 ```
 
 See: [examples/simple-postgres-session](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples/simple-postgres-session)
@@ -106,19 +94,20 @@ See: [examples/simple-postgres-session](https://github.com/aussierobots/turul-mc
 
 ```toml
 [dependencies]
-turul-mcp-server = { version = "0.3", features = ["http", "sse", "dynamodb"] }
+turul-mcp-server = { version = "0.3", features = ["dynamodb"] }
 turul-mcp-session-storage = { version = "0.3", features = ["dynamodb"] }
-aws-sdk-dynamodb = "1"
-aws-config = "1"
-```
-
-For task storage, add:
-
-```toml
-turul-mcp-task-storage = { version = "0.3", features = ["dynamodb"] }
 ```
 
 See: [examples/simple-dynamodb-session](https://github.com/aussierobots/turul-mcp-framework/tree/main/examples/simple-dynamodb-session)
+
+### DynamoDB + Dynamic Tools (Lambda production)
+
+```toml
+[dependencies]
+turul-mcp-server = { version = "0.3", features = ["dynamodb", "dynamic-tools"] }
+turul-mcp-session-storage = { version = "0.3", features = ["dynamodb"] }
+turul-mcp-server-state-storage = { version = "0.3", features = ["dynamodb"] }
+```
 
 ## Environment Variables
 
