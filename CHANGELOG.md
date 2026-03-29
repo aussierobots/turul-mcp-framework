@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.29] - 2026-03-29
+
+### Added
+
+- **SessionEventDispatcher** (`turul-mcp-server`): Awaitable dispatcher trait on `SessionManager` for guaranteed notification persistence on the request path. Custom events are persisted via `StreamManager::broadcast_to_session()` before `broadcast_event()` returns. Installed by the runtime (HTTP server, Lambda).
+- **Mandatory persistence enforcement**: `broadcast_event()` returns `Result<(), String>` for Custom events. `broadcast_notification()` returns `Result<(), ToolRegistryError::NotificationFailed>`. `activate_tool()`, `deactivate_tool()`, `check_for_changes()` propagate dispatcher failures — no silent success when mandatory persistence fails.
+- **Live registry fingerprint for new sessions**: In Dynamic mode, `SessionAwareInitializeHandler` reads `ToolRegistry::fingerprint()` instead of the build-time static value. New sessions after runtime tool mutations get the correct baseline — no spurious mismatch notification.
+
+### Fixed
+
+- **DynamoDB error observability** (`turul-mcp-server-state-storage`): `dynamo_err_debug()` uses `{:?}` (Debug) format instead of `{}`  (Display) for AWS SDK errors, surfacing error code, message, HTTP status, and request ID instead of generic "service error".
+- **SSE bridge narrowed to observer-only**: The detached bridge task no longer persists or delivers `SessionEvent::Custom` events — the awaited dispatcher handles that on the request path. Eliminates duplicate persistence.
+
+### Changed
+
+- **BREAKING: `broadcast_event()` returns `Result`**: Callers that previously ignored the return value of `SessionManager::broadcast_event()` must now handle the `Result<(), String>` return for Custom events. Non-custom events always return `Ok(())`.
+
+## [0.3.28] - 2026-03-29
+
+### Fixed
+
+- **Non-deterministic tool fingerprint** (`turul-mcp-server`): `compute_tool_fingerprint()` now canonicalizes JSON (recursive key sorting) before FNV hashing.
+
 ## [0.3.27] - 2026-03-29
 
 ### Changed
