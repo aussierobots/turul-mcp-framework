@@ -1333,6 +1333,58 @@ mod tests {
         );
     }
 
+    /// Regression: new session after runtime mutation must get the live fingerprint,
+    /// not the stale build-time fingerprint. Otherwise the first request triggers a
+    /// spurious notifications/tools/list_changed.
+    #[tokio::test]
+    async fn test_new_session_after_mutation_gets_live_fingerprint() {
+        let (sm, dispatcher) = test_session_manager_with_dispatcher();
+        sm.set_event_dispatcher(dispatcher.clone()).await;
+
+        let registry = ToolRegistry::new(test_tools(), sm.clone(), test_storage());
+
+        // Mutate tools at runtime
+        registry.deactivate_tool("gamma").await.unwrap();
+        let live_fp = registry.fingerprint().await;
+
+        // Simulate what SessionAwareInitializeHandler does in Dynamic mode:
+        // it should read registry.fingerprint(), not the build-time value.
+        let session_id = sm.create_session().await;
+        sm.set_session_state(
+            &session_id,
+            "mcp:tool_fingerprint",
+            serde_json::json!(live_fp),
+        ).await;
+
+        // The stored fingerprint must match the live registry
+        let stored_fp = sm.get_session_state(&session_id, "mcp:tool_fingerprint").await
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+            .expect("fingerprint should be stored");
+
+        assert_eq!(
+            stored_fp, live_fp,
+            "New session must get live registry fingerprint, not build-time"
+        );
+
+        // Clear the dispatcher event count from the deactivate_tool call
+        let events_before = dispatcher.event_count().await;
+
+        // Simulate next request: compare session fingerprint vs live fingerprint
+        // If they match, no spurious notification should be emitted
+        let session_fp = stored_fp;
+        let current_fp = registry.fingerprint().await;
+        assert_eq!(
+            session_fp, current_fp,
+            "Session fingerprint must match current — no mismatch, no spurious notification"
+        );
+
+        // Verify no new events were dispatched (no spurious notification)
+        assert_eq!(
+            dispatcher.event_count().await, events_before,
+            "No spurious notification should be emitted for a correctly initialized session"
+        );
+    }
+
     /// Requirement: multiple sessions must each receive their own dispatched event.
     #[tokio::test]
     async fn test_dispatcher_targets_all_sessions() {

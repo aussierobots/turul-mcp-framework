@@ -388,7 +388,7 @@ impl McpServer {
         }
 
         // Create session-aware initialize handler
-        let init_handler = SessionAwareInitializeHandler::new(
+        let mut init_handler = SessionAwareInitializeHandler::new(
             self.implementation.clone(),
             self.capabilities.clone(),
             self.instructions.clone(),
@@ -396,6 +396,10 @@ impl McpServer {
             self.strict_lifecycle,
             self.tool_fingerprint.clone(),
         );
+        #[cfg(feature = "dynamic-tools")]
+        if let Some(ref registry) = self.tool_registry {
+            init_handler = init_handler.with_tool_registry(Arc::clone(registry));
+        }
 
         // Build HTTP server with shared session storage from SessionManager
         let session_storage = self.session_manager.get_storage();
@@ -619,7 +623,7 @@ impl McpServer {
         }
 
         // Create session-aware initialize handler
-        let init_handler = SessionAwareInitializeHandler::new(
+        let mut init_handler = SessionAwareInitializeHandler::new(
             self.implementation.clone(),
             self.capabilities.clone(),
             self.instructions.clone(),
@@ -627,6 +631,10 @@ impl McpServer {
             self.strict_lifecycle,
             self.tool_fingerprint.clone(),
         );
+        #[cfg(feature = "dynamic-tools")]
+        if let Some(ref registry) = self.tool_registry {
+            init_handler = init_handler.with_tool_registry(Arc::clone(registry));
+        }
 
         // Build HTTP server with shared session storage from SessionManager
         let session_storage = self.session_manager.get_storage();
@@ -885,6 +893,11 @@ pub struct SessionAwareInitializeHandler {
     session_manager: Arc<SessionManager>,
     strict_lifecycle: bool,
     tool_fingerprint: String,
+    /// Live tool registry for Dynamic mode — if set, the current registry fingerprint
+    /// is used instead of the build-time `tool_fingerprint`. This ensures new sessions
+    /// created after runtime tool mutations get the correct baseline.
+    #[cfg(feature = "dynamic-tools")]
+    tool_registry: Option<Arc<crate::tool_registry::ToolRegistry>>,
 }
 
 impl SessionAwareInitializeHandler {
@@ -903,7 +916,16 @@ impl SessionAwareInitializeHandler {
             session_manager,
             strict_lifecycle,
             tool_fingerprint,
+            #[cfg(feature = "dynamic-tools")]
+            tool_registry: None,
         }
+    }
+
+    /// Set the live tool registry for Dynamic mode fingerprint resolution.
+    #[cfg(feature = "dynamic-tools")]
+    pub fn with_tool_registry(mut self, registry: Arc<crate::tool_registry::ToolRegistry>) -> Self {
+        self.tool_registry = Some(registry);
+        self
     }
 
     /// Negotiate protocol version with client
@@ -1160,11 +1182,24 @@ impl JsonRpcHandler for SessionAwareInitializeHandler {
         // Store tool fingerprint only for dynamic modes (listChanged=true)
         // Static mode: no fingerprint, no change detection
         if !self.tool_fingerprint.is_empty() {
+            // In Dynamic mode with a live registry, use the current registry fingerprint
+            // instead of the build-time fingerprint. This ensures new sessions created
+            // after runtime tool mutations get the correct baseline — no spurious
+            // mismatch notification on the first request.
+            #[cfg(feature = "dynamic-tools")]
+            let fingerprint = if let Some(ref registry) = self.tool_registry {
+                registry.fingerprint().await
+            } else {
+                self.tool_fingerprint.clone()
+            };
+            #[cfg(not(feature = "dynamic-tools"))]
+            let fingerprint = self.tool_fingerprint.clone();
+
             self.session_manager
                 .set_session_state(
                     &session_id,
                     "mcp:tool_fingerprint",
-                    serde_json::json!(self.tool_fingerprint),
+                    serde_json::json!(fingerprint),
                 )
                 .await;
         }

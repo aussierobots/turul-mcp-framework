@@ -327,7 +327,7 @@ impl LambdaMcpServer {
 
         // Create session-aware initialize handler (reuse MCP server handler)
         use turul_mcp_server::SessionAwareInitializeHandler;
-        let init_handler = SessionAwareInitializeHandler::new(
+        let mut init_handler = SessionAwareInitializeHandler::new(
             self.implementation.clone(),
             self.capabilities.clone(),
             self.instructions.clone(),
@@ -335,6 +335,10 @@ impl LambdaMcpServer {
             self.strict_lifecycle,
             self.tool_fingerprint.clone(),
         );
+        #[cfg(feature = "dynamic-tools")]
+        if let Some(ref registry) = self.tool_registry {
+            init_handler = init_handler.with_tool_registry(Arc::clone(registry));
+        }
         dispatcher.register_method("initialize".to_string(), init_handler);
 
         // Create session-aware tools/list handler (reuse MCP server handler)
