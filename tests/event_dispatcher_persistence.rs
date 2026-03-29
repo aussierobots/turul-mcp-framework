@@ -537,7 +537,7 @@ async fn test_dispatcher_failure_propagates_to_caller() {
         .set_event_dispatcher(Arc::new(FailingDispatcher))
         .await;
 
-    let _session_id = session_manager.create_session().await;
+    let session_id = session_manager.create_session().await;
 
     let server_state = Arc::new(
         turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
@@ -560,5 +560,21 @@ async fn test_dispatcher_failure_propagates_to_caller() {
         err.contains("simulated storage failure"),
         "Error must surface the dispatcher failure, got: {}",
         err
+    );
+
+    // Verify: no events were persisted (dispatcher failed before storage)
+    use turul_mcp_session_storage::SessionStorage;
+    let events = session_storage
+        .get_recent_events(&session_id, 100)
+        .await
+        .unwrap();
+    let tool_changed = events
+        .iter()
+        .filter(|e| e.event_type == "notifications/tools/list_changed")
+        .count();
+    assert_eq!(
+        tool_changed, 0,
+        "No events should be persisted when dispatcher fails, got {}",
+        tool_changed
     );
 }

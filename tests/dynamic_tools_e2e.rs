@@ -17,7 +17,7 @@ use tracing::info;
 
 /// Core E2E test: tool deactivation → updated tools/list → re-init → same updated tools
 #[tokio::test]
-async fn test_dynamic_tools_deactivation_causes_stale_session_404() {
+async fn test_dynamic_tools_deactivation_updates_live_tool_set() {
     let _ = tracing_subscriber::fmt::try_init();
     info!("Starting Dynamic E2E test");
 
@@ -69,14 +69,11 @@ async fn test_dynamic_tools_deactivation_causes_stale_session_404() {
         .expect("Failed to call deactivate_multiply");
     info!("Deactivate result: {:?}", deactivate_result);
 
-    // Step 4: Next tools/list on the SAME session sees the updated tool set.
-    //
-    // Note: The tool_fingerprint on the HTTP handler is set once at build time and
-    // is NOT updated when Dynamic tools change at runtime. The session's
-    // stored mcp:tool_fingerprint matches the handler's static fingerprint, so no
-    // mismatch (404) occurs. Dynamic changes are signaled to clients via
-    // SSE notifications/tools/list_changed; the fingerprint mechanism guards against
-    // cross-restart or cross-cluster staleness, not in-process dynamic changes.
+    // Step 4: Same session sees updated tool set immediately.
+    // In Dynamic mode, the live ToolRegistry is the source of truth for tools/list.
+    // New sessions use the live registry fingerprint as their baseline — no spurious
+    // mismatch. notifications/tools/list_changed is persisted to session event storage
+    // via the SessionEventDispatcher before the emitting function returns.
     let post_deactivation = client
         .list_tools()
         .await
