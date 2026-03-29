@@ -134,12 +134,16 @@ This applies to ALL notification types sent via SSE/HTTP transport. The protocol
 
 **SessionManager is the single event bus.** All notification emitters (ToolRegistry, SessionContext) go through `SessionManager::broadcast_event()`. Guaranteed persistence is provided by the `SessionEventDispatcher` — an awaited trait installed at the SessionManager layer, not at individual emitters.
 
-- `broadcast_event()` collects session IDs (under read lock), drops the lock, then awaits the dispatcher per-session
+- `broadcast_event()` for Custom events enumerates targets from `storage.list_sessions()` (NOT the in-memory cache), filters terminated sessions, dispatches per-session via the awaited dispatcher
+- `dispatch_custom_event(session_id)` is for per-session delivery (e.g., fingerprint mismatch) — storage-backed, not cache-gated
+- `send_event_to_session()` is cache-backed (unchanged) — used only when the session is known to be attached in this process
 - The dispatcher calls `StreamManager::broadcast_to_session()` which persists to session event storage AND delivers to active connections
 - The SSE bridge task is observer-only for Custom events — NOT the persistence path
 - Without a dispatcher (e.g., no HTTP server), events are best-effort only (in-memory channels)
 
 **Do NOT add notification sinks or persistence hooks to individual emitters** — that splits the event architecture into competing delivery paths.
+
+**Distributed session targeting** (see ADR-023): In Lambda/multi-instance, the in-memory `SessionManager.sessions` cache may not contain sessions created by other instances. Notification targeting for Custom events uses `storage.list_sessions()`, not the cache.
 
 ### Critical Error Handling Rules
 
@@ -330,6 +334,11 @@ cargo build
 cargo test
 cargo run --example minimal-server
 
+# Specific test suites
+cargo test -p turul-mcp-server --features dynamic-tools     # Dynamic tools + registry tests
+cargo test -p turul-mcp-framework-integration-tests --test event_dispatcher_persistence  # Notification persistence
+cargo test -p turul-mcp-framework-integration-tests --test compliance  # MCP spec compliance
+
 # MCP Testing
 cargo run --example client-initialise-server -- --port 52935
 cargo run --example client-initialise-report -- --url http://127.0.0.1:52935/mcp
@@ -382,7 +391,7 @@ Before publishing a new version:
 6. **Publish order** (dependency-first):
    ```
    json-rpc-server → protocol-2025-06-18 → protocol-2025-11-25 → protocol → builders →
-   session-storage → task-storage → derive* → http-server → server → client → aws-lambda
+   session-storage → task-storage → server-state-storage → derive* → http-server → server → client → aws-lambda → oauth
    ```
    *`turul-mcp-derive` has circular dev-deps on `turul-mcp-server` — temporarily comment out dev-deps, publish with `--allow-dirty`, restore*
 7. **Git tag**: `git tag v0.x.y && git push origin v0.x.y`
@@ -401,7 +410,9 @@ Before publishing a new version:
 - `turul-mcp-client/` - Client library
 - `turul-mcp-session-storage/` - Pluggable session storage (InMemory, SQLite, PostgreSQL, DynamoDB)
 - `turul-mcp-task-storage/` - Task storage for long-running operations
+- `turul-mcp-server-state-storage/` - Server-global state for dynamic tool coordination
 - `turul-mcp-aws-lambda/` - AWS Lambda integration
+- `turul-mcp-oauth/` - OAuth 2.1 Resource Server support
 
 ### Session Management
 - UUID v7 sessions with automatic cleanup
