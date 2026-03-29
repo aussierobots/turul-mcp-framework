@@ -327,6 +327,7 @@ impl LambdaMcpServer {
 
         // Create session-aware initialize handler (reuse MCP server handler)
         use turul_mcp_server::SessionAwareInitializeHandler;
+        #[allow(unused_mut)]
         let mut init_handler = SessionAwareInitializeHandler::new(
             self.implementation.clone(),
             self.capabilities.clone(),
@@ -343,6 +344,7 @@ impl LambdaMcpServer {
 
         // Create session-aware tools/list handler (reuse MCP server handler)
         use turul_mcp_server::ListToolsHandler;
+        #[allow(unused_mut)]
         let mut list_handler = ListToolsHandler::new_with_session_manager(
             self.tools.clone(),
             self.session_manager.clone(),

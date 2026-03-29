@@ -18,7 +18,7 @@
 //!    cargo run -p dynamic-tools-test-client -- http://127.0.0.1:9000/mcp
 //!    ```
 
-use tracing::{error, info};
+use tracing::info;
 use turul_mcp_client::{ClientConfig, McpClient};
 use turul_mcp_client::transport::TransportFactory;
 

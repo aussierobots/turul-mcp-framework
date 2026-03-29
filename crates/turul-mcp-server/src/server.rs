@@ -469,7 +469,7 @@ impl McpServer {
             self.install_event_dispatcher(&http_server).await;
 
             // Set up event forwarding bridge (observer-only for Custom events)
-            self.setup_sse_event_bridge(&http_server).await;
+            self.setup_sse_event_bridge().await;
         }
 
         http_server.run().await.map_err(|http_err| match http_err {
@@ -508,10 +508,9 @@ impl McpServer {
     /// Set up event forwarding bridge between SessionManager and StreamManager.
     /// With the event dispatcher installed, Custom events are observer-only here —
     /// the dispatcher handles persistence on the request path.
-    async fn setup_sse_event_bridge(&self, http_server: &turul_http_mcp_server::HttpMcpServer) {
-        debug!("🌉 Setting up SSE event bridge between SessionManager and StreamManager");
+    async fn setup_sse_event_bridge(&self) {
+        debug!("🌉 Setting up SSE event bridge (observer-only for Custom events)");
 
-        let stream_manager = http_server.get_stream_manager();
         let mut global_events = self.session_manager.subscribe_all_session_events();
 
         tokio::spawn(async move {
