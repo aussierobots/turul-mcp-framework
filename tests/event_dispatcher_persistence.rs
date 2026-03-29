@@ -270,3 +270,239 @@ async fn test_stored_event_payload_is_valid_jsonrpc() {
         "Must have correct method"
     );
 }
+
+/// Prove: exactly 1 stored event when both the awaited dispatcher AND the
+/// global broadcast channel (observer bridge) are active simultaneously.
+/// The bridge must NOT re-persist Custom events — only the dispatcher does.
+#[tokio::test]
+async fn test_no_duplicate_storage_with_bridge_running() {
+    let session_storage = Arc::new(InMemorySessionStorage::new());
+
+    let session_manager = Arc::new(SessionManager::with_storage(
+        session_storage.clone(),
+        turul_mcp_protocol::ServerCapabilities::default(),
+    ));
+
+    let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+
+    // Install the awaited dispatcher (same as server.rs does)
+    let dispatcher = Arc::new(TestEventDispatcher {
+        stream_manager: Arc::clone(&stream_manager),
+    });
+    session_manager.set_event_dispatcher(dispatcher).await;
+
+    // Start the observer bridge — simulates what server.rs/Lambda does.
+    // With the dispatcher active, the bridge must NOT persist Custom events.
+    {
+        let mut global_events = session_manager.subscribe_all_session_events();
+        tokio::spawn(async move {
+            while let Ok((_session_id, event)) = global_events.recv().await {
+                match event {
+                    turul_mcp_server::SessionEvent::Custom { ref event_type, .. } => {
+                        // Observer-only: do NOT call broadcast_to_session here.
+                        let _ = event_type; // suppress unused warning
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
+
+    let session_id = session_manager.create_session().await;
+
+    let server_state = Arc::new(
+        turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
+    );
+    let registry = turul_mcp_server::ToolRegistry::new(
+        make_tools(),
+        session_manager,
+        server_state,
+    );
+
+    registry.deactivate_tool("beta").await.unwrap();
+
+    // Small yield to let the bridge task run (if it were going to persist, it would)
+    tokio::task::yield_now().await;
+
+    use turul_mcp_session_storage::SessionStorage;
+    let events = session_storage
+        .get_recent_events(&session_id, 100)
+        .await
+        .unwrap();
+
+    let tool_changed_count = events
+        .iter()
+        .filter(|e| e.event_type == "notifications/tools/list_changed")
+        .count();
+
+    assert_eq!(
+        tool_changed_count, 1,
+        "Exactly 1 stored event expected (dispatcher only, bridge is observer-only), got {}",
+        tool_changed_count
+    );
+}
+
+/// Prove: the Lambda wiring path produces the same guaranteed persistence.
+/// Simulates the Lambda server.rs pattern: create StreamManager, install
+/// dispatcher, create ToolRegistry, emit notification, verify storage.
+#[tokio::test]
+async fn test_lambda_wiring_pattern_persists_events() {
+    // Simulate Lambda cold start: create all components independently
+    // (same construction order as LambdaMcpServer::handler())
+    let session_storage = Arc::new(InMemorySessionStorage::new());
+
+    let session_manager = Arc::new(SessionManager::with_storage(
+        session_storage.clone(),
+        turul_mcp_protocol::ServerCapabilities::default(),
+    ));
+
+    // Lambda creates StreamManager (server.rs line 258)
+    let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+
+    // Lambda installs dispatcher (server.rs line ~270)
+    struct LambdaDispatcher {
+        stream_manager: Arc<StreamManager>,
+    }
+    #[async_trait]
+    impl SessionEventDispatcher for LambdaDispatcher {
+        async fn dispatch_to_session(
+            &self,
+            session_id: &str,
+            event_type: String,
+            data: serde_json::Value,
+        ) -> Result<(), String> {
+            self.stream_manager
+                .broadcast_to_session(session_id, event_type, data)
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+        }
+    }
+    let dispatcher = Arc::new(LambdaDispatcher {
+        stream_manager: Arc::clone(&stream_manager),
+    });
+    session_manager.set_event_dispatcher(dispatcher).await;
+
+    // Lambda starts observer-only bridge (server.rs line ~300)
+    {
+        let mut global_events = session_manager.subscribe_all_session_events();
+        tokio::spawn(async move {
+            while let Ok((_session_id, event)) = global_events.recv().await {
+                match event {
+                    turul_mcp_server::SessionEvent::Custom { .. } => {
+                        // Observer-only in Lambda
+                    }
+                    _ => {}
+                }
+            }
+        });
+    }
+
+    // Simulate: session already exists from a previous Lambda invocation
+    let session_id = session_manager.create_session().await;
+
+    // Lambda creates ToolRegistry (same as production)
+    let server_state = Arc::new(
+        turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
+    );
+    let registry = turul_mcp_server::ToolRegistry::new(
+        make_tools(),
+        session_manager,
+        server_state,
+    );
+
+    // Simulate: check_for_changes() or activate/deactivate on the request path
+    registry.deactivate_tool("alpha").await.unwrap();
+
+    // MUST be in storage BEFORE this function returns (no async bridge needed)
+    use turul_mcp_session_storage::SessionStorage;
+    let events = session_storage
+        .get_recent_events(&session_id, 10)
+        .await
+        .unwrap();
+
+    let tool_changed = events
+        .iter()
+        .filter(|e| e.event_type == "notifications/tools/list_changed")
+        .count();
+
+    assert_eq!(
+        tool_changed, 1,
+        "Lambda path: exactly 1 event must be in storage before return, got {}",
+        tool_changed
+    );
+
+    // Verify payload
+    let event = events
+        .iter()
+        .find(|e| e.event_type == "notifications/tools/list_changed")
+        .unwrap();
+    assert_eq!(event.data["jsonrpc"], "2.0");
+    assert_eq!(event.data["method"], "notifications/tools/list_changed");
+}
+
+/// Prove: check_for_changes() with real storage + real dispatcher persists
+/// before returning. Simulates cross-instance fingerprint mismatch.
+#[tokio::test]
+async fn test_check_for_changes_real_persistence() {
+    let session_storage = Arc::new(InMemorySessionStorage::new());
+    let server_state = Arc::new(
+        turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
+    );
+
+    // Instance A: write initial state to shared storage
+    let sm_a = Arc::new(SessionManager::new(
+        turul_mcp_protocol::ServerCapabilities::default(),
+    ));
+    let registry_a = turul_mcp_server::ToolRegistry::new(
+        make_tools(),
+        sm_a,
+        server_state.clone(),
+    );
+    registry_a.sync_from_storage().await.unwrap();
+
+    // Instance A deactivates a tool → writes new fingerprint to storage
+    registry_a.deactivate_tool("beta").await.unwrap();
+    registry_a.sync_from_storage().await.unwrap();
+
+    // Instance B: different session manager with dispatcher, same shared storage
+    let sm_b = Arc::new(SessionManager::with_storage(
+        session_storage.clone(),
+        turul_mcp_protocol::ServerCapabilities::default(),
+    ));
+    let stream_manager_b = Arc::new(StreamManager::new(session_storage.clone()));
+    let dispatcher_b = Arc::new(TestEventDispatcher {
+        stream_manager: stream_manager_b,
+    });
+    sm_b.set_event_dispatcher(dispatcher_b).await;
+
+    let session_id = sm_b.create_session().await;
+
+    let registry_b = turul_mcp_server::ToolRegistry::new(
+        make_tools(), // all tools active — different from storage
+        sm_b,
+        server_state.clone(),
+    );
+
+    // check_for_changes() detects mismatch → emits notification → dispatcher persists
+    let changed = registry_b.check_for_changes().await.unwrap();
+    assert!(changed, "Should detect fingerprint mismatch");
+
+    // Event MUST be in storage NOW — not deferred to a bridge task
+    use turul_mcp_session_storage::SessionStorage;
+    let events = session_storage
+        .get_recent_events(&session_id, 10)
+        .await
+        .unwrap();
+
+    let tool_changed = events
+        .iter()
+        .filter(|e| e.event_type == "notifications/tools/list_changed")
+        .count();
+
+    assert_eq!(
+        tool_changed, 1,
+        "check_for_changes must persist exactly 1 event via dispatcher before returning, got {}",
+        tool_changed
+    );
+}
