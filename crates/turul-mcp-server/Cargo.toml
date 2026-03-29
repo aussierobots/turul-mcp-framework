@@ -9,12 +9,12 @@ homepage.workspace = true
 description = "High-level framework for building Model Context Protocol (MCP) servers"
 
 [features]
-default = ["http", "sse", "sqlite", "postgres", "dynamodb"]
+default = ["http", "sse"]
 http = ["turul-http-mcp-server"]
 sse = ["turul-http-mcp-server/sse"]
-postgres = ["turul-mcp-session-storage/postgres"]
-sqlite = ["turul-mcp-session-storage/sqlite"]
-dynamodb = ["turul-mcp-session-storage/dynamodb"]
+sqlite = ["turul-mcp-session-storage/sqlite", "turul-mcp-task-storage/sqlite", "turul-mcp-server-state-storage?/sqlite"]
+postgres = ["turul-mcp-session-storage/postgres", "turul-mcp-task-storage/postgres", "turul-mcp-server-state-storage?/postgres"]
+dynamodb = ["turul-mcp-session-storage/dynamodb", "turul-mcp-task-storage/dynamodb", "turul-mcp-server-state-storage?/dynamodb"]
 dynamic-tools = ["turul-mcp-server-state-storage"]
 test-utils = []
 

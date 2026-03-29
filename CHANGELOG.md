@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.27] - 2026-03-29
+
+### Changed
+
+- **BREAKING: Default features reduced** (`turul-mcp-server`): Default features now `["http", "sse"]` only. SQLite, PostgreSQL, and DynamoDB backends are opt-in via `features = ["sqlite"]`, `features = ["postgres"]`, `features = ["dynamodb"]`. This significantly reduces compile time and binary size for projects that only need in-memory storage.
+- **Backend features forward to all storage crates** (`turul-mcp-server`): `sqlite`/`postgres`/`dynamodb` features now forward to both `turul-mcp-session-storage` AND `turul-mcp-task-storage` (previously only session-storage).
+- **Unified backend features** (`turul-mcp-server`): `sqlite`/`postgres`/`dynamodb` features use weak dependency forwarding (`?/`) to also enable backends on `turul-mcp-server-state-storage` when `dynamic-tools` is active. No separate compound features needed.
+- **Lambda backend features** (`turul-mcp-aws-lambda`): Added `sqlite`, `postgres` forwarding features.
+
+### Migration
+
+If you previously depended on `turul-mcp-server` without specifying features and used SQLite, PostgreSQL, or DynamoDB backends, add the backend feature explicitly:
+
+```toml
+# Before (backends included by default)
+turul-mcp-server = "0.3.26"
+
+# After (backends opt-in)
+turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
+```
+
 ## [0.3.26] - 2026-03-29
 
 ### Fixed

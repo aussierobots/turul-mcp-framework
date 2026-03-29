@@ -14,7 +14,9 @@ default = ["cors", "sse"]
 cors = []                                         # CORS header injection for Lambda responses
 sse = []                                          # Server-Sent Events stream adaptation
 streaming = ["sse"]                               # Enable real SSE streaming with run_with_streaming_response
-dynamodb = ["turul-mcp-session-storage/dynamodb"] # DynamoDB session storage
+sqlite = ["turul-mcp-server/sqlite"]              # SQLite storage backends
+postgres = ["turul-mcp-server/postgres"]          # PostgreSQL storage backends
+dynamodb = ["turul-mcp-server/dynamodb", "turul-mcp-session-storage/dynamodb"] # DynamoDB storage backends
 dynamic-tools = ["turul-mcp-server/dynamic-tools", "turul-mcp-server-state-storage"]
 
 [dependencies]
