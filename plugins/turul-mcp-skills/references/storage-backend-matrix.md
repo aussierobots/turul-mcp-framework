@@ -52,9 +52,9 @@ Default features: `["http", "sse"]` — in-memory only, no backend deps compiled
 | Backend | `turul-mcp-server` features | Forwards to |
 |---|---|---|
 | InMemory | (default) | — |
-| SQLite | `["sqlite"]` | session-storage + task-storage |
-| PostgreSQL | `["postgres"]` | session-storage + task-storage |
-| DynamoDB | `["dynamodb"]` | session-storage + task-storage |
+| SQLite | `["sqlite"]` | session-storage + task-storage (+ server-state-storage if `dynamic-tools` active) |
+| PostgreSQL | `["postgres"]` | session-storage + task-storage (+ server-state-storage if `dynamic-tools` active) |
+| DynamoDB | `["dynamodb"]` | session-storage + task-storage (+ server-state-storage if `dynamic-tools` active) |
 | Dynamic tools | `["dynamic-tools"]` | server-state-storage (in-memory) |
 | Dynamic + DynamoDB | `["dynamodb", "dynamic-tools"]` | all three storage crates |
 
