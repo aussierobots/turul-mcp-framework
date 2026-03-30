@@ -13,11 +13,12 @@
 //! `describe_table()` key schema inspection. Both conventions are fully supported.
 
 use std::collections::HashMap;
+#[allow(unused_imports)] // Ordering used in non-DynamoDB cfg fallback
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::SystemTime;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+// chrono used via full path (chrono::Utc::now()) in event timestamp fallbacks
 use serde_json::Value;
 use thiserror::Error;
 use tracing::{debug, error, info, warn};
@@ -211,6 +212,7 @@ pub struct DynamoDbSessionStorage {
     config: DynamoDbConfig,
     #[cfg(feature = "dynamodb")]
     client: Client,
+    #[allow(dead_code)] // Used only in non-DynamoDB cfg fallback
     event_counter: AtomicU64,
     #[cfg(feature = "dynamodb")]
     session_naming: NamingConvention,
@@ -1793,9 +1795,6 @@ impl SessionStorage for DynamoDbSessionStorage {
         session_id: &str,
         mut event: SseEvent,
     ) -> Result<SseEvent, Self::Error> {
-        // Assign unique event ID
-        event.id = self.event_counter.fetch_add(1, Ordering::SeqCst);
-
         #[cfg(feature = "dynamodb")]
         {
             use aws_sdk_dynamodb::types::AttributeValue;
@@ -1825,11 +1824,8 @@ impl SessionStorage for DynamoDbSessionStorage {
                 return Err(SessionStorageError::SessionNotFound(session_id.to_string()));
             }
 
-            // Store events in separate table: mcp-sessions-events
             let event_table = format!("{}-events", self.config.table_name);
 
-            // Only verify/create events table when verify_tables is enabled.
-            // When false, table is assumed to exist (managed by CloudFormation/Terraform).
             if self.config.verify_tables {
                 self.ensure_events_table_exists(&event_table).await?;
             }
@@ -1837,75 +1833,120 @@ impl SessionStorage for DynamoDbSessionStorage {
             let data_json = serde_json::to_string(&event.data)
                 .map_err(|e| SessionStorageError::SerializationError(e.to_string()))?;
 
-            let mut item = HashMap::from([
-                (
-                    ea.session_id.to_string(),
-                    AttributeValue::S(session_id.to_string()),
-                ),
-                (
-                    ea.event_id.to_string(),
-                    AttributeValue::N(event.id.to_string()),
-                ),
-                (
-                    "timestamp".to_string(),
-                    AttributeValue::N(event.timestamp.to_string()),
-                ),
-                (
-                    ea.event_type.to_string(),
-                    AttributeValue::S(event.event_type.clone()),
-                ),
-                ("data".to_string(), AttributeValue::S(data_json)),
-                // TTL for automatic event cleanup
-                (
-                    "ttl".to_string(),
-                    AttributeValue::N(
-                        (SystemTime::now()
-                            .duration_since(SystemTime::UNIX_EPOCH)
-                            .unwrap()
-                            .as_secs()
-                            + (self.config.event_ttl_minutes * 60))
-                            .to_string(),
+            // Storage-derived event ID with conditional write.
+            // Query current max eventId for this session, then PutItem with
+            // condition_expression to prevent duplicate IDs across Lambda instances.
+            const MAX_RETRIES: u32 = 5;
+            for attempt in 0..MAX_RETRIES {
+                // 1. Query current max eventId for this session
+                let max_query = self
+                    .client
+                    .query()
+                    .table_name(&event_table)
+                    .key_condition_expression(format!("{} = :sid", ea.session_id))
+                    .expression_attribute_values(
+                        ":sid",
+                        AttributeValue::S(session_id.to_string()),
+                    )
+                    .scan_index_forward(false) // descending — max first
+                    .limit(1)
+                    .projection_expression(ea.event_id)
+                    .send()
+                    .await
+                    .map_err(|e| DynamoDbError::AwsError(format!("{e:?}")))?;
+
+                let next_id = max_query
+                    .items()
+                    .first()
+                    .and_then(|item| item.get(ea.event_id))
+                    .and_then(|v| v.as_n().ok())
+                    .and_then(|n| n.parse::<u64>().ok())
+                    .map(|max| max + 1)
+                    .unwrap_or(1);
+
+                event.id = next_id;
+
+                // 2. Build item
+                let mut item = HashMap::from([
+                    (
+                        ea.session_id.to_string(),
+                        AttributeValue::S(session_id.to_string()),
                     ),
-                ),
-            ]);
+                    (
+                        ea.event_id.to_string(),
+                        AttributeValue::N(event.id.to_string()),
+                    ),
+                    (
+                        "timestamp".to_string(),
+                        AttributeValue::N(event.timestamp.to_string()),
+                    ),
+                    (
+                        ea.event_type.to_string(),
+                        AttributeValue::S(event.event_type.clone()),
+                    ),
+                    ("data".to_string(), AttributeValue::S(data_json.clone())),
+                    (
+                        "ttl".to_string(),
+                        AttributeValue::N(
+                            (SystemTime::now()
+                                .duration_since(SystemTime::UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs()
+                                + (self.config.event_ttl_minutes * 60))
+                                .to_string(),
+                        ),
+                    ),
+                ]);
 
-            if let Some(retry) = event.retry {
-                item.insert("retry".to_string(), AttributeValue::N(retry.to_string()));
+                if let Some(retry) = event.retry {
+                    item.insert("retry".to_string(), AttributeValue::N(retry.to_string()));
+                }
+
+                // 3. Conditional PutItem — attribute_not_exists prevents duplicate eventId
+                match self
+                    .client
+                    .put_item()
+                    .table_name(&event_table)
+                    .set_item(Some(item))
+                    .condition_expression(format!("attribute_not_exists({})", ea.event_id))
+                    .send()
+                    .await
+                {
+                    Ok(_) => {
+                        debug!(
+                            "Stored SSE event {} in DynamoDB for session: {}",
+                            event.id, session_id
+                        );
+                        return Ok(event);
+                    }
+                    Err(e) => {
+                        // Check for ConditionalCheckFailedException — another writer raced
+                        let is_condition_failed = format!("{e:?}")
+                            .contains("ConditionalCheckFailed");
+                        if is_condition_failed && attempt < MAX_RETRIES - 1 {
+                            warn!(
+                                "Event ID {} collision for session {} (attempt {}), retrying",
+                                next_id, session_id, attempt + 1
+                            );
+                            continue;
+                        }
+                        return Err(DynamoDbError::AwsError(format!("{e:?}")).into());
+                    }
+                }
             }
 
-            match self
-                .client
-                .put_item()
-                .table_name(&event_table)
-                .set_item(Some(item))
-                .send()
-                .await
-            {
-                Ok(_) => {
-                    debug!(
-                        "Successfully stored SSE event {} in DynamoDB for session: {}",
-                        event.id, session_id
-                    );
-                }
-                Err(err) => {
-                    error!("Failed to store SSE event in DynamoDB: {}", err);
-                    return Err(SessionStorageError::DatabaseError(format!(
-                        "Failed to store event: {}",
-                        err
-                    )));
-                }
-            }
+            return Err(SessionStorageError::DatabaseError(format!(
+                "Failed to store event after {} retries for session {}",
+                MAX_RETRIES, session_id
+            )));
         }
 
+        // Non-DynamoDB fallback (should not reach here with dynamodb feature)
         #[cfg(not(feature = "dynamodb"))]
         {
-            debug!(
-                "Storing SSE event in DynamoDB (placeholder): {} -> {}",
-                session_id, event.id
-            );
+            event.id = self.event_counter.fetch_add(1, Ordering::SeqCst);
+            Ok(event)
         }
-
-        Ok(event)
     }
 
     async fn get_events_after(
@@ -1969,16 +2010,16 @@ impl SessionStorage for DynamoDbSessionStorage {
                         .and_then(|s| serde_json::from_str(s).ok())
                         .unwrap_or(Value::Null);
 
+                    // Timestamp stored as numeric millis (AttributeValue::N)
                     let timestamp = item
                         .get("timestamp")
-                        .and_then(|v| v.as_s().ok())
-                        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .unwrap_or_else(Utc::now);
+                        .and_then(|v| v.as_n().ok())
+                        .and_then(|n| n.parse::<u64>().ok())
+                        .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as u64);
 
                     let event = SseEvent {
                         id: event_id,
-                        timestamp: timestamp.timestamp_millis() as u64,
+                        timestamp,
                         event_type,
                         data,
                         retry: None,
@@ -2062,16 +2103,16 @@ impl SessionStorage for DynamoDbSessionStorage {
                         .and_then(|s| serde_json::from_str(s).ok())
                         .unwrap_or(Value::Null);
 
+                    // Timestamp stored as numeric millis (AttributeValue::N)
                     let timestamp = item
                         .get("timestamp")
-                        .and_then(|v| v.as_s().ok())
-                        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-                        .map(|dt| dt.with_timezone(&Utc))
-                        .unwrap_or_else(Utc::now);
+                        .and_then(|v| v.as_n().ok())
+                        .and_then(|n| n.parse::<u64>().ok())
+                        .unwrap_or_else(|| chrono::Utc::now().timestamp_millis() as u64);
 
                     let event = SseEvent {
                         id: event_id,
-                        timestamp: timestamp.timestamp_millis() as u64,
+                        timestamp,
                         event_type,
                         data,
                         retry: None,
