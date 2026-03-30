@@ -275,6 +275,21 @@ turul-mcp-server = "0.3"
 turul-mcp-server = { version = "0.3", features = ["dynamodb", "dynamic-tools"] }
 ```
 
+## Future Consideration: Session-Backed Event Sequencing
+
+**Current fix:** DynamoDB event IDs are derived from event storage — query max `eventId` per session, conditional PutItem with `attribute_not_exists`, retry on collision. This restores monotonic per-session IDs across Lambda instances.
+
+**Future optimization:** Move event sequencing to the session record itself (e.g., `lastEventId` field on the session). Atomically increment that counter when allocating a new SSE event ID, then write the event record using the allocated ID.
+
+**Why this may be preferable:**
+- Avoids querying the events table to find max `eventId` (1 fewer read per event)
+- One authoritative per-session event sequence counter
+- Better fit for distributed/serverless deployments
+
+**Tradeoff:** If counter increment succeeds but event write fails, gaps in event IDs can occur. Gaps are acceptable — the invariant is monotonic increasing, not contiguous numbering.
+
+**Status:** Future work / optimization. Not part of the current release fix.
+
 ## Consequences
 
 - `Static` (default): zero behavioral change, zero compiled overhead
