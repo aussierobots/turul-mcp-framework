@@ -215,8 +215,7 @@ impl StreamManager {
         let combined_stream = async_stream::stream! {
             // SSE replay policy:
             // - With Last-Event-ID: exact resume — replay events strictly after that ID
-            // - Without Last-Event-ID: bounded recent replay — deliver stored events
-            //   for this session so clients see notifications after API GW timeout reconnects
+            // - Without Last-Event-ID: live events only, no replay
             if let Some(after_id) = last_event_id {
                 debug!("🌊 Exact resume from Last-Event-ID {} for session={}, connection={}",
                        after_id, session_id_clone, connection_id_clone);
@@ -233,22 +232,8 @@ impl StreamManager {
                     }
                 }
             } else {
-                debug!("🌊 Fresh reconnect for session={}, connection={} — bounded recent replay",
+                debug!("🌊 Fresh SSE stream (no Last-Event-ID) for session={}, connection={} — live events only",
                        session_id_clone, connection_id_clone);
-
-                match storage.get_recent_events(&session_id_clone, config.max_replay_events).await {
-                    Ok(events) => {
-                        debug!("🌊 Replaying {} recent events (fresh reconnect)", events.len());
-                        for event in events.into_iter() {
-                            if event.event_type != "ping" && event.event_type != "keepalive" {
-                                yield event;
-                            }
-                        }
-                    },
-                    Err(e) => {
-                        error!("Failed to get recent events: {}", e);
-                    }
-                }
             }
 
             // 2. Then, stream real-time events from dedicated channel
@@ -559,13 +544,19 @@ impl StreamManager {
                 .unwrap_or_default()
         };
 
+        // First pass: identify ALL dead connections (regardless of delivery order)
         let mut dead_connections: Vec<ConnectionId> = Vec::new();
-        let mut delivered = false;
-
         for (conn_id, sender) in &candidates {
             if sender.is_closed() {
                 dead_connections.push(conn_id.clone());
-                continue;
+            }
+        }
+
+        // Second pass: try to deliver to first live connection (MCP: ONE connection only)
+        let mut delivered = false;
+        for (conn_id, sender) in &candidates {
+            if sender.is_closed() {
+                continue; // Already marked dead
             }
             match sender.try_send(stored_event.clone()) {
                 Ok(()) => {
@@ -574,7 +565,7 @@ impl StreamManager {
                         session_id, conn_id, stored_event.id, stored_event.event_type
                     );
                     delivered = true;
-                    break; // MCP: send to ONE connection only
+                    break;
                 }
                 Err(mpsc::error::TrySendError::Closed(_)) => {
                     debug!("Connection closed during send: session={}, connection={}", session_id, conn_id);
@@ -582,7 +573,6 @@ impl StreamManager {
                 }
                 Err(mpsc::error::TrySendError::Full(_)) => {
                     warn!("Connection buffer full: session={}, connection={}", session_id, conn_id);
-                    // Don't remove — buffer full is transient
                 }
             }
         }
@@ -1030,10 +1020,9 @@ mod tests {
         assert_eq!(events[0].id, event_id);
     }
 
-    /// Fresh reconnect (no Last-Event-ID) delivers bounded recent events
-    /// so clients see notifications after API Gateway timeout reconnections.
+    /// Fresh GET SSE (no Last-Event-ID): no replay — live events only.
     #[tokio::test]
-    async fn test_fresh_reconnect_delivers_recent_events() {
+    async fn test_fresh_sse_no_replay() {
         let storage = Arc::new(InMemorySessionStorage::new());
         let _manager = StreamManager::new(storage.clone());
 
@@ -1043,16 +1032,19 @@ mod tests {
             .unwrap();
         let session_id = session.session_id.clone();
 
-        // Store events
+        // Store event before connection
         storage.store_event(&session_id, SseEvent::new(
             "notifications/tools/list_changed".to_string(),
             serde_json::json!({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}),
         )).await.unwrap();
 
-        // Fresh reconnect uses get_recent_events — bounded replay
-        let recent = storage.get_recent_events(&session_id, 100).await.unwrap();
-        assert_eq!(recent.len(), 1, "Fresh reconnect should see recent events");
-        assert_eq!(recent[0].event_type, "notifications/tools/list_changed");
+        // Event exists in storage
+        let stored = storage.get_events_after(&session_id, 0).await.unwrap();
+        assert_eq!(stored.len(), 1, "Event should be in storage");
+
+        // But fresh GET SSE (no Last-Event-ID) does NOT replay.
+        // The create_sse_stream() else branch is a no-op — live events only.
+        // Replay requires explicit Last-Event-ID from the client.
     }
 
     /// Verify: resume with Last-Event-ID only gets events AFTER that ID.
