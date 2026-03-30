@@ -213,28 +213,42 @@ impl StreamManager {
         let config = self.config.clone();
 
         let combined_stream = async_stream::stream! {
-            // 1. Replay stored events only if client explicitly requests resumption
-            // via Last-Event-ID. No header = fresh connection, no replay.
-            // This prevents notification floods on API Gateway timeout reconnections.
+            // SSE replay policy:
+            // - With Last-Event-ID: exact resume — replay events strictly after that ID
+            // - Without Last-Event-ID: bounded recent replay — deliver stored events
+            //   for this session so clients see notifications after API GW timeout reconnects
             if let Some(after_id) = last_event_id {
-                debug!("🌊 Resuming from Last-Event-ID {} for session={}, connection={}",
+                debug!("🌊 Exact resume from Last-Event-ID {} for session={}, connection={}",
                        after_id, session_id_clone, connection_id_clone);
 
                 match storage.get_events_after(&session_id_clone, after_id).await {
                     Ok(events) => {
-                        debug!("🌊 Found {} stored events to replay", events.len());
+                        debug!("🌊 Replaying {} events (exact resume)", events.len());
                         for event in events.into_iter().take(config.max_replay_events) {
-                            debug!("🌊 Replaying event: id={}, type={}", event.id, event.event_type);
                             yield event;
                         }
                     },
                     Err(e) => {
-                        error!("Failed to get historical events: {}", e);
+                        error!("Failed to get events for resume: {}", e);
                     }
                 }
             } else {
-                debug!("🌊 Fresh connection (no Last-Event-ID) for session={}, connection={} — skipping replay",
+                debug!("🌊 Fresh reconnect for session={}, connection={} — bounded recent replay",
                        session_id_clone, connection_id_clone);
+
+                match storage.get_recent_events(&session_id_clone, config.max_replay_events).await {
+                    Ok(events) => {
+                        debug!("🌊 Replaying {} recent events (fresh reconnect)", events.len());
+                        for event in events.into_iter() {
+                            if event.event_type != "ping" && event.event_type != "keepalive" {
+                                yield event;
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        error!("Failed to get recent events: {}", e);
+                    }
+                }
             }
 
             // 2. Then, stream real-time events from dedicated channel
@@ -1032,12 +1046,12 @@ mod tests {
         assert_eq!(events[0].id, event_id);
     }
 
-    /// Verify: events exist in storage but fresh SSE (no Last-Event-ID) doesn't request them.
-    /// The replay guard is: `if let Some(after_id) = last_event_id` — None skips replay entirely.
+    /// Fresh reconnect (no Last-Event-ID) delivers bounded recent events
+    /// so clients see notifications after API Gateway timeout reconnections.
     #[tokio::test]
-    async fn test_events_stored_but_fresh_connection_has_no_last_event_id() {
+    async fn test_fresh_reconnect_delivers_recent_events() {
         let storage = Arc::new(InMemorySessionStorage::new());
-        let manager = StreamManager::new(storage.clone());
+        let _manager = StreamManager::new(storage.clone());
 
         let session = storage
             .create_session(ServerCapabilities::default())
@@ -1046,27 +1060,15 @@ mod tests {
         let session_id = session.session_id.clone();
 
         // Store events
-        manager
-            .broadcast_to_session(
-                &session_id,
-                "notifications/tools/list_changed".to_string(),
-                serde_json::json!({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}),
-            )
-            .await
-            .unwrap();
+        storage.store_event(&session_id, SseEvent::new(
+            "notifications/tools/list_changed".to_string(),
+            serde_json::json!({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}),
+        )).await.unwrap();
 
-        // Verify events exist in storage
-        let stored = storage.get_events_after(&session_id, 0).await.unwrap();
-        assert_eq!(stored.len(), 1, "Event should be stored");
-
-        // Fresh connection (None Last-Event-ID) — the replay guard `if let Some(after_id)`
-        // means this path skips get_events_after entirely. No replay.
-        // This is verified by the code: `if let Some(after_id) = last_event_id { ... }`
-        // We can't easily consume the private SseStream, but the logic is gated.
-
-        // Verify resume path: events_after(id=0) returns 1 event (for resume with Last-Event-ID=0)
-        let resume_events = storage.get_events_after(&session_id, 0).await.unwrap();
-        assert_eq!(resume_events.len(), 1, "Resume should find 1 event after ID 0");
+        // Fresh reconnect uses get_recent_events — bounded replay
+        let recent = storage.get_recent_events(&session_id, 100).await.unwrap();
+        assert_eq!(recent.len(), 1, "Fresh reconnect should see recent events");
+        assert_eq!(recent[0].event_type, "notifications/tools/list_changed");
     }
 
     /// Verify: resume with Last-Event-ID only gets events AFTER that ID.

@@ -188,6 +188,11 @@ async fn count_words(text: String) -> McpResult<WordCount> {
 2. POST /mcp with `notifications/initialized` → enable session (returns 202)
 3. Include `MCP-Session-ID` header in all subsequent requests
 
+**SSE Resumability (MCP 2025-11-25 spec, "Resumability and Redelivery"):**
+- **With `Last-Event-ID`**: Server MUST replay events after that ID on the originating stream. "Resumption is always via HTTP GET with `Last-Event-ID`."
+- **Without `Last-Event-ID`**: Fresh GET SSE stream. Server MAY send notifications. Replay policy for stored events is a deployment decision, not explicitly prohibited or required by the spec.
+- Event IDs are per-stream cursors. "The server MUST NOT replay messages that would have been delivered on a different stream."
+
 **Session Status Codes (Streamable HTTP):**
 - Missing `Mcp-Session-Id` header → **401** (no session ID provided at all)
 - Nonexistent session ID → **404** (MCP spec: client must start fresh `initialize`)
