@@ -483,7 +483,9 @@ impl StreamManager {
         let connections = self.connections.read().await;
         connections
             .get(session_id)
-            .map(|session_connections| !session_connections.is_empty())
+            .map(|session_connections| {
+                session_connections.values().any(|sender| !sender.is_closed())
+            })
             .unwrap_or(false)
     }
 
@@ -542,86 +544,68 @@ impl StreamManager {
             .await
             .map_err(|e| StreamError::StorageError(e.to_string()))?;
 
-        // DEBUG: Check connection state more thoroughly
-        let connections = self.connections.read().await;
-        debug!(
-            "[{}] 🔍 Checking connections for session {}: connections hashmap has {} sessions",
-            self.instance_id,
-            session_id,
-            connections.len()
-        );
+        // Collect connection candidates under read lock, then drop lock before sending.
+        // Dead connections are removed immediately on discovery; delivery falls back to
+        // the next live connection. MCP: send to ONE connection only per event.
+        let candidates: Vec<(ConnectionId, mpsc::Sender<SseEvent>)> = {
+            let connections = self.connections.read().await;
+            connections
+                .get(session_id)
+                .map(|sc| {
+                    sc.iter()
+                        .map(|(id, sender)| (id.clone(), sender.clone()))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
 
-        if let Some(session_connections) = connections.get(session_id) {
-            debug!(
-                "🔍 Session {} found with {} connections",
-                session_id,
-                session_connections.len()
-            );
+        let mut dead_connections: Vec<ConnectionId> = Vec::new();
+        let mut delivered = false;
 
-            if !session_connections.is_empty() {
-                // Pick the FIRST available connection (MCP compliant)
-                let (selected_connection_id, selected_sender) =
-                    session_connections.iter().next().unwrap();
-
-                // Check if sender is closed
-                if selected_sender.is_closed() {
-                    warn!(
-                        "🔌 Sender is closed for connection: session={}, connection={}",
-                        session_id, selected_connection_id
-                    );
-                    debug!("📭 Connection sender was closed, event stored for reconnection");
-                } else {
+        for (conn_id, sender) in &candidates {
+            if sender.is_closed() {
+                dead_connections.push(conn_id.clone());
+                continue;
+            }
+            match sender.try_send(stored_event.clone()) {
+                Ok(()) => {
                     debug!(
-                        "✅ Sender is open, attempting to send to connection: session={}, connection={}",
-                        session_id, selected_connection_id
+                        "Sent to connection: session={}, connection={}, event_id={}, type={}",
+                        session_id, conn_id, stored_event.id, stored_event.event_type
                     );
-
-                    match selected_sender.try_send(stored_event.clone()) {
-                        Ok(()) => {
-                            debug!(
-                                "Sent notification to ONE connection: session={}, connection={}, event_id={}, method={}",
-                                session_id,
-                                selected_connection_id,
-                                stored_event.id,
-                                stored_event.event_type
-                            );
-                        }
-                        Err(mpsc::error::TrySendError::Full(_)) => {
-                            warn!(
-                                "⚠️ Connection buffer full: session={}, connection={}",
-                                session_id, selected_connection_id
-                            );
-                            // Event is still stored for reconnection
-                        }
-                        Err(mpsc::error::TrySendError::Closed(_)) => {
-                            warn!(
-                                "🔌 Connection closed during send: session={}, connection={}",
-                                session_id, selected_connection_id
-                            );
-                            // Event is still stored for reconnection
-                        }
-                    }
+                    delivered = true;
+                    break; // MCP: send to ONE connection only
                 }
-            } else {
-                debug!(
-                    "📭 No active connections for session: {} (event stored for reconnection)",
-                    session_id
-                );
+                Err(mpsc::error::TrySendError::Closed(_)) => {
+                    debug!("Connection closed during send: session={}, connection={}", session_id, conn_id);
+                    dead_connections.push(conn_id.clone());
+                }
+                Err(mpsc::error::TrySendError::Full(_)) => {
+                    warn!("Connection buffer full: session={}, connection={}", session_id, conn_id);
+                    // Don't remove — buffer full is transient
+                }
             }
-        } else {
-            debug!(
-                "📭 No connections registered for session: {} (event stored for reconnection)",
-                session_id
-            );
+        }
 
-            // DEBUG: List all sessions in connections
-            for (sid, conns) in connections.iter() {
-                debug!(
-                    "🔍 Available session: {} with {} connections",
-                    sid,
-                    conns.len()
-                );
+        // Remove dead connections immediately
+        if !dead_connections.is_empty() {
+            let mut connections = self.connections.write().await;
+            if let Some(session_connections) = connections.get_mut(session_id) {
+                for dead_id in &dead_connections {
+                    session_connections.remove(dead_id);
+                    debug!("Removed dead connection: session={}, connection={}", session_id, dead_id);
+                }
+                if session_connections.is_empty() {
+                    connections.remove(session_id);
+                }
             }
+        }
+
+        if !delivered {
+            debug!(
+                "No live connection for session {} — event {} stored for reconnect replay",
+                session_id, stored_event.id
+            );
         }
 
         Ok(stored_event.id)
@@ -1110,5 +1094,127 @@ mod tests {
         // Resume from id2 — should get nothing
         let events_after_id2 = storage.get_events_after(&session_id, id2).await.unwrap();
         assert_eq!(events_after_id2.len(), 0, "No events after id2");
+    }
+
+    /// Dead connection is removed on send failure, not left lingering.
+    #[tokio::test]
+    async fn test_dead_connection_removed_on_send_failure() {
+        let storage = Arc::new(InMemorySessionStorage::new());
+        let manager = StreamManager::new(storage.clone());
+
+        let session = storage
+            .create_session(ServerCapabilities::default())
+            .await
+            .unwrap();
+        let session_id = session.session_id.clone();
+
+        // Register a connection, then drop the receiver to simulate API GW timeout
+        let (sender, receiver) = mpsc::channel(10);
+        manager
+            .register_connection(&session_id, "dead-conn".to_string(), sender)
+            .await;
+        drop(receiver); // Simulate disconnection
+
+        assert!(manager.has_connections(&session_id).await == false,
+            "has_connections should return false for closed sender");
+
+        // Broadcast — should detect dead connection and remove it
+        let _ = manager
+            .broadcast_to_session(
+                &session_id,
+                "notifications/tools/list_changed".to_string(),
+                serde_json::json!({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}),
+            )
+            .await;
+
+        // Verify dead connection was removed from the map
+        let connections = manager.connections.read().await;
+        assert!(
+            connections.get(&session_id).is_none(),
+            "Dead connection should be removed, session entry should be cleaned up"
+        );
+    }
+
+    /// When first connection is dead, delivery falls back to the next live one.
+    #[tokio::test]
+    async fn test_fallback_to_next_live_connection() {
+        let storage = Arc::new(InMemorySessionStorage::new());
+        let manager = StreamManager::new(storage.clone());
+
+        let session = storage
+            .create_session(ServerCapabilities::default())
+            .await
+            .unwrap();
+        let session_id = session.session_id.clone();
+
+        // Register dead connection first
+        let (dead_sender, dead_receiver) = mpsc::channel(10);
+        manager
+            .register_connection(&session_id, "dead-conn".to_string(), dead_sender)
+            .await;
+        drop(dead_receiver);
+
+        // Register live connection second
+        let (live_sender, mut live_receiver) = mpsc::channel(10);
+        manager
+            .register_connection(&session_id, "live-conn".to_string(), live_sender)
+            .await;
+
+        // Broadcast — should skip dead, deliver to live
+        manager
+            .broadcast_to_session(
+                &session_id,
+                "notifications/tools/list_changed".to_string(),
+                serde_json::json!({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"}),
+            )
+            .await
+            .unwrap();
+
+        // Live connection should have received the event
+        let event = live_receiver.try_recv();
+        assert!(event.is_ok(), "Live connection should receive the event");
+        assert_eq!(event.unwrap().event_type, "notifications/tools/list_changed");
+
+        // Dead connection should be removed
+        let connections = manager.connections.read().await;
+        let session_conns = connections.get(&session_id).unwrap();
+        assert!(!session_conns.contains_key("dead-conn"), "Dead connection should be removed");
+        assert!(session_conns.contains_key("live-conn"), "Live connection should remain");
+    }
+
+    /// has_connections() ignores closed senders.
+    #[tokio::test]
+    async fn test_has_connections_ignores_closed_senders() {
+        let storage = Arc::new(InMemorySessionStorage::new());
+        let manager = StreamManager::new(storage.clone());
+
+        let session = storage
+            .create_session(ServerCapabilities::default())
+            .await
+            .unwrap();
+        let session_id = session.session_id.clone();
+
+        // Register and immediately close
+        let (sender, receiver) = mpsc::channel(10);
+        manager
+            .register_connection(&session_id, "closed-conn".to_string(), sender)
+            .await;
+        drop(receiver);
+
+        assert!(
+            !manager.has_connections(&session_id).await,
+            "has_connections must return false when all senders are closed"
+        );
+
+        // Register a live connection
+        let (live_sender, _live_receiver) = mpsc::channel(10);
+        manager
+            .register_connection(&session_id, "live-conn".to_string(), live_sender)
+            .await;
+
+        assert!(
+            manager.has_connections(&session_id).await,
+            "has_connections must return true when at least one sender is open"
+        );
     }
 }
