@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.31] - 2026-03-30
+
+### Fixed
+
+- **SSE replay**: No replay without `Last-Event-ID` — reverted bounded replay that caused duplicate notifications on API Gateway timeout reconnections. With `Last-Event-ID`: exact resume. Without: live events only.
+- **Dead SSE connections**: Removed immediately on send failure, delivery falls back to next live connection. `has_connections()` now ignores closed senders.
+- **DynamoDB event ID monotonic**: Conditional write (`attribute_not_exists`) with retry prevents duplicate event IDs across Lambda cold starts.
+- **DynamoDB timestamp read**: Fixed numeric millis read (was parsing as RFC3339 string, always fell back to `Utc::now()`).
+- **Distributed session targeting**: `broadcast_event()` enumerates targets from `storage.list_sessions()` for Custom events. `dispatch_custom_event()` for per-session delivery without cache dependency.
+- **SessionEventDispatcher**: Guaranteed notification persistence on request path. `broadcast_event()` returns `Result` — dispatcher failures propagate.
+- **Initialize live fingerprint**: Dynamic mode uses `ToolRegistry::fingerprint()` for new sessions, not build-time static.
+- **DynamoDB `get_active_entities`**: Removed `entityId` from filter expression (DynamoDB rejects sort keys in filters).
+
+### Added
+
+- **`ToolChangeNotifier` trait**: Awaitable callback for restart/redeploy fingerprint mismatch notifications, backed by `SessionManager::dispatch_custom_event()`.
+- **`dispatch_custom_event()`**: Storage-backed per-session event dispatch, not cache-gated.
+- **`SessionEventDispatcher` trait**: Awaitable dispatcher on `SessionManager` for guaranteed Custom event persistence.
+- **ADR-023 updates**: Distributed session targeting, session-backed event sequencing future consideration.
+
 ## [0.3.30] - 2026-03-29
 
 ### Fixed
