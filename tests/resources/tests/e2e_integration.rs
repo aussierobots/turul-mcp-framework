@@ -24,7 +24,10 @@ async fn test_mcp_initialize_session() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     // Verify response structure
     assert!(result.contains_key("result"));
@@ -55,7 +58,10 @@ async fn test_resources_list() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
     let result = client
         .list_resources()
         .await
@@ -127,7 +133,10 @@ async fn test_file_resource_read() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
     let result = client
         .read_resource("file:///tmp/test.txt")
         .await
@@ -160,7 +169,10 @@ async fn test_memory_resource_read() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
     let result = client
         .read_resource("file:///memory/data.json")
         .await
@@ -194,7 +206,10 @@ async fn test_error_resource_handling() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
     let result = client
         .read_resource("file:///error/not_found.txt")
         .await
@@ -222,7 +237,10 @@ async fn test_template_resource_with_variables() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     // Template resource should handle URI variables
     let result = client
@@ -249,7 +267,10 @@ async fn test_binary_resource_read() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
     let result = client
         .read_resource("file:///binary/image.png")
         .await
@@ -282,7 +303,10 @@ async fn test_session_aware_resource() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
     let result = client
         .read_resource("file:///session/info.json")
         .await
@@ -315,7 +339,10 @@ async fn test_resource_subscription() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
     let server_capabilities = &init_response["result"]["capabilities"]["resources"];
     assert_eq!(
         server_capabilities["subscribe"], false,
@@ -358,7 +385,10 @@ async fn test_paginated_resource() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
     let result = client
         .read_resource("file:///paginated/items.json")
         .await
@@ -390,7 +420,10 @@ async fn test_large_resource_handling() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
     let result = client
         .read_resource("file:///large/dataset.json")
         .await
@@ -425,7 +458,10 @@ async fn test_resource_with_metadata() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
     let result = client
         .read_resource("file:///meta/dynamic.json")
         .await
@@ -456,7 +492,10 @@ async fn test_complete_resource_specification() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
     let result = client
         .read_resource("file:///complete/all-fields.json")
         .await
@@ -495,7 +534,10 @@ async fn test_sse_resource_notifications() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     // Subscribe to notifications first
     let _subscribe_result = client
@@ -534,7 +576,10 @@ async fn test_multi_resource_collection() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
     let result = client
         .read_resource("file:///multi/contents.txt")
         .await

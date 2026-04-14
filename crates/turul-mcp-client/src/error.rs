@@ -177,6 +177,22 @@ impl McpClientError {
         )
     }
 
+    /// Check if this error indicates the server rejected the request because
+    /// `notifications/initialized` has not been processed yet (JSON-RPC -32031
+    /// or message containing "Session not initialized").
+    ///
+    /// This is distinct from `is_session_expired()` (HTTP 404): the session
+    /// exists but the server hasn't finished the handshake. The client should
+    /// disconnect, re-run `connect()`, and retry the request once.
+    pub fn is_session_not_initialized(&self) -> bool {
+        match self {
+            Self::ServerError { code, message, .. } => {
+                *code == -32031 || message.contains("Session not initialized")
+            }
+            _ => false,
+        }
+    }
+
     /// Check if the error is a protocol-level issue
     pub fn is_protocol_error(&self) -> bool {
         matches!(self, Self::Protocol(_))
@@ -235,5 +251,44 @@ mod tests {
             message: "Not Found".to_string(),
         };
         assert_eq!(err.to_string(), "HTTP 404: Not Found");
+    }
+
+    #[test]
+    fn test_session_not_initialized_by_code() {
+        let err = McpClientError::server_error(
+            -32031,
+            "Session error: something",
+            None,
+        );
+        assert!(err.is_session_not_initialized());
+    }
+
+    #[test]
+    fn test_session_not_initialized_by_message() {
+        let err = McpClientError::server_error(
+            -32000,
+            "Session not initialized - client must send notifications/initialized first",
+            None,
+        );
+        assert!(err.is_session_not_initialized());
+    }
+
+    #[test]
+    fn test_unrelated_error_is_not_session_not_initialized() {
+        let err = McpClientError::server_error(
+            -32602,
+            "Invalid params",
+            None,
+        );
+        assert!(!err.is_session_not_initialized());
+    }
+
+    #[test]
+    fn test_transport_error_is_not_session_not_initialized() {
+        let err = McpClientError::Transport(TransportError::HttpStatus {
+            status: 500,
+            message: "Internal".to_string(),
+        });
+        assert!(!err.is_session_not_initialized());
     }
 }

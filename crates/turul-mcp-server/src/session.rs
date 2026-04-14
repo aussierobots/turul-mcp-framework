@@ -1530,19 +1530,23 @@ impl SessionManager {
         }
 
         // Phase 2: Awaited dispatcher for Custom events (mandatory persistence)
-        if let SessionEvent::Custom { ref event_type, ref data } = event {
+        if let SessionEvent::Custom {
+            ref event_type,
+            ref data,
+        } = event
+        {
             let dispatcher = self.event_dispatcher.read().await.clone();
             if let Some(ref dispatcher) = dispatcher {
-                dispatcher.dispatch_to_session(
-                    session_id,
-                    event_type.clone(),
-                    data.clone(),
-                ).await?;
+                dispatcher
+                    .dispatch_to_session(session_id, event_type.clone(), data.clone())
+                    .await?;
             }
         }
 
         // Phase 3: Global channel (observer-only)
-        let _ = self.global_event_sender.send((session_id.to_string(), event));
+        let _ = self
+            .global_event_sender
+            .send((session_id.to_string(), event));
 
         Ok(())
     }
@@ -1562,7 +1566,10 @@ impl SessionManager {
         {
             let sessions = self.sessions.read().await;
             if let Some(session) = sessions.get(session_id) {
-                let event = SessionEvent::Custom { event_type: event_type.clone(), data: data.clone() };
+                let event = SessionEvent::Custom {
+                    event_type: event_type.clone(),
+                    data: data.clone(),
+                };
                 let _ = session.send_event(event);
             }
         }
@@ -1570,7 +1577,9 @@ impl SessionManager {
         // Dispatcher (mandatory — storage-backed, not cache-gated)
         let dispatcher = self.event_dispatcher.read().await.clone();
         if let Some(ref dispatcher) = dispatcher {
-            dispatcher.dispatch_to_session(session_id, event_type, data).await?;
+            dispatcher
+                .dispatch_to_session(session_id, event_type, data)
+                .await?;
         }
 
         Ok(())
@@ -1598,11 +1607,18 @@ impl SessionManager {
 
         // Phase 2: Storage-backed targeting for Custom events
         let mut dispatch_errors: Vec<String> = Vec::new();
-        if let SessionEvent::Custom { ref event_type, ref data } = event {
+        if let SessionEvent::Custom {
+            ref event_type,
+            ref data,
+        } = event
+        {
             let dispatcher = self.event_dispatcher.read().await.clone();
             if let Some(ref dispatcher) = dispatcher {
                 // Enumerate ALL sessions from storage — not the in-memory cache
-                let all_ids = self.storage.list_sessions().await
+                let all_ids = self
+                    .storage
+                    .list_sessions()
+                    .await
                     .map_err(|e| format!("Failed to list sessions from storage: {}", e))?;
 
                 // Filter terminated sessions
@@ -1616,11 +1632,10 @@ impl SessionManager {
                 }
 
                 for session_id in &targets {
-                    if let Err(e) = dispatcher.dispatch_to_session(
-                        session_id,
-                        event_type.clone(),
-                        data.clone(),
-                    ).await {
+                    if let Err(e) = dispatcher
+                        .dispatch_to_session(session_id, event_type.clone(), data.clone())
+                        .await
+                    {
                         dispatch_errors.push(format!("session {}: {}", session_id, e));
                     }
                 }
@@ -1629,7 +1644,8 @@ impl SessionManager {
 
         // Phase 3: Global broadcast channel — observer-only (cache-local, tests/debugging)
         for session_id in &cached_ids {
-            if let Err(e) = self.global_event_sender
+            if let Err(e) = self
+                .global_event_sender
                 .send((session_id.clone(), event.clone()))
             {
                 debug!("Global event broadcast failed (no listeners): {}", e);

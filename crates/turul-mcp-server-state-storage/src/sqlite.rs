@@ -133,10 +133,10 @@ impl ServerStateStorage for SqliteServerStateStorage {
 
         match row {
             Some(row) => {
-                let metadata: Option<serde_json::Value> =
-                    row.get::<Option<String>, _>("metadata")
-                        .map(|s| serde_json::from_str(&s))
-                        .transpose()?;
+                let metadata: Option<serde_json::Value> = row
+                    .get::<Option<String>, _>("metadata")
+                    .map(|s| serde_json::from_str(&s))
+                    .transpose()?;
 
                 Ok(Some(EntityState {
                     entity_id: row.get("entity_id"),
@@ -185,14 +185,12 @@ impl ServerStateStorage for SqliteServerStateStorage {
         entity_type: &str,
         entity_id: &str,
     ) -> Result<(), ServerStateError> {
-        sqlx::query(
-            "DELETE FROM server_entity_state WHERE entity_type = ? AND entity_id = ?",
-        )
-        .bind(entity_type)
-        .bind(entity_id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?;
+        sqlx::query("DELETE FROM server_entity_state WHERE entity_type = ? AND entity_id = ?")
+            .bind(entity_type)
+            .bind(entity_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?;
 
         Ok(())
     }
@@ -212,10 +210,7 @@ impl ServerStateStorage for SqliteServerStateStorage {
         Ok(rows)
     }
 
-    async fn get_fingerprint(
-        &self,
-        entity_type: &str,
-    ) -> Result<Option<String>, ServerStateError> {
+    async fn get_fingerprint(&self, entity_type: &str) -> Result<Option<String>, ServerStateError> {
         let fp = sqlx::query_scalar::<_, String>(
             "SELECT fingerprint FROM server_fingerprints WHERE entity_type = ?",
         )

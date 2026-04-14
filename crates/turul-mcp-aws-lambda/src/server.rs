@@ -116,8 +116,9 @@ impl LambdaMcpServer {
         task_runtime: Option<Arc<turul_mcp_server::TaskRuntime>>,
         tool_fingerprint: String,
         #[cfg(feature = "dynamic-tools")] dynamic_tools: bool,
-        #[cfg(feature = "dynamic-tools")]
-        server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
+        #[cfg(feature = "dynamic-tools")] server_state_storage: Option<
+            Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
+        >,
     ) -> Self {
         // Create session manager with server capabilities
         let session_manager = Arc::new(SessionManager::with_storage_and_timeouts(
@@ -312,7 +313,10 @@ impl LambdaMcpServer {
                             );
                         }
                         _ => {
-                            debug!("Lambda SSE Bridge: non-custom event for session {}", session_id);
+                            debug!(
+                                "Lambda SSE Bridge: non-custom event for session {}",
+                                session_id
+                            );
                         }
                     }
                 }
@@ -420,16 +424,21 @@ impl LambdaMcpServer {
             }
             #[async_trait::async_trait]
             impl turul_http_mcp_server::ToolChangeNotifier for LambdaToolNotifier {
-                async fn notify_tools_changed(&self, session_id: &str) -> std::result::Result<(), String> {
+                async fn notify_tools_changed(
+                    &self,
+                    session_id: &str,
+                ) -> std::result::Result<(), String> {
                     let notification = turul_mcp_protocol::JsonRpcNotification::new(
                         "notifications/tools/list_changed".to_string(),
                     );
                     let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;
-                    self.session_manager.dispatch_custom_event(
-                        session_id,
-                        "notifications/tools/list_changed".to_string(),
-                        data,
-                    ).await
+                    self.session_manager
+                        .dispatch_custom_event(
+                            session_id,
+                            "notifications/tools/list_changed".to_string(),
+                            data,
+                        )
+                        .await
                 }
             }
             handler.with_tool_notifier(Arc::new(LambdaToolNotifier {

@@ -379,7 +379,11 @@ mod tests {
     impl HasExecution for AnotherTool {}
     #[async_trait]
     impl McpTool for AnotherTool {
-        async fn call(&self, _args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+        async fn call(
+            &self,
+            _args: Value,
+            _session: Option<SessionContext>,
+        ) -> McpResult<CallToolResult> {
             Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
         }
     }
@@ -397,16 +401,31 @@ mod tests {
     fn test_fingerprint_order_independent() {
         // Insert in different orders — HashMap ordering varies but fingerprint should be stable
         let mut tools_a = HashMap::new();
-        tools_a.insert("test".to_string(), Arc::new(TestTool::new()) as Arc<dyn McpTool>);
-        tools_a.insert("another".to_string(), Arc::new(AnotherTool) as Arc<dyn McpTool>);
+        tools_a.insert(
+            "test".to_string(),
+            Arc::new(TestTool::new()) as Arc<dyn McpTool>,
+        );
+        tools_a.insert(
+            "another".to_string(),
+            Arc::new(AnotherTool) as Arc<dyn McpTool>,
+        );
 
         let mut tools_b = HashMap::new();
-        tools_b.insert("another".to_string(), Arc::new(AnotherTool) as Arc<dyn McpTool>);
-        tools_b.insert("test".to_string(), Arc::new(TestTool::new()) as Arc<dyn McpTool>);
+        tools_b.insert(
+            "another".to_string(),
+            Arc::new(AnotherTool) as Arc<dyn McpTool>,
+        );
+        tools_b.insert(
+            "test".to_string(),
+            Arc::new(TestTool::new()) as Arc<dyn McpTool>,
+        );
 
         let fp_a = compute_tool_fingerprint(&tools_a);
         let fp_b = compute_tool_fingerprint(&tools_b);
-        assert_eq!(fp_a, fp_b, "Tool insertion order must not affect fingerprint");
+        assert_eq!(
+            fp_a, fp_b,
+            "Tool insertion order must not affect fingerprint"
+        );
     }
 
     #[test]
@@ -415,7 +434,10 @@ mod tests {
         let tools_2 = tool_map(vec![Arc::new(AnotherTool) as Arc<dyn McpTool>]);
         let fp_1 = compute_tool_fingerprint(&tools_1);
         let fp_2 = compute_tool_fingerprint(&tools_2);
-        assert_ne!(fp_1, fp_2, "Different tools must produce different fingerprints");
+        assert_ne!(
+            fp_1, fp_2,
+            "Different tools must produce different fingerprints"
+        );
     }
 
     #[test]
@@ -434,7 +456,11 @@ mod tests {
     fn test_fingerprint_empty_tools() {
         let tools = HashMap::new();
         let fp = compute_tool_fingerprint(&tools);
-        assert_eq!(fp.len(), 16, "Empty tool set should still produce valid fingerprint");
+        assert_eq!(
+            fp.len(),
+            16,
+            "Empty tool set should still produce valid fingerprint"
+        );
     }
 
     /// Mandatory canonicalization test: same tool definition built via different paths
@@ -451,7 +477,10 @@ mod tests {
         let desc_b = tool_to_descriptor(&tool_b);
         let json_a = serde_json::to_string(&desc_a).unwrap();
         let json_b = serde_json::to_string(&desc_b).unwrap();
-        assert_eq!(json_a, json_b, "Same tool built independently must serialize identically");
+        assert_eq!(
+            json_a, json_b,
+            "Same tool built independently must serialize identically"
+        );
 
         // Full fingerprint comparison
         let tools_a = tool_map(vec![Arc::new(tool_a) as Arc<dyn McpTool>]);
@@ -471,17 +500,45 @@ mod tests {
         struct OrderTestTool {
             input_schema: ToolSchema,
         }
-        impl HasBaseMetadata for OrderTestTool { fn name(&self) -> &str { "order_test" } }
-        impl HasDescription for OrderTestTool { fn description(&self) -> Option<&str> { Some("test") } }
-        impl HasInputSchema for OrderTestTool { fn input_schema(&self) -> &ToolSchema { &self.input_schema } }
-        impl HasOutputSchema for OrderTestTool { fn output_schema(&self) -> Option<&ToolSchema> { None } }
-        impl HasAnnotations for OrderTestTool { fn annotations(&self) -> Option<&ToolAnnotations> { None } }
-        impl HasToolMeta for OrderTestTool { fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None } }
+        impl HasBaseMetadata for OrderTestTool {
+            fn name(&self) -> &str {
+                "order_test"
+            }
+        }
+        impl HasDescription for OrderTestTool {
+            fn description(&self) -> Option<&str> {
+                Some("test")
+            }
+        }
+        impl HasInputSchema for OrderTestTool {
+            fn input_schema(&self) -> &ToolSchema {
+                &self.input_schema
+            }
+        }
+        impl HasOutputSchema for OrderTestTool {
+            fn output_schema(&self) -> Option<&ToolSchema> {
+                None
+            }
+        }
+        impl HasAnnotations for OrderTestTool {
+            fn annotations(&self) -> Option<&ToolAnnotations> {
+                None
+            }
+        }
+        impl HasToolMeta for OrderTestTool {
+            fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+                None
+            }
+        }
         impl HasIcons for OrderTestTool {}
         impl HasExecution for OrderTestTool {}
         #[async_trait]
         impl McpTool for OrderTestTool {
-            async fn call(&self, _args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+            async fn call(
+                &self,
+                _args: Value,
+                _session: Option<SessionContext>,
+            ) -> McpResult<CallToolResult> {
                 Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
             }
         }
@@ -506,7 +563,10 @@ mod tests {
 
         let fp_a = compute_tool_fingerprint(&tool_map(vec![tool_a]));
         let fp_b = compute_tool_fingerprint(&tool_map(vec![tool_b]));
-        assert_eq!(fp_a, fp_b, "Property insertion order must not affect fingerprint");
+        assert_eq!(
+            fp_a, fp_b,
+            "Property insertion order must not affect fingerprint"
+        );
     }
 
     /// Regression: nested objects and additional fields with different HashMap
@@ -516,23 +576,55 @@ mod tests {
         struct NestedTestTool {
             input_schema: ToolSchema,
         }
-        impl HasBaseMetadata for NestedTestTool { fn name(&self) -> &str { "nested_test" } }
-        impl HasDescription for NestedTestTool { fn description(&self) -> Option<&str> { Some("test") } }
-        impl HasInputSchema for NestedTestTool { fn input_schema(&self) -> &ToolSchema { &self.input_schema } }
-        impl HasOutputSchema for NestedTestTool { fn output_schema(&self) -> Option<&ToolSchema> { None } }
-        impl HasAnnotations for NestedTestTool { fn annotations(&self) -> Option<&ToolAnnotations> { None } }
-        impl HasToolMeta for NestedTestTool { fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None } }
+        impl HasBaseMetadata for NestedTestTool {
+            fn name(&self) -> &str {
+                "nested_test"
+            }
+        }
+        impl HasDescription for NestedTestTool {
+            fn description(&self) -> Option<&str> {
+                Some("test")
+            }
+        }
+        impl HasInputSchema for NestedTestTool {
+            fn input_schema(&self) -> &ToolSchema {
+                &self.input_schema
+            }
+        }
+        impl HasOutputSchema for NestedTestTool {
+            fn output_schema(&self) -> Option<&ToolSchema> {
+                None
+            }
+        }
+        impl HasAnnotations for NestedTestTool {
+            fn annotations(&self) -> Option<&ToolAnnotations> {
+                None
+            }
+        }
+        impl HasToolMeta for NestedTestTool {
+            fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+                None
+            }
+        }
         impl HasIcons for NestedTestTool {}
         impl HasExecution for NestedTestTool {}
         #[async_trait]
         impl McpTool for NestedTestTool {
-            async fn call(&self, _args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+            async fn call(
+                &self,
+                _args: Value,
+                _session: Option<SessionContext>,
+            ) -> McpResult<CallToolResult> {
                 Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
             }
         }
 
         // Helper: build a schema with same logical content but varied insertion order
-        fn build_schema(inner_order: &[(&str, JsonSchema)], outer_order: &[(&str, JsonSchema)], additional_order: &[(&str, serde_json::Value)]) -> ToolSchema {
+        fn build_schema(
+            inner_order: &[(&str, JsonSchema)],
+            outer_order: &[(&str, JsonSchema)],
+            additional_order: &[(&str, serde_json::Value)],
+        ) -> ToolSchema {
             let mut outer_props = HashMap::new();
             for (k, v) in outer_order {
                 outer_props.insert(k.to_string(), v.clone());
@@ -560,29 +652,34 @@ mod tests {
 
         // Order A: outer=[config, enabled], additional=[x, y]
         let tool_a = Arc::new(NestedTestTool {
-            input_schema: build_schema(&[], &[
-                ("config", nested_a),
-                ("enabled", JsonSchema::boolean()),
-            ], &[
-                ("x", serde_json::json!("extra_x")),
-                ("y", serde_json::json!("extra_y")),
-            ]),
+            input_schema: build_schema(
+                &[],
+                &[("config", nested_a), ("enabled", JsonSchema::boolean())],
+                &[
+                    ("x", serde_json::json!("extra_x")),
+                    ("y", serde_json::json!("extra_y")),
+                ],
+            ),
         }) as Arc<dyn McpTool>;
 
         // Order B: outer=[enabled, config], additional=[y, x] (reversed at all levels)
         let tool_b = Arc::new(NestedTestTool {
-            input_schema: build_schema(&[], &[
-                ("enabled", JsonSchema::boolean()),
-                ("config", nested_b),
-            ], &[
-                ("y", serde_json::json!("extra_y")),
-                ("x", serde_json::json!("extra_x")),
-            ]),
+            input_schema: build_schema(
+                &[],
+                &[("enabled", JsonSchema::boolean()), ("config", nested_b)],
+                &[
+                    ("y", serde_json::json!("extra_y")),
+                    ("x", serde_json::json!("extra_x")),
+                ],
+            ),
         }) as Arc<dyn McpTool>;
 
         let fp_a = compute_tool_fingerprint(&tool_map(vec![tool_a]));
         let fp_b = compute_tool_fingerprint(&tool_map(vec![tool_b]));
-        assert_eq!(fp_a, fp_b, "Nested property and additional field order must not affect fingerprint");
+        assert_eq!(
+            fp_a, fp_b,
+            "Nested property and additional field order must not affect fingerprint"
+        );
     }
 
     /// Test that annotation changes affect the fingerprint
@@ -594,10 +691,14 @@ mod tests {
             annotations: Option<ToolAnnotations>,
         }
         impl HasBaseMetadata for AnnotatedTool {
-            fn name(&self) -> &str { "annotated" }
+            fn name(&self) -> &str {
+                "annotated"
+            }
         }
         impl HasDescription for AnnotatedTool {
-            fn description(&self) -> Option<&str> { Some("test") }
+            fn description(&self) -> Option<&str> {
+                Some("test")
+            }
         }
         impl HasInputSchema for AnnotatedTool {
             fn input_schema(&self) -> &ToolSchema {
@@ -605,27 +706,48 @@ mod tests {
                 SCHEMA.get_or_init(|| ToolSchema::object())
             }
         }
-        impl HasOutputSchema for AnnotatedTool { fn output_schema(&self) -> Option<&ToolSchema> { None } }
-        impl HasAnnotations for AnnotatedTool {
-            fn annotations(&self) -> Option<&ToolAnnotations> { self.annotations.as_ref() }
+        impl HasOutputSchema for AnnotatedTool {
+            fn output_schema(&self) -> Option<&ToolSchema> {
+                None
+            }
         }
-        impl HasToolMeta for AnnotatedTool { fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None } }
+        impl HasAnnotations for AnnotatedTool {
+            fn annotations(&self) -> Option<&ToolAnnotations> {
+                self.annotations.as_ref()
+            }
+        }
+        impl HasToolMeta for AnnotatedTool {
+            fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+                None
+            }
+        }
         impl HasIcons for AnnotatedTool {}
         impl HasExecution for AnnotatedTool {}
         #[async_trait]
         impl McpTool for AnnotatedTool {
-            async fn call(&self, _args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+            async fn call(
+                &self,
+                _args: Value,
+                _session: Option<SessionContext>,
+            ) -> McpResult<CallToolResult> {
                 Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
             }
         }
 
         let tool_plain = Arc::new(AnnotatedTool { annotations: None }) as Arc<dyn McpTool>;
         let tool_annotated = Arc::new(AnnotatedTool {
-            annotations: Some(ToolAnnotations::new().with_read_only_hint(true).with_destructive_hint(false)),
+            annotations: Some(
+                ToolAnnotations::new()
+                    .with_read_only_hint(true)
+                    .with_destructive_hint(false),
+            ),
         }) as Arc<dyn McpTool>;
 
         let fp_plain = compute_tool_fingerprint(&tool_map(vec![tool_plain]));
         let fp_annotated = compute_tool_fingerprint(&tool_map(vec![tool_annotated]));
-        assert_ne!(fp_plain, fp_annotated, "Annotation changes must affect fingerprint");
+        assert_ne!(
+            fp_plain, fp_annotated,
+            "Annotation changes must affect fingerprint"
+        );
     }
 }

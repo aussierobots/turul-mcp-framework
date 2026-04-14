@@ -206,7 +206,10 @@ async fn test_error_response() -> Result<()> {
     );
     let error_code = json["error"]["code"].as_i64().unwrap();
     assert_eq!(error_code, -32601, "Should be method-not-found error code");
-    info!("✅ Error response test passed with error code: {}", error_code);
+    info!(
+        "✅ Error response test passed with error code: {}",
+        error_code
+    );
 
     Ok(())
 }

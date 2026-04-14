@@ -388,8 +388,7 @@ impl TestServerManager {
         extra_args: &[&str],
     ) -> Result<Self, Box<dyn std::error::Error>> {
         // Build a combined args list: --port <port> + extra_args
-        let port = Self::find_available_port()
-            .ok_or("Failed to find available port")?;
+        let port = Self::find_available_port().ok_or("Failed to find available port")?;
 
         let workspace_root =
             find_workspace_root().map_err(|e| format!("Failed to find workspace root: {}", e))?;
@@ -409,7 +408,12 @@ impl TestServerManager {
                 match build_status {
                     Ok(status) if status.success() => {}
                     Ok(status) => {
-                        return Err(format!("Failed to build {} (exit: {:?})", server_name, status.code()).into());
+                        return Err(format!(
+                            "Failed to build {} (exit: {:?})",
+                            server_name,
+                            status.code()
+                        )
+                        .into());
                     }
                     Err(e) => {
                         return Err(format!("Failed to build {}: {}", server_name, e).into());
@@ -587,8 +591,8 @@ impl TestServerManager {
     }
 
     /// Start dynamic-tools-server with multiply inactive at startup
-    pub async fn start_dynamic_tools_server_multiply_inactive(
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn start_dynamic_tools_server_multiply_inactive()
+    -> Result<Self, Box<dyn std::error::Error>> {
         Self::start_with_args("dynamic-tools-server", &["--multiply-inactive"]).await
     }
 

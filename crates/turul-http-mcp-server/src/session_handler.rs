@@ -467,98 +467,217 @@ impl SessionMcpHandler {
                     let method_name = request.method.clone();
 
                     // Special handling for initialize requests - they create new sessions
-                    let (response, response_session_id, inline_notifications) =
-                        if request.method == "initialize" {
-                    debug!(
-                        "Handling initialize request - creating new session via session storage"
-                    );
+                    let (response, response_session_id, inline_notifications) = if request.method
+                        == "initialize"
+                    {
+                        debug!(
+                            "Handling initialize request - creating new session via session storage"
+                        );
 
-                    // Let session storage create the session and generate the ID (GPS pattern)
-                    let capabilities = ServerCapabilities::default();
-                    match self.session_storage.create_session(capabilities).await {
-                        Ok(session_info) => {
-                            debug!(
-                                "Created new session via session storage: {}",
-                                session_info.session_id
-                            );
+                        // Let session storage create the session and generate the ID (GPS pattern)
+                        let capabilities = ServerCapabilities::default();
+                        match self.session_storage.create_session(capabilities).await {
+                            Ok(session_info) => {
+                                debug!(
+                                    "Created new session via session storage: {}",
+                                    session_info.session_id
+                                );
 
-                            // ✅ CORRECTED ARCHITECTURE: Create session-specific notification broadcaster from shared StreamManager
+                                // ✅ CORRECTED ARCHITECTURE: Create session-specific notification broadcaster from shared StreamManager
+                                let broadcaster: SharedNotificationBroadcaster =
+                                    Arc::new(StreamManagerNotificationBroadcaster::new(
+                                        Arc::clone(&self.stream_manager),
+                                    ));
+                                let broadcaster_any =
+                                    Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+
+                                let session_context = SessionContext {
+                                    session_id: session_info.session_id.clone(),
+                                    metadata: std::collections::HashMap::new(),
+                                    broadcaster: Some(broadcaster_any),
+                                    timestamp: chrono::Utc::now().timestamp_millis() as u64,
+                                    extensions: std::collections::HashMap::new(),
+                                };
+
+                                // Run middleware pipeline and dispatch
+                                // Injection is applied immediately inside run_middleware_and_dispatch
+                                let (response, _) = self
+                                    .run_middleware_and_dispatch(
+                                        request,
+                                        headers.clone(),
+                                        session_context,
+                                        pre_session_extensions.clone(),
+                                    )
+                                    .await;
+
+                                // Return the session ID created by session storage for the HTTP header
+                                (response, Some(session_info.session_id), Vec::new())
+                            }
+                            Err(err) => {
+                                error!("Failed to create session during initialize: {}", err);
+                                // Return error response using proper JSON-RPC error format
+                                let error_msg = format!("Session creation failed: {}", err);
+                                let error_response =
+                                    turul_mcp_json_rpc_server::JsonRpcMessage::error(
+                                        turul_mcp_json_rpc_server::JsonRpcError::internal_error(
+                                            Some(request.id),
+                                            Some(error_msg),
+                                        ),
+                                    );
+                                (error_response, None, Vec::new())
+                            }
+                        }
+                    } else {
+                        // For non-initialize requests, validate session exists and fingerprint matches.
+                        // Returns HTTP 404 (not JSON-RPC error) — session validation is transport-level,
+                        // matching StreamableHttpHandler's behavior for cross-transport consistency.
+                        if let Some(ref session_id_str) = session_id {
+                            if let Err(err) = self.validate_session_exists(session_id_str).await {
+                                warn!(
+                                    "Session validation failed for session '{}': {}",
+                                    session_id_str, err
+                                );
+                                let body = serde_json::json!({
+                                    "error": {
+                                        "code": 404,
+                                        "message": format!("Session validation failed: {}", err)
+                                    }
+                                })
+                                .to_string();
+                                return Ok(Response::builder()
+                                    .status(StatusCode::NOT_FOUND)
+                                    .header(CONTENT_TYPE, "application/json")
+                                    .body(convert_to_unified_body(Full::new(Bytes::from(body))))
+                                    .unwrap());
+                            }
+                        }
+
+                        // Create session context if session ID is provided
+                        let session_context = if let Some(ref session_id_str) = session_id {
+                            debug!("Processing request with session: {}", session_id_str);
                             let broadcaster: SharedNotificationBroadcaster =
                                 Arc::new(StreamManagerNotificationBroadcaster::new(Arc::clone(
                                     &self.stream_manager,
                                 )));
                             let broadcaster_any =
                                 Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
-
-                            let session_context = SessionContext {
-                                session_id: session_info.session_id.clone(),
+                            Some(SessionContext {
+                                session_id: session_id_str.clone(),
                                 metadata: std::collections::HashMap::new(),
                                 broadcaster: Some(broadcaster_any),
                                 timestamp: chrono::Utc::now().timestamp_millis() as u64,
                                 extensions: std::collections::HashMap::new(),
-                            };
-
-                            // Run middleware pipeline and dispatch
-                            // Injection is applied immediately inside run_middleware_and_dispatch
-                            let (response, _) = self
-                                .run_middleware_and_dispatch(
-                                    request,
-                                    headers.clone(),
-                                    session_context,
-                                    pre_session_extensions.clone(),
-                                )
-                                .await;
-
-                            // Return the session ID created by session storage for the HTTP header
-                            (response, Some(session_info.session_id), Vec::new())
-                        }
-                        Err(err) => {
-                            error!("Failed to create session during initialize: {}", err);
-                            // Return error response using proper JSON-RPC error format
-                            let error_msg = format!("Session creation failed: {}", err);
-                            let error_response = turul_mcp_json_rpc_server::JsonRpcMessage::error(
-                                turul_mcp_json_rpc_server::JsonRpcError::internal_error(
-                                    Some(request.id),
-                                    Some(error_msg),
-                                ),
-                            );
-                            (error_response, None, Vec::new())
-                        }
-                    }
-                } else {
-                    // For non-initialize requests, validate session exists and fingerprint matches.
-                    // Returns HTTP 404 (not JSON-RPC error) — session validation is transport-level,
-                    // matching StreamableHttpHandler's behavior for cross-transport consistency.
-                    if let Some(ref session_id_str) = session_id {
-                        if let Err(err) = self.validate_session_exists(session_id_str).await {
-                            warn!(
-                                "Session validation failed for session '{}': {}",
-                                session_id_str, err
-                            );
-                            let body = serde_json::json!({
-                                "error": {
-                                    "code": 404,
-                                    "message": format!("Session validation failed: {}", err)
-                                }
                             })
-                            .to_string();
-                            return Ok(Response::builder()
-                                .status(StatusCode::NOT_FOUND)
-                                .header(CONTENT_TYPE, "application/json")
-                                .body(convert_to_unified_body(Full::new(Bytes::from(body))))
-                                .unwrap());
-                        }
-                    }
+                        } else {
+                            debug!("Processing request without session (lenient mode)");
+                            None
+                        };
 
-                    // Create session context if session ID is provided
+                        // Register a temporary StreamManager connection BEFORE dispatch
+                        // so that notifications broadcast during tool execution are
+                        // captured inline rather than relying on a post-hoc storage read.
+                        let is_tool_call = method_name == "tools/call";
+                        let temp_connection = if is_tool_call {
+                            if let Some(ref sid) = session_id {
+                                let (notify_tx, notify_rx) = tokio::sync::mpsc::channel::<
+                                    turul_mcp_session_storage::SseEvent,
+                                >(64);
+                                let conn_id = format!("post-{}", uuid::Uuid::now_v7().as_simple());
+                                match self
+                                    .stream_manager
+                                    .register_streaming_connection(sid, conn_id.clone(), notify_tx)
+                                    .await
+                                {
+                                    Ok(()) => {
+                                        debug!(
+                                            "Registered temporary POST connection for tool call: session={}, connection={}",
+                                            sid, conn_id
+                                        );
+                                        Some((conn_id, notify_rx, sid.clone()))
+                                    }
+                                    Err(e) => {
+                                        debug!(
+                                            "Could not register temporary connection (non-fatal): {}",
+                                            e
+                                        );
+                                        None
+                                    }
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+
+                        // Run middleware pipeline and dispatch
+                        let (response, _stashed_injection) = if let Some(ctx) = session_context {
+                            self.run_middleware_and_dispatch(
+                                request,
+                                headers.clone(),
+                                ctx,
+                                pre_session_extensions.clone(),
+                            )
+                            .await
+                        } else {
+                            // No session - fast path (no middleware, just dispatch)
+                            (self.dispatcher.handle_request(request).await, None)
+                        };
+
+                        // Drain and unregister the temporary connection
+                        let mut inline_notifications = Vec::new();
+                        if let Some((conn_id, mut notify_rx, sid)) = temp_connection {
+                            while let Ok(event) = notify_rx.try_recv() {
+                                if event.event_type != "ping" && event.event_type != "keepalive" {
+                                    debug!(
+                                        "Captured inline notification: session={}, event_type={}",
+                                        sid, event.event_type
+                                    );
+                                    inline_notifications.push(event);
+                                }
+                            }
+                            self.stream_manager
+                                .unregister_connection(&sid, &conn_id)
+                                .await;
+                        }
+
+                        (response, session_id, inline_notifications)
+                    };
+
+                    // Convert JsonRpcMessage to JsonRpcMessageResult
+                    let message_result = match response {
+                        turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
+                            JsonRpcMessageResult::Response(resp)
+                        }
+                        turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
+                            JsonRpcMessageResult::Error(err)
+                        }
+                    };
+                    (
+                        message_result,
+                        response_session_id,
+                        Some(method_name),
+                        inline_notifications,
+                    )
+                }
+                JsonRpcMessage::Notification(notification) => {
+                    debug!(
+                        "Processing JSON-RPC notification: method={}",
+                        notification.method
+                    );
+                    let method_name = notification.method.clone();
+
+                    // For notifications, create session context if session ID is provided
+                    // Let server-level handlers decide whether to enforce session requirements
                     let session_context = if let Some(ref session_id_str) = session_id {
-                        debug!("Processing request with session: {}", session_id_str);
+                        debug!("Processing notification with session: {}", session_id_str);
                         let broadcaster: SharedNotificationBroadcaster =
                             Arc::new(StreamManagerNotificationBroadcaster::new(Arc::clone(
                                 &self.stream_manager,
                             )));
                         let broadcaster_any =
                             Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
+
                         Some(SessionContext {
                             session_id: session_id_str.clone(),
                             metadata: std::collections::HashMap::new(),
@@ -567,144 +686,26 @@ impl SessionMcpHandler {
                             extensions: std::collections::HashMap::new(),
                         })
                     } else {
-                        debug!("Processing request without session (lenient mode)");
+                        debug!("Processing notification without session (lenient mode)");
                         None
                     };
 
-                    // Register a temporary StreamManager connection BEFORE dispatch
-                    // so that notifications broadcast during tool execution are
-                    // captured inline rather than relying on a post-hoc storage read.
-                    let is_tool_call = method_name == "tools/call";
-                    let temp_connection = if is_tool_call {
-                        if let Some(ref sid) = session_id {
-                            let (notify_tx, notify_rx) =
-                                tokio::sync::mpsc::channel::<turul_mcp_session_storage::SseEvent>(
-                                    64,
-                                );
-                            let conn_id =
-                                format!("post-{}", uuid::Uuid::now_v7().as_simple());
-                            match self
-                                .stream_manager
-                                .register_streaming_connection(sid, conn_id.clone(), notify_tx)
-                                .await
-                            {
-                                Ok(()) => {
-                                    debug!(
-                                        "Registered temporary POST connection for tool call: session={}, connection={}",
-                                        sid, conn_id
-                                    );
-                                    Some((conn_id, notify_rx, sid.clone()))
-                                }
-                                Err(e) => {
-                                    debug!(
-                                        "Could not register temporary connection (non-fatal): {}",
-                                        e
-                                    );
-                                    None
-                                }
-                            }
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
+                    let result = self
+                        .dispatcher
+                        .handle_notification_with_context(notification, session_context)
+                        .await;
 
-                    // Run middleware pipeline and dispatch
-                    let (response, _stashed_injection) = if let Some(ctx) = session_context {
-                        self.run_middleware_and_dispatch(
-                            request,
-                            headers.clone(),
-                            ctx,
-                            pre_session_extensions.clone(),
-                        )
-                        .await
-                    } else {
-                        // No session - fast path (no middleware, just dispatch)
-                        (self.dispatcher.handle_request(request).await, None)
-                    };
-
-                    // Drain and unregister the temporary connection
-                    let mut inline_notifications = Vec::new();
-                    if let Some((conn_id, mut notify_rx, sid)) = temp_connection {
-                        while let Ok(event) = notify_rx.try_recv() {
-                            if event.event_type != "ping" && event.event_type != "keepalive" {
-                                debug!(
-                                    "Captured inline notification: session={}, event_type={}",
-                                    sid, event.event_type
-                                );
-                                inline_notifications.push(event);
-                            }
-                        }
-                        self.stream_manager
-                            .unregister_connection(&sid, &conn_id)
-                            .await;
+                    if let Err(err) = result {
+                        error!("Notification handling error: {}", err);
                     }
-
-                    (response, session_id, inline_notifications)
-                };
-
-                // Convert JsonRpcMessage to JsonRpcMessageResult
-                let message_result = match response {
-                    turul_mcp_json_rpc_server::JsonRpcMessage::Response(resp) => {
-                        JsonRpcMessageResult::Response(resp)
-                    }
-                    turul_mcp_json_rpc_server::JsonRpcMessage::Error(err) => {
-                        JsonRpcMessageResult::Error(err)
-                    }
-                };
-                (
-                    message_result,
-                    response_session_id,
-                    Some(method_name),
-                    inline_notifications,
-                )
-            }
-            JsonRpcMessage::Notification(notification) => {
-                debug!(
-                    "Processing JSON-RPC notification: method={}",
-                    notification.method
-                );
-                let method_name = notification.method.clone();
-
-                // For notifications, create session context if session ID is provided
-                // Let server-level handlers decide whether to enforce session requirements
-                let session_context = if let Some(ref session_id_str) = session_id {
-                    debug!("Processing notification with session: {}", session_id_str);
-                    let broadcaster: SharedNotificationBroadcaster = Arc::new(
-                        StreamManagerNotificationBroadcaster::new(Arc::clone(&self.stream_manager)),
-                    );
-                    let broadcaster_any =
-                        Arc::new(broadcaster) as Arc<dyn std::any::Any + Send + Sync>;
-
-                    Some(SessionContext {
-                        session_id: session_id_str.clone(),
-                        metadata: std::collections::HashMap::new(),
-                        broadcaster: Some(broadcaster_any),
-                        timestamp: chrono::Utc::now().timestamp_millis() as u64,
-                        extensions: std::collections::HashMap::new(),
-                    })
-                } else {
-                    debug!("Processing notification without session (lenient mode)");
-                    None
-                };
-
-                let result = self
-                    .dispatcher
-                    .handle_notification_with_context(notification, session_context)
-                    .await;
-
-                if let Err(err) = result {
-                    error!("Notification handling error: {}", err);
+                    (
+                        JsonRpcMessageResult::NoResponse,
+                        session_id.clone(),
+                        Some(method_name),
+                        Vec::new(),
+                    )
                 }
-                (
-                    JsonRpcMessageResult::NoResponse,
-                    session_id.clone(),
-                    Some(method_name),
-                    Vec::new(),
-                )
-            }
-        };
+            };
 
         // Convert message result to HTTP response
         match message_result {
@@ -1050,8 +1051,13 @@ impl SessionMcpHandler {
                                 "Tool fingerprint updated for session '{}' (tools changed since session created)",
                                 session_id
                             );
-                            let _ = self.session_storage
-                                .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
+                            let _ = self
+                                .session_storage
+                                .set_session_state(
+                                    session_id,
+                                    "mcp:tool_fingerprint",
+                                    serde_json::json!(current_fp),
+                                )
                                 .await;
 
                             // Emit via notifier (backed by SessionManager → dispatcher)
@@ -1066,9 +1072,17 @@ impl SessionMcpHandler {
                         }
                     } else {
                         // Missing fingerprint (legacy session) — store current
-                        info!("Session '{}' has no tool fingerprint, storing current", session_id);
-                        let _ = self.session_storage
-                            .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
+                        info!(
+                            "Session '{}' has no tool fingerprint, storing current",
+                            session_id
+                        );
+                        let _ = self
+                            .session_storage
+                            .set_session_state(
+                                session_id,
+                                "mcp:tool_fingerprint",
+                                serde_json::json!(current_fp),
+                            )
                             .await;
                     }
                 }
@@ -1372,7 +1386,11 @@ mod tests {
             .unwrap();
         let session_id = session.session_id.clone();
         storage
-            .set_session_state(&session_id, "mcp:tool_fingerprint", serde_json::json!("fp_v1"))
+            .set_session_state(
+                &session_id,
+                "mcp:tool_fingerprint",
+                serde_json::json!("fp_v1"),
+            )
             .await
             .unwrap();
 
@@ -1389,7 +1407,10 @@ mod tests {
 
         // Session continues — NOT rejected
         let result = handler.validate_session_exists(&session_id).await;
-        assert!(result.is_ok(), "Fingerprint mismatch must NOT reject session");
+        assert!(
+            result.is_ok(),
+            "Fingerprint mismatch must NOT reject session"
+        );
 
         // Stored fingerprint updated to current
         let stored_fp = storage
@@ -1415,7 +1436,11 @@ mod tests {
             .unwrap();
         let session_id = session.session_id.clone();
         storage
-            .set_session_state(&session_id, "mcp:tool_fingerprint", serde_json::json!("fp_v1"))
+            .set_session_state(
+                &session_id,
+                "mcp:tool_fingerprint",
+                serde_json::json!("fp_v1"),
+            )
             .await
             .unwrap();
 
@@ -1498,7 +1523,10 @@ mod tests {
         // tool_fingerprint defaults to None
 
         let result = handler.validate_session_exists(&session_id).await;
-        assert!(result.is_ok(), "Handler without fingerprint should accept all sessions");
+        assert!(
+            result.is_ok(),
+            "Handler without fingerprint should accept all sessions"
+        );
     }
 
     // ===================================================================
@@ -1518,7 +1546,11 @@ mod tests {
             .unwrap();
         let session_id = session.session_id.clone();
         storage
-            .set_session_state(&session_id, "mcp:tool_fingerprint", serde_json::json!("deploy_v1"))
+            .set_session_state(
+                &session_id,
+                "mcp:tool_fingerprint",
+                serde_json::json!("deploy_v1"),
+            )
             .await
             .unwrap();
 
@@ -1534,7 +1566,10 @@ mod tests {
 
         // Session continues — fingerprint updated
         let result = handler.validate_session_exists(&session_id).await;
-        assert!(result.is_ok(), "Session must continue on fingerprint mismatch");
+        assert!(
+            result.is_ok(),
+            "Session must continue on fingerprint mismatch"
+        );
 
         // Stored fingerprint updated to current
         let stored_fp = storage
@@ -1564,7 +1599,11 @@ mod tests {
             .unwrap();
         let session_id = session.session_id.clone();
         storage
-            .set_session_state(&session_id, "mcp:tool_fingerprint", serde_json::json!("old_fp"))
+            .set_session_state(
+                &session_id,
+                "mcp:tool_fingerprint",
+                serde_json::json!("old_fp"),
+            )
             .await
             .unwrap();
 
@@ -1584,7 +1623,10 @@ mod tests {
 
         // Second request: fingerprints now match, should proceed normally
         let result2 = handler.validate_session_exists(&session_id).await;
-        assert!(result2.is_ok(), "Second request should proceed (fingerprints match)");
+        assert!(
+            result2.is_ok(),
+            "Second request should proceed (fingerprints match)"
+        );
 
         // Fingerprint is current
         let stored_fp = storage

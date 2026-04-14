@@ -605,7 +605,10 @@ mod event_broadcasting_tests {
             .send_event_to_session("non-existent", SessionEvent::KeepAlive)
             .await;
         assert!(result.is_err(), "Should fail for non-existent session");
-        assert!(result.unwrap_err().contains("not found"), "Error should mention session not found");
+        assert!(
+            result.unwrap_err().contains("not found"),
+            "Error should mention session not found"
+        );
     }
 
     #[tokio::test]
@@ -833,7 +836,10 @@ mod error_handling_tests {
         let event_result = manager
             .send_event_to_session(invalid_session_id, SessionEvent::KeepAlive)
             .await;
-        assert!(event_result.is_err(), "Should fail for non-existent session");
+        assert!(
+            event_result.is_err(),
+            "Should fail for non-existent session"
+        );
     }
 
     #[tokio::test]

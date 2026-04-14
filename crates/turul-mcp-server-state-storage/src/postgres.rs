@@ -81,10 +81,7 @@ impl PostgresServerStateStorage {
             .connect(&config.database_url)
             .await
             .map_err(|e| {
-                ServerStateError::DatabaseError(format!(
-                    "Failed to connect to PostgreSQL: {}",
-                    e
-                ))
+                ServerStateError::DatabaseError(format!("Failed to connect to PostgreSQL: {}", e))
             })?;
 
         let verify = config.verify_tables;
@@ -245,14 +242,12 @@ impl ServerStateStorage for PostgresServerStateStorage {
         entity_type: &str,
         entity_id: &str,
     ) -> Result<(), ServerStateError> {
-        sqlx::query(
-            "DELETE FROM server_entity_state WHERE entity_type = $1 AND entity_id = $2",
-        )
-        .bind(entity_type)
-        .bind(entity_id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?;
+        sqlx::query("DELETE FROM server_entity_state WHERE entity_type = $1 AND entity_id = $2")
+            .bind(entity_type)
+            .bind(entity_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?;
 
         debug!("Deleted entity state: {}/{}", entity_type, entity_id);
         Ok(())
@@ -277,10 +272,7 @@ impl ServerStateStorage for PostgresServerStateStorage {
         Ok(ids)
     }
 
-    async fn get_fingerprint(
-        &self,
-        entity_type: &str,
-    ) -> Result<Option<String>, ServerStateError> {
+    async fn get_fingerprint(&self, entity_type: &str) -> Result<Option<String>, ServerStateError> {
         let fp = sqlx::query_scalar::<_, String>(
             "SELECT fingerprint FROM server_fingerprints WHERE entity_type = $1",
         )
@@ -312,10 +304,7 @@ impl ServerStateStorage for PostgresServerStateStorage {
         .await
         .map_err(|e| ServerStateError::DatabaseError(e.to_string()))?;
 
-        debug!(
-            "Set fingerprint for {}: {}",
-            entity_type, fingerprint
-        );
+        debug!("Set fingerprint for {}: {}", entity_type, fingerprint);
         Ok(())
     }
 
@@ -418,10 +407,7 @@ mod tests {
             .unwrap();
 
         // Get
-        let state = storage
-            .get_entity_state("tools", "pg_add")
-            .await
-            .unwrap();
+        let state = storage.get_entity_state("tools", "pg_add").await.unwrap();
         assert!(state.is_some());
         let state = state.unwrap();
         assert!(state.active);
@@ -439,10 +425,7 @@ mod tests {
             .delete_entity_state("tools", "pg_add")
             .await
             .unwrap();
-        let deleted = storage
-            .get_entity_state("tools", "pg_add")
-            .await
-            .unwrap();
+        let deleted = storage.get_entity_state("tools", "pg_add").await.unwrap();
         assert!(deleted.is_none());
     }
 
@@ -550,27 +533,16 @@ mod tests {
         let storage = create_test_storage().await.unwrap();
 
         // No snapshot before fingerprint is set
-        let snap = storage
-            .get_registry_snapshot("pg_snap_type")
-            .await
-            .unwrap();
+        let snap = storage.get_registry_snapshot("pg_snap_type").await.unwrap();
         assert!(snap.is_none());
 
         // Set entities and fingerprint
         storage
-            .set_entity_state(
-                "pg_snap_type",
-                "snap_a",
-                test_entity("snap_a", true),
-            )
+            .set_entity_state("pg_snap_type", "snap_a", test_entity("snap_a", true))
             .await
             .unwrap();
         storage
-            .set_entity_state(
-                "pg_snap_type",
-                "snap_off",
-                test_entity("snap_off", false),
-            )
+            .set_entity_state("pg_snap_type", "snap_off", test_entity("snap_off", false))
             .await
             .unwrap();
         storage
@@ -578,10 +550,7 @@ mod tests {
             .await
             .unwrap();
 
-        let snap = storage
-            .get_registry_snapshot("pg_snap_type")
-            .await
-            .unwrap();
+        let snap = storage.get_registry_snapshot("pg_snap_type").await.unwrap();
         assert!(snap.is_some());
         let snap = snap.unwrap();
         assert_eq!(snap.entity_type, "pg_snap_type");

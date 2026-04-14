@@ -53,11 +53,13 @@ impl turul_http_mcp_server::ToolChangeNotifier for SessionManagerToolNotifier {
             "notifications/tools/list_changed".to_string(),
         );
         let data = serde_json::to_value(&notification).map_err(|e| e.to_string())?;
-        self.session_manager.dispatch_custom_event(
-            session_id,
-            "notifications/tools/list_changed".to_string(),
-            data,
-        ).await
+        self.session_manager
+            .dispatch_custom_event(
+                session_id,
+                "notifications/tools/list_changed".to_string(),
+                data,
+            )
+            .await
     }
 }
 
@@ -132,8 +134,9 @@ impl McpServer {
         route_registry: Arc<turul_http_mcp_server::RouteRegistry>,
         tool_fingerprint: String,
         #[cfg(feature = "dynamic-tools")] dynamic_tools: bool,
-        #[cfg(feature = "dynamic-tools")]
-        server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
+        #[cfg(feature = "dynamic-tools")] server_state_storage: Option<
+            Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
+        >,
         #[cfg(feature = "http")] bind_address: SocketAddr,
         #[cfg(feature = "http")] mcp_path: String,
         #[cfg(feature = "http")] enable_cors: bool,
@@ -259,9 +262,7 @@ impl McpServer {
     fn create_tool_registry(
         compiled_tools: HashMap<String, Arc<dyn McpTool>>,
         session_manager: Arc<SessionManager>,
-        server_state_storage: Option<
-            Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>,
-        >,
+        server_state_storage: Option<Arc<dyn turul_mcp_server_state_storage::ServerStateStorage>>,
     ) -> crate::tool_registry::ToolRegistry {
         let storage = server_state_storage.unwrap_or_else(|| {
             Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new())
@@ -382,17 +383,26 @@ impl McpServer {
                         info!("Dynamic: local tools match shared storage");
                     }
                     Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
-                        warn!("Dynamic: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.", old_fingerprint);
+                        warn!(
+                            "Dynamic: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.",
+                            old_fingerprint
+                        );
                     }
                     Err(e) => {
-                        error!("Dynamic: failed to sync with shared storage: {}. Continuing with local state.", e);
+                        error!(
+                            "Dynamic: failed to sync with shared storage: {}. Continuing with local state.",
+                            e
+                        );
                     }
                 }
 
                 // Start background polling for cross-instance changes
                 let poll_interval = registry.check_ttl();
                 let _poll_handle = registry.start_polling(poll_interval);
-                debug!("Dynamic: started background polling (interval: {:?})", poll_interval);
+                debug!(
+                    "Dynamic: started background polling (interval: {:?})",
+                    poll_interval
+                );
             }
         }
 
@@ -521,10 +531,7 @@ impl McpServer {
     /// This makes `broadcast_event()` persist Custom events synchronously
     /// on the request path, rather than relying on the detached bridge task.
     #[cfg(feature = "http")]
-    async fn install_event_dispatcher(
-        &self,
-        http_server: &turul_http_mcp_server::HttpMcpServer,
-    ) {
+    async fn install_event_dispatcher(&self, http_server: &turul_http_mcp_server::HttpMcpServer) {
         let stream_manager = http_server.get_stream_manager();
         let dispatcher = Arc::new(StreamManagerEventDispatcher { stream_manager });
         self.session_manager.set_event_dispatcher(dispatcher).await;
@@ -619,17 +626,26 @@ impl McpServer {
                         info!("Dynamic: local tools match shared storage");
                     }
                     Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
-                        warn!("Dynamic: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.", old_fingerprint);
+                        warn!(
+                            "Dynamic: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.",
+                            old_fingerprint
+                        );
                     }
                     Err(e) => {
-                        error!("Dynamic: failed to sync with shared storage: {}. Continuing with local state.", e);
+                        error!(
+                            "Dynamic: failed to sync with shared storage: {}. Continuing with local state.",
+                            e
+                        );
                     }
                 }
 
                 // Start background polling for cross-instance changes
                 let poll_interval = registry.check_ttl();
                 let _poll_handle = registry.start_polling(poll_interval);
-                debug!("Dynamic: started background polling (interval: {:?})", poll_interval);
+                debug!(
+                    "Dynamic: started background polling (interval: {:?})",
+                    poll_interval
+                );
             }
         }
 

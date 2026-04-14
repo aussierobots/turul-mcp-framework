@@ -97,10 +97,7 @@ impl ServerStateStorage for InMemoryServerStateStorage {
             .unwrap_or_default())
     }
 
-    async fn get_fingerprint(
-        &self,
-        entity_type: &str,
-    ) -> Result<Option<String>, ServerStateError> {
+    async fn get_fingerprint(&self, entity_type: &str) -> Result<Option<String>, ServerStateError> {
         let fps = self.fingerprints.read().await;
         Ok(fps.get(entity_type).cloned())
     }

@@ -176,7 +176,7 @@ impl Default for DynamoDbConfig {
             table_name: "mcp-sessions".to_string(),
             region: std::env::var("AWS_REGION").unwrap_or_else(|_| "us-east-1".to_string()),
             session_ttl_minutes: 30, // Default 30 minutes
-            event_ttl_minutes: 30,  // Default 30 minutes
+            event_ttl_minutes: 30,   // Default 30 minutes
             max_events_per_session: 1000,
             enable_backup: true,
             enable_encryption: true,
@@ -1844,10 +1844,7 @@ impl SessionStorage for DynamoDbSessionStorage {
                     .query()
                     .table_name(&event_table)
                     .key_condition_expression(format!("{} = :sid", ea.session_id))
-                    .expression_attribute_values(
-                        ":sid",
-                        AttributeValue::S(session_id.to_string()),
-                    )
+                    .expression_attribute_values(":sid", AttributeValue::S(session_id.to_string()))
                     .scan_index_forward(false) // descending — max first
                     .limit(1)
                     .projection_expression(ea.event_id)
@@ -1921,12 +1918,14 @@ impl SessionStorage for DynamoDbSessionStorage {
                     }
                     Err(e) => {
                         // Check for ConditionalCheckFailedException — another writer raced
-                        let is_condition_failed = format!("{e:?}")
-                            .contains("ConditionalCheckFailed");
+                        let is_condition_failed =
+                            format!("{e:?}").contains("ConditionalCheckFailed");
                         if is_condition_failed && attempt < MAX_RETRIES - 1 {
                             warn!(
                                 "Event ID {} collision for session {} (attempt {}), retrying",
-                                next_id, session_id, attempt + 1
+                                next_id,
+                                session_id,
+                                attempt + 1
                             );
                             continue;
                         }

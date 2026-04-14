@@ -654,17 +654,27 @@ impl StreamableHttpHandler {
                                 "Tool fingerprint updated for session '{}' (tools changed since session created)",
                                 session_id
                             );
-                            let _ = self.session_storage
-                                .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
+                            let _ = self
+                                .session_storage
+                                .set_session_state(
+                                    session_id,
+                                    "mcp:tool_fingerprint",
+                                    serde_json::json!(current_fp),
+                                )
                                 .await;
 
                             // Emit notifications/tools/list_changed via the notifier
                             // (backed by SessionManager → dispatcher → guaranteed persistence)
                             if let Some(ref notifier) = self.tool_notifier {
-                                notifier.notify_tools_changed(session_id).await
-                                    .map_err(|e| SessionValidationError::NotificationFailed(
-                                        format!("session {}: {}", session_id, e)
-                                    ))?;
+                                notifier
+                                    .notify_tools_changed(session_id)
+                                    .await
+                                    .map_err(|e| {
+                                        SessionValidationError::NotificationFailed(format!(
+                                            "session {}: {}",
+                                            session_id, e
+                                        ))
+                                    })?;
                             }
                         }
                     } else {
@@ -673,8 +683,13 @@ impl StreamableHttpHandler {
                             "Session '{}' has no tool fingerprint, storing current",
                             session_id
                         );
-                        let _ = self.session_storage
-                            .set_session_state(session_id, "mcp:tool_fingerprint", serde_json::json!(current_fp))
+                        let _ = self
+                            .session_storage
+                            .set_session_state(
+                                session_id,
+                                "mcp:tool_fingerprint",
+                                serde_json::json!(current_fp),
+                            )
                             .await;
                     }
                 }

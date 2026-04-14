@@ -95,19 +95,14 @@ pub trait ServerStateStorage: Send + Sync {
     ) -> Result<(), ServerStateError>;
 
     /// List all active entity IDs for a given type.
-    async fn get_active_entities(
-        &self,
-        entity_type: &str,
-    ) -> Result<Vec<String>, ServerStateError>;
+    async fn get_active_entities(&self, entity_type: &str)
+    -> Result<Vec<String>, ServerStateError>;
 
     // ==================== Fingerprint ====================
 
     /// Get the current fingerprint for an entity type.
     /// Returns None if no fingerprint has been set.
-    async fn get_fingerprint(
-        &self,
-        entity_type: &str,
-    ) -> Result<Option<String>, ServerStateError>;
+    async fn get_fingerprint(&self, entity_type: &str) -> Result<Option<String>, ServerStateError>;
 
     /// Set the fingerprint for an entity type.
     async fn set_fingerprint(
@@ -132,4 +127,4 @@ pub trait ServerStateStorage: Send + Sync {
 }
 
 /// Type alias for boxed server state storage (mirrors SessionStorage pattern)
-pub type BoxedServerStateStorage = dyn ServerStateStorage<>;
+pub type BoxedServerStateStorage = dyn ServerStateStorage;

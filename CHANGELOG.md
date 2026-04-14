@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.32] - 2026-04-15
+
+### Fixed
+
+- **Client session retry on -32031**: `McpClient::call_tool()` (and all request methods) now detect JSON-RPC error code `-32031` ("Session not initialized") and automatically disconnect, reconnect, and retry once. Fixes cold-start race condition where `notifications/initialized` hasn't been processed before the first request arrives — especially visible on Lambda behind API Gateway.
+
+### Added
+
+- **`McpClientError::is_session_not_initialized()`**: Detects session-not-initialized errors by code (-32031) or message content.
+
 ## [0.3.31] - 2026-03-30
 
 ### Fixed

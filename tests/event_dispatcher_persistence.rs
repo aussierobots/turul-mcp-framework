@@ -11,8 +11,8 @@ use async_trait::async_trait;
 use serde_json::Value;
 use turul_http_mcp_server::StreamManager;
 use turul_mcp_builders::prelude::*;
-use turul_mcp_protocol::tools::{CallToolResult, ToolResult, ToolSchema};
 use turul_mcp_protocol::McpResult;
+use turul_mcp_protocol::tools::{CallToolResult, ToolResult, ToolSchema};
 use turul_mcp_server::session::{SessionContext, SessionEventDispatcher, SessionManager};
 use turul_mcp_session_storage::InMemorySessionStorage;
 
@@ -25,10 +25,14 @@ struct SimpleTool {
 }
 
 impl HasBaseMetadata for SimpleTool {
-    fn name(&self) -> &str { self.tool_name }
+    fn name(&self) -> &str {
+        self.tool_name
+    }
 }
 impl HasDescription for SimpleTool {
-    fn description(&self) -> Option<&str> { Some("test") }
+    fn description(&self) -> Option<&str> {
+        Some("test")
+    }
 }
 impl HasInputSchema for SimpleTool {
     fn input_schema(&self) -> &ToolSchema {
@@ -37,20 +41,30 @@ impl HasInputSchema for SimpleTool {
     }
 }
 impl HasOutputSchema for SimpleTool {
-    fn output_schema(&self) -> Option<&ToolSchema> { None }
+    fn output_schema(&self) -> Option<&ToolSchema> {
+        None
+    }
 }
 impl HasAnnotations for SimpleTool {
-    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
+    fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
+        None
+    }
 }
 impl HasToolMeta for SimpleTool {
-    fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+    fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+        None
+    }
 }
 impl HasIcons for SimpleTool {}
 impl HasExecution for SimpleTool {}
 
 #[async_trait]
 impl turul_mcp_server::McpTool for SimpleTool {
-    async fn call(&self, _args: Value, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
+    async fn call(
+        &self,
+        _args: Value,
+        _session: Option<SessionContext>,
+    ) -> McpResult<CallToolResult> {
         Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
     }
 }
@@ -85,8 +99,14 @@ impl SessionEventDispatcher for TestEventDispatcher {
 
 fn make_tools() -> HashMap<String, Arc<dyn turul_mcp_server::McpTool>> {
     let mut tools: HashMap<String, Arc<dyn turul_mcp_server::McpTool>> = HashMap::new();
-    tools.insert("alpha".to_string(), Arc::new(SimpleTool { tool_name: "alpha" }));
-    tools.insert("beta".to_string(), Arc::new(SimpleTool { tool_name: "beta" }));
+    tools.insert(
+        "alpha".to_string(),
+        Arc::new(SimpleTool { tool_name: "alpha" }),
+    );
+    tools.insert(
+        "beta".to_string(),
+        Arc::new(SimpleTool { tool_name: "beta" }),
+    );
     tools
 }
 
@@ -119,14 +139,8 @@ async fn test_deactivate_persists_to_event_storage() {
     let (session_manager, session_storage) = build_stack().await;
     let session_id = session_manager.create_session().await;
 
-    let server_state = Arc::new(
-        turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
-    );
-    let registry = turul_mcp_server::ToolRegistry::new(
-        make_tools(),
-        session_manager,
-        server_state,
-    );
+    let server_state = Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new());
+    let registry = turul_mcp_server::ToolRegistry::new(make_tools(), session_manager, server_state);
 
     // Deactivate a tool — this MUST persist the notification before returning
     registry.deactivate_tool("beta").await.unwrap();
@@ -157,14 +171,8 @@ async fn test_activate_persists_to_event_storage() {
     let (session_manager, session_storage) = build_stack().await;
     let session_id = session_manager.create_session().await;
 
-    let server_state = Arc::new(
-        turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
-    );
-    let registry = turul_mcp_server::ToolRegistry::new(
-        make_tools(),
-        session_manager,
-        server_state,
-    );
+    let server_state = Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new());
+    let registry = turul_mcp_server::ToolRegistry::new(make_tools(), session_manager, server_state);
 
     // Deactivate first, then count events after re-activate
     registry.deactivate_tool("alpha").await.unwrap();
@@ -202,14 +210,8 @@ async fn test_notification_persisted_per_session() {
     let session_a = session_manager.create_session().await;
     let session_b = session_manager.create_session().await;
 
-    let server_state = Arc::new(
-        turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
-    );
-    let registry = turul_mcp_server::ToolRegistry::new(
-        make_tools(),
-        session_manager,
-        server_state,
-    );
+    let server_state = Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new());
+    let registry = turul_mcp_server::ToolRegistry::new(make_tools(), session_manager, server_state);
 
     registry.deactivate_tool("beta").await.unwrap();
 
@@ -241,14 +243,8 @@ async fn test_stored_event_payload_is_valid_jsonrpc() {
     let (session_manager, session_storage) = build_stack().await;
     let session_id = session_manager.create_session().await;
 
-    let server_state = Arc::new(
-        turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
-    );
-    let registry = turul_mcp_server::ToolRegistry::new(
-        make_tools(),
-        session_manager,
-        server_state,
-    );
+    let server_state = Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new());
+    let registry = turul_mcp_server::ToolRegistry::new(make_tools(), session_manager, server_state);
 
     registry.deactivate_tool("alpha").await.unwrap();
 
@@ -310,14 +306,8 @@ async fn test_no_duplicate_storage_with_bridge_running() {
 
     let session_id = session_manager.create_session().await;
 
-    let server_state = Arc::new(
-        turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
-    );
-    let registry = turul_mcp_server::ToolRegistry::new(
-        make_tools(),
-        session_manager,
-        server_state,
-    );
+    let server_state = Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new());
+    let registry = turul_mcp_server::ToolRegistry::new(make_tools(), session_manager, server_state);
 
     registry.deactivate_tool("beta").await.unwrap();
 
@@ -402,14 +392,8 @@ async fn test_lambda_wiring_pattern_persists_events() {
     let session_id = session_manager.create_session().await;
 
     // Lambda creates ToolRegistry (same as production)
-    let server_state = Arc::new(
-        turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
-    );
-    let registry = turul_mcp_server::ToolRegistry::new(
-        make_tools(),
-        session_manager,
-        server_state,
-    );
+    let server_state = Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new());
+    let registry = turul_mcp_server::ToolRegistry::new(make_tools(), session_manager, server_state);
 
     // Simulate: check_for_changes() or activate/deactivate on the request path
     registry.deactivate_tool("alpha").await.unwrap();
@@ -446,19 +430,13 @@ async fn test_lambda_wiring_pattern_persists_events() {
 #[tokio::test]
 async fn test_check_for_changes_real_persistence() {
     let session_storage = Arc::new(InMemorySessionStorage::new());
-    let server_state = Arc::new(
-        turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
-    );
+    let server_state = Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new());
 
     // Instance A: write initial state to shared storage
     let sm_a = Arc::new(SessionManager::new(
         turul_mcp_protocol::ServerCapabilities::default(),
     ));
-    let registry_a = turul_mcp_server::ToolRegistry::new(
-        make_tools(),
-        sm_a,
-        server_state.clone(),
-    );
+    let registry_a = turul_mcp_server::ToolRegistry::new(make_tools(), sm_a, server_state.clone());
     registry_a.sync_from_storage().await.unwrap();
 
     // Instance A deactivates a tool → writes new fingerprint to storage
@@ -539,14 +517,8 @@ async fn test_dispatcher_failure_propagates_to_caller() {
 
     let session_id = session_manager.create_session().await;
 
-    let server_state = Arc::new(
-        turul_mcp_server_state_storage::InMemoryServerStateStorage::new(),
-    );
-    let registry = turul_mcp_server::ToolRegistry::new(
-        make_tools(),
-        session_manager,
-        server_state,
-    );
+    let server_state = Arc::new(turul_mcp_server_state_storage::InMemoryServerStateStorage::new());
+    let registry = turul_mcp_server::ToolRegistry::new(make_tools(), session_manager, server_state);
 
     // deactivate_tool MUST return Err when dispatcher fails
     let result = registry.deactivate_tool("beta").await;
@@ -615,9 +587,16 @@ async fn test_uncached_session_receives_per_session_custom_event() {
     let data = serde_json::to_value(&notification).unwrap();
 
     let result = session_manager
-        .dispatch_custom_event(&session_id, "notifications/tools/list_changed".to_string(), data)
+        .dispatch_custom_event(
+            &session_id,
+            "notifications/tools/list_changed".to_string(),
+            data,
+        )
         .await;
-    assert!(result.is_ok(), "dispatch_custom_event should succeed for uncached-but-real session");
+    assert!(
+        result.is_ok(),
+        "dispatch_custom_event should succeed for uncached-but-real session"
+    );
 
     // Event MUST be in storage
     let events = session_storage
@@ -628,7 +607,11 @@ async fn test_uncached_session_receives_per_session_custom_event() {
         .iter()
         .filter(|e| e.event_type == "notifications/tools/list_changed")
         .count();
-    assert_eq!(tool_changed, 1, "Exactly 1 event for uncached session, got {}", tool_changed);
+    assert_eq!(
+        tool_changed, 1,
+        "Exactly 1 event for uncached session, got {}",
+        tool_changed
+    );
 }
 
 /// Prove: broadcast_event() reaches sessions that exist in storage but NOT in the cache.
@@ -666,7 +649,10 @@ async fn test_broadcast_reaches_storage_backed_uncached_sessions() {
             data,
         })
         .await;
-    assert!(result.is_ok(), "broadcast_event should succeed with uncached storage sessions");
+    assert!(
+        result.is_ok(),
+        "broadcast_event should succeed with uncached storage sessions"
+    );
 
     // Event MUST be in storage for the uncached session
     let events = session_storage
@@ -677,7 +663,11 @@ async fn test_broadcast_reaches_storage_backed_uncached_sessions() {
         .iter()
         .filter(|e| e.event_type == "notifications/tools/list_changed")
         .count();
-    assert_eq!(tool_changed, 1, "Broadcast must reach uncached session, got {}", tool_changed);
+    assert_eq!(
+        tool_changed, 1,
+        "Broadcast must reach uncached session, got {}",
+        tool_changed
+    );
 }
 
 /// Prove: dispatch_custom_event for a nonexistent session succeeds (storage accepts any session_id).
@@ -700,9 +690,16 @@ async fn test_dispatch_to_nonexistent_session_succeeds() {
 
     // InMemory store_event() creates events list on the fly for any session_id
     let result = session_manager
-        .dispatch_custom_event("does-not-exist-anywhere", "notifications/tools/list_changed".to_string(), data)
+        .dispatch_custom_event(
+            "does-not-exist-anywhere",
+            "notifications/tools/list_changed".to_string(),
+            data,
+        )
         .await;
-    assert!(result.is_ok(), "dispatch_custom_event succeeds for nonexistent session (storage accepts any session_id)");
+    assert!(
+        result.is_ok(),
+        "dispatch_custom_event succeeds for nonexistent session (storage accepts any session_id)"
+    );
 }
 
 /// Prove: broadcast_event() propagates storage enumeration failure, not silent cache fallback.
@@ -719,50 +716,102 @@ async fn test_broadcast_storage_enumeration_failure_propagates() {
     impl turul_mcp_session_storage::SessionStorage for FailingListStorage {
         type Error = SessionStorageError;
 
-        async fn create_session(&self, caps: turul_mcp_protocol::ServerCapabilities) -> std::result::Result<turul_mcp_session_storage::SessionInfo, Self::Error> {
+        async fn create_session(
+            &self,
+            caps: turul_mcp_protocol::ServerCapabilities,
+        ) -> std::result::Result<turul_mcp_session_storage::SessionInfo, Self::Error> {
             self.inner.create_session(caps).await
         }
-        async fn create_session_with_id(&self, id: String, caps: turul_mcp_protocol::ServerCapabilities) -> std::result::Result<turul_mcp_session_storage::SessionInfo, Self::Error> {
+        async fn create_session_with_id(
+            &self,
+            id: String,
+            caps: turul_mcp_protocol::ServerCapabilities,
+        ) -> std::result::Result<turul_mcp_session_storage::SessionInfo, Self::Error> {
             self.inner.create_session_with_id(id, caps).await
         }
-        async fn get_session(&self, id: &str) -> std::result::Result<Option<turul_mcp_session_storage::SessionInfo>, Self::Error> {
+        async fn get_session(
+            &self,
+            id: &str,
+        ) -> std::result::Result<Option<turul_mcp_session_storage::SessionInfo>, Self::Error>
+        {
             self.inner.get_session(id).await
         }
-        async fn update_session(&self, info: turul_mcp_session_storage::SessionInfo) -> std::result::Result<(), Self::Error> {
+        async fn update_session(
+            &self,
+            info: turul_mcp_session_storage::SessionInfo,
+        ) -> std::result::Result<(), Self::Error> {
             self.inner.update_session(info).await
         }
         async fn delete_session(&self, id: &str) -> std::result::Result<bool, Self::Error> {
             self.inner.delete_session(id).await
         }
         async fn list_sessions(&self) -> std::result::Result<Vec<String>, Self::Error> {
-            Err(SessionStorageError::DatabaseError("simulated list_sessions failure".to_string()))
+            Err(SessionStorageError::DatabaseError(
+                "simulated list_sessions failure".to_string(),
+            ))
         }
         async fn session_count(&self) -> std::result::Result<usize, Self::Error> {
             self.inner.session_count().await
         }
-        async fn set_session_state(&self, id: &str, key: &str, value: serde_json::Value) -> std::result::Result<(), Self::Error> {
+        async fn set_session_state(
+            &self,
+            id: &str,
+            key: &str,
+            value: serde_json::Value,
+        ) -> std::result::Result<(), Self::Error> {
             self.inner.set_session_state(id, key, value).await
         }
-        async fn get_session_state(&self, id: &str, key: &str) -> std::result::Result<Option<serde_json::Value>, Self::Error> {
+        async fn get_session_state(
+            &self,
+            id: &str,
+            key: &str,
+        ) -> std::result::Result<Option<serde_json::Value>, Self::Error> {
             self.inner.get_session_state(id, key).await
         }
-        async fn remove_session_state(&self, id: &str, key: &str) -> std::result::Result<Option<serde_json::Value>, Self::Error> {
+        async fn remove_session_state(
+            &self,
+            id: &str,
+            key: &str,
+        ) -> std::result::Result<Option<serde_json::Value>, Self::Error> {
             self.inner.remove_session_state(id, key).await
         }
-        async fn expire_sessions(&self, older_than: std::time::SystemTime) -> std::result::Result<Vec<String>, Self::Error> {
+        async fn expire_sessions(
+            &self,
+            older_than: std::time::SystemTime,
+        ) -> std::result::Result<Vec<String>, Self::Error> {
             self.inner.expire_sessions(older_than).await
         }
-        async fn store_event(&self, session_id: &str, event: SseEvent) -> std::result::Result<SseEvent, Self::Error> {
+        async fn store_event(
+            &self,
+            session_id: &str,
+            event: SseEvent,
+        ) -> std::result::Result<SseEvent, Self::Error> {
             self.inner.store_event(session_id, event).await
         }
-        async fn get_events_after(&self, session_id: &str, after_event_id: u64) -> std::result::Result<Vec<SseEvent>, Self::Error> {
-            self.inner.get_events_after(session_id, after_event_id).await
+        async fn get_events_after(
+            &self,
+            session_id: &str,
+            after_event_id: u64,
+        ) -> std::result::Result<Vec<SseEvent>, Self::Error> {
+            self.inner
+                .get_events_after(session_id, after_event_id)
+                .await
         }
-        async fn get_recent_events(&self, session_id: &str, limit: usize) -> std::result::Result<Vec<SseEvent>, Self::Error> {
+        async fn get_recent_events(
+            &self,
+            session_id: &str,
+            limit: usize,
+        ) -> std::result::Result<Vec<SseEvent>, Self::Error> {
             self.inner.get_recent_events(session_id, limit).await
         }
-        async fn delete_events_before(&self, session_id: &str, before_event_id: u64) -> std::result::Result<u64, Self::Error> {
-            self.inner.delete_events_before(session_id, before_event_id).await
+        async fn delete_events_before(
+            &self,
+            session_id: &str,
+            before_event_id: u64,
+        ) -> std::result::Result<u64, Self::Error> {
+            self.inner
+                .delete_events_before(session_id, before_event_id)
+                .await
         }
         async fn event_count(&self) -> std::result::Result<usize, Self::Error> {
             self.inner.event_count().await
@@ -770,11 +819,14 @@ async fn test_broadcast_storage_enumeration_failure_propagates() {
         async fn maintenance(&self) -> std::result::Result<(), Self::Error> {
             self.inner.maintenance().await
         }
-        fn backend_name(&self) -> &'static str { "failing-test" }
+        fn backend_name(&self) -> &'static str {
+            "failing-test"
+        }
     }
 
     let inner = Arc::new(InMemorySessionStorage::new());
-    let failing_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> = Arc::new(FailingListStorage { inner });
+    let failing_storage: Arc<turul_mcp_session_storage::BoxedSessionStorage> =
+        Arc::new(FailingListStorage { inner });
 
     let session_manager = Arc::new(SessionManager::with_storage(
         failing_storage,
@@ -799,9 +851,14 @@ async fn test_broadcast_storage_enumeration_failure_propagates() {
         })
         .await;
 
-    assert!(result.is_err(), "broadcast_event must propagate storage enumeration failure");
     assert!(
-        result.unwrap_err().contains("simulated list_sessions failure"),
+        result.is_err(),
+        "broadcast_event must propagate storage enumeration failure"
+    );
+    assert!(
+        result
+            .unwrap_err()
+            .contains("simulated list_sessions failure"),
         "Error must surface the storage failure"
     );
 }

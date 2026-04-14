@@ -240,7 +240,11 @@ async fn test_object_tool_execution_and_schema() {
     if let Some(structured) = response.structured_content {
         let obj = structured.as_object().unwrap();
         // With output = CustomResult, field name is camelCase of struct name
-        assert!(obj.contains_key("customResult"), "Expected 'customResult' field, got keys: {:?}", obj.keys().collect::<Vec<_>>());
+        assert!(
+            obj.contains_key("customResult"),
+            "Expected 'customResult' field, got keys: {:?}",
+            obj.keys().collect::<Vec<_>>()
+        );
         let expected_result = json!({
             "message": "test",
             "count": 42,

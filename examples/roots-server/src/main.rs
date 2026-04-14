@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("roots-server")
-        .version("0.3.31")
+        .version("0.3.32")
         .title("MCP Roots Test Server")
         .instructions("Test server demonstrating MCP roots functionality for file system access control and directory discovery. Provides root directories for E2E testing.")
         // Add root directories the server can access

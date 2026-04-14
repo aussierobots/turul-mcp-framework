@@ -81,9 +81,10 @@ struct ActivateMultiplyTool {}
 impl ActivateMultiplyTool {
     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let registry = REGISTRY.get().expect("Registry not initialized");
-        registry.activate_tool("multiply").await.map_err(|e| {
-            turul_mcp_protocol::McpError::ToolExecutionError(e.to_string())
-        })?;
+        registry
+            .activate_tool("multiply")
+            .await
+            .map_err(|e| turul_mcp_protocol::McpError::ToolExecutionError(e.to_string()))?;
         // Swap: hide activate, show deactivate
         let _ = registry.deactivate_tool("activate_multiply").await;
         let _ = registry.activate_tool("deactivate_multiply").await;
@@ -103,9 +104,10 @@ struct DeactivateMultiplyTool {}
 impl DeactivateMultiplyTool {
     async fn execute(&self, _session: Option<SessionContext>) -> McpResult<CallToolResult> {
         let registry = REGISTRY.get().expect("Registry not initialized");
-        registry.deactivate_tool("multiply").await.map_err(|e| {
-            turul_mcp_protocol::McpError::ToolExecutionError(e.to_string())
-        })?;
+        registry
+            .deactivate_tool("multiply")
+            .await
+            .map_err(|e| turul_mcp_protocol::McpError::ToolExecutionError(e.to_string()))?;
         // Swap: hide deactivate, show activate
         let _ = registry.deactivate_tool("deactivate_multiply").await;
         let _ = registry.activate_tool("activate_multiply").await;
@@ -134,7 +136,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("=== Dynamic Tools Server ===");
     info!("Endpoint: http://127.0.0.1:{}/mcp", port);
-    info!("multiply starts {}", if multiply_active { "active" } else { "inactive" });
+    info!(
+        "multiply starts {}",
+        if multiply_active {
+            "active"
+        } else {
+            "inactive"
+        }
+    );
 
     let server = McpServer::builder()
         .name("dynamic-tools-demo")

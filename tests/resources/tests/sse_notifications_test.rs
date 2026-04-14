@@ -25,7 +25,10 @@ async fn test_sse_connection_establishment() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     // Test basic SSE connection
     let events = client
@@ -72,7 +75,10 @@ async fn test_sse_resource_list_changed_notification() {
         }))
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     // Subscribe to resources that might trigger list changes
     let subscribe_result = client
@@ -123,7 +129,10 @@ async fn test_sse_resource_subscription_notifications() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     // Subscribe to a subscribable resource
     let _subscribe_result = client.subscribe_resource("subscribe://updates").await;
@@ -169,13 +178,19 @@ async fn test_sse_session_isolation() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize client1");
-    client1.send_initialized_notification().await.expect("Failed to send initialized");
+    client1
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     client2
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize client2");
-    client2.send_initialized_notification().await.expect("Failed to send initialized");
+    client2
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     // Verify they have different session IDs
     assert_ne!(client1.session_id(), client2.session_id());
@@ -234,7 +249,10 @@ async fn test_sse_notification_format_compliance() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     // Subscribe to trigger potential notifications
     let _subscribe_result = client.subscribe_resource("notify://trigger").await;
@@ -304,7 +322,10 @@ async fn test_sse_with_multiple_resource_operations() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     // Perform multiple resource operations that might trigger notifications
     let operations = vec![
@@ -363,7 +384,10 @@ async fn test_sse_error_resource_notifications() {
         .initialize_with_capabilities(TestFixtures::resource_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     // Try to subscribe to an error resource
     let _error_result = client.subscribe_resource("error://not_found").await;

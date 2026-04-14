@@ -441,6 +441,35 @@ impl McpClient {
                         continue;
                     }
 
+                    // JSON-RPC -32031: server rejected because notifications/initialized
+                    // hasn't been processed yet. Disconnect, full reconnect, retry once.
+                    if e.is_session_not_initialized() {
+                        warn!(
+                            "Session not initialized (code -32031) — \
+                             disconnecting and reconnecting"
+                        );
+                        // Full reconnect: disconnect old session, connect fresh
+                        if let Err(dc_err) = self.disconnect().await {
+                            warn!(error = %dc_err, "Disconnect during session retry failed");
+                        }
+                        self.session.reset().await;
+                        if let Err(reconnect_err) = self.connect().await {
+                            warn!(error = %reconnect_err, "Reconnect after -32031 failed");
+                            return Err(e);
+                        }
+                        // Retry the original request exactly once
+                        return match self.send_request_raw(request).await {
+                            Ok(response) => {
+                                self.session.update_activity().await;
+                                Ok(response)
+                            }
+                            Err(retry_err) => {
+                                warn!(error = %retry_err, "Retry after reconnect also failed");
+                                Err(retry_err)
+                            }
+                        };
+                    }
+
                     if !e.is_retryable() || !self.config.retry.should_retry(attempt + 1) {
                         return Err(e);
                     }
@@ -2444,6 +2473,446 @@ mod tests {
         // Subsequent list_tools should return new cache
         let tools3 = client.list_tools().await.unwrap();
         assert_eq!(tools3.len(), 2);
+    }
+
+    // ── ReconnectableMockTransport ─────────────────────────────────────
+    //
+    // A mock that supports multiple connect()/disconnect() cycles by
+    // advertising server_events: false (skips event listener in connect()).
+    // Used for testing the -32031 session retry path.
+
+    struct ReconnectableMockTransport {
+        init_responses: Arc<std::sync::Mutex<VecDeque<McpClientResult<TransportResponse>>>>,
+        request_responses: Arc<std::sync::Mutex<VecDeque<McpClientResult<Value>>>>,
+        set_session_ids: Arc<std::sync::Mutex<Vec<String>>>,
+        clear_count: Arc<AtomicU32>,
+        connect_count: Arc<AtomicU32>,
+        disconnect_count: Arc<AtomicU32>,
+        connected: bool,
+    }
+
+    impl ReconnectableMockTransport {
+        fn new() -> Self {
+            Self {
+                init_responses: Arc::new(std::sync::Mutex::new(VecDeque::new())),
+                request_responses: Arc::new(std::sync::Mutex::new(VecDeque::new())),
+                set_session_ids: Arc::new(std::sync::Mutex::new(Vec::new())),
+                clear_count: Arc::new(AtomicU32::new(0)),
+                connect_count: Arc::new(AtomicU32::new(0)),
+                disconnect_count: Arc::new(AtomicU32::new(0)),
+                connected: false,
+            }
+        }
+
+        fn push_init_response(&mut self, resp: McpClientResult<TransportResponse>) {
+            self.init_responses.lock().unwrap().push_back(resp);
+        }
+
+        fn push_request_response(&mut self, resp: McpClientResult<Value>) {
+            self.request_responses.lock().unwrap().push_back(resp);
+        }
+    }
+
+    #[async_trait]
+    impl crate::transport::Transport for ReconnectableMockTransport {
+        fn transport_type(&self) -> TransportType {
+            TransportType::Http
+        }
+
+        fn capabilities(&self) -> TransportCapabilities {
+            TransportCapabilities {
+                streaming: false,
+                bidirectional: false,
+                server_events: false, // No event listener — supports multiple connect cycles
+                max_message_size: None,
+                persistent: false,
+            }
+        }
+
+        async fn connect(&mut self) -> McpClientResult<()> {
+            self.connect_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.connected = true;
+            Ok(())
+        }
+
+        async fn disconnect(&mut self) -> McpClientResult<()> {
+            self.disconnect_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            self.connected = false;
+            Ok(())
+        }
+
+        fn is_connected(&self) -> bool {
+            self.connected
+        }
+
+        async fn send_request(&mut self, _request: Value) -> McpClientResult<Value> {
+            self.request_responses
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| {
+                    Err(McpClientError::generic(
+                        "ReconnectableMockTransport: no more request responses queued",
+                    ))
+                })
+        }
+
+        async fn send_request_with_headers(
+            &mut self,
+            _request: Value,
+        ) -> McpClientResult<TransportResponse> {
+            self.init_responses
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| {
+                    Err(McpClientError::generic(
+                        "ReconnectableMockTransport: no more init responses queued",
+                    ))
+                })
+        }
+
+        async fn send_notification(&mut self, _notification: Value) -> McpClientResult<()> {
+            Ok(())
+        }
+
+        async fn send_delete(&mut self, _session_id: &str) -> McpClientResult<()> {
+            Ok(())
+        }
+
+        fn set_session_id(&mut self, session_id: String) {
+            self.set_session_ids.lock().unwrap().push(session_id);
+        }
+
+        fn clear_session_id(&mut self) {
+            self.clear_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+
+        async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver> {
+            // Should never be called since server_events is false
+            Err(McpClientError::generic("No event listener"))
+        }
+
+        fn connection_info(&self) -> ConnectionInfo {
+            ConnectionInfo {
+                transport_type: TransportType::Http,
+                endpoint: "reconnectable-mock://test".to_string(),
+                connected: self.connected,
+                capabilities: self.capabilities(),
+                metadata: Value::Null,
+            }
+        }
+
+        fn statistics(&self) -> TransportStatistics {
+            TransportStatistics::default()
+        }
+    }
+
+    // ── Session not-initialized (-32031) retry tests ──────────────────
+
+    /// Test: -32031 error triggers disconnect + reconnect + single retry.
+    /// Simulates the race condition where notifications/initialized hasn't
+    /// been processed when the first tool call arrives.
+    #[tokio::test]
+    async fn test_session_not_initialized_triggers_reconnect_and_retry() {
+        let mut transport = ReconnectableMockTransport::new();
+
+        // 1. Initial connect → initialize succeeds with session "AAA"
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-AAA"),
+            "2025-11-25",
+        )));
+
+        // 2. First call_tool → server returns -32031 (initialized not processed yet)
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "error": {
+                "code": -32031,
+                "message": "Session error: Session not initialized - client must send notifications/initialized first (strict lifecycle mode)"
+            }
+        })));
+
+        // 3. Reconnect → initialize succeeds with session "BBB"
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-BBB"),
+            "2025-11-25",
+        )));
+
+        // 4. Retried call_tool → succeeds
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_2",
+            "result": {
+                "content": [{"type": "text", "text": "42"}],
+                "isError": false
+            }
+        })));
+
+        let connect_count = transport.connect_count.clone();
+        let disconnect_count = transport.disconnect_count.clone();
+        let set_ids = transport.set_session_ids.clone();
+
+        let client = McpClient::new(Box::new(transport), fast_retry_config(3));
+        client.connect().await.unwrap();
+
+        // This should: fail with -32031 → disconnect → reconnect → retry → succeed
+        let result = client.call_tool("add", json!({"a": 1, "b": 2})).await;
+        assert!(
+            result.is_ok(),
+            "call_tool should succeed after -32031 reconnect: {:?}",
+            result.err()
+        );
+
+        let call_result = result.unwrap();
+        assert!(!call_result.is_error.unwrap_or(true));
+
+        // Verify disconnect + reconnect happened
+        // connect_count: 1 (initial) + 1 (reconnect) = 2
+        assert_eq!(
+            connect_count.load(Ordering::SeqCst),
+            2,
+            "Should have connected twice (initial + reconnect)"
+        );
+        assert_eq!(
+            disconnect_count.load(Ordering::SeqCst),
+            1,
+            "Should have disconnected once during recovery"
+        );
+
+        // Verify new session ID was set
+        let ids = set_ids.lock().unwrap();
+        assert!(
+            ids.contains(&"session-BBB".to_string()),
+            "New session ID 'session-BBB' should be set after reconnect, got: {:?}",
+            *ids
+        );
+    }
+
+    /// Test: -32031 reconnect only retries once — if retry also fails,
+    /// the retry error is returned (not the original -32031).
+    #[tokio::test]
+    async fn test_session_not_initialized_retry_fails_returns_retry_error() {
+        let mut transport = ReconnectableMockTransport::new();
+
+        // 1. Initial connect
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-AAA"),
+            "2025-11-25",
+        )));
+
+        // 2. First request → -32031
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "error": {
+                "code": -32031,
+                "message": "Session error: Session not initialized"
+            }
+        })));
+
+        // 3. Reconnect succeeds
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-BBB"),
+            "2025-11-25",
+        )));
+
+        // 4. Retry ALSO fails with -32031 (persistent issue)
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_2",
+            "error": {
+                "code": -32031,
+                "message": "Session error: Session not initialized (still)"
+            }
+        })));
+
+        let client = McpClient::new(Box::new(transport), fast_retry_config(3));
+        client.connect().await.unwrap();
+
+        let result = client.call_tool("add", json!({})).await;
+        assert!(result.is_err(), "Should fail after retry also fails");
+
+        let err = result.unwrap_err();
+        assert_eq!(
+            err.error_code(),
+            Some(-32031),
+            "Should return the retry's error"
+        );
+    }
+
+    /// Test: -32031 when reconnect itself fails — original error is returned.
+    #[tokio::test]
+    async fn test_session_not_initialized_reconnect_fails_returns_original_error() {
+        let mut transport = ReconnectableMockTransport::new();
+
+        // 1. Initial connect
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-AAA"),
+            "2025-11-25",
+        )));
+
+        // 2. Request → -32031
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "error": {
+                "code": -32031,
+                "message": "Session error: Session not initialized"
+            }
+        })));
+
+        // 3. Reconnect FAILS (no init response queued → will error)
+
+        let client = McpClient::new(Box::new(transport), fast_retry_config(3));
+        client.connect().await.unwrap();
+
+        let result = client.call_tool("add", json!({})).await;
+        assert!(result.is_err(), "Should fail when reconnect fails");
+
+        // Original -32031 error is returned
+        let err = result.unwrap_err();
+        assert!(
+            err.is_session_not_initialized(),
+            "Should return original -32031 error when reconnect fails, got: {}",
+            err
+        );
+    }
+
+    /// Test: "Session not initialized" message without code -32031 is still detected.
+    #[tokio::test]
+    async fn test_session_not_initialized_detected_by_message() {
+        let mut transport = ReconnectableMockTransport::new();
+
+        // 1. Initial connect
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-AAA"),
+            "2025-11-25",
+        )));
+
+        // 2. Request → error with different code but matching message
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "error": {
+                "code": -32000,
+                "message": "Session not initialized - client must send notifications/initialized first"
+            }
+        })));
+
+        // 3. Reconnect
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-BBB"),
+            "2025-11-25",
+        )));
+
+        // 4. Retry succeeds
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_2",
+            "result": { "tools": [] }
+        })));
+
+        let client = McpClient::new(Box::new(transport), fast_retry_config(3));
+        client.connect().await.unwrap();
+
+        let result = client.list_tools().await;
+        assert!(
+            result.is_ok(),
+            "Message-based detection should trigger reconnect: {:?}",
+            result.err()
+        );
+    }
+
+    /// Test: Non-session errors (e.g. -32602) do NOT trigger reconnect.
+    #[tokio::test]
+    async fn test_non_session_error_does_not_trigger_reconnect() {
+        let mut transport = ReconnectableMockTransport::new();
+
+        // 1. Initial connect
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-AAA"),
+            "2025-11-25",
+        )));
+
+        // 2. Request → -32602 (invalid params — not a session error)
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "error": {
+                "code": -32602,
+                "message": "Invalid params: missing 'name'"
+            }
+        })));
+
+        let connect_count = transport.connect_count.clone();
+
+        let client = McpClient::new(Box::new(transport), fast_retry_config(1));
+        client.connect().await.unwrap();
+
+        let result = client.call_tool("add", json!({})).await;
+        assert!(result.is_err());
+
+        // Should NOT have reconnected — only the initial connect
+        assert_eq!(
+            connect_count.load(Ordering::SeqCst),
+            1,
+            "Non-session errors must not trigger reconnect"
+        );
+    }
+
+    /// Test: call_tool_with_task also benefits from -32031 retry
+    /// (it uses send_request_internal internally).
+    #[tokio::test]
+    async fn test_call_tool_with_task_also_retries_on_session_error() {
+        let mut transport = ReconnectableMockTransport::new();
+
+        // 1. Initial connect
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-AAA"),
+            "2025-11-25",
+        )));
+
+        // 2. call_tool_with_task → -32031
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_1",
+            "error": {
+                "code": -32031,
+                "message": "Session error: Session not initialized"
+            }
+        })));
+
+        // 3. Reconnect
+        transport.push_init_response(Ok(StatefulMockTransport::make_init_response(
+            Some("session-BBB"),
+            "2025-11-25",
+        )));
+
+        // 4. Retry succeeds (sync tool result)
+        transport.push_request_response(Ok(json!({
+            "jsonrpc": "2.0",
+            "id": "req_2",
+            "result": {
+                "content": [{"type": "text", "text": "done"}],
+                "isError": false
+            }
+        })));
+
+        let client = McpClient::new(Box::new(transport), fast_retry_config(3));
+        client.connect().await.unwrap();
+
+        let result = client
+            .call_tool_with_task("slow_add", json!({"a": 1}), None)
+            .await;
+        assert!(
+            result.is_ok(),
+            "call_tool_with_task should recover from -32031: {:?}",
+            result.err()
+        );
     }
 
     /// Test: invalidate_caches() clears all caches.

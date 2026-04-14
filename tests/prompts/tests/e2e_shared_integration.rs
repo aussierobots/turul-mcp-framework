@@ -18,7 +18,10 @@ async fn test_prompts_initialization_with_shared_utils() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     TestFixtures::verify_initialization_response(&result);
     assert!(client.session_id().is_some());
@@ -37,7 +40,10 @@ async fn test_prompts_list_with_shared_utils() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     let result = client.list_prompts().await.expect("Failed to list prompts");
 
@@ -68,7 +74,10 @@ async fn test_simple_prompt_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     let result = client
         .get_prompt("simple_prompt", None)
@@ -88,7 +97,10 @@ async fn test_string_args_prompt_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     let arguments = TestFixtures::create_string_args();
     let result = client
@@ -117,7 +129,10 @@ async fn test_number_args_prompt_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     let arguments = TestFixtures::create_number_args();
     let result = client
@@ -146,7 +161,10 @@ async fn test_boolean_args_prompt_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     let arguments = TestFixtures::create_boolean_args();
     let result = client
@@ -177,7 +195,10 @@ async fn test_multi_message_prompt_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     let mut arguments = std::collections::HashMap::new();
     arguments.insert(
@@ -218,7 +239,10 @@ async fn test_session_consistency_prompts() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     SessionTestUtils::verify_session_consistency(&client)
         .await
@@ -235,7 +259,10 @@ async fn test_session_aware_prompt_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     SessionTestUtils::test_session_aware_prompt(&client)
         .await
@@ -252,7 +279,10 @@ async fn test_template_prompt_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     let arguments = TestFixtures::create_template_args();
 
@@ -283,7 +313,10 @@ async fn test_empty_messages_prompt_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     let result = client
         .get_prompt("empty_messages_prompt", None)
@@ -313,7 +346,10 @@ async fn test_validation_failure_prompt_with_shared_utils() {
     let mut client = McpTestClient::new(server.port());
 
     client.initialize().await.expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     // Try to get validation failure prompt without required arguments
     let result = client
@@ -343,7 +379,10 @@ async fn test_sse_notifications_prompts_with_shared_utils() {
         .initialize_with_capabilities(TestFixtures::prompts_capabilities())
         .await
         .expect("Failed to initialize");
-    client.send_initialized_notification().await.expect("Failed to send initialized");
+    client
+        .send_initialized_notification()
+        .await
+        .expect("Failed to send initialized");
 
     // Test SSE stream (simplified - real test would trigger changes)
     let events = client

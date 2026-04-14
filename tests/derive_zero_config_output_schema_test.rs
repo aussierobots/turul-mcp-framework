@@ -16,7 +16,10 @@ use turul_mcp_protocol::McpResult;
 // --- Test 1: Zero-config derive tool has NO output schema ---
 
 #[derive(McpTool, Clone, Default)]
-#[tool(name = "zero_config_tool", description = "Tool without explicit output type")]
+#[tool(
+    name = "zero_config_tool",
+    description = "Tool without explicit output type"
+)]
 struct ZeroConfigTool {
     a: f64,
     b: f64,

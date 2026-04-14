@@ -408,4 +408,3 @@ impl NotificationBroadcaster for StreamManagerNotificationBroadcaster {
 
 /// Shared NotificationBroadcaster type alias for use across the turul-http-mcp-server crate
 pub type SharedNotificationBroadcaster = Arc<dyn NotificationBroadcaster + Send + Sync>;
-

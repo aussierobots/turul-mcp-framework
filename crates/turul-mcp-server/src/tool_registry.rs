@@ -196,9 +196,8 @@ impl ToolRegistry {
         let notification = turul_mcp_protocol::JsonRpcNotification::new(
             "notifications/tools/list_changed".to_string(),
         );
-        let data = serde_json::to_value(&notification).unwrap_or_else(|e| {
-            panic!("JsonRpcNotification serialization must not fail: {}", e)
-        });
+        let data = serde_json::to_value(&notification)
+            .unwrap_or_else(|e| panic!("JsonRpcNotification serialization must not fail: {}", e));
         self.session_manager
             .broadcast_event(crate::session::SessionEvent::Custom {
                 event_type: "notifications/tools/list_changed".to_string(),
@@ -307,7 +306,11 @@ impl ToolRegistry {
             metadata: None,
             updated_at: chrono::Utc::now().to_rfc3339(),
         };
-        if let Err(e) = self.server_state.set_entity_state("tools", name, entity).await {
+        if let Err(e) = self
+            .server_state
+            .set_entity_state("tools", name, entity)
+            .await
+        {
             warn!("Failed to persist tool state to storage: {}", e);
         }
         // Update fingerprint in storage
@@ -340,7 +343,10 @@ impl ToolRegistry {
         }
 
         // Cache expired — check storage
-        let stored_fp = self.server_state.get_fingerprint("tools").await
+        let stored_fp = self
+            .server_state
+            .get_fingerprint("tools")
+            .await
             .map_err(|e| ToolRegistryError::StorageError(e.to_string()))?;
 
         // Update last check timestamp
@@ -350,7 +356,10 @@ impl ToolRegistry {
 
         match stored_fp {
             Some(fp) if fp != local_fp => {
-                debug!("Dynamic: external tool change detected (stored={}, local={})", fp, local_fp);
+                debug!(
+                    "Dynamic: external tool change detected (stored={}, local={})",
+                    fp, local_fp
+                );
                 self.load_state_from_storage().await?;
                 self.broadcast_notification().await?;
                 debug!("Dynamic: tool state reloaded and clients notified");
@@ -387,18 +396,13 @@ impl ToolRegistry {
                                 stored_fp, local_fp
                             );
                             if let Err(e) = registry.load_state_from_storage().await {
-                                warn!(
-                                    "Failed to reload tool state from storage: {}",
-                                    e
-                                );
+                                warn!("Failed to reload tool state from storage: {}", e);
                                 continue;
                             }
                             if let Err(e) = registry.broadcast_notification().await {
                                 warn!("Failed to persist tool change notification: {}", e);
                             }
-                            debug!(
-                                "Dynamic: tool state reloaded and clients notified"
-                            );
+                            debug!("Dynamic: tool state reloaded and clients notified");
                         }
                     }
                     Ok(None) => {
@@ -429,7 +433,9 @@ impl ToolRegistry {
 /// Errors from tool registry operations.
 #[derive(Debug, thiserror::Error)]
 pub enum ToolRegistryError {
-    #[error("Tool '{0}' is not a compiled tool — cannot activate/deactivate tools that were not registered at build time")]
+    #[error(
+        "Tool '{0}' is not a compiled tool — cannot activate/deactivate tools that were not registered at build time"
+    )]
     NotCompiled(String),
 
     #[error("Storage error: {0}")]
@@ -456,8 +462,8 @@ mod tests {
     use async_trait::async_trait;
     use serde_json::Value;
     use turul_mcp_builders::prelude::*;
-    use turul_mcp_protocol::tools::{CallToolResult, ToolResult, ToolSchema};
     use turul_mcp_protocol::McpResult;
+    use turul_mcp_protocol::tools::{CallToolResult, ToolResult, ToolSchema};
 
     // Minimal test tool
     struct TestDynTool {
@@ -514,37 +520,62 @@ mod tests {
         schema: turul_mcp_protocol::tools::ToolSchema,
     }
     impl HasBaseMetadata for SchemaTestTool {
-        fn name(&self) -> &str { self.tool_name }
+        fn name(&self) -> &str {
+            self.tool_name
+        }
     }
     impl HasDescription for SchemaTestTool {
-        fn description(&self) -> Option<&str> { Some("schema test tool") }
+        fn description(&self) -> Option<&str> {
+            Some("schema test tool")
+        }
     }
     impl HasInputSchema for SchemaTestTool {
-        fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema { &self.schema }
+        fn input_schema(&self) -> &turul_mcp_protocol::tools::ToolSchema {
+            &self.schema
+        }
     }
     impl HasOutputSchema for SchemaTestTool {
-        fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> { None }
+        fn output_schema(&self) -> Option<&turul_mcp_protocol::tools::ToolSchema> {
+            None
+        }
     }
     impl HasAnnotations for SchemaTestTool {
-        fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> { None }
+        fn annotations(&self) -> Option<&turul_mcp_protocol::tools::ToolAnnotations> {
+            None
+        }
     }
     impl HasToolMeta for SchemaTestTool {
-        fn tool_meta(&self) -> Option<&HashMap<String, Value>> { None }
+        fn tool_meta(&self) -> Option<&HashMap<String, Value>> {
+            None
+        }
     }
     impl HasIcons for SchemaTestTool {}
     impl HasExecution for SchemaTestTool {}
     #[async_trait]
     impl McpTool for SchemaTestTool {
-        async fn call(&self, _args: Value, _session: Option<crate::session::SessionContext>) -> McpResult<CallToolResult> {
+        async fn call(
+            &self,
+            _args: Value,
+            _session: Option<crate::session::SessionContext>,
+        ) -> McpResult<CallToolResult> {
             Ok(CallToolResult::success(vec![ToolResult::text("ok")]))
         }
     }
 
     fn test_tools() -> HashMap<String, Arc<dyn McpTool>> {
         let mut tools: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
-        tools.insert("alpha".to_string(), Arc::new(TestDynTool { tool_name: "alpha" }));
-        tools.insert("beta".to_string(), Arc::new(TestDynTool { tool_name: "beta" }));
-        tools.insert("gamma".to_string(), Arc::new(TestDynTool { tool_name: "gamma" }));
+        tools.insert(
+            "alpha".to_string(),
+            Arc::new(TestDynTool { tool_name: "alpha" }),
+        );
+        tools.insert(
+            "beta".to_string(),
+            Arc::new(TestDynTool { tool_name: "beta" }),
+        );
+        tools.insert(
+            "gamma".to_string(),
+            Arc::new(TestDynTool { tool_name: "gamma" }),
+        );
         tools
     }
 
@@ -613,7 +644,10 @@ mod tests {
         let registry = test_registry();
         let result = registry.activate_tool("nonexistent").await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), ToolRegistryError::NotCompiled(_)));
+        assert!(matches!(
+            result.unwrap_err(),
+            ToolRegistryError::NotCompiled(_)
+        ));
     }
 
     #[tokio::test]
@@ -646,7 +680,10 @@ mod tests {
         registry.deactivate_tool("beta").await.unwrap();
         let fp_after = registry.fingerprint().await;
 
-        assert_ne!(fp_before, fp_after, "Fingerprint must change when active set changes");
+        assert_ne!(
+            fp_before, fp_after,
+            "Fingerprint must change when active set changes"
+        );
     }
 
     #[tokio::test]
@@ -715,7 +752,8 @@ mod tests {
         let mut found_notification = false;
         // Drain all events (there may be multiple from the broadcast to each session)
         while let Ok((recv_session_id, event)) =
-            tokio::time::timeout(std::time::Duration::from_millis(100), receiver.recv()).await
+            tokio::time::timeout(std::time::Duration::from_millis(100), receiver.recv())
+                .await
                 .unwrap_or(Err(tokio::sync::broadcast::error::RecvError::Closed))
         {
             if let crate::session::SessionEvent::Custom { event_type, .. } = &event {
@@ -747,13 +785,11 @@ mod tests {
         let registry = ToolRegistry::new(test_tools(), session_manager, test_storage());
         registry.deactivate_tool("alpha").await.unwrap();
 
-        let (_sid, event) = tokio::time::timeout(
-            std::time::Duration::from_millis(100),
-            receiver.recv(),
-        )
-        .await
-        .expect("Timeout waiting for event")
-        .expect("Channel closed");
+        let (_sid, event) =
+            tokio::time::timeout(std::time::Duration::from_millis(100), receiver.recv())
+                .await
+                .expect("Timeout waiting for event")
+                .expect("Channel closed");
 
         if let crate::session::SessionEvent::Custom { event_type, data } = event {
             assert_eq!(event_type, "notifications/tools/list_changed");
@@ -840,8 +876,15 @@ mod tests {
         assert!(active.is_empty(), "All tools deactivated → empty list");
 
         let fp_empty = registry.fingerprint().await;
-        assert_ne!(fp_full, fp_empty, "Empty set fingerprint differs from full set");
-        assert_eq!(fp_empty.len(), 16, "Empty set still produces valid fingerprint");
+        assert_ne!(
+            fp_full, fp_empty,
+            "Empty set fingerprint differs from full set"
+        );
+        assert_eq!(
+            fp_empty.len(),
+            16,
+            "Empty set still produces valid fingerprint"
+        );
 
         // get_tool returns None for all
         assert!(registry.get_tool("alpha").await.is_none());
@@ -872,339 +915,335 @@ mod tests {
     // Storage-backed coordination tests
     // ===================================================================
 
-        #[tokio::test]
-        async fn test_sync_from_storage_initializes_empty_storage() {
-            let storage = test_storage();
-            let registry = ToolRegistry::new(
-                test_tools(),
-                test_session_manager(),
-                storage.clone(),
-            );
+    #[tokio::test]
+    async fn test_sync_from_storage_initializes_empty_storage() {
+        let storage = test_storage();
+        let registry = ToolRegistry::new(test_tools(), test_session_manager(), storage.clone());
 
-            let result = registry.sync_from_storage().await.unwrap();
-            assert!(matches!(result, SyncResult::InitializedStorage));
+        let result = registry.sync_from_storage().await.unwrap();
+        assert!(matches!(result, SyncResult::InitializedStorage));
 
-            // Storage should now have the fingerprint
-            let stored_fp = storage.get_fingerprint("tools").await.unwrap();
-            assert!(stored_fp.is_some());
-            assert_eq!(stored_fp.unwrap(), registry.fingerprint().await);
-        }
+        // Storage should now have the fingerprint
+        let stored_fp = storage.get_fingerprint("tools").await.unwrap();
+        assert!(stored_fp.is_some());
+        assert_eq!(stored_fp.unwrap(), registry.fingerprint().await);
+    }
 
-        #[tokio::test]
-        async fn test_sync_from_storage_in_sync() {
-            let storage = test_storage();
-            let registry = ToolRegistry::new(
-                test_tools(),
-                test_session_manager(),
-                storage.clone(),
-            );
+    #[tokio::test]
+    async fn test_sync_from_storage_in_sync() {
+        let storage = test_storage();
+        let registry = ToolRegistry::new(test_tools(), test_session_manager(), storage.clone());
 
-            // First sync initializes storage
-            registry.sync_from_storage().await.unwrap();
+        // First sync initializes storage
+        registry.sync_from_storage().await.unwrap();
 
-            // Second sync with same tools should be in sync
-            let registry2 = ToolRegistry::new(
-                test_tools(),
-                test_session_manager(),
-                storage.clone(),
-            );
-            let result = registry2.sync_from_storage().await.unwrap();
-            assert!(matches!(result, SyncResult::InSync));
-        }
+        // Second sync with same tools should be in sync
+        let registry2 = ToolRegistry::new(test_tools(), test_session_manager(), storage.clone());
+        let result = registry2.sync_from_storage().await.unwrap();
+        assert!(matches!(result, SyncResult::InSync));
+    }
 
-        /// Regression: two independently constructed registries with the same logical
-        /// tools (but different HashMap insertion orders) must produce the same fingerprint
-        /// and sync_from_storage() must NOT detect a mismatch. This is the registry-level
-        /// proof for the Lambda production bug where non-deterministic HashMap serialization
-        /// caused every cold start to trigger a spurious fingerprint mismatch.
-        #[tokio::test]
-        async fn test_independent_registries_same_tools_no_spurious_mismatch() {
-            use turul_mcp_protocol::schema::JsonSchema;
-            use turul_mcp_protocol::tools::ToolSchema;
+    /// Regression: two independently constructed registries with the same logical
+    /// tools (but different HashMap insertion orders) must produce the same fingerprint
+    /// and sync_from_storage() must NOT detect a mismatch. This is the registry-level
+    /// proof for the Lambda production bug where non-deterministic HashMap serialization
+    /// caused every cold start to trigger a spurious fingerprint mismatch.
+    #[tokio::test]
+    async fn test_independent_registries_same_tools_no_spurious_mismatch() {
+        use turul_mcp_protocol::schema::JsonSchema;
+        use turul_mcp_protocol::tools::ToolSchema;
 
-            // Build tools with HashMap properties in order A
-            let mut props_a = HashMap::new();
-            props_a.insert("name".to_string(), JsonSchema::string());
-            props_a.insert("age".to_string(), JsonSchema::number());
-            props_a.insert("active".to_string(), JsonSchema::boolean());
+        // Build tools with HashMap properties in order A
+        let mut props_a = HashMap::new();
+        props_a.insert("name".to_string(), JsonSchema::string());
+        props_a.insert("age".to_string(), JsonSchema::number());
+        props_a.insert("active".to_string(), JsonSchema::boolean());
 
-            let mut tools_a: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
-            tools_a.insert("alpha".to_string(), Arc::new(TestDynTool { tool_name: "alpha" }));
-            tools_a.insert("complex".to_string(), Arc::new(SchemaTestTool {
+        let mut tools_a: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
+        tools_a.insert(
+            "alpha".to_string(),
+            Arc::new(TestDynTool { tool_name: "alpha" }),
+        );
+        tools_a.insert(
+            "complex".to_string(),
+            Arc::new(SchemaTestTool {
                 tool_name: "complex",
                 schema: ToolSchema::object()
                     .with_properties(props_a)
                     .with_required(vec!["name".to_string()]),
-            }));
+            }),
+        );
 
-            // Build tools with HashMap properties in order B (reversed insertion)
-            let mut props_b = HashMap::new();
-            props_b.insert("active".to_string(), JsonSchema::boolean());
-            props_b.insert("name".to_string(), JsonSchema::string());
-            props_b.insert("age".to_string(), JsonSchema::number());
+        // Build tools with HashMap properties in order B (reversed insertion)
+        let mut props_b = HashMap::new();
+        props_b.insert("active".to_string(), JsonSchema::boolean());
+        props_b.insert("name".to_string(), JsonSchema::string());
+        props_b.insert("age".to_string(), JsonSchema::number());
 
-            let mut tools_b: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
-            tools_b.insert("complex".to_string(), Arc::new(SchemaTestTool {
+        let mut tools_b: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
+        tools_b.insert(
+            "complex".to_string(),
+            Arc::new(SchemaTestTool {
                 tool_name: "complex",
                 schema: ToolSchema::object()
                     .with_properties(props_b)
                     .with_required(vec!["name".to_string()]),
-            }));
-            tools_b.insert("alpha".to_string(), Arc::new(TestDynTool { tool_name: "alpha" }));
+            }),
+        );
+        tools_b.insert(
+            "alpha".to_string(),
+            Arc::new(TestDynTool { tool_name: "alpha" }),
+        );
 
-            let storage = test_storage();
+        let storage = test_storage();
 
-            // Registry A initializes storage
-            let registry_a = ToolRegistry::new(tools_a, test_session_manager(), storage.clone());
-            let result_a = registry_a.sync_from_storage().await.unwrap();
-            assert!(matches!(result_a, SyncResult::InitializedStorage));
+        // Registry A initializes storage
+        let registry_a = ToolRegistry::new(tools_a, test_session_manager(), storage.clone());
+        let result_a = registry_a.sync_from_storage().await.unwrap();
+        assert!(matches!(result_a, SyncResult::InitializedStorage));
 
-            // Registry B syncs — must be InSync, not LocalNewer
-            let registry_b = ToolRegistry::new(tools_b, test_session_manager(), storage.clone());
-            let result_b = registry_b.sync_from_storage().await.unwrap();
-            assert!(
-                matches!(result_b, SyncResult::InSync),
-                "Identically-configured registries with different HashMap order must sync as InSync, got {:?}",
-                result_b
-            );
+        // Registry B syncs — must be InSync, not LocalNewer
+        let registry_b = ToolRegistry::new(tools_b, test_session_manager(), storage.clone());
+        let result_b = registry_b.sync_from_storage().await.unwrap();
+        assert!(
+            matches!(result_b, SyncResult::InSync),
+            "Identically-configured registries with different HashMap order must sync as InSync, got {:?}",
+            result_b
+        );
 
-            // Fingerprints must be identical
-            assert_eq!(
-                registry_a.fingerprint().await,
-                registry_b.fingerprint().await,
-                "Same logical tools must produce same fingerprint regardless of HashMap insertion order"
-            );
-        }
+        // Fingerprints must be identical
+        assert_eq!(
+            registry_a.fingerprint().await,
+            registry_b.fingerprint().await,
+            "Same logical tools must produce same fingerprint regardless of HashMap insertion order"
+        );
+    }
 
-        #[tokio::test]
-        async fn test_sync_from_storage_detects_newer_tools() {
-            let storage = test_storage();
+    #[tokio::test]
+    async fn test_sync_from_storage_detects_newer_tools() {
+        let storage = test_storage();
 
-            // First server writes its state
-            let registry1 = ToolRegistry::new(
-                test_tools(),
-                test_session_manager(),
-                storage.clone(),
-            );
-            registry1.sync_from_storage().await.unwrap();
-            let old_fp = storage.get_fingerprint("tools").await.unwrap().unwrap();
+        // First server writes its state
+        let registry1 = ToolRegistry::new(test_tools(), test_session_manager(), storage.clone());
+        registry1.sync_from_storage().await.unwrap();
+        let old_fp = storage.get_fingerprint("tools").await.unwrap().unwrap();
 
-            // Second server has different tools (simulate by deactivating one first)
-            // Create with only 2 of the 3 tools
-            let mut fewer_tools: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
-            fewer_tools.insert("alpha".to_string(), Arc::new(TestDynTool { tool_name: "alpha" }));
-            fewer_tools.insert("beta".to_string(), Arc::new(TestDynTool { tool_name: "beta" }));
+        // Second server has different tools (simulate by deactivating one first)
+        // Create with only 2 of the 3 tools
+        let mut fewer_tools: HashMap<String, Arc<dyn McpTool>> = HashMap::new();
+        fewer_tools.insert(
+            "alpha".to_string(),
+            Arc::new(TestDynTool { tool_name: "alpha" }),
+        );
+        fewer_tools.insert(
+            "beta".to_string(),
+            Arc::new(TestDynTool { tool_name: "beta" }),
+        );
 
-            let registry2 = ToolRegistry::new(
-                fewer_tools,
-                test_session_manager(),
-                storage.clone(),
-            );
-            let result = registry2.sync_from_storage().await.unwrap();
+        let registry2 = ToolRegistry::new(fewer_tools, test_session_manager(), storage.clone());
+        let result = registry2.sync_from_storage().await.unwrap();
 
-            // Should detect mismatch and update storage
-            match result {
-                SyncResult::UpdatedStorage { old_fingerprint } => {
-                    assert_eq!(old_fingerprint, old_fp);
-                }
-                other => panic!("Expected UpdatedStorage, got {:?}", other),
+        // Should detect mismatch and update storage
+        match result {
+            SyncResult::UpdatedStorage { old_fingerprint } => {
+                assert_eq!(old_fingerprint, old_fp);
             }
-
-            // Storage fingerprint should now match the new server
-            let new_fp = storage.get_fingerprint("tools").await.unwrap().unwrap();
-            assert_eq!(new_fp, registry2.fingerprint().await);
-            assert_ne!(new_fp, old_fp);
+            other => panic!("Expected UpdatedStorage, got {:?}", other),
         }
 
-        #[tokio::test]
-        async fn test_activate_persists_to_storage() {
-            let storage = test_storage();
-            let registry = ToolRegistry::new(
-                test_tools(),
-                test_session_manager(),
-                storage.clone(),
-            );
+        // Storage fingerprint should now match the new server
+        let new_fp = storage.get_fingerprint("tools").await.unwrap().unwrap();
+        assert_eq!(new_fp, registry2.fingerprint().await);
+        assert_ne!(new_fp, old_fp);
+    }
 
-            // Deactivate then activate
-            registry.deactivate_tool("beta").await.unwrap();
-            registry.activate_tool("beta").await.unwrap();
+    #[tokio::test]
+    async fn test_activate_persists_to_storage() {
+        let storage = test_storage();
+        let registry = ToolRegistry::new(test_tools(), test_session_manager(), storage.clone());
 
-            // Storage should have beta as active
-            let state = storage.get_entity_state("tools", "beta").await.unwrap();
-            assert!(state.is_some());
-            assert!(state.unwrap().active);
+        // Deactivate then activate
+        registry.deactivate_tool("beta").await.unwrap();
+        registry.activate_tool("beta").await.unwrap();
 
-            // Fingerprint in storage should match in-memory
-            let stored_fp = storage.get_fingerprint("tools").await.unwrap();
-            assert_eq!(stored_fp, Some(registry.fingerprint().await));
-        }
+        // Storage should have beta as active
+        let state = storage.get_entity_state("tools", "beta").await.unwrap();
+        assert!(state.is_some());
+        assert!(state.unwrap().active);
 
-        #[tokio::test]
-        async fn test_polling_detects_external_fingerprint_change() {
-            let storage = test_storage();
-            let registry = Arc::new(ToolRegistry::new(
-                test_tools(),
-                test_session_manager(),
-                storage.clone(),
-            ));
+        // Fingerprint in storage should match in-memory
+        let stored_fp = storage.get_fingerprint("tools").await.unwrap();
+        assert_eq!(stored_fp, Some(registry.fingerprint().await));
+    }
 
-            // Sync initial state to storage
-            registry.sync_from_storage().await.unwrap();
-            let initial_fp = registry.fingerprint().await;
+    #[tokio::test]
+    async fn test_polling_detects_external_fingerprint_change() {
+        let storage = test_storage();
+        let registry = Arc::new(ToolRegistry::new(
+            test_tools(),
+            test_session_manager(),
+            storage.clone(),
+        ));
 
-            // Simulate another instance deactivating a tool directly in storage
-            let entity = turul_mcp_server_state_storage::EntityState {
-                entity_id: "gamma".to_string(),
-                active: false,
-                metadata: None,
-                updated_at: chrono::Utc::now().to_rfc3339(),
-            };
-            storage
-                .set_entity_state("tools", "gamma", entity)
-                .await
-                .unwrap();
-            // Write a new fingerprint that differs from local
-            storage
-                .set_fingerprint("tools", "external_change".to_string())
-                .await
-                .unwrap();
+        // Sync initial state to storage
+        registry.sync_from_storage().await.unwrap();
+        let initial_fp = registry.fingerprint().await;
 
-            // Start polling with very short interval
-            let handle = registry.start_polling(std::time::Duration::from_millis(50));
+        // Simulate another instance deactivating a tool directly in storage
+        let entity = turul_mcp_server_state_storage::EntityState {
+            entity_id: "gamma".to_string(),
+            active: false,
+            metadata: None,
+            updated_at: chrono::Utc::now().to_rfc3339(),
+        };
+        storage
+            .set_entity_state("tools", "gamma", entity)
+            .await
+            .unwrap();
+        // Write a new fingerprint that differs from local
+        storage
+            .set_fingerprint("tools", "external_change".to_string())
+            .await
+            .unwrap();
 
-            // Wait for poll to detect change
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        // Start polling with very short interval
+        let handle = registry.start_polling(std::time::Duration::from_millis(50));
 
-            // Local fingerprint should have been updated (recomputed from new active set)
-            let new_fp = registry.fingerprint().await;
-            assert_ne!(
-                new_fp, initial_fp,
-                "Polling should detect external fingerprint change and reload state"
-            );
+        // Wait for poll to detect change
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
-            // gamma should now be inactive
-            let active = registry.list_active_tools().await;
-            assert_eq!(active.len(), 2, "gamma should have been deactivated by external change");
-            assert!(
-                active.iter().all(|t| t.name != "gamma"),
-                "gamma should not be in the active tool list"
-            );
+        // Local fingerprint should have been updated (recomputed from new active set)
+        let new_fp = registry.fingerprint().await;
+        assert_ne!(
+            new_fp, initial_fp,
+            "Polling should detect external fingerprint change and reload state"
+        );
 
-            handle.abort();
-        }
+        // gamma should now be inactive
+        let active = registry.list_active_tools().await;
+        assert_eq!(
+            active.len(),
+            2,
+            "gamma should have been deactivated by external change"
+        );
+        assert!(
+            active.iter().all(|t| t.name != "gamma"),
+            "gamma should not be in the active tool list"
+        );
 
-        #[tokio::test]
-        async fn test_polling_noop_when_fingerprints_match() {
-            let storage = test_storage();
-            let registry = Arc::new(ToolRegistry::new(
-                test_tools(),
-                test_session_manager(),
-                storage.clone(),
-            ));
+        handle.abort();
+    }
 
-            // Sync initial state
-            registry.sync_from_storage().await.unwrap();
-            let initial_fp = registry.fingerprint().await;
+    #[tokio::test]
+    async fn test_polling_noop_when_fingerprints_match() {
+        let storage = test_storage();
+        let registry = Arc::new(ToolRegistry::new(
+            test_tools(),
+            test_session_manager(),
+            storage.clone(),
+        ));
 
-            // Start polling — fingerprints match, so nothing should change
-            let handle = registry.start_polling(std::time::Duration::from_millis(50));
+        // Sync initial state
+        registry.sync_from_storage().await.unwrap();
+        let initial_fp = registry.fingerprint().await;
 
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        // Start polling — fingerprints match, so nothing should change
+        let handle = registry.start_polling(std::time::Duration::from_millis(50));
 
-            let fp_after = registry.fingerprint().await;
-            assert_eq!(
-                fp_after, initial_fp,
-                "Fingerprint should remain unchanged when storage matches"
-            );
-            assert_eq!(registry.list_active_tools().await.len(), 3);
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
 
-            handle.abort();
-        }
+        let fp_after = registry.fingerprint().await;
+        assert_eq!(
+            fp_after, initial_fp,
+            "Fingerprint should remain unchanged when storage matches"
+        );
+        assert_eq!(registry.list_active_tools().await.len(), 3);
 
-        #[tokio::test]
-        async fn test_deactivate_persists_to_storage() {
-            let storage = test_storage();
-            let registry = ToolRegistry::new(
-                test_tools(),
-                test_session_manager(),
-                storage.clone(),
-            );
+        handle.abort();
+    }
 
-            registry.deactivate_tool("gamma").await.unwrap();
+    #[tokio::test]
+    async fn test_deactivate_persists_to_storage() {
+        let storage = test_storage();
+        let registry = ToolRegistry::new(test_tools(), test_session_manager(), storage.clone());
 
-            // Storage should have gamma as inactive
-            let state = storage.get_entity_state("tools", "gamma").await.unwrap();
-            assert!(state.is_some());
-            assert!(!state.unwrap().active);
-        }
+        registry.deactivate_tool("gamma").await.unwrap();
 
-        #[tokio::test]
-        async fn test_check_for_changes_detects_external_change() {
-            let storage = test_storage();
-            let registry = ToolRegistry::new(
-                test_tools(),
-                test_session_manager(),
-                storage.clone(),
-            );
+        // Storage should have gamma as inactive
+        let state = storage.get_entity_state("tools", "gamma").await.unwrap();
+        assert!(state.is_some());
+        assert!(!state.unwrap().active);
+    }
 
-            // Sync initial state to storage
-            registry.sync_from_storage().await.unwrap();
-            let initial_fp = registry.fingerprint().await;
+    #[tokio::test]
+    async fn test_check_for_changes_detects_external_change() {
+        let storage = test_storage();
+        let registry = ToolRegistry::new(test_tools(), test_session_manager(), storage.clone());
 
-            // Simulate another instance deactivating gamma directly in storage
-            let entity = turul_mcp_server_state_storage::EntityState {
-                entity_id: "gamma".to_string(),
-                active: false,
-                metadata: None,
-                updated_at: chrono::Utc::now().to_rfc3339(),
-            };
-            storage
-                .set_entity_state("tools", "gamma", entity)
-                .await
-                .unwrap();
-            storage
-                .set_fingerprint("tools", "external_change".to_string())
-                .await
-                .unwrap();
+        // Sync initial state to storage
+        registry.sync_from_storage().await.unwrap();
+        let initial_fp = registry.fingerprint().await;
 
-            // check_for_changes should detect the external change
-            let changed = registry.check_for_changes().await.unwrap();
-            assert!(changed, "check_for_changes must return true when storage fingerprint differs");
+        // Simulate another instance deactivating gamma directly in storage
+        let entity = turul_mcp_server_state_storage::EntityState {
+            entity_id: "gamma".to_string(),
+            active: false,
+            metadata: None,
+            updated_at: chrono::Utc::now().to_rfc3339(),
+        };
+        storage
+            .set_entity_state("tools", "gamma", entity)
+            .await
+            .unwrap();
+        storage
+            .set_fingerprint("tools", "external_change".to_string())
+            .await
+            .unwrap();
 
-            // Local fingerprint should have been recomputed from the new active set
-            let new_fp = registry.fingerprint().await;
-            assert_ne!(new_fp, initial_fp, "Fingerprint must change after reload");
+        // check_for_changes should detect the external change
+        let changed = registry.check_for_changes().await.unwrap();
+        assert!(
+            changed,
+            "check_for_changes must return true when storage fingerprint differs"
+        );
 
-            // gamma should now be inactive
-            let active = registry.list_active_tools().await;
-            assert_eq!(active.len(), 2, "gamma should have been deactivated by external change");
-            assert!(
-                active.iter().all(|t| t.name != "gamma"),
-                "gamma should not be in the active tool list"
-            );
-        }
+        // Local fingerprint should have been recomputed from the new active set
+        let new_fp = registry.fingerprint().await;
+        assert_ne!(new_fp, initial_fp, "Fingerprint must change after reload");
 
-        #[tokio::test]
-        async fn test_check_for_changes_noop_when_matching() {
-            let storage = test_storage();
-            let registry = ToolRegistry::new(
-                test_tools(),
-                test_session_manager(),
-                storage.clone(),
-            );
+        // gamma should now be inactive
+        let active = registry.list_active_tools().await;
+        assert_eq!(
+            active.len(),
+            2,
+            "gamma should have been deactivated by external change"
+        );
+        assert!(
+            active.iter().all(|t| t.name != "gamma"),
+            "gamma should not be in the active tool list"
+        );
+    }
 
-            // Sync initial state to storage so fingerprints match
-            registry.sync_from_storage().await.unwrap();
-            let initial_fp = registry.fingerprint().await;
+    #[tokio::test]
+    async fn test_check_for_changes_noop_when_matching() {
+        let storage = test_storage();
+        let registry = ToolRegistry::new(test_tools(), test_session_manager(), storage.clone());
 
-            // check_for_changes should detect no change
-            let changed = registry.check_for_changes().await.unwrap();
-            assert!(!changed, "check_for_changes must return false when fingerprints match");
+        // Sync initial state to storage so fingerprints match
+        registry.sync_from_storage().await.unwrap();
+        let initial_fp = registry.fingerprint().await;
 
-            // Fingerprint and active tools should be unchanged
-            assert_eq!(registry.fingerprint().await, initial_fp);
-            assert_eq!(registry.list_active_tools().await.len(), 3);
-        }
+        // check_for_changes should detect no change
+        let changed = registry.check_for_changes().await.unwrap();
+        assert!(
+            !changed,
+            "check_for_changes must return false when fingerprints match"
+        );
+
+        // Fingerprint and active tools should be unchanged
+        assert_eq!(registry.fingerprint().await, initial_fp);
+        assert_eq!(registry.list_active_tools().await.len(), 3);
+    }
 
     // ===================================================================
     // SessionEventDispatcher guaranteed persistence tests
@@ -1226,8 +1265,14 @@ mod tests {
             self.events.lock().await.len()
         }
 
-        async fn events_for_type(&self, event_type: &str) -> Vec<(String, String, serde_json::Value)> {
-            self.events.lock().await.iter()
+        async fn events_for_type(
+            &self,
+            event_type: &str,
+        ) -> Vec<(String, String, serde_json::Value)> {
+            self.events
+                .lock()
+                .await
+                .iter()
                 .filter(|(_, et, _)| et == event_type)
                 .cloned()
                 .collect()
@@ -1242,11 +1287,10 @@ mod tests {
             event_type: String,
             data: serde_json::Value,
         ) -> std::result::Result<(), String> {
-            self.events.lock().await.push((
-                session_id.to_string(),
-                event_type,
-                data,
-            ));
+            self.events
+                .lock()
+                .await
+                .push((session_id.to_string(), event_type, data));
             Ok(())
         }
     }
@@ -1271,9 +1315,12 @@ mod tests {
         let registry = ToolRegistry::new(test_tools(), sm, test_storage());
         registry.deactivate_tool("beta").await.unwrap();
 
-        let events = dispatcher.events_for_type("notifications/tools/list_changed").await;
+        let events = dispatcher
+            .events_for_type("notifications/tools/list_changed")
+            .await;
         assert_eq!(
-            events.len(), 1,
+            events.len(),
+            1,
             "deactivate_tool must persist exactly 1 notification, got {}",
             events.len()
         );
@@ -1298,7 +1345,8 @@ mod tests {
         let count_after_activate = dispatcher.event_count().await;
 
         assert_eq!(
-            count_after_activate - count_after_deactivate, 1,
+            count_after_activate - count_after_deactivate,
+            1,
             "activate_tool must persist exactly 1 additional notification"
         );
     }
@@ -1329,9 +1377,12 @@ mod tests {
         let changed = registry_b.check_for_changes().await.unwrap();
         assert!(changed, "Should detect fingerprint mismatch");
 
-        let events = dispatcher.events_for_type("notifications/tools/list_changed").await;
+        let events = dispatcher
+            .events_for_type("notifications/tools/list_changed")
+            .await;
         assert_eq!(
-            events.len(), 1,
+            events.len(),
+            1,
             "check_for_changes must persist exactly 1 notification before returning, got {}",
             events.len()
         );
@@ -1358,10 +1409,13 @@ mod tests {
             &session_id,
             "mcp:tool_fingerprint",
             serde_json::json!(live_fp),
-        ).await;
+        )
+        .await;
 
         // The stored fingerprint must match the live registry
-        let stored_fp = sm.get_session_state(&session_id, "mcp:tool_fingerprint").await
+        let stored_fp = sm
+            .get_session_state(&session_id, "mcp:tool_fingerprint")
+            .await
             .and_then(|v| v.as_str().map(|s| s.to_string()))
             .expect("fingerprint should be stored");
 
@@ -1384,7 +1438,8 @@ mod tests {
 
         // Verify no new events were dispatched (no spurious notification)
         assert_eq!(
-            dispatcher.event_count().await, events_before,
+            dispatcher.event_count().await,
+            events_before,
             "No spurious notification should be emitted for a correctly initialized session"
         );
     }
@@ -1407,11 +1462,14 @@ mod tests {
                 &session_id,
                 "mcp:tool_fingerprint",
                 serde_json::json!(static_fingerprint),
-            ).await;
+            )
+            .await;
         }
 
         // Verify: no fingerprint in session state
-        let stored = sm.get_session_state(&session_id, "mcp:tool_fingerprint").await;
+        let stored = sm
+            .get_session_state(&session_id, "mcp:tool_fingerprint")
+            .await;
         assert!(
             stored.is_none(),
             "Static mode must NOT store mcp:tool_fingerprint, got {:?}",
@@ -1431,15 +1489,24 @@ mod tests {
         let registry = ToolRegistry::new(test_tools(), sm, test_storage());
         registry.deactivate_tool("alpha").await.unwrap();
 
-        let events = dispatcher.events_for_type("notifications/tools/list_changed").await;
+        let events = dispatcher
+            .events_for_type("notifications/tools/list_changed")
+            .await;
         assert_eq!(
-            events.len(), 2,
+            events.len(),
+            2,
             "Should dispatch to both sessions, got {}",
             events.len()
         );
 
         let session_ids: Vec<&str> = events.iter().map(|(s, _, _)| s.as_str()).collect();
-        assert!(session_ids.contains(&session_a.as_str()), "Should dispatch to session A");
-        assert!(session_ids.contains(&session_b.as_str()), "Should dispatch to session B");
+        assert!(
+            session_ids.contains(&session_a.as_str()),
+            "Should dispatch to session A"
+        );
+        assert!(
+            session_ids.contains(&session_b.as_str()),
+            "Should dispatch to session B"
+        );
     }
 }

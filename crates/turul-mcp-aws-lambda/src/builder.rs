@@ -1158,7 +1158,10 @@ impl LambdaMcpServerBuilder {
             self.task_runtime,
             tool_fingerprint,
             #[cfg(feature = "dynamic-tools")]
-            !matches!(self.tool_change_mode, turul_mcp_server::ToolChangeMode::Static),
+            !matches!(
+                self.tool_change_mode,
+                turul_mcp_server::ToolChangeMode::Static
+            ),
             #[cfg(feature = "dynamic-tools")]
             self.server_state_storage,
         ))

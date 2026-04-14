@@ -13,8 +13,8 @@
 
 use async_trait::async_trait;
 use aws_config::{BehaviorVersion, Region};
-use aws_sdk_dynamodb::types::AttributeValue;
 use aws_sdk_dynamodb::Client;
+use aws_sdk_dynamodb::types::AttributeValue;
 use tracing::{debug, error, info, warn};
 
 use crate::error::ServerStateError;
@@ -116,10 +116,7 @@ impl DynamoDbServerStateStorage {
                         use aws_sdk_dynamodb::types::TableStatus;
                         match status {
                             TableStatus::Active => {
-                                info!(
-                                    "DynamoDB table '{}' is active and ready",
-                                    self.table_name
-                                );
+                                info!("DynamoDB table '{}' is active and ready", self.table_name);
                                 Ok(())
                             }
                             _ => {
@@ -144,10 +141,7 @@ impl DynamoDbServerStateStorage {
                 }
             }
             Err(_) => {
-                warn!(
-                    "Table '{}' does not exist, creating it",
-                    self.table_name
-                );
+                warn!("Table '{}' does not exist, creating it", self.table_name);
                 self.create_table().await?;
                 self.wait_for_table_active().await
             }
@@ -199,17 +193,11 @@ impl DynamoDbServerStateStorage {
             .await
         {
             Ok(_) => {
-                info!(
-                    "Successfully initiated table creation: {}",
-                    self.table_name
-                );
+                info!("Successfully initiated table creation: {}", self.table_name);
                 Ok(())
             }
             Err(err) => {
-                error!(
-                    "Failed to create table '{}': {}",
-                    self.table_name, err
-                );
+                error!("Failed to create table '{}': {}", self.table_name, err);
                 Err(ServerStateError::DatabaseError(format!(
                     "Failed to create table '{}': {}",
                     self.table_name, err
@@ -259,12 +247,18 @@ impl DynamoDbServerStateStorage {
     }
 
     /// Extract a string attribute from a DynamoDB item.
-    fn get_s(item: &std::collections::HashMap<String, AttributeValue>, key: &str) -> Option<String> {
+    fn get_s(
+        item: &std::collections::HashMap<String, AttributeValue>,
+        key: &str,
+    ) -> Option<String> {
         item.get(key).and_then(|v| v.as_s().ok()).cloned()
     }
 
     /// Extract a boolean attribute from a DynamoDB item.
-    fn get_bool(item: &std::collections::HashMap<String, AttributeValue>, key: &str) -> Option<bool> {
+    fn get_bool(
+        item: &std::collections::HashMap<String, AttributeValue>,
+        key: &str,
+    ) -> Option<bool> {
         item.get(key).and_then(|v| v.as_bool().ok()).copied()
     }
 
@@ -276,9 +270,7 @@ impl DynamoDbServerStateStorage {
         let active = Self::get_bool(item, "active").unwrap_or(false);
         let updated_at = Self::get_s(item, "updatedAt").unwrap_or_default();
 
-        let metadata = Self::get_s(item, "metadata").and_then(|s| {
-            serde_json::from_str(&s).ok()
-        });
+        let metadata = Self::get_s(item, "metadata").and_then(|s| serde_json::from_str(&s).ok());
 
         Some(EntityState {
             entity_id,
@@ -337,10 +329,7 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
             request = request.item("metadata", AttributeValue::S(json));
         }
 
-        request
-            .send()
-            .await
-            .map_err(Self::dynamo_err_debug)?;
+        request.send().await.map_err(Self::dynamo_err_debug)?;
 
         Ok(())
     }
@@ -350,7 +339,10 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
         entity_type: &str,
         entity_id: &str,
     ) -> Result<(), ServerStateError> {
-        debug!("DynamoDB delete_entity_state: {}/{}", entity_type, entity_id);
+        debug!(
+            "DynamoDB delete_entity_state: {}/{}",
+            entity_type, entity_id
+        );
 
         self.client
             .delete_item()
@@ -393,10 +385,7 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
         Ok(entities)
     }
 
-    async fn get_fingerprint(
-        &self,
-        entity_type: &str,
-    ) -> Result<Option<String>, ServerStateError> {
+    async fn get_fingerprint(&self, entity_type: &str) -> Result<Option<String>, ServerStateError> {
         debug!("DynamoDB get_fingerprint: {}", entity_type);
 
         let result = self
@@ -422,7 +411,10 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
         entity_type: &str,
         fingerprint: String,
     ) -> Result<(), ServerStateError> {
-        debug!("DynamoDB set_fingerprint: {} = {}", entity_type, fingerprint);
+        debug!(
+            "DynamoDB set_fingerprint: {} = {}",
+            entity_type, fingerprint
+        );
 
         let now = chrono::Utc::now().to_rfc3339();
 
@@ -582,10 +574,7 @@ mod tests {
             .await
             .unwrap();
 
-        let fp = storage
-            .get_fingerprint(entity_types::TOOLS)
-            .await
-            .unwrap();
+        let fp = storage.get_fingerprint(entity_types::TOOLS).await.unwrap();
         assert_eq!(fp, Some("abc123".to_string()));
 
         // Update
@@ -593,10 +582,7 @@ mod tests {
             .set_fingerprint(entity_types::TOOLS, "def456".to_string())
             .await
             .unwrap();
-        let fp = storage
-            .get_fingerprint(entity_types::TOOLS)
-            .await
-            .unwrap();
+        let fp = storage.get_fingerprint(entity_types::TOOLS).await.unwrap();
         assert_eq!(fp, Some("def456".to_string()));
 
         // Cleanup
@@ -616,11 +602,7 @@ mod tests {
             .await
             .unwrap();
         storage
-            .set_entity_state(
-                entity_types::RESOURCES,
-                "file",
-                test_entity("file", true),
-            )
+            .set_entity_state(entity_types::RESOURCES, "file", test_entity("file", true))
             .await
             .unwrap();
         storage
@@ -649,10 +631,7 @@ mod tests {
 
         // Fingerprints are isolated
         assert_eq!(
-            storage
-                .get_fingerprint(entity_types::TOOLS)
-                .await
-                .unwrap(),
+            storage.get_fingerprint(entity_types::TOOLS).await.unwrap(),
             Some("fp_tools".to_string())
         );
         assert_eq!(
@@ -798,7 +777,11 @@ mod tests {
             .await
             .unwrap();
         storage
-            .set_entity_state(entity_types::TOOLS, "real_tool", test_entity("real_tool", true))
+            .set_entity_state(
+                entity_types::TOOLS,
+                "real_tool",
+                test_entity("real_tool", true),
+            )
             .await
             .unwrap();
 

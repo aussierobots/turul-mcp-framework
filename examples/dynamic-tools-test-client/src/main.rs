@@ -19,8 +19,8 @@
 //!    ```
 
 use tracing::info;
-use turul_mcp_client::{ClientConfig, McpClient};
 use turul_mcp_client::transport::TransportFactory;
+use turul_mcp_client::{ClientConfig, McpClient};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -53,13 +53,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
     info!("Initial tools: {:?}", tool_names);
 
-    assert!(tool_names.contains(&"multiply"), "FAIL: multiply should be in initial tool list");
-    assert!(tool_names.contains(&"add"), "FAIL: add should be in initial tool list");
+    assert!(
+        tool_names.contains(&"multiply"),
+        "FAIL: multiply should be in initial tool list"
+    );
+    assert!(
+        tool_names.contains(&"add"),
+        "FAIL: add should be in initial tool list"
+    );
     info!("PASS: Initial tools correct");
 
     // Step 3: Deactivate multiply
     info!("\n--- Step 3: Call deactivate_multiply ---");
-    let result = client.call_tool("deactivate_multiply", serde_json::json!({})).await?;
+    let result = client
+        .call_tool("deactivate_multiply", serde_json::json!({}))
+        .await?;
     info!("Deactivate result: {:?}", result);
     info!("PASS: deactivate_multiply called successfully");
 
@@ -69,14 +77,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
     info!("Tools after deactivation: {:?}", tool_names);
 
-    assert!(!tool_names.contains(&"multiply"), "FAIL: multiply should NOT be in tool list");
-    assert!(tool_names.contains(&"activate_multiply"), "FAIL: activate_multiply should be available");
-    assert!(tool_names.contains(&"add"), "FAIL: add should still be present");
+    assert!(
+        !tool_names.contains(&"multiply"),
+        "FAIL: multiply should NOT be in tool list"
+    );
+    assert!(
+        tool_names.contains(&"activate_multiply"),
+        "FAIL: activate_multiply should be available"
+    );
+    assert!(
+        tool_names.contains(&"add"),
+        "FAIL: add should still be present"
+    );
     info!("PASS: multiply removed, activate_multiply available");
 
     // Step 5: Reactivate multiply
     info!("\n--- Step 5: Call activate_multiply ---");
-    let result = client.call_tool("activate_multiply", serde_json::json!({})).await?;
+    let result = client
+        .call_tool("activate_multiply", serde_json::json!({}))
+        .await?;
     info!("Activate result: {:?}", result);
     info!("PASS: activate_multiply called successfully");
 
@@ -86,8 +105,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tool_names: Vec<&str> = tools.iter().map(|t| t.name.as_str()).collect();
     info!("Tools after reactivation: {:?}", tool_names);
 
-    assert!(tool_names.contains(&"multiply"), "FAIL: multiply should be back");
-    assert!(tool_names.contains(&"deactivate_multiply"), "FAIL: deactivate_multiply should be available");
+    assert!(
+        tool_names.contains(&"multiply"),
+        "FAIL: multiply should be back"
+    );
+    assert!(
+        tool_names.contains(&"deactivate_multiply"),
+        "FAIL: deactivate_multiply should be available"
+    );
     info!("PASS: multiply restored");
 
     info!("\n=== ALL TESTS PASSED ===");

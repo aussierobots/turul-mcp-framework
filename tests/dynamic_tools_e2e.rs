@@ -34,14 +34,20 @@ async fn test_dynamic_tools_deactivation_updates_live_tool_set() {
 
     // Step 1: Initialize and verify initial tools
     let init_result = client.initialize().await.expect("Failed to initialize");
-    assert!(init_result.contains_key("result"), "Initialize should succeed");
+    assert!(
+        init_result.contains_key("result"),
+        "Initialize should succeed"
+    );
 
     client
         .send_initialized_notification()
         .await
         .expect("Failed to send initialized");
 
-    let session_id = client.session_id().expect("Should have session ID").to_string();
+    let session_id = client
+        .session_id()
+        .expect("Should have session ID")
+        .to_string();
     info!("Initialized with session: {}", session_id);
 
     // Step 2: Verify tools/list shows multiply as active
@@ -121,7 +127,10 @@ async fn test_dynamic_tools_deactivation_updates_live_tool_set() {
     );
 
     // Step 5: Re-initialize and confirm the updated tool set persists in a new session
-    let reinit_result = client.initialize().await.expect("Re-initialize should succeed");
+    let reinit_result = client
+        .initialize()
+        .await
+        .expect("Re-initialize should succeed");
     assert!(
         reinit_result.contains_key("result"),
         "Re-initialization must return a result"
@@ -227,10 +236,7 @@ async fn test_dynamic_tools_server_startup_flag() {
         tool_names.contains(&"activate_multiply"),
         "activate_multiply should be available when multiply is inactive"
     );
-    assert!(
-        tool_names.contains(&"add"),
-        "add should always be active"
-    );
+    assert!(tool_names.contains(&"add"), "add should always be active");
     assert!(
         tool_names.contains(&"greet"),
         "greet should always be active"

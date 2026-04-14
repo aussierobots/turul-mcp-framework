@@ -469,7 +469,9 @@ impl StreamManager {
         connections
             .get(session_id)
             .map(|session_connections| {
-                session_connections.values().any(|sender| !sender.is_closed())
+                session_connections
+                    .values()
+                    .any(|sender| !sender.is_closed())
             })
             .unwrap_or(false)
     }
@@ -568,11 +570,17 @@ impl StreamManager {
                     break;
                 }
                 Err(mpsc::error::TrySendError::Closed(_)) => {
-                    debug!("Connection closed during send: session={}, connection={}", session_id, conn_id);
+                    debug!(
+                        "Connection closed during send: session={}, connection={}",
+                        session_id, conn_id
+                    );
                     dead_connections.push(conn_id.clone());
                 }
                 Err(mpsc::error::TrySendError::Full(_)) => {
-                    warn!("Connection buffer full: session={}, connection={}", session_id, conn_id);
+                    warn!(
+                        "Connection buffer full: session={}, connection={}",
+                        session_id, conn_id
+                    );
                 }
             }
         }
@@ -583,7 +591,10 @@ impl StreamManager {
             if let Some(session_connections) = connections.get_mut(session_id) {
                 for dead_id in &dead_connections {
                     session_connections.remove(dead_id);
-                    debug!("Removed dead connection: session={}, connection={}", session_id, dead_id);
+                    debug!(
+                        "Removed dead connection: session={}, connection={}",
+                        session_id, dead_id
+                    );
                 }
                 if session_connections.is_empty() {
                     connections.remove(session_id);
@@ -1080,7 +1091,11 @@ mod tests {
 
         // Resume from id1 — should only get id2
         let events_after_id1 = storage.get_events_after(&session_id, id1).await.unwrap();
-        assert_eq!(events_after_id1.len(), 1, "Should get only events after id1");
+        assert_eq!(
+            events_after_id1.len(),
+            1,
+            "Should get only events after id1"
+        );
         assert_eq!(events_after_id1[0].id, id2, "Should be the second event");
 
         // Resume from id2 — should get nothing
@@ -1107,8 +1122,10 @@ mod tests {
             .await;
         drop(receiver); // Simulate disconnection
 
-        assert!(manager.has_connections(&session_id).await == false,
-            "has_connections should return false for closed sender");
+        assert!(
+            manager.has_connections(&session_id).await == false,
+            "has_connections should return false for closed sender"
+        );
 
         // Broadcast — should detect dead connection and remove it
         let _ = manager
@@ -1165,13 +1182,22 @@ mod tests {
         // Live connection should have received the event
         let event = live_receiver.try_recv();
         assert!(event.is_ok(), "Live connection should receive the event");
-        assert_eq!(event.unwrap().event_type, "notifications/tools/list_changed");
+        assert_eq!(
+            event.unwrap().event_type,
+            "notifications/tools/list_changed"
+        );
 
         // Dead connection should be removed
         let connections = manager.connections.read().await;
         let session_conns = connections.get(&session_id).unwrap();
-        assert!(!session_conns.contains_key("dead-conn"), "Dead connection should be removed");
-        assert!(session_conns.contains_key("live-conn"), "Live connection should remain");
+        assert!(
+            !session_conns.contains_key("dead-conn"),
+            "Dead connection should be removed"
+        );
+        assert!(
+            session_conns.contains_key("live-conn"),
+            "Live connection should remain"
+        );
     }
 
     /// has_connections() ignores closed senders.
