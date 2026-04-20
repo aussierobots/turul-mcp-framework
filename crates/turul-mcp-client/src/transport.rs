@@ -107,43 +107,43 @@ pub trait Transport: Send + Sync {
     fn capabilities(&self) -> TransportCapabilities;
 
     /// Connect to the server
-    async fn connect(&mut self) -> McpClientResult<()>;
+    async fn connect(&self) -> McpClientResult<()>;
 
     /// Disconnect from the server
-    async fn disconnect(&mut self) -> McpClientResult<()>;
+    async fn disconnect(&self) -> McpClientResult<()>;
 
     /// Check if connected
     fn is_connected(&self) -> bool;
 
     /// Send a request and wait for response
-    async fn send_request(&mut self, request: Value) -> McpClientResult<Value>;
+    async fn send_request(&self, request: Value) -> McpClientResult<Value>;
 
     /// Send a request and return response with headers (for initialization)
     async fn send_request_with_headers(
-        &mut self,
+        &self,
         request: Value,
     ) -> McpClientResult<TransportResponse>;
 
     /// Send a notification (no response expected)
-    async fn send_notification(&mut self, notification: Value) -> McpClientResult<()>;
+    async fn send_notification(&self, notification: Value) -> McpClientResult<()>;
 
     /// Send a DELETE request for session termination (MCP session management)
-    async fn send_delete(&mut self, session_id: &str) -> McpClientResult<()>;
+    async fn send_delete(&self, session_id: &str) -> McpClientResult<()>;
 
     /// Set the session ID to include in subsequent requests (MCP session management)
-    fn set_session_id(&mut self, session_id: String);
+    fn set_session_id(&self, session_id: String);
 
     /// Clear the session ID (used during 404 re-initialization)
-    fn clear_session_id(&mut self);
+    fn clear_session_id(&self);
 
     /// Start listening for server events (if supported)
-    async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver>;
+    async fn start_event_listener(&self) -> McpClientResult<EventReceiver>;
 
     /// Get connection information
     fn connection_info(&self) -> ConnectionInfo;
 
     /// Perform health check
-    async fn health_check(&mut self) -> McpClientResult<bool> {
+    async fn health_check(&self) -> McpClientResult<bool> {
         // Default implementation: try to send a ping
         let ping_request = serde_json::json!({
             "jsonrpc": "2.0",

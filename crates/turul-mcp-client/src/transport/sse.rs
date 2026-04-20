@@ -32,12 +32,12 @@ pub struct SseTransport {
     request_counter: AtomicU64,
     /// Statistics
     stats: Arc<parking_lot::Mutex<TransportStatistics>>,
-    /// Event sender for server events
-    event_sender: Option<mpsc::UnboundedSender<ServerEvent>>,
+    /// Event sender for server events (Mutex so hot-path methods can take &self)
+    event_sender: parking_lot::Mutex<Option<mpsc::UnboundedSender<ServerEvent>>>,
     /// SSE stream handle
-    sse_handle: Option<tokio::task::JoinHandle<()>>,
+    sse_handle: parking_lot::Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// Session ID from server (set after initialization)
-    session_id: Option<String>,
+    session_id: parking_lot::Mutex<Option<String>>,
 }
 
 impl SseTransport {
@@ -73,9 +73,9 @@ impl SseTransport {
             connected: AtomicBool::new(false),
             request_counter: AtomicU64::new(0),
             stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
-            event_sender: None,
-            sse_handle: None,
-            session_id: None,
+            event_sender: parking_lot::Mutex::new(None),
+            sse_handle: parking_lot::Mutex::new(None),
+            session_id: parking_lot::Mutex::new(None),
         })
     }
 
@@ -100,9 +100,9 @@ impl SseTransport {
             connected: AtomicBool::new(false),
             request_counter: AtomicU64::new(0),
             stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
-            event_sender: None,
-            sse_handle: None,
-            session_id: None,
+            event_sender: parking_lot::Mutex::new(None),
+            sse_handle: parking_lot::Mutex::new(None),
+            session_id: parking_lot::Mutex::new(None),
         })
     }
 
@@ -156,7 +156,7 @@ impl SseTransport {
 
     /// Start SSE event stream
     async fn start_sse_stream(
-        &mut self,
+        &self,
         sender: mpsc::UnboundedSender<ServerEvent>,
     ) -> McpClientResult<()> {
         debug!(sse_endpoint = %self.sse_endpoint, "Starting SSE stream");
@@ -242,7 +242,7 @@ impl SseTransport {
             }
         });
 
-        self.sse_handle = Some(handle);
+        *self.sse_handle.lock() = Some(handle);
         Ok(())
     }
 
@@ -313,7 +313,7 @@ impl Transport for SseTransport {
         }
     }
 
-    async fn connect(&mut self) -> McpClientResult<()> {
+    async fn connect(&self) -> McpClientResult<()> {
         debug!(
             endpoint = %self.endpoint,
             sse_endpoint = %self.sse_endpoint,
@@ -329,17 +329,17 @@ impl Transport for SseTransport {
         Ok(())
     }
 
-    async fn disconnect(&mut self) -> McpClientResult<()> {
+    async fn disconnect(&self) -> McpClientResult<()> {
         debug!("Disconnecting SSE transport");
         self.connected.store(false, Ordering::SeqCst);
 
         // Stop SSE stream
-        if let Some(handle) = self.sse_handle.take() {
+        if let Some(handle) = self.sse_handle.lock().take() {
             handle.abort();
         }
 
         // Close event sender
-        if let Some(sender) = self.event_sender.take() {
+        if let Some(sender) = self.event_sender.lock().take() {
             sender.send(ServerEvent::ConnectionLost).ok();
         }
 
@@ -351,7 +351,7 @@ impl Transport for SseTransport {
         self.connected.load(Ordering::SeqCst)
     }
 
-    async fn send_request(&mut self, request: Value) -> McpClientResult<Value> {
+    async fn send_request(&self, request: Value) -> McpClientResult<Value> {
         if !self.is_connected() {
             return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
         }
@@ -380,7 +380,7 @@ impl Transport for SseTransport {
             .header("MCP-Protocol-Version", "2025-11-25");
 
         // Add session ID header if available
-        if let Some(ref session_id) = self.session_id {
+        if let Some(ref session_id) = *self.session_id.lock() {
             request_builder = request_builder.header("Mcp-Session-Id", session_id);
         }
 
@@ -410,7 +410,7 @@ impl Transport for SseTransport {
     }
 
     async fn send_request_with_headers(
-        &mut self,
+        &self,
         request: Value,
     ) -> McpClientResult<crate::transport::TransportResponse> {
         // For SSE transport, we can delegate to the HTTP-style request but with header extraction
@@ -432,7 +432,7 @@ impl Transport for SseTransport {
             .header("MCP-Protocol-Version", "2025-11-25");
 
         // Add session ID header if available
-        if let Some(ref session_id) = self.session_id {
+        if let Some(ref session_id) = *self.session_id.lock() {
             request_builder = request_builder.header("Mcp-Session-Id", session_id);
         }
 
@@ -461,7 +461,7 @@ impl Transport for SseTransport {
         Ok(crate::transport::TransportResponse::new(result, headers))
     }
 
-    async fn send_notification(&mut self, notification: Value) -> McpClientResult<()> {
+    async fn send_notification(&self, notification: Value) -> McpClientResult<()> {
         if !self.is_connected() {
             return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
         }
@@ -480,7 +480,7 @@ impl Transport for SseTransport {
             .header("MCP-Protocol-Version", "2025-11-25");
 
         // Add session ID header if available
-        if let Some(ref session_id) = self.session_id {
+        if let Some(ref session_id) = *self.session_id.lock() {
             request_builder = request_builder.header("Mcp-Session-Id", session_id);
         }
 
@@ -507,7 +507,7 @@ impl Transport for SseTransport {
         }
     }
 
-    async fn send_delete(&mut self, session_id: &str) -> McpClientResult<()> {
+    async fn send_delete(&self, session_id: &str) -> McpClientResult<()> {
         if !self.is_connected() {
             return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
         }
@@ -567,12 +567,12 @@ impl Transport for SseTransport {
         }
     }
 
-    async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver> {
+    async fn start_event_listener(&self) -> McpClientResult<EventReceiver> {
         let (sender, receiver) = mpsc::unbounded_channel();
 
         // Start SSE stream
         self.start_sse_stream(sender.clone()).await?;
-        self.event_sender = Some(sender);
+        *self.event_sender.lock() = Some(sender);
 
         info!("SSE event listener started");
         Ok(receiver)
@@ -594,14 +594,14 @@ impl Transport for SseTransport {
         }
     }
 
-    fn set_session_id(&mut self, session_id: String) {
+    fn set_session_id(&self, session_id: String) {
         debug!("SSE transport: Setting session ID: {}", session_id);
-        self.session_id = Some(session_id);
+        *self.session_id.lock() = Some(session_id);
     }
 
-    fn clear_session_id(&mut self) {
+    fn clear_session_id(&self) {
         debug!("SSE transport: Clearing session ID for re-initialization");
-        self.session_id = None;
+        *self.session_id.lock() = None;
     }
 
     fn statistics(&self) -> TransportStatistics {
@@ -612,7 +612,7 @@ impl Transport for SseTransport {
 impl Drop for SseTransport {
     fn drop(&mut self) {
         debug!("🔥 DROP: SseTransport (CLIENT) - SSE transport being cleaned up");
-        if let Some(handle) = self.sse_handle.take() {
+        if let Some(handle) = self.sse_handle.lock().take() {
             debug!("🔥 Aborting SSE handle - this will close the SSE connection");
             handle.abort();
         } else {
@@ -638,7 +638,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_connect_sets_connected_flag() {
-        let mut transport = SseTransport::new("http://localhost:8080/mcp").unwrap();
+        let transport = SseTransport::new("http://localhost:8080/mcp").unwrap();
         assert!(!transport.is_connected());
         transport.connect().await.unwrap();
         assert!(transport.is_connected());

@@ -48,7 +48,7 @@ async fn test_custom_headers_appear_on_outbound_requests() {
         ..Default::default()
     };
 
-    let mut transport =
+    let transport =
         HttpTransport::with_config(&format!("{}/mcp", mock_server.uri()), &config).unwrap();
     transport.connect().await.unwrap();
 
@@ -76,7 +76,7 @@ async fn test_custom_user_agent() {
         ..Default::default()
     };
 
-    let mut transport =
+    let transport =
         HttpTransport::with_config(&format!("{}/mcp", mock_server.uri()), &config).unwrap();
     transport.connect().await.unwrap();
 
@@ -99,7 +99,7 @@ async fn test_no_redirects_policy() {
         ..Default::default()
     };
 
-    let mut transport =
+    let transport =
         HttpTransport::with_config(&format!("{}/mcp", mock_server.uri()), &config).unwrap();
     transport.connect().await.unwrap();
 
@@ -128,7 +128,7 @@ async fn test_accept_header_on_post_requests() {
         .mount(&mock_server)
         .await;
 
-    let mut transport = HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
+    let transport = HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
     transport.connect().await.unwrap();
 
     let _ = transport.send_request(ping_request()).await;
@@ -148,7 +148,7 @@ async fn test_notification_post_includes_accept_header() {
         .mount(&mock_server)
         .await;
 
-    let mut transport = HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
+    let transport = HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
     transport.connect().await.unwrap();
 
     let notification = serde_json::json!({
@@ -175,7 +175,7 @@ async fn test_mcp_protocol_version_header_on_requests() {
         .mount(&mock_server)
         .await;
 
-    let mut transport = HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
+    let transport = HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap();
     transport.connect().await.unwrap();
 
     let _ = transport.send_request(ping_request()).await;

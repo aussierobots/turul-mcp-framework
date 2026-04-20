@@ -33,8 +33,8 @@ pub struct HttpTransport {
     request_counter: AtomicU64,
     /// Statistics
     stats: Arc<parking_lot::Mutex<TransportStatistics>>,
-    /// Event sender for server events
-    event_sender: Option<mpsc::UnboundedSender<ServerEvent>>,
+    /// Event sender for server events (Mutex so hot-path methods can take &self)
+    event_sender: parking_lot::Mutex<Option<mpsc::UnboundedSender<ServerEvent>>>,
     /// Queue for progress notifications when no listener exists
     queued_events: Arc<parking_lot::Mutex<Vec<ServerEvent>>>,
     /// Session ID from server (set after initialization) - shared between transport and SSE task
@@ -68,7 +68,7 @@ impl HttpTransport {
             connected: AtomicBool::new(false),
             request_counter: AtomicU64::new(0),
             stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
-            event_sender: None,
+            event_sender: parking_lot::Mutex::new(None),
             queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
             session_id: Arc::new(parking_lot::Mutex::new(None)),
         })
@@ -123,7 +123,7 @@ impl HttpTransport {
             connected: AtomicBool::new(false),
             request_counter: AtomicU64::new(0),
             stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
-            event_sender: None,
+            event_sender: parking_lot::Mutex::new(None),
             queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
             session_id: Arc::new(parking_lot::Mutex::new(None)),
         })
@@ -140,20 +140,20 @@ impl HttpTransport {
             connected: AtomicBool::new(false),
             request_counter: AtomicU64::new(0),
             stats: Arc::new(parking_lot::Mutex::new(TransportStatistics::default())),
-            event_sender: None,
+            event_sender: parking_lot::Mutex::new(None),
             queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
             session_id: Arc::new(parking_lot::Mutex::new(None)),
         })
     }
 
     /// Set the session ID to use for subsequent requests
-    pub fn set_session_id(&mut self, session_id: String) {
+    pub fn set_session_id(&self, session_id: String) {
         debug!("Setting session ID: {}", session_id);
         *self.session_id.lock() = Some(session_id);
     }
 
     /// Clear the session ID (used during 404 re-initialization)
-    pub fn clear_session_id(&mut self) {
+    pub fn clear_session_id(&self) {
         debug!("Clearing session ID for re-initialization");
         *self.session_id.lock() = None;
     }
@@ -175,7 +175,7 @@ impl HttpTransport {
 
     /// Test helper: Process an in-memory byte stream (for testing without network)
     #[doc(hidden)]
-    pub async fn test_handle_byte_stream<S, B, E>(&mut self, stream: S) -> McpClientResult<Value>
+    pub async fn test_handle_byte_stream<S, B, E>(&self, stream: S) -> McpClientResult<Value>
     where
         S: Stream<Item = Result<B, E>> + Unpin,
         B: AsRef<[u8]>,
@@ -187,7 +187,7 @@ impl HttpTransport {
     /// Parse an SSE stream from a POST response.
     /// Extracts JSON-RPC frames from `data:` lines, routes notifications
     /// to event_sender, returns the final result/error frame.
-    async fn handle_sse_stream(&mut self, response: Response) -> McpClientResult<Value> {
+    async fn handle_sse_stream(&self, response: Response) -> McpClientResult<Value> {
         use futures::StreamExt;
         use tokio::io::AsyncBufReadExt;
 
@@ -197,9 +197,10 @@ impl HttpTransport {
         );
         let mut lines = tokio::io::BufReader::new(reader).lines();
 
+        let sender_snapshot = self.event_sender.lock().clone();
         parse_sse_lines(
             &mut lines,
-            &self.event_sender,
+            sender_snapshot,
             &self.queued_events,
             &self.stats,
         )
@@ -208,7 +209,7 @@ impl HttpTransport {
 
     /// Test helper: Process an in-memory SSE byte stream
     #[doc(hidden)]
-    pub async fn test_handle_sse_stream<S, B, E>(&mut self, stream: S) -> McpClientResult<Value>
+    pub async fn test_handle_sse_stream<S, B, E>(&self, stream: S) -> McpClientResult<Value>
     where
         S: Stream<Item = Result<B, E>> + Unpin,
         B: AsRef<[u8]>,
@@ -228,9 +229,10 @@ impl HttpTransport {
         let cursor = std::io::Cursor::new(buffer);
         let mut lines = tokio::io::BufReader::new(cursor).lines();
 
+        let sender_snapshot = self.event_sender.lock().clone();
         parse_sse_lines(
             &mut lines,
-            &self.event_sender,
+            sender_snapshot,
             &self.queued_events,
             &self.stats,
         )
@@ -238,7 +240,7 @@ impl HttpTransport {
     }
 
     /// Handle HTTP response
-    async fn handle_response(&mut self, response: Response) -> McpClientResult<Value> {
+    async fn handle_response(&self, response: Response) -> McpClientResult<Value> {
         let status = response.status();
 
         if !status.is_success() {
@@ -284,7 +286,7 @@ impl HttpTransport {
     }
 
     /// Handle JSON stream (works for both single responses and chunked streaming)
-    async fn handle_json_stream(&mut self, response: Response) -> McpClientResult<Value> {
+    async fn handle_json_stream(&self, response: Response) -> McpClientResult<Value> {
         use futures::StreamExt;
 
         let stream = response
@@ -295,7 +297,7 @@ impl HttpTransport {
     }
 
     /// Handle a generic byte stream (for both HTTP responses and in-memory testing)
-    async fn handle_byte_stream<S, B, E>(&mut self, mut stream: S) -> McpClientResult<Value>
+    async fn handle_byte_stream<S, B, E>(&self, mut stream: S) -> McpClientResult<Value>
     where
         S: Stream<Item = Result<B, E>> + Unpin,
         B: AsRef<[u8]>,
@@ -304,9 +306,12 @@ impl HttpTransport {
         use futures::StreamExt;
 
         // Ensure event channel exists (lazy creation)
-        if self.event_sender.is_none() {
-            let (tx, _rx) = mpsc::unbounded_channel();
-            self.event_sender = Some(tx);
+        {
+            let mut guard = self.event_sender.lock();
+            if guard.is_none() {
+                let (tx, _rx) = mpsc::unbounded_channel();
+                *guard = Some(tx);
+            }
         }
 
         let mut buffer = Vec::new();
@@ -359,7 +364,8 @@ impl HttpTransport {
                             } else {
                                 ServerEvent::Notification(json.clone())
                             };
-                            if let Some(sender) = &self.event_sender {
+                            let sender_snapshot = self.event_sender.lock().clone();
+                            if let Some(sender) = sender_snapshot {
                                 if sender.send(event.clone()).is_err() {
                                     // Channel closed, queue the event for future listeners
                                     debug!("Event channel closed, queuing notification");
@@ -417,7 +423,7 @@ impl HttpTransport {
 
     /// Handle HTTP response with headers
     async fn handle_response_with_headers(
-        &mut self,
+        &self,
         response: Response,
     ) -> McpClientResult<crate::transport::TransportResponse> {
         let status = response.status();
@@ -498,7 +504,7 @@ impl Transport for HttpTransport {
         }
     }
 
-    async fn connect(&mut self) -> McpClientResult<()> {
+    async fn connect(&self) -> McpClientResult<()> {
         debug!(endpoint = %self.endpoint, "Connecting to HTTP endpoint");
 
         // HTTP is stateless — no persistent connection to establish.
@@ -509,12 +515,12 @@ impl Transport for HttpTransport {
         Ok(())
     }
 
-    async fn disconnect(&mut self) -> McpClientResult<()> {
+    async fn disconnect(&self) -> McpClientResult<()> {
         debug!("Disconnecting HTTP transport");
         self.connected.store(false, Ordering::SeqCst);
 
         // Close event sender if exists
-        if let Some(sender) = self.event_sender.take() {
+        if let Some(sender) = self.event_sender.lock().take() {
             sender.send(ServerEvent::ConnectionLost).ok();
         }
 
@@ -526,7 +532,7 @@ impl Transport for HttpTransport {
         self.connected.load(Ordering::SeqCst)
     }
 
-    async fn send_request(&mut self, request: Value) -> McpClientResult<Value> {
+    async fn send_request(&self, request: Value) -> McpClientResult<Value> {
         if !self.is_connected() {
             return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
         }
@@ -590,7 +596,7 @@ impl Transport for HttpTransport {
     }
 
     async fn send_request_with_headers(
-        &mut self,
+        &self,
         request: Value,
     ) -> McpClientResult<crate::transport::TransportResponse> {
         if !self.is_connected() {
@@ -656,7 +662,7 @@ impl Transport for HttpTransport {
         Ok(result)
     }
 
-    async fn send_notification(&mut self, notification: Value) -> McpClientResult<()> {
+    async fn send_notification(&self, notification: Value) -> McpClientResult<()> {
         if !self.is_connected() {
             return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
         }
@@ -707,7 +713,7 @@ impl Transport for HttpTransport {
         }
     }
 
-    async fn send_delete(&mut self, session_id: &str) -> McpClientResult<()> {
+    async fn send_delete(&self, session_id: &str) -> McpClientResult<()> {
         if !self.is_connected() {
             return Err(TransportError::ConnectionFailed("Not connected".to_string()).into());
         }
@@ -767,11 +773,11 @@ impl Transport for HttpTransport {
         }
     }
 
-    async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver> {
+    async fn start_event_listener(&self) -> McpClientResult<EventReceiver> {
         use futures::StreamExt;
 
         let (tx, rx) = mpsc::unbounded_channel();
-        self.event_sender = Some(tx.clone());
+        *self.event_sender.lock() = Some(tx.clone());
 
         // Replay any queued events to the new listener
         let queued_events = {
@@ -993,7 +999,7 @@ impl Transport for HttpTransport {
         }
     }
 
-    async fn health_check(&mut self) -> McpClientResult<bool> {
+    async fn health_check(&self) -> McpClientResult<bool> {
         if !self.is_connected() {
             return Ok(false);
         }
@@ -1015,12 +1021,12 @@ impl Transport for HttpTransport {
         }
     }
 
-    fn set_session_id(&mut self, session_id: String) {
+    fn set_session_id(&self, session_id: String) {
         debug!("HttpTransport: Setting session ID: {}", session_id);
         *self.session_id.lock() = Some(session_id);
     }
 
-    fn clear_session_id(&mut self) {
+    fn clear_session_id(&self) {
         debug!("HttpTransport: Clearing session ID for re-initialization");
         *self.session_id.lock() = None;
     }
@@ -1034,7 +1040,7 @@ impl Transport for HttpTransport {
 /// Extracted from handle_sse_stream for testability.
 async fn parse_sse_lines<R: tokio::io::AsyncBufRead + Unpin>(
     lines: &mut tokio::io::Lines<R>,
-    event_sender: &Option<mpsc::UnboundedSender<ServerEvent>>,
+    event_sender: Option<mpsc::UnboundedSender<ServerEvent>>,
     queued_events: &Arc<parking_lot::Mutex<Vec<ServerEvent>>>,
     stats: &Arc<parking_lot::Mutex<TransportStatistics>>,
 ) -> McpClientResult<Value> {
@@ -1061,7 +1067,7 @@ async fn parse_sse_lines<R: tokio::io::AsyncBufRead + Unpin>(
             } else {
                 ServerEvent::Notification(json)
             };
-            if let Some(sender) = event_sender {
+            if let Some(ref sender) = event_sender {
                 if sender.send(event.clone()).is_err() {
                     queued_events.lock().push(event);
                 }
@@ -1102,7 +1108,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_connect_sets_connected_flag() {
-        let mut transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
         assert!(!transport.is_connected());
         transport.connect().await.unwrap();
         assert!(transport.is_connected());
@@ -1151,7 +1157,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_byte_stream_single_response() {
-        let mut transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
 
         // Create a single JSON response
         let response_json = serde_json::json!({
@@ -1176,7 +1182,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_byte_stream_chunked_response() {
-        let mut transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
 
         // Create a response that will be split across chunks
         let response_json = serde_json::json!({
@@ -1207,7 +1213,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_byte_stream_with_progress_notifications() {
-        let mut transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
 
         // Create progress notification followed by final response
         let progress1 = serde_json::json!({
@@ -1268,7 +1274,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_progress_event_queue_replay() {
-        let mut transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:8080/mcp").unwrap();
 
         // Create progress notifications that arrive BEFORE starting event listener
         let progress1 = serde_json::json!({
@@ -1346,7 +1352,7 @@ mod tests {
         let sse_body: &[u8] = b"event: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{\"tools\":[]}}\n\n";
         let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
 
-        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let result = transport.test_handle_sse_stream(stream).await;
         assert!(
             result.is_ok(),
@@ -1362,7 +1368,7 @@ mod tests {
         let sse_body: &[u8] = b"data: {\"jsonrpc\":\"2.0\",\"id\":\"req_1\",\"error\":{\"code\":-32600,\"message\":\"Invalid\"}}\n\n";
         let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
 
-        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let result = transport.test_handle_sse_stream(stream).await;
         assert!(result.is_ok());
         let json = result.unwrap();
@@ -1375,7 +1381,7 @@ mod tests {
             b"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\"}\n\n";
         let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
 
-        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let result = transport.test_handle_sse_stream(stream).await;
         assert!(result.is_err(), "Should fail when no final frame");
     }
@@ -1431,7 +1437,7 @@ mod tests {
             br#"{"jsonrpc":"2.0","id":"srv-1","method":"sampling/createMessage","params":{}}"#;
         let stream = create_test_stream(vec![server_request.to_vec()]);
 
-        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         // This will fail to find a final response frame (the server request is not a response),
         // but the frame should be queued as a Request event
         let _ = transport.test_handle_byte_stream(stream).await;
@@ -1452,7 +1458,7 @@ mod tests {
         let error_response = br#"{"jsonrpc":"2.0","id":"req_0","error":{"code":-32602,"message":"Invalid params","data":{"detail":"missing field"}}}"#;
         let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(error_response.to_vec())]);
 
-        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let result = transport.test_handle_byte_stream(stream).await;
 
         assert!(
@@ -1470,7 +1476,7 @@ mod tests {
         let sse_data = b"data: {\"jsonrpc\":\"2.0\",\"id\":\"srv-99\",\"method\":\"sampling/createMessage\",\"params\":{}}\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{\"tools\":[]}}\n\n";
         let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_data.to_vec())]);
 
-        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let result = transport.test_handle_sse_stream(stream).await;
 
         assert!(result.is_ok());
@@ -1496,7 +1502,7 @@ mod tests {
         let sse_data = b"data: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/progress\",\"params\":{\"progress\":50}}\ndata: {\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{\"tools\":[]}}\n\n";
         let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_data.to_vec())]);
 
-        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let result = transport.test_handle_sse_stream(stream).await;
 
         assert!(result.is_ok());
@@ -1517,7 +1523,7 @@ mod tests {
         let sse_body: &[u8] = b"data:{\"jsonrpc\":\"2.0\",\"id\":\"req_0\",\"result\":{}}\n\n";
         let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(sse_body.to_vec())]);
 
-        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let result = transport.test_handle_sse_stream(stream).await;
         assert!(
             result.is_ok(),
@@ -1540,7 +1546,7 @@ mod tests {
         let mut lines = tokio::io::BufReader::new(cursor).lines();
 
         let sender = Some(tx);
-        let _ = parse_sse_lines(&mut lines, &sender, &queued, &stats).await;
+        let _ = parse_sse_lines(&mut lines, sender, &queued, &stats).await;
 
         // Check: event should be in EITHER the channel OR queued_events, not both
         let channel_event = rx.try_recv().ok();
@@ -1562,7 +1568,7 @@ mod tests {
         let frames = br#"{"jsonrpc":"2.0","id":"srv-1","method":"sampling/createMessage","params":{}}{"jsonrpc":"2.0","method":"notifications/progress","params":{"progress":50}}{"jsonrpc":"2.0","id":"req_0","result":{"tools":[]}}"#;
         let stream = futures::stream::iter(vec![Ok::<_, std::io::Error>(frames.to_vec())]);
 
-        let mut transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
+        let transport = HttpTransport::new("http://localhost:9999/mcp").unwrap();
         let result = transport.test_handle_byte_stream(stream).await;
 
         assert!(result.is_ok());

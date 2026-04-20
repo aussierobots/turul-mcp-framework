@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.33] - 2026-04-21
+
+### Changed
+
+- **`Transport` trait — `&self` on hot-path methods** (`turul-mcp-client`): `connect`, `disconnect`, `send_request`, `send_request_with_headers`, `send_notification`, `send_delete`, `set_session_id`, `clear_session_id`, `start_event_listener`, and `health_check` now take `&self`. `McpClient::transport` is now `Arc<BoxedTransport>` — the outer `tokio::sync::Mutex` that serialized every request has been removed.
+
+### Fixed
+
+- **Concurrent client requests no longer serialize** (`turul-mcp-client`): N parallel `call_tool` / `list_tools` / etc. on one `Arc<McpClient>` now run in parallel through `reqwest`'s internal connection pool. Before: total wall time ≈ Σ per-call latency (Mutex-serialized). After: wall time ≈ max per-call latency.
+
+### Breaking
+
+- External implementors of `turul_mcp_client::transport::Transport` must change `&mut self` to `&self` on the listed methods and move any bare-mutable state into interior-mutable wrappers (`Atomic*` / `parking_lot::Mutex`). The stock `HttpTransport` and `SseTransport` already use interior mutability on all hot-path state.
+
 ## [0.3.32] - 2026-04-15
 
 ### Fixed

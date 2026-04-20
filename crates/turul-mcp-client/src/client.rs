@@ -31,8 +31,10 @@ pub type NotificationCallback = Arc<dyn Fn(&str, Option<&Value>) + Send + Sync>;
 
 /// Main MCP client
 pub struct McpClient {
-    /// Transport layer
-    transport: Arc<tokio::sync::Mutex<BoxedTransport>>,
+    /// Transport layer — `Arc<BoxedTransport>` (no Mutex) so concurrent
+    /// `call_tool`/`list_tools`/etc. go through the transport in parallel.
+    /// Each `Transport` impl is responsible for its own interior mutability.
+    transport: Arc<BoxedTransport>,
     /// Session manager
     session: Arc<SessionManager>,
     /// Configuration
@@ -72,14 +74,12 @@ impl Drop for McpClient {
         tokio::spawn(async move {
             // Only send DELETE if we have a session ID
             if let Some(session_id_str) = session_id.session_id_optional().await {
-                let mut transport_guard = transport.lock().await;
-
                 info!(
                     session_id = session_id_str,
                     "McpClient dropped - attempting session cleanup via DELETE request"
                 );
 
-                if let Err(e) = transport_guard.send_delete(&session_id_str).await {
+                if let Err(e) = transport.send_delete(&session_id_str).await {
                     warn!(
                         session_id = session_id_str,
                         error = %e,
@@ -118,7 +118,7 @@ impl McpClient {
         let session = Arc::new(SessionManager::new(config.clone()));
 
         Self {
-            transport: Arc::new(tokio::sync::Mutex::new(transport)),
+            transport: Arc::new(transport),
             session,
             config,
             stream_handler: Arc::new(tokio::sync::Mutex::new(StreamHandler::new())),
@@ -142,12 +142,11 @@ impl McpClient {
 
         // Connect transport
         {
-            let mut transport = self.transport.lock().await;
-            transport.connect().await?;
+            self.transport.connect().await?;
 
             // Start event listener if supported
-            if transport.capabilities().server_events {
-                let receiver = transport.start_event_listener().await?;
+            if self.transport.capabilities().server_events {
+                let receiver = self.transport.start_event_listener().await?;
 
                 // Create response channel for sending JSON-RPC responses back
                 let (response_tx, mut response_rx) =
@@ -215,8 +214,7 @@ impl McpClient {
                 let transport_clone = Arc::clone(&self.transport);
                 let consumer_handle = tokio::spawn(async move {
                     while let Some(response) = response_rx.recv().await {
-                        let mut transport = transport_clone.lock().await;
-                        if let Err(e) = transport.send_notification(response).await {
+                        if let Err(e) = transport_clone.send_notification(response).await {
                             warn!("Failed to send response back to server: {}", e);
                         }
                     }
@@ -245,8 +243,7 @@ impl McpClient {
 
         // Send DELETE request for session cleanup if we have a session ID
         if let Some(session_id) = self.session.session_id_optional().await {
-            let mut transport = self.transport.lock().await;
-            if let Err(e) = transport.send_delete(&session_id).await {
+            if let Err(e) = self.transport.send_delete(&session_id).await {
                 warn!(
                     session_id = session_id,
                     error = %e,
@@ -263,8 +260,7 @@ impl McpClient {
             .await;
 
         // Disconnect transport
-        let mut transport = self.transport.lock().await;
-        transport.disconnect().await?;
+        self.transport.disconnect().await?;
 
         info!("Disconnected from MCP server");
         Ok(())
@@ -272,11 +268,7 @@ impl McpClient {
 
     /// Check if client is connected and ready
     pub async fn is_ready(&self) -> bool {
-        let transport_connected = {
-            let transport = self.transport.lock().await;
-            transport.is_connected()
-        };
-
+        let transport_connected = self.transport.is_connected();
         let session_ready = self.session.is_ready().await;
 
         transport_connected && session_ready
@@ -284,10 +276,7 @@ impl McpClient {
 
     /// Get client connection status
     pub async fn connection_status(&self) -> ConnectionStatus {
-        let transport_info = {
-            let transport = self.transport.lock().await;
-            transport.connection_info()
-        };
+        let transport_info = self.transport.connection_info();
 
         let session_stats = self.session.statistics().await;
 
@@ -343,8 +332,7 @@ impl McpClient {
             self.session.set_session_id(session_id.clone()).await?;
 
             // Tell transport to include session ID in all subsequent requests
-            let mut transport = self.transport.lock().await;
-            transport.set_session_id(session_id);
+            self.transport.set_session_id(session_id);
         } else {
             debug!("Server did not provide Mcp-Session-Id — stateless session (spec-valid)");
         }
@@ -429,10 +417,7 @@ impl McpClient {
                         self.session.reset().await;
                         // Clear stale session ID from transport so initialize
                         // request is sent without Mcp-Session-Id header
-                        {
-                            let mut transport = self.transport.lock().await;
-                            transport.clear_session_id();
-                        }
+                        self.transport.clear_session_id();
                         if let Err(reinit_err) = self.initialize_session().await {
                             warn!(error = %reinit_err, "Re-initialization failed");
                             return Err(e);
@@ -527,11 +512,9 @@ impl McpClient {
         &self,
         request: Value,
     ) -> McpClientResult<crate::transport::TransportResponse> {
-        let mut transport = self.transport.lock().await;
-
         timeout(
             self.config.timeouts.request,
-            transport.send_request_with_headers(request),
+            self.transport.send_request_with_headers(request),
         )
         .await
         .map_err(|_| McpClientError::Timeout)?
@@ -543,11 +526,9 @@ impl McpClient {
             return Err(SessionError::NotInitialized.into());
         }
 
-        let mut transport = self.transport.lock().await;
-
         let response = timeout(
             self.config.timeouts.request,
-            transport.send_request(request),
+            self.transport.send_request(request),
         )
         .await
         .map_err(|_| McpClientError::Timeout)??;
@@ -569,8 +550,7 @@ impl McpClient {
 
     /// Send notification
     async fn send_notification_internal(&self, notification: Value) -> McpClientResult<()> {
-        let mut transport = self.transport.lock().await;
-        transport.send_notification(notification).await?;
+        self.transport.send_notification(notification).await?;
         self.session.update_activity().await;
         Ok(())
     }
@@ -1193,8 +1173,7 @@ impl McpClient {
 
     /// Get transport statistics
     pub async fn transport_stats(&self) -> crate::transport::TransportStatistics {
-        let transport = self.transport.lock().await;
-        transport.statistics()
+        self.transport.statistics()
     }
 }
 
@@ -1378,6 +1357,7 @@ impl Default for McpClientBuilder {
 mod tests {
     use super::*;
     use crate::transport::http::HttpTransport;
+    use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
     use crate::transport::{
         ConnectionInfo, EventReceiver, ServerEvent, TransportCapabilities, TransportResponse,
         TransportStatistics, TransportType,
@@ -1416,9 +1396,9 @@ mod tests {
     /// a controllable event channel for injecting ServerEvents.
     struct MockTransport {
         event_tx: mpsc::UnboundedSender<ServerEvent>,
-        event_rx: Option<mpsc::UnboundedReceiver<ServerEvent>>,
+        event_rx: parking_lot::Mutex<Option<mpsc::UnboundedReceiver<ServerEvent>>>,
         notifications: Arc<tokio::sync::Mutex<Vec<Value>>>,
-        connected: bool,
+        connected: AtomicBool,
     }
 
     impl MockTransport {
@@ -1427,9 +1407,9 @@ mod tests {
             let notifications = Arc::new(tokio::sync::Mutex::new(Vec::new()));
             let mock = Self {
                 event_tx,
-                event_rx: Some(event_rx),
+                event_rx: parking_lot::Mutex::new(Some(event_rx)),
                 notifications: Arc::clone(&notifications),
-                connected: false,
+                connected: AtomicBool::new(false),
             };
             (mock, notifications)
         }
@@ -1456,27 +1436,27 @@ mod tests {
             }
         }
 
-        async fn connect(&mut self) -> McpClientResult<()> {
-            self.connected = true;
+        async fn connect(&self) -> McpClientResult<()> {
+            self.connected.store(true, AtomicOrdering::SeqCst);
             Ok(())
         }
 
-        async fn disconnect(&mut self) -> McpClientResult<()> {
-            self.connected = false;
+        async fn disconnect(&self) -> McpClientResult<()> {
+            self.connected.store(false, AtomicOrdering::SeqCst);
             Ok(())
         }
 
         fn is_connected(&self) -> bool {
-            self.connected
+            self.connected.load(AtomicOrdering::SeqCst)
         }
 
-        async fn send_request(&mut self, _request: Value) -> McpClientResult<Value> {
+        async fn send_request(&self, _request: Value) -> McpClientResult<Value> {
             // Not used in this test path
             Ok(json!({"jsonrpc": "2.0", "result": {}}))
         }
 
         async fn send_request_with_headers(
-            &mut self,
+            &self,
             _request: Value,
         ) -> McpClientResult<TransportResponse> {
             // Return a valid initialize response with session ID
@@ -1502,21 +1482,22 @@ mod tests {
             ))
         }
 
-        async fn send_notification(&mut self, notification: Value) -> McpClientResult<()> {
+        async fn send_notification(&self, notification: Value) -> McpClientResult<()> {
             self.notifications.lock().await.push(notification);
             Ok(())
         }
 
-        async fn send_delete(&mut self, _session_id: &str) -> McpClientResult<()> {
+        async fn send_delete(&self, _session_id: &str) -> McpClientResult<()> {
             Ok(())
         }
 
-        fn set_session_id(&mut self, _session_id: String) {}
+        fn set_session_id(&self, _session_id: String) {}
 
-        fn clear_session_id(&mut self) {}
+        fn clear_session_id(&self) {}
 
-        async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver> {
+        async fn start_event_listener(&self) -> McpClientResult<EventReceiver> {
             self.event_rx
+                .lock()
                 .take()
                 .ok_or_else(|| McpClientError::generic("Event listener already started"))
         }
@@ -1525,7 +1506,7 @@ mod tests {
             ConnectionInfo {
                 transport_type: TransportType::Http,
                 endpoint: "mock://test".to_string(),
-                connected: self.connected,
+                connected: self.is_connected(),
                 capabilities: self.capabilities(),
                 metadata: Value::Null,
             }
@@ -1713,11 +1694,11 @@ mod tests {
         /// Event channel sender
         event_tx: Option<mpsc::UnboundedSender<ServerEvent>>,
         /// Event channel receiver (taken once by start_event_listener)
-        event_rx: Option<mpsc::UnboundedReceiver<ServerEvent>>,
+        event_rx: parking_lot::Mutex<Option<mpsc::UnboundedReceiver<ServerEvent>>>,
         /// Capabilities
         caps: TransportCapabilities,
         /// Connected flag
-        connected: bool,
+        connected: AtomicBool,
     }
 
     impl StatefulMockTransport {
@@ -1729,7 +1710,7 @@ mod tests {
                 set_session_ids: Arc::new(std::sync::Mutex::new(Vec::new())),
                 clear_count: Arc::new(AtomicU32::new(0)),
                 event_tx: Some(event_tx),
-                event_rx: Some(event_rx),
+                event_rx: parking_lot::Mutex::new(Some(event_rx)),
                 caps: TransportCapabilities {
                     streaming: true,
                     bidirectional: true,
@@ -1737,7 +1718,7 @@ mod tests {
                     max_message_size: None,
                     persistent: true,
                 },
-                connected: false,
+                connected: AtomicBool::new(false),
             }
         }
 
@@ -1790,21 +1771,21 @@ mod tests {
             self.caps.clone()
         }
 
-        async fn connect(&mut self) -> McpClientResult<()> {
-            self.connected = true;
+        async fn connect(&self) -> McpClientResult<()> {
+            self.connected.store(true, AtomicOrdering::SeqCst);
             Ok(())
         }
 
-        async fn disconnect(&mut self) -> McpClientResult<()> {
-            self.connected = false;
+        async fn disconnect(&self) -> McpClientResult<()> {
+            self.connected.store(false, AtomicOrdering::SeqCst);
             Ok(())
         }
 
         fn is_connected(&self) -> bool {
-            self.connected
+            self.connected.load(AtomicOrdering::SeqCst)
         }
 
-        async fn send_request(&mut self, _request: Value) -> McpClientResult<Value> {
+        async fn send_request(&self, _request: Value) -> McpClientResult<Value> {
             self.request_responses
                 .lock()
                 .unwrap()
@@ -1817,7 +1798,7 @@ mod tests {
         }
 
         async fn send_request_with_headers(
-            &mut self,
+            &self,
             _request: Value,
         ) -> McpClientResult<TransportResponse> {
             self.init_responses
@@ -1831,25 +1812,26 @@ mod tests {
                 })
         }
 
-        async fn send_notification(&mut self, _notification: Value) -> McpClientResult<()> {
+        async fn send_notification(&self, _notification: Value) -> McpClientResult<()> {
             Ok(())
         }
 
-        async fn send_delete(&mut self, _session_id: &str) -> McpClientResult<()> {
+        async fn send_delete(&self, _session_id: &str) -> McpClientResult<()> {
             Ok(())
         }
 
-        fn set_session_id(&mut self, session_id: String) {
+        fn set_session_id(&self, session_id: String) {
             self.set_session_ids.lock().unwrap().push(session_id);
         }
 
-        fn clear_session_id(&mut self) {
+        fn clear_session_id(&self) {
             self.clear_count
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
 
-        async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver> {
+        async fn start_event_listener(&self) -> McpClientResult<EventReceiver> {
             self.event_rx
+                .lock()
                 .take()
                 .ok_or_else(|| McpClientError::generic("Event listener already started"))
         }
@@ -1858,7 +1840,7 @@ mod tests {
             ConnectionInfo {
                 transport_type: TransportType::Http,
                 endpoint: "stateful-mock://test".to_string(),
-                connected: self.connected,
+                connected: self.is_connected(),
                 capabilities: self.caps.clone(),
                 metadata: Value::Null,
             }
@@ -2488,7 +2470,7 @@ mod tests {
         clear_count: Arc<AtomicU32>,
         connect_count: Arc<AtomicU32>,
         disconnect_count: Arc<AtomicU32>,
-        connected: bool,
+        connected: AtomicBool,
     }
 
     impl ReconnectableMockTransport {
@@ -2500,7 +2482,7 @@ mod tests {
                 clear_count: Arc::new(AtomicU32::new(0)),
                 connect_count: Arc::new(AtomicU32::new(0)),
                 disconnect_count: Arc::new(AtomicU32::new(0)),
-                connected: false,
+                connected: AtomicBool::new(false),
             }
         }
 
@@ -2529,25 +2511,25 @@ mod tests {
             }
         }
 
-        async fn connect(&mut self) -> McpClientResult<()> {
+        async fn connect(&self) -> McpClientResult<()> {
             self.connect_count
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            self.connected = true;
+            self.connected.store(true, AtomicOrdering::SeqCst);
             Ok(())
         }
 
-        async fn disconnect(&mut self) -> McpClientResult<()> {
+        async fn disconnect(&self) -> McpClientResult<()> {
             self.disconnect_count
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            self.connected = false;
+            self.connected.store(false, AtomicOrdering::SeqCst);
             Ok(())
         }
 
         fn is_connected(&self) -> bool {
-            self.connected
+            self.connected.load(AtomicOrdering::SeqCst)
         }
 
-        async fn send_request(&mut self, _request: Value) -> McpClientResult<Value> {
+        async fn send_request(&self, _request: Value) -> McpClientResult<Value> {
             self.request_responses
                 .lock()
                 .unwrap()
@@ -2560,7 +2542,7 @@ mod tests {
         }
 
         async fn send_request_with_headers(
-            &mut self,
+            &self,
             _request: Value,
         ) -> McpClientResult<TransportResponse> {
             self.init_responses
@@ -2574,24 +2556,24 @@ mod tests {
                 })
         }
 
-        async fn send_notification(&mut self, _notification: Value) -> McpClientResult<()> {
+        async fn send_notification(&self, _notification: Value) -> McpClientResult<()> {
             Ok(())
         }
 
-        async fn send_delete(&mut self, _session_id: &str) -> McpClientResult<()> {
+        async fn send_delete(&self, _session_id: &str) -> McpClientResult<()> {
             Ok(())
         }
 
-        fn set_session_id(&mut self, session_id: String) {
+        fn set_session_id(&self, session_id: String) {
             self.set_session_ids.lock().unwrap().push(session_id);
         }
 
-        fn clear_session_id(&mut self) {
+        fn clear_session_id(&self) {
             self.clear_count
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         }
 
-        async fn start_event_listener(&mut self) -> McpClientResult<EventReceiver> {
+        async fn start_event_listener(&self) -> McpClientResult<EventReceiver> {
             // Should never be called since server_events is false
             Err(McpClientError::generic("No event listener"))
         }
@@ -2600,7 +2582,7 @@ mod tests {
             ConnectionInfo {
                 transport_type: TransportType::Http,
                 endpoint: "reconnectable-mock://test".to_string(),
-                connected: self.connected,
+                connected: self.is_connected(),
                 capabilities: self.capabilities(),
                 metadata: Value::Null,
             }
