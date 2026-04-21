@@ -1401,6 +1401,7 @@ impl SessionStorage for DynamoDbSessionStorage {
                 .get_item()
                 .table_name(&self.config.table_name)
                 .set_key(Some(key))
+                .consistent_read(true) // RYW: session must be visible immediately after initialize
                 .send()
                 .await
             {
@@ -1500,6 +1501,7 @@ impl SessionStorage for DynamoDbSessionStorage {
                 .get_item()
                 .table_name(&self.config.table_name)
                 .set_key(Some(session_key.clone()))
+                .consistent_read(true) // RYW: read-before-write must observe latest state
                 .send()
                 .await
             {
@@ -1813,6 +1815,7 @@ impl SessionStorage for DynamoDbSessionStorage {
                 .get_item()
                 .table_name(&self.config.table_name)
                 .set_key(Some(session_key))
+                .consistent_read(true) // RYW: must observe just-initialized sessions
                 .send()
                 .await
             {
@@ -1838,11 +1841,15 @@ impl SessionStorage for DynamoDbSessionStorage {
             // condition_expression to prevent duplicate IDs across Lambda instances.
             const MAX_RETRIES: u32 = 5;
             for attempt in 0..MAX_RETRIES {
-                // 1. Query current max eventId for this session
+                // 1. Query current max eventId for this session.
+                // consistent_read(true) improves visibility of recent events across
+                // Lambda instances; it does NOT prevent races — the condition_expression
+                // on the subsequent PutItem plus MAX_RETRIES is the race-control path.
                 let max_query = self
                     .client
                     .query()
                     .table_name(&event_table)
+                    .consistent_read(true)
                     .key_condition_expression(format!("{} = :sid", ea.session_id))
                     .expression_attribute_values(":sid", AttributeValue::S(session_id.to_string()))
                     .scan_index_forward(false) // descending — max first
@@ -2674,5 +2681,71 @@ mod tests {
     async fn test_get_attr_missing() {
         let item: HashMap<String, AttributeValue> = HashMap::new();
         assert!(get_attr(&item, "sessionId", "session_id").is_none());
+    }
+
+    // Storage contract regression test: write then read must return the written value.
+    //
+    // This is a read-your-writes contract test, NOT proof of AWS DynamoDB consistency
+    // behavior. DynamoDB-Local / LocalStack may pass this test even if the implementation
+    // omits consistent_read(true), because emulators do not reliably reproduce AWS
+    // eventual-read behavior. It guards against regressions like local caches or delayed
+    // persistence on any backend.
+    //
+    // Against real AWS DynamoDB this test covers the MCP SSE resumability contract:
+    // persisted events must be visible to a fresh instance before replay completes.
+    // The "cold reader" pattern (fresh storage handle for the read) reproduces the
+    // Lambda cross-instance scenario as closely as we can from a single test harness.
+    #[tokio::test]
+    #[ignore = "requires DynamoDB"]
+    async fn read_your_writes_contract() {
+        use turul_mcp_protocol::ServerCapabilities;
+
+        let writer = DynamoDbSessionStorage::with_config(DynamoDbConfig::default())
+            .await
+            .unwrap();
+        let cold_reader = DynamoDbSessionStorage::with_config(DynamoDbConfig::default())
+            .await
+            .unwrap();
+
+        // 1. Session RYW: create on writer, get on fresh reader.
+        let session = writer
+            .create_session(ServerCapabilities::default())
+            .await
+            .unwrap();
+        let session_id = session.session_id.clone();
+        let fetched = cold_reader.get_session(&session_id).await.unwrap();
+        assert!(
+            fetched.is_some(),
+            "RYW violation: session written by one instance not visible to another"
+        );
+
+        // 2. Session-state RYW: set on writer, get on fresh reader.
+        writer
+            .set_session_state(&session_id, "ryw_key", serde_json::json!("ryw_value"))
+            .await
+            .unwrap();
+        let state = cold_reader
+            .get_session_state(&session_id, "ryw_key")
+            .await
+            .unwrap();
+        assert_eq!(
+            state,
+            Some(serde_json::json!("ryw_value")),
+            "RYW violation: session state not visible across instances"
+        );
+
+        // 3. Event-replay RYW: store on writer, read from tail on fresh reader.
+        // This is the MCP SSE resumability path — stored events must be visible for
+        // Last-Event-ID replay from any instance.
+        let event = SseEvent::new("message".to_string(), serde_json::json!({"n": 1}));
+        writer.store_event(&session_id, event).await.unwrap();
+        let recent = cold_reader.get_recent_events(&session_id, 10).await.unwrap();
+        assert!(
+            !recent.is_empty(),
+            "RYW violation: stored event not visible to fresh reader"
+        );
+
+        // Cleanup
+        writer.delete_session(&session_id).await.unwrap();
     }
 }

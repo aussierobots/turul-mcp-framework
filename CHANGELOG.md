@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.34] - 2026-04-21
+
+### Fixed
+
+- **DynamoDB read-your-writes on critical paths** (`turul-mcp-session-storage`, `turul-mcp-server-state-storage`): Added `consistent_read(true)` to the DynamoDB read sites that must observe just-written values across instances. Eventual-consistency reads on these paths could cause cold-start Lambda instances to miss sessions, session state, persisted events, or fingerprints written by other instances — breaking MCP SSE resumability and the `initialize` handshake.
+  - `get_session`, `set_session_state` read-before-write, `store_event` session-exists check, and `store_event` max-eventId query (visibility; races still handled by the existing conditional `PutItem` + `MAX_RETRIES` loop).
+  - `get_fingerprint` — cold-start instance must observe the latest fingerprint.
+
+### Added
+
+- **Storage contract regression tests** (`#[ignore = "requires DynamoDB"]`): `read_your_writes_contract` (session, state, event-replay) and `read_your_writes_contract_fingerprint`. Classified as storage contract regression tests; documented that DynamoDB-Local / LocalStack does not reliably reproduce AWS eventual reads, so passing locally does not prove AWS consistency correctness.
+
 ## [0.3.33] - 2026-04-21
 
 ### Changed
@@ -681,7 +693,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.22...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.34...HEAD
+[0.3.34]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.33...v0.3.34
 [0.3.22]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.21...v0.3.22
 [0.3.21]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.20...v0.3.21
 [0.3.20]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.19...v0.3.20

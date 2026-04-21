@@ -397,6 +397,7 @@ impl ServerStateStorage for DynamoDbServerStateStorage {
                 "entityId",
                 AttributeValue::S(FINGERPRINT_ENTITY_ID.to_string()),
             )
+            .consistent_read(true) // RYW: cold-start instance must observe latest fingerprint
             .send()
             .await
             .map_err(Self::dynamo_err_debug)?;
@@ -840,5 +841,43 @@ mod tests {
             .table_name(&config.table_name)
             .send()
             .await;
+    }
+
+    // Storage contract regression test: write then read must return the written value.
+    //
+    // This is a read-your-writes contract test, NOT proof of AWS DynamoDB consistency
+    // behavior. DynamoDB-Local / LocalStack may pass this test even if the implementation
+    // omits consistent_read(true), because emulators do not reliably reproduce AWS
+    // eventual-read behavior. The test guards against regressions like local caches,
+    // delayed persistence, or dropped writes.
+    //
+    // Against real AWS DynamoDB this exercises the cold-start fingerprint-read path
+    // from a fresh storage instance — the scenario behind the v0.3.26 non-deterministic
+    // fingerprint investigation and the subsequent consistent_read(true) fix.
+    #[tokio::test]
+    #[ignore = "requires DynamoDB"]
+    async fn read_your_writes_contract_fingerprint() {
+        let writer = DynamoDbServerStateStorage::new().await.unwrap();
+        let expected = format!("fp_{}", uuid::Uuid::now_v7().as_simple());
+
+        writer
+            .set_fingerprint(entity_types::TOOLS, expected.clone())
+            .await
+            .unwrap();
+
+        // Simulate a cold-start instance by constructing a fresh storage handle.
+        // The AWS SDK client is separate; the RYW guarantee must hold across instances.
+        let cold_reader = DynamoDbServerStateStorage::new().await.unwrap();
+        let fp = cold_reader
+            .get_fingerprint(entity_types::TOOLS)
+            .await
+            .unwrap();
+        assert_eq!(fp, Some(expected));
+
+        // Cleanup
+        writer
+            .delete_entity_state(entity_types::TOOLS, FINGERPRINT_ENTITY_ID)
+            .await
+            .unwrap();
     }
 }
