@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.37] - 2026-04-24
+
+### Fixed
+
+- **HTTP/2 connection drop detection** (`turul-mcp-client`): `HttpTransport` now configures `reqwest`'s h2 keepalive PINGs (`http2_keep_alive_interval = 30s`, `http2_keep_alive_timeout = 10s`, `http2_keep_alive_while_idle = true`) on both `new()` and `with_config()` construction paths. Without these, a connection silently dropped by the server or an intermediary (API Gateway ~350s idle, NAT, ALB) looks alive to the client pool until the next request — which then pays the full reconnect cost. PING keepalives surface the drop proactively so idle pooled connections either stay alive or fail fast and reconnect before a user-facing request uses them. No-op on h1-only backends (ALPN-negotiated h1 connections don't engage h2 keepalive state).
+
+### Note
+
+Values chosen as conservative defaults: 30s interval detects drops well before typical intermediary idle windows without being wasteful (~10 bytes per PING). 10s timeout halves reqwest's default 20s for faster fail-over on flaky paths. `while_idle = true` is the load-bearing bit — it keeps pooled idle connections being probed, which is precisely where silent-drop bimodality manifests. No new `ConnectionConfig` fields were added; if tuning becomes necessary it will land alongside other pending 0.4 surface changes.
+
 ## [0.3.36] - 2026-04-24
 
 ### Changed
@@ -726,6 +736,7 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - 42+ working examples
 
 [Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.36...HEAD
+[0.3.37]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.36...v0.3.37
 [0.3.36]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.35...v0.3.36
 [0.3.35]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.34...v0.3.35
 [0.3.34]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.33...v0.3.34

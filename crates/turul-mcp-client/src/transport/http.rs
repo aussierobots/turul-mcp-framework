@@ -59,6 +59,11 @@ impl HttpTransport {
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .user_agent("mcp-client/0.1.0")
+            // HTTP/2 keepalives: proactively PING so silent server/intermediary drops
+            // surface immediately instead of on the next real request. No-op on h1.
+            .http2_keep_alive_interval(Duration::from_secs(30))
+            .http2_keep_alive_timeout(Duration::from_secs(10))
+            .http2_keep_alive_while_idle(true)
             .build()
             .map_err(|e| TransportError::Http(format!("Failed to create HTTP client: {}", e)))?;
 
@@ -96,7 +101,12 @@ impl HttpTransport {
             .timeout(Duration::from_secs(30))
             .user_agent(user_agent)
             .pool_max_idle_per_host(config.pool_settings.max_idle_per_host as usize)
-            .pool_idle_timeout(config.pool_settings.idle_timeout);
+            .pool_idle_timeout(config.pool_settings.idle_timeout)
+            // HTTP/2 keepalives: proactively PING so silent server/intermediary drops
+            // surface immediately instead of on the next real request. No-op on h1.
+            .http2_keep_alive_interval(Duration::from_secs(30))
+            .http2_keep_alive_timeout(Duration::from_secs(10))
+            .http2_keep_alive_while_idle(true);
 
         builder = if config.follow_redirects {
             builder.redirect(reqwest::redirect::Policy::limited(
