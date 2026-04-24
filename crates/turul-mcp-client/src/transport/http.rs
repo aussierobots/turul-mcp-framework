@@ -94,11 +94,17 @@ impl HttpTransport {
 
         let mut builder = Client::builder()
             .timeout(Duration::from_secs(30))
-            .user_agent(user_agent);
+            .user_agent(user_agent)
+            .pool_max_idle_per_host(config.pool_settings.max_idle_per_host as usize)
+            .pool_idle_timeout(config.pool_settings.idle_timeout);
 
-        if !config.follow_redirects {
-            builder = builder.redirect(reqwest::redirect::Policy::none());
-        }
+        builder = if config.follow_redirects {
+            builder.redirect(reqwest::redirect::Policy::limited(
+                config.max_redirects as usize,
+            ))
+        } else {
+            builder.redirect(reqwest::redirect::Policy::none())
+        };
 
         if let Some(ref headers) = config.headers {
             let mut header_map = reqwest::header::HeaderMap::new();

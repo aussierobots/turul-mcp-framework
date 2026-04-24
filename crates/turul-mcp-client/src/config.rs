@@ -101,10 +101,17 @@ pub struct ConnectionConfig {
     /// Whether to follow redirects
     pub follow_redirects: bool,
 
-    /// Maximum number of redirects to follow
+    /// Maximum number of redirects to follow (only applies when `follow_redirects = true`)
     pub max_redirects: u32,
 
-    /// Keep-alive settings
+    /// Keep-alive settings.
+    ///
+    /// No reqwest equivalent — reqwest exposes `tcp_keepalive(Option<Duration>)`, not a
+    /// boolean. This field is scheduled for removal in 0.4.
+    #[deprecated(
+        since = "0.3.35",
+        note = "no reqwest equivalent; scheduled for removal in 0.4"
+    )]
     pub keep_alive: bool,
 
     /// Connection pool settings
@@ -114,14 +121,27 @@ pub struct ConnectionConfig {
 /// Connection pool configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PoolConfig {
-    /// Maximum number of idle connections per host
+    /// Maximum number of idle connections per host kept in the pool.
+    ///
+    /// Wired to `reqwest::ClientBuilder::pool_max_idle_per_host`. The default was raised
+    /// from 5 to 32 in 0.3.35 so that callers relying on the previous default (which was
+    /// silently ignored and deferred to reqwest's internal default) are not regressed.
     pub max_idle_per_host: u32,
 
-    /// Idle connection timeout
+    /// Idle connection timeout.
+    ///
+    /// Wired to `reqwest::ClientBuilder::pool_idle_timeout`.
     #[serde(with = "duration_serde")]
     pub idle_timeout: Duration,
 
-    /// Connection lifetime
+    /// Maximum connection lifetime.
+    ///
+    /// No reqwest equivalent — reqwest exposes `pool_idle_timeout` but no per-connection
+    /// max lifetime. This field is scheduled for removal in 0.4.
+    #[deprecated(
+        since = "0.3.35",
+        note = "no reqwest equivalent; scheduled for removal in 0.4"
+    )]
     #[serde(with = "duration_serde")]
     pub max_lifetime: Duration,
 }
@@ -183,6 +203,7 @@ impl Default for RetryConfig {
 }
 
 impl Default for ConnectionConfig {
+    #[allow(deprecated)] // keep_alive is deprecated but must remain in Default until 0.4
     fn default() -> Self {
         Self {
             user_agent: Some(format!("mcp-client/{}", env!("CARGO_PKG_VERSION"))),
@@ -196,9 +217,13 @@ impl Default for ConnectionConfig {
 }
 
 impl Default for PoolConfig {
+    #[allow(deprecated)] // max_lifetime is deprecated but must remain in Default until 0.4
     fn default() -> Self {
         Self {
-            max_idle_per_host: 5,
+            // 32 matches typical HTTP client pool sizing. Previously 5, silently ignored
+            // (reqwest default was `usize::MAX`). 0.3.35 honors the value, so raising the
+            // default here avoids regressing callers who took the previous default.
+            max_idle_per_host: 32,
             idle_timeout: Duration::from_secs(90),
             max_lifetime: Duration::from_secs(300),
         }
