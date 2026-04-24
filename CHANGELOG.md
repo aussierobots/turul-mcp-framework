@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`ConnectionConfig` fields now honored** (`turul-mcp-client`): `HttpTransport::with_config` previously advertised six configuration fields but consumed only three (`user_agent`, `follow_redirects`, `headers`). `max_redirects`, `pool_settings.max_idle_per_host`, and `pool_settings.idle_timeout` were silent no-ops — callers set them and `reqwest` defaults applied instead. These three are now wired through to `reqwest::ClientBuilder` (`Policy::limited`, `pool_max_idle_per_host`, `pool_idle_timeout`).
+
+### Deprecated
+
+- **`ConnectionConfig::keep_alive`** and **`PoolConfig::max_lifetime`** (`turul-mcp-client`): no reqwest equivalent. `reqwest` exposes `tcp_keepalive(Option<Duration>)`, not a boolean, and has no per-connection max-lifetime API. Both fields will be removed in 0.4. Callers who do not reference them are unaffected.
+
+### Changed
+
+- **`PoolConfig::default().max_idle_per_host`** raised from 5 to 32 (`turul-mcp-client`): the previous default was silently ignored (reqwest's internal default `usize::MAX` applied). Now that the field is honored, the previous default would cap callers at 5 idle connections per host — a regression for fan-out workloads. 32 matches typical HTTP client sizing; callers can still set their own value.
+
+### Note
+
+This release fixes `ConnectionConfig` API truthfulness only. It does not change HTTP/2 support, connection protocol negotiation, or any other transport-layer behavior. A separate investigation (#13) is evaluating whether enabling `reqwest/http2` measurably affects cold-path tail latency; no decision has been made on that feature.
+
 ## [0.3.34] - 2026-04-21
 
 ### Fixed
