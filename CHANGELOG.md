@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.35] - 2026-04-24
+
 ### Fixed
 
 - **`ConnectionConfig` fields now honored** (`turul-mcp-client`): `HttpTransport::with_config` previously advertised six configuration fields but consumed only three (`user_agent`, `follow_redirects`, `headers`). `max_redirects`, `pool_settings.max_idle_per_host`, and `pool_settings.idle_timeout` were silent no-ops — callers set them and `reqwest` defaults applied instead. These three are now wired through to `reqwest::ClientBuilder` (`Policy::limited`, `pool_max_idle_per_host`, `pool_idle_timeout`).
@@ -709,7 +711,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.34...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.35...HEAD
+[0.3.35]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.34...v0.3.35
 [0.3.34]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.33...v0.3.34
 [0.3.22]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.21...v0.3.22
 [0.3.21]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.20...v0.3.21
