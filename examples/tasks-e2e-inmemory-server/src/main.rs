@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = McpServer::builder()
         .name("tasks-e2e-inmemory-server")
-        .version("0.3.35")
+        .version("0.3.36")
         .with_task_storage(Arc::new(InMemoryTaskStorage::new()))
         .tool_fn(slow_add)
         .tool_fn(slow_cancelable)
