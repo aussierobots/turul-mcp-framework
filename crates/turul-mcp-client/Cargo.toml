@@ -19,7 +19,7 @@ futures = { workspace = true }
 async-trait = { workspace = true }
 
 # HTTP client
-reqwest = { workspace = true, features = ["json", "stream"] }
+reqwest = { workspace = true, features = ["json", "stream", "http2"] }
 hyper = { workspace = true }
 
 # JSON handling

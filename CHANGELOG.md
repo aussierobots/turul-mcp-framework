@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.36] - 2026-04-24
+
+### Changed
+
+- **`turul-mcp-client` now compiled with `reqwest/http2` feature**: reqwest auto-negotiates HTTP/2 via ALPN when the backend advertises `h2`. For servers that only speak HTTP/1.1, ALPN falls back to h1 — no behavior change. For h2-capable backends (AWS API Gateway, ALB, CloudFront, most modern HTTPS servers), concurrent `call_tool` invocations on one `Arc<McpClient>` are now multiplexed over a single TLS connection instead of opening N separate h1 connections. Resolves #13.
+
+### Testing
+
+- `tests/http2_feature.rs`: compile-time regression test that fails if a future `Cargo.toml` edit accidentally disables `reqwest/http2`.
+
+### Note on validation
+
+This change enables h2 at the dependency layer; the wire-level negotiation is handled entirely by reqwest + rustls ALPN. End-to-end validation (latency improvement on concurrent fan-out against h2-capable backends) is owned by downstream consumers — no specific latency claim is attached to this release. See #13 for the measurement plan and expected behavior.
+
 ## [0.3.35] - 2026-04-24
 
 ### Fixed
@@ -711,7 +725,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.35...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.36...HEAD
+[0.3.36]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.35...v0.3.36
 [0.3.35]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.34...v0.3.35
 [0.3.34]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.33...v0.3.34
 [0.3.22]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.21...v0.3.22
