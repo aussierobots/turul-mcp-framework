@@ -255,11 +255,7 @@ mod tests {
 
     #[test]
     fn test_session_not_initialized_by_code() {
-        let err = McpClientError::server_error(
-            -32031,
-            "Session error: something",
-            None,
-        );
+        let err = McpClientError::server_error(-32031, "Session error: something", None);
         assert!(err.is_session_not_initialized());
     }
 
@@ -275,11 +271,7 @@ mod tests {
 
     #[test]
     fn test_unrelated_error_is_not_session_not_initialized() {
-        let err = McpClientError::server_error(
-            -32602,
-            "Invalid params",
-            None,
-        );
+        let err = McpClientError::server_error(-32602, "Invalid params", None);
         assert!(!err.is_session_not_initialized());
     }
 

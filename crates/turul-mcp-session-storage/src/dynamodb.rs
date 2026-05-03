@@ -2739,7 +2739,10 @@ mod tests {
         // Last-Event-ID replay from any instance.
         let event = SseEvent::new("message".to_string(), serde_json::json!({"n": 1}));
         writer.store_event(&session_id, event).await.unwrap();
-        let recent = cold_reader.get_recent_events(&session_id, 10).await.unwrap();
+        let recent = cold_reader
+            .get_recent_events(&session_id, 10)
+            .await
+            .unwrap();
         assert!(
             !recent.is_empty(),
             "RYW violation: stored event not visible to fresh reader"

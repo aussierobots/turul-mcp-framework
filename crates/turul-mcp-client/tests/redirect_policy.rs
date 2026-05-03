@@ -22,9 +22,7 @@ async fn max_redirects_zero_does_not_follow_302() {
     // POST /mcp → 302 redirect to /elsewhere
     Mock::given(method("POST"))
         .and(path("/mcp"))
-        .respond_with(
-            ResponseTemplate::new(302).insert_header("Location", "/elsewhere"),
-        )
+        .respond_with(ResponseTemplate::new(302).insert_header("Location", "/elsewhere"))
         .expect(1) // Must be called exactly once — no auto-follow
         .mount(&mock_server)
         .await;

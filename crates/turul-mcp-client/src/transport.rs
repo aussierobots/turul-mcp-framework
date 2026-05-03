@@ -119,10 +119,8 @@ pub trait Transport: Send + Sync {
     async fn send_request(&self, request: Value) -> McpClientResult<Value>;
 
     /// Send a request and return response with headers (for initialization)
-    async fn send_request_with_headers(
-        &self,
-        request: Value,
-    ) -> McpClientResult<TransportResponse>;
+    async fn send_request_with_headers(&self, request: Value)
+    -> McpClientResult<TransportResponse>;
 
     /// Send a notification (no response expected)
     async fn send_notification(&self, notification: Value) -> McpClientResult<()>;
@@ -136,7 +134,25 @@ pub trait Transport: Send + Sync {
     /// Clear the session ID (used during 404 re-initialization)
     fn clear_session_id(&self);
 
-    /// Start listening for server events (if supported)
+    /// Start listening for server events (if supported).
+    ///
+    /// # Streamable HTTP listener termination (since 0.3.38)
+    ///
+    /// On the streamable HTTP transport, the SSE GET listener treats HTTP 4xx
+    /// as **terminal**: the cached `Mcp-Session-Id` is cleared, a single
+    /// [`ServerEvent::Error`] (`"SSE GET rejected with HTTP <status> — listener
+    /// exiting"`) is emitted, and the spawned task exits. The returned
+    /// [`EventReceiver`] is **not** closed (the transport keeps an internal
+    /// sender clone), so callers must observe the terminal `Error` event itself
+    /// — not channel closure — to detect the exit.
+    ///
+    /// Recovery is the caller's responsibility: re-run `initialize` and call
+    /// `start_event_listener` again. Because the cached session header was
+    /// cleared, the next initialize POST will be sent without a stale
+    /// `Mcp-Session-Id`, mirroring the existing POST 404 recovery flow.
+    ///
+    /// HTTP 5xx and network errors remain transient and are retried with the
+    /// existing static backoff.
     async fn start_event_listener(&self) -> McpClientResult<EventReceiver>;
 
     /// Get connection information
@@ -182,7 +198,15 @@ pub enum ServerEvent {
     Response(Value),
     /// Connection was lost
     ConnectionLost,
-    /// Transport error occurred
+    /// Transport error occurred.
+    ///
+    /// On the streamable HTTP transport, an `Error` whose payload contains
+    /// `"listener exiting"` signals that the SSE GET listener task has
+    /// terminated (HTTP 4xx response — see [`Transport::start_event_listener`]
+    /// for the full contract). The cached session header has already been
+    /// cleared; the caller should re-run `initialize` and restart the listener.
+    /// Other `Error` payloads are non-terminal — the listener continues to
+    /// retry transient failures.
     Error(String),
     /// Heartbeat/keep-alive
     Heartbeat,

@@ -43,8 +43,7 @@ async fn test_concurrent_send_request_runs_in_parallel() {
         .mount(&mock_server)
         .await;
 
-    let transport =
-        Arc::new(HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap());
+    let transport = Arc::new(HttpTransport::new(&format!("{}/mcp", mock_server.uri())).unwrap());
     transport.connect().await.unwrap();
 
     let start = Instant::now();
@@ -64,9 +63,7 @@ async fn test_concurrent_send_request_runs_in_parallel() {
     }
 
     for h in handles {
-        h.await
-            .expect("task panicked")
-            .expect("request failed");
+        h.await.expect("task panicked").expect("request failed");
     }
 
     let elapsed = start.elapsed();

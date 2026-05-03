@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.38] - 2026-05-03
+
+### Fixed
+
+- **SSE GET 4xx hot-loop on streamable HTTP transport** (`turul-mcp-client`): `HttpTransport`'s SSE listener task previously treated every non-2xx GET response identically — `warn!` then sleep 5s + `continue` — producing an infinite retry loop against servers that legitimately reject the request (e.g. an MCP server with `strict_lifecycle(true)` returning HTTP 400 for a GET issued after session termination). The listener now distinguishes status classes:
+  - **4xx → terminal**: clear the cached `Mcp-Session-Id` (only if it still matches what the failing GET sent — see CAS note below), emit `ServerEvent::Error("SSE GET rejected with HTTP <status> — listener exiting")`, and exit the spawned task. The cache clear ensures the caller's next `initialize` POST goes out without a stale session header (mirrors the canonical POST-404 recovery in `McpClient::send_request_raw`).
+  - **5xx and other non-2xx → transient**: existing `warn!` + 5s sleep + retry behavior is preserved.
+
+  Caller contract: on terminal SSE GET 4xx the listener exits cleanly; the caller may then re-run its normal `initialize` / `start_event_listener` flow. No new `ServerEvent` variants, no public API additions, no extension of `is_session_expired()` (which remains 404-only). The legacy `transport/sse.rs` is unchanged in this slice.
+
+### Note
+
+Surfaced by a Lambda MCP client logging repeated `"SSE stream error: error decoding response body"` followed by `"SSE connection lost, attempting to reconnect..."` against an API Gateway-fronted server with `strict_lifecycle(true)`. The 29s API GW idle timeout killed the SSE stream; the listener re-issued GET, which 400'd, and the loop never terminated. Four regression tests in `tests/sse_terminal_4xx.rs` lock in: terminal-on-400 with cache clear, transient-on-503, listener-works-without-session-id (stateless mode guard), and compare-and-swap on cache clear (does not clobber a fresher session).
+
+The CAS detail matters because `McpClient::connect()` spawns the SSE listener **before** running `initialize_session()` (see `client.rs:135-229`). The two race: the listener may build a GET while `session_id` is still `None`, then `initialize` writes a real session ID into the cache, then the in-flight GET 4xx's. An unconditional cache clear would clobber the just-initialized session and break every subsequent POST. The fix snapshots the session header sent at request-build time and only clears the cache if it still matches that snapshot — preserving the strict-lifecycle bug-fix semantics (snapshot==current==Some(stale) → clear) while leaving a fresher value alone (snapshot=None, current=Some(new) → no-op).
+
 ## [0.3.37] - 2026-04-24
 
 ### Fixed
@@ -735,7 +751,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.36...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.38...HEAD
+[0.3.38]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.37...v0.3.38
 [0.3.37]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.36...v0.3.37
 [0.3.36]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.35...v0.3.36
 [0.3.35]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.34...v0.3.35

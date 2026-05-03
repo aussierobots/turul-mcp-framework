@@ -837,8 +837,15 @@ impl Transport for HttpTransport {
                     .header("Accept", "text/event-stream")
                     .header("MCP-Protocol-Version", "2025-11-25");
 
-                // Include session ID if available (read fresh value each time)
-                if let Some(ref current_session_id) = *session_id.lock() {
+                // Snapshot the session ID at request-build time. We need the
+                // snapshot (not just the cached value at response time) so the
+                // 4xx terminal handler below can compare-and-swap: only clear
+                // the cache if it still matches what we sent. If `connect()` ran
+                // `initialize_session()` after we built this GET (a real race —
+                // `client.rs:135-229` spawns the listener before initialize),
+                // a fresher session ID must not be clobbered.
+                let sent_session_id: Option<String> = session_id.lock().clone();
+                if let Some(ref current_session_id) = sent_session_id {
                     debug!("SSE request using session ID: {}", current_session_id);
                     request_builder = request_builder.header("Mcp-Session-Id", current_session_id);
                 } else {
@@ -865,15 +872,42 @@ impl Transport for HttpTransport {
                         resp
                     }
                     Ok(resp) => {
-                        warn!("SSE connection failed with status: {}", resp.status());
+                        let status = resp.status();
+                        warn!("SSE connection failed with status: {}", status);
+
+                        // 4xx is structurally fatal for the SSE GET listener: retrying
+                        // the same request unchanged will never succeed. Clear the cached
+                        // session header — but only if it still matches what we sent —
+                        // so the caller's next initialize POST is sent without a stale
+                        // Mcp-Session-Id (mirrors the POST 404 recovery path in
+                        // McpClient::send_request_raw). If `initialize_session()`
+                        // wrote a fresher session ID into the cache while our GET was
+                        // in flight (which happens because `client.rs:connect()`
+                        // spawns the listener before initialize), leave the new value
+                        // alone. Then emit the error and exit; the caller drives
+                        // recovery by re-running initialize and restarting the listener.
+                        if status.is_client_error() {
+                            let mut guard = session_id.lock();
+                            if *guard == sent_session_id {
+                                *guard = None;
+                            }
+                            drop(guard);
+                            let _ = tx.send(ServerEvent::Error(format!(
+                                "SSE GET rejected with HTTP {} — listener exiting",
+                                status
+                            )));
+                            return;
+                        }
+
+                        // 5xx and other non-2xx: treat as transient, retry with the
+                        // existing static backoff.
                         if tx
-                            .send(ServerEvent::Error(format!("HTTP {}", resp.status())))
+                            .send(ServerEvent::Error(format!("HTTP {}", status)))
                             .is_err()
                         {
                             debug!("Event channel closed, stopping SSE listener");
                             return;
                         }
-                        // Wait before retrying
                         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
                         continue;
                     }

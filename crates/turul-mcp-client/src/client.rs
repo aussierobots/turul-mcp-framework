@@ -1357,13 +1357,13 @@ impl Default for McpClientBuilder {
 mod tests {
     use super::*;
     use crate::transport::http::HttpTransport;
-    use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
     use crate::transport::{
         ConnectionInfo, EventReceiver, ServerEvent, TransportCapabilities, TransportResponse,
         TransportStatistics, TransportType,
     };
     use async_trait::async_trait;
     use std::collections::HashMap;
+    use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
     use tokio::sync::mpsc;
 
     #[tokio::test]
