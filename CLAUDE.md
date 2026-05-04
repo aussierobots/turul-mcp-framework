@@ -1,5 +1,10 @@
 # CLAUDE.md
 
+1. Don’t assume. Don’t hide confusion. Surface tradeoffs.
+2. Minimum code that solves the problem. Nothing speculative.
+3. Touch only what you must. Clean up only your own mess.
+4. Define success criteria. Loop until verified.
+
 Production-ready Rust framework for Model Context Protocol (MCP) servers with zero-configuration design and complete MCP 2025-11-25 specification support.
 
 > **Source of Truth**
