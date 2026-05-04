@@ -111,7 +111,6 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
-use tokio::sync::OnceCell;
 use tracing::{debug, error, info};
 use turul_http_mcp_server::middleware::{
     DispatcherResult, McpMiddleware, MiddlewareError, RequestContext, SessionInjection,
@@ -215,9 +214,6 @@ impl McpMiddleware for AuthMiddleware {
     }
 }
 
-/// Global handler instance (created once, reused across invocations)
-static HANDLER: OnceCell<turul_mcp_aws_lambda::LambdaMcpHandler> = OnceCell::const_new();
-
 /// Initialize logging
 fn init_logging() {
     let log_level = env::var("LOG_LEVEL").unwrap_or_else(|_| "INFO".to_string());
@@ -230,24 +226,20 @@ fn init_logging() {
     info!("🚀 Logging initialized at level: {}", log_level);
 }
 
-/// Lambda handler function
-async fn lambda_handler(request: Request) -> Result<Response<Body>, Error> {
-    info!(
-        "🌐 Lambda MCP request: {} {}",
-        request.method(),
-        request.uri().path()
+/// Lambda handler function — receives a clone of the prebuilt handler per request.
+async fn lambda_handler(
+    handler: turul_mcp_aws_lambda::LambdaMcpHandler,
+    request: Request,
+) -> Result<Response<Body>, Error> {
+    debug!(
+        method = %request.method(),
+        path = %request.uri().path(),
+        "Lambda MCP request"
     );
-
-    // Get or create handler (cached globally for session persistence)
-    let handler = HANDLER
-        .get_or_try_init(|| async { create_lambda_mcp_handler().await })
-        .await?;
-
-    // Process request through the Lambda MCP handler
-    handler
-        .handle(request)
-        .await
-        .map_err(|e| Error::from(e.to_string()))
+    handler.handle(request).await.map_err(|e| {
+        error!("❌ Lambda MCP handler error: {}", e);
+        Error::from(e.to_string())
+    })
 }
 
 /// Create the Lambda MCP handler with authentication middleware
@@ -320,11 +312,15 @@ async fn main() -> Result<(), Error> {
         env::var("MCP_SESSION_TABLE").unwrap_or("mcp-sessions".to_string())
     );
 
+    // Build the handler eagerly in main() so DDB session storage init,
+    // server build, and tool registration land in Lambda's Init Duration
+    // — not inside the first invocation's handler_total. See ADR-024.
+    let handler = create_lambda_mcp_handler().await?;
     info!("🎯 Lambda handler ready with auth middleware");
 
     // Run Lambda HTTP runtime (non-streaming).
     // For streaming with completion-invocation handling, use:
     //   turul_mcp_aws_lambda::run_streaming(handler).await          // standard
     //   turul_mcp_aws_lambda::run_streaming_with(my_dispatch).await  // custom dispatch
-    run(service_fn(lambda_handler)).await
+    run(service_fn(move |req| lambda_handler(handler.clone(), req))).await
 }

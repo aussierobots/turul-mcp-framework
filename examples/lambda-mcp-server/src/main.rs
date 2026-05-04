@@ -21,8 +21,7 @@ mod tools;
 
 use lambda_http::{Body, Error, Request, run, service_fn};
 use std::env;
-use tokio::sync::OnceCell;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 // Framework imports
 use turul_mcp_aws_lambda::LambdaMcpServerBuilder;
@@ -33,9 +32,6 @@ use session_aware_logging_demo::{
     CheckLoggingStatusTool, SessionLoggingDemoTool, SetLoggingLevelTool,
 };
 use tools::{CloudWatchMetricsTool, DynamoDbQueryTool, SnsPublishTool, SqsSendMessageTool};
-
-/// Global handler instance - created once per Lambda container, reused across invocations
-static HANDLER: OnceCell<turul_mcp_aws_lambda::LambdaMcpHandler> = OnceCell::const_new();
 
 /// Initialize CloudWatch-optimized logging for Lambda environment
 fn init_logging() {
@@ -51,20 +47,16 @@ fn init_logging() {
     info!("🚀 Logging initialized at level: {}", log_level);
 }
 
-/// Lambda handler function using turul-mcp-aws-lambda
-async fn lambda_handler(request: Request) -> Result<lambda_http::Response<Body>, Error> {
-    info!(
-        "🌐 Lambda MCP request: {} {}",
-        request.method(),
-        request.uri().path()
+/// Lambda handler function — receives a clone of the prebuilt handler per request.
+async fn lambda_handler(
+    handler: turul_mcp_aws_lambda::LambdaMcpHandler,
+    request: Request,
+) -> Result<lambda_http::Response<Body>, Error> {
+    debug!(
+        method = %request.method(),
+        path = %request.uri().path(),
+        "Lambda MCP request"
     );
-
-    // Get or create handler (cached globally for session persistence)
-    let handler = HANDLER
-        .get_or_try_init(|| async { create_lambda_mcp_handler().await })
-        .await?;
-
-    // Process request through the Lambda MCP handler
     handler.handle(request).await.map_err(|e| {
         error!("❌ Lambda MCP handler error: {}", e);
         Error::from(e.to_string())
@@ -146,8 +138,11 @@ async fn main() -> Result<(), Error> {
         env::var("MCP_SESSION_TABLE").unwrap_or("mcp-sessions".to_string())
     );
 
+    // Build the handler eagerly in main() so DDB session storage init,
+    // server build, and tool registration land in Lambda's Init Duration
+    // — not inside the first invocation's handler_total. See ADR-024.
+    let handler = create_lambda_mcp_handler().await?;
     info!("🎯 Lambda handler ready (snapshot-based SSE)");
 
-    // Run Lambda HTTP runtime (regular, non-streaming)
-    run(service_fn(lambda_handler)).await
+    run(service_fn(move |req| lambda_handler(handler.clone(), req))).await
 }

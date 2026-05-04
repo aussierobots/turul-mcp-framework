@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **Lambda eager handler init** (`turul-mcp-aws-lambda`): documented and exemplified building `LambdaMcpHandler` eagerly in `main()` before the Lambda runtime hand-off, avoiding request-path lazy initialization for fan-out-sensitive workloads. Removed `static OnceCell<LambdaMcpHandler>` patterns from `examples/lambda-mcp-server`, `examples/lambda-mcp-server-streaming`, and `examples/middleware-auth-lambda`; each example now builds the handler once in `main()` and `move`-captures it into a small `service_fn(move |req| lambda_handler(handler.clone(), req))` wrapper. Updated `crates/turul-mcp-aws-lambda/README.md` quick-start and "Custom Dispatch with `run_streaming_with()`" sections to match. The existing `LambdaMcpServerBuilder::build().await?` followed by `server.handler().await?` already performs full eager init (DDB session storage, server-state-storage, server build, tool/resource registration, session cleanup spawn, dynamic-tools sync, cold-start task recovery) — no new API is added. Per-request `info!` logging in example handlers dropped to `debug!` to avoid CloudWatch flood at production traffic. Closes #15. See [ADR-024](docs/adr/024-lambda-eager-handler-init.md).
+
 ## [0.3.38] - 2026-05-03
 
 ### Fixed

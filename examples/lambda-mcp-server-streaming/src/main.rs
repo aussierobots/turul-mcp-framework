@@ -22,12 +22,15 @@
 //! `run_streaming_with()` instead:
 //!
 //! ```rust,ignore
-//! turul_mcp_aws_lambda::run_streaming_with(|request| async move {
-//!     if request.uri().path() == "/.well-known/oauth-authorization-server" {
-//!         return Ok(well_known_response());
+//! let handler = server.handler().await?;
+//! turul_mcp_aws_lambda::run_streaming_with(move |request| {
+//!     let handler = handler.clone();
+//!     async move {
+//!         if request.uri().path() == "/.well-known/oauth-authorization-server" {
+//!             return Ok(well_known_response());
+//!         }
+//!         handler.handle_streaming(request).await
 //!     }
-//!     let handler = HANDLER.get_or_try_init(|| async { create_handler().await }).await?;
-//!     handler.handle_streaming(request).await
 //! }).await
 //! ```
 
@@ -36,7 +39,6 @@ mod tools;
 
 use lambda_http::Error;
 use std::env;
-use tokio::sync::OnceCell;
 use tracing::info;
 
 // Framework imports
@@ -72,9 +74,6 @@ fn init_logging() {
 
     info!("Logging initialized at level: {}", log_level);
 }
-
-/// Global handler instance - created once and reused across all Lambda invocations
-static HANDLER: OnceCell<turul_mcp_aws_lambda::LambdaMcpHandler> = OnceCell::const_new();
 
 /// Create the Lambda MCP handler with AWS tools
 async fn create_lambda_mcp_handler() -> Result<turul_mcp_aws_lambda::LambdaMcpHandler, Error> {
@@ -147,12 +146,11 @@ async fn main() -> Result<(), Error> {
             .unwrap_or_else(|_| "(not set, using default 'mcp-sessions')".to_string())
     );
 
-    // Pre-initialize handler during startup (not on first request)
+    // Build the handler eagerly in main() so DDB session storage init,
+    // server build, and tool registration land in Lambda's Init Duration
+    // — not inside the first invocation's handler_total. See ADR-024.
     info!("Pre-initializing MCP handler...");
-    HANDLER
-        .get_or_try_init(|| async { create_lambda_mcp_handler().await })
-        .await?;
-    let handler = HANDLER.get().unwrap().clone();
+    let handler = create_lambda_mcp_handler().await?;
     info!("Lambda handler ready and initialized");
 
     // Run with framework's streaming entry point.

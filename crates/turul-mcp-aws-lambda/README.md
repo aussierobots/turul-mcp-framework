@@ -73,17 +73,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .build()
         .await?;
 
-    // Create handler for Lambda runtime
+    // Build the handler eagerly in main() — see ADR-024.
     let handler = server.handler().await?;
 
-    // Run with standard Lambda runtime (snapshot-based SSE)
-    run(service_fn(move |req| {
-        let handler = handler.clone();
-        async move {
-            handler.handle(req).await
-                .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
-        }
-    })).await
+    // Run with standard Lambda runtime (snapshot-based SSE).
+    run(service_fn(move |req| dispatch(handler.clone(), req))).await
+}
+
+async fn dispatch(
+    handler: turul_mcp_aws_lambda::LambdaMcpHandler,
+    req: lambda_http::Request,
+) -> Result<lambda_http::Response<lambda_http::Body>, Box<dyn std::error::Error + Send + Sync>> {
+    handler.handle(req).await
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)
 }
 ```
 
@@ -115,17 +117,31 @@ async fn main() -> Result<(), lambda_http::Error> {
 #### Custom Dispatch with `run_streaming_with()`
 
 When you need pre-dispatch logic (e.g., `.well-known` routing) that runs before
-the MCP handler, use `run_streaming_with()`:
+the MCP handler, use `run_streaming_with()`. Build the handler eagerly in
+`main()` and `move`-capture it into the closure — this keeps init cost in
+Lambda's `Init Duration` rather than the first request's `handler_total`:
 
 ```rust
-turul_mcp_aws_lambda::run_streaming_with(|request| async move {
-    if request.uri().path() == "/.well-known/oauth-authorization-server" {
-        return Ok(well_known_response());
+let handler = server.handler().await?;
+turul_mcp_aws_lambda::run_streaming_with(move |request| {
+    let handler = handler.clone();
+    async move {
+        if request.uri().path() == "/.well-known/oauth-authorization-server" {
+            return Ok(well_known_response());
+        }
+        handler.handle_streaming(request).await
     }
-    let handler = HANDLER.get_or_try_init(|| async { create_handler().await }).await?;
-    handler.handle_streaming(request).await
 }).await
 ```
+
+> **Recommendation: build the handler eagerly in `main()`.** Construct
+> `LambdaMcpServerBuilder` and call `.build().await?.handler().await?` *before*
+> handing control to the Lambda runtime. Avoid `OnceCell::get_or_try_init(...)`
+> inside the per-request dispatch path for latency-sensitive or fan-out
+> callers — that pattern moves DDB session/server-state init, server build, and
+> tool registration (~500 ms with DDB backends) inside the first invocation's
+> `Duration` instead of Lambda's `Init Duration` field. Lazy request-path init
+> remains valid for back-compat. See [ADR-024](../../docs/adr/024-lambda-eager-handler-init.md).
 
 Both entry points classify raw Lambda runtime payloads three ways:
 - **API Gateway events** — dispatched to your handler normally
