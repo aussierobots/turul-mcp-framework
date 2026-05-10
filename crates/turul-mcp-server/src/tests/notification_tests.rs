@@ -149,7 +149,7 @@ mod broadcast_notification_tests {
             }),
         };
 
-        manager.broadcast_event(broadcast_event).await;
+        let _ = manager.broadcast_event(broadcast_event).await;
 
         // Verify sessions still exist (broadcast shouldn't affect session lifecycle)
         assert!(manager.session_exists(&session1).await);
@@ -169,7 +169,7 @@ mod broadcast_notification_tests {
         let broadcast_event = SessionEvent::KeepAlive;
 
         // Broadcasting to no sessions should not panic or error
-        manager.broadcast_event(broadcast_event).await;
+        let _ = manager.broadcast_event(broadcast_event).await;
     }
 
     #[tokio::test]
@@ -193,7 +193,7 @@ mod broadcast_notification_tests {
             data: json!({"remaining_sessions": 2}),
         };
 
-        manager.broadcast_event(broadcast_event).await;
+        let _ = manager.broadcast_event(broadcast_event).await;
 
         // Verify remaining sessions
         assert!(manager.session_exists(&session1).await);
@@ -628,7 +628,7 @@ mod notification_performance_tests {
                 event_type: "broadcast_performance".to_string(),
                 data: json!({"broadcast_id": i}),
             };
-            manager.broadcast_event(event).await;
+            let _ = manager.broadcast_event(event).await;
         }
 
         let duration = start.elapsed();

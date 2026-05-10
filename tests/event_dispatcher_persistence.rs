@@ -293,12 +293,9 @@ async fn test_no_duplicate_storage_with_bridge_running() {
         let mut global_events = session_manager.subscribe_all_session_events();
         tokio::spawn(async move {
             while let Ok((_session_id, event)) = global_events.recv().await {
-                match event {
-                    turul_mcp_server::SessionEvent::Custom { ref event_type, .. } => {
-                        // Observer-only: do NOT call broadcast_to_session here.
-                        let _ = event_type; // suppress unused warning
-                    }
-                    _ => {}
+                if let turul_mcp_server::SessionEvent::Custom { ref event_type, .. } = event {
+                    // Observer-only: do NOT call broadcast_to_session here.
+                    let _ = event_type; // suppress unused warning
                 }
             }
         });
@@ -378,11 +375,8 @@ async fn test_lambda_wiring_pattern_persists_events() {
         let mut global_events = session_manager.subscribe_all_session_events();
         tokio::spawn(async move {
             while let Ok((_session_id, event)) = global_events.recv().await {
-                match event {
-                    turul_mcp_server::SessionEvent::Custom { .. } => {
-                        // Observer-only in Lambda
-                    }
-                    _ => {}
+                if let turul_mcp_server::SessionEvent::Custom { .. } = event {
+                    // Observer-only in Lambda
                 }
             }
         });

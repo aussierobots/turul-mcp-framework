@@ -24,7 +24,7 @@ async fn test_single_json_response() -> Result<()> {
 
     info!("🧪 Testing single JSON response handling (in-memory)");
 
-    let mut transport = HttpTransport::new("http://localhost:8080/mcp")?;
+    let transport = HttpTransport::new("http://localhost:8080/mcp")?;
 
     // Create a mock tools/list response
     let response_json = json!({
@@ -65,7 +65,7 @@ async fn test_streaming_json_frames() -> Result<()> {
 
     info!("🧪 Testing streaming JSON frames (in-memory)");
 
-    let mut transport = HttpTransport::new("http://localhost:8080/mcp")?;
+    let transport = HttpTransport::new("http://localhost:8080/mcp")?;
 
     // Start event listener to collect progress notifications
     let mut events = transport.start_event_listener().await?;
@@ -177,7 +177,7 @@ async fn test_error_response() -> Result<()> {
 
     info!("🧪 Testing error response handling (in-memory)");
 
-    let mut transport = HttpTransport::new("http://localhost:8080/mcp")?;
+    let transport = HttpTransport::new("http://localhost:8080/mcp")?;
 
     // Create a mock error response for a nonexistent method
     let error_response = json!({

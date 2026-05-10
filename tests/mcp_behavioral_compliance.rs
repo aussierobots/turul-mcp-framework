@@ -1594,15 +1594,12 @@ impl McpMiddleware for ToolFilteringMiddleware {
         ctx: &RequestContext<'_>,
         result: &mut DispatcherResult,
     ) -> Result<(), MiddlewareError> {
-        if ctx.method() == "tools/list" {
-            if let DispatcherResult::Success(val) = result {
-                if let Some(tools) = val.get_mut("tools") {
-                    if let Some(arr) = tools.as_array_mut() {
+        if ctx.method() == "tools/list"
+            && let DispatcherResult::Success(val) = result
+                && let Some(tools) = val.get_mut("tools")
+                    && let Some(arr) = tools.as_array_mut() {
                         arr.retain(|t| t["name"] != "secret_tool");
                     }
-                }
-            }
-        }
         Ok(())
     }
 }

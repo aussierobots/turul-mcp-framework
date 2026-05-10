@@ -399,8 +399,8 @@ impl TestServerManager {
             .join(server_name);
 
         // Auto-build if needed
-        if !binary_path.exists() {
-            if let Some(package) = Self::server_package(server_name) {
+        if !binary_path.exists()
+            && let Some(package) = Self::server_package(server_name) {
                 let build_status = std::process::Command::new("cargo")
                     .args(["build", "--package", package, "--bin", server_name])
                     .current_dir(&workspace_root)
@@ -420,7 +420,6 @@ impl TestServerManager {
                     }
                 }
             }
-        }
 
         let mut cmd_args: Vec<String> = vec!["--port".to_string(), port.to_string()];
         for arg in extra_args {

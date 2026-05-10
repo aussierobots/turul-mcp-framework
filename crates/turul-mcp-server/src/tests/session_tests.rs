@@ -627,7 +627,7 @@ mod event_broadcasting_tests {
         };
 
         // This should not panic or error
-        manager.broadcast_event(broadcast_event).await;
+        let _ = manager.broadcast_event(broadcast_event).await;
     }
 
     #[tokio::test]
