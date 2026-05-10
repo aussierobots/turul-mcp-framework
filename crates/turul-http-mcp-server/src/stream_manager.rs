@@ -1123,7 +1123,7 @@ mod tests {
         drop(receiver); // Simulate disconnection
 
         assert!(
-            manager.has_connections(&session_id).await == false,
+            !manager.has_connections(&session_id).await,
             "has_connections should return false for closed sender"
         );
 

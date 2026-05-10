@@ -357,7 +357,7 @@ mod tests {
     impl HasInputSchema for AnotherTool {
         fn input_schema(&self) -> &ToolSchema {
             static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-            SCHEMA.get_or_init(|| ToolSchema::object())
+            SCHEMA.get_or_init(ToolSchema::object)
         }
     }
     impl HasOutputSchema for AnotherTool {
@@ -703,7 +703,7 @@ mod tests {
         impl HasInputSchema for AnnotatedTool {
             fn input_schema(&self) -> &ToolSchema {
                 static SCHEMA: std::sync::OnceLock<ToolSchema> = std::sync::OnceLock::new();
-                SCHEMA.get_or_init(|| ToolSchema::object())
+                SCHEMA.get_or_init(ToolSchema::object)
             }
         }
         impl HasOutputSchema for AnnotatedTool {

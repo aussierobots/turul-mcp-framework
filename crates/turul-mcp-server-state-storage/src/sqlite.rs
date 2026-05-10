@@ -158,7 +158,7 @@ impl ServerStateStorage for SqliteServerStateStorage {
         let metadata_json = state
             .metadata
             .as_ref()
-            .map(|v| serde_json::to_string(v))
+            .map(serde_json::to_string)
             .transpose()?;
 
         sqlx::query(

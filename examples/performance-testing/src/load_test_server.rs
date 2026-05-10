@@ -198,11 +198,7 @@ impl PerfStatsTool {
         let total_requests = REQUEST_COUNTER.load(Ordering::Relaxed);
         let total_time_micros = TOTAL_PROCESSING_TIME.load(Ordering::Relaxed);
 
-        let avg_time_micros = if total_requests > 0 {
-            total_time_micros / total_requests
-        } else {
-            0
-        };
+        let avg_time_micros = total_time_micros.checked_div(total_requests).unwrap_or(0);
 
         let stats = json!({
             "total_requests": total_requests,
@@ -291,11 +287,7 @@ async fn main() -> anyhow::Result<()> {
 
             let total_requests = REQUEST_COUNTER.load(Ordering::Relaxed);
             let total_time = TOTAL_PROCESSING_TIME.load(Ordering::Relaxed);
-            let avg_time = if total_requests > 0 {
-                total_time / total_requests
-            } else {
-                0
-            };
+            let avg_time = total_time.checked_div(total_requests).unwrap_or(0);
 
             info!(
                 "Performance stats - Requests: {}, Avg time: {}μs, RPS: {:.2}",

@@ -135,11 +135,7 @@ impl Metrics {
         let max_time = self.max_response_time_ms.load(Ordering::Relaxed);
 
         let successful = completed - failed;
-        let avg_time = if successful > 0 {
-            total_time / successful
-        } else {
-            0
-        };
+        let avg_time = total_time.checked_div(successful).unwrap_or(0);
 
         info!("=== Performance Test Results ===");
         info!("Requests sent: {}", sent);

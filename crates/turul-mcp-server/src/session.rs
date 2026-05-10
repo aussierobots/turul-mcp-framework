@@ -1624,11 +1624,10 @@ impl SessionManager {
                 // Filter terminated sessions
                 let mut targets = Vec::new();
                 for sid in &all_ids {
-                    if let Ok(Some(info)) = self.storage.get_session(sid).await {
-                        if !info.is_terminated() {
+                    if let Ok(Some(info)) = self.storage.get_session(sid).await
+                        && !info.is_terminated() {
                             targets.push(sid.clone());
                         }
-                    }
                 }
 
                 for session_id in &targets {

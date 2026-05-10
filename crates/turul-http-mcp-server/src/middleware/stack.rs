@@ -333,13 +333,11 @@ mod tests {
             _ctx: &RequestContext<'_>,
             result: &mut DispatcherResult,
         ) -> Result<(), MiddlewareError> {
-            if let DispatcherResult::Success(val) = result {
-                if let Some(tools) = val.get_mut("tools") {
-                    if let Some(arr) = tools.as_array_mut() {
+            if let DispatcherResult::Success(val) = result
+                && let Some(tools) = val.get_mut("tools")
+                    && let Some(arr) = tools.as_array_mut() {
                         arr.retain(|t| t["name"] != "secret_tool");
                     }
-                }
-            }
             Ok(())
         }
     }

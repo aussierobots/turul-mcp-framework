@@ -531,8 +531,8 @@ impl SessionMcpHandler {
                         // For non-initialize requests, validate session exists and fingerprint matches.
                         // Returns HTTP 404 (not JSON-RPC error) — session validation is transport-level,
                         // matching StreamableHttpHandler's behavior for cross-transport consistency.
-                        if let Some(ref session_id_str) = session_id {
-                            if let Err(err) = self.validate_session_exists(session_id_str).await {
+                        if let Some(ref session_id_str) = session_id
+                            && let Err(err) = self.validate_session_exists(session_id_str).await {
                                 warn!(
                                     "Session validation failed for session '{}': {}",
                                     session_id_str, err
@@ -550,7 +550,6 @@ impl SessionMcpHandler {
                                     .body(convert_to_unified_body(Full::new(Bytes::from(body))))
                                     .unwrap());
                             }
-                        }
 
                         // Create session context if session ID is provided
                         let session_context = if let Some(ref session_id_str) = session_id {

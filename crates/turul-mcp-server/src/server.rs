@@ -373,8 +373,8 @@ impl McpServer {
 
         // Sync tool registry with shared storage on startup (coordination mode only)
         #[cfg(feature = "dynamic-tools")]
-        if self.coordination_enabled {
-            if let Some(ref registry) = self.tool_registry {
+        if self.coordination_enabled
+            && let Some(ref registry) = self.tool_registry {
                 match registry.sync_from_storage().await {
                     Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
                         info!("Dynamic: initialized shared storage with local tool state");
@@ -404,7 +404,6 @@ impl McpServer {
                     poll_interval
                 );
             }
-        }
 
         // Create session-aware tool handler (with optional task runtime for async execution)
         let mut tool_handler = SessionAwareToolHandler::new(
@@ -421,6 +420,7 @@ impl McpServer {
         }
 
         // Create session-aware initialize handler
+        #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
         let mut init_handler = SessionAwareInitializeHandler::new(
             self.implementation.clone(),
             self.capabilities.clone(),
@@ -453,6 +453,7 @@ impl McpServer {
                 }))
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(vec!["tools/list".to_string()], {
+                    #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
                     let mut lth = ListToolsHandler::new_with_session_manager(
                         self.tools.clone(),
                         self.session_manager.clone(),
@@ -616,8 +617,8 @@ impl McpServer {
 
         // Sync tool registry with shared storage on startup (coordination mode only)
         #[cfg(feature = "dynamic-tools")]
-        if self.coordination_enabled {
-            if let Some(ref registry) = self.tool_registry {
+        if self.coordination_enabled
+            && let Some(ref registry) = self.tool_registry {
                 match registry.sync_from_storage().await {
                     Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
                         info!("Dynamic: initialized shared storage with local tool state");
@@ -647,7 +648,6 @@ impl McpServer {
                     poll_interval
                 );
             }
-        }
 
         // Create session-aware tool handler (with optional task runtime for async execution)
         let mut tool_handler = SessionAwareToolHandler::new(
@@ -664,6 +664,7 @@ impl McpServer {
         }
 
         // Create session-aware initialize handler
+        #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
         let mut init_handler = SessionAwareInitializeHandler::new(
             self.implementation.clone(),
             self.capabilities.clone(),
@@ -696,6 +697,7 @@ impl McpServer {
                 }))
                 .register_handler(vec!["initialize".to_string()], init_handler)
                 .register_handler(vec!["tools/list".to_string()], {
+                    #[cfg_attr(not(feature = "dynamic-tools"), allow(unused_mut))]
                     let mut lth = ListToolsHandler::new_with_session_manager(
                         self.tools.clone(),
                         self.session_manager.clone(),

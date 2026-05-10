@@ -577,7 +577,7 @@ impl GetAlertHistoryTool {
         }
 
         // Sort by timestamp (most recent first) and limit
-        filtered_alerts.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        filtered_alerts.sort_by_key(|e| std::cmp::Reverse(e.timestamp));
         filtered_alerts.truncate(limit);
 
         // Build response with rule information

@@ -335,11 +335,10 @@ impl ToolRegistry {
         // TTL check — skip storage read if cache is fresh
         {
             let last = self.last_check.read().await;
-            if let Some(instant) = *last {
-                if instant.elapsed() < self.check_ttl {
+            if let Some(instant) = *last
+                && instant.elapsed() < self.check_ttl {
                     return Ok(false);
                 }
-            }
         }
 
         // Cache expired — check storage
@@ -756,8 +755,8 @@ mod tests {
                 .await
                 .unwrap_or(Err(tokio::sync::broadcast::error::RecvError::Closed))
         {
-            if let crate::session::SessionEvent::Custom { event_type, .. } = &event {
-                if event_type == "notifications/tools/list_changed" {
+            if let crate::session::SessionEvent::Custom { event_type, .. } = &event
+                && event_type == "notifications/tools/list_changed" {
                     found_notification = true;
                     assert_eq!(
                         recv_session_id, session_id,
@@ -765,7 +764,6 @@ mod tests {
                     );
                     break;
                 }
-            }
         }
 
         assert!(
@@ -834,12 +832,11 @@ mod tests {
                 .await
                 .unwrap_or(Err(tokio::sync::broadcast::error::RecvError::Closed))
         {
-            if let crate::session::SessionEvent::Custom { event_type, .. } = &event {
-                if event_type == "notifications/tools/list_changed" {
+            if let crate::session::SessionEvent::Custom { event_type, .. } = &event
+                && event_type == "notifications/tools/list_changed" {
                     found = true;
                     break;
                 }
-            }
         }
         assert!(found, "activate_tool() must also broadcast notification");
     }

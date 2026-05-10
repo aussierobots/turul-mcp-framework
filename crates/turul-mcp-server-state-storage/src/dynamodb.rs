@@ -220,15 +220,14 @@ impl DynamoDbServerStateStorage {
                 .await
             {
                 Ok(output) => {
-                    if let Some(table) = output.table() {
-                        if table.table_status() == Some(&TableStatus::Active) {
+                    if let Some(table) = output.table()
+                        && table.table_status() == Some(&TableStatus::Active) {
                             info!(
                                 "Table '{}' is now ACTIVE (attempt {})",
                                 self.table_name, attempt
                             );
                             return Ok(());
                         }
-                    }
                 }
                 Err(err) => {
                     debug!(
@@ -668,7 +667,7 @@ mod tests {
         let storage = DynamoDbServerStateStorage::new().await.unwrap();
 
         // No snapshot before fingerprint set
-        let snap = storage
+        let _snap = storage
             .get_registry_snapshot(entity_types::TOOLS)
             .await
             .unwrap();

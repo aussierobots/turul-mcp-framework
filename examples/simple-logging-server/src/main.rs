@@ -232,7 +232,7 @@ impl GetLogsStatusTool {
         }
 
         // Get most recent logs
-        filtered_logs.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        filtered_logs.sort_by_key(|e| std::cmp::Reverse(e.timestamp));
         filtered_logs.truncate(limit);
 
         Ok(json!({
