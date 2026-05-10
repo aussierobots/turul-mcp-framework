@@ -15,7 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **JSON-RPC 2.0 batch processing** (via `turul-rpc-jsonrpc`): the original `turul_mcp_json_rpc_server::dispatch::parse_json_rpc_messages` was a stub claiming "JSON-RPC 2.0 removed batch support" (it didn't). `turul-rpc-jsonrpc 0.1.0` ships a real spec-conformant batch implementation — `parse_json_rpc_batch` returns a `BatchOrSingle` discriminator; `JsonRpcDispatcher::handle_batch` dispatches per-member with notification-response suppression, all-notifications no-response semantics, and empty-batch → single `Invalid Request` (`-32600`) per [JSON-RPC 2.0 §6](https://www.jsonrpc.org/specification#batch). Reachable through the shim via `turul_mcp_json_rpc_server::dispatch::parse_json_rpc_batch`; existing single-message paths are unchanged.
+- **JSON-RPC 2.0 batch processing** (via `turul-rpc-jsonrpc`): the original `turul_mcp_json_rpc_server::dispatch::parse_json_rpc_messages` was a stub claiming "JSON-RPC 2.0 removed batch support" (it didn't). `turul-rpc-jsonrpc 0.1.0` ships a spec-conformant batch implementation — `parse_json_rpc_batch` returns a `BatchOrSingle` discriminator; `JsonRpcDispatcher::handle_batch` dispatches per-member with notification-response suppression, all-notifications no-response semantics, and empty-batch → single `Invalid Request` (`-32600`) per [JSON-RPC 2.0 §6](https://www.jsonrpc.org/specification#batch).
+  - **Reachable through the shim**: `JsonRpcDispatcher::handle_batch` (the dispatcher type is re-exported and methods come with the type — listed here per ADR-003 §"additive items reviewed").
+  - **Not reachable through the shim**: `parse_json_rpc_batch` and `BatchOrSingle` live in `turul_rpc::batch`, a module the shim does **not** re-export. Users who want them depend on `turul-rpc` directly. This preserves the v0.3.38-surface discipline.
+
+### Note on JSON-RPC 2.0 compliance posture
+
+`turul-rpc 0.1` advertises JSON-RPC 2.0 with **one documented departure**: incoming requests with `"id": null` are rejected as `Invalid Request` (`-32600`). The spec permits null id with a discouragement note. The strict posture is **inherited from `turul-mcp-json-rpc-server 0.3.38`** — relaxing it in the shim release would be a behaviour change. A v0.2 candidate is to surface a permissive codec-level type for callers who need null-id requests. See `turul-rpc/docs/adr/002-json-rpc-2-compliance.md`.
 
 ### Documentation
 
