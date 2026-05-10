@@ -146,13 +146,7 @@ http-body = "1"
 bytes = "1"
 
 # turul-rpc — generic JSON-RPC 2.0 framework, upstream of turul-mcp-json-rpc-server.
-#
-# !!! MERGE BLOCKER: sibling-path dep requires `turul-rpc` checked out at
-# `../turul-rpc` adjacent to this repo. Fresh clones / CI without that sibling
-# WILL FAIL to resolve. Before merging this branch to main, replace with:
-#   turul-rpc = { version = "0.1", default-features = false }
-# That swap requires turul-rpc 0.1.0 published to crates.io first. ADR-025.
-turul-rpc = { version = "0.1", path = "../turul-rpc/crates/turul-rpc", default-features = false }
+turul-rpc = { version = "0.1", default-features = false }
 
 # Internal crate dependencies
 turul-mcp-json-rpc-server = { version = "0.3.39", path = "crates/turul-mcp-json-rpc-server" }
