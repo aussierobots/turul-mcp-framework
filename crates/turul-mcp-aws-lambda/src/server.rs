@@ -224,17 +224,18 @@ impl LambdaMcpServer {
         // Sync tool registry with shared storage on startup (coordination mode only)
         #[cfg(feature = "dynamic-tools")]
         if self.coordination_enabled
-            && let Some(ref registry) = self.tool_registry {
-                use tracing::warn;
-                match registry.sync_from_storage().await {
-                    Ok(_) => {
-                        info!("Dynamic: synced tool registry with shared storage");
-                    }
-                    Err(e) => {
-                        warn!(error = %e, "Dynamic: failed to sync with shared storage on cold start");
-                    }
+            && let Some(ref registry) = self.tool_registry
+        {
+            use tracing::warn;
+            match registry.sync_from_storage().await {
+                Ok(_) => {
+                    info!("Dynamic: synced tool registry with shared storage");
+                }
+                Err(e) => {
+                    warn!(error = %e, "Dynamic: failed to sync with shared storage on cold start");
                 }
             }
+        }
 
         // Cold-start recovery: handler() is called once per Lambda cold start from main().
         // The returned LambdaMcpHandler is Clone'd for each request — recovery runs exactly once.

@@ -42,8 +42,8 @@ pub use turul_rpc::{error, error_codes, notification, prelude, request, response
 /// [adr-003]: https://github.com/aussierobots/turul-rpc/blob/main/docs/adr/003-compatibility-with-turul-mcp-json-rpc-server.md
 pub mod dispatch {
     pub use turul_rpc::dispatch::{
-        create_error_response, create_success_response, parse_json_rpc_message,
-        parse_json_rpc_messages, JsonRpcMessage, JsonRpcMessageResult,
+        JsonRpcMessage, JsonRpcMessageResult, create_error_response, create_success_response,
+        parse_json_rpc_message, parse_json_rpc_messages,
     };
 }
 
@@ -52,8 +52,8 @@ pub use turul_rpc::r#async;
 
 // Root re-exports — match the original crate's `pub use` lines.
 pub use turul_rpc::{
-    JsonRpcError, JsonRpcErrorCode, JsonRpcMessage, JsonRpcNotification, JsonRpcRequest,
-    JsonRpcResponse, JsonRpcVersion, RequestId, RequestParams, ResponseResult, JSONRPC_VERSION,
+    JSONRPC_VERSION, JsonRpcError, JsonRpcErrorCode, JsonRpcMessage, JsonRpcNotification,
+    JsonRpcRequest, JsonRpcResponse, JsonRpcVersion, RequestId, RequestParams, ResponseResult,
 };
 
 #[cfg(feature = "async")]

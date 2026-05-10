@@ -532,24 +532,25 @@ impl SessionMcpHandler {
                         // Returns HTTP 404 (not JSON-RPC error) — session validation is transport-level,
                         // matching StreamableHttpHandler's behavior for cross-transport consistency.
                         if let Some(ref session_id_str) = session_id
-                            && let Err(err) = self.validate_session_exists(session_id_str).await {
-                                warn!(
-                                    "Session validation failed for session '{}': {}",
-                                    session_id_str, err
-                                );
-                                let body = serde_json::json!({
-                                    "error": {
-                                        "code": 404,
-                                        "message": format!("Session validation failed: {}", err)
-                                    }
-                                })
-                                .to_string();
-                                return Ok(Response::builder()
-                                    .status(StatusCode::NOT_FOUND)
-                                    .header(CONTENT_TYPE, "application/json")
-                                    .body(convert_to_unified_body(Full::new(Bytes::from(body))))
-                                    .unwrap());
-                            }
+                            && let Err(err) = self.validate_session_exists(session_id_str).await
+                        {
+                            warn!(
+                                "Session validation failed for session '{}': {}",
+                                session_id_str, err
+                            );
+                            let body = serde_json::json!({
+                                "error": {
+                                    "code": 404,
+                                    "message": format!("Session validation failed: {}", err)
+                                }
+                            })
+                            .to_string();
+                            return Ok(Response::builder()
+                                .status(StatusCode::NOT_FOUND)
+                                .header(CONTENT_TYPE, "application/json")
+                                .body(convert_to_unified_body(Full::new(Bytes::from(body))))
+                                .unwrap());
+                        }
 
                         // Create session context if session ID is provided
                         let session_context = if let Some(ref session_id_str) = session_id {

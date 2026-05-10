@@ -221,13 +221,14 @@ impl DynamoDbServerStateStorage {
             {
                 Ok(output) => {
                     if let Some(table) = output.table()
-                        && table.table_status() == Some(&TableStatus::Active) {
-                            info!(
-                                "Table '{}' is now ACTIVE (attempt {})",
-                                self.table_name, attempt
-                            );
-                            return Ok(());
-                        }
+                        && table.table_status() == Some(&TableStatus::Active)
+                    {
+                        info!(
+                            "Table '{}' is now ACTIVE (attempt {})",
+                            self.table_name, attempt
+                        );
+                        return Ok(());
+                    }
                 }
                 Err(err) => {
                     debug!(

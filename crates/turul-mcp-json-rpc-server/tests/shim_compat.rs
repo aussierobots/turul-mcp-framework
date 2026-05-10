@@ -21,20 +21,28 @@ use turul_mcp_json_rpc_server::{
 use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler, SessionContext};
 
 #[cfg(feature = "streams")]
-use turul_mcp_json_rpc_server::{JsonRpcFrame, StreamingJsonRpcDispatcher, StreamingJsonRpcHandler};
+use turul_mcp_json_rpc_server::{
+    JsonRpcFrame, StreamingJsonRpcDispatcher, StreamingJsonRpcHandler,
+};
 
 // Module re-exports — non-async paths
-use turul_mcp_json_rpc_server::error::{JsonRpcError as _E, JsonRpcErrorCode as _C, JsonRpcErrorObject, JsonRpcTransportError};
-use turul_mcp_json_rpc_server::request::{JsonRpcRequest as _R, RequestParams as _RP};
-use turul_mcp_json_rpc_server::response::{JsonRpcMessage as _M, JsonRpcResponse as _Rsp, ResponseResult as _RR};
-use turul_mcp_json_rpc_server::notification::JsonRpcNotification as _N;
-use turul_mcp_json_rpc_server::types::{JsonRpcVersion as _V, RequestId as _ID};
-use turul_mcp_json_rpc_server::dispatch::{
-    create_error_response, create_success_response, parse_json_rpc_message,
-    parse_json_rpc_messages, JsonRpcMessage as DispatchMessage, JsonRpcMessageResult,
-};
 #[cfg(feature = "async")]
-use turul_mcp_json_rpc_server::r#async::{JsonRpcDispatcher as _D, JsonRpcHandler as _H, SessionContext as _S, ToJsonRpcError};
+use turul_mcp_json_rpc_server::r#async::{
+    JsonRpcDispatcher as _D, JsonRpcHandler as _H, SessionContext as _S, ToJsonRpcError,
+};
+use turul_mcp_json_rpc_server::dispatch::{
+    JsonRpcMessage as DispatchMessage, JsonRpcMessageResult, create_error_response,
+    create_success_response, parse_json_rpc_message, parse_json_rpc_messages,
+};
+use turul_mcp_json_rpc_server::error::{
+    JsonRpcError as _E, JsonRpcErrorCode as _C, JsonRpcErrorObject, JsonRpcTransportError,
+};
+use turul_mcp_json_rpc_server::notification::JsonRpcNotification as _N;
+use turul_mcp_json_rpc_server::request::{JsonRpcRequest as _R, RequestParams as _RP};
+use turul_mcp_json_rpc_server::response::{
+    JsonRpcMessage as _M, JsonRpcResponse as _Rsp, ResponseResult as _RR,
+};
+use turul_mcp_json_rpc_server::types::{JsonRpcVersion as _V, RequestId as _ID};
 
 // error_codes module
 use turul_mcp_json_rpc_server::error_codes::{

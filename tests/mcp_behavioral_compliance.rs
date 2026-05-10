@@ -1596,10 +1596,11 @@ impl McpMiddleware for ToolFilteringMiddleware {
     ) -> Result<(), MiddlewareError> {
         if ctx.method() == "tools/list"
             && let DispatcherResult::Success(val) = result
-                && let Some(tools) = val.get_mut("tools")
-                    && let Some(arr) = tools.as_array_mut() {
-                        arr.retain(|t| t["name"] != "secret_tool");
-                    }
+            && let Some(tools) = val.get_mut("tools")
+            && let Some(arr) = tools.as_array_mut()
+        {
+            arr.retain(|t| t["name"] != "secret_tool");
+        }
         Ok(())
     }
 }

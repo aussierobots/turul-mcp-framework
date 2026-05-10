@@ -20,8 +20,10 @@
 
 #![allow(dead_code)]
 
-use serde_json::{json, Value};
-use turul_mcp_json_rpc_server::dispatch::{parse_json_rpc_message, JsonRpcMessage as IncomingMessage};
+use serde_json::{Value, json};
+use turul_mcp_json_rpc_server::dispatch::{
+    JsonRpcMessage as IncomingMessage, parse_json_rpc_message,
+};
 use turul_mcp_json_rpc_server::error::JsonRpcError;
 use turul_mcp_json_rpc_server::error_codes::*;
 use turul_mcp_json_rpc_server::types::RequestId;
@@ -148,12 +150,11 @@ fn shim_method_not_found_echoes_id() {
 #[cfg(feature = "async")]
 mod dispatcher {
     use async_trait::async_trait;
-    use serde_json::{json, Value};
-    use turul_mcp_json_rpc_server::error::JsonRpcErrorObject;
+    use serde_json::{Value, json};
     use turul_mcp_json_rpc_server::r#async::ToJsonRpcError;
+    use turul_mcp_json_rpc_server::error::JsonRpcErrorObject;
     use turul_mcp_json_rpc_server::{
-        JsonRpcDispatcher, JsonRpcHandler, JsonRpcRequest, RequestId, RequestParams,
-        SessionContext,
+        JsonRpcDispatcher, JsonRpcHandler, JsonRpcRequest, RequestId, RequestParams, SessionContext,
     };
 
     #[derive(thiserror::Error, Debug)]
@@ -204,8 +205,7 @@ mod dispatcher {
     #[tokio::test]
     async fn shim_dispatcher_method_not_found_echoes_id() {
         let d: JsonRpcDispatcher<E> = JsonRpcDispatcher::new();
-        let req =
-            JsonRpcRequest::new_no_params(RequestId::String("xyz".into()), "missing".into());
+        let req = JsonRpcRequest::new_no_params(RequestId::String("xyz".into()), "missing".into());
         let resp = d.handle_request(req).await;
 
         let v = serde_json::to_value(&resp).unwrap();

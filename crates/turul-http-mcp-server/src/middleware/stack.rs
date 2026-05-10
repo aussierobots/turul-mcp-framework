@@ -335,9 +335,10 @@ mod tests {
         ) -> Result<(), MiddlewareError> {
             if let DispatcherResult::Success(val) = result
                 && let Some(tools) = val.get_mut("tools")
-                    && let Some(arr) = tools.as_array_mut() {
-                        arr.retain(|t| t["name"] != "secret_tool");
-                    }
+                && let Some(arr) = tools.as_array_mut()
+            {
+                arr.retain(|t| t["name"] != "secret_tool");
+            }
             Ok(())
         }
     }

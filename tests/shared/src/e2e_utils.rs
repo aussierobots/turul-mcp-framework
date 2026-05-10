@@ -400,26 +400,27 @@ impl TestServerManager {
 
         // Auto-build if needed
         if !binary_path.exists()
-            && let Some(package) = Self::server_package(server_name) {
-                let build_status = std::process::Command::new("cargo")
-                    .args(["build", "--package", package, "--bin", server_name])
-                    .current_dir(&workspace_root)
-                    .status();
-                match build_status {
-                    Ok(status) if status.success() => {}
-                    Ok(status) => {
-                        return Err(format!(
-                            "Failed to build {} (exit: {:?})",
-                            server_name,
-                            status.code()
-                        )
-                        .into());
-                    }
-                    Err(e) => {
-                        return Err(format!("Failed to build {}: {}", server_name, e).into());
-                    }
+            && let Some(package) = Self::server_package(server_name)
+        {
+            let build_status = std::process::Command::new("cargo")
+                .args(["build", "--package", package, "--bin", server_name])
+                .current_dir(&workspace_root)
+                .status();
+            match build_status {
+                Ok(status) if status.success() => {}
+                Ok(status) => {
+                    return Err(format!(
+                        "Failed to build {} (exit: {:?})",
+                        server_name,
+                        status.code()
+                    )
+                    .into());
+                }
+                Err(e) => {
+                    return Err(format!("Failed to build {}: {}", server_name, e).into());
                 }
             }
+        }
 
         let mut cmd_args: Vec<String> = vec!["--port".to_string(), port.to_string()];
         for arg in extra_args {

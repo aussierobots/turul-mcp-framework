@@ -295,9 +295,10 @@ impl LambdaMcpHandler {
         // Check for remote tool changes (Dynamic mode with coordination)
         #[cfg(feature = "dynamic-tools")]
         if let Some(ref registry) = self.tool_registry
-            && let Err(e) = registry.check_for_changes().await {
-                tracing::warn!(error = %e, "Failed to check for tool changes");
-            }
+            && let Err(e) = registry.check_for_changes().await
+        {
+            tracing::warn!(error = %e, "Failed to check for tool changes");
+        }
 
         // 🚀 DELEGATION: Convert Lambda request to hyper request
         let hyper_req = crate::adapter::lambda_to_hyper_request(req)?;
@@ -405,9 +406,10 @@ impl LambdaMcpHandler {
         // Check for remote tool changes (Dynamic mode with coordination)
         #[cfg(feature = "dynamic-tools")]
         if let Some(ref registry) = self.tool_registry
-            && let Err(e) = registry.check_for_changes().await {
-                tracing::warn!(error = %e, "Failed to check for tool changes (streaming)");
-            }
+            && let Err(e) = registry.check_for_changes().await
+        {
+            tracing::warn!(error = %e, "Failed to check for tool changes (streaming)");
+        }
 
         // 🚀 DELEGATION: Convert Lambda request to hyper request
         let hyper_req = crate::adapter::lambda_to_hyper_request(req)

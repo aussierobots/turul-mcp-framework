@@ -374,36 +374,37 @@ impl McpServer {
         // Sync tool registry with shared storage on startup (coordination mode only)
         #[cfg(feature = "dynamic-tools")]
         if self.coordination_enabled
-            && let Some(ref registry) = self.tool_registry {
-                match registry.sync_from_storage().await {
-                    Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
-                        info!("Dynamic: initialized shared storage with local tool state");
-                    }
-                    Ok(crate::tool_registry::SyncResult::InSync) => {
-                        info!("Dynamic: local tools match shared storage");
-                    }
-                    Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
-                        warn!(
-                            "Dynamic: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.",
-                            old_fingerprint
-                        );
-                    }
-                    Err(e) => {
-                        error!(
-                            "Dynamic: failed to sync with shared storage: {}. Continuing with local state.",
-                            e
-                        );
-                    }
+            && let Some(ref registry) = self.tool_registry
+        {
+            match registry.sync_from_storage().await {
+                Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
+                    info!("Dynamic: initialized shared storage with local tool state");
                 }
-
-                // Start background polling for cross-instance changes
-                let poll_interval = registry.check_ttl();
-                let _poll_handle = registry.start_polling(poll_interval);
-                debug!(
-                    "Dynamic: started background polling (interval: {:?})",
-                    poll_interval
-                );
+                Ok(crate::tool_registry::SyncResult::InSync) => {
+                    info!("Dynamic: local tools match shared storage");
+                }
+                Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
+                    warn!(
+                        "Dynamic: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.",
+                        old_fingerprint
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        "Dynamic: failed to sync with shared storage: {}. Continuing with local state.",
+                        e
+                    );
+                }
             }
+
+            // Start background polling for cross-instance changes
+            let poll_interval = registry.check_ttl();
+            let _poll_handle = registry.start_polling(poll_interval);
+            debug!(
+                "Dynamic: started background polling (interval: {:?})",
+                poll_interval
+            );
+        }
 
         // Create session-aware tool handler (with optional task runtime for async execution)
         let mut tool_handler = SessionAwareToolHandler::new(
@@ -618,36 +619,37 @@ impl McpServer {
         // Sync tool registry with shared storage on startup (coordination mode only)
         #[cfg(feature = "dynamic-tools")]
         if self.coordination_enabled
-            && let Some(ref registry) = self.tool_registry {
-                match registry.sync_from_storage().await {
-                    Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
-                        info!("Dynamic: initialized shared storage with local tool state");
-                    }
-                    Ok(crate::tool_registry::SyncResult::InSync) => {
-                        info!("Dynamic: local tools match shared storage");
-                    }
-                    Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
-                        warn!(
-                            "Dynamic: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.",
-                            old_fingerprint
-                        );
-                    }
-                    Err(e) => {
-                        error!(
-                            "Dynamic: failed to sync with shared storage: {}. Continuing with local state.",
-                            e
-                        );
-                    }
+            && let Some(ref registry) = self.tool_registry
+        {
+            match registry.sync_from_storage().await {
+                Ok(crate::tool_registry::SyncResult::InitializedStorage) => {
+                    info!("Dynamic: initialized shared storage with local tool state");
                 }
-
-                // Start background polling for cross-instance changes
-                let poll_interval = registry.check_ttl();
-                let _poll_handle = registry.start_polling(poll_interval);
-                debug!(
-                    "Dynamic: started background polling (interval: {:?})",
-                    poll_interval
-                );
+                Ok(crate::tool_registry::SyncResult::InSync) => {
+                    info!("Dynamic: local tools match shared storage");
+                }
+                Ok(crate::tool_registry::SyncResult::UpdatedStorage { old_fingerprint }) => {
+                    warn!(
+                        "Dynamic: updated shared storage (old fingerprint: {}). Other running instances may be serving stale tools.",
+                        old_fingerprint
+                    );
+                }
+                Err(e) => {
+                    error!(
+                        "Dynamic: failed to sync with shared storage: {}. Continuing with local state.",
+                        e
+                    );
+                }
             }
+
+            // Start background polling for cross-instance changes
+            let poll_interval = registry.check_ttl();
+            let _poll_handle = registry.start_polling(poll_interval);
+            debug!(
+                "Dynamic: started background polling (interval: {:?})",
+                poll_interval
+            );
+        }
 
         // Create session-aware tool handler (with optional task runtime for async execution)
         let mut tool_handler = SessionAwareToolHandler::new(

@@ -1210,10 +1210,9 @@ fn generate_config_suggestions(config: &Value, config_type: &str) -> McpResult<V
                 suggestions.push("Add connection pooling for better performance".to_string());
             }
         }
-        "api_config"
-            if !config["security"]["rate_limiting"].is_object() => {
-                suggestions.push("Implement rate limiting for API protection".to_string());
-            }
+        "api_config" if !config["security"]["rate_limiting"].is_object() => {
+            suggestions.push("Implement rate limiting for API protection".to_string());
+        }
         _ => {}
     }
 
