@@ -1,264 +1,97 @@
-# Turul JSON-RPC Server
+# turul-mcp-json-rpc-server (compatibility shim)
 
-A generic JSON-RPC 2.0 server implementation that provides the foundation for the MCP protocol transport layer.
+> **Terminal shim.** This crate is a thin re-export of [`turul-rpc`][turul-rpc]
+> for backward compatibility with `turul-mcp-framework 0.3.x`. **New code
+> should depend on `turul-rpc` directly.**
 
-## Features
+[turul-rpc]: https://crates.io/crates/turul-rpc
 
-- **JSON-RPC 2.0 Compliant**: Full specification support with proper error handling
-- **Type-Safe Error Handling**: Domain errors with automatic protocol conversion
-- **Session Support**: Optional session context for stateful operations
-- **Generic Handler Interface**: Flexible handler registration system
-- **Unified Error Architecture**: Clean domain/protocol separation
+## What this crate is
 
-## Key Architecture
+`turul-mcp-json-rpc-server` was the generic JSON-RPC 2.0 implementation
+inside `turul-mcp-framework` through v0.3.38. As of **v0.3.39** the
+implementation moved to a sibling repository, [`turul-rpc`][turul-rpc-repo],
+which publishes four crates:
 
-The framework uses a **clean domain/protocol separation** where:
+- [`turul-rpc-core`](https://crates.io/crates/turul-rpc-core) — wire types
+- [`turul-rpc-jsonrpc`](https://crates.io/crates/turul-rpc-jsonrpc) — codec, parser, JSON-RPC 2.0 batch
+- [`turul-rpc-server`](https://crates.io/crates/turul-rpc-server) — async dispatcher, handler trait, session, streaming
+- [`turul-rpc`](https://crates.io/crates/turul-rpc) — facade re-exporting the above
 
-1. **Handlers return domain errors only** (`Result<Value, DomainError>`)
-2. **Dispatcher owns protocol conversion** (domain → JSON-RPC errors)
-3. **No double-wrapping** or protocol structures in business logic
+This crate (`turul-mcp-json-rpc-server`) is now a ~50-line re-export shim.
+Every public type, trait, function, and module from prior 0.3.x releases
+continues to resolve at the same path with the **same nominal type** —
+existing imports compile and behave identically.
 
-## Quick Start
+[turul-rpc-repo]: https://github.com/aussierobots/turul-rpc
+
+## Lifecycle
+
+| Version | Posture |
+|---|---|
+| `0.3.38` and earlier | Self-contained JSON-RPC 2.0 implementation |
+| `0.3.39` (current) | Re-export shim over `turul-rpc 0.1` |
+| `0.3.40+` | Patch shim if a compatibility issue is found |
+| `0.4.0` | **Not planned.** `turul-mcp-framework 0.4.0` removes this crate from its dependency tree |
+
+Existing 0.3.x consumers may continue depending on this crate
+indefinitely. There is no deprecation warning attached to imports.
+
+## For new code
+
+```toml
+[dependencies]
+turul-rpc = "0.1"
+```
 
 ```rust
-use turul_mcp_json_rpc_server::{
-    JsonRpcHandler, JsonRpcDispatcher, RequestParams,
-    r#async::{SessionContext, ToJsonRpcError},
-    dispatch::parse_json_rpc_message,
-    error::JsonRpcErrorObject,
-};
-use serde_json::{Value, json};
-use async_trait::async_trait;
-
-/// Calculator error type - handlers return domain errors only
-#[derive(thiserror::Error, Debug)]
-enum CalculatorError {
-    #[error("Missing parameters: {0}")]
-    MissingParameters(String),
-    #[error("Invalid parameter: {0}")]
-    InvalidParameter(String),
-    #[error("Unknown method: {0}")]
-    UnknownMethod(String),
-}
-
-impl ToJsonRpcError for CalculatorError {
-    fn to_error_object(&self) -> JsonRpcErrorObject {
-        match self {
-            CalculatorError::MissingParameters(msg) => JsonRpcErrorObject::invalid_params(msg),
-            CalculatorError::InvalidParameter(msg) => JsonRpcErrorObject::invalid_params(msg),
-            CalculatorError::UnknownMethod(method) => JsonRpcErrorObject::method_not_found(method),
-        }
-    }
-}
-
-struct CalculatorHandler;
-
-#[async_trait]
-impl JsonRpcHandler for CalculatorHandler {
-    type Error = CalculatorError;  // Handlers specify their error type
-
-    async fn handle(
-        &self,
-        method: &str,
-        params: Option<RequestParams>,
-        _session: Option<SessionContext>
-    ) -> Result<Value, Self::Error> {  // Return domain errors only
-        match method {
-            "add" => {
-                let params = params.ok_or_else(|| {
-                    CalculatorError::MissingParameters("Missing parameters for add operation".to_string())
-                })?;
-
-                let map = params.to_map();
-                let a = map.get("a").and_then(|v| v.as_f64()).ok_or_else(|| {
-                    CalculatorError::InvalidParameter("Parameter 'a' is required and must be a number".to_string())
-                })?;
-                let b = map.get("b").and_then(|v| v.as_f64()).ok_or_else(|| {
-                    CalculatorError::InvalidParameter("Parameter 'b' is required and must be a number".to_string())
-                })?;
-
-                Ok(json!({"result": a + b}))
-            }
-            "subtract" => {
-                let params = params.ok_or_else(|| {
-                    CalculatorError::MissingParameters("Missing parameters for subtract operation".to_string())
-                })?;
-
-                let map = params.to_map();
-                let a = map.get("a").and_then(|v| v.as_f64()).ok_or_else(|| {
-                    CalculatorError::InvalidParameter("Parameter 'a' is required and must be a number".to_string())
-                })?;
-                let b = map.get("b").and_then(|v| v.as_f64()).ok_or_else(|| {
-                    CalculatorError::InvalidParameter("Parameter 'b' is required and must be a number".to_string())
-                })?;
-
-                Ok(json!({"result": a - b}))
-            }
-            _ => Err(CalculatorError::UnknownMethod(
-                format!("{}. Supported methods: add, subtract", method)
-            ))
-        }
-    }
-
-    fn supported_methods(&self) -> Vec<String> {
-        vec!["add".to_string(), "subtract".to_string()]
-    }
-}
-
-#[tokio::main]
-async fn main() {
-    // Create type-safe dispatcher
-    let mut dispatcher: JsonRpcDispatcher<CalculatorError> = JsonRpcDispatcher::new();
-    dispatcher.register_methods(
-        vec!["add".to_string(), "subtract".to_string()],
-        CalculatorHandler,
-    );
-
-    // Example request processing
-    let request_json = r#"{"jsonrpc": "2.0", "method": "add", "params": {"a": 5, "b": 3}, "id": 1}"#;
-
-    match parse_json_rpc_message(request_json) {
-        Ok(turul_mcp_json_rpc_server::dispatch::JsonRpcMessage::Request(request)) => {
-            let response = dispatcher.handle_request(request).await;
-            println!("Response: {}", serde_json::to_string_pretty(&response).unwrap());
-        }
-        _ => println!("Invalid request"),
-    }
-}
+use turul_rpc::{JsonRpcDispatcher, JsonRpcHandler, RequestParams, SessionContext};
+use turul_rpc::error::JsonRpcErrorObject;
+use turul_rpc::r#async::ToJsonRpcError;
 ```
 
-## Error Handling Architecture
+See the [`turul-rpc` README][turul-rpc-readme] for the full quick-start,
+two runnable examples (`simple_calculator`, `batch_dispatch`), and the
+[`docs/adr/`][adrs] directory for architectural decisions.
 
-### 🚨 Critical: Use Domain Errors Only
+[turul-rpc-readme]: https://github.com/aussierobots/turul-rpc#readme
+[adrs]: https://github.com/aussierobots/turul-rpc/tree/main/docs/adr
 
-**✅ CORRECT Pattern:**
-```rust
-#[derive(thiserror::Error, Debug)]
-enum MyError {
-    #[error("Invalid input: {0}")]
-    InvalidInput(String),
-}
+## Compatibility contract
 
-impl ToJsonRpcError for MyError {
-    fn to_error_object(&self) -> JsonRpcErrorObject {
-        match self {
-            MyError::InvalidInput(msg) => JsonRpcErrorObject::invalid_params(msg),
-        }
-    }
-}
+Two test files in this crate enforce the v0.3.38 surface:
 
-impl JsonRpcHandler for MyHandler {
-    type Error = MyError;
+- `tests/symbol_coverage.rs` — names every top-level public path from
+  the v0.3.38 `cargo public-api` snapshot via `use` statements; fails
+  to compile if any path becomes unreachable.
+- `tests/shim_compat.rs` — asserts type identity across paths
+  (`turul_mcp_json_rpc_server::RequestId == turul_rpc::RequestId ==
+  turul_rpc::types::RequestId`).
 
-    async fn handle(&self, ...) -> Result<Value, MyError> {
-        Err(MyError::InvalidInput("Bad data".to_string()))  // Domain error only
-    }
-}
-```
+New `turul-rpc 0.1` APIs that did not exist in v0.3.38 (notably
+`parse_json_rpc_batch` and `BatchOrSingle`) live in `turul_rpc::batch`,
+a module **not re-exported** by this shim. Users who want batch
+processing should depend on `turul-rpc` directly. See [ADR-003][adr-003].
 
-**❌ WRONG Pattern:**
-```rust
-// DON'T DO THIS - JsonRpcProcessingError no longer exists
-use turul_mcp_json_rpc_server::error::JsonRpcProcessingError;  // Removed!
+[adr-003]: https://github.com/aussierobots/turul-rpc/blob/main/docs/adr/003-compatibility-with-turul-mcp-json-rpc-server.md
 
-// DON'T DO THIS - Never create protocol errors in handlers
-impl JsonRpcHandler for MyHandler {
-    async fn handle(&self, ...) -> Result<Value, JsonRpcError> {  // NO!
-        Err(JsonRpcError::new(...))  // Wrong layer!
-    }
-}
-```
+## Compliance posture
 
-### JSON-RPC Error Conversion
+`turul-rpc 0.1` (and therefore this shim) implements JSON-RPC 2.0 with
+**one documented departure**: incoming requests with `"id": null` are
+rejected as `Invalid Request` (`-32600`). The spec permits null id but
+discourages it. The strict posture is **inherited from v0.3.38** — this
+shim release does not change runtime behaviour. See
+`turul-rpc/docs/adr/002-json-rpc-2-compliance.md` for the v0.2 plan to
+surface a permissive codec-level type.
 
-The dispatcher automatically converts domain errors to proper JSON-RPC errors:
+## Where to file issues
 
-- **Domain Error**: `InvalidInput("missing field")`
-- **JSON-RPC Error**: `{"code": -32602, "message": "missing field"}`
+| Kind | Repository |
+|---|---|
+| JSON-RPC 2.0 implementation, batch, dispatcher, types | [`turul-rpc`](https://github.com/aussierobots/turul-rpc/issues) |
+| Shim compatibility regression in framework 0.3.x | [`turul-mcp-framework`](https://github.com/aussierobots/turul-mcp-framework/issues) |
 
-### Response Format
+## License
 
-**Success Response:**
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "result": {"calculation": 42}
-}
-```
-
-**Error Response:**
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 1,
-  "error": {
-    "code": -32602,
-    "message": "Invalid parameter: missing required field"
-  }
-}
-```
-
-## Advanced Usage
-
-### Session Context
-
-```rust
-#[async_trait]
-impl JsonRpcHandler for StatefulHandler {
-    type Error = MyError;
-
-    async fn handle(
-        &self,
-        method: &str,
-        params: Option<RequestParams>,
-        session: Option<SessionContext>
-    ) -> Result<Value, Self::Error> {
-        if let Some(ctx) = session {
-            // Use async session operations
-            let state = (ctx.get_state)("user_id").await;
-            (ctx.set_state)("last_method", json!(method)).await;
-        }
-        Ok(json!({"status": "success"}))
-    }
-}
-```
-
-### Multiple Handlers
-
-```rust
-let mut dispatcher: JsonRpcDispatcher<MyError> = JsonRpcDispatcher::new();
-
-// Register specific methods
-dispatcher.register_method("calculate".to_string(), CalculatorHandler);
-dispatcher.register_method("validate".to_string(), ValidatorHandler);
-
-// Register default handler for unmatched methods
-dispatcher.set_default_handler(FallbackHandler);
-```
-
-## Migration Guide
-
-When upgrading from earlier versions:
-
-1. **Remove JsonRpcProcessingError imports** - no longer exists
-2. **Add associated Error type** to JsonRpcHandler implementations
-3. **Implement ToJsonRpcError** for your error types
-4. **Return domain errors directly** - no protocol layer creation
-5. **Use JsonRpcDispatcher<YourError>** with explicit type parameter
-
-## Features
-
-- `serde`: JSON serialization/deserialization support
-- `async`: Async handler support with futures
-- `session`: Session context support for stateful operations
-
-## Dependencies
-
-This crate depends on:
-- `serde` and `serde_json` for JSON handling
-- `async-trait` for async trait support
-- `thiserror` for domain error definitions
-- `tokio` for async runtime support
-
-For MCP protocol support, use this with `turul-mcp-server` which provides the high-level MCP server framework.
+MIT OR Apache-2.0.

@@ -9,18 +9,21 @@
 
 #![allow(dead_code, unused_imports)]
 
-// Crate-root re-exports
+// Crate-root re-exports — non-async items always available
 use turul_mcp_json_rpc_server::JSONRPC_VERSION;
 use turul_mcp_json_rpc_server::{
-    JsonRpcDispatcher, JsonRpcError, JsonRpcErrorCode, JsonRpcHandler, JsonRpcMessage,
-    JsonRpcNotification, JsonRpcRequest, JsonRpcResponse, JsonRpcVersion, RequestId, RequestParams,
-    ResponseResult, SessionContext,
+    JsonRpcError, JsonRpcErrorCode, JsonRpcMessage, JsonRpcNotification, JsonRpcRequest,
+    JsonRpcResponse, JsonRpcVersion, RequestId, RequestParams, ResponseResult,
 };
+
+// Async-gated crate-root re-exports
+#[cfg(feature = "async")]
+use turul_mcp_json_rpc_server::{JsonRpcDispatcher, JsonRpcHandler, SessionContext};
 
 #[cfg(feature = "streams")]
 use turul_mcp_json_rpc_server::{JsonRpcFrame, StreamingJsonRpcDispatcher, StreamingJsonRpcHandler};
 
-// Module re-exports
+// Module re-exports — non-async paths
 use turul_mcp_json_rpc_server::error::{JsonRpcError as _E, JsonRpcErrorCode as _C, JsonRpcErrorObject, JsonRpcTransportError};
 use turul_mcp_json_rpc_server::request::{JsonRpcRequest as _R, RequestParams as _RP};
 use turul_mcp_json_rpc_server::response::{JsonRpcMessage as _M, JsonRpcResponse as _Rsp, ResponseResult as _RR};
@@ -58,6 +61,7 @@ fn jsonrpc_version_constant() {
     assert_eq!(JSONRPC_VERSION, "2.0");
 }
 
+#[cfg(feature = "async")]
 #[test]
 fn type_identity_request_id_is_same_across_paths() {
     // RequestId reached via the crate root must be the same nominal type as

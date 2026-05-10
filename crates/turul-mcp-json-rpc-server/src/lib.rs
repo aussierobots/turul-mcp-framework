@@ -13,7 +13,7 @@
 //! turul-rpc = "0.1"
 //! ```
 //!
-//! ```rust,no_run
+//! ```ignore
 //! use turul_rpc::{JsonRpcDispatcher, JsonRpcHandler, RequestParams, SessionContext};
 //! ```
 //!
@@ -29,7 +29,23 @@
 //! [adr-003]: https://github.com/aussierobots/turul-rpc/blob/main/docs/adr/003-compatibility-with-turul-mcp-json-rpc-server.md
 
 // Module re-exports — match the original crate's `pub mod` layout.
-pub use turul_rpc::{dispatch, error, error_codes, notification, prelude, request, response, types};
+pub use turul_rpc::{error, error_codes, notification, prelude, request, response, types};
+
+/// JSON-RPC dispatch helpers and the inbound message union.
+///
+/// **Curated** to the v0.3.38 surface. New `turul-rpc 0.1` APIs (notably
+/// `parse_json_rpc_batch` and `BatchOrSingle`) live in `turul_rpc::batch`
+/// and are intentionally NOT re-exported here so the shim keeps its
+/// preservation-only posture per [ADR-003][adr-003]. Code that wants
+/// batch processing should depend on `turul-rpc` directly.
+///
+/// [adr-003]: https://github.com/aussierobots/turul-rpc/blob/main/docs/adr/003-compatibility-with-turul-mcp-json-rpc-server.md
+pub mod dispatch {
+    pub use turul_rpc::dispatch::{
+        create_error_response, create_success_response, parse_json_rpc_message,
+        parse_json_rpc_messages, JsonRpcMessage, JsonRpcMessageResult,
+    };
+}
 
 #[cfg(feature = "async")]
 pub use turul_rpc::r#async;

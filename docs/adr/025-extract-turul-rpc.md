@@ -126,6 +126,28 @@ Spec compliance is a v0.1 success criterion per
    Rejected at the turul-rpc level (see [rpc-001][rpc-001]) — keeps the
    wire types tied to the async runtime forever.
 
+## Merge blocker — path dependency
+
+The `extract/turul-rpc-shim` branch ships with a sibling-path workspace
+dep:
+
+```toml
+turul-rpc = { version = "0.1", path = "../turul-rpc/crates/turul-rpc", default-features = false }
+```
+
+This **must** be replaced with the crates.io version-only form before
+merge to `main`:
+
+```toml
+turul-rpc = { version = "0.1", default-features = false }
+```
+
+That swap requires `turul-rpc 0.1.0` and its three sibling crates
+(`turul-rpc-core`, `turul-rpc-jsonrpc`, `turul-rpc-server`) to be
+published to crates.io first. Until then, fresh clones and CI without the
+sibling repo at `../turul-rpc` will fail to resolve dependencies. The
+branch is staging work; merge is gated on the publish step.
+
 ## Verification
 
 The 0.3.39 release passed:
