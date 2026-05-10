@@ -18,6 +18,15 @@ A comprehensive Rust framework for building Model Context Protocol (MCP) servers
 - **🔧 Development Features**: Session management, real-time notifications, performance monitoring, and UUID v7 support
 - **⚡ Performance Optimized**: Comprehensive benchmarking suite with >1000 RPS throughput, <100ms response times, and extensive stress testing
 
+## Turul MCP vs Turul RPC
+
+This project ships two layered surfaces. Most users only need the MCP layer.
+
+- **`turul-mcp`** (this framework) — the Model Context Protocol implementation. Tools, resources, prompts, sampling, elicitation, tasks, sessions, Streamable HTTP/SSE transport, the macro suite, storage backends.
+- **[`turul-rpc`](https://github.com/aussierobots/turul-rpc)** — generic, transport-agnostic typed JSON-RPC 2.0 framework: dispatch, domain/protocol error separation, optional session context, async handler trait, batch processing, notifications. No MCP knowledge. Useful as a foundation for any non-MCP request/response service that wants the same handler-returns-domain-error contract Turul uses internally.
+
+Turul MCP is built on top of Turul RPC. The `turul-mcp-json-rpc-server` crate, which historically carried the JSON-RPC implementation, is a thin re-export shim over `turul-rpc` since v0.3.39. **Existing 0.3.x users do not need to change anything** — `turul_mcp_json_rpc_server::*` imports continue to compile and behave identically. New code (and new tools/agents reading this README) should depend on `turul-rpc` directly. See [ADR-025](docs/adr/025-extract-turul-rpc.md).
+
 ## 🚀 Quick Start
 
 ### 1. Function Macros (Simplest - Recommended)

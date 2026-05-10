@@ -416,7 +416,7 @@ Before publishing a new version:
 - `turul-mcp-builders/` - Runtime builders + framework traits
 - `turul-mcp-derive/` - Proc macros (McpTool, McpResource, McpPrompt, mcp_tool)
 - `turul-http-mcp-server/` - HTTP/SSE transport
-- `turul-mcp-json-rpc-server/` - JSON-RPC dispatch layer
+- `turul-mcp-json-rpc-server/` - **Compatibility shim** since 0.3.39 — re-exports [`turul-rpc`](https://github.com/aussierobots/turul-rpc) (sibling repo). New code should depend on `turul-rpc` directly. No 0.4 of this crate; framework 0.4.0 drops the dep entirely. See ADR-025.
 - `turul-mcp-client/` - Client library
 - `turul-mcp-session-storage/` - Pluggable session storage (InMemory, SQLite, PostgreSQL, DynamoDB)
 - `turul-mcp-task-storage/` - Task storage for long-running operations

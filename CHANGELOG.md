@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.39] - Unreleased
+
+### Changed
+
+- **`turul-mcp-json-rpc-server` is now a re-export shim over [`turul-rpc`](https://github.com/aussierobots/turul-rpc)** (a new sibling repository / crate family). All implementation moved to `turul-rpc-core`, `turul-rpc-jsonrpc`, and `turul-rpc-server`; the framework crate `turul-mcp-json-rpc-server 0.3.39` is now ~50 lines of `pub use turul_rpc::*` plus module re-exports. Public API surface is preserved at every original path with identical nominal types — existing `turul_mcp_json_rpc_server::*` imports continue to compile and behave identically. Internal framework crates (`turul-mcp-protocol-2025-{06-18,11-25}`, `turul-mcp-builders`, `turul-mcp-server`, `turul-http-mcp-server`, `turul-mcp-aws-lambda`) continue to depend on `turul-mcp-json-rpc-server` through 0.3.x; framework 0.4.0 will migrate those imports to `turul-rpc` directly and drop the shim crate. **There is no planned 0.4 release of `turul-mcp-json-rpc-server`** — 0.3.39 is the terminal shim. Existing 0.3.x consumers may continue depending on it indefinitely; new code should depend on `turul-rpc` directly. See [ADR-025](docs/adr/025-extract-turul-rpc.md).
+
+### Added
+
+- **JSON-RPC 2.0 batch processing** (via `turul-rpc-jsonrpc`): the original `turul_mcp_json_rpc_server::dispatch::parse_json_rpc_messages` was a stub claiming "JSON-RPC 2.0 removed batch support" (it didn't). `turul-rpc-jsonrpc 0.1.0` ships a real spec-conformant batch implementation — `parse_json_rpc_batch` returns a `BatchOrSingle` discriminator; `JsonRpcDispatcher::handle_batch` dispatches per-member with notification-response suppression, all-notifications no-response semantics, and empty-batch → single `Invalid Request` (`-32600`) per [JSON-RPC 2.0 §6](https://www.jsonrpc.org/specification#batch). Reachable through the shim via `turul_mcp_json_rpc_server::dispatch::parse_json_rpc_batch`; existing single-message paths are unchanged.
+
 ### Documentation
 
 - **Lambda eager handler init** (`turul-mcp-aws-lambda`): documented and exemplified building `LambdaMcpHandler` eagerly in `main()` before the Lambda runtime hand-off, avoiding request-path lazy initialization for fan-out-sensitive workloads. Removed `static OnceCell<LambdaMcpHandler>` patterns from `examples/lambda-mcp-server`, `examples/lambda-mcp-server-streaming`, and `examples/middleware-auth-lambda`; each example now builds the handler once in `main()` and `move`-captures it into a small `service_fn(move |req| lambda_handler(handler.clone(), req))` wrapper. Updated `crates/turul-mcp-aws-lambda/README.md` quick-start and "Custom Dispatch with `run_streaming_with()`" sections to match. The existing `LambdaMcpServerBuilder::build().await?` followed by `server.handler().await?` already performs full eager init (DDB session storage, server-state-storage, server build, tool/resource registration, session cleanup spawn, dynamic-tools sync, cold-start task recovery) — no new API is added. Per-request `info!` logging in example handlers dropped to `debug!` to avoid CloudWatch flood at production traffic. Closes #15. See [ADR-024](docs/adr/024-lambda-eager-handler-init.md).

@@ -6,19 +6,16 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Pure JSON-RPC 2.0 server implementation with type-safe domain/protocol separation"
+description = "Compatibility shim re-exporting turul-rpc — see turul-rpc on crates.io for current development."
 
 [features]
 default = ["async"]
-async = ["async-trait", "futures"]
-streams = ["async", "futures"]
+async = ["turul-rpc/async"]
+streams = ["async", "turul-rpc/streams"]
 
 [dependencies]
-serde.workspace = true
-serde_json.workspace = true
-thiserror.workspace = true
-async-trait = { workspace = true, optional = true }
-futures = { workspace = true, optional = true }
+turul-rpc = { workspace = true }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["test-util"] }
+serde_json.workspace = true
+thiserror.workspace = true
