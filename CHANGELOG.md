@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.42] - Unreleased
+### Notes (no version)
+
+- **v0.3.43 investigation closed as documented limitation.** Production verification by the downstream consumer (sd-mcp v0.7.12) confirmed that v0.3.42's `EnsureOneFrame` adapter does not actually fix the empty-body Lambda streaming `IncompleteMessage` / 60s timeout / APIGW 502 case it claimed to solve. A wire-level diagnostic harness on branch `park/wire-level-test-harness` (retained on origin) replicates `lambda_runtime-1.2.0/src/requests.rs` serialization verbatim and confirms `BodyDataStream` yielding a zero-byte data frame does not satisfy the AWS Lambda Runtime API wire contract. Three resolution paths were considered: (a) sentinel-byte fix in `EnsureOneFrame`, (b) reject empty bodies with a clear error, (c) document the limitation; APIGW MOCK on OPTIONS is the permanent pattern. **Decision: (c).** Reasons in ADR-026 §"Resolution 2026-05-11". v0.3.42 stays published; framework code is unchanged; fleet deployments (sd-mcp v0.7.13, plus sv-track/gps-trust-mcp/gps-trust-agent-mcp port wave) use APIGW MOCK on all OPTIONS methods. CLAUDE.md "Test Coverage Discipline" gained rule 3 (wire-layer coverage for transport-protocol boundaries) as a permanent gate improvement — this is the recurrence prevention for the class of failure mode v0.3.42 hit, regardless of how this specific bug resolved.
+
+## [0.3.42] - 2026-05-11
 
 ### Fixed
 

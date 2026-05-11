@@ -1,8 +1,46 @@
 # ADR-026: Lambda Streaming Response Empty-Body Envelope Contract
 
-**Status:** Accepted
+**Status:** Closed — option (c). v0.3.42's `EnsureOneFrame` contract was found insufficient by production wire-level testing; investigation closed with no further runtime change. **APIGW MOCK on OPTIONS is the permanent pattern** for streaming-mode Lambdas. See "Resolution 2026-05-11" below.
 **Date:** 2026-05-11
 **Crate:** `turul-mcp-aws-lambda`
+
+## Resolution 2026-05-11
+
+After v0.3.42 shipped and was verified against production by the downstream consumer (sd-mcp, v0.7.12, deployed against `sd.aussierobots.com.au`), the empty-body Lambda streaming failure mode was confirmed unchanged. The `EnsureOneFrame` adapter satisfies the framework-internal contract documented below ("`BodyDataStream` yields ≥1 data frame") but does NOT satisfy the actual AWS Lambda Runtime API wire contract — `tx.send_data(Bytes::new())` produces no on-wire content bytes after the metadata + 8-NUL delimiter, hyper reports `IncompleteMessage`, the invocation hangs to timeout, API Gateway emits 502.
+
+A wire-level diagnostic harness was developed on branch `park/wire-level-test-harness` (commit `4937e3a`, retained on origin as archived diagnostic). The harness replicates `lambda_runtime-1.2.0/src/requests.rs:81-137` verbatim and asserts non-empty content bytes after the delimiter. Under v0.3.42's current code, three of four wire tests fail, confirming the framework-level fix is insufficient.
+
+Three resolution paths were considered:
+
+- **(a) Emit non-empty sentinel byte** in `EnsureOneFrame`'s fallback. Trivial code change, but requires real-AWS validation that the sentinel byte stays inside the Lambda streaming envelope rather than leaking to the HTTP response body visible to the client. For 204 No Content responses (which by RFC 7230 §3.3.3 forbid response bodies), a leaked byte may break client expectations. No CI infrastructure exists in turul to validate against real AWS; shipping (a) without external validation risks the same iteration trap as v0.3.42.
+- **(b) Reject empty-body streaming responses** at `into_lambda_stream_response`. Honest contract, fully validatable from local tests, but turns silent timeouts into loud build/runtime errors for any consumer using `Empty::new()` or `Full::new(Bytes::new())` bodies through `run_streaming_with`. Cost is borne by every existing consumer with no alternative inside Lambda; they'd be forced to MOCK regardless.
+- **(c) Document the limitation; no runtime change.** APIGW MOCK on OPTIONS is already AWS's recommended pattern for streaming-mode Lambdas. The framework-internal contract below stays as documented but is acknowledged as incomplete at the AWS boundary.
+
+**Decision: (c).** Reasons:
+
+1. MOCK is AWS's own recommendation for CORS preflight on streaming Lambdas. The framework is not papering over a missing AWS capability; it is aligning with AWS's documented architecture.
+2. Only one consumer (sd-mcp) has hit this bug. The fleet (sv-track, gps-trust-mcp, gps-trust-agent-mcp) will adopt MOCK in their port wave regardless of framework behavior.
+3. Without real-AWS CI validation, option (a) would require deploy-iterate-revert cycles against sd-mcp's production Lambda — multi-session iteration cost outweighs the benefit of "Lambda-served preflight."
+4. Option (b)'s improved error visibility is real but punitive; it changes a known workaround (MOCK) into a forced workaround without offering anything new.
+
+### Operational consequences
+
+- **v0.3.42 stays published.** Not regressive for non-empty body responses (the entire MCP request flow). Its CHANGELOG and the "Original contract" section below are preserved verbatim as historical record; both overstate the empty-body fix's effectiveness, but yanking or amending would only add confusion.
+- **No v0.3.43 planned** for this issue. Future framework releases (for unrelated reasons) should not silently change the empty-body behavior without re-opening this ADR.
+- **Fleet pattern: MOCK on all OPTIONS methods** for any consumer deploying turul-mcp-aws-lambda behind API Gateway streaming integration. Same template as sd-mcp v0.7.13.
+- **`park/wire-level-test-harness`** branch retained on origin (not merged) as the diagnostic checkpoint. If a future contributor reopens this with real-AWS CI infrastructure, the wire tests there are the regression net any candidate v0.3.43 fix must clear.
+- **CLAUDE.md "Test Coverage Discipline" rule 3** (wire-layer coverage requirement) is a permanent gate improvement, retained on `main` regardless of how this specific bug resolved. It exists because v0.3.42's failure mode was tests calibrated to the wrong layer; the rule prevents that recurring.
+
+### Operational status
+
+- sd-mcp: production stable on v0.7.13 with APIGW MOCK on `.well-known/{proxy+}`, `/oauth-protected-resource`, `/oauth-protected-resource/{proxy+}` OPTIONS. Pinned to turul-mcp-aws-lambda 0.3.42 for v0.3.40/v0.3.41 fixes (streaming custom-route CORS, `WWW-Authenticate` exposed by default, builder CORS propagation — all real, all working). OPTIONS does not invoke Lambda.
+- sv-track, gps-trust-mcp, gps-trust-agent-mcp: should adopt the same MOCK pattern in their next port wave.
+
+The "Original contract" section below describes what v0.3.42's `EnsureOneFrame` adapter implements. It is true at the framework-internal boundary (`BodyDataStream` yields ≥1 item) but does NOT solve the production failure. Read it as documentation of code that exists, not as a working contract.
+
+---
+
+## Original contract (v0.3.42 — superseded by Resolution above)
 
 ## Context
 

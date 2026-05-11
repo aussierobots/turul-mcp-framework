@@ -51,13 +51,14 @@ trait McpResourceV2 { ... }      // Avoid versioned APIs
 
 ### Test Coverage Discipline (pre-publish gate)
 
-**Every behavior-changing slice must satisfy all three before release:**
+**Every behavior-changing slice must satisfy all four before release:**
 
 1. **ADR exists or is updated.** Tests validate the ADR contract, not what the code happens to do. If no ADR governs the changed behavior, write or update one in the same slice and reference it in the CHANGELOG entry.
 2. **Production-path coverage.** Tests must exercise the entry point real consumers use (e.g., `Builder → server.handler() → handle_streaming()`), not just direct construction of the patched type. A fix verified only at the unit it touched does not cover the bug — v0.3.40 → v0.3.41 happened because tests bypassed the builder path.
-3. **Revert-and-fail check.** Temporarily revert the fix and run the new tests. They MUST fail. If they still pass, the test asserts code behavior rather than contract — rewrite it. Record the revert-and-fail result in the commit message.
+3. **Wire-layer coverage for transport-protocol boundaries.** When the fix touches code that produces bytes consumed by another protocol layer (Lambda Runtime API, hyper, SSE wire format, JSON-RPC envelope, MCP streamable HTTP), the test MUST exercise the bytes that hit that next layer — not just the framework-internal types that produce them. v0.3.42 happened because tests asserted "BodyDataStream yields ≥1 item" while production failed at "Lambda Runtime API wire bytes after delimiter are non-empty." For transport-protocol tests, drain through a verbatim transliteration of the upstream serializer (e.g. `lambda_runtime-<version>/src/requests.rs`) and assert on the resulting byte sequence. No "faithful mock" loophole — use the upstream code unmodified (call it if pub, replicate verbatim with a source-line citation if not).
+4. **Revert-and-fail check.** Temporarily revert the fix and run the new tests. They MUST fail. If they still pass, the test asserts code behavior rather than contract — rewrite it. Record the revert-and-fail result in the commit message.
 
-A green test suite written alongside the fix is suspect by default. The revert-and-fail check is the only proof the regression net catches the bug.
+A green test suite written alongside the fix is suspect by default. The revert-and-fail check is the only proof the regression net catches the bug. The wire-layer rule exists because a test calibrated to the framework's internal types will pass for any fix that satisfies those types, even when the fix doesn't satisfy the actual protocol contract consumed downstream.
 
 ### Protocol Re-export Rule (MANDATORY)
 
