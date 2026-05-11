@@ -453,6 +453,18 @@ impl LambdaMcpServer {
             handler
         };
 
+        // Propagate builder-configured CORS to the constructed handler.
+        // Must be applied after notifier/registry wiring so the final handler
+        // returned to the caller carries the CORS config — every
+        // `if let Some(cors_config)` branch inside `LambdaMcpHandler` reads
+        // from `self.cors_config`, which `with_middleware_and_fingerprint`
+        // initializes to `None`.
+        #[cfg(feature = "cors")]
+        let handler = match self.cors_config.clone() {
+            Some(cors) => handler.with_cors(cors),
+            None => handler,
+        };
+
         Ok(handler)
     }
 

@@ -1371,12 +1371,180 @@ mod tests {
             .unwrap();
 
         let handler = server.handler().await.unwrap();
-        // Verify handler has stream_manager
-        // Verify handler has stream_manager (critical invariant)
+        // Verify handler has stream_manager (critical invariant — pre-existing smoke check)
         assert!(
             handler.get_stream_manager().as_ref() as *const _ as usize > 0,
             "Stream manager must be initialized"
         );
+    }
+
+    // ── Builder-path CORS propagation regressions ──
+    //
+    // `LambdaMcpServerBuilder::cors(...)` populates `LambdaMcpServer.cors_config`,
+    // but for ~7 months `LambdaMcpServer::handler()` constructed the
+    // `LambdaMcpHandler` via `with_middleware_and_fingerprint(...)` (which
+    // initializes `cors_config: None`) and never chained `.with_cors(...)`
+    // onto the result. Every `if let Some(ref cors_config) = self.cors_config`
+    // branch inside the handler was therefore unreachable through the
+    // documented builder entry point. The smoke test above didn't catch it
+    // because it only asserts `stream_manager` exists.
+    //
+    // These tests probe the actual contract: configure CORS on the builder,
+    // pull a real response off the handler, assert the headers appear.
+
+    #[cfg(feature = "cors")]
+    mod cors_propagation {
+        use super::*;
+        use async_trait::async_trait;
+        use http::Request;
+        use lambda_http::Body as LambdaBody;
+        use turul_http_mcp_server::middleware::{
+            DispatcherResult, McpMiddleware, MiddlewareError, RequestContext, SessionInjection,
+        };
+        use turul_mcp_session_storage::SessionView;
+
+        fn preflight_request() -> lambda_http::Request {
+            Request::builder()
+                .method("OPTIONS")
+                .uri("/mcp")
+                .header("Origin", "https://client.example.test")
+                .header("Access-Control-Request-Method", "POST")
+                .body(LambdaBody::Empty)
+                .unwrap()
+        }
+
+        fn post_request() -> lambda_http::Request {
+            Request::builder()
+                .method("POST")
+                .uri("/mcp")
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json, text/event-stream")
+                .header("MCP-Protocol-Version", "2025-11-25")
+                .header("Origin", "https://client.example.test")
+                .body(LambdaBody::Text(
+                    r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+                ))
+                .unwrap()
+        }
+
+        /// Builder-path streaming preflight must carry CORS headers.
+        ///
+        /// Repros the original drop-on-the-floor bug: before the fix,
+        /// `server.handler().await.handle_streaming(OPTIONS)` returned a
+        /// preflight response with no `Access-Control-Allow-Origin`.
+        #[tokio::test]
+        async fn builder_path_streaming_preflight_has_cors() {
+            let server = LambdaMcpServerBuilder::new()
+                .cors_allow_all_origins()
+                .storage(Arc::new(InMemorySessionStorage::new()))
+                .sse(false)
+                .build()
+                .await
+                .unwrap();
+            let handler = server.handler().await.unwrap();
+
+            let resp = handler.handle_streaming(preflight_request()).await.unwrap();
+            assert_eq!(resp.status(), 200);
+            assert!(
+                resp.headers().contains_key("access-control-allow-origin"),
+                "builder-configured CORS must reach the streaming preflight response; \
+                 got headers: {:?}",
+                resp.headers(),
+            );
+            assert!(
+                resp.headers().contains_key("access-control-allow-methods"),
+                "preflight must advertise methods",
+            );
+        }
+
+        /// Non-preflight: a middleware-emitted 401 through the builder-path
+        /// streaming handler must also carry CORS — this is the production
+        /// failure mode that previously masquerade-ed as a CORS bug.
+        #[tokio::test]
+        async fn builder_path_streaming_401_has_cors_and_exposes_www_authenticate() {
+            struct ForceChallenge;
+
+            #[async_trait]
+            impl McpMiddleware for ForceChallenge {
+                fn runs_before_session(&self) -> bool {
+                    true
+                }
+                async fn before_dispatch(
+                    &self,
+                    _ctx: &mut RequestContext<'_>,
+                    _session: Option<&dyn SessionView>,
+                    _injection: &mut SessionInjection,
+                ) -> std::result::Result<(), MiddlewareError> {
+                    Err(MiddlewareError::http_challenge(
+                        401,
+                        "Bearer realm=\"mcp\", \
+                         resource_metadata=\"https://example.test/.well-known/oauth-protected-resource\"",
+                    ))
+                }
+                async fn after_dispatch(
+                    &self,
+                    _ctx: &RequestContext<'_>,
+                    _result: &mut DispatcherResult,
+                ) -> std::result::Result<(), MiddlewareError> {
+                    Ok(())
+                }
+            }
+
+            let server = LambdaMcpServerBuilder::new()
+                .cors_allow_all_origins()
+                .middleware(Arc::new(ForceChallenge))
+                .storage(Arc::new(InMemorySessionStorage::new()))
+                .sse(false)
+                .build()
+                .await
+                .unwrap();
+            let handler = server.handler().await.unwrap();
+
+            let resp = handler.handle_streaming(post_request()).await.unwrap();
+            let headers = resp.headers();
+
+            assert_eq!(resp.status(), 401);
+            assert!(
+                headers.contains_key("www-authenticate"),
+                "WWW-Authenticate must survive the builder-path streaming transport",
+            );
+            assert!(
+                headers.contains_key("access-control-allow-origin"),
+                "401 must carry CORS through the builder path — was the source of the v0.3.40 production gap",
+            );
+            let expose = headers
+                .get("access-control-expose-headers")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+            assert!(
+                expose
+                    .split(',')
+                    .map(str::trim)
+                    .any(|h| h.eq_ignore_ascii_case("WWW-Authenticate")),
+                "expose-headers must include WWW-Authenticate; got {expose:?}",
+            );
+        }
+
+        /// Negative: builder with no CORS configured → no CORS headers.
+        /// Guards against accidentally injecting defaults for consumers who
+        /// opted out (or never opted in).
+        #[tokio::test]
+        async fn builder_path_without_cors_emits_no_cors_headers() {
+            let server = LambdaMcpServerBuilder::new()
+                .storage(Arc::new(InMemorySessionStorage::new()))
+                .sse(false)
+                .build()
+                .await
+                .unwrap();
+            let handler = server.handler().await.unwrap();
+
+            let resp = handler.handle_streaming(preflight_request()).await.unwrap();
+            assert!(
+                !resp.headers().contains_key("access-control-allow-origin"),
+                "no builder CORS → no CORS headers; got {:?}",
+                resp.headers(),
+            );
+        }
     }
 
     #[tokio::test]

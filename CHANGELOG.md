@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.40] - Unreleased
+## [0.3.41] - Unreleased
+
+### Fixed
+
+- **`LambdaMcpServer::handler()` silently dropped builder-configured CORS** (`turul-mcp-aws-lambda`). `LambdaMcpServerBuilder::cors(...)` / `.cors_allow_all_origins()` / `.cors_allow_origins(...)` / `.cors_from_env()` populated `LambdaMcpServer.cors_config`, but `handler()` constructed the `LambdaMcpHandler` via `with_middleware_and_fingerprint(...)` (which initializes `cors_config: None`) and never chained `.with_cors(self.cors_config.clone())` onto the result. Every `if let Some(ref cors_config) = self.cors_config` branch inside `LambdaMcpHandler` — preflight short-circuit, custom-route injections, final-response injection — was therefore unreachable through the documented builder entry point. Pre-existing since `5d4bdd3` (2025-10-05, "feat: add middleware support for Lambda"); silently broken across all releases from then through v0.3.40. The injection logic added in v0.3.40 for streaming custom-route branches was functionally correct but unreachable for builder-constructed handlers, which is what surfaced the bug. Fix: `handler()` now chains `.with_cors(self.cors_config.clone())` after the notifier/registry wiring, before returning. Three new regression tests assert builder-path CORS coverage explicitly: streaming OPTIONS preflight, streaming 401 challenge (non-preflight, with `WWW-Authenticate` preserved + exposed), and negative-path (no CORS config → no CORS headers). The previous `test_cors_configuration` only smoke-checked `stream_manager`, which is why the bug slipped past CI for ~7 months — that smoke check is retained but no longer the sole guard.
+
+## [0.3.40] - 2026-05-11
 
 ### Fixed
 
