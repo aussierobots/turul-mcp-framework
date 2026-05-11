@@ -27,7 +27,9 @@ pub(crate) const CORS_ALLOW_HEADERS: &str =
 /// Response headers a browser is allowed to read.
 ///
 /// `Mcp-Session-Id` — client must read the session ID from the initialize response.
-pub(crate) const CORS_EXPOSE_HEADERS: &str = "Mcp-Session-Id";
+// WWW-Authenticate is exposed so browser OAuth clients can read the RFC 9728
+// challenge on 401 responses (non-safelisted CORS header).
+pub(crate) const CORS_EXPOSE_HEADERS: &str = "Mcp-Session-Id, WWW-Authenticate";
 
 /// Preflight cache duration in seconds (24 hours).
 pub(crate) const CORS_MAX_AGE: &str = "86400";
@@ -111,9 +113,19 @@ mod tests {
             "Must include Last-Event-ID"
         );
 
-        assert_eq!(
-            headers.get("Access-Control-Expose-Headers").unwrap(),
-            "Mcp-Session-Id"
+        let exposed = headers
+            .get("Access-Control-Expose-Headers")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        let exposed_set: Vec<&str> = exposed.split(',').map(str::trim).collect();
+        assert!(
+            exposed_set.iter().any(|h| h.eq_ignore_ascii_case("Mcp-Session-Id")),
+            "Expose-Headers must include Mcp-Session-Id; got {exposed:?}",
+        );
+        assert!(
+            exposed_set.iter().any(|h| h.eq_ignore_ascii_case("WWW-Authenticate")),
+            "Expose-Headers must include WWW-Authenticate so browser OAuth clients can read RFC 9728 challenges; got {exposed:?}",
         );
         assert_eq!(headers.get("Access-Control-Max-Age").unwrap(), CORS_MAX_AGE);
 
@@ -180,12 +192,25 @@ mod tests {
         assert!(allowed.contains("MCP-Protocol-Version"));
         assert!(allowed.contains("Last-Event-ID"));
 
-        assert_eq!(
-            response
-                .headers()
-                .get("Access-Control-Expose-Headers")
-                .unwrap(),
-            "Mcp-Session-Id"
+        let exposed = response
+            .headers()
+            .get("Access-Control-Expose-Headers")
+            .unwrap()
+            .to_str()
+            .unwrap();
+        assert!(
+            exposed
+                .split(',')
+                .map(str::trim)
+                .any(|h| h.eq_ignore_ascii_case("Mcp-Session-Id")),
+            "Expose-Headers must include Mcp-Session-Id; got {exposed:?}",
+        );
+        assert!(
+            exposed
+                .split(',')
+                .map(str::trim)
+                .any(|h| h.eq_ignore_ascii_case("WWW-Authenticate")),
+            "Expose-Headers must include WWW-Authenticate; got {exposed:?}",
         );
     }
 

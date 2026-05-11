@@ -83,7 +83,7 @@ pub use handler::LambdaMcpHandler;
 pub use server::LambdaMcpServer;
 
 #[cfg(feature = "cors")]
-pub use cors::CorsConfig;
+pub use cors::{CorsConfig, create_preflight_response, inject_cors_headers};
 
 /// Classification of a raw Lambda runtime event payload.
 ///

@@ -291,6 +291,59 @@ let server = LambdaMcpServerBuilder::new()
     .await?;
 ```
 
+### Deployment notes — REST API Gateway
+
+The crate registers the Lambda binary as **streaming-only** via
+`lambda_runtime::run` with a `StreamResponse` return type. That registration is
+a per-binary contract with the AWS Runtime API: a single binary cannot serve
+both streaming and buffered framings. Streaming responses are not
+buffered-Invoke compatible, so REST API Gateway integrations need a few
+deployment-side rules:
+
+- **OPTIONS preflight**: REST `AWS_PROXY` integrations talking to a
+  streaming-registered Lambda cannot reliably parse the streaming
+  response envelope. Use an **API Gateway MOCK integration** for the
+  `OPTIONS` method on browser-facing routes (e.g. `/mcp`). This is the
+  AWS-recommended pattern for streaming Lambdas and matches what the
+  console's *Enable CORS* button auto-generates.
+- **API-Gateway-emitted 4xx/5xx**: Errors produced by API Gateway itself
+  (authorizer rejection, throttling, internal gateway failures) never
+  reach the Lambda, so no framework-side CORS injection can apply. Add
+  `AWS::ApiGateway::GatewayResponse` resources for at least
+  `UNAUTHORIZED`, `ACCESS_DENIED`, `DEFAULT_4XX`, and `DEFAULT_5XX` with
+  `Access-Control-Allow-Origin` (and friends) set via the
+  `gatewayresponse.header.*` parameters.
+- **Browser OAuth (`WWW-Authenticate`)**: Browsers can only read
+  non-safelisted response headers when listed in
+  `Access-Control-Expose-Headers`. RFC 9728 OAuth discovery requires
+  clients to parse `WWW-Authenticate` on `401` responses, so it must be
+  exposed. The default `CorsConfig` includes it; if you build a custom
+  `CorsConfig` and want browser OAuth to work, retain
+  `WWW-Authenticate` in `expose_headers`.
+- **`.well-known` / RFC 9728 metadata routes**: any route handler
+  registered via `LambdaMcpServerBuilder::route(...)` is reached
+  *before* MCP dispatch in both buffered and streaming paths. Both
+  paths apply the configured `CorsConfig` to the route response before
+  returning. If you bypass this — e.g. by handling the route inside a
+  `run_streaming_with` dispatch closure that short-circuits before
+  calling `handler.handle_streaming()` — you must call the re-exported
+  helpers yourself:
+
+  ```rust
+  use turul_mcp_aws_lambda::{inject_cors_headers, create_preflight_response};
+  // ... inside your dispatch closure, before returning:
+  if let Some(cors) = &cors_config {
+      inject_cors_headers(&mut response, cors, request_origin.as_deref())?;
+  }
+  ```
+
+- **Per-route method contracts**: `inject_cors_headers` applies
+  `CorsConfig.allowed_methods` as configured. It does **not** infer
+  that a `.well-known` route only allows `GET, OPTIONS` while `/mcp`
+  allows `GET, POST, DELETE, OPTIONS`. If you need per-route method
+  advertising, either build separate `CorsConfig` instances per route
+  or accept the unified list.
+
 ## SSE Streaming in Lambda
 
 ### Real-time Notifications

@@ -424,12 +424,32 @@ impl LambdaMcpHandler {
                     use http_body_util::BodyExt;
                     let (parts, body) = hyper_req.into_parts();
                     let boxed_req = hyper::Request::from_parts(parts, body.boxed_unsync());
-                    return Ok(route_handler.handle(boxed_req).await);
+                    let mut route_resp = route_handler.handle(boxed_req).await;
+                    #[cfg(feature = "cors")]
+                    if let Some(ref cors_config) = self.cors_config {
+                        inject_cors_headers(
+                            &mut route_resp,
+                            cors_config,
+                            request_origin.as_deref(),
+                        )
+                        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+                    }
+                    return Ok(route_resp);
                 }
                 Ok(None) => {} // No match, continue to MCP handler
                 Err(e) => {
                     debug!("Route validation error (streaming): {}", e);
-                    return Ok(e.into_response());
+                    let mut err_resp = e.into_response();
+                    #[cfg(feature = "cors")]
+                    if let Some(ref cors_config) = self.cors_config {
+                        inject_cors_headers(
+                            &mut err_resp,
+                            cors_config,
+                            request_origin.as_deref(),
+                        )
+                        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+                    }
+                    return Ok(err_resp);
                 }
             }
         }
@@ -1313,5 +1333,288 @@ mod tests {
             json["result"]["tools"].is_array(),
             "Must return tools list in lenient mode: {json}"
         );
+    }
+
+    // ── Streaming custom-route CORS regression tests ──
+    //
+    // Guards the parity between the buffered `handle()` path and the
+    // streaming `handle_streaming()` path: both must apply configured
+    // CORS to custom-route responses (matched and validation-error)
+    // before returning.
+
+    #[cfg(feature = "cors")]
+    mod cors_streaming_routes {
+        use super::*;
+        use async_trait::async_trait;
+        use bytes::Bytes;
+        use http_body_util::Full;
+        use hyper::{Request as HyperRequest, Response as HyperResponse, StatusCode};
+        use turul_http_mcp_server::middleware::MiddlewareStack;
+        use turul_http_mcp_server::{
+            RouteBody, RouteHandler, RouteRegistry, StreamConfig, StreamManager,
+        };
+
+        struct StubRoute {
+            status: StatusCode,
+            body: &'static str,
+        }
+
+        #[async_trait]
+        impl RouteHandler for StubRoute {
+            async fn handle(&self, _req: HyperRequest<RouteBody>) -> HyperResponse<RouteBody> {
+                use http_body_util::BodyExt;
+                HyperResponse::builder()
+                    .status(self.status)
+                    .header("Content-Type", "application/json")
+                    .body(
+                        Full::new(Bytes::from(self.body))
+                            .map_err(|never| match never {})
+                            .boxed_unsync(),
+                    )
+                    .unwrap()
+            }
+        }
+
+        fn handler_with_route_and_cors(
+            registry: Arc<RouteRegistry>,
+            cors: Option<CorsConfig>,
+        ) -> LambdaMcpHandler {
+            let session_storage = Arc::new(InMemorySessionStorage::new());
+            let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+            let dispatcher = Arc::new(JsonRpcDispatcher::new());
+            let config = ServerConfig::default();
+            let capabilities = ServerCapabilities::default();
+            let middleware_stack = Arc::new(MiddlewareStack::new());
+
+            let handler = LambdaMcpHandler::with_middleware(
+                config,
+                dispatcher,
+                session_storage,
+                stream_manager,
+                StreamConfig::default(),
+                capabilities,
+                middleware_stack,
+                false,
+                registry,
+            );
+            match cors {
+                Some(cfg) => handler.with_cors(cfg),
+                None => handler,
+            }
+        }
+
+        fn get_request(path: &str, origin: &str) -> LambdaRequest {
+            Request::builder()
+                .method("GET")
+                .uri(path)
+                .header("Origin", origin)
+                .body(LambdaBody::Empty)
+                .unwrap()
+        }
+
+        #[tokio::test]
+        async fn streaming_custom_route_match_injects_cors() {
+            let mut registry = RouteRegistry::new();
+            registry.add_route(
+                "/.well-known/oauth-protected-resource",
+                Arc::new(StubRoute {
+                    status: StatusCode::OK,
+                    body: r#"{"resource":"https://example.test/mcp"}"#,
+                }),
+            );
+            let handler = handler_with_route_and_cors(
+                Arc::new(registry),
+                Some(CorsConfig::default()),
+            );
+
+            let req = get_request(
+                "/.well-known/oauth-protected-resource",
+                "https://client.example.test",
+            );
+            let resp = handler.handle_streaming(req).await.unwrap();
+
+            assert_eq!(resp.status(), StatusCode::OK);
+            assert!(
+                resp.headers().contains_key("access-control-allow-origin"),
+                "matched streaming route must carry CORS headers",
+            );
+            assert!(
+                resp.headers().contains_key("access-control-expose-headers"),
+                "matched streaming route must expose configured headers",
+            );
+        }
+
+        #[tokio::test]
+        async fn streaming_route_validation_error_injects_cors() {
+            // Empty registry + path-traversal path → validation error branch.
+            let registry = Arc::new({
+                let mut r = RouteRegistry::new();
+                r.add_route(
+                    "/.well-known/oauth-protected-resource",
+                    Arc::new(StubRoute {
+                        status: StatusCode::OK,
+                        body: "{}",
+                    }),
+                );
+                r
+            });
+            let handler = handler_with_route_and_cors(registry, Some(CorsConfig::default()));
+
+            let req = get_request("/../etc/passwd", "https://client.example.test");
+            let resp = handler.handle_streaming(req).await.unwrap();
+
+            assert!(
+                resp.status().is_client_error(),
+                "path-traversal must be a 4xx, got {}",
+                resp.status(),
+            );
+            assert!(
+                resp.headers().contains_key("access-control-allow-origin"),
+                "validation-error streaming route must carry CORS headers",
+            );
+        }
+
+        #[tokio::test]
+        async fn streaming_custom_route_without_cors_config_returns_untouched() {
+            // Sanity: without `.with_cors()`, the route response must NOT
+            // gain CORS headers (regression guard so we never inject
+            // default CORS for consumers who deliberately opted out).
+            let mut registry = RouteRegistry::new();
+            registry.add_route(
+                "/.well-known/oauth-protected-resource",
+                Arc::new(StubRoute {
+                    status: StatusCode::OK,
+                    body: "{}",
+                }),
+            );
+            let handler = handler_with_route_and_cors(Arc::new(registry), None);
+
+            let req = get_request(
+                "/.well-known/oauth-protected-resource",
+                "https://client.example.test",
+            );
+            let resp = handler.handle_streaming(req).await.unwrap();
+
+            assert_eq!(resp.status(), StatusCode::OK);
+            assert!(
+                !resp.headers().contains_key("access-control-allow-origin"),
+                "no CORS config → no CORS headers (got {:?})",
+                resp.headers(),
+            );
+        }
+    }
+
+    // ── OAuth-style 401 challenge through streaming + CORS ──
+    //
+    // Verifies the transport contract: a middleware that returns
+    // `MiddlewareError::http_challenge(401, ...)` produces a response
+    // that (a) keeps the WWW-Authenticate header, (b) carries
+    // configured CORS, and (c) exposes WWW-Authenticate so browser
+    // OAuth clients can read it for RFC 9728 discovery.
+
+    #[cfg(feature = "cors")]
+    mod cors_streaming_oauth {
+        use super::*;
+        use async_trait::async_trait;
+        use turul_http_mcp_server::middleware::{
+            DispatcherResult, McpMiddleware, MiddlewareError, MiddlewareStack, RequestContext,
+            SessionInjection,
+        };
+        use turul_http_mcp_server::{StreamConfig, StreamManager};
+        use turul_mcp_session_storage::SessionView;
+
+        struct ForceChallenge;
+
+        #[async_trait]
+        impl McpMiddleware for ForceChallenge {
+            fn runs_before_session(&self) -> bool {
+                true
+            }
+
+            async fn before_dispatch(
+                &self,
+                _ctx: &mut RequestContext<'_>,
+                _session: Option<&dyn SessionView>,
+                _injection: &mut SessionInjection,
+            ) -> std::result::Result<(), MiddlewareError> {
+                Err(MiddlewareError::http_challenge(
+                    401,
+                    "Bearer realm=\"mcp\", resource_metadata=\"https://example.test/.well-known/oauth-protected-resource\"",
+                ))
+            }
+
+            async fn after_dispatch(
+                &self,
+                _ctx: &RequestContext<'_>,
+                _result: &mut DispatcherResult,
+            ) -> std::result::Result<(), MiddlewareError> {
+                Ok(())
+            }
+        }
+
+        #[tokio::test]
+        async fn streaming_401_challenge_has_cors_and_exposes_www_authenticate() {
+            let session_storage = Arc::new(InMemorySessionStorage::new());
+            let stream_manager = Arc::new(StreamManager::new(session_storage.clone()));
+            let dispatcher = Arc::new(JsonRpcDispatcher::new());
+            let config = ServerConfig::default();
+            let capabilities = ServerCapabilities::default();
+
+            let mut middleware = MiddlewareStack::new();
+            middleware.push(Arc::new(ForceChallenge));
+            let middleware = Arc::new(middleware);
+
+            let route_registry =
+                Arc::new(turul_http_mcp_server::RouteRegistry::new());
+
+            let handler = LambdaMcpHandler::with_middleware(
+                config,
+                dispatcher,
+                session_storage,
+                stream_manager,
+                StreamConfig::default(),
+                capabilities,
+                middleware,
+                false,
+                route_registry,
+            )
+            .with_cors(CorsConfig::default());
+
+            let req = Request::builder()
+                .method("POST")
+                .uri("/mcp")
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json, text/event-stream")
+                .header("MCP-Protocol-Version", "2025-11-25")
+                .header("Origin", "https://client.example.test")
+                .body(LambdaBody::Text(
+                    r#"{"jsonrpc":"2.0","method":"initialize","id":1}"#.to_string(),
+                ))
+                .unwrap();
+
+            let resp = handler.handle_streaming(req).await.unwrap();
+            let headers = resp.headers();
+
+            assert_eq!(resp.status(), 401, "challenge must be 401");
+            assert!(
+                headers.contains_key("www-authenticate"),
+                "WWW-Authenticate must be preserved through streaming transport",
+            );
+            assert!(
+                headers.contains_key("access-control-allow-origin"),
+                "401 response must carry Access-Control-Allow-Origin",
+            );
+            let expose = headers
+                .get("access-control-expose-headers")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+            assert!(
+                expose
+                    .split(',')
+                    .map(str::trim)
+                    .any(|h| h.eq_ignore_ascii_case("WWW-Authenticate")),
+                "expose-headers must include WWW-Authenticate; got {expose:?}",
+            );
+        }
     }
 }

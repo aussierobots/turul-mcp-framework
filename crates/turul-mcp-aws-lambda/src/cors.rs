@@ -52,6 +52,9 @@ impl Default for CorsConfig {
             expose_headers: vec![
                 "Mcp-Session-Id".to_string(),
                 "Mcp-Protocol-Version".to_string(),
+                // Exposed so browser OAuth clients can read the RFC 9728
+                // challenge on 401 responses (non-safelisted CORS header).
+                "WWW-Authenticate".to_string(),
             ],
         }
     }
@@ -291,6 +294,46 @@ mod tests {
             response
                 .headers()
                 .contains_key("access-control-allow-headers")
+        );
+    }
+
+    #[test]
+    fn test_default_expose_headers_contains_www_authenticate() {
+        // Browsers can only read non-safelisted response headers when listed
+        // in Access-Control-Expose-Headers. RFC 9728 OAuth discovery requires
+        // clients to parse the WWW-Authenticate challenge on 401 responses,
+        // so it must be exposed by default for any browser-fronted MCP server.
+        let config = CorsConfig::default();
+        assert!(
+            config
+                .expose_headers
+                .iter()
+                .any(|h| h.eq_ignore_ascii_case("WWW-Authenticate")),
+            "default expose_headers must include WWW-Authenticate; got {:?}",
+            config.expose_headers,
+        );
+    }
+
+    #[tokio::test]
+    async fn test_custom_expose_headers_not_mutated_by_injection() {
+        // Caller-supplied expose_headers wins as-is. Injection must not
+        // augment or rewrite the list — consumers control the surface.
+        let config = CorsConfig {
+            expose_headers: vec!["X-Custom".to_string()],
+            ..Default::default()
+        };
+        let original = config.expose_headers.clone();
+
+        let mut response = LambdaResponse::builder()
+            .status(200)
+            .body(Body::Empty)
+            .unwrap();
+        inject_cors_headers(&mut response, &config, Some("https://example.com")).unwrap();
+
+        assert_eq!(config.expose_headers, original);
+        assert_eq!(
+            response.headers().get("access-control-expose-headers"),
+            Some(&HeaderValue::from_static("X-Custom"))
         );
     }
 

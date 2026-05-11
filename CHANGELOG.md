@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.39] - Unreleased
+## [0.3.40] - Unreleased
+
+### Fixed
+
+- **Lambda streaming custom-route CORS asymmetry** (`turul-mcp-aws-lambda`): `LambdaMcpHandler::handle_streaming()` returned route-matched and route-validation-error responses **without** injecting the configured `CorsConfig`, while the buffered `handle()` injected CORS for the equivalent branches. Browser-facing custom routes registered via `LambdaMcpServerBuilder::route(...)` (e.g. `.well-known/oauth-protected-resource` for RFC 9728 OAuth discovery) therefore returned `200 OK` with the correct body but no `Access-Control-Allow-Origin`, even when CORS was configured. Streaming now matches buffered: both branches inject CORS before returning. Regression tests added covering matched-route CORS, validation-error CORS, no-CORS-config-no-injection, and a 401 challenge end-to-end through the streaming transport with `WWW-Authenticate` preserved and exposed.
+
+### Changed
+
+- **Default `Access-Control-Expose-Headers` now includes `WWW-Authenticate`** in both `turul-mcp-aws-lambda::CorsConfig::default()` and `turul-http-mcp-server::cors::CORS_EXPOSE_HEADERS`. Browser OAuth clients cannot read non-safelisted response headers unless they appear in `Access-Control-Expose-Headers`; RFC 9728 discovery requires clients to parse `WWW-Authenticate` on `401` responses, so it must be exposed by default for any browser-fronted MCP server. Behavioural impact: a previously-not-exposed response header is now exposed to browser JS by default. Consumers passing a custom `expose_headers` list retain full control and must add `WWW-Authenticate` explicitly if they want browser OAuth to work. No change to non-browser clients.
+
+### Added
+
+- **Public re-exports for CORS helpers** in `turul-mcp-aws-lambda`: `inject_cors_headers` and `create_preflight_response` are now re-exported from the crate root and `prelude`, alongside the existing `CorsConfig` re-export. This is the supported escape hatch for `run_streaming_with` dispatch closures that short-circuit before calling `handler.handle_streaming()` — call the helper before returning to keep CORS behaviour consistent with the framework's built-in routing path. **Boundary**: the framework guarantees CORS on every response built inside `LambdaMcpHandler::handle_streaming()`; the consumer is responsible for CORS on responses built before `handle_streaming` is called, including custom `run_streaming_with` short-circuits — use the re-exported `inject_cors_headers` / `create_preflight_response`.
+
+## [0.3.39] - 2026-05-10
 
 ### Changed
 

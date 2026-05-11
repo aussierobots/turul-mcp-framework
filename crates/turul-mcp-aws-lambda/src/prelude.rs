@@ -15,7 +15,7 @@ pub use crate::server::LambdaMcpServer;
 pub use crate::{run_streaming, run_streaming_with};
 
 #[cfg(feature = "cors")]
-pub use crate::cors::CorsConfig;
+pub use crate::cors::{CorsConfig, create_preflight_response, inject_cors_headers};
 
 // Re-export MCP protocol types
 pub use turul_mcp_protocol::prelude::*;
