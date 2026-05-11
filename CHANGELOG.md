@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.41] - Unreleased
+## [0.3.42] - Unreleased
+
+### Fixed
+
+- **Lambda streaming response with zero-data-frame body caused `IncompleteMessage` / 60 s timeout / API Gateway 502** (`turul-mcp-aws-lambda`). `into_lambda_stream_response` accepted any `B: http_body::Body + Unpin + Send + 'static`, but when `B` produced zero `Frame::Data` frames (e.g. `http_body_util::Empty::<Bytes>::new()`), the resulting `BodyDataStream` yielded zero items. The Lambda Response Streaming multipart envelope wrote the prelude + metadata JSON + trailer separator and then closed the body stream without ever writing a body chunk. Lambda's Runtime API client (hyper) requires at least one chunk before EOF for the framing to terminate cleanly; without one, the connection closed mid-frame with `hyper::Error(IncompleteMessage)`. The function appeared to hang for its full timeout, AWS reported `Status: timeout` (not `Status: error`, no `Errors` metric increment), and API Gateway emitted 502 to the client after the timeout. Common trigger: `.well-known/oauth-protected-resource` OPTIONS short-circuits in `run_streaming_with` dispatch closures returning `Response<UnsyncBoxBody<Bytes, hyper::Error>>` with `Empty::new()` body. **This is a pre-existing latent bug, not a v0.3.39 → v0.3.40 regression** — `f6438cb` does not touch any code path affected by it; consumer dispatch closures simply began exercising the empty-body path. Fix: internal `EnsureOneFrame<B>` body adapter wraps `B` in `into_lambda_stream_response` and emits a single zero-length `Frame::data` if the underlying body would otherwise yield no data frames. Bodies that natively produce ≥1 data frame are unaffected (first frame forwarded as soon as `B` yields it; no buffering, no pre-polling, streaming semantics preserved). The zero-length frame is invisible at the HTTP layer — no `Content-Length` header added, no response bytes visible to the client. Contract documented in ADR-026. Revert-and-fail recorded in commit message.
+
+
 
 ### Fixed
 

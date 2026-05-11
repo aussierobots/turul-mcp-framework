@@ -145,7 +145,8 @@ fn classify_runtime_event(payload: serde_json::Value) -> RuntimeEventClassificat
 }
 
 type StreamBody = http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, hyper::Error>;
-type StreamResult = lambda_runtime::StreamResponse<http_body_util::BodyDataStream<StreamBody>>;
+type StreamResult =
+    lambda_runtime::StreamResponse<http_body_util::BodyDataStream<EnsureOneFrame<StreamBody>>>;
 
 /// Result of [`handle_runtime_payload()`], carrying both the Lambda response
 /// and a static string identifying the event type for logging/observability.
@@ -330,16 +331,114 @@ where
     .await
 }
 
+/// Body adapter that guarantees at least one data frame is yielded.
+///
+/// Lambda Response Streaming framing requires the multipart body stream
+/// to produce at least one chunk before EOF. If the wrapped body yields
+/// zero data frames (e.g. `Empty::new()`, or `Full::new(Bytes::new())`
+/// after `Full` short-circuits, or any body whose first poll returns
+/// `None`), the Runtime API request body terminates without matching
+/// the framing contract, the connection closes with `hyper::Error`
+/// `IncompleteMessage`, and AWS reports the invocation as a 60-second
+/// timeout. API Gateway then emits 502 to the client.
+///
+/// This adapter is invisible for bodies that already produce ≥1 data
+/// frame. For zero-frame bodies, it emits one zero-length `Bytes` data
+/// frame, which satisfies the multipart framing contract without
+/// changing the visible response body.
+///
+/// See ADR-026.
+struct EnsureOneFrame<B> {
+    inner: B,
+    /// Tracks whether we have observed (or fabricated) the first data
+    /// frame, so we only inject the fallback once and only if needed.
+    first_frame_state: FirstFrameState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FirstFrameState {
+    /// Haven't yet seen a frame from the underlying body. If the
+    /// underlying poll returns `Ready(None)`, we inject the fallback.
+    Initial,
+    /// At least one frame (real or fallback-injected) has been emitted
+    /// downstream. Subsequent polls forward unchanged.
+    Done,
+    /// We injected the fallback frame on the last poll; the next poll
+    /// must return `Ready(None)` to terminate the stream.
+    FallbackEmitted,
+}
+
+impl<B> http_body::Body for EnsureOneFrame<B>
+where
+    B: http_body::Body<Data = bytes::Bytes> + Unpin,
+{
+    type Data = bytes::Bytes;
+    type Error = B::Error;
+
+    fn poll_frame(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<std::result::Result<http_body::Frame<Self::Data>, Self::Error>>>
+    {
+        use std::task::Poll;
+        match self.first_frame_state {
+            FirstFrameState::FallbackEmitted => Poll::Ready(None),
+            FirstFrameState::Done => std::pin::Pin::new(&mut self.inner).poll_frame(cx),
+            FirstFrameState::Initial => {
+                match std::pin::Pin::new(&mut self.inner).poll_frame(cx) {
+                    Poll::Pending => Poll::Pending,
+                    Poll::Ready(Some(Ok(frame))) => {
+                        self.first_frame_state = FirstFrameState::Done;
+                        Poll::Ready(Some(Ok(frame)))
+                    }
+                    Poll::Ready(Some(Err(e))) => {
+                        // An error before any frame is yielded still satisfies
+                        // the "we have something to send" contract from
+                        // lambda_runtime's perspective — let the error
+                        // propagate as-is. No fallback needed.
+                        self.first_frame_state = FirstFrameState::Done;
+                        Poll::Ready(Some(Err(e)))
+                    }
+                    Poll::Ready(None) => {
+                        self.first_frame_state = FirstFrameState::FallbackEmitted;
+                        Poll::Ready(Some(Ok(http_body::Frame::data(bytes::Bytes::new()))))
+                    }
+                }
+            }
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        match self.first_frame_state {
+            FirstFrameState::Initial => false,
+            FirstFrameState::Done => self.inner.is_end_stream(),
+            FirstFrameState::FallbackEmitted => true,
+        }
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        // Defer to inner. The fallback frame is zero bytes so adds nothing
+        // to the upper/lower bound; consumers reading `size_hint` are
+        // typically only concerned with content-length, which is irrelevant
+        // to streaming framing.
+        self.inner.size_hint()
+    }
+}
+
 /// Convert an HTTP response into a Lambda `StreamResponse`.
 ///
 /// Replicates `lambda_http::streaming::into_stream_response` (which is private)
 /// by extracting status/headers/cookies into `MetadataPrelude` and converting
 /// the body into a `Stream`.
+///
+/// The body is wrapped in [`EnsureOneFrame`] to guarantee the resulting
+/// stream yields at least one chunk — Lambda Response Streaming framing
+/// requires this. See ADR-026.
 fn into_lambda_stream_response<B>(
     response: http::Response<B>,
-) -> lambda_runtime::StreamResponse<http_body_util::BodyDataStream<B>>
+) -> lambda_runtime::StreamResponse<http_body_util::BodyDataStream<EnsureOneFrame<B>>>
 where
-    B: http_body::Body + Unpin + Send + 'static,
+    B: http_body::Body<Data = bytes::Bytes> + Unpin + Send + 'static,
 {
     let (parts, body) = response.into_parts();
     let mut headers = parts.headers;
@@ -351,6 +450,11 @@ where
         .map(|c| String::from_utf8_lossy(c.as_bytes()).to_string())
         .collect::<Vec<_>>();
     headers.remove(http::header::SET_COOKIE);
+
+    let body = EnsureOneFrame {
+        inner: body,
+        first_frame_state: FirstFrameState::Initial,
+    };
 
     lambda_runtime::StreamResponse {
         metadata_prelude: lambda_runtime::MetadataPrelude {
@@ -830,6 +934,144 @@ mod streaming_completion_tests {
             "run_streaming_with dispatch must be called for API Gateway events"
         );
         assert_eq!(result.event_type, "api_gateway_event");
+    }
+
+    // ── Empty-body Lambda streaming envelope contract ──
+    //
+    // `run_streaming_with` accepts any `Response<B>` where `B: Body + Unpin
+    // + Send + 'static`. Consumers (notably custom OPTIONS short-circuits
+    // for `.well-known` routes) construct empty-body responses two ways:
+    //
+    //   - `Empty::new()`              — zero data frames, immediate end-of-stream
+    //   - `Full::new(Bytes::new())`   — at most one zero-byte data frame
+    //
+    // `BodyDataStream` adapts a `Body` into a `Stream<Item = Bytes>`,
+    // yielding only Data frames (Trailers frames are dropped). When the
+    // underlying body produces zero data frames, the resulting Lambda
+    // `StreamResponse` carries a stream that completes without ever
+    // yielding an item — the Runtime API multipart streaming framing
+    // never sees a body chunk, the request body terminates without
+    // matching the expected framing, and the Runtime API connection
+    // closes with `IncompleteMessage`. Production symptom: APIGW 502
+    // after the function timeout while the dispatch closure already
+    // returned `Ok(resp)`.
+    //
+    // Contract these tests enforce (ADR-026): the framework MUST produce
+    // a Lambda streaming response whose `BodyDataStream` yields at least
+    // one data frame for any input `Response<B>`, including bodies that
+    // would otherwise produce zero data frames natively.
+
+    async fn drain_stream<S, B>(
+        stream: lambda_runtime::StreamResponse<S>,
+    ) -> (u16, Vec<bytes::Bytes>)
+    where
+        S: futures::Stream<Item = std::result::Result<bytes::Bytes, B>> + Unpin,
+    {
+        use futures::StreamExt;
+        let status = stream.metadata_prelude.status_code.as_u16();
+        let mut frames = Vec::new();
+        let mut s = stream.stream;
+        while let Some(item) = s.next().await {
+            frames.push(item.unwrap_or_else(|_| bytes::Bytes::new()));
+        }
+        (status, frames)
+    }
+
+    /// Adapter-level: an `Empty::new()` body must still produce at least
+    /// one data frame after passing through `into_lambda_stream_response`.
+    /// This is the smallest possible repro of the production failure.
+    #[tokio::test]
+    async fn test_into_lambda_stream_response_empty_body_yields_data_frame() {
+        use http_body_util::{BodyExt, Empty};
+
+        let body = Empty::<bytes::Bytes>::new()
+            .map_err(|_: std::convert::Infallible| -> hyper::Error { unreachable!() })
+            .boxed_unsync();
+        let response = http::Response::builder()
+            .status(204)
+            .header("Access-Control-Allow-Origin", "*")
+            .header("Access-Control-Allow-Methods", "GET, OPTIONS")
+            .body(body)
+            .unwrap();
+
+        let stream = into_lambda_stream_response(response);
+        let (status, frames) = drain_stream(stream).await;
+
+        assert_eq!(status, 204);
+        assert!(
+            !frames.is_empty(),
+            "empty-body streaming response must yield at least one data frame \
+             (got zero frames — Runtime API will see IncompleteMessage); \
+             frames: {:?}",
+            frames,
+        );
+    }
+
+    /// Service-fn-level: mirror sd-mcp's exact dispatch shape — custom
+    /// OPTIONS short-circuit returning `Response<UnsyncBoxBody>` with
+    /// `Empty::new()` body — through `handle_runtime_payload` (which is
+    /// what `run_streaming_with` wraps around the dispatch closure).
+    /// Production failure repros here if (and only if) the adapter
+    /// layer doesn't guarantee at least one data frame.
+    #[tokio::test]
+    async fn test_run_streaming_with_empty_body_dispatch_yields_data_frame() {
+        let dispatch = |_req: lambda_http::Request| async move {
+            use http_body_util::{BodyExt, Empty};
+            let body = Empty::<bytes::Bytes>::new()
+                .map_err(|_: std::convert::Infallible| -> hyper::Error { unreachable!() })
+                .boxed_unsync();
+            let resp = http::Response::builder()
+                .status(204)
+                .header("Access-Control-Allow-Origin", "https://client.example.test")
+                .header("Access-Control-Allow-Methods", "GET, OPTIONS")
+                .header("Access-Control-Allow-Headers", "Content-Type")
+                .body(body)
+                .unwrap();
+            Ok::<_, lambda_http::Error>(resp)
+        };
+
+        let result = handle_runtime_payload(
+            load_fixture("apigw_v2"),
+            lambda_runtime::Context::default(),
+            dispatch,
+        )
+        .await
+        .expect("handle_runtime_payload must succeed");
+
+        assert_eq!(result.event_type, "api_gateway_event");
+        let (status, frames) = drain_stream(result.response).await;
+        assert_eq!(status, 204);
+        assert!(
+            !frames.is_empty(),
+            "run_streaming_with dispatch returning Empty::new() body must yield \
+             at least one data frame through the envelope; got zero — this is \
+             the production .well-known OPTIONS 502 / IncompleteMessage path; \
+             frames: {:?}",
+            frames,
+        );
+    }
+
+    /// Negative control: a non-empty body must of course pass through.
+    /// Catches a faulty fix that suppresses all data frames.
+    #[tokio::test]
+    async fn test_into_lambda_stream_response_non_empty_body_preserves_bytes() {
+        use http_body_util::{BodyExt, Full};
+
+        let payload = bytes::Bytes::from_static(b"hello");
+        let body = Full::new(payload.clone())
+            .map_err(|_: std::convert::Infallible| -> hyper::Error { unreachable!() })
+            .boxed_unsync();
+        let response = http::Response::builder().status(200).body(body).unwrap();
+
+        let stream = into_lambda_stream_response(response);
+        let (status, frames) = drain_stream(stream).await;
+        assert_eq!(status, 200);
+        let joined: Vec<u8> = frames.iter().flat_map(|f| f.iter().copied()).collect();
+        assert_eq!(
+            joined,
+            payload.to_vec(),
+            "non-empty body must round-trip its bytes through the envelope",
+        );
     }
 
     #[tokio::test]

@@ -49,6 +49,16 @@ trait McpResourceV2 { ... }      // Avoid versioned APIs
 - Never silently accept multiple wire formats in tests (e.g., `.strip_prefix("data: ")` to handle both SSE and JSON) — assert the expected Content-Type and body format explicitly
 - Tests must assert wire-format compliance: Content-Type headers, HTTP status codes, JSON-RPC error codes, and response body shape
 
+### Test Coverage Discipline (pre-publish gate)
+
+**Every behavior-changing slice must satisfy all three before release:**
+
+1. **ADR exists or is updated.** Tests validate the ADR contract, not what the code happens to do. If no ADR governs the changed behavior, write or update one in the same slice and reference it in the CHANGELOG entry.
+2. **Production-path coverage.** Tests must exercise the entry point real consumers use (e.g., `Builder → server.handler() → handle_streaming()`), not just direct construction of the patched type. A fix verified only at the unit it touched does not cover the bug — v0.3.40 → v0.3.41 happened because tests bypassed the builder path.
+3. **Revert-and-fail check.** Temporarily revert the fix and run the new tests. They MUST fail. If they still pass, the test asserts code behavior rather than contract — rewrite it. Record the revert-and-fail result in the commit message.
+
+A green test suite written alongside the fix is suspect by default. The revert-and-fail check is the only proof the regression net catches the bug.
+
 ### Protocol Re-export Rule (MANDATORY)
 
 **NEVER reference versioned protocol crates directly.** Always use the `turul-mcp-protocol` re-export crate.
