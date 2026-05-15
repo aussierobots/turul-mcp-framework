@@ -120,11 +120,15 @@ mod tests {
             .unwrap();
         let exposed_set: Vec<&str> = exposed.split(',').map(str::trim).collect();
         assert!(
-            exposed_set.iter().any(|h| h.eq_ignore_ascii_case("Mcp-Session-Id")),
+            exposed_set
+                .iter()
+                .any(|h| h.eq_ignore_ascii_case("Mcp-Session-Id")),
             "Expose-Headers must include Mcp-Session-Id; got {exposed:?}",
         );
         assert!(
-            exposed_set.iter().any(|h| h.eq_ignore_ascii_case("WWW-Authenticate")),
+            exposed_set
+                .iter()
+                .any(|h| h.eq_ignore_ascii_case("WWW-Authenticate")),
             "Expose-Headers must include WWW-Authenticate so browser OAuth clients can read RFC 9728 challenges; got {exposed:?}",
         );
         assert_eq!(headers.get("Access-Control-Max-Age").unwrap(), CORS_MAX_AGE);

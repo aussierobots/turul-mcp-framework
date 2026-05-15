@@ -442,12 +442,8 @@ impl LambdaMcpHandler {
                     let mut err_resp = e.into_response();
                     #[cfg(feature = "cors")]
                     if let Some(ref cors_config) = self.cors_config {
-                        inject_cors_headers(
-                            &mut err_resp,
-                            cors_config,
-                            request_origin.as_deref(),
-                        )
-                        .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+                        inject_cors_headers(&mut err_resp, cors_config, request_origin.as_deref())
+                            .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
                     }
                     return Ok(err_resp);
                 }
@@ -1422,10 +1418,8 @@ mod tests {
                     body: r#"{"resource":"https://example.test/mcp"}"#,
                 }),
             );
-            let handler = handler_with_route_and_cors(
-                Arc::new(registry),
-                Some(CorsConfig::default()),
-            );
+            let handler =
+                handler_with_route_and_cors(Arc::new(registry), Some(CorsConfig::default()));
 
             let req = get_request(
                 "/.well-known/oauth-protected-resource",
@@ -1564,8 +1558,7 @@ mod tests {
             middleware.push(Arc::new(ForceChallenge));
             let middleware = Arc::new(middleware);
 
-            let route_registry =
-                Arc::new(turul_http_mcp_server::RouteRegistry::new());
+            let route_registry = Arc::new(turul_http_mcp_server::RouteRegistry::new());
 
             let handler = LambdaMcpHandler::with_middleware(
                 config,

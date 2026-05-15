@@ -245,16 +245,26 @@ impl SessionManager {
         Ok(())
     }
 
-    /// Terminate session
+    /// Terminate session.
+    ///
+    /// Flips state to `Terminated` and clears `session_id`. After this returns,
+    /// `session_id_optional()` yields `None`, which makes a subsequent `Drop`
+    /// cleanup pass a no-op (it has no ID to DELETE against). This is the
+    /// idempotency contract that lets callers explicitly `disconnect()` and
+    /// then let the client drop without a second doomed DELETE landing on
+    /// the server (often with an already-expired bearer).
     pub async fn terminate(&self, reason: Option<String>) {
         let mut session = self.session.write().await;
 
         let previous_state = session.state.clone();
+        let session_id_for_log = session.session_id.as_deref().unwrap_or("None").to_string();
+
         session.state = SessionState::Terminated;
+        session.session_id = None;
         session.update_activity();
 
         info!(
-            session_id = %session.session_id.as_deref().unwrap_or("None"),
+            session_id = %session_id_for_log,
             previous_state = %previous_state,
             reason = reason.as_deref().unwrap_or("user requested"),
             "Session terminated"
@@ -473,10 +483,25 @@ mod tests {
         assert_eq!(manager.state().await, SessionState::Active);
         assert!(manager.is_ready().await);
 
-        // Terminate session
+        // Simulate the server having assigned a session ID at initialize.
+        manager
+            .set_session_id("session-XYZ".to_string())
+            .await
+            .unwrap();
+        assert_eq!(
+            manager.session_id_optional().await.as_deref(),
+            Some("session-XYZ")
+        );
+
+        // Terminate session — must clear both state AND session_id so the
+        // Drop-fallback in McpClient sees no ID and skips its DELETE.
         manager.terminate(Some("test completed".to_string())).await;
         assert_eq!(manager.state().await, SessionState::Terminated);
         assert!(!manager.is_ready().await);
+        assert!(
+            manager.session_id_optional().await.is_none(),
+            "terminate() must clear session_id so subsequent Drop is a no-op"
+        );
     }
 
     #[tokio::test]

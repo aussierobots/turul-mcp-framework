@@ -1399,6 +1399,9 @@ mod tests {
         event_rx: parking_lot::Mutex<Option<mpsc::UnboundedReceiver<ServerEvent>>>,
         notifications: Arc<tokio::sync::Mutex<Vec<Value>>>,
         connected: AtomicBool,
+        /// Count of `send_delete` calls — observable from the test side via a
+        /// pre-cloned Arc, since the transport is moved into `Box` before connect.
+        delete_count: Arc<std::sync::atomic::AtomicU32>,
     }
 
     impl MockTransport {
@@ -1410,6 +1413,7 @@ mod tests {
                 event_rx: parking_lot::Mutex::new(Some(event_rx)),
                 notifications: Arc::clone(&notifications),
                 connected: AtomicBool::new(false),
+                delete_count: Arc::new(std::sync::atomic::AtomicU32::new(0)),
             };
             (mock, notifications)
         }
@@ -1417,6 +1421,12 @@ mod tests {
         /// Get the event sender for injecting server events from the test
         fn event_sender(&self) -> mpsc::UnboundedSender<ServerEvent> {
             self.event_tx.clone()
+        }
+
+        /// Pre-clone the DELETE-count handle so a test can observe it after the
+        /// transport has been boxed and moved into the client.
+        fn delete_count_handle(&self) -> Arc<std::sync::atomic::AtomicU32> {
+            Arc::clone(&self.delete_count)
         }
     }
 
@@ -1488,6 +1498,8 @@ mod tests {
         }
 
         async fn send_delete(&self, _session_id: &str) -> McpClientResult<()> {
+            self.delete_count
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(())
         }
 
@@ -1642,6 +1654,66 @@ mod tests {
         );
 
         client.disconnect().await.unwrap();
+    }
+
+    /// `disconnect()` must clear the SessionManager's session_id so that the
+    /// subsequent `Drop` cleanup sees no ID and skips its DELETE. Without this
+    /// idempotency the client fires two DELETEs (one from disconnect, one from
+    /// Drop) — the second lands on a server with the session already gone, and
+    /// in OAuth deployments may arrive after the bearer token has expired.
+    #[tokio::test]
+    async fn test_disconnect_clears_session_so_drop_is_noop() {
+        let (mock, _notifications) = MockTransport::new();
+        let delete_count = mock.delete_count_handle();
+
+        let client = McpClientBuilder::new()
+            .with_transport(Box::new(mock))
+            .build();
+        client.connect().await.unwrap();
+
+        client.disconnect().await.unwrap();
+        assert_eq!(
+            delete_count.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "explicit disconnect must send exactly one DELETE"
+        );
+
+        // Drop the client — the cleanup task is spawned; give the runtime a
+        // moment to schedule it. If the idempotency contract holds the
+        // spawned task hits the `None` branch and returns without DELETE.
+        drop(client);
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        assert_eq!(
+            delete_count.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "Drop after disconnect must NOT send a second DELETE"
+        );
+    }
+
+    /// Regression guard for the existing Drop-without-disconnect path: a caller
+    /// that just lets the client fall out of scope (no explicit `disconnect()`)
+    /// must still get the DELETE sent by Drop. Locking this in protects against
+    /// future "always clear session_id eagerly" refactors that would silently
+    /// break server-side session cleanup for the implicit-drop path.
+    #[tokio::test]
+    async fn test_drop_without_disconnect_still_fires_delete() {
+        let (mock, _notifications) = MockTransport::new();
+        let delete_count = mock.delete_count_handle();
+
+        let client = McpClientBuilder::new()
+            .with_transport(Box::new(mock))
+            .build();
+        client.connect().await.unwrap();
+
+        drop(client);
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        assert_eq!(
+            delete_count.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "Drop without prior disconnect must send DELETE"
+        );
     }
 
     #[tokio::test]
