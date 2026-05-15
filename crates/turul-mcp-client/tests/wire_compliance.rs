@@ -180,3 +180,120 @@ async fn test_mcp_protocol_version_header_on_requests() {
 
     let _ = transport.send_request(ping_request()).await;
 }
+
+// ---------------------------------------------------------------------------
+// Auth-header override (v0.3.44): rotating the bearer on a live transport.
+//
+// Regression net for the v0.3.43 observation that an OAuth `client_credentials`
+// rotation could leave `disconnect()`'s DELETE flying under the *old* bearer
+// (which the AS or upstream authorizer may have already revoked, surfacing as
+// HTTP 403 Forbidden in ~15 ms). The fix exposes
+// `Transport::update_auth_header()` / `McpClient::set_bearer()` so callers can
+// rotate the bearer *before* DELETE without rebuilding the transport (which
+// would drop the connection pool).
+//
+// These are wire-layer tests per CLAUDE.md rule 3: they assert what reqwest
+// actually puts on the wire, not framework-internal state.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_send_delete_uses_overridden_bearer_after_rotation() {
+    let mock_server = MockServer::start().await;
+
+    // The DELETE under the NEW bearer is the one we expect.
+    Mock::given(method("DELETE"))
+        .and(header("Authorization", "Bearer NEW"))
+        .and(header("Mcp-Session-Id", "sess-abc"))
+        .respond_with(ResponseTemplate::new(200))
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    // Build the transport with the OLD bearer baked into `default_headers` —
+    // the exact construction-time-only state v0.3.43 had no API to update.
+    let mut headers = std::collections::HashMap::new();
+    headers.insert("Authorization".to_string(), "Bearer OLD".to_string());
+    let config = ConnectionConfig {
+        headers: Some(headers),
+        ..Default::default()
+    };
+    let transport =
+        HttpTransport::with_config(&format!("{}/mcp", mock_server.uri()), &config).unwrap();
+    transport.connect().await.unwrap();
+
+    // Rotate the bearer before disconnect — this is the new API.
+    transport
+        .update_auth_header(Some("Bearer NEW".to_string()))
+        .await;
+
+    transport.send_delete("sess-abc").await.unwrap();
+
+    // wiremock verifies expect(1) with the NEW-bearer matcher on drop.
+}
+
+#[tokio::test]
+async fn test_send_request_uses_overridden_bearer_after_rotation() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(header("Authorization", "Bearer NEW"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(json_rpc_ok()),
+        )
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let mut headers = std::collections::HashMap::new();
+    headers.insert("Authorization".to_string(), "Bearer OLD".to_string());
+    let config = ConnectionConfig {
+        headers: Some(headers),
+        ..Default::default()
+    };
+    let transport =
+        HttpTransport::with_config(&format!("{}/mcp", mock_server.uri()), &config).unwrap();
+    transport.connect().await.unwrap();
+
+    transport
+        .update_auth_header(Some("Bearer NEW".to_string()))
+        .await;
+
+    let _ = transport.send_request(ping_request()).await;
+}
+
+#[tokio::test]
+async fn test_clearing_override_falls_back_to_default_headers() {
+    let mock_server = MockServer::start().await;
+
+    // After clearing, default_headers should reassert (Bearer OLD).
+    Mock::given(method("POST"))
+        .and(header("Authorization", "Bearer OLD"))
+        .respond_with(
+            ResponseTemplate::new(200)
+                .insert_header("Content-Type", "application/json")
+                .set_body_json(json_rpc_ok()),
+        )
+        .expect(1)
+        .mount(&mock_server)
+        .await;
+
+    let mut headers = std::collections::HashMap::new();
+    headers.insert("Authorization".to_string(), "Bearer OLD".to_string());
+    let config = ConnectionConfig {
+        headers: Some(headers),
+        ..Default::default()
+    };
+    let transport =
+        HttpTransport::with_config(&format!("{}/mcp", mock_server.uri()), &config).unwrap();
+    transport.connect().await.unwrap();
+
+    // Set, then clear — the next POST must carry the original default header.
+    transport
+        .update_auth_header(Some("Bearer NEW".to_string()))
+        .await;
+    transport.update_auth_header(None).await;
+
+    let _ = transport.send_request(ping_request()).await;
+}

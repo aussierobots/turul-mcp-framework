@@ -39,6 +39,16 @@ pub struct HttpTransport {
     queued_events: Arc<parking_lot::Mutex<Vec<ServerEvent>>>,
     /// Session ID from server (set after initialization) - shared between transport and SSE task
     session_id: Arc<parking_lot::Mutex<Option<String>>>,
+    /// Per-request `Authorization` header override.
+    ///
+    /// Reqwest's `default_headers` are baked into the `Client` at construction
+    /// (see `with_config`); they cannot be mutated thereafter without rebuilding
+    /// the `Client` (and dropping the connection pool). To support bearer
+    /// rotation on a long-lived transport — see [`Transport::update_auth_header`] —
+    /// we store the live override here and inject it on every outbound request
+    /// via `RequestBuilder::header(…)`, which overrides any same-named entry in
+    /// `default_headers`. Shared with the SSE GET listener task.
+    auth_override: Arc<parking_lot::RwLock<Option<String>>>,
 }
 
 impl HttpTransport {
@@ -76,6 +86,7 @@ impl HttpTransport {
             event_sender: parking_lot::Mutex::new(None),
             queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
             session_id: Arc::new(parking_lot::Mutex::new(None)),
+            auth_override: Arc::new(parking_lot::RwLock::new(None)),
         })
     }
 
@@ -142,6 +153,7 @@ impl HttpTransport {
             event_sender: parking_lot::Mutex::new(None),
             queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
             session_id: Arc::new(parking_lot::Mutex::new(None)),
+            auth_override: Arc::new(parking_lot::RwLock::new(None)),
         })
     }
 
@@ -159,6 +171,7 @@ impl HttpTransport {
             event_sender: parking_lot::Mutex::new(None),
             queued_events: Arc::new(parking_lot::Mutex::new(Vec::new())),
             session_id: Arc::new(parking_lot::Mutex::new(None)),
+            auth_override: Arc::new(parking_lot::RwLock::new(None)),
         })
     }
 
@@ -178,6 +191,18 @@ impl HttpTransport {
     fn next_request_id(&self) -> String {
         let counter = self.request_counter.fetch_add(1, Ordering::SeqCst);
         format!("req_{}", counter)
+    }
+
+    /// Apply the live `Authorization` override (if any) to a `RequestBuilder`.
+    /// Per-request headers override `default_headers` of the same name in
+    /// reqwest, so this transparently supersedes any bearer baked in via
+    /// `ConnectionConfig::headers`.
+    fn apply_auth_override(&self, builder: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        if let Some(value) = self.auth_override.read().as_ref() {
+            builder.header(reqwest::header::AUTHORIZATION, value)
+        } else {
+            builder
+        }
     }
 
     /// Update statistics
@@ -576,6 +601,8 @@ impl Transport for HttpTransport {
             .header("Accept", MCP_POST_ACCEPT)
             .header("MCP-Protocol-Version", "2025-11-25");
 
+        req_builder = self.apply_auth_override(req_builder);
+
         // Include session ID if we have one
         if let Some(ref session_id) = *self.session_id.lock() {
             debug!("HTTP request using session ID: {}", session_id);
@@ -642,6 +669,8 @@ impl Transport for HttpTransport {
             .header("Accept", MCP_POST_ACCEPT)
             .header("MCP-Protocol-Version", "2025-11-25");
 
+        req_builder = self.apply_auth_override(req_builder);
+
         // Include session ID if we have one
         if let Some(ref session_id) = *self.session_id.lock() {
             debug!("HTTP request with headers using session ID: {}", session_id);
@@ -697,6 +726,8 @@ impl Transport for HttpTransport {
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2025-11-25");
 
+        req_builder = self.apply_auth_override(req_builder);
+
         // Include session ID if we have one
         if let Some(ref session_id) = *self.session_id.lock() {
             debug!("HTTP notification using session ID: {}", session_id);
@@ -743,12 +774,19 @@ impl Transport for HttpTransport {
         self.update_stats(|stats| stats.requests_sent += 1);
         let start_time = Instant::now();
 
-        let response = self
+        let req_builder = self
             .client
             .delete(self.endpoint.clone())
             .header("Content-Type", "application/json")
             .header("MCP-Protocol-Version", "2025-11-25")
-            .header("Mcp-Session-Id", session_id)
+            .header("Mcp-Session-Id", session_id);
+
+        // Apply live bearer override so callers that rotated the M2M token
+        // immediately before disconnect (Transport::update_auth_header) send
+        // the DELETE under the *new* bearer, not the one baked into
+        // default_headers at transport construction.
+        let response = self
+            .apply_auth_override(req_builder)
             .send()
             .await
             .map_err(|e| TransportError::Http(format!("Failed to send DELETE request: {}", e)))?;
@@ -826,6 +864,7 @@ impl Transport for HttpTransport {
         let client = self.client.clone();
         let url = self.endpoint.clone();
         let session_id = self.session_id.clone();
+        let auth_override = self.auth_override.clone();
 
         info!("Starting SSE event listener for GET requests at: {}", url);
 
@@ -836,6 +875,13 @@ impl Transport for HttpTransport {
                     .get(url.as_str())
                     .header("Accept", "text/event-stream")
                     .header("MCP-Protocol-Version", "2025-11-25");
+
+                // Apply the live bearer override (if any) so token rotation
+                // also reaches the SSE GET. Per-request header overrides
+                // default_headers — see Transport::update_auth_header.
+                if let Some(value) = auth_override.read().as_ref() {
+                    request_builder = request_builder.header(reqwest::header::AUTHORIZATION, value);
+                }
 
                 // Snapshot the session ID at request-build time. We need the
                 // snapshot (not just the cached value at response time) so the
@@ -1079,6 +1125,13 @@ impl Transport for HttpTransport {
     fn clear_session_id(&self) {
         debug!("HttpTransport: Clearing session ID for re-initialization");
         *self.session_id.lock() = None;
+    }
+
+    async fn update_auth_header(&self, value: Option<String>) {
+        // RwLock write contention is irrelevant — rotation is rare, reads are
+        // common and held only for the duration of building one RequestBuilder.
+        *self.auth_override.write() = value;
+        debug!("HttpTransport: Authorization override updated");
     }
 
     fn statistics(&self) -> TransportStatistics {

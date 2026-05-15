@@ -134,6 +134,37 @@ pub trait Transport: Send + Sync {
     /// Clear the session ID (used during 404 re-initialization)
     fn clear_session_id(&self);
 
+    /// Update (or clear) the `Authorization` header used on subsequent outbound
+    /// requests, *without* tearing down the underlying connection pool.
+    ///
+    /// `Some("Bearer …")` overrides any previously-configured Authorization
+    /// header. `None` removes the override, falling back to whatever was
+    /// configured at transport construction (e.g. via
+    /// `ConnectionConfig::headers`).
+    ///
+    /// # Why this exists
+    ///
+    /// Transports that cache static headers at construction (e.g. the HTTP
+    /// transport's `reqwest::default_headers`) will otherwise send a stale
+    /// bearer on long-running clients that outlive a single token. The
+    /// canonical failure is OAuth `client_credentials` rotation: a caller mints
+    /// a fresh bearer for one [`crate::McpClient`], but a previously-created
+    /// client still holds the old bearer in `default_headers`, so its
+    /// `disconnect()` DELETE flies under a token the AS may have already
+    /// revoked — observed as `HTTP 403 Forbidden` from upstream authorizers
+    /// (API Gateway, ALB OIDC, etc.).
+    ///
+    /// Updating the override before calling `disconnect()` lets the DELETE
+    /// carry the current bearer instead.
+    ///
+    /// # Default implementation
+    ///
+    /// Transports that do not authenticate at the transport layer (stdio, plain
+    /// SSE) ignore this call. Only `HttpTransport` is expected to apply it.
+    async fn update_auth_header(&self, _value: Option<String>) {
+        // No-op for transports without per-request HTTP auth.
+    }
+
     /// Start listening for server events (if supported).
     ///
     /// # Streamable HTTP listener termination (since 0.3.38)

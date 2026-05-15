@@ -266,6 +266,32 @@ impl McpClient {
         Ok(())
     }
 
+    /// Update (or clear) the bearer token sent on subsequent transport requests.
+    ///
+    /// This is the canonical way to rotate an OAuth `client_credentials` token
+    /// on a long-lived [`McpClient`]. Callers should invoke this *before* the
+    /// next outbound request (most importantly, before [`Self::disconnect`]),
+    /// so the resulting DELETE flies under the fresh bearer rather than the
+    /// one that was baked into the transport at construction.
+    ///
+    /// Passing `None` removes the override and falls back to whatever
+    /// `Authorization` header (if any) was configured at construction.
+    ///
+    /// On transports that don't authenticate at the transport layer (stdio,
+    /// plain SSE), this is a no-op — see [`Transport::update_auth_header`].
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// // Old client is about to be torn down after the M2M token rotated.
+    /// old_client.set_bearer(Some(&fresh_token)).await;
+    /// old_client.disconnect().await?;   // DELETE under fresh bearer
+    /// ```
+    pub async fn set_bearer(&self, token: Option<&str>) {
+        let value = token.map(|t| format!("Bearer {}", t));
+        self.transport.update_auth_header(value).await;
+    }
+
     /// Check if client is connected and ready
     pub async fn is_ready(&self) -> bool {
         let transport_connected = self.transport.is_connected();
