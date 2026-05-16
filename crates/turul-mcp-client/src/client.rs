@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
+use turul_rpc::{JsonRpcNotification, JsonRpcRequest, RequestId, RequestParams};
 
 use crate::config::ClientConfig;
 use crate::error::{McpClientError, McpClientResult, SessionError};
@@ -327,12 +328,7 @@ impl McpClient {
             McpClientError::generic(format!("Failed to serialize initialize request: {}", e))
         })?;
 
-        let json_rpc_request = json!({
-            "jsonrpc": "2.0",
-            "method": "initialize",
-            "id": self.next_request_id(),
-            "params": request_json
-        });
+        let json_rpc_request = self.build_request("initialize", request_json);
 
         // Send initialize request with timeout (need headers for session ID)
         let response = timeout(
@@ -393,11 +389,8 @@ impl McpClient {
             .await?;
 
         // Send initialized notification per MCP spec
-        let initialized_notification = json!({
-            "jsonrpc": "2.0",
-            "method": "notifications/initialized",
-            "params": {}
-        });
+        let initialized_notification =
+            Self::build_notification("notifications/initialized", json!({}));
 
         self.send_notification_internal(initialized_notification)
             .await?;
@@ -412,6 +405,25 @@ impl McpClient {
             .request_counter
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         format!("req_{}", counter)
+    }
+
+    /// Build a JSON-RPC request envelope as a `Value` ready for the transport.
+    ///
+    /// Routes through `turul_rpc::JsonRpcRequest` so the `jsonrpc: "2.0"` envelope
+    /// is single-source-of-truth — no manual `json!({"jsonrpc": "2.0", ...})` at
+    /// call sites. An empty `Value::Object` is preserved as `"params":{}` on the
+    /// wire (not omitted) for drop-in compatibility with the prior hand-rolled form.
+    fn build_request(&self, method: &str, params: Value) -> Value {
+        let id = RequestId::String(self.next_request_id());
+        let request = JsonRpcRequest::new(id, method.to_string(), value_to_request_params(params));
+        serde_json::to_value(request).expect("JsonRpcRequest serialization is infallible")
+    }
+
+    /// Build a JSON-RPC notification envelope as a `Value` ready for the transport.
+    fn build_notification(method: &str, params: Value) -> Value {
+        let notification =
+            JsonRpcNotification::new(method.to_string(), value_to_request_params(params));
+        serde_json::to_value(notification).expect("JsonRpcNotification serialization is infallible")
     }
 
     /// Send request and handle retries
@@ -624,12 +636,7 @@ impl McpClient {
     async fn fetch_tools(&self) -> McpClientResult<Vec<Tool>> {
         debug!("Fetching tools from server");
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "tools/list",
-            "id": self.next_request_id(),
-            "params": {}
-        });
+        let request = self.build_request("tools/list", json!({}));
 
         let response = self.send_request_internal(request).await?;
         let tools_response: ListToolsResult =
@@ -652,12 +659,7 @@ impl McpClient {
             json!({})
         };
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "tools/list",
-            "id": self.next_request_id(),
-            "params": request_params
-        });
+        let request = self.build_request("tools/list", request_params);
 
         let response = self.send_request_internal(request).await?;
         let tools_response: ListToolsResult =
@@ -675,15 +677,13 @@ impl McpClient {
     pub async fn call_tool(&self, name: &str, arguments: Value) -> McpClientResult<CallToolResult> {
         debug!(tool = name, "Calling tool");
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "tools/call",
-            "id": self.next_request_id(),
-            "params": {
+        let request = self.build_request(
+            "tools/call",
+            json!({
                 "name": name,
                 "arguments": arguments
-            }
-        });
+            }),
+        );
 
         let response = self.send_request_internal(request).await?;
         let call_response: CallToolResult =
@@ -733,12 +733,7 @@ impl McpClient {
     async fn fetch_resources(&self) -> McpClientResult<Vec<Resource>> {
         debug!("Fetching resources from server");
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "resources/list",
-            "id": self.next_request_id(),
-            "params": {}
-        });
+        let request = self.build_request("resources/list", json!({}));
 
         let response = self.send_request_internal(request).await?;
         let resources_response: ListResourcesResult =
@@ -764,12 +759,7 @@ impl McpClient {
             json!({})
         };
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "resources/list",
-            "id": self.next_request_id(),
-            "params": request_params
-        });
+        let request = self.build_request("resources/list", request_params);
 
         let response = self.send_request_internal(request).await?;
         let resources_response: ListResourcesResult =
@@ -790,14 +780,7 @@ impl McpClient {
     ) -> McpClientResult<Vec<turul_mcp_protocol::ResourceContent>> {
         debug!(uri = uri, "Reading resource");
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "resources/read",
-            "id": self.next_request_id(),
-            "params": {
-                "uri": uri
-            }
-        });
+        let request = self.build_request("resources/read", json!({ "uri": uri }));
 
         let response = self.send_request_internal(request).await?;
         let read_response: ReadResourceResult =
@@ -815,12 +798,7 @@ impl McpClient {
     pub async fn list_resource_templates(&self) -> McpClientResult<Vec<ResourceTemplate>> {
         debug!("Listing resource templates");
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "resources/templates/list",
-            "id": self.next_request_id(),
-            "params": {}
-        });
+        let request = self.build_request("resources/templates/list", json!({}));
 
         let response = self.send_request_internal(request).await?;
         let templates_response: ListResourceTemplatesResult =
@@ -846,12 +824,7 @@ impl McpClient {
             json!({})
         };
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "resources/templates/list",
-            "id": self.next_request_id(),
-            "params": request_params
-        });
+        let request = self.build_request("resources/templates/list", request_params);
 
         let response = self.send_request_internal(request).await?;
         let templates_response: ListResourceTemplatesResult =
@@ -901,12 +874,7 @@ impl McpClient {
     async fn fetch_prompts(&self) -> McpClientResult<Vec<Prompt>> {
         debug!("Fetching prompts from server");
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "prompts/list",
-            "id": self.next_request_id(),
-            "params": {}
-        });
+        let request = self.build_request("prompts/list", json!({}));
 
         let response = self.send_request_internal(request).await?;
         let prompts_response: ListPromptsResult =
@@ -929,12 +897,7 @@ impl McpClient {
             json!({})
         };
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "prompts/list",
-            "id": self.next_request_id(),
-            "params": request_params
-        });
+        let request = self.build_request("prompts/list", request_params);
 
         let response = self.send_request_internal(request).await?;
         let prompts_response: ListPromptsResult =
@@ -964,12 +927,7 @@ impl McpClient {
             params["arguments"] = args;
         }
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "prompts/get",
-            "id": self.next_request_id(),
-            "params": params
-        });
+        let request = self.build_request("prompts/get", params);
 
         let response = self.send_request_internal(request).await?;
         let prompt_response: GetPromptResult =
@@ -987,12 +945,7 @@ impl McpClient {
     pub async fn ping(&self) -> McpClientResult<()> {
         debug!("Sending ping");
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "ping",
-            "id": self.next_request_id(),
-            "params": {}
-        });
+        let request = self.build_request("ping", json!({}));
 
         self.send_request_internal(request).await?;
         debug!("Ping successful");
@@ -1005,14 +958,7 @@ impl McpClient {
     pub async fn get_task(&self, task_id: &str) -> McpClientResult<Task> {
         debug!(task_id = task_id, "Getting task");
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "tasks/get",
-            "id": self.next_request_id(),
-            "params": {
-                "taskId": task_id
-            }
-        });
+        let request = self.build_request("tasks/get", json!({ "taskId": task_id }));
 
         let response = self.send_request_internal(request).await?;
         let task_response: GetTaskResult =
@@ -1026,12 +972,7 @@ impl McpClient {
     pub async fn list_tasks(&self) -> McpClientResult<Vec<Task>> {
         debug!("Listing tasks");
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "tasks/list",
-            "id": self.next_request_id(),
-            "params": {}
-        });
+        let request = self.build_request("tasks/list", json!({}));
 
         let response = self.send_request_internal(request).await?;
         let tasks_response: ListTasksResult =
@@ -1054,12 +995,7 @@ impl McpClient {
             json!({})
         };
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "tasks/list",
-            "id": self.next_request_id(),
-            "params": request_params
-        });
+        let request = self.build_request("tasks/list", request_params);
 
         let response = self.send_request_internal(request).await?;
         let tasks_response: ListTasksResult =
@@ -1077,14 +1013,7 @@ impl McpClient {
     pub async fn cancel_task(&self, task_id: &str) -> McpClientResult<Task> {
         debug!(task_id = task_id, "Cancelling task");
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "tasks/cancel",
-            "id": self.next_request_id(),
-            "params": {
-                "taskId": task_id
-            }
-        });
+        let request = self.build_request("tasks/cancel", json!({ "taskId": task_id }));
 
         let response = self.send_request_internal(request).await?;
         let cancel_response: CancelTaskResult =
@@ -1101,14 +1030,7 @@ impl McpClient {
     pub async fn get_task_result(&self, task_id: &str) -> McpClientResult<Value> {
         debug!(task_id = task_id, "Getting task result");
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "tasks/result",
-            "id": self.next_request_id(),
-            "params": {
-                "taskId": task_id
-            }
-        });
+        let request = self.build_request("tasks/result", json!({ "taskId": task_id }));
 
         // Use long_operation timeout since tasks/result blocks until terminal
         let response = timeout(
@@ -1145,12 +1067,7 @@ impl McpClient {
             params["task"]["ttl"] = json!(ttl);
         }
 
-        let request = json!({
-            "jsonrpc": "2.0",
-            "method": "tools/call",
-            "id": self.next_request_id(),
-            "params": params
-        });
+        let request = self.build_request("tools/call", params);
 
         let response = self.send_request_internal(request).await?;
         let result = response.get("result").cloned().unwrap_or(Value::Null);
@@ -1376,6 +1293,24 @@ impl McpClientBuilder {
 impl Default for McpClientBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Convert a `serde_json::Value` to `Option<RequestParams>`, preserving the
+/// invariant that `Value::Object(empty)` becomes `Some(empty)` (renders as
+/// `"params":{}`), not `None` (which would omit the field via
+/// `skip_serializing_if`). All MCP client call sites pass either an Object
+/// (for named params) or `Value::Null` (no params); Array params are accepted
+/// for completeness but no current call site uses them.
+fn value_to_request_params(params: Value) -> Option<RequestParams> {
+    match params {
+        Value::Null => None,
+        Value::Object(map) => Some(RequestParams::Object(map.into_iter().collect())),
+        Value::Array(arr) => Some(RequestParams::Array(arr)),
+        other => unreachable!(
+            "MCP client requests use object or null params; got scalar: {:?}",
+            other
+        ),
     }
 }
 
@@ -3018,5 +2953,224 @@ mod tests {
         assert!(client.cached_tools.read().await.is_none());
         assert!(client.cached_resources.read().await.is_none());
         assert!(client.cached_prompts.read().await.is_none());
+    }
+
+    // ========================================================================
+    // JSON-RPC envelope construction tests (turul-rpc typed constructors)
+    //
+    // These tests guard the sweep that replaced 20+ hand-rolled
+    // `json!({"jsonrpc": "2.0", ...})` envelopes with `JsonRpcRequest::new` /
+    // `JsonRpcNotification::new` from `turul-rpc`. They lock in the semantic
+    // envelope shape (jsonrpc version, method, id presence, params field
+    // present-vs-absent) so a future refactor — e.g., switching to
+    // `new_no_params`, which would omit `params` via `skip_serializing_if` —
+    // cannot silently change the on-wire envelope contract.
+    // ========================================================================
+
+    fn fresh_client_for_envelope_tests() -> McpClient {
+        let (mock, _notifications) = MockTransport::new();
+        McpClient::new(Box::new(mock), ClientConfig::default())
+    }
+
+    #[test]
+    fn test_value_to_request_params_null_yields_none() {
+        assert!(value_to_request_params(Value::Null).is_none());
+    }
+
+    #[test]
+    fn test_value_to_request_params_empty_object_yields_some_empty() {
+        let result = value_to_request_params(json!({}));
+        match result {
+            Some(RequestParams::Object(map)) => assert!(map.is_empty()),
+            other => panic!("expected Some(Object(empty)), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_value_to_request_params_object_preserves_entries() {
+        let result = value_to_request_params(json!({"name": "x", "n": 42}));
+        match result {
+            Some(RequestParams::Object(map)) => {
+                assert_eq!(map.get("name"), Some(&json!("x")));
+                assert_eq!(map.get("n"), Some(&json!(42)));
+            }
+            other => panic!("expected Some(Object), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_value_to_request_params_array() {
+        let result = value_to_request_params(json!([1, 2, 3]));
+        match result {
+            Some(RequestParams::Array(arr)) => {
+                assert_eq!(arr, vec![json!(1), json!(2), json!(3)]);
+            }
+            other => panic!("expected Some(Array), got {:?}", other),
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "MCP client requests use object or null params")]
+    fn test_value_to_request_params_scalar_panics() {
+        // Defensive: no MCP client call site passes a scalar Value as params.
+        // If a future call site does, surface it loudly rather than silently
+        // wrapping in a positional-array RequestParams::Array.
+        let _ = value_to_request_params(json!("just-a-string"));
+    }
+
+    #[tokio::test]
+    async fn test_build_request_envelope_shape() {
+        let client = fresh_client_for_envelope_tests();
+        let envelope = client.build_request("ping", json!({}));
+
+        assert_eq!(envelope["jsonrpc"], json!("2.0"));
+        assert_eq!(envelope["method"], json!("ping"));
+        assert_eq!(envelope["id"], json!("req_0"));
+        assert_eq!(
+            envelope["params"],
+            json!({}),
+            "empty Object params MUST serialize as `\"params\":{{}}` (not omitted) for wire-byte compat"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_request_with_object_params() {
+        let client = fresh_client_for_envelope_tests();
+        let envelope = client.build_request(
+            "tools/call",
+            json!({"name": "calc", "arguments": {"a": 1, "b": 2}}),
+        );
+
+        assert_eq!(envelope["method"], json!("tools/call"));
+        assert_eq!(envelope["params"]["name"], json!("calc"));
+        assert_eq!(envelope["params"]["arguments"]["a"], json!(1));
+        assert_eq!(envelope["params"]["arguments"]["b"], json!(2));
+    }
+
+    /// Regression: MCP tool arguments commonly carry array values
+    /// (e.g., `compute_stats({"values": [1.0, 2.0, 3.0]})`). The sweep routes
+    /// the `arguments` Object through `RequestParams::Object(HashMap<String,
+    /// serde_json::Value>)`; the inner `Value`s must survive untouched so a
+    /// nested `Value::Array` is still an array on the wire — not flattened,
+    /// stringified, or coerced. Distinct from JSON-RPC positional params at
+    /// the envelope level (see `Value::Array` branch in `value_to_request_params`).
+    #[tokio::test]
+    async fn test_build_request_preserves_nested_array_values_in_arguments() {
+        let client = fresh_client_for_envelope_tests();
+        let envelope = client.build_request(
+            "tools/call",
+            json!({
+                "name": "compute_stats",
+                "arguments": {
+                    "values": [1.0, 2.0, 3.0, 4.5],
+                    "tags": ["alpha", "beta"],
+                    "matrix": [[1, 2], [3, 4]],
+                }
+            }),
+        );
+
+        assert_eq!(envelope["method"], json!("tools/call"));
+        assert_eq!(envelope["params"]["name"], json!("compute_stats"));
+        assert_eq!(
+            envelope["params"]["arguments"]["values"],
+            json!([1.0, 2.0, 3.0, 4.5]),
+            "numeric array argument must survive intact"
+        );
+        assert_eq!(
+            envelope["params"]["arguments"]["tags"],
+            json!(["alpha", "beta"]),
+            "string array argument must survive intact"
+        );
+        assert_eq!(
+            envelope["params"]["arguments"]["matrix"],
+            json!([[1, 2], [3, 4]]),
+            "nested-array argument must survive intact"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_build_request_id_increments_per_call() {
+        let client = fresh_client_for_envelope_tests();
+        let a = client.build_request("ping", json!({}));
+        let b = client.build_request("ping", json!({}));
+        let c = client.build_request("ping", json!({}));
+
+        assert_eq!(a["id"], json!("req_0"));
+        assert_eq!(b["id"], json!("req_1"));
+        assert_eq!(c["id"], json!("req_2"));
+    }
+
+    #[tokio::test]
+    async fn test_build_request_null_params_omits_field() {
+        let client = fresh_client_for_envelope_tests();
+        let envelope = client.build_request("ping", Value::Null);
+
+        assert_eq!(envelope["jsonrpc"], json!("2.0"));
+        assert_eq!(envelope["method"], json!("ping"));
+        assert!(
+            envelope.get("params").is_none(),
+            "Value::Null params MUST omit the `params` field (skip_serializing_if=Option::is_none)"
+        );
+    }
+
+    #[test]
+    fn test_build_notification_envelope_shape() {
+        let envelope =
+            McpClient::build_notification("notifications/initialized", json!({}));
+
+        assert_eq!(envelope["jsonrpc"], json!("2.0"));
+        assert_eq!(envelope["method"], json!("notifications/initialized"));
+        assert_eq!(envelope["params"], json!({}));
+        assert!(
+            envelope.get("id").is_none(),
+            "notifications MUST NOT include an `id` field per JSON-RPC 2.0 §4.1"
+        );
+    }
+
+    #[test]
+    fn test_build_notification_with_object_params() {
+        let envelope = McpClient::build_notification(
+            "notifications/progress",
+            json!({"progressToken": "tok-1", "progress": 0.5}),
+        );
+
+        assert!(envelope.get("id").is_none());
+        assert_eq!(envelope["method"], json!("notifications/progress"));
+        assert_eq!(envelope["params"]["progressToken"], json!("tok-1"));
+        assert_eq!(envelope["params"]["progress"], json!(0.5));
+    }
+
+    #[test]
+    fn test_build_notification_null_params_omits_field() {
+        let envelope = McpClient::build_notification("notifications/cancelled", Value::Null);
+
+        assert_eq!(envelope["jsonrpc"], json!("2.0"));
+        assert_eq!(envelope["method"], json!("notifications/cancelled"));
+        assert!(envelope.get("params").is_none());
+        assert!(envelope.get("id").is_none());
+    }
+
+    /// Locks in semantic JSON-envelope equality with the prior hand-rolled
+    /// `json!({"jsonrpc": "2.0", "method": ..., "id": ..., "params": {...}})`
+    /// form. Compares as `serde_json::Value`, which is field-order-agnostic per
+    /// JSON-RPC 2.0 (objects are unordered key/value sets); this is not a
+    /// byte-equality assertion. Catches semantic drift like an omitted `params`
+    /// field, missing `jsonrpc` version, or extra envelope fields.
+    #[tokio::test]
+    async fn test_build_request_matches_legacy_handrolled_form() {
+        let client = fresh_client_for_envelope_tests();
+        let typed = client.build_request("tools/list", json!({"cursor": "abc"}));
+
+        let legacy = json!({
+            "jsonrpc": "2.0",
+            "method": "tools/list",
+            "id": "req_0",
+            "params": {"cursor": "abc"},
+        });
+
+        assert_eq!(
+            typed, legacy,
+            "build_request envelope must be semantically equivalent to the prior hand-rolled form"
+        );
     }
 }

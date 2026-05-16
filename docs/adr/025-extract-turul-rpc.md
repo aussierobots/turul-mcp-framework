@@ -174,3 +174,14 @@ The 0.3.39 release passed:
 
 - 2026-05-10: Initial proposal accepted. Shim landed in framework v0.3.39
   on branch `extract/turul-rpc-shim`.
+- 2026-05-16: Scoped exception for `turul-mcp-client`. The client crate
+  may depend on `turul-rpc` directly during the 0.3.x line, ahead of the
+  rest of the framework's 0.4.0 cutover. Rationale: the client was the
+  largest single consumer of hand-rolled `json!({"jsonrpc": "2.0", ...})`
+  envelopes (20+ production sites), and the cleanup slice that swept
+  them to typed `JsonRpcRequest::new` / `JsonRpcNotification::new`
+  constructors is naturally expressed against `turul-rpc` directly. The
+  remaining framework crates (`turul-mcp-server`, `turul-http-mcp-server`,
+  `turul-mcp-aws-lambda`, etc.) stay on `turul-mcp-json-rpc-server`
+  through the rest of 0.3.x, per the original lifecycle above. ADR-026
+  will still cover the framework-wide cutover at 0.4.0.
