@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.45] - 2026-05-16
+
+### Changed
+
+- **`turul-mcp-client` migrates to `turul-rpc` directly, ahead of the rest of the framework** (scoped 0.3.x exception per [ADR-025](docs/adr/025-extract-turul-rpc.md) §"Revision log" 2026-05-16 entry). The client crate's `Cargo.toml` no longer depends on the `turul-mcp-json-rpc-server` shim — it depends on `turul-rpc` directly. The remaining framework crates (`turul-mcp-server`, `turul-http-mcp-server`, `turul-mcp-aws-lambda`, etc.) continue to depend on the shim through the rest of 0.3.x; the framework-wide cutover lands at 0.4.0 per the original ADR-025 lifecycle. **Consumer impact**: `turul-mcp-client` users do not need to add `turul-rpc` to their own `Cargo.toml` — the dep is internal. Public API surface of `turul-mcp-client` is unchanged. Anyone explicitly importing types via `turul_mcp_json_rpc_server::*` from inside their own application code is unaffected (the shim crate still ships).
+
+### Refactor
+
+- **`turul-mcp-client` JSON-RPC envelopes now flow through `turul-rpc`'s typed constructors instead of 20+ hand-rolled `json!({"jsonrpc": "2.0", ...})` literals**. Two new private helpers in `crates/turul-mcp-client/src/client.rs` — `build_request(method, params)` and `build_notification(method, params)` — route every outbound MCP method (initialize, tools/list ×2, tools/call ×2, resources/list ×2, resources/read, resources/templates/list ×2, prompts/list ×2, prompts/get, ping, tasks/get, tasks/list ×2, tasks/cancel, tasks/result, notifications/initialized) through `turul_rpc::JsonRpcRequest::new` / `JsonRpcNotification::new`. The JSON-RPC 2.0 envelope shape (`jsonrpc` version, field ordering, `params` present-vs-absent semantics) now lives in one place rather than being copy-pasted across the file. **Wire bytes are semantically equivalent** to the prior hand-rolled form; this is a maintainability slice, not a behaviour change.
+  - **Empty-params preservation**: `Value::Object(empty)` is intentionally preserved as `"params":{}` on the wire (not omitted via `skip_serializing_if`), matching the prior hand-rolled form so any MCP server that distinguishes `params: {}` from a missing `params` field continues to see the same envelope. `Value::Null` is correctly omitted (no `params` field).
+  - **Defensive scalar handling**: `value_to_request_params(Value)` panics with `unreachable!()` for scalar `Value` inputs — no MCP client call site passes a scalar, and silently wrapping in a positional-array `RequestParams::Array` would be a wire-format change masking misuse rather than surfacing it.
+
+### Test
+
+- **17 new tests guarding the typed-envelope refactor**, totalling 130 client tests on the slice (was 113):
+  - **5 unit tests** for `value_to_request_params` (Null → None; empty Object → `Some(Object(empty))`; Object preserves entries; Array preserved; scalar `#[should_panic]`).
+  - **5 unit tests** for `build_request` (envelope shape with `jsonrpc/method/id/params`; nested object params; ID monotonic increment per call; `Value::Null` params omits the field on the wire; semantic JSON-envelope equality with the prior hand-rolled `json!({"jsonrpc": "2.0", ...})` form).
+  - **3 unit tests** for `build_notification` (envelope shape with no `id` per JSON-RPC 2.0 §4.1; nested object params; `Value::Null` omits both `id` and `params`).
+  - **1 unit test** `test_build_request_preserves_nested_array_values_in_arguments` — array values inside `params.arguments` (numeric, string, nested-array) round-trip through `RequestParams::Object(HashMap<String, Value>)` intact, distinct from JSON-RPC envelope-level positional params.
+  - **3 wire-layer tests** in `tests/wire_compliance.rs` exercising `JsonRpcRequest` / `JsonRpcNotification` directly through `HttpTransport` against wiremock — typed request envelope on wire; empty-Object params preserves `"params":{}` on wire (not omitted); typed notification omits `id` field on wire.
+  - **1 wire-layer test** `test_mcp_client_ping_sends_typed_jsonrpc_envelope_through_full_stack` — end-to-end production-path coverage walking `McpClient::connect()` + `ping()` against a wiremock server, capturing the `ping` POST body via `received_requests()`, asserting the JSON-RPC 2.0 envelope shape, AND asserting `notifications/initialized` POST has no `id` field.
+  - **1 wire-layer test** `test_mcp_client_call_tool_preserves_array_argument_values_on_wire` — end-to-end `McpClient::call_tool("compute_stats", json!({"values": [1,2,3,4,5], "tags": [...], "matrix": [[1,2],[3,4]]}))` against wiremock, capturing the `tools/call` POST body, asserting `body["params"]["arguments"].is_object()` (proves MCP uses named args, not JSON-RPC positional) and that all three array values survive intact at `body["params"]["arguments"].{values, tags, matrix}` with no flattening, coercion, or stringification.
+
+### Cleanup
+
+- **`MockTransport` and `StatefulMockTransport` test fixtures now advertise `tools.listChanged: false`** (was `true`). Both fixtures previously claimed the capability during initialize but never emitted `notifications/tools/list_changed` from the mock itself, violating MCP capability truthfulness ("server MUST NOT claim a capability it does not actually deliver"). The three `test_*_list_changed_notification_invalidates_cache` tests inject the notification out-of-band via `MockTransport::event_sender()` and continue to pass — confirmed by the cache-invalidation handler at `client.rs:175-193` which processes the notification unconditionally rather than gating on the capability flag. No production-code change.
+
 ## [0.3.44] - 2026-05-15
 
 ### Added
