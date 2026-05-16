@@ -1441,7 +1441,13 @@ mod tests {
                     "result": {
                         "protocolVersion": "2025-11-25",
                         "capabilities": {
-                            "tools": { "listChanged": true }
+                            // listChanged is false: this static MockTransport does NOT
+                            // emit notifications/tools/list_changed during initialize, so
+                            // advertising true would violate MCP capability truthfulness.
+                            // Tests that exercise list_changed inject the notification
+                            // via `event_sender()` (an out-of-band channel), independent
+                            // of the advertised capability.
+                            "tools": { "listChanged": false }
                         },
                         "serverInfo": {
                             "name": "mock-server",
@@ -1781,7 +1787,13 @@ mod tests {
                     "result": {
                         "protocolVersion": protocol_version,
                         "capabilities": {
-                            "tools": { "listChanged": true }
+                            // listChanged is false: this StatefulMockTransport does NOT
+                            // emit notifications/tools/list_changed during initialize, so
+                            // advertising true would violate MCP capability truthfulness.
+                            // Tests that exercise list_changed inject the notification
+                            // via `event_sender()` (an out-of-band channel), independent
+                            // of the advertised capability.
+                            "tools": { "listChanged": false }
                         },
                         "serverInfo": {
                             "name": "stateful-mock",
