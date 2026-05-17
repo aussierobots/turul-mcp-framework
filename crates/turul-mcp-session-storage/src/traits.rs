@@ -367,7 +367,7 @@ impl From<serde_json::Error> for SessionStorageError {
     }
 }
 
-#[cfg(feature = "sqlite")]
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
 impl From<sqlx::Error> for SessionStorageError {
     fn from(err: sqlx::Error) -> Self {
         SessionStorageError::DatabaseError(err.to_string())

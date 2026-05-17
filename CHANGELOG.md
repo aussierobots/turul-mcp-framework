@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.46] - 2026-05-17
+
+### Fixed
+
+- **`turul-mcp-session-storage` failed to compile with `--features postgres` alone** (without `sqlite`). The `From<sqlx::Error> for SessionStorageError` impl in `crates/turul-mcp-session-storage/src/traits.rs` was gated `#[cfg(feature = "sqlite")]`, but `postgres.rs` contains a bare `?` on a `sqlx::Result` inside the expiration-cleanup transaction (`crates/turul-mcp-session-storage/src/postgres.rs:772`), which requires that `From` impl to exist. Enabling only the `postgres` feature therefore yielded 18 `E0277: the trait \`From<sqlx::Error>\` is not implemented` errors across the postgres module. Fix is a single feature-gate change to `#[cfg(any(feature = "sqlite", feature = "postgres"))]`, matching the gate already used in `turul-mcp-task-storage/src/error.rs:47`. Revert-and-fail evidence: `cargo check -p turul-mcp-session-storage --no-default-features --features postgres` fails with the 18 errors before the change, succeeds after. Verified clean across the four feature subsets users actually combine: `--features postgres`, `--features sqlite`, `--features dynamodb`, and `--features sqlite,postgres,dynamodb`. **Consumer impact**: Anyone depending on `turul-mcp-session-storage = { version = "0.3.45", features = ["postgres"] }` without also enabling `"sqlite"` could not build at all on 0.3.34–0.3.45; this is unblocked on 0.3.46. **Scope check confirming this is the only instance**: `turul-mcp-task-storage` already had the correct `any(...)` gate; `turul-mcp-server-state-storage` (the tool-fingerprint backend) has no `From<sqlx::Error>` impl and doesn't need one — its postgres backend uses `.map_err(...)` consistently and compiles cleanly under each single-feature combo.
+
 ## [0.3.45] - 2026-05-16
 
 ### Changed
@@ -66,7 +72,7 @@ Production verification by the downstream consumer (sd-mcp v0.7.12) confirmed th
 
 - **Lambda streaming response with zero-data-frame body caused `IncompleteMessage` / 60 s timeout / API Gateway 502** (`turul-mcp-aws-lambda`). `into_lambda_stream_response` accepted any `B: http_body::Body + Unpin + Send + 'static`, but when `B` produced zero `Frame::Data` frames (e.g. `http_body_util::Empty::<Bytes>::new()`), the resulting `BodyDataStream` yielded zero items. The Lambda Response Streaming multipart envelope wrote the prelude + metadata JSON + trailer separator and then closed the body stream without ever writing a body chunk. Lambda's Runtime API client (hyper) requires at least one chunk before EOF for the framing to terminate cleanly; without one, the connection closed mid-frame with `hyper::Error(IncompleteMessage)`. The function appeared to hang for its full timeout, AWS reported `Status: timeout` (not `Status: error`, no `Errors` metric increment), and API Gateway emitted 502 to the client after the timeout. Common trigger: `.well-known/oauth-protected-resource` OPTIONS short-circuits in `run_streaming_with` dispatch closures returning `Response<UnsyncBoxBody<Bytes, hyper::Error>>` with `Empty::new()` body. **This is a pre-existing latent bug, not a v0.3.39 → v0.3.40 regression** — `f6438cb` does not touch any code path affected by it; consumer dispatch closures simply began exercising the empty-body path. Fix: internal `EnsureOneFrame<B>` body adapter wraps `B` in `into_lambda_stream_response` and emits a single zero-length `Frame::data` if the underlying body would otherwise yield no data frames. Bodies that natively produce ≥1 data frame are unaffected (first frame forwarded as soon as `B` yields it; no buffering, no pre-polling, streaming semantics preserved). The zero-length frame is invisible at the HTTP layer — no `Content-Length` header added, no response bytes visible to the client. Contract documented in ADR-026. Revert-and-fail recorded in commit message.
 
-
+## [0.3.41] - 2026-05-11
 
 ### Fixed
 
@@ -850,7 +856,15 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.38...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.46...HEAD
+[0.3.46]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.45...v0.3.46
+[0.3.45]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.44...v0.3.45
+[0.3.44]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.43...v0.3.44
+[0.3.43]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.42...v0.3.43
+[0.3.42]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.41...v0.3.42
+[0.3.41]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.40...v0.3.41
+[0.3.40]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.39...v0.3.40
+[0.3.39]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.38...v0.3.39
 [0.3.38]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.37...v0.3.38
 [0.3.37]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.36...v0.3.37
 [0.3.36]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.35...v0.3.36
