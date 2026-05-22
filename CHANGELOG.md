@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.47] - 2026-05-23
+
+### Fixed
+
+- **`turul-http-mcp-server` returned HTTP 401 for missing `Mcp-Session-Id` instead of the spec-required HTTP 400.** MCP 2025-11-25 § Session Management states: *"Servers that require a session ID SHOULD respond to requests without an MCP-Session-Id header (other than initialization) with HTTP 400 Bad Request."* Two code paths were affected:
+  - **Streamable HTTP POST non-initialize, non-allowed-ping**: `crates/turul-http-mcp-server/src/streamable_http.rs:1347-1373` was returning `StatusCode::UNAUTHORIZED`. Now returns `StatusCode::BAD_REQUEST`. The pre-init ping bypass at line 1174 is preserved; with `allow_unauthenticated_ping=false`, sessionless ping rejection also lands in this path and correctly returns 400 (same missing-header contract). Stale comment at line 296 documenting the bug as if it were spec is corrected.
+  - **Legacy `session_handler.rs` GET SSE (protocol ≤ 2024-11-05)**: `crates/turul-http-mcp-server/src/session_handler.rs:864-870` was returning HTTP 200 with a JSON-RPC error body via `jsonrpc_error_to_unified_body` (which hardcodes 200). The JSON-RPC error body shape is preserved, but the response is now wrapped in a 400 status instead of 200. Cross-transport consistency with the Streamable HTTP path.
+- **Streamable HTTP GET and DELETE** were already returning 400 for missing session (`streamable_http.rs:546` and `:1083`); no code change needed on those paths — only their test assertions were tightened (the GET test was tolerant of either 400/401; now requires 400).
+- **Test compliance**: per CLAUDE.md §"Test Compliance" ("Tests validate the MCP spec — never change tests to preserve buggy behavior"), four test files were updated from asserting `401` to asserting `400`:
+  - `tests/session_id_compliance.rs` (6 assertions + 2 test renames + header comment)
+  - `tests/mcp_behavioral_compliance.rs` (sessionless-non-ping-rejected assertion, sessionless-ping-with-flag-off assertion, plus a new regression test for the legacy GET SSE missing-session path that pins both HTTP status and JSON-RPC envelope body)
+  - `tests/streamable_http_e2e.rs` (POST hard assertion + GET tightened-tolerant assertion + stale comments)
+  - `tests/phase5_regression_tests.rs` (line 136 assertion)
+- **CLAUDE.md §"Session Status Codes" table** updated to reflect the spec-correct mapping, including the ping/`allow_unauthenticated_ping` interaction and an explicit row for the legacy SSE path.
+
+### Versioning rule override
+
+This is an MCP transport contract correction. By the prior versioning rule ("Minor bumps cover A2A/MCP/schema contract changes") it would have been a minor (`0.4.0`) bump. We ship it as a patch (`0.3.47`) because:
+
+1. The change brings the framework into compliance with an existing spec, not adoption of a new spec revision; existing-spec compliance corrections are bug fixes by nature.
+2. The user-global versioning rule has been updated to: patch bumps cover bug fixes, contract corrections, and spec-compliance fixes; minor bumps are reserved for new MCP spec adoption or explicit instruction.
+3. Observable client impact is minimal: any conforming MCP 2025-11-25 client already handles 400 for missing session per spec; the prior 401 was a server-side defect that clients should already have been tolerant of (treating either 400 or 401 as "session is gone, restart `initialize`").
+
+### Revert-and-fail evidence
+
+After applying both fixes, reverting them via `git stash` and re-running the targeted tests produces:
+
+```
+test_sessionless_non_ping_rejected                                  left: 401, right: 400
+test_legacy_handler_get_sse_without_session_returns_400             left: 200, right: 400
+test_unauthenticated_ping_disabled_rejects_sessionless_ping         left: 401, right: 400
+test result: FAILED. 0 passed; 3 failed
+```
+
+Restoring the fix returns all 11 targeted tests to GREEN (8 `feature_tests` + 3 `compliance`). The test net catches both bug classes.
+
 ## [0.3.46] - 2026-05-17
 
 ### Fixed
@@ -856,7 +892,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.46...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.47...HEAD
+[0.3.47]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.46...v0.3.47
 [0.3.46]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.45...v0.3.46
 [0.3.45]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.44...v0.3.45
 [0.3.44]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.43...v0.3.44

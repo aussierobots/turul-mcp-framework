@@ -292,8 +292,10 @@ impl StreamableHttpContext {
 
 /// Why session validation failed — determines the HTTP status code.
 ///
-/// MCP 2025-11-25 spec: terminated or unknown sessions MUST return 404 Not Found.
-/// Missing `Mcp-Session-Id` header (a different code path) stays 401 Unauthorized.
+/// MCP 2025-11-25 § Session Management:
+/// - Missing `Mcp-Session-Id` header (different code path, see POST handler) → 400 Bad Request
+/// - Terminated or unknown session ID → 404 Not Found (MUST)
+/// - Auth failures (OAuth middleware, different layer) → 401 Unauthorized
 enum SessionValidationError {
     /// Session ID not found or session has been terminated → 404 Not Found
     NotFound(String),
@@ -1344,8 +1346,14 @@ impl StreamableHttpHandler {
                     }
                     existing_id.clone()
                 } else {
-                    // Return 401 for missing header — this is NOT a stale session (404),
-                    // it's "no session ID provided at all"
+                    // Per MCP 2025-11-25 § Session Management: "Servers that require a session ID
+                    // SHOULD respond to requests without an MCP-Session-Id header (other than
+                    // initialization) with HTTP 400 Bad Request." This covers non-initialize,
+                    // non-allowed-ping requests. The pre-init ping bypass at the top of this
+                    // function still applies; with allow_unauthenticated_ping=false the ping
+                    // rejection also lands here and correctly returns 400.
+                    // Stale sessions are a different code path (→ 404). Auth failures live in
+                    // OAuth middleware (→ 401).
                     let method_name = match &message {
                         JsonRpcMessage::Request(req) => &req.method,
                         JsonRpcMessage::Notification(notif) => &notif.method,
@@ -1370,7 +1378,7 @@ impl StreamableHttpHandler {
                         serde_json::to_string(&error_response).unwrap_or_else(|_| "{}".to_string());
 
                     return Response::builder()
-                        .status(StatusCode::UNAUTHORIZED)
+                        .status(StatusCode::BAD_REQUEST)
                         .header(CONTENT_TYPE, "application/json")
                         .header("MCP-Protocol-Version", context.protocol_version.as_str())
                         .body(

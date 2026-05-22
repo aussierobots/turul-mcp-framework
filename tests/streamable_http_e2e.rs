@@ -1422,11 +1422,11 @@ async fn test_negative_cases_missing_headers() {
         .expect("Request timeout")
         .expect("Request failed");
 
-    // Should return 401 for missing session ID (unauthorized)
+    // Should return 400 for missing session ID per MCP 2025-11-25 § Session Management
     assert_eq!(
         response.status(),
-        StatusCode::UNAUTHORIZED,
-        "POST without session ID should return 401"
+        StatusCode::BAD_REQUEST,
+        "POST without session ID should return 400 per MCP spec"
     );
 
     let error_body = response.into_body().collect().await.unwrap().to_bytes();
@@ -1460,11 +1460,11 @@ async fn test_negative_cases_missing_headers() {
         .expect("Request timeout")
         .expect("Request failed");
 
-    // Should fail without session
-    assert!(
-        response.status() == StatusCode::UNAUTHORIZED
-            || response.status() == StatusCode::BAD_REQUEST,
-        "GET without session ID should fail, got: {}",
+    // Should fail with 400 per MCP 2025-11-25 § Session Management
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "GET without session ID should return 400 per MCP spec, got: {}",
         response.status()
     );
     println!("✅ GET without session ID properly rejected");
@@ -1692,8 +1692,8 @@ async fn test_strict_lifecycle_enforcement_over_streamable_http() {
     let client = create_client();
     let base_url = format!("http://127.0.0.1:{}", server.port());
 
-    // Test: Request without proper session initialization should fail
-    // In streamable HTTP, this returns 401 status (vs JSON-RPC error in regular HTTP)
+    // Test: Request with a nonexistent session ID should fail with 404
+    // (a different code path than missing-header, which would be 400)
     let unauthorized_request = Request::builder()
         .method(Method::POST)
         .uri(format!("{}/mcp", base_url))
@@ -1718,7 +1718,7 @@ async fn test_strict_lifecycle_enforcement_over_streamable_http() {
         .expect("Request failed");
 
     // MCP 2025-11-25 spec: nonexistent session ID → 404 Not Found
-    // (not 401 — that's for missing auth tokens, not stale sessions)
+    // (not 400 — that's missing-header; not 401 — that's auth failure)
     assert_eq!(
         response.status(),
         StatusCode::NOT_FOUND,

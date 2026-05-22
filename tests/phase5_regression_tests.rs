@@ -133,7 +133,7 @@ async fn test_lifecycle_enforcement_over_streamable_http() {
             .send()
     ).await.expect("Request timeout").expect("Request failed");
 
-    assert_eq!(response.status(), 401); // Should be unauthorized without session
+    assert_eq!(response.status(), 400); // Missing session → 400 per MCP 2025-11-25 § Session Management
 }
 
 /// Test pagination limit bounds
