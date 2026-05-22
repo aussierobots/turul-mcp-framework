@@ -892,7 +892,8 @@ turul-mcp-server = { version = "0.3.27", features = ["sqlite"] }
 - AWS Lambda support
 - 42+ working examples
 
-[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.46...HEAD
+[Unreleased]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.47...HEAD
+[0.3.47]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.46...v0.3.47
 [0.3.46]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.45...v0.3.46
 [0.3.45]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.44...v0.3.45
 [0.3.44]: https://github.com/aussierobots/turul-mcp-framework/compare/v0.3.43...v0.3.44
