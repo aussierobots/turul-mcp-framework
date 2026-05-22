@@ -21,15 +21,18 @@ impl McpMiddleware for LambdaAuthMiddleware {
             return Ok(());
         }
 
-        // API Gateway Lambda authorizer populates x-authorizer-* headers.
-        // These are pre-validated by the authorizer — middleware just extracts them.
-        let principal_id = ctx
+        // API Gateway Lambda authorizer forwards its custom context fields as
+        // x-authorizer-* headers (snake_cased). Use the fields YOUR authorizer
+        // Lambda returns under `context: {...}` — for example, user_id, sub,
+        // account_id, scope. `principalId` is intentionally NOT forwarded
+        // (it's an API Gateway internal); return your own identity field.
+        let user_id = ctx
             .metadata()
-            .get("x-authorizer-principalid")
+            .get("x-authorizer-user_id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
                 MiddlewareError::unauthenticated(
-                    "Missing authorizer principal — is the API Gateway authorizer configured?",
+                    "Missing authorizer user_id — is your API Gateway authorizer returning it under context?",
                 )
             })?;
 
@@ -41,7 +44,7 @@ impl McpMiddleware for LambdaAuthMiddleware {
             .unwrap_or("default");
 
         // Inject into session for tool access
-        injection.set_state("user_id", json!(principal_id));
+        injection.set_state("user_id", json!(user_id));
         injection.set_state("scope", json!(scope));
         injection.set_metadata("auth_source", json!("api-gateway-authorizer"));
 

@@ -264,15 +264,18 @@ tracing_subscriber::fmt()
 
 ## API Gateway Authorizer Integration
 
-API Gateway authorizers populate `x-authorizer-*` headers automatically. Middleware reads them via `ctx.metadata()`:
+API Gateway authorizers' **custom context fields** are forwarded as `x-authorizer-*` headers automatically. Middleware reads them via `ctx.metadata()` using the field name your authorizer returns:
 
 ```rust
 let user_id = ctx.metadata()
-    .get("x-authorizer-principalid")
+    .get("x-authorizer-user_id")
+    .and_then(|v| v.as_str());
+let account_id = ctx.metadata()
+    .get("x-authorizer-account_id")
     .and_then(|v| v.as_str());
 ```
 
-The Lambda adapter converts camelCase authorizer fields to snake_case headers (`userId` → `x-authorizer-user_id`). Both V1 (REST API) and V2 (HTTP API) formats are supported.
+The Lambda adapter converts camelCase authorizer fields to snake_case headers (`userId` → `x-authorizer-user_id`). Both V1 (REST API) and V2 (HTTP API) formats are supported. **Not forwarded** (API Gateway internals, intentionally skipped): `principalId`, `integrationLatency`, `usageIdentifierKey` — make sure your authorizer returns the identity fields you need under `context: {...}`.
 
 **See:** the `middleware-patterns` skill (Pattern 4: Lambda Auth) for the full `LambdaAuthMiddleware` example.
 
