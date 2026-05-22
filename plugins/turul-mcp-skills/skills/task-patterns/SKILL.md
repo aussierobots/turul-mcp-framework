@@ -12,7 +12,8 @@ description: >
   or "task storage backend".
   Covers MCP task support for long-running tools, state machine,
   storage backends, cancellation, and capability truthfulness in
-  the Turul MCP Framework (Rust).
+  the Turul MCP Framework (Rust). TaskStorage is distinct from
+  SessionStorage; for session persistence see session-storage-backends.
 ---
 
 # Task Patterns — Turul MCP Framework
@@ -153,17 +154,34 @@ use turul_mcp_task_storage::InMemoryTaskStorage;
 let storage = Arc::new(InMemoryTaskStorage::new());
 
 // SQLite (feature = "sqlite")
-use turul_mcp_task_storage::SqliteTaskStorage;
-let storage = Arc::new(SqliteTaskStorage::new("sqlite://tasks.db").await?);
+use turul_mcp_task_storage::{SqliteTaskStorage, SqliteTaskConfig};
+let storage = Arc::new(
+    SqliteTaskStorage::with_config(SqliteTaskConfig {
+        database_path: "tasks.db".into(),
+        ..Default::default()
+    }).await?,
+);
 
 // PostgreSQL (feature = "postgres")
-use turul_mcp_task_storage::PostgresTaskStorage;
-let storage = Arc::new(PostgresTaskStorage::new("postgres://localhost/mydb").await?);
+use turul_mcp_task_storage::{PostgresTaskStorage, PostgresTaskConfig};
+let storage = Arc::new(
+    PostgresTaskStorage::with_config(PostgresTaskConfig {
+        database_url: "postgres://localhost/mydb".into(),
+        ..Default::default()
+    }).await?,
+);
 
 // DynamoDB (feature = "dynamodb")
-use turul_mcp_task_storage::DynamoDbTaskStorage;
-let storage = Arc::new(DynamoDbTaskStorage::new("mcp-tasks").await?);
+use turul_mcp_task_storage::{DynamoDbTaskStorage, DynamoDbTaskConfig};
+let storage = Arc::new(
+    DynamoDbTaskStorage::with_config(DynamoDbTaskConfig {
+        table_name: "mcp-tasks".into(),
+        ..Default::default()
+    }).await?,
+);
 ```
+
+Each backend exposes `new()` (zero-arg, uses `<Backend>TaskConfig::default()`) and `with_config(...)` for explicit configuration. Use `with_config` whenever you need a non-default value — there is no string-URL constructor.
 
 **For full backend configuration details**, see the `storage-backend-matrix` reference.
 

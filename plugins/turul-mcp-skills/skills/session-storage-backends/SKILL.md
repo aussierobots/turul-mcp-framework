@@ -9,7 +9,8 @@ description: >
   "session event management", "SseEvent", or "SessionStorageError".
   Covers the SessionStorage trait, backend selection, event management
   for SSE resumability, error types, and background cleanup in the
-  Turul MCP Framework (Rust).
+  Turul MCP Framework (Rust). Do NOT use for TaskStorage — task
+  persistence is a separate trait; see task-patterns.
 ---
 
 # Session Storage Backends — Turul MCP Framework

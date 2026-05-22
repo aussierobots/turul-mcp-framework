@@ -8,7 +8,9 @@ description: >
   "cargo test", "test organization", "SSE testing",
   or "test consolidation". Covers unit testing, E2E testing,
   compliance testing, SSE testing, and test organization
-  in the Turul MCP Framework (Rust).
+  in the Turul MCP Framework (Rust). McpTestClient is the
+  in-process test harness; for the production client API
+  see mcp-client-patterns.
 ---
 
 # Testing Patterns — Turul MCP Framework

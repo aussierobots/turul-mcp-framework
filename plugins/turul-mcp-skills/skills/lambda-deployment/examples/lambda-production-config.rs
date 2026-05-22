@@ -43,14 +43,17 @@ impl McpMiddleware for LambdaAuthMiddleware {
             return Ok(());
         }
 
-        // API Gateway authorizer populates x-authorizer-* headers
+        // API Gateway authorizer's custom context fields land as x-authorizer-*
+        // headers. Use whatever identity field your authorizer Lambda returns
+        // (e.g. user_id, sub, account_id). `principalId` is NOT forwarded — it
+        // is filtered out as an API Gateway internal.
         let user_id = ctx
             .metadata()
-            .get("x-authorizer-principalid")
+            .get("x-authorizer-user_id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
                 MiddlewareError::unauthenticated(
-                    "Missing authorizer principal — is the API Gateway authorizer configured?",
+                    "Missing authorizer user_id — is your API Gateway authorizer returning it under context?",
                 )
             })?;
 

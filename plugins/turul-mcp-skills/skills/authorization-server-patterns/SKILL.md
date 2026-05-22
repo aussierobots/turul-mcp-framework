@@ -9,7 +9,10 @@ description: >
   "refresh token", "authorization-server-patterns", or "build an auth server".
   Covers building a standalone demo OAuth 2.1 Authorization Server
   using standard Rust crates for use alongside Turul MCP Resource Servers.
-  Demo-grade only — not production identity infrastructure.
+  Use these demo examples only for local development and PoCs.
+  Do NOT use these demo examples as production identity infrastructure —
+  use Cognito, Auth0, Keycloak, or Ory Hydra for that. For protecting an
+  MCP server (RS role), see auth-patterns.
 ---
 
 # Authorization Server Patterns — Demo / Reference

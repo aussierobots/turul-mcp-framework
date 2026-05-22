@@ -12,7 +12,8 @@ description: >
   Covers authentication and authorization patterns for MCP servers
   in the Turul MCP Framework (Rust): OAuth 2.1 Resource Server
   compliance, JWT validation, API key middleware, and Lambda
-  authorizer integration.
+  authorizer integration. Do NOT use for issuing tokens or
+  building an Authorization Server — see authorization-server-patterns.
 ---
 
 # Auth Patterns — Turul MCP Framework
@@ -148,6 +149,34 @@ let metadata = ProtectedResourceMetadata::new(
 
 The handler returns JSON with `Cache-Control: public, max-age=3600`.
 
+## Authorization Server Discovery Chain (RFC 8414)
+
+The RS publishes the AS URL via PRM; clients then fetch the AS metadata themselves. **The RS does NOT serve `/.well-known/oauth-authorization-server` — that endpoint lives on the AS.**
+
+```
+                                                AS
+   Client                                       │
+     │   1. GET /.well-known/                   │
+     │      oauth-protected-resource    ───► RS │
+     │                                          │
+     │   2. Reads "authorization_servers" ──────│──►  (URL of the AS)
+     │                                          │
+     │   3. GET /.well-known/                                ▼
+     │      oauth-authorization-server  ──────────────►  RFC 8414
+     │      (or .../openid-configuration)                AS metadata
+     │
+     │   4. Run PKCE flow against AS, then call RS with bearer
+```
+
+**Normative requirements** (MCP 2025-11-25 § Authorization):
+
+- "MCP servers **MUST** implement OAuth 2.0 Protected Resource Metadata (RFC 9728)" — the RS publishes its identity and the AS list.
+- "MCP clients **MUST** use OAuth 2.0 Protected Resource Metadata for authorization server discovery."
+- "MCP authorization servers **MUST** provide at least one of: OAuth 2.0 Authorization Server Metadata (RFC 8414) or OpenID Connect Discovery 1.0."
+- "MCP clients **MUST** support both discovery mechanisms."
+
+The RS implementer's job stops at point 2: publish a truthful `authorization_servers` list in PRM and ensure your `resource` URL matches what clients will send.
+
 ## Audience Validation
 
 Audience validation is **always required** — there's no opt-out.
@@ -160,6 +189,42 @@ let validator = JwtValidator::new(jwks_uri, "my-audience");  // NOT Option<&str>
 With `oauth_resource_server()`, the audience is automatically set to the resource URL from your metadata. With manual construction, you choose any audience string.
 
 **Why mandatory**: Without audience validation, a token issued for `https://other-service.com` would be accepted by your MCP server. This is a critical security requirement per OAuth 2.1.
+
+## Resource Parameter (RFC 8707) — what clients must send
+
+Audience validation only works because clients are required to **bind** the token to your specific RS at the point of issuance. MCP makes this a normative client-side requirement.
+
+> MCP 2025-11-25 § Resource Parameter Implementation:
+> "MCP clients **MUST** implement Resource Indicators for OAuth 2.0 as defined in RFC 8707... The `resource` parameter:
+> 1. **MUST** be included in both authorization requests and token requests.
+> 2. **MUST** identify the MCP server that the client intends to use the token with..."
+>
+> "MCP clients **MUST** send this parameter regardless of whether authorization servers support it."
+
+Concretely, a compliant MCP client sends:
+
+```
+GET  /authorize?response_type=code
+                &client_id=...
+                &redirect_uri=...
+                &resource=https://api.example.com/mcp     ← MUST
+                &code_challenge=...&code_challenge_method=S256
+                &scope=mcp:read mcp:write
+
+POST /token     grant_type=authorization_code
+                &code=...
+                &resource=https://api.example.com/mcp     ← MUST (same value)
+                &code_verifier=...
+```
+
+The AS uses `resource` to set the token's `aud` claim. The RS later validates that `aud` equals its own canonical URI.
+
+**RS implementer responsibilities** (still small):
+
+1. Pick a single canonical resource URI for your MCP server (e.g. `https://api.example.com/mcp`).
+2. Pass that exact URI as the first argument to `ProtectedResourceMetadata::new(...)`.
+3. Pass that exact URI as the audience argument to `JwtValidator::new(...)` (or let `oauth_resource_server()` propagate it for you).
+4. Document the URI so client integrators know what to send as `resource` and `aud`.
 
 ## Accessing Auth Claims in Tools
 
@@ -271,16 +336,17 @@ impl McpMiddleware for ApiKeyMiddleware {
 
 ## Pattern 4: Lambda API Gateway Authorizer
 
-On Lambda, API Gateway can validate tokens before your MCP server runs. The authorizer populates `x-authorizer-*` headers automatically:
+On Lambda, API Gateway can validate tokens before your MCP server runs. The authorizer's **custom context fields** (whatever your authorizer Lambda returns under `context: {...}`) are forwarded as `x-authorizer-*` headers automatically:
 
 ```rust
-// Read authorizer claims in middleware or tools
+// Read authorizer claims in middleware or tools — use the custom fields
+// your authorizer returns, e.g. user_id, account_id, scope.
 let user_id = ctx.metadata()
-    .get("x-authorizer-principalid")
+    .get("x-authorizer-user_id")
     .and_then(|v| v.as_str());
 ```
 
-The Lambda adapter converts camelCase authorizer fields to snake_case headers (`userId` → `x-authorizer-user_id`). Both V1 (REST API) and V2 (HTTP API) formats are supported.
+The Lambda adapter converts camelCase authorizer fields to snake_case headers (`userId` → `x-authorizer-user_id`). Both V1 (REST API) and V2 (HTTP API) formats are supported. **Not forwarded**: API Gateway internals (`principalId`, `integrationLatency`, `usageIdentifierKey`) — surface your own `user_id`/`subject`/etc. from the authorizer's context instead.
 
 **When to use Gateway authorizers instead of `turul-mcp-oauth`:**
 - AWS-native deployments with Cognito or custom authorizers
@@ -379,6 +445,10 @@ When `scopes_supported` is configured, `scope="mcp:read mcp:write"` is included 
 6. **JWKS endpoint hammering** — The validator rate-limits refresh to once per 60s by default. If you set a very short refresh interval, you risk being rate-limited by the AS.
 
 7. **Manually dispatching well-known routes in `run_streaming_with()`** — You don't need custom dispatch for `.well-known` routes. Register them via `.route()` on `LambdaMcpServerBuilder` — `handle_streaming()` checks the route registry before MCP dispatch. Use `run_streaming_with()` only when you need pre-dispatch logic that isn't route-based (e.g., request logging, custom health checks).
+
+8. **Resource / audience URI mismatch between RS and what clients send** — The single most common interop failure. If your `ProtectedResourceMetadata::new("https://api.example.com/mcp", ...)` declares one URI but clients send `resource=https://api.example.com` (no `/mcp` path), the AS issues `aud=https://api.example.com` and your RS rejects with `invalid audience`. Fix: pick one canonical URI, use it verbatim in `ProtectedResourceMetadata::new`, `JwtValidator::new`, and document it so client integrators send the exact same string as `resource` in both `/authorize` and `/token`.
+
+9. **Expecting the RS to serve `/.well-known/oauth-authorization-server`** — That endpoint lives on the AS, not the RS. The RS only serves `/.well-known/oauth-protected-resource` (RFC 9728); it advertises the AS URL via the `authorization_servers` field and clients fetch RFC 8414 metadata from the AS directly.
 
 ## Beyond This Skill
 

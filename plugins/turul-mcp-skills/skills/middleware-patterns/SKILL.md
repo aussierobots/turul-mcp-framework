@@ -9,6 +9,9 @@ description: >
   "lambda auth middleware", or "DispatcherResult".
   Covers creating HTTP middleware for auth, rate limiting, logging,
   and Lambda authorizer extraction in the Turul MCP Framework (Rust).
+  For OAuth/JWT-specific middleware (oauth_resource_server,
+  JwtValidator, ProtectedResourceMetadata) see auth-patterns —
+  this skill covers the McpMiddleware trait plumbing only.
 ---
 
 # Middleware Patterns — Turul MCP Framework
@@ -249,12 +252,15 @@ impl McpMiddleware for LambdaAuthMiddleware {
             return Ok(());
         }
 
-        // API Gateway authorizer populates x-authorizer-* headers
+        // API Gateway authorizer's custom context fields land as x-authorizer-*
+        // headers. Use the field name your authorizer Lambda returns under
+        // `context: {...}` (e.g. user_id, sub, account_id). `principalId` is
+        // intentionally NOT forwarded — return your own identity field instead.
         let user_id = ctx.metadata()
-            .get("x-authorizer-principalid")
+            .get("x-authorizer-user_id")
             .and_then(|v| v.as_str())
             .ok_or_else(|| MiddlewareError::unauthenticated(
-                "Missing authorizer principal — is the API Gateway authorizer configured?"
+                "Missing authorizer user_id — is the API Gateway authorizer returning it in context?"
             ))?;
 
         injection.set_state("user_id", serde_json::json!(user_id));

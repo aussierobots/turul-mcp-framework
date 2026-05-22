@@ -155,12 +155,17 @@ turul-mcp-task-storage = { version = "0.3", features = ["sqlite"] }
 ```
 
 ```rust
-use turul_mcp_task_storage::SqliteTaskStorage;
-let storage = Arc::new(SqliteTaskStorage::new("sqlite://tasks.db").await?);
+use turul_mcp_task_storage::{SqliteTaskStorage, SqliteTaskConfig};
+let storage = Arc::new(
+    SqliteTaskStorage::with_config(SqliteTaskConfig {
+        database_path: "tasks.db".into(),
+        ..Default::default()
+    }).await?,
+);
 ```
 
 - Persistent, single-instance only
-- Auto-creates tables on connect
+- Tables are auto-migrated only when `verify_tables = true` (defaults to `false`); for first-time use set both `verify_tables: true` and `create_tables: true`
 
 ### PostgreSQL (feature = "postgres")
 
@@ -170,12 +175,17 @@ turul-mcp-task-storage = { version = "0.3", features = ["postgres"] }
 ```
 
 ```rust
-use turul_mcp_task_storage::PostgresTaskStorage;
-let storage = Arc::new(PostgresTaskStorage::new("postgres://localhost/mydb").await?);
+use turul_mcp_task_storage::{PostgresTaskStorage, PostgresTaskConfig};
+let storage = Arc::new(
+    PostgresTaskStorage::with_config(PostgresTaskConfig {
+        database_url: "postgres://localhost/mydb".into(),
+        ..Default::default()
+    }).await?,
+);
 ```
 
 - Persistent, multi-instance safe (optimistic locking via `version` column)
-- Auto-creates tables on connect
+- Tables are auto-migrated only when `verify_tables = true` (defaults to `false`); for first-time use set both `verify_tables: true` and `create_tables: true`
 
 ### DynamoDB (feature = "dynamodb")
 
@@ -185,8 +195,13 @@ turul-mcp-task-storage = { version = "0.3", features = ["dynamodb"] }
 ```
 
 ```rust
-use turul_mcp_task_storage::DynamoDbTaskStorage;
-let storage = Arc::new(DynamoDbTaskStorage::new("mcp-tasks").await?);
+use turul_mcp_task_storage::{DynamoDbTaskStorage, DynamoDbTaskConfig};
+let storage = Arc::new(
+    DynamoDbTaskStorage::with_config(DynamoDbTaskConfig {
+        table_name: "mcp-tasks".into(),
+        ..Default::default()
+    }).await?,
+);
 ```
 
 - Persistent, serverless-native, multi-instance safe

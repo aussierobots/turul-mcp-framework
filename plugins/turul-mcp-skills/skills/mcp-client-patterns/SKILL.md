@@ -9,7 +9,9 @@ description: >
   "refresh_tools", "tool change notification", or "list_changed client".
   Covers transport selection, connection lifecycle, tool/resource/prompt
   invocation, task workflows, tool change notifications, and error handling
-  for the Turul MCP Client (turul-mcp-client crate, Rust).
+  for the Turul MCP Client (turul-mcp-client crate, Rust). Do NOT use for
+  server-side work (tools, resources, prompts) — see tool-creation-patterns
+  and resource-prompt-patterns.
 ---
 
 # Turul MCP Client Patterns
@@ -286,6 +288,38 @@ This skill covers transport and lifecycle, not authentication. MCP clients that 
 The `turul-mcp-client` crate handles transport and session lifecycle. Token acquisition and header injection are the client application's responsibility.
 
 **See:** the `auth-patterns` skill for RS-side validation and the `authorization-server-patterns` skill for building a demo AS to test against.
+
+## Bearer Lifecycle & Rotation
+
+Per MCP authorization, the bearer token MUST be present on **every** HTTP request a client makes — that includes the POST request stream, the GET SSE listener, and the DELETE cleanup. A long-lived client that holds a token across rotations needs to swap the token in place rather than rebuild the whole client (which would drop the connection pool).
+
+```rust
+// turul-mcp-client v0.3
+// Rotate the bearer on a long-lived client without losing the connection pool.
+// All five outbound surfaces (POST, GET SSE, DELETE, send_request_with_headers,
+// send_notification) pick up the new token immediately.
+client.set_bearer(Some(&fresh_token)).await;
+client.disconnect().await?;  // DELETE goes out with the fresh bearer
+```
+
+**Lifecycle invariants worth knowing** (v0.3.33–v0.3.46 hardening):
+
+| Invariant | Notes |
+|---|---|
+| `disconnect()` is idempotent | Safe to call multiple times; also fires implicitly from `Drop`. After explicit `disconnect()`, the implicit `Drop` is a no-op (no duplicate DELETE). |
+| Concurrent `call_tool` on `Arc<McpClient>` runs in parallel | `Transport` trait takes `&self` on hot paths; reqwest's connection pool serves concurrent requests. No outer `Mutex`. |
+| SSE GET 4xx is terminal | The background SSE listener treats any 4xx on the GET stream as a permanent failure, clears the cached session ID, and exits. The next `connect()` re-establishes from a fresh `initialize`. |
+| `set_bearer(None)` falls back to default headers | Useful for clearing an override and reverting to whatever was baked into `ClientBuilder::default_headers()`. |
+
+Common rotation pattern for OAuth `client_credentials` deployments:
+
+```rust
+loop {
+    let token = oauth.refresh().await?;     // get fresh bearer
+    client.set_bearer(Some(&token)).await;  // swap in place
+    tokio::time::sleep(token.ttl - skew).await;
+}
+```
 
 ## Beyond This Skill
 

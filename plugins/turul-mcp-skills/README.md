@@ -2,7 +2,7 @@
 
 Skills and tools for building MCP servers and clients with the [Turul MCP Framework](https://github.com/aussierobots/turul-mcp-framework) (Rust).
 
-## What's Included (v0.6.2)
+## What's Included (v0.6.3)
 
 | Component | Type | Purpose |
 |---|---|---|
@@ -219,6 +219,23 @@ Validates an existing Turul MCP server project:
 This plugin targets **turul-mcp-server v0.3** (MCP 2025-11-25).
 
 ## Changelog
+
+### v0.6.3
+- **Fixed**: `task-patterns` dead constructors — `SqliteTaskStorage::new("…")`, `PostgresTaskStorage::new("…")`, `DynamoDbTaskStorage::new("…")` did not compile against the current API. All three now use `with_config(<BackendConfig>{...})` form, matching `lambda-deployment`. Also corrected the stale "auto-creates tables on connect" note in `references/task-storage-guide.md` (tables are migrated only when `verify_tables = true`).
+- **Fixed**: `x-authorizer-principalid` examples in `auth-patterns`, `middleware-patterns`, `lambda-deployment` (SKILL.md + reference + 2 example .rs files). The Lambda adapter intentionally skips API Gateway internals (`principalId`, `integrationLatency`, `usageIdentifierKey`); examples now use concrete custom-context fields (`x-authorizer-user_id`, `x-authorizer-account_id`, `x-authorizer-scope`) with an explicit "not forwarded" note.
+- **Added**: `mcp-client-patterns` — new "Bearer Lifecycle & Rotation" section covering `set_bearer()` (v0.3.44), idempotent `disconnect()`/`Drop` (v0.3.43), SSE GET 4xx terminal behavior (v0.3.38), concurrent `call_tool` via `&self` transport (v0.3.33), and the MCP requirement that bearer auth is present on every HTTP request including GET listeners and DELETE cleanup.
+- **Added**: `auth-patterns` — new "Authorization Server Discovery Chain (RFC 8414)" section spelling out the RS PRM → `authorization_servers` → AS metadata fetch flow, with explicit "the RS does NOT serve `/.well-known/oauth-authorization-server`" guidance and quoted MCP 2025-11-25 normative MUSTs.
+- **Added**: `auth-patterns` — new "Resource Parameter (RFC 8707)" section covering the client-side MCP MUST that `resource` is included in both `/authorize` and `/token` requests, and the corresponding RS implementer responsibilities (canonical URI alignment between `ProtectedResourceMetadata::new`, `JwtValidator::new`, and what clients send).
+- **Added**: `auth-patterns` — two new "Common Mistakes" entries: resource/audience URI mismatch (the most common interop failure) and the RS-vs-AS discovery boundary.
+- **Added**: 7 frontmatter `Do NOT use for ...` disambiguation clauses to reduce trigger collisions:
+  - `auth-patterns` ↔ `authorization-server-patterns` (validate-vs-issue boundary)
+  - `task-patterns` ↔ `session-storage-backends` (reciprocal — TaskStorage ≠ SessionStorage)
+  - `testing-patterns` ↔ `mcp-client-patterns` (test harness vs production client)
+  - `middleware-patterns` ↔ `auth-patterns` (plumbing vs OAuth specifics)
+  - `mcp-client-patterns` (client-side vs server-side scope)
+  - `authorization-server-patterns` (tightened to "demo examples are not production identity infrastructure" per spec)
+- **Verified**: smoke-tested 5 skill patterns in a throwaway crate (`/tmp/turul-skills-smoke`) — `echo_text`, `add_numbers`, `server_time_stub` (function macro), `WordCountTool` (derive + `output = Type` + schemars), `slow_add` (function macro + `task_support = "optional"`), plus `InMemoryTaskStorage::new()` — all compile cleanly against current crate APIs. No production examples touched.
+- **Scope**: skills-only release. Framework crates were not modified; status-code teaching unchanged.
 
 ### v0.6.2
 - Added server identity (icons) section to `tool-creation-patterns` skill with `.icons()` builder method, `Icon::data_uri()`, and trigger phrases

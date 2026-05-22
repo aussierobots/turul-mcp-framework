@@ -81,8 +81,12 @@ For HTTP transport:
 - `"x-forwarded-for"` — Client IP (behind proxy)
 
 For Lambda transport:
-- `"x-authorizer-principalid"` — API Gateway authorizer principal
-- `"x-authorizer-*"` — Authorizer context fields
+- `"x-authorizer-<field>"` — Authorizer's custom context fields, snake-cased
+  (e.g. `x-authorizer-user_id`, `x-authorizer-account_id`, `x-authorizer-scope`).
+  Use the field names your authorizer Lambda returns under `context: {...}`.
+- **Not forwarded**: API Gateway internals (`principalId`, `integrationLatency`,
+  `usageIdentifierKey`) are intentionally skipped — return your own identity
+  fields from the authorizer instead.
 - `"source-ip"` — API Gateway source IP
 
 ## SessionInjection
