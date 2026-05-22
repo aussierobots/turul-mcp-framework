@@ -857,7 +857,13 @@ impl SessionMcpHandler {
             protocol_version, session_id
         );
 
-        // Session ID is required for SSE
+        // Session ID is required for SSE.
+        // Per MCP 2025-11-25 § Session Management: missing Mcp-Session-Id → HTTP 400 Bad Request.
+        // Mirrors the streamable_http.rs POST pattern: build the JSON-RPC error body via the
+        // standard `JsonRpcError` helper, then wrap it in a 400 response. (The
+        // `jsonrpc_error_to_unified_body` helper hardcodes HTTP 200, which was non-spec here;
+        // we keep the JSON-RPC body shape but inline the response builder to set the correct
+        // status.)
         let session_id = match session_id {
             Some(id) => id,
             None => {
@@ -866,7 +872,12 @@ impl SessionMcpHandler {
                     None,
                     JsonRpcErrorObject::server_error(-32002, "Missing Mcp-Session-Id header", None),
                 );
-                return jsonrpc_error_to_unified_body(error);
+                let error_json = serde_json::to_string(&error).unwrap_or_else(|_| "{}".to_string());
+                return Ok(Response::builder()
+                    .status(StatusCode::BAD_REQUEST)
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(convert_to_unified_body(Full::new(Bytes::from(error_json))))
+                    .unwrap());
             }
         };
 

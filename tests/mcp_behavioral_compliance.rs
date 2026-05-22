@@ -806,7 +806,7 @@ async fn test_strict_lifecycle_rejects_tool_calls_before_initialized() {
 // The key evidence that streamable HTTP enforcement works:
 // 1. SessionAwareMcpHandlerBridge.handle() and handle_notification() both include lifecycle checks
 // 2. All requests (regular and streamable) go through the same dispatcher.register_handler() system
-// 3. The failing E2E tests in streamable_http_e2e.rs show 401 errors, proving enforcement is active
+// 3. The failing E2E tests in streamable_http_e2e.rs show 400 errors, proving enforcement is active
 // 4. Both test_strict_lifecycle_allows_after_initialized and test_strict_lifecycle_rejects_before_initialized
 //    demonstrate the lifecycle enforcement logic works correctly
 //
@@ -1152,7 +1152,7 @@ async fn test_sessionless_ping_notification_returns_202() {
 /// T3: Pre-init non-ping request rejected
 ///
 /// All methods other than `ping` require a valid Mcp-Session-Id header.
-/// Without one, the server should return 401.
+/// Without one, the server should return 400 per MCP 2025-11-25 § Session Management.
 #[tokio::test]
 async fn test_sessionless_non_ping_rejected() {
     let server_url = start_test_server_with_tools().await;
@@ -1176,8 +1176,8 @@ async fn test_sessionless_non_ping_rejected() {
 
     assert_eq!(
         response.status(),
-        401,
-        "Non-ping request without session should be rejected with 401"
+        400,
+        "Non-ping request without session should be rejected with 400 per MCP spec"
     );
 }
 
@@ -1218,7 +1218,8 @@ async fn test_post_init_ping_with_session_works() {
 /// T5: allow_unauthenticated_ping=false restores rejection
 ///
 /// When the config opt-out is set, sessionless ping should be rejected
-/// with 401, restoring the original strict behavior.
+/// with 400 (same missing-session contract as any other non-ping method),
+/// restoring strict behavior. Per MCP 2025-11-25 § Session Management.
 #[tokio::test]
 async fn test_unauthenticated_ping_disabled_rejects_sessionless_ping() {
     let server_url = start_test_server_no_unauthenticated_ping().await;
@@ -1241,8 +1242,8 @@ async fn test_unauthenticated_ping_disabled_rejects_sessionless_ping() {
 
     assert_eq!(
         response.status(),
-        401,
-        "Sessionless ping should be 401 when allow_unauthenticated_ping=false"
+        400,
+        "Sessionless ping should be 400 when allow_unauthenticated_ping=false per MCP spec"
     );
 }
 
@@ -1283,6 +1284,69 @@ async fn test_legacy_handler_sessionless_ping_works() {
     assert!(
         body["result"].is_object(),
         "Legacy ping should return empty result object"
+    );
+}
+
+/// Legacy handler GET SSE without session → 400 + JSON-RPC error envelope.
+///
+/// Regression guard for session_handler.rs GET SSE missing-session path.
+/// Previously returned HTTP 200 with a JSON-RPC error body (non-spec).
+/// Now returns HTTP 400 per MCP 2025-11-25 § Session Management while preserving
+/// the JSON-RPC 2.0 error envelope in the body. This test pins BOTH the HTTP
+/// status AND the body schema so a future refactor that swaps either dimension
+/// (e.g. back to `jsonrpc_error_to_unified_body` which hardcodes 200, or to an
+/// ad-hoc `{"error":{"code":400,...}}` body without the `jsonrpc` field) will
+/// fail immediately.
+#[tokio::test]
+async fn test_legacy_handler_get_sse_without_session_returns_400() {
+    let server_url = start_test_server_with_tools().await;
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get(&server_url)
+        .header("Accept", "text/event-stream")
+        .header("MCP-Protocol-Version", "2024-11-05")
+        .send()
+        .await
+        .unwrap();
+
+    // Wire-layer contract: HTTP 400 + application/json + JSON-RPC 2.0 envelope.
+    assert_eq!(
+        response.status(),
+        400,
+        "Legacy GET SSE without session should return HTTP 400 (was 200+JSON-RPC error)"
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or(""),
+        "application/json",
+        "Body should be JSON-encoded JSON-RPC error envelope"
+    );
+
+    let body: Value = response.json().await.unwrap();
+    assert_eq!(
+        body["jsonrpc"], "2.0",
+        "Body MUST be a JSON-RPC 2.0 envelope (preserves contract for MCP clients)"
+    );
+    assert!(
+        body["id"].is_null(),
+        "id MUST be null per JSON-RPC 2.0 §5 (request id was un-parseable: missing header is pre-dispatch)"
+    );
+    assert!(
+        body["error"].is_object(),
+        "envelope MUST have an `error` object"
+    );
+    assert_eq!(
+        body["error"]["code"], -32002,
+        "error.code locked at -32002 for missing-session on the legacy path"
+    );
+    let msg = body["error"]["message"].as_str().unwrap_or("");
+    assert!(
+        msg.contains("Missing Mcp-Session-Id"),
+        "error.message should explain the missing-header condition, got: {msg}"
     );
 }
 

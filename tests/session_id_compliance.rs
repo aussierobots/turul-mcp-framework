@@ -1,8 +1,12 @@
 //! Integration tests for MCP session ID compliance
 //!
 //! Verifies that:
-//! - Only `initialize` works without session ID
-//! - All other methods return 401 without session ID
+//! - Only `initialize` (and sessionless `ping` when allowed) work without session ID
+//! - All other methods return 400 Bad Request without session ID per MCP 2025-11-25
+//!   § Session Management ("Servers that require a session ID SHOULD respond ... with
+//!   HTTP 400 Bad Request")
+//! - Nonexistent or terminated session IDs return 404 (different code path)
+//! - 401 is reserved for auth-layer failures (missing/invalid bearer)
 //! - Session ID is properly passed through the handshake
 
 use serde_json::{Value, json};
@@ -52,11 +56,11 @@ async fn start_test_server() -> String {
 }
 
 #[tokio::test]
-async fn test_tools_list_without_session_returns_401() {
+async fn test_tools_list_without_session_returns_400() {
     let server_url = start_test_server().await;
     let client = reqwest::Client::new();
 
-    // Try tools/list WITHOUT session ID - should return 401
+    // Try tools/list WITHOUT session ID - should return 400 per MCP 2025-11-25
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
@@ -70,9 +74,12 @@ async fn test_tools_list_without_session_returns_401() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), 401);
-
+    // Wire-layer contract: HTTP 400 + JSON-RPC 2.0 envelope body.
+    // Pinning both dimensions so a future refactor cannot quietly drop the
+    // `jsonrpc: "2.0"` field or revert the status to 401/200 without failing here.
+    assert_eq!(response.status(), 400);
     let body: Value = response.json().await.unwrap();
+    assert_eq!(body["jsonrpc"], "2.0", "MUST be a JSON-RPC 2.0 envelope");
     assert_eq!(body["error"]["code"], -32001);
     assert!(
         body["error"]["message"]
@@ -83,11 +90,11 @@ async fn test_tools_list_without_session_returns_401() {
 }
 
 #[tokio::test]
-async fn test_resources_list_without_session_returns_401() {
+async fn test_resources_list_without_session_returns_400() {
     let server_url = start_test_server().await;
     let client = reqwest::Client::new();
 
-    // Try resources/list WITHOUT session ID - should return 401
+    // Try resources/list WITHOUT session ID - should return 400 per MCP 2025-11-25
     let response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
@@ -101,7 +108,7 @@ async fn test_resources_list_without_session_returns_401() {
         .await
         .unwrap();
 
-    assert_eq!(response.status(), 401);
+    assert_eq!(response.status(), 400);
 
     let body: Value = response.json().await.unwrap();
     assert_eq!(body["error"]["code"], -32001);
@@ -211,7 +218,7 @@ async fn test_discovery_methods_with_session_succeed() {
     // Should contain result, not error
     let body_text = tools_response.text().await.unwrap();
     // We don't check the exact result since it's streamed, just that we get a response
-    // The key test is that we get 200 OK instead of 401 Unauthorized
+    // The key test is that we get 200 OK instead of 400 Bad Request (missing session)
     assert!(!body_text.is_empty(), "Response should not be empty");
 }
 
@@ -220,7 +227,7 @@ async fn test_complete_session_flow() {
     let server_url = start_test_server().await;
     let client = reqwest::Client::new();
 
-    // Step 1: tools/list without session should fail with 401
+    // Step 1: tools/list without session should fail with 400
     let no_session_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
@@ -234,7 +241,7 @@ async fn test_complete_session_flow() {
         .await
         .unwrap();
 
-    assert_eq!(no_session_response.status(), 401);
+    assert_eq!(no_session_response.status(), 400);
 
     // Step 2: Initialize to get session
     let init_response = client
@@ -414,7 +421,7 @@ async fn test_mcp_inspector_flow_with_combined_accept_header() {
 }
 
 /// MCP 2025-11-25 spec: a fabricated/nonexistent session ID must return 404 Not Found,
-/// NOT 401 Unauthorized. 401 is reserved for auth failures; 404 tells the client
+/// NOT 400 (missing header) or 401 (auth failure). 404 tells the client
 /// to start a fresh initialize handshake.
 #[tokio::test]
 async fn test_nonexistent_session_returns_404() {
@@ -439,7 +446,7 @@ async fn test_nonexistent_session_returns_404() {
     assert_eq!(
         response.status(),
         404,
-        "Nonexistent session must return 404 per MCP spec, not 401"
+        "Nonexistent session must return 404 per MCP spec (not 400 missing-header, not 401 auth)"
     );
 }
 
@@ -493,7 +500,7 @@ async fn test_terminated_session_returns_404() {
         delete_response.status()
     );
 
-    // Step 3: Use the terminated session — must get 404, not 401
+    // Step 3: Use the terminated session — must get 404, not 400/401
     let stale_response = client
         .post(&server_url)
         .header("Content-Type", "application/json")
@@ -511,6 +518,6 @@ async fn test_terminated_session_returns_404() {
     assert_eq!(
         stale_response.status(),
         404,
-        "Terminated session must return 404 per MCP spec, not 401"
+        "Terminated session must return 404 per MCP spec (not 400 missing-header, not 401 auth)"
     );
 }

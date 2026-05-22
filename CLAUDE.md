@@ -209,12 +209,15 @@ async fn count_words(text: String) -> McpResult<WordCount> {
 - **Without `Last-Event-ID`**: Fresh GET SSE stream. Server MAY send notifications. Replay policy for stored events is a deployment decision, not explicitly prohibited or required by the spec.
 - Event IDs are per-stream cursors. "The server MUST NOT replay messages that would have been delivered on a different stream."
 
-**Session Status Codes (Streamable HTTP):**
-- Missing `Mcp-Session-Id` header → **401** (no session ID provided at all)
+**Session Status Codes (Streamable HTTP):** (per MCP 2025-11-25 § Session Management)
+- Missing `Mcp-Session-Id` header → **400** ("Servers that require a session ID SHOULD respond to requests without an MCP-Session-Id header (other than initialization) with HTTP 400 Bad Request"). Pre-init `ping` bypass: with `allow_unauthenticated_ping = true` (default) sessionless pings succeed; with `false`, the rejection also returns 400 (same missing-header contract).
 - Nonexistent session ID → **404** (MCP spec: client must start fresh `initialize`)
 - Terminated session ID → **404** (MCP spec: treated same as nonexistent)
 - Auth token invalid/expired → **401** (OAuth middleware, separate from session)
+- Insufficient OAuth scope → **403**
 - Storage backend error → **500**
+
+**Legacy `session_handler.rs` (protocol ≤ 2024-11-05) GET SSE** also returns 400 for missing `Mcp-Session-Id` for cross-transport consistency (previously returned HTTP 200 with a JSON-RPC error body — non-spec).
 
 **Testing:** All requests need valid Accept header (application/json, text/event-stream, or */*)
 
