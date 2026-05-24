@@ -31,8 +31,17 @@ pub const JSONRPC_VERSION: &str = "2.0";
 
 pub trait Params {}
 
+/// Required request id — present on requests and successful responses.
+/// Schema: `RequestId = string | number`; we expose as borrowed `Value` for
+/// permissive accept (the typed narrowing is a separate follow-up).
 pub trait HasRequestId {
-    fn id(&self) -> &turul_mcp_json_rpc_server::types::RequestId;
+    fn id(&self) -> &Value;
+}
+
+/// Optional request id — used by `JSONRPCErrorResponse` where the server may
+/// omit `id` if it couldn't parse the original request's id.
+pub trait HasOptionalRequestId {
+    fn id(&self) -> Option<&Value>;
 }
 
 pub trait HasResult {
@@ -53,18 +62,34 @@ pub trait HasParams {
     fn params(&self) -> Option<&dyn Params>;
 }
 
+/// Exposes the `_meta` field per the schema's `Result { _meta?: MetaObject }`
+/// and `Notification.params { _meta?: MetaObject }` shapes. Borrowed, typed —
+/// no JSON round-trip.
+pub trait HasMeta {
+    fn meta(&self) -> Option<&crate::meta::MetaObject>;
+}
+
+/// Exposes the `resultType` discriminator per the schema's
+/// `Result.resultType: ResultType` field. Every spec-compliant result MUST
+/// carry this; per the schema doc-comment, absent values default to `Complete`
+/// for backward compatibility with pre-DRAFT-2026-v1 servers.
+pub trait HasResultType {
+    fn result_type(&self) -> crate::result_type::ResultType;
+}
+
+/// Escape hatch — flatten a typed result into a JSON-object map. Not part of
+/// the [`RpcResult`] supertrait bound; consumers that need this should prefer
+/// `serde_json::to_value`. Retained for the rare framework site that needs an
+/// untyped view.
 pub trait HasData {
-    /// Returns an owned JSON‐object map of this value.
     fn data(&self) -> HashMap<String, Value>;
 }
 
-pub trait HasMeta {
-    /// Returns an owned JSON‐object map of this value.
-    fn meta(&self) -> Option<HashMap<String, Value>>;
-}
-
+/// Exposes the `error` field on a `JSONRPCErrorResponse`. The schema's
+/// `Error` interface maps to [`turul_rpc::error::JsonRpcErrorObject`]
+/// (`{ code, message, data? }`).
 pub trait HasErrorObject {
-    fn error(&self) -> &turul_mcp_json_rpc_server::error::JsonRpcErrorObject;
+    fn error(&self) -> &turul_rpc::error::JsonRpcErrorObject;
 }
 
 // ==========================
@@ -73,24 +98,38 @@ pub trait HasErrorObject {
 
 pub trait RpcRequest: HasMethod + HasParams {}
 pub trait RpcNotification: HasMethod + HasParams {}
-pub trait RpcResult: HasMeta + HasData {}
+/// Schema's `Result` interface: `{ _meta?: MetaObject, resultType: ResultType,
+/// [key: string]: unknown }`. Bound to [`HasMeta`] + [`HasResultType`] —
+/// arbitrary `[key: string]: unknown` extra keys are domain-specific and
+/// expressed on the concrete struct itself.
+pub trait RpcResult: HasMeta + HasResultType {}
 pub trait JsonRpcRequestTrait: HasJsonRpcVersion + HasRequestId + RpcRequest {}
 pub trait JsonRpcNotificationTrait: HasJsonRpcVersion + RpcNotification {}
 
-pub trait JsonRpcResponseTrait: HasJsonRpcVersion + HasRequestId + HasResult + Serialize {
+/// `JSONRPCResultResponse` per schema — successful response carrying `result`.
+pub trait JsonRpcResultResponseTrait:
+    HasJsonRpcVersion + HasRequestId + HasResult + Serialize
+{
     fn to_bytes(&self) -> Vec<u8> {
         serde_json::to_vec(self).unwrap()
     }
 }
 
-pub trait JsonRpcErrorTrait: HasJsonRpcVersion + HasRequestId + HasErrorObject {}
+/// `JSONRPCErrorResponse` per schema — error response with optional `id`.
+pub trait JsonRpcErrorResponseTrait:
+    HasJsonRpcVersion + HasOptionalRequestId + HasErrorObject + Serialize
+{
+    fn to_bytes(&self) -> Vec<u8> {
+        serde_json::to_vec(self).unwrap()
+    }
+}
 
 // ==========================
 // === Param Specialisations ===
 // ==========================
 
 pub trait HasRequestIdParam: Params {
-    fn request_id(&self) -> &turul_mcp_json_rpc_server::types::RequestId;
+    fn request_id(&self) -> &Value;
 }
 
 pub trait HasReasonParam: Params {
@@ -307,7 +346,10 @@ pub trait CreateMessageRequest: JsonRpcRequestTrait + HasCreateMessageRequestPar
     }
 }
 
-pub trait CreateMessageResult: RpcResult {
+/// `CreateMessageResult` — per schema `extends SamplingMessage`, NOT `Result`.
+/// Bound to [`HasMeta`] only (not [`RpcResult`]) because it has no
+/// `resultType` discriminator.
+pub trait CreateMessageResult: HasMeta {
     fn role(&self) -> &Role;
     fn content(&self) -> &SamplingMessageContent;
     fn model(&self) -> &String;
@@ -437,7 +479,7 @@ pub trait ParamExtractor<T: Params> {
     type Error;
 
     /// Extract parameters from RequestParams using trait-based conversion
-    fn extract(params: turul_mcp_json_rpc_server::RequestParams) -> Result<T, Self::Error>;
+    fn extract(params: turul_rpc::RequestParams) -> Result<T, Self::Error>;
 }
 
 /// Trait for serde-based parameter extraction (simpler cases)
@@ -445,7 +487,7 @@ pub trait SerdeParamExtractor<T: Params> {
     type Error;
 
     /// Extract parameters using serde deserialization
-    fn extract_serde(params: turul_mcp_json_rpc_server::RequestParams) -> Result<T, Self::Error>;
+    fn extract_serde(params: turul_rpc::RequestParams) -> Result<T, Self::Error>;
 }
 
 /// Trait for field-by-field parameter extraction (complex cases)
@@ -453,5 +495,5 @@ pub trait FieldParamExtractor<T: Params> {
     type Error;
 
     /// Extract parameters field by field with validation
-    fn extract_fields(params: turul_mcp_json_rpc_server::RequestParams) -> Result<T, Self::Error>;
+    fn extract_fields(params: turul_rpc::RequestParams) -> Result<T, Self::Error>;
 }

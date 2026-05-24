@@ -1,68 +1,77 @@
-//! JSON-RPC 2.0 envelopes for MCP DRAFT-2026-v1
+//! MCP-specific `params` and `result` shapes that layer on top of generic
+//! JSON-RPC 2.0 wire envelopes from `turul-rpc`.
 //!
-//! Provides the wire-level envelope types: `JsonRpcRequest`, `JsonRpcNotification`,
-//! `JsonRpcResponse`, `JsonRpcError`, `JsonRpcMessage` (untagged union).
+//! This module **does not redefine** `JsonRpcRequest`, `JsonRpcResponse`,
+//! `JsonRpcNotification`, `JsonRpcError`, `JsonRpcMessage`, or `RequestId` —
+//! those come from [`turul_rpc`] and are re-exported from the crate root.
+//! The schema's `JSONRPCResponse = JSONRPCResultResponse | JSONRPCErrorResponse`
+//! union is `turul_rpc::JsonRpcResponse`; the success-only variant is
+//! `turul_rpc::JsonRpcSuccessResponse`.
 //!
-//! Maps to the draft schema's JSON-RPC envelope section (`schema/draft-schema.ts`).
+//! What lives here is MCP layer:
+//! - [`RequestParams`] — required `_meta: RequestMetaObject` per DRAFT-2026-v1.
+//! - `NotificationParams` (in [`crate::notifications`]) — optional `_meta: MetaObject`.
+//! - [`PaginatedRequestParams`] — `RequestParams + cursor?`.
 //!
-//! ## Known divergences from strict schema
-//!
-//! - `JsonRpcRequest.id: Value` is permissive; schema declares `RequestId = string | number`.
-//! - `JsonRpcResponse` combines success/error into one struct with `Option<result>`/`Option<error>`;
-//!   schema declares separate `JSONRPCResultResponse` and `JSONRPCErrorResponse` joined by
-//!   the `JSONRPCResponse` union. The current shape produces correct wire output via
-//!   `skip_serializing_if = "Option::is_none"` but loses the schema's type-level guarantee
-//!   that exactly one of `result`/`error` is present.
-//! - `JsonRpcMessage` has an `Error` variant not in the schema union; harmless on the wire
-//!   (untagged enum), unused in dispatch.
-//! - `RequestParams._meta` is `Option<Meta>` (legacy 2025-11-25 shape); schema requires
-//!   `_meta: RequestMetaObject` on every request.
-//! - `Result.resultType` is not modeled on `ResultWithMeta` (the generic envelope);
-//!   typed result structs carry it directly.
+//! Typed result structs (`CallToolResult`, `ListToolsResult`, etc.) live in
+//! their domain modules and implement [`crate::traits::RpcResult`] directly —
+//! no generic envelope wrapper.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::meta::{MetaObject, ProgressToken, RequestMetaObject};
-use crate::traits::{
-    HasData, HasDataParam, HasMeta, HasMetaParam, HasProgressTokenParam, Params, RpcResult,
-};
+use crate::meta::{ProgressToken, RequestMetaObject};
+use crate::traits::{HasDataParam, HasMetaParam, HasProgressTokenParam, Params};
 
-/// JSON-RPC version constant
+/// JSON-RPC version constant. Mirrors `turul_rpc::JSONRPC_VERSION` for the
+/// few sites that still need a `&str` literal rather than the typed enum.
 pub const JSONRPC_VERSION: &str = "2.0";
 
-/// JSON-RPC `params` object with optional `_meta` and method-specific arguments
+/// JSON-RPC `params` object for any request — `_meta` is **required** per
+/// DRAFT-2026-v1 stateless core (carries `protocolVersion`, `clientInfo`,
+/// `clientCapabilities` for per-request negotiation).
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RequestParams {
     /// Schema-typed `_meta` per `RequestMetaObject`. Required fields like
     /// `io.modelcontextprotocol/protocolVersion`, `clientInfo`, and
     /// `clientCapabilities` live as named fields on the typed struct.
-    #[serde(default, skip_serializing_if = "Option::is_none", alias = "_meta")]
-    pub meta: Option<RequestMetaObject>,
+    #[serde(rename = "_meta")]
+    pub meta: RequestMetaObject,
 
     /// All other method-specific parameters
     #[serde(flatten)]
     pub other: HashMap<String, Value>,
 }
 
-impl Params for RequestParams {}
+impl RequestParams {
+    /// Construct with the required `_meta`. Extra parameters start empty.
+    pub fn new(meta: RequestMetaObject) -> Self {
+        Self {
+            meta,
+            other: HashMap::new(),
+        }
+    }
 
-impl HasMeta for RequestParams {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        // Surface the typed RequestMetaObject as a loose map for trait consumers.
-        self.meta.as_ref().and_then(|m| {
-            serde_json::to_value(m)
-                .ok()
-                .and_then(|v| v.as_object().map(|o| o.clone().into_iter().collect()))
-        })
+    /// Insert a method-specific parameter key.
+    pub fn with(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
+        self.other.insert(key.into(), value.into());
+        self
     }
 }
 
+impl Params for RequestParams {}
+
+// `HasMeta` (returns `Option<&MetaObject>` — the loose `_meta?: MetaObject`
+// shape used by Result and NotificationParams) intentionally NOT implemented
+// for `RequestParams`. The schema's `RequestParams._meta: RequestMetaObject`
+// is typed and REQUIRED — `request.meta` is the direct accessor; `HasMetaParam`
+// exposes the namespaced `extra` keys for loose consumers.
+
 impl HasProgressTokenParam for RequestParams {
     fn progress_token(&self) -> Option<&ProgressToken> {
-        self.meta.as_ref()?.progress_token.as_ref()
+        self.meta.progress_token.as_ref()
     }
 }
 
@@ -72,12 +81,17 @@ impl HasDataParam for RequestParams {
     }
 }
 
+// `NotificationParams` lives in `crate::notifications` (it predates this slice
+// and has the same wire shape: `{ _meta?: MetaObject, [rest] }`). Framework
+// trait impls are co-located with the struct there.
+
 /// `params` shape for any request that extends `PaginatedRequest` —
 /// `PaginatedRequestParams extends RequestParams { cursor?: Cursor }`.
 ///
 /// Used directly by `ListResourcesRequest`, `ListResourceTemplatesRequest`,
 /// `ListPromptsRequest`, `ListToolsRequest` — one struct, one wire shape.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// `_meta` is **required** (inherited from `RequestParams`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaginatedRequestParams {
     /// Opaque pagination cursor — server returns results after this point.
@@ -85,14 +99,15 @@ pub struct PaginatedRequestParams {
     pub cursor: Option<crate::meta::Cursor>,
 
     /// Schema-typed `_meta` per `RequestMetaObject` (inherited via
-    /// `PaginatedRequestParams extends RequestParams`).
-    #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
-    pub meta: Option<RequestMetaObject>,
+    /// `PaginatedRequestParams extends RequestParams`). Required.
+    #[serde(rename = "_meta")]
+    pub meta: RequestMetaObject,
 }
 
 impl PaginatedRequestParams {
-    pub fn new() -> Self {
-        Self::default()
+    /// Construct with the required `_meta`. No cursor by default.
+    pub fn new(meta: RequestMetaObject) -> Self {
+        Self { cursor: None, meta }
     }
 
     pub fn with_cursor(mut self, cursor: crate::meta::Cursor) -> Self {
@@ -101,7 +116,7 @@ impl PaginatedRequestParams {
     }
 
     pub fn with_meta(mut self, meta: RequestMetaObject) -> Self {
-        self.meta = Some(meta);
+        self.meta = meta;
         self
     }
 }
@@ -113,7 +128,7 @@ impl HasMetaParam for PaginatedRequestParams {
         // Surface only the namespaced `extra` keys from `RequestMetaObject`.
         // Structured spec fields (protocolVersion, clientInfo, clientCapabilities,
         // progressToken, logLevel) are accessed via `self.meta` directly.
-        self.meta.as_ref().map(|m| &m.extra)
+        Some(&self.meta.extra)
     }
 }
 
@@ -123,201 +138,18 @@ impl HasMetaParam for RequestParams {
         // The structured spec fields (protocolVersion, clientInfo, clientCapabilities,
         // progressToken, logLevel) aren't reachable via this loose trait — callers
         // that need them must access `self.meta` directly.
-        self.meta.as_ref().map(|m| &m.extra)
+        Some(&self.meta.extra)
     }
 }
 
-/// Generic result envelope. Every `Result` extends `{_meta?: MetaObject}` —
-/// loose key-value, namespaced per schema.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResultWithMeta {
-    /// The result data
-    #[serde(flatten)]
-    pub data: HashMap<String, Value>,
-
-    /// Optional `_meta` — loose `MetaObject` per schema.
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<MetaObject>,
-}
-
-impl ResultWithMeta {
-    pub fn new(data: HashMap<String, Value>) -> Self {
-        Self { data, meta: None }
-    }
-
-    pub fn with_meta(mut self, meta: MetaObject) -> Self {
-        self.meta = Some(meta);
-        self
-    }
-
-    pub fn from_value(value: Value) -> Self {
-        match value {
-            Value::Object(map) => Self {
-                data: map.into_iter().collect(),
-                meta: None,
-            },
-            _ => Self {
-                data: HashMap::new(),
-                meta: None,
-            },
-        }
-    }
-}
-
-impl HasData for ResultWithMeta {
-    fn data(&self) -> HashMap<String, Value> {
-        self.data.clone()
-    }
-}
-
-impl HasMeta for ResultWithMeta {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
-    }
-}
-
-impl RpcResult for ResultWithMeta {}
-
-/// A standard JSON-RPC 2.0 request
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JsonRpcRequest {
-    pub jsonrpc: String,
-    pub id: Value,
-    pub method: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub params: Option<RequestParams>,
-}
-
-impl JsonRpcRequest {
-    pub fn new(id: Value, method: String) -> Self {
-        Self {
-            jsonrpc: JSONRPC_VERSION.to_string(),
-            id,
-            method,
-            params: None,
-        }
-    }
-
-    pub fn with_params(mut self, params: RequestParams) -> Self {
-        self.params = Some(params);
-        self
-    }
-}
-
-/// A standard JSON-RPC 2.0 response
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JsonRpcResponse {
-    pub jsonrpc: String,
-    pub id: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<ResultWithMeta>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<JsonRpcError>,
-}
-
-impl JsonRpcResponse {
-    pub fn success(id: Value, result: ResultWithMeta) -> Self {
-        Self {
-            jsonrpc: JSONRPC_VERSION.to_string(),
-            id,
-            result: Some(result),
-            error: None,
-        }
-    }
-
-    pub fn error(id: Value, error: JsonRpcError) -> Self {
-        Self {
-            jsonrpc: JSONRPC_VERSION.to_string(),
-            id,
-            result: None,
-            error: Some(error),
-        }
-    }
-}
-
-/// JSON-RPC 2.0 error object.
-///
-/// See [JSON-RPC 2.0 Error Object](https://www.jsonrpc.org/specification#error_object).
-/// The MCP schema's `ParseError`, `InvalidRequestError`, `MethodNotFoundError`,
-/// `InvalidParamsError`, and `InternalError` interfaces all share this shape;
-/// the factories below mint each with the canonical error code.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JsonRpcError {
-    pub code: i32,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
-}
-
-impl JsonRpcError {
-    pub fn new(code: i32, message: String) -> Self {
-        Self {
-            code,
-            message,
-            data: None,
-        }
-    }
-
-    pub fn with_data(mut self, data: Value) -> Self {
-        self.data = Some(data);
-        self
-    }
-
-    // Standard JSON-RPC error codes
-    pub fn parse_error() -> Self {
-        Self::new(-32700, "Parse error".to_string())
-    }
-
-    pub fn invalid_request() -> Self {
-        Self::new(-32600, "Invalid Request".to_string())
-    }
-
-    pub fn method_not_found() -> Self {
-        Self::new(-32601, "Method not found".to_string())
-    }
-
-    pub fn invalid_params() -> Self {
-        Self::new(-32602, "Invalid params".to_string())
-    }
-
-    pub fn internal_error() -> Self {
-        Self::new(-32603, "Internal error".to_string())
-    }
-}
-
-/// A JSON-RPC 2.0 notification (no response expected)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JsonRpcNotification {
-    pub jsonrpc: String,
-    pub method: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub params: Option<RequestParams>,
-}
-
-impl JsonRpcNotification {
-    pub fn new(method: String) -> Self {
-        Self {
-            jsonrpc: JSONRPC_VERSION.to_string(),
-            method,
-            params: None,
-        }
-    }
-
-    pub fn with_params(mut self, params: RequestParams) -> Self {
-        self.params = Some(params);
-        self
-    }
-}
-
-/// Unified JSON-RPC message type
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum JsonRpcMessage {
-    Request(JsonRpcRequest),
-    Response(JsonRpcResponse),
-    Notification(JsonRpcNotification),
-    Error(JsonRpcError),
-}
+// Wire-envelope types (`JsonRpcRequest`, `JsonRpcResponse` (the union),
+// `JsonRpcSuccessResponse`, `JsonRpcNotification`, `JsonRpcError`,
+// `JsonRpcMessage`, `RequestId`, `JsonRpcVersion`) come from `turul-rpc` and
+// are re-exported from the crate root. The MCP types above (`RequestParams`,
+// `NotificationParams`, `PaginatedRequestParams`) are what goes *inside* the
+// envelope's `params` field per the schema's `Request.params: { [key: string]:
+// any }`. Typed results (`CallToolResult`, `ListToolsResult`, etc.) go inside
+// `result` directly — no generic envelope wrapper.
 
 #[cfg(test)]
 mod tests {
@@ -339,7 +171,7 @@ mod tests {
         .with_extra("sessionId", json!("s-123"));
 
         let params = RequestParams {
-            meta: Some(meta),
+            meta,
             other: {
                 let mut map = HashMap::new();
                 map.insert("name".to_string(), json!("test"));
@@ -360,39 +192,25 @@ mod tests {
         assert!(json_str.contains("name"));
 
         let parsed: RequestParams = serde_json::from_str(&json_str).unwrap();
-        assert!(parsed.meta.is_some());
         assert_eq!(
             parsed
                 .meta
-                .as_ref()
-                .unwrap()
                 .progress_token
                 .as_ref()
                 .unwrap()
                 .as_str(),
             "test-token"
         );
-        assert_eq!(parsed.meta.as_ref().unwrap().protocol_version, "DRAFT-2026-v1");
+        assert_eq!(parsed.meta.protocol_version, "DRAFT-2026-v1");
     }
 
     #[test]
-    fn test_result_with_meta() {
-        let mut data = HashMap::new();
-        data.insert("result".to_string(), json!("success"));
-
-        let mut meta = HashMap::new();
-        meta.insert("total".to_string(), json!(42));
-
-        let result = ResultWithMeta::new(data).with_meta(meta);
-
-        // Test traits
-        assert!(result.data().contains_key("result"));
-        assert!(result.meta().unwrap().contains_key("total"));
-
-        // Test serialization
-        let json_str = serde_json::to_string(&result).unwrap();
-        assert!(json_str.contains("result"));
-        assert!(json_str.contains("_meta"));
-        assert!(json_str.contains("total"));
+    fn test_request_params_rejects_missing_meta() {
+        // Spec compliance: `_meta` is REQUIRED on every request per DRAFT-2026-v1.
+        // Wire shape without `_meta` MUST fail to deserialize.
+        let wire_without_meta = json!({"name": "test"});
+        let r: Result<RequestParams, _> = serde_json::from_value(wire_without_meta);
+        assert!(r.is_err(), "RequestParams without _meta must reject");
     }
+
 }

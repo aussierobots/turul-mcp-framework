@@ -48,7 +48,7 @@ impl Default for EmptyResult {
 }
 
 // Trait implementations for EmptyResult
-use crate::traits::{HasData, HasMeta, RpcResult};
+use crate::traits::{HasData, HasMeta, HasResultType, RpcResult};
 
 impl HasData for EmptyResult {
     fn data(&self) -> HashMap<String, Value> {
@@ -57,8 +57,14 @@ impl HasData for EmptyResult {
 }
 
 impl HasMeta for EmptyResult {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
+    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+        self.meta.as_ref()
+    }
+}
+
+impl HasResultType for EmptyResult {
+    fn result_type(&self) -> crate::result_type::ResultType {
+        self.result_type
     }
 }
 

@@ -5,6 +5,7 @@ members = [
   "crates/turul-mcp-json-rpc-server",
   "crates/turul-mcp-protocol-2025-06-18",
   "crates/turul-mcp-protocol-2025-11-25",
+  "crates/turul-mcp-protocol-2026-07-28",
   "crates/turul-mcp-protocol",
   "crates/turul-mcp-session-storage",
   "crates/turul-mcp-task-storage",
@@ -110,7 +111,12 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.3.47"
+# Per per-crate-independent-versioning policy (see CLAUDE.md/AGENTS.md "Crate
+# Versioning Policy"), individual crates carry their own literal `version = "..."`
+# declarations and do NOT inherit from this field. The value here is a default
+# for tooling that still references `[workspace.package].version` (e.g. some
+# IDE plugins); it does not flow into any published crate.
+version = "0.4.0"
 edition = "2024"
 authors = ["Nick Hortovanyi <nick@aussierobots.com.au>"]
 license = "MIT OR Apache-2.0"
@@ -146,23 +152,30 @@ http-body = "1"
 bytes = "1"
 
 # turul-rpc — generic JSON-RPC 2.0 framework, upstream of turul-mcp-json-rpc-server.
-turul-rpc = { version = "0.1", default-features = false }
+# `async` feature enables `r#async::ToJsonRpcError` (used by our McpError impl).
+turul-rpc = { version = "0.2.1", default-features = false, features = ["async"] }
 
-# Internal crate dependencies
-turul-mcp-json-rpc-server = { version = "0.3.47", path = "crates/turul-mcp-json-rpc-server" }
+# Internal crate dependencies.
+# Per-crate independent versioning: each crate publishes at its own semver
+# (see CLAUDE.md/AGENTS.md "Crate Versioning Policy"). The version pinned
+# here is what consumers of this workspace see for path+version resolution.
+# Frozen historical protocol crates (`2025-06-18`, `2025-11-25`) stay at
+# their last 0.3.x publish — everything else moves on its own cadence.
+turul-mcp-json-rpc-server = { version = "0.4.0", path = "crates/turul-mcp-json-rpc-server" }
 turul-mcp-protocol-2025-06-18 = { version = "0.3.47", path = "crates/turul-mcp-protocol-2025-06-18" }
 turul-mcp-protocol-2025-11-25 = { version = "0.3.47", path = "crates/turul-mcp-protocol-2025-11-25" }
-turul-mcp-protocol = { version = "0.3.47", path = "crates/turul-mcp-protocol" }
-turul-mcp-session-storage = { version = "0.3.47", path = "crates/turul-mcp-session-storage" }
-turul-mcp-task-storage = { version = "0.3.47", path = "crates/turul-mcp-task-storage" }
-turul-mcp-server-state-storage = { version = "0.3.47", path = "crates/turul-mcp-server-state-storage" }
-turul-http-mcp-server = { version = "0.3.47", path = "crates/turul-http-mcp-server" }
-turul-mcp-server = { version = "0.3.47", path = "crates/turul-mcp-server" }
-turul-mcp-derive = { version = "0.3.47", path = "crates/turul-mcp-derive" }
-turul-mcp-client = { version = "0.3.47", path = "crates/turul-mcp-client" }
-turul-mcp-builders = { version = "0.3.47", path = "crates/turul-mcp-builders" }
-turul-mcp-aws-lambda = { version = "0.3.47", path = "crates/turul-mcp-aws-lambda" }
-turul-mcp-oauth = { version = "0.3.47", path = "crates/turul-mcp-oauth" }
+turul-mcp-protocol-2026-07-28 = { version = "0.4.0", path = "crates/turul-mcp-protocol-2026-07-28" }
+turul-mcp-protocol = { version = "0.4.0", path = "crates/turul-mcp-protocol" }
+turul-mcp-session-storage = { version = "0.4.0", path = "crates/turul-mcp-session-storage" }
+turul-mcp-task-storage = { version = "0.4.0", path = "crates/turul-mcp-task-storage" }
+turul-mcp-server-state-storage = { version = "0.4.0", path = "crates/turul-mcp-server-state-storage" }
+turul-http-mcp-server = { version = "0.4.0", path = "crates/turul-http-mcp-server" }
+turul-mcp-server = { version = "0.4.0", path = "crates/turul-mcp-server" }
+turul-mcp-derive = { version = "0.4.0", path = "crates/turul-mcp-derive" }
+turul-mcp-client = { version = "0.4.0", path = "crates/turul-mcp-client" }
+turul-mcp-builders = { version = "0.4.0", path = "crates/turul-mcp-builders" }
+turul-mcp-aws-lambda = { version = "0.4.0", path = "crates/turul-mcp-aws-lambda" }
+turul-mcp-oauth = { version = "0.4.0", path = "crates/turul-mcp-oauth" }
 
 # Additional dependencies for examples and tests
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

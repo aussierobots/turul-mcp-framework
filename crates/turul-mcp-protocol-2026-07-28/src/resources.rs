@@ -180,17 +180,12 @@ pub struct ListResourcesRequest {
     pub params: crate::json_rpc::PaginatedRequestParams,
 }
 
-impl Default for ListResourcesRequest {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ListResourcesRequest {
-    pub fn new() -> Self {
+    /// Construct with the required `_meta`.
+    pub fn new(meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "resources/list".to_string(),
-            params: crate::json_rpc::PaginatedRequestParams::new(),
+            params: crate::json_rpc::PaginatedRequestParams::new(meta),
         }
     }
 
@@ -454,17 +449,12 @@ pub struct ListResourceTemplatesRequest {
     pub params: crate::json_rpc::PaginatedRequestParams,
 }
 
-impl Default for ListResourceTemplatesRequest {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ListResourceTemplatesRequest {
-    pub fn new() -> Self {
+    /// Construct with the required `_meta`.
+    pub fn new(meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "resources/templates/list".to_string(),
-            params: crate::json_rpc::PaginatedRequestParams::new(),
+            params: crate::json_rpc::PaginatedRequestParams::new(meta),
         }
     }
 
@@ -601,8 +591,14 @@ impl HasData for ReadResourceResult {
 }
 
 impl HasMeta for ReadResourceResult {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
+    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+        self.meta.as_ref()
+    }
+}
+
+impl crate::traits::HasResultType for ReadResourceResult {
+    fn result_type(&self) -> crate::result_type::ResultType {
+        self.result_type
     }
 }
 
@@ -665,8 +661,14 @@ impl HasData for ListResourceTemplatesResult {
 }
 
 impl HasMeta for ListResourceTemplatesResult {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
+    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+        self.meta.as_ref()
+    }
+}
+
+impl crate::traits::HasResultType for ListResourceTemplatesResult {
+    fn result_type(&self) -> crate::result_type::ResultType {
+        self.result_type
     }
 }
 
@@ -701,12 +703,17 @@ impl HasData for ListResourcesResult {
 }
 
 impl HasMeta for ListResourcesResult {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
+    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+        self.meta.as_ref()
     }
 }
 
-// RpcResult automatically implemented via blanket impl (HasMeta + HasData)
+impl crate::traits::HasResultType for ListResourcesResult {
+    fn result_type(&self) -> crate::result_type::ResultType {
+        self.result_type
+    }
+}
+
 impl crate::traits::RpcResult for ListResourcesResult {}
 
 impl crate::traits::ListResourcesResult for ListResourcesResult {
@@ -778,7 +785,12 @@ mod tests {
 
     #[test]
     fn test_trait_implementations() {
-        let request = ListResourcesRequest::new();
+        let meta = crate::meta::RequestMetaObject::new(
+            "DRAFT-2026-v1",
+            crate::initialize::Implementation::new("test", "1.0.0"),
+            crate::initialize::ClientCapabilities::default(),
+        );
+        let request = ListResourcesRequest::new(meta);
         assert!(request.params.cursor.is_none());
 
         let resources = vec![Resource::new("test://resource", "Test Resource")];

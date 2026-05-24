@@ -503,12 +503,15 @@ impl HasData for CreateMessageResult {
 }
 
 impl HasMeta for CreateMessageResult {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
+    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+        self.meta.as_ref()
     }
 }
 
-impl RpcResult for CreateMessageResult {}
+// `CreateMessageResult` does NOT implement `RpcResult` — per the schema it
+// `extends SamplingMessage` (not `Result`), so it has no `resultType`
+// discriminator and the `RpcResult: HasMeta + HasResultType` bound doesn't fit.
+// See `crate::traits::RpcResult` for the contract.
 
 impl crate::traits::CreateMessageResult for CreateMessageResult {
     fn role(&self) -> &Role {

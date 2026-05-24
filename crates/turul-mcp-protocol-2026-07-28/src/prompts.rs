@@ -165,17 +165,13 @@ pub struct ListPromptsRequest {
     pub params: crate::json_rpc::PaginatedRequestParams,
 }
 
-impl Default for ListPromptsRequest {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ListPromptsRequest {
-    pub fn new() -> Self {
+    /// Construct with the required `_meta` (per-request capability negotiation
+    /// is mandatory in DRAFT-2026-v1 stateless core).
+    pub fn new(meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "prompts/list".to_string(),
-            params: crate::json_rpc::PaginatedRequestParams::new(),
+            params: crate::json_rpc::PaginatedRequestParams::new(meta),
         }
     }
 
@@ -480,8 +476,14 @@ impl HasData for ListPromptsResult {
 }
 
 impl HasMeta for ListPromptsResult {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
+    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+        self.meta.as_ref()
+    }
+}
+
+impl HasResultType for ListPromptsResult {
+    fn result_type(&self) -> crate::result_type::ResultType {
+        self.result_type
     }
 }
 
@@ -548,8 +550,14 @@ impl HasData for GetPromptResult {
 }
 
 impl HasMeta for GetPromptResult {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
+    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+        self.meta.as_ref()
+    }
+}
+
+impl HasResultType for GetPromptResult {
+    fn result_type(&self) -> crate::result_type::ResultType {
+        self.result_type
     }
 }
 

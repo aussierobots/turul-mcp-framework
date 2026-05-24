@@ -269,17 +269,12 @@ pub struct ListToolsRequest {
     pub params: crate::json_rpc::PaginatedRequestParams,
 }
 
-impl Default for ListToolsRequest {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ListToolsRequest {
-    pub fn new() -> Self {
+    /// Construct with the required `_meta`.
+    pub fn new(meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "tools/list".to_string(),
-            params: crate::json_rpc::PaginatedRequestParams::new(),
+            params: crate::json_rpc::PaginatedRequestParams::new(meta),
         }
     }
 
@@ -679,8 +674,14 @@ impl HasData for CallToolResult {
 }
 
 impl HasMeta for CallToolResult {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
+    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+        self.meta.as_ref()
+    }
+}
+
+impl HasResultType for CallToolResult {
+    fn result_type(&self) -> crate::result_type::ResultType {
+        self.result_type
     }
 }
 
@@ -741,8 +742,14 @@ impl HasData for ListToolsResult {
 }
 
 impl HasMeta for ListToolsResult {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
+    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+        self.meta.as_ref()
+    }
+}
+
+impl HasResultType for ListToolsResult {
+    fn result_type(&self) -> crate::result_type::ResultType {
+        self.result_type
     }
 }
 

@@ -48,8 +48,8 @@ pub use crate::McpVersion;
 pub use crate::icons::Icon;
 pub use crate::initialize::{ClientCapabilities, Implementation};
 
-// Common types
-pub use crate::json_rpc::{JsonRpcNotification, JsonRpcRequest, JsonRpcResponse};
+// Common types — wire envelopes come from `turul-rpc` (re-exported at crate root).
+pub use crate::{JsonRpcNotification, JsonRpcRequest, JsonRpcResponse};
 pub use crate::meta::{Annotations, Cursor};
 pub use crate::{McpError, McpResult};
 

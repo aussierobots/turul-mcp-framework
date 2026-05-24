@@ -8,7 +8,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use crate::logging::LoggingLevel;
-use turul_mcp_json_rpc_server::types::RequestId;
+use turul_rpc::RequestId;
 
 /// Base notification parameters that can include _meta
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,6 +44,22 @@ impl NotificationParams {
     pub fn with_param(mut self, key: impl Into<String>, value: Value) -> Self {
         self.other.insert(key.into(), value);
         self
+    }
+}
+
+// `Params` and `HasMetaParam` impls live at the bottom of this file alongside
+// the rest of the notifications trait impls. Adding the `HasMeta` and
+// `HasDataParam` impls (which the json_rpc layer needs) here for visibility
+// with the struct definition.
+impl crate::traits::HasMeta for NotificationParams {
+    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+        self.meta.as_ref()
+    }
+}
+
+impl crate::traits::HasDataParam for NotificationParams {
+    fn data(&self) -> &HashMap<String, Value> {
+        &self.other
     }
 }
 
@@ -534,7 +550,7 @@ mod tests {
 
     #[test]
     fn test_cancelled_notification() {
-        use turul_mcp_json_rpc_server::types::RequestId;
+        use turul_rpc::RequestId;
         let notification =
             CancelledNotification::new(RequestId::Number(123)).with_reason("User cancelled");
 

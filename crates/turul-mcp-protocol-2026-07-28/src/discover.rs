@@ -10,8 +10,6 @@
 //!
 //! [`RequestMetaObject`]: crate::meta::RequestMetaObject
 
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -42,16 +40,12 @@ pub struct DiscoverRequest {
 }
 
 impl DiscoverRequest {
-    /// Construct an empty discover request. Caller is expected to attach
-    /// `params._meta` with a [`RequestMetaObject`](crate::meta::RequestMetaObject)
-    /// for spec-strict per-request capability negotiation.
-    pub fn new() -> Self {
+    /// Construct a discover request with the required `_meta` (per-request
+    /// capability negotiation, mandatory in DRAFT-2026-v1 stateless core).
+    pub fn new(meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: SERVER_DISCOVER_METHOD.to_string(),
-            params: crate::json_rpc::RequestParams {
-                meta: None,
-                other: HashMap::new(),
-            },
+            params: crate::json_rpc::RequestParams::new(meta),
         }
     }
 
@@ -59,12 +53,6 @@ impl DiscoverRequest {
     pub fn with_params(mut self, params: crate::json_rpc::RequestParams) -> Self {
         self.params = params;
         self
-    }
-}
-
-impl Default for DiscoverRequest {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -170,11 +158,19 @@ mod tests {
         ServerCapabilities::default()
     }
 
+    fn fixture_meta() -> crate::meta::RequestMetaObject {
+        crate::meta::RequestMetaObject::new(
+            "DRAFT-2026-v1",
+            Implementation::new("test-client", "1.0.0"),
+            ClientCapabilities::default(),
+        )
+    }
+
     // --- DiscoverRequest ---
 
     #[test]
     fn discover_request_method_is_server_discover() {
-        let r = DiscoverRequest::new();
+        let r = DiscoverRequest::new(fixture_meta());
         assert_eq!(r.method, "server/discover");
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["method"], "server/discover");
@@ -187,7 +183,7 @@ mod tests {
 
     #[test]
     fn discover_request_has_params_object() {
-        let r = DiscoverRequest::new();
+        let r = DiscoverRequest::new(fixture_meta());
         let v = serde_json::to_value(&r).unwrap();
         assert!(v["params"].is_object(), "params must be present per DiscoverRequest schema");
     }

@@ -296,8 +296,14 @@ impl HasData for CompleteResult {
 }
 
 impl HasMeta for CompleteResult {
-    fn meta(&self) -> Option<HashMap<String, Value>> {
-        self.meta.clone()
+    fn meta(&self) -> Option<&crate::meta::MetaObject> {
+        self.meta.as_ref()
+    }
+}
+
+impl HasResultType for CompleteResult {
+    fn result_type(&self) -> crate::result_type::ResultType {
+        self.result_type
     }
 }
 

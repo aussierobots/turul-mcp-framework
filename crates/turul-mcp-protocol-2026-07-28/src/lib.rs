@@ -144,9 +144,10 @@ pub use elicitation::{
     ElicitAction, ElicitRequestFormParams, ElicitRequest, ElicitResult, ElicitationBuilder,
     ElicitationSchema, PrimitiveSchemaDefinition, StringFormat,
 };
+// MCP-specific params/result shapes (what goes inside the wire envelope's
+// `params`/`result` fields). Envelopes themselves come from `turul-rpc` below.
 pub use json_rpc::{
-    JsonRpcError, JsonRpcMessage, JsonRpcNotification, JsonRpcRequest, JsonRpcResponse,
-    RequestParams, ResultWithMeta,
+    PaginatedRequestParams, RequestParams, JSONRPC_VERSION,
 };
 pub use caching::{CacheScope, CacheableResult};
 pub use headers::{
@@ -180,14 +181,22 @@ pub use notifications::{
 pub use ping::{EmptyParams, EmptyResult};
 pub use schema::JsonSchema;
 pub use traits::{
-    HasData, HasDataParam, HasMeta, HasMetaParam, HasProgressTokenParam, JsonRpcNotificationTrait,
-    JsonRpcRequestTrait, JsonRpcResponseTrait, Params, RpcResult,
+    HasData, HasDataParam, HasErrorObject, HasMeta, HasMetaParam, HasOptionalRequestId,
+    HasProgressTokenParam, HasRequestId, HasResultType, JsonRpcErrorResponseTrait,
+    JsonRpcNotificationTrait, JsonRpcRequestTrait, JsonRpcResultResponseTrait, Params, RpcResult,
 };
 
-// JSON-RPC foundation (legacy - prefer our implementations above)
-pub use turul_mcp_json_rpc_server::{
-    RequestParams as LegacyRequestParams, ResponseResult, types::RequestId,
+// JSON-RPC wire envelopes come from `turul-rpc` (0.2 schema-compliant types).
+// We rename `turul_rpc::RequestParams` (the JSON-RPC envelope's `params` value:
+// `Object | Array`) to `JsonRpcParams` so it doesn't collide with the MCP
+// `RequestParams` interface (which is the named-properties shape that goes
+// inside the `Object` variant).
+pub use turul_rpc::{
+    JsonRpcError, JsonRpcErrorCode, JsonRpcMessage, JsonRpcNotification, JsonRpcRequest,
+    JsonRpcResponse, JsonRpcSuccessResponse, JsonRpcVersion, RequestId, ResponseResult,
+    error::JsonRpcErrorObject,
 };
+pub use turul_rpc::RequestParams as JsonRpcParams;
 
 /// The MCP protocol version string this crate currently targets, exactly as it appears
 /// on the wire in `LATEST_PROTOCOL_VERSION` of the upstream draft `schema.ts`.
@@ -398,8 +407,8 @@ impl McpError {
     }
 
     /// Convert to a JsonRpcErrorObject for JSON-RPC 2.0 responses
-    pub fn to_error_object(&self) -> turul_mcp_json_rpc_server::error::JsonRpcErrorObject {
-        use turul_mcp_json_rpc_server::error::JsonRpcErrorObject;
+    pub fn to_error_object(&self) -> turul_rpc::error::JsonRpcErrorObject {
+        use turul_rpc::error::JsonRpcErrorObject;
 
         match self {
             // Request-level errors map to InvalidParams (-32602) with descriptive message
@@ -543,21 +552,21 @@ impl McpError {
     /// Create a JSON-RPC error response for this MCP error
     pub fn to_json_rpc_response(
         &self,
-        id: Option<turul_mcp_json_rpc_server::RequestId>,
-    ) -> turul_mcp_json_rpc_server::JsonRpcError {
-        turul_mcp_json_rpc_server::JsonRpcError::new(id, self.to_error_object())
+        id: Option<turul_rpc::RequestId>,
+    ) -> turul_rpc::JsonRpcError {
+        turul_rpc::JsonRpcError::new(id, self.to_error_object())
     }
 
     /// Legacy method for backward compatibility - use to_error_object() instead
     #[deprecated(note = "Use to_error_object() instead for cleaner architecture")]
-    pub fn to_json_rpc_error(&self) -> turul_mcp_json_rpc_server::error::JsonRpcErrorObject {
+    pub fn to_json_rpc_error(&self) -> turul_rpc::error::JsonRpcErrorObject {
         self.to_error_object()
     }
 }
 
 // Implement the ToJsonRpcError trait for MCP errors
-impl turul_mcp_json_rpc_server::r#async::ToJsonRpcError for McpError {
-    fn to_error_object(&self) -> turul_mcp_json_rpc_server::error::JsonRpcErrorObject {
+impl turul_rpc::r#async::ToJsonRpcError for McpError {
+    fn to_error_object(&self) -> turul_rpc::error::JsonRpcErrorObject {
         // Delegate to our existing type-safe implementation
         McpError::to_error_object(self)
     }
