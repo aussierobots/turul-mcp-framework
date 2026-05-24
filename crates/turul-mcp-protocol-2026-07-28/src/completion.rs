@@ -69,18 +69,25 @@ pub struct CompleteRequestParams {
     /// Optional context
     #[serde(skip_serializing_if = "Option::is_none")]
     pub context: Option<CompletionContext>,
-    /// Schema-typed `_meta` per `RequestMetaObject`.
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<crate::meta::RequestMetaObject>,
+    /// Schema-typed `_meta` per `RequestMetaObject`. Required per schema
+    /// (`CompleteRequestParams extends RequestParams`, and `RequestParams._meta`
+    /// is required in DRAFT-2026-v1 stateless core).
+    #[serde(rename = "_meta")]
+    pub meta: crate::meta::RequestMetaObject,
 }
 
 impl CompleteRequestParams {
-    pub fn new(reference: CompletionReference, argument: CompleteArgument) -> Self {
+    /// Construct with the required `_meta`, reference, and argument.
+    pub fn new(
+        reference: CompletionReference,
+        argument: CompleteArgument,
+        meta: crate::meta::RequestMetaObject,
+    ) -> Self {
         Self {
             reference,
             argument,
             context: None,
-            meta: None,
+            meta,
         }
     }
 
@@ -90,7 +97,7 @@ impl CompleteRequestParams {
     }
 
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
-        self.meta = Some(meta);
+        self.meta = meta;
         self
     }
 }
@@ -106,10 +113,15 @@ pub struct CompleteRequest {
 }
 
 impl CompleteRequest {
-    pub fn new(reference: CompletionReference, argument: CompleteArgument) -> Self {
+    /// Construct with the required `_meta`, reference, and argument.
+    pub fn new(
+        reference: CompletionReference,
+        argument: CompleteArgument,
+        meta: crate::meta::RequestMetaObject,
+    ) -> Self {
         Self {
             method: "completion/complete".to_string(),
-            params: CompleteRequestParams::new(reference, argument),
+            params: CompleteRequestParams::new(reference, argument, meta),
         }
     }
 
@@ -267,8 +279,8 @@ impl Params for CompleteRequestParams {}
 
 impl HasMetaParam for CompleteRequestParams {
     fn meta(&self) -> Option<&HashMap<String, Value>> {
-        // Surface namespaced `extra` keys from typed `RequestMetaObject`.
-        self.meta.as_ref().map(|m| &m.extra)
+        // Surface namespaced `extra` keys from the required typed `RequestMetaObject`.
+        Some(&self.meta.extra)
     }
 }
 
@@ -379,9 +391,9 @@ mod tests {
         let request = CompleteRequest::new(
             CompletionReference::prompt("test_prompt"),
             CompleteArgument::new("arg_name", "partial_value"),
+            meta,
         )
-        .with_context(context)
-        .with_meta(meta);
+        .with_context(context);
 
         let json_value = serde_json::to_value(&request).unwrap();
 
@@ -432,9 +444,15 @@ mod tests {
 
     #[test]
     fn test_serialization() {
+        let meta = crate::meta::RequestMetaObject::new(
+            "DRAFT-2026-v1",
+            crate::initialize::Implementation::new("test-client", "1.0.0"),
+            crate::initialize::ClientCapabilities::default(),
+        );
         let request = CompleteRequest::new(
             CompletionReference::resource("file:///test/{id}.txt"),
             CompleteArgument::new("id", "test"),
+            meta,
         );
 
         let json = serde_json::to_string(&request).unwrap();

@@ -293,7 +293,8 @@ pub struct ElicitationSchema {
     pub required: Option<Vec<String>>,
 }
 
-/// Form-mode elicitation params.
+/// Form-mode elicitation params. Per schema this interface does NOT extend
+/// `RequestParams` — no `_meta` field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ElicitRequestFormParams {
@@ -306,13 +307,10 @@ pub struct ElicitRequestFormParams {
 
     /// A restricted subset of JSON Schema — only top-level primitive properties.
     pub requested_schema: ElicitationSchema,
-
-    /// Schema-typed `_meta` per `RequestMetaObject`.
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<crate::meta::RequestMetaObject>,
 }
 
-/// URL-mode elicitation params.
+/// URL-mode elicitation params. Per schema this interface does NOT extend
+/// `RequestParams` — no `_meta` field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ElicitRequestURLParams {
@@ -328,10 +326,6 @@ pub struct ElicitRequestURLParams {
 
     /// The URL the user should navigate to.
     pub url: String,
-
-    /// Schema-typed `_meta` per `RequestMetaObject`.
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<crate::meta::RequestMetaObject>,
 }
 
 /// Fixed-value mode discriminator for [`ElicitRequestFormParams`].
@@ -382,7 +376,6 @@ impl ElicitRequest {
                 mode: None,
                 message: message.into(),
                 requested_schema,
-                meta: None,
             }),
         }
     }
@@ -400,7 +393,6 @@ impl ElicitRequest {
                 message: message.into(),
                 elicitation_id: elicitation_id.into(),
                 url: url.into(),
-                meta: None,
             }),
         }
     }
@@ -418,13 +410,7 @@ impl ElicitRequestFormParams {
             mode: None,
             message: message.into(),
             requested_schema,
-            meta: None,
         }
-    }
-
-    pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
-        self.meta = Some(meta);
-        self
     }
 }
 
@@ -439,13 +425,7 @@ impl ElicitRequestURLParams {
             message: message.into(),
             elicitation_id: elicitation_id.into(),
             url: url.into(),
-            meta: None,
         }
-    }
-
-    pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
-        self.meta = Some(meta);
-        self
     }
 }
 
@@ -455,17 +435,9 @@ use crate::traits::*;
 impl Params for ElicitRequestFormParams {}
 impl Params for ElicitRequestURLParams {}
 
-impl HasMetaParam for ElicitRequestFormParams {
-    fn meta(&self) -> Option<&HashMap<String, Value>> {
-        self.meta.as_ref().map(|m| &m.extra)
-    }
-}
-
-impl HasMetaParam for ElicitRequestURLParams {
-    fn meta(&self) -> Option<&HashMap<String, Value>> {
-        self.meta.as_ref().map(|m| &m.extra)
-    }
-}
+// `HasMetaParam` intentionally NOT implemented — per schema neither
+// ElicitRequestFormParams nor ElicitRequestURLParams extends RequestParams,
+// so they have no `_meta` field on the wire.
 
 impl HasMethod for ElicitRequest {
     fn method(&self) -> &str {
@@ -917,14 +889,8 @@ mod tests {
 
     #[test]
     fn test_elicit_request_matches_typescript_spec() {
-        // Test ElicitRequest matches: { method: string, params: { message: string, requestedSchema: {...}, _meta?: {...} } }
-        let meta = crate::meta::RequestMetaObject::new(
-            "DRAFT-2026-v1",
-            crate::initialize::Implementation::new("test-client", "1.0.0"),
-            crate::initialize::ClientCapabilities::default(),
-        )
-        .with_extra("requestId", json!("req-123"));
-
+        // Per schema: ElicitRequestFormParams = { mode?, message, requestedSchema }.
+        // Does NOT extend RequestParams — no `_meta` field.
         let schema = ElicitationSchema::new()
             .with_property(
                 "name".to_string(),
@@ -933,13 +899,7 @@ mod tests {
             .with_property("age".to_string(), PrimitiveSchemaDefinition::integer())
             .with_required(vec!["name".to_string()]);
 
-        let request = ElicitRequest {
-            method: "elicitation/create".to_string(),
-            params: ElicitRequestParams::Form(
-                ElicitRequestFormParams::new("Please provide your details", schema)
-                    .with_meta(meta),
-            ),
-        };
+        let request = ElicitRequest::new_form("Please provide your details", schema);
 
         let json_value = serde_json::to_value(&request).unwrap();
 
@@ -952,7 +912,14 @@ mod tests {
         assert!(json_value["params"]["requestedSchema"].is_object());
         assert_eq!(json_value["params"]["requestedSchema"]["type"], "object");
         assert!(json_value["params"]["requestedSchema"]["properties"].is_object());
-        assert_eq!(json_value["params"]["_meta"]["requestId"], "req-123");
+        // Spec compliance: ElicitRequestFormParams does NOT carry `_meta`.
+        assert!(
+            !json_value["params"]
+                .as_object()
+                .unwrap()
+                .contains_key("_meta"),
+            "ElicitRequestFormParams MUST NOT serialize a _meta field per schema"
+        );
     }
 
     #[test]

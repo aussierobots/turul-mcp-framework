@@ -272,19 +272,22 @@ pub struct GetPromptRequestParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_state: Option<String>,
 
-    /// Schema-typed `_meta` per `RequestMetaObject`.
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<crate::meta::RequestMetaObject>,
+    /// Schema-typed `_meta` per `RequestMetaObject`. Required per schema
+    /// (`GetPromptRequestParams extends InputResponseRequestParams extends RequestParams`,
+    /// and `RequestParams._meta` is required in DRAFT-2026-v1 stateless core).
+    #[serde(rename = "_meta")]
+    pub meta: crate::meta::RequestMetaObject,
 }
 
 impl GetPromptRequestParams {
-    pub fn new(name: impl Into<String>) -> Self {
+    /// Construct with the required `_meta` and prompt `name`.
+    pub fn new(name: impl Into<String>, meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             name: name.into(),
             arguments: None,
             input_responses: None,
             request_state: None,
-            meta: None,
+            meta,
         }
     }
 
@@ -294,7 +297,7 @@ impl GetPromptRequestParams {
     }
 
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
-        self.meta = Some(meta);
+        self.meta = meta;
         self
     }
 
@@ -321,10 +324,11 @@ pub struct GetPromptRequest {
 }
 
 impl GetPromptRequest {
-    pub fn new(name: impl Into<String>) -> Self {
+    /// Construct with the required `_meta` and prompt `name`.
+    pub fn new(name: impl Into<String>, meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "prompts/get".to_string(),
-            params: GetPromptRequestParams::new(name),
+            params: GetPromptRequestParams::new(name, meta),
         }
     }
 
@@ -514,7 +518,7 @@ impl HasGetPromptRequestParams for GetPromptRequestParams {
 
 impl HasMetaParam for GetPromptRequestParams {
     fn meta(&self) -> Option<&HashMap<String, Value>> {
-        self.meta.as_ref().map(|m| &m.extra)
+        Some(&self.meta.extra)
     }
 }
 
@@ -617,7 +621,12 @@ mod tests {
         let mut args = HashMap::new();
         args.insert("topic".to_string(), "AI Safety".to_string()); // Now uses String instead of Value
 
-        let request = GetPromptRequest::new("write_essay").with_arguments(args);
+        let meta = crate::meta::RequestMetaObject::new(
+            "DRAFT-2026-v1",
+            crate::initialize::Implementation::new("test-client", "1.0.0"),
+            crate::initialize::ClientCapabilities::default(),
+        );
+        let request = GetPromptRequest::new("write_essay", meta).with_arguments(args);
 
         assert_eq!(request.params.name, "write_essay");
         assert!(request.params.arguments.is_some());

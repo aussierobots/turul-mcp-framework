@@ -287,23 +287,27 @@ pub struct ReadResourceRequestParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_state: Option<String>,
 
-    /// Schema-typed `_meta` per `RequestMetaObject`.
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<crate::meta::RequestMetaObject>,
+    /// Schema-typed `_meta` per `RequestMetaObject`. Required per schema
+    /// (`ReadResourceRequestParams extends ResourceRequestParams, InputResponseRequestParams`
+    /// — both extend `RequestParams` whose `_meta` is required in
+    /// DRAFT-2026-v1 stateless core).
+    #[serde(rename = "_meta")]
+    pub meta: crate::meta::RequestMetaObject,
 }
 
 impl ReadResourceRequestParams {
-    pub fn new(uri: impl Into<String>) -> Self {
+    /// Construct with the required `_meta` and resource `uri`.
+    pub fn new(uri: impl Into<String>, meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             uri: uri.into(),
             input_responses: None,
             request_state: None,
-            meta: None,
+            meta,
         }
     }
 
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
-        self.meta = Some(meta);
+        self.meta = meta;
         self
     }
 
@@ -330,10 +334,11 @@ pub struct ReadResourceRequest {
 }
 
 impl ReadResourceRequest {
-    pub fn new(uri: impl Into<String>) -> Self {
+    /// Construct with the required `_meta` and resource `uri`.
+    pub fn new(uri: impl Into<String>, meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "resources/read".to_string(),
-            params: ReadResourceRequestParams::new(uri),
+            params: ReadResourceRequestParams::new(uri, meta),
         }
     }
 

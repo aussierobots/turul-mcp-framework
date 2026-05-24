@@ -377,19 +377,22 @@ pub struct CallToolRequestParams {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_state: Option<String>,
 
-    /// Schema-typed `_meta` per `RequestMetaObject`.
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<crate::meta::RequestMetaObject>,
+    /// Schema-typed `_meta` per `RequestMetaObject`. Required per schema
+    /// (`CallToolRequestParams extends InputResponseRequestParams extends RequestParams`,
+    /// and `RequestParams._meta` is required in DRAFT-2026-v1 stateless core).
+    #[serde(rename = "_meta")]
+    pub meta: crate::meta::RequestMetaObject,
 }
 
 impl CallToolRequestParams {
-    pub fn new(name: impl Into<String>) -> Self {
+    /// Construct with the required `_meta` and tool `name`.
+    pub fn new(name: impl Into<String>, meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             name: name.into(),
             arguments: None,
             input_responses: None,
             request_state: None,
-            meta: None,
+            meta,
         }
     }
 
@@ -431,7 +434,7 @@ impl CallToolRequestParams {
     }
 
     pub fn with_meta(mut self, meta: crate::meta::RequestMetaObject) -> Self {
-        self.meta = Some(meta);
+        self.meta = meta;
         self
     }
 }
@@ -447,10 +450,11 @@ pub struct CallToolRequest {
 }
 
 impl CallToolRequest {
-    pub fn new(name: impl Into<String>) -> Self {
+    /// Construct with the required `_meta` and tool `name`.
+    pub fn new(name: impl Into<String>, meta: crate::meta::RequestMetaObject) -> Self {
         Self {
             method: "tools/call".to_string(),
-            params: CallToolRequestParams::new(name),
+            params: CallToolRequestParams::new(name, meta),
         }
     }
 
@@ -785,7 +789,7 @@ impl HasCallToolRequestParams for CallToolRequestParams {
     }
 
     fn meta(&self) -> Option<&HashMap<String, Value>> {
-        self.meta.as_ref().map(|m| &m.extra)
+        Some(&self.meta.extra)
     }
 }
 

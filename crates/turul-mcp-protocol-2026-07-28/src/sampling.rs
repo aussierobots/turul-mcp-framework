@@ -262,9 +262,9 @@ pub struct CreateMessageRequestParams {
     /// Optional tool choice configuration (MCP 2025-11-25)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
-    /// Meta information (optional _meta field inside params)
-    #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
-    pub meta: Option<std::collections::HashMap<String, Value>>,
+    // Per schema, `CreateMessageRequestParams` does NOT extend `RequestParams`
+    // — no `_meta` field. The earlier Rust-side `meta: Option<HashMap>` was a
+    // non-spec carryover, removed for Protocol Crate Purity.
 }
 
 /// Complete sampling/createMessage request (matches TypeScript CreateMessageRequest interface)
@@ -304,7 +304,6 @@ impl CreateMessageRequestParams {
             metadata: None,
             tools: None,
             tool_choice: None,
-            meta: None,
         }
     }
 
@@ -335,11 +334,6 @@ impl CreateMessageRequestParams {
 
     pub fn with_stop_sequences(mut self, sequences: Vec<String>) -> Self {
         self.stop_sequences = Some(sequences);
-        self
-    }
-
-    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
-        self.meta = Some(meta);
         self
     }
 }
@@ -388,10 +382,6 @@ impl CreateMessageRequest {
         self
     }
 
-    pub fn with_meta(mut self, meta: std::collections::HashMap<String, Value>) -> Self {
-        self.params = self.params.with_meta(meta);
-        self
-    }
 }
 
 impl CreateMessageResult {
@@ -463,11 +453,9 @@ impl HasCreateMessageRequestParams for CreateMessageRequestParams {
     }
 }
 
-impl HasMetaParam for CreateMessageRequestParams {
-    fn meta(&self) -> Option<&std::collections::HashMap<String, Value>> {
-        self.meta.as_ref()
-    }
-}
+// `HasMetaParam` intentionally NOT implemented — per schema
+// `CreateMessageRequestParams` does NOT extend `RequestParams`, so it has no
+// `_meta` field on the wire.
 
 // Trait implementations for CreateMessageRequest
 impl HasMethod for CreateMessageRequest {

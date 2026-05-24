@@ -39,9 +39,8 @@ mod tests {
         )
         .with_extra("clientId", json!("test-client"));
 
-        let request = CallToolRequest::new("echo")
-            .with_arguments_value(json!(args))
-            .with_meta(meta);
+        let request = CallToolRequest::new("echo", meta)
+            .with_arguments_value(json!(args));
 
         // Serialize to JSON to check structure
         let json_value = serde_json::to_value(&request).unwrap();
@@ -167,19 +166,27 @@ mod tests {
     }
 
     #[test]
-    fn test_optional_meta_serialization() {
-        // Test that _meta is properly omitted when None
-        let request = CallToolRequest::new("test");
+    fn test_meta_always_serialized() {
+        // Schema compliance: `CallToolRequestParams._meta` is REQUIRED in
+        // DRAFT-2026-v1 stateless core. Every `tools/call` request MUST
+        // serialize a `_meta` carrying per-request capability negotiation.
+        let request = CallToolRequest::new("test", super::fixture_meta());
         let json_value = serde_json::to_value(&request).unwrap();
 
         assert_eq!(json_value["method"], "tools/call");
         assert_eq!(json_value["params"]["name"], "test");
-        // _meta should be absent since it's None
+        // `_meta` MUST be present.
         assert!(
-            !json_value["params"]
+            json_value["params"]
                 .as_object()
                 .unwrap()
-                .contains_key("_meta")
+                .contains_key("_meta"),
+            "RequestParams._meta is required per schema"
+        );
+        // Required namespaced fields on the wire:
+        assert_eq!(
+            json_value["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"],
+            "DRAFT-2026-v1"
         );
     }
 }
@@ -859,7 +866,6 @@ mod elicitation_modes {
             mode: Some(FormModeMarker::Form),
             message: "x".into(),
             requested_schema: ElicitationSchema::new(),
-            meta: None,
         };
         let v = serde_json::to_value(&p).unwrap();
         assert_eq!(v["mode"], "form");
@@ -1201,7 +1207,7 @@ mod prompts_alignment {
         // Schema line 1444: `arguments?: { [key: string]: string }`.
         let mut args = HashMap::new();
         args.insert("lang".to_string(), "rust".to_string());
-        let p = GetPromptRequestParams::new("code_review").with_arguments(args);
+        let p = GetPromptRequestParams::new("code_review", super::fixture_meta()).with_arguments(args);
         let v = serde_json::to_value(&p).unwrap();
         assert_eq!(v["arguments"]["lang"], "rust");
         assert!(
@@ -1218,7 +1224,7 @@ mod prompts_alignment {
             "rq-1".to_string(),
             InputResponse::ListRoots(ListRootsResult::new(vec![])),
         );
-        let p = GetPromptRequestParams::new("code_review")
+        let p = GetPromptRequestParams::new("code_review", super::fixture_meta())
             .with_input_responses(responses, "opaque-state");
         let v = serde_json::to_value(&p).unwrap();
         assert_eq!(v["name"], "code_review");
@@ -1228,7 +1234,7 @@ mod prompts_alignment {
 
     #[test]
     fn get_prompt_params_omits_mixin_fields_when_absent() {
-        let p = GetPromptRequestParams::new("x");
+        let p = GetPromptRequestParams::new("x", super::fixture_meta());
         let v = serde_json::to_value(&p).unwrap();
         assert!(!v.as_object().unwrap().contains_key("inputResponses"));
         assert!(!v.as_object().unwrap().contains_key("requestState"));
@@ -1333,7 +1339,7 @@ mod resources_alignment {
             "rq-1".to_string(),
             InputResponse::ListRoots(ListRootsResult::new(vec![])),
         );
-        let p = ReadResourceRequestParams::new("file:///x")
+        let p = ReadResourceRequestParams::new("file:///x", super::fixture_meta())
             .with_input_responses(responses, "opaque");
         let v = serde_json::to_value(&p).unwrap();
         assert_eq!(v["uri"], "file:///x");
@@ -1343,7 +1349,7 @@ mod resources_alignment {
 
     #[test]
     fn read_resource_params_omits_mixin_fields_when_absent() {
-        let p = ReadResourceRequestParams::new("file:///x");
+        let p = ReadResourceRequestParams::new("file:///x", super::fixture_meta());
         let v = serde_json::to_value(&p).unwrap();
         assert!(!v.as_object().unwrap().contains_key("inputResponses"));
         assert!(!v.as_object().unwrap().contains_key("requestState"));
@@ -1390,7 +1396,7 @@ mod tools_alignment {
     #[test]
     fn tools_call_request_emits_correct_method() {
         // Schema line 1717: `method: "tools/call"`.
-        let r = CallToolRequest::new("echo");
+        let r = CallToolRequest::new("echo", super::fixture_meta());
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["method"], "tools/call");
         assert_eq!(v["params"]["name"], "echo");
@@ -1467,7 +1473,7 @@ mod tools_alignment {
             "rq-1".to_string(),
             InputResponse::ListRoots(ListRootsResult::new(vec![])),
         );
-        let p = CallToolRequestParams::new("echo").with_input_responses(responses, "opaque-state");
+        let p = CallToolRequestParams::new("echo", super::fixture_meta()).with_input_responses(responses, "opaque-state");
         let v = serde_json::to_value(&p).unwrap();
         assert_eq!(v["name"], "echo");
         assert!(
@@ -1479,7 +1485,7 @@ mod tools_alignment {
 
     #[test]
     fn call_tool_params_omits_mixin_fields_when_absent() {
-        let p = CallToolRequestParams::new("echo");
+        let p = CallToolRequestParams::new("echo", super::fixture_meta());
         let v = serde_json::to_value(&p).unwrap();
         assert!(
             !v.as_object().unwrap().contains_key("inputResponses"),
@@ -1770,7 +1776,7 @@ mod method_strings {
     #[test]
     fn tools_call_binding() {
         use turul_mcp_protocol_2026_07_28::tools::CallToolRequest;
-        let v = serde_json::to_value(CallToolRequest::new("x")).unwrap();
+        let v = serde_json::to_value(CallToolRequest::new("x", super::fixture_meta())).unwrap();
         assert_eq!(method_of(&v), "tools/call");
     }
 
@@ -1791,7 +1797,7 @@ mod method_strings {
     #[test]
     fn resources_read_binding() {
         use turul_mcp_protocol_2026_07_28::resources::ReadResourceRequest;
-        let v = serde_json::to_value(ReadResourceRequest::new("file:///x")).unwrap();
+        let v = serde_json::to_value(ReadResourceRequest::new("file:///x", super::fixture_meta())).unwrap();
         assert_eq!(method_of(&v), "resources/read");
     }
 
@@ -1805,7 +1811,7 @@ mod method_strings {
     #[test]
     fn prompts_get_binding() {
         use turul_mcp_protocol_2026_07_28::prompts::GetPromptRequest;
-        let v = serde_json::to_value(GetPromptRequest::new("p")).unwrap();
+        let v = serde_json::to_value(GetPromptRequest::new("p", super::fixture_meta())).unwrap();
         assert_eq!(method_of(&v), "prompts/get");
     }
 
@@ -2315,11 +2321,11 @@ mod multi_round_trip {
             InputResponse::ListRoots(ListRootsResult::new(vec![])),
         );
 
-        let call = CallToolRequestParams::new("t")
+        let call = CallToolRequestParams::new("t", super::fixture_meta())
             .with_input_responses(responses.clone(), "state-x");
-        let read = ReadResourceRequestParams::new("res://x")
+        let read = ReadResourceRequestParams::new("res://x", super::fixture_meta())
             .with_input_responses(responses.clone(), "state-x");
-        let prompt = GetPromptRequestParams::new("p")
+        let prompt = GetPromptRequestParams::new("p", super::fixture_meta())
             .with_input_responses(responses.clone(), "state-x");
 
         let v_call = serde_json::to_value(&call).unwrap();
