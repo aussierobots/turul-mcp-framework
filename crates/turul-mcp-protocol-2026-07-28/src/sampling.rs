@@ -31,7 +31,7 @@ impl SamplingResult {
     }
 }
 
-/// Role enum for messages (per MCP 2025-11-25 spec — only "user" | "assistant")
+/// Role enum for messages — `"user"` or `"assistant"`. The MCP spec has no `"system"` role.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
@@ -39,7 +39,7 @@ pub enum Role {
     Assistant,
 }
 
-/// Model hint — an open-ended struct per MCP 2025-11-25 spec.
+/// Model hint — an open-ended struct.
 ///
 /// The `name` field can be any model identifier string. Clients use hints to
 /// express model preferences without restricting to a hardcoded set.
@@ -77,7 +77,7 @@ pub struct ModelPreferences {
     pub intelligence_priority: Option<f64>,
 }
 
-/// Tool choice mode for sampling requests (per MCP 2025-11-25)
+/// Tool choice mode for sampling requests.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ToolChoiceMode {
@@ -85,12 +85,13 @@ pub enum ToolChoiceMode {
     Auto,
     /// Model must not use any tools
     None,
-    /// Model must use at least one tool (MCP 2025-11-25: "required")
+    /// Model must use at least one tool. Wire value: `"required"`; legacy
+    /// `"any"` is accepted on deserialize for backward compatibility.
     #[serde(alias = "any")]
     Required,
 }
 
-/// Tool choice configuration for sampling requests (per MCP 2025-11-25)
+/// Tool choice configuration for sampling requests.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolChoice {
@@ -116,7 +117,7 @@ impl ToolChoice {
         }
     }
 
-    /// Create tool choice requiring at least one tool (MCP 2025-11-25: "required")
+    /// Create tool choice requiring at least one tool. Wire value: `"required"`.
     pub fn required() -> Self {
         Self {
             mode: ToolChoiceMode::Required,
@@ -124,7 +125,8 @@ impl ToolChoice {
         }
     }
 
-    /// Compatibility alias for `required()` — MCP 2025-11-25 wire value is "required"
+    /// Alias for [`Self::required`] — accepts the older `"any"` name on the
+    /// caller side; emits `"required"` on the wire.
     pub fn any() -> Self {
         Self::required()
     }
@@ -256,10 +258,10 @@ pub struct CreateMessageRequestParams {
     /// Optional metadata
     #[serde(skip_serializing_if = "Option::is_none")]
     pub metadata: Option<Value>,
-    /// Optional tools the LLM can use during sampling (MCP 2025-11-25)
+    /// Optional tools the LLM can use during sampling.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<crate::tools::Tool>>,
-    /// Optional tool choice configuration (MCP 2025-11-25)
+    /// Optional tool choice configuration.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
     // Per schema, `CreateMessageRequestParams` does NOT extend `RequestParams`

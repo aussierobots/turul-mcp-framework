@@ -6,7 +6,7 @@
 //!
 //! Every `export interface`/`export type`/`export const` in the vendored
 //! `schema/draft-schema.ts` has a corresponding Rust binding here. Every
-//! binding has a compliance test in [`compliance_test`]. The full
+//! binding has a compliance test in `tests/compliance.rs`. The full
 //! per-symbol coverage map is `docs/plans/2026-07-28-schema-coverage-matrix.md`.
 //!
 //! ## Surface area
@@ -97,8 +97,6 @@ pub mod roots;
 pub mod subscriptions;
 pub mod sampling;
 pub mod schema;
-// `tasks` module removed: tasks moved out of core to extension (SEP-2663);
-// DRAFT-2026-v1 schema has no tasks/* methods or Task types.
 pub mod tools;
 pub mod traits;
 pub mod version;
@@ -132,7 +130,6 @@ pub use resources::{
     ListResourcesRequest, ListResourcesResult, ReadResourceRequest, ReadResourceResult, Resource,
     ResourceContent,
 };
-// `tasks` re-exports removed: module deleted (not in DRAFT-2026-v1 schema).
 pub use tools::{
     CallToolRequest, CallToolResult, ListToolsRequest, ListToolsResult, Tool, ToolOutputSchema,
     ToolResult, ToolSchema,
@@ -193,8 +190,8 @@ pub use traits::{
 // inside the `Object` variant).
 pub use turul_rpc::{
     JsonRpcError, JsonRpcErrorCode, JsonRpcMessage, JsonRpcNotification, JsonRpcRequest,
-    JsonRpcResponse, JsonRpcSuccessResponse, JsonRpcVersion, RequestId, ResponseResult,
-    error::JsonRpcErrorObject,
+    JsonRpcResponse, JsonRpcSuccessResponse, JsonRpcVersion, JsonRpcWireMessage, RequestId,
+    ResponseResult, error::JsonRpcErrorObject, parse_json_rpc_wire_message,
 };
 pub use turul_rpc::RequestParams as JsonRpcParams;
 
@@ -450,7 +447,8 @@ impl McpError {
                 JsonRpcErrorObject::invalid_params(&format!("Unknown prompt: {}", name))
             }
 
-            // MCP-specific structured errors per draft schema (lines 363, 371).
+            // MCP-specific structured errors: MissingRequiredClientCapabilityError (-32003)
+            // and UnsupportedProtocolVersionError (-32004) per DRAFT-2026-v1 schema.
             McpError::MissingRequiredClientCapability { required } => {
                 JsonRpcErrorObject::server_error(
                     -32003,

@@ -3,9 +3,6 @@
 //! This module defines the types used for the MCP tools functionality.
 
 use crate::meta::Cursor;
-// `JsonSchema` no longer imported at top-level: properties values are now
-// `Value` per DRAFT-2026-v1 spec's `[k]: unknown`. Tests that exercise
-// `JsonSchema` import it locally via `crate::schema::JsonSchema`.
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -84,9 +81,8 @@ impl ToolAnnotations {
     }
 }
 
-// `TaskSupport` and `ToolExecution` removed: tasks moved to extension (SEP-2663);
-// DRAFT-2026-v1 `Tool` schema has no `execution` field. Task-aware tool
-// invocation belongs in the tasks extension crate (when SEP-2663 is finalized).
+// Task-aware tool invocation lives in the tasks extension crate (SEP-2663);
+// the DRAFT-2026-v1 `Tool` schema has no `execution` field.
 
 // === Protocol Types ===
 
@@ -132,7 +128,7 @@ impl ToolSchema {
     }
 
     /// Attach properties. Values are arbitrary JSON Schema 2020-12 shapes.
-    /// To convert from a structured [`JsonSchema`]: `serde_json::to_value(schema).unwrap()`.
+    /// To convert from a structured [`crate::schema::JsonSchema`]: `serde_json::to_value(schema).unwrap()`.
     pub fn with_properties(mut self, properties: HashMap<String, Value>) -> Self {
         self.properties = Some(properties);
         self
@@ -480,8 +476,8 @@ impl CallToolRequest {
     }
 }
 
-/// Tool result type - an alias for ContentBlock to maintain backward compatibility
-/// while ensuring MCP 2025-11-25 specification compliance
+/// Alias for [`crate::content::ContentBlock`] kept for callers that reference
+/// the type by its older name.
 pub type ToolResult = crate::content::ContentBlock;
 
 /// Result for tools/call — extends `Result`.
@@ -777,15 +773,8 @@ impl HasCallToolRequestParams for CallToolRequestParams {
         &self.name
     }
 
-    fn arguments(&self) -> Option<&Value> {
-        // Note: This trait method has limitations due to HashMap<String, Value> -> Value conversion
-        // The conversion creates a temporary Value that can't be borrowed for the required lifetime.
-        //
-        // For now, use CallToolRequestParams::get_arguments() for HashMap access or
-        // get_arguments_as_value() for owned Value access in downstream code.
-        //
-        // The direct .arguments field access works fine and is used by the framework.
-        None
+    fn arguments(&self) -> Option<&HashMap<String, Value>> {
+        self.arguments.as_ref()
     }
 
     fn meta(&self) -> Option<&HashMap<String, Value>> {

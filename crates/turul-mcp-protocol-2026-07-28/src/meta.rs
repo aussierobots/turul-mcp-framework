@@ -1,20 +1,21 @@
-//! `_meta` Field Support for MCP
+//! `_meta` Field Support for MCP DRAFT-2026-v1.
 //!
-//! Two distinct meta carriers live here:
-//! - [`Meta`] — the legacy 2025-11-25 carrier used by existing request/result
-//!   types in this crate. Carries `progressToken`, pagination state, etc.
-//!   Will be progressively replaced by the strictly-typed
-//!   [`RequestMetaObject`] / loose [`MetaObject`] split.
-//! - [`RequestMetaObject`] / [`MetaObject`] — DRAFT-2026-v1 meta carriers.
-//!   `RequestMetaObject` carries the per-request capability negotiation that
-//!   replaces the deleted `initialize` handshake (stateless core, SEP-2567/2575).
+//! Two distinct meta carriers per the schema:
+//! - [`RequestMetaObject`] — strictly-typed shape for every `Request.params._meta`.
+//!   Carries the required `io.modelcontextprotocol/protocolVersion`, `clientInfo`,
+//!   and `clientCapabilities` for per-request capability negotiation, plus
+//!   optional `progressToken` and `logLevel`. Arbitrary namespaced keys ride
+//!   along on the flattened `extra` map.
+//! - [`MetaObject`] — loose `HashMap<String, Value>` for `Notification.params._meta`
+//!   and `Result._meta`. Open key-value per the schema's reverse-DNS prefix rules.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// Annotations for resources, prompts, and tools (matches TypeScript Annotations per MCP 2025-11-25).
-/// See [MCP spec](https://modelcontextprotocol.io/specification/2025-11-25)
+/// Annotations for resources, prompts, and tools — `audience`, `priority`,
+/// `last_modified`. Carried on `Resource`, `ResourceTemplate`, `Prompt`,
+/// `Tool` (via `ToolAnnotations`), and `ContentBlock`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Annotations {
@@ -114,24 +115,6 @@ impl From<&str> for Cursor {
     }
 }
 
-// The misshapen 2025-11-25 `Meta` struct (pagination/progress fields stuffed
-// into `_meta`) is removed. DRAFT-2026-v1 defines two distinct types:
-//   - `MetaObject` (loose `HashMap<String, Value>`) — for Notification.params._meta
-//     and Result._meta.
-//   - `RequestMetaObject` (typed) — for Request.params._meta, with required
-//     namespaced fields (`io.modelcontextprotocol/protocolVersion`, etc.).
-//
-// The `Meta::with_cursor` / `with_pagination` / `with_progress` builders were
-// spec-incorrect: they encoded `cursor`, `total`, `progress`, etc. INSIDE
-// `_meta`, but per schema:
-//   - `cursor` belongs at `PaginatedRequestParams.cursor` (top-level)
-//   - `total`, `hasMore` belong at `PaginatedResult.{total, hasMore}` (top-level)
-//   - `progress`, `currentStep`, `totalSteps`, `estimatedRemainingSeconds`
-//     belong at `ProgressNotificationParams.{...}` (top-level)
-//
-// Callers should set those fields on their schema-correct location, NOT
-// wrap them in a `_meta` payload. `PaginatedResponse<T>` / `ProgressResponse<T>`
-// helpers are removed for the same reason.
 
 // ---------------------------------------------------------------------------
 // Convention `_meta` keys (changelog Minor #2: OpenTelemetry trace context;
@@ -210,10 +193,9 @@ pub type MetaObject = HashMap<String, Value>;
 ///
 /// Extra keys per `MetaObject` rules are preserved in [`Self::extra`].
 ///
-/// **Note on type references**: `Implementation` and `ClientCapabilities` are
-/// imported from `crate::initialize`, which still holds the 2025-11-25 shapes.
-/// If/when these migrate to `crate::discover`, this struct will pick up the
-/// new shapes automatically via the import path.
+/// [`Implementation`](crate::initialize::Implementation) and
+/// [`ClientCapabilities`](crate::initialize::ClientCapabilities) are imported
+/// from [`crate::initialize`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestMetaObject {
     /// Caller-supplied progress token. Optional.

@@ -25,7 +25,7 @@ pub const SERVER_DISCOVER_METHOD: &str = "server/discover";
 /// `DiscoverRequest extends JSONRPCRequest { method: "server/discover", params: RequestParams }`.
 ///
 /// The `jsonrpc: "2.0"` and `id` fields are supplied by the
-/// [`JsonRpcRequest`](crate::json_rpc::JsonRpcRequest) envelope when this typed
+/// [`JsonRpcRequest`](crate::JsonRpcRequest) envelope when this typed
 /// payload is wrapped for the wire — matches existing crate convention
 /// (`CallToolRequest`, `ListToolsRequest`, etc.).
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -55,7 +55,7 @@ mod tests {
 
     #[test]
     fn test_list_tools_request_matches_typescript_spec() {
-        // Schema lines 1601–1603: `ListToolsRequest extends PaginatedRequest`,
+        // `ListToolsRequest extends PaginatedRequest`,
         // params.cursor at TOP LEVEL (not inside _meta). params._meta is a
         // RequestMetaObject with required namespaced fields + arbitrary
         // namespaced keys (e.g. `sessionId`) via the flatten `extra` catch-all.
@@ -191,9 +191,9 @@ mod tests {
     }
 }
 
-/// Phase 6 — JSON Schema 2020-12 acceptance on Tool.inputSchema/outputSchema (SEP-2106).
+/// JSON Schema 2020-12 acceptance on Tool.inputSchema/outputSchema (SEP-2106).
 ///
-/// Schema lines 1815–1834 widen Tool schemas to accept any JSON Schema 2020-12
+/// `Tool` schemas (input/output) accept any JSON Schema 2020-12
 /// keyword. Our `ToolSchema` uses `#[serde(flatten)] additional: HashMap<String, Value>`
 /// to pass through unknown keywords. These tests prove the round-trip works
 /// for the composition and reference keywords introduced by 2020-12.
@@ -254,9 +254,9 @@ mod json_schema_2020_12 {
 
     #[test]
     fn input_schema_accepts_ref_and_defs() {
-        // SEP-2106: $ref and $defs reference keywords. Per safeguard note (schema 1820),
-        // external $ref URIs must NOT be auto-dereferenced — but our type just stores
-        // them; dereference is a consumer concern.
+        // SEP-2106: $ref and $defs reference keywords. Per the spec's safeguard
+        // note on `inputSchema`, external $ref URIs must NOT be auto-dereferenced —
+        // but our type just stores them; dereference is a consumer concern.
         let mut extra = serde_json::Map::new();
         extra.insert(
             "$defs".to_string(),
@@ -292,7 +292,7 @@ mod json_schema_2020_12 {
 
     #[test]
     fn input_schema_accepts_schema_dialect_marker() {
-        // Schema line 1826: `inputSchema: { $schema?: string; type: "object"; ... }`.
+        // `Tool.inputSchema` shape: `{ $schema?: string; type: "object"; ... }`.
         let mut extra = serde_json::Map::new();
         extra.insert(
             "$schema".to_string(),
@@ -332,7 +332,7 @@ mod json_schema_2020_12 {
 
     #[test]
     fn properties_field_accepts_2020_12_unknown_values() {
-        // Schema lines 1815–1826: `properties` values are `unknown` (any JSON).
+        // In `Tool.inputSchema`, `properties` values are `unknown` (any JSON).
         // `ToolSchema.properties: Option<HashMap<String, Value>>` honors this —
         // a `$ref`-only property schema parses without error, and any
         // composition keyword inside individual property schemas survives
@@ -383,7 +383,7 @@ mod json_schema_2020_12 {
 
     #[test]
     fn output_schema_accepts_non_object_root() {
-        // Schema lines 1828–1834: `outputSchema?: { $schema?: string; [key: string]: unknown }`.
+        // `Tool.outputSchema?: { $schema?: string; [key: string]: unknown }`.
         // No root `type` constraint. `Tool.output_schema` is now typed
         // `Option<ToolOutputSchema>`, a separate flatten-only struct that
         // doesn't bake in `type: "object"`. Any 2020-12 root works.
@@ -413,7 +413,7 @@ mod json_schema_2020_12 {
     }
 }
 
-/// Phase 9 — coverage closure: shape tests for remaining schema types
+/// coverage closure: shape tests for remaining schema types
 /// (Resource, ResourceTemplate, Prompt, PromptArgument, PromptMessage,
 /// Implementation, Annotations, Icon). Most of these were carried unchanged
 /// from 2025-11-25; the tests prove their wire shapes still match DRAFT-2026-v1.
@@ -428,7 +428,7 @@ mod remaining_shapes {
 
     #[test]
     fn resource_shape_matches_schema() {
-        // Schema lines 1275–1308: `Resource extends BaseMetadata, Icons`
+        // `Resource extends BaseMetadata, Icons`
         // with uri (required), description?, mimeType?, annotations?, size?, _meta?.
         let r = Resource::new("file:///x", "x");
         let v = serde_json::to_value(&r).unwrap();
@@ -446,7 +446,7 @@ mod remaining_shapes {
 
     #[test]
     fn resource_template_shape_matches_schema() {
-        // Schema lines 1315–1341: `ResourceTemplate extends BaseMetadata, Icons`
+        // `ResourceTemplate extends BaseMetadata, Icons`
         // with uriTemplate (required), description?, mimeType?, annotations?, _meta?.
         let r = ResourceTemplate::new("template", "file:///{user_id}.json");
         let v = serde_json::to_value(&r).unwrap();
@@ -456,7 +456,7 @@ mod remaining_shapes {
 
     #[test]
     fn prompt_shape_matches_schema() {
-        // Schema lines 1493–1505: `Prompt extends BaseMetadata, Icons`
+        // `Prompt extends BaseMetadata, Icons`
         // with description?, arguments?, _meta?.
         let p = Prompt::new("code_review");
         let v = serde_json::to_value(&p).unwrap();
@@ -465,7 +465,7 @@ mod remaining_shapes {
 
     #[test]
     fn prompt_argument_shape_matches_schema() {
-        // Schema lines 1512–1521: `PromptArgument extends BaseMetadata` with
+        // `PromptArgument extends BaseMetadata` with
         // description?, required?.
         let a = PromptArgument::new("language");
         let v = serde_json::to_value(&a).unwrap();
@@ -474,8 +474,7 @@ mod remaining_shapes {
 
     #[test]
     fn prompt_message_role_values_match_schema() {
-        // Schema line 1528: `Role = "user" | "assistant"`. Also schema lines
-        // 1538–1541: `PromptMessage { role, content }`.
+        // `Role = "user" | "assistant"`; `PromptMessage { role, content }`.
         let m_user = PromptMessage::user_text("hi");
         let m_assistant = PromptMessage::assistant_text("hello");
         let v_user = serde_json::to_value(&m_user).unwrap();
@@ -489,7 +488,7 @@ mod remaining_shapes {
 
     #[test]
     fn prompt_message_only_user_and_assistant_roles() {
-        // Schema line 1528 enumerates exactly these two; no "system".
+        // `Role` enumerates exactly these two; no "system".
         let user_wire = json!({"role": "user", "content": {"type": "text", "text": "x"}});
         let assist_wire = json!({"role": "assistant", "content": {"type": "text", "text": "x"}});
         let system_wire = json!({"role": "system", "content": {"type": "text", "text": "x"}});
@@ -498,13 +497,13 @@ mod remaining_shapes {
         assert!(serde_json::from_value::<PromptMessage>(assist_wire).is_ok());
         assert!(
             serde_json::from_value::<PromptMessage>(system_wire).is_err(),
-            "role 'system' must be rejected per schema line 1528 (only user|assistant)"
+            "role 'system' must be rejected per `Role` (only user|assistant)"
         );
     }
 
     #[test]
     fn implementation_shape_matches_schema() {
-        // Schema lines 865–886: `Implementation extends BaseMetadata, Icons`
+        // `Implementation extends BaseMetadata, Icons`
         // with version (required), description?, websiteUrl?.
         let i = Implementation::new("my-server", "0.4.0")
             .with_description("test server")
@@ -520,7 +519,7 @@ mod remaining_shapes {
 
     #[test]
     fn annotations_shape_matches_schema() {
-        // Schema lines 2059–2089: `Annotations { audience?: Role[], priority?: number, lastModified?: string }`.
+        // `Annotations { audience?: Role[], priority?: number, lastModified?: string }`.
         let a = Annotations::new()
             .with_audience(vec!["user".to_string(), "assistant".to_string()])
             .with_priority(0.7)
@@ -536,7 +535,7 @@ mod remaining_shapes {
 
     #[test]
     fn icon_shape_matches_schema() {
-        // Schema lines 779–816: `Icon { src, mimeType?, sizes?, theme? ("light"|"dark") }`.
+        // `Icon { src, mimeType?, sizes?, theme? ("light"|"dark") }`.
         let i = Icon::new("https://example.com/icon.png");
         let v = serde_json::to_value(&i).unwrap();
         assert_eq!(v["src"], "https://example.com/icon.png");
@@ -560,7 +559,7 @@ mod remaining_shapes {
     }
 }
 
-/// Phase 3.5 — completion.rs schema alignment (schema lines 2358–2474).
+/// completion.rs schema alignment.
 #[cfg(test)]
 mod completion_alignment {
     use turul_mcp_protocol_2026_07_28::completion::{
@@ -572,7 +571,7 @@ mod completion_alignment {
 
     #[test]
     fn complete_result_emits_result_type() {
-        // Schema lines 2421–2438: `CompleteResult extends Result` with required `resultType`.
+        // `CompleteResult extends Result` with required `resultType`.
         let r = CompleteResult::new(CompletionResult::new(vec!["foo".to_string()]));
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["resultType"], "complete");
@@ -591,7 +590,7 @@ mod completion_alignment {
 
     #[test]
     fn completion_inner_field_shape() {
-        // Schema lines 2422–2437: `completion: {values: string[] (max 100), total?, hasMore?}`.
+        // `CompleteResult.completion: {values: string[] (max 100), total?, hasMore?}`.
         let inner = CompletionResult::new(vec!["a".to_string(), "b".to_string()])
             .with_total(10)
             .with_has_more(true);
@@ -612,7 +611,7 @@ mod completion_alignment {
 
     #[test]
     fn resource_template_reference_type_field() {
-        // Schema lines 2457–2465: `{type: "ref/resource", uri}`.
+        // `ResourceTemplateReference: {type: "ref/resource", uri}`.
         let r = ResourceTemplateReference::new("template://t");
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["type"], "ref/resource");
@@ -621,7 +620,7 @@ mod completion_alignment {
 
     #[test]
     fn prompt_reference_type_field() {
-        // Schema lines 2472–2474: `PromptReference extends BaseMetadata { type: "ref/prompt" }`.
+        // `PromptReference extends BaseMetadata { type: "ref/prompt" }`.
         let r = PromptReference::new("my_prompt");
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["type"], "ref/prompt");
@@ -630,7 +629,7 @@ mod completion_alignment {
 
     #[test]
     fn complete_argument_shape() {
-        // Schema lines 2375–2384: `argument: {name, value}`.
+        // `CompleteArgument: {name, value}`.
         let a = CompleteArgument::new("lang", "rust");
         let v = serde_json::to_value(&a).unwrap();
         assert_eq!(v["name"], "lang");
@@ -638,11 +637,10 @@ mod completion_alignment {
     }
 }
 
-/// Phase 3.6 — Schema-driven assertion that `EmptyResult` carries `resultType`.
+/// Schema-driven assertion that `EmptyResult` carries `resultType`.
 ///
-/// Schema line 435: `EmptyResult = Result`. The 2025-11-25 EmptyResult had
-/// no resultType; DRAFT-2026-v1 inherits the required `resultType` field from
-/// `Result`. Phase 3.6 also confirms `ping` is gone (already proven in
+/// `EmptyResult = Result`. DRAFT-2026-v1 inherits the required `resultType`
+/// field from `Result`. Also confirms `ping` is gone (already proven in
 /// `removed_methods::ping_method_is_gone`); `PingRequest` remains transitionally
 /// in code with `#[deprecated]`.
 #[cfg(test)]
@@ -657,8 +655,7 @@ mod empty_result_alignment {
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(
             v["resultType"], "complete",
-            "EmptyResult must carry resultType per schema line 178+435 \
-             (EmptyResult = Result, Result.resultType required)"
+            "EmptyResult must carry resultType per `Result.resultType` (required)"
         );
     }
 
@@ -682,7 +679,7 @@ mod empty_result_alignment {
     }
 }
 
-/// Phase 3.7 — content.rs ContentBlock variants (schema lines 2091–2099).
+/// content.rs `ContentBlock` variants.
 ///
 /// Verifies wire shape of `ContentBlock` discriminated union:
 /// `TextContent | ImageContent | AudioContent | ResourceLink | EmbeddedResource`,
@@ -694,7 +691,6 @@ mod content_alignment {
 
     #[test]
     fn text_content_type_field_is_text() {
-        // Schema lines 2109–2123.
         let c = ContentBlock::text("hello");
         let v = serde_json::to_value(&c).unwrap();
         assert_eq!(v["type"], "text");
@@ -703,7 +699,6 @@ mod content_alignment {
 
     #[test]
     fn image_content_type_field_is_image() {
-        // Schema lines 2133–2154.
         let c = ContentBlock::image("base64data", "image/png");
         let v = serde_json::to_value(&c).unwrap();
         assert_eq!(v["type"], "image");
@@ -713,7 +708,6 @@ mod content_alignment {
 
     #[test]
     fn audio_content_type_field_is_audio() {
-        // Schema lines 2164–2185.
         let c = ContentBlock::audio("base64data", "audio/wav");
         let v = serde_json::to_value(&c).unwrap();
         assert_eq!(v["type"], "audio");
@@ -754,7 +748,7 @@ mod content_alignment {
 
     #[test]
     fn resource_link_type_field_present() {
-        // Schema lines 1553–1555: `ResourceLink extends Resource { type: "resource_link" }`.
+        // `ResourceLink extends Resource { type: "resource_link" }`.
         // Construct via the public API used by the prompts/tools paths.
         let r = json!({
             "type": "resource_link",
@@ -766,7 +760,7 @@ mod content_alignment {
         let parsed: Result<ContentBlock, _> = serde_json::from_value(r.clone());
         assert!(
             parsed.is_ok(),
-            "ContentBlock must accept `type: resource_link` (schema lines 1553–1555); \
+            "ContentBlock must accept `type: resource_link` (per `ResourceLink`); \
              got error: {:?}",
             parsed.err()
         );
@@ -777,7 +771,7 @@ mod content_alignment {
 
     #[test]
     fn embedded_resource_type_field_present() {
-        // Schema lines 1568–1578: `EmbeddedResource { type: "resource", resource, ... }`.
+        // `EmbeddedResource { type: "resource", resource, ... }`.
         let wire = json!({
             "type": "resource",
             "resource": {
@@ -795,7 +789,7 @@ mod content_alignment {
     }
 }
 
-/// Phase 3.4 — elicitation.rs enum schema variants (schema lines 2687–2886).
+/// elicitation.rs enum schema variants.
 ///
 /// Verifies wire shape of all four new DRAFT-2026-v1 enum schema types:
 /// - `UntitledSingleSelectEnumSchema` — `{type:"string", enum:[]}`
@@ -803,7 +797,7 @@ mod content_alignment {
 /// - `UntitledMultiSelectEnumSchema` — `{type:"array", items:{type:"string", enum:[]}}`
 /// - `TitledMultiSelectEnumSchema` — `{type:"array", items:{anyOf:[{const,title}]}}`
 
-/// Group A — URL-mode elicitation discriminated union (schema lines 2540–2629).
+/// URL-mode elicitation discriminated union.
 #[cfg(test)]
 mod elicitation_modes {
     use turul_mcp_protocol_2026_07_28::elicitation::{
@@ -824,7 +818,7 @@ mod elicitation_modes {
 
     #[test]
     fn url_mode_round_trips_with_required_mode_and_fields() {
-        // Schema lines 2588–2606: mode:"url" REQUIRED, plus elicitationId + url.
+        // `ElicitRequestURLParams`: mode:"url" REQUIRED, plus elicitationId + url.
         let r = ElicitRequest::new_url("Please authorize", "elicit-abc-123", "https://auth.example/login");
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["method"], "elicitation/create");
@@ -889,7 +883,6 @@ mod elicitation_enum_schemas {
 
     #[test]
     fn untitled_single_select_wire_shape() {
-        // Schema lines 2695–2713.
         let s = UntitledSingleSelectEnumSchema::new(vec![
             "red".to_string(),
             "green".to_string(),
@@ -908,7 +901,6 @@ mod elicitation_enum_schemas {
 
     #[test]
     fn titled_single_select_wire_shape() {
-        // Schema lines 2723–2750.
         let s = TitledSingleSelectEnumSchema::new(vec![
             TitledEnumOption::new("r", "Red"),
             TitledEnumOption::new("g", "Green"),
@@ -925,7 +917,6 @@ mod elicitation_enum_schemas {
 
     #[test]
     fn untitled_multi_select_wire_shape() {
-        // Schema lines 2768–2800.
         let s = UntitledMultiSelectEnumSchema::new(vec!["a".to_string(), "b".to_string()]);
         let v = serde_json::to_value(&s).unwrap();
         assert_eq!(v["type"], "array");
@@ -936,7 +927,6 @@ mod elicitation_enum_schemas {
 
     #[test]
     fn titled_multi_select_wire_shape() {
-        // Schema lines 2810–2850.
         let s = TitledMultiSelectEnumSchema::new(vec![
             TitledEnumOption::new("a", "Alpha"),
             TitledEnumOption::new("b", "Beta"),
@@ -1020,14 +1010,14 @@ mod elicitation_enum_schemas {
     }
 }
 
-/// Phase 3.3 — prompts.rs schema alignment (schema lines 1391–1590).
+/// prompts.rs schema alignment.
 ///
 /// Verifies wire shape of `ListPromptsResult` (extends PaginatedResult,
 /// CacheableResult), `GetPromptResult` (extends Result), and `GetPromptRequestParams`
 /// (extends InputResponseRequestParams).
 
-/// Group C — `SamplingMessage` single|array content + 5-variant `SamplingMessageContentBlock`
-/// (schema lines 2038–2052) and `CreateMessageResult extends SamplingMessage` (2007–2025).
+/// `SamplingMessage` single|array content + 5-variant `SamplingMessageContentBlock`
+/// and `CreateMessageResult extends SamplingMessage`.
 #[cfg(test)]
 mod sampling_message_alignment {
     use turul_mcp_protocol_2026_07_28::sampling::{
@@ -1077,7 +1067,7 @@ mod sampling_message_alignment {
 
     #[test]
     fn sampling_message_meta_is_camelcase_underscore_meta() {
-        // Schema line 2041: `_meta?: MetaObject`.
+        // `SamplingMessage._meta?: MetaObject`.
         let mut meta = std::collections::HashMap::new();
         meta.insert("trace".into(), json!("abc"));
         let msg = SamplingMessage::user_text("hi").with_meta(meta);
@@ -1087,7 +1077,7 @@ mod sampling_message_alignment {
 
     #[test]
     fn sampling_message_content_block_excludes_resource_link_variant() {
-        // Schema lines 2047–2052 list only Text|Image|Audio|ToolUse|ToolResult.
+        // `SamplingMessageContentBlock` lists only Text|Image|Audio|ToolUse|ToolResult.
         // A wire payload tagged "resource_link" must NOT round-trip through SamplingMessageContentBlock.
         let wire = json!({"type": "resource_link", "uri": "file:///x", "name": "x"});
         let parsed: Result<SamplingMessageContentBlock, _> = serde_json::from_value(wire);
@@ -1103,7 +1093,7 @@ mod sampling_message_alignment {
 
     #[test]
     fn tool_use_content_block_carries_id_name_input() {
-        // Schema lines 2047–2052 → ToolUseContent has id, name, input map.
+        // `SamplingMessageContentBlock::ToolUse` has id, name, input map.
         let mut input = std::collections::HashMap::new();
         input.insert("k".into(), json!("v"));
         let blk = SamplingMessageContentBlock::ToolUse {
@@ -1121,7 +1111,7 @@ mod sampling_message_alignment {
 
     #[test]
     fn create_message_result_extends_sampling_message_shape() {
-        // Schema lines 2007–2025: extends SamplingMessage, adds model + stopReason.
+        // `CreateMessageResult` extends SamplingMessage, adds model + stopReason.
         let r = CreateMessageResult::single(
             Role::Assistant,
             SamplingMessageContentBlock::text("done"),
@@ -1204,7 +1194,7 @@ mod prompts_alignment {
 
     #[test]
     fn get_prompt_params_arguments_is_string_map() {
-        // Schema line 1444: `arguments?: { [key: string]: string }`.
+        // `GetPromptRequestParams.arguments?: { [key: string]: string }`.
         let mut args = HashMap::new();
         args.insert("lang".to_string(), "rust".to_string());
         let p = GetPromptRequestParams::new("code_review", super::fixture_meta()).with_arguments(args);
@@ -1218,7 +1208,7 @@ mod prompts_alignment {
 
     #[test]
     fn get_prompt_params_input_responses_mixin_serializes() {
-        // Schema line 1436: `GetPromptRequestParams extends InputResponseRequestParams`.
+        // `GetPromptRequestParams extends InputResponseRequestParams`.
         let mut responses: InputResponses = HashMap::new();
         responses.insert(
             "rq-1".to_string(),
@@ -1241,7 +1231,7 @@ mod prompts_alignment {
     }
 }
 
-/// Phase 3.2 — resources.rs schema alignment (schema lines 999–1390).
+/// resources.rs schema alignment.
 ///
 /// Verifies the wire shape of:
 /// - `ListResourcesResult` (extends PaginatedResult, CacheableResult)
@@ -1281,7 +1271,7 @@ mod resources_alignment {
 
     #[test]
     fn list_resources_result_emits_required_cache_fields_with_defaults() {
-        // Schema requires ttlMs + cacheScope (CacheableResult mixin, lines 1020–1022).
+        // Schema requires ttlMs + cacheScope (CacheableResult mixin).
         let r = ListResourcesResult::new(vec![]);
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["ttlMs"], 0);
@@ -1300,7 +1290,7 @@ mod resources_alignment {
         let r = ListResourceTemplatesResult::new(vec![]);
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["resultType"], "complete");
-        // Schema line 1058: `resourceTemplates: ResourceTemplate[]`.
+        // `ListResourceTemplatesResult.resourceTemplates: ResourceTemplate[]`.
         assert!(v["resourceTemplates"].is_array());
     }
 
@@ -1332,7 +1322,7 @@ mod resources_alignment {
 
     #[test]
     fn read_resource_params_input_responses_mixin_serializes() {
-        // Schema lines 1092–1093: ReadResourceRequestParams extends
+        // `ReadResourceRequestParams` extends
         // ResourceRequestParams, InputResponseRequestParams.
         let mut responses: InputResponses = HashMap::new();
         responses.insert(
@@ -1363,7 +1353,7 @@ mod resources_alignment {
     }
 }
 
-/// Phase 3.1 — tools.rs schema alignment (schema lines 1601–1844).
+/// tools.rs schema alignment.
 ///
 /// Verifies:
 /// - `tools/list` and `tools/call` method strings
@@ -1387,7 +1377,7 @@ mod tools_alignment {
 
     #[test]
     fn tools_list_request_emits_correct_method() {
-        // Schema line 1602: `method: "tools/list"`.
+        // `ListToolsRequest.method: "tools/list"`.
         let r = ListToolsRequest::new(super::fixture_meta());
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["method"], "tools/list");
@@ -1395,7 +1385,7 @@ mod tools_alignment {
 
     #[test]
     fn tools_call_request_emits_correct_method() {
-        // Schema line 1717: `method: "tools/call"`.
+        // `CallToolRequest.method: "tools/call"`.
         let r = CallToolRequest::new("echo", super::fixture_meta());
         let v = serde_json::to_value(&r).unwrap();
         assert_eq!(v["method"], "tools/call");
@@ -1405,7 +1395,7 @@ mod tools_alignment {
     #[test]
     fn call_tool_result_always_emits_result_type() {
         // CallToolResult extends Result; resultType is required on wire per
-        // schema line 178. Our default-init produces Complete.
+        // `Result`. Our default-init produces Complete.
         for r in [
             CallToolResult::new(vec![ContentBlock::text("hi")]),
             CallToolResult::success(vec![ContentBlock::text("ok")]),
@@ -1429,7 +1419,7 @@ mod tools_alignment {
     #[test]
     fn list_tools_result_emits_required_cache_fields_with_defaults() {
         // Schema requires ttlMs + cacheScope on every list result (CacheableResult
-        // mixin, schema lines 1613–1615). Default constructor produces (0, Public)
+        // mixin). Default constructor produces (0, Public)
         // — immediately-stale public response.
         let r = ListToolsResult::new(vec![]);
         let v = serde_json::to_value(&r).unwrap();
@@ -1445,7 +1435,7 @@ mod tools_alignment {
 
     #[test]
     fn list_tools_result_with_cache_produces_compliant_wire_shape() {
-        // Schema lines 1613–1615: `ListToolsResult extends PaginatedResult, CacheableResult`.
+        // `ListToolsResult extends PaginatedResult, CacheableResult`.
         let r = ListToolsResult::new(vec![])
             .with_cache(CacheableResult::new(60_000, CacheScope::Private));
         let v = serde_json::to_value(&r).unwrap();
@@ -1467,7 +1457,7 @@ mod tools_alignment {
 
     #[test]
     fn call_tool_params_with_input_responses_mixes_in_correctly() {
-        // Schema line 1697: `CallToolRequestParams extends InputResponseRequestParams`.
+        // `CallToolRequestParams extends InputResponseRequestParams`.
         let mut responses: InputResponses = HashMap::new();
         responses.insert(
             "rq-1".to_string(),
@@ -1499,7 +1489,7 @@ mod tools_alignment {
 
     #[test]
     fn structured_content_accepts_any_json_value() {
-        // Schema lines 1649–1655 widen `structuredContent` from object-only
+        // `CallToolResult.structuredContent` widens from object-only
         // (2025-11-25) to `unknown` — arrays, scalars, null are all valid.
         for value in [
             json!(42),
@@ -1521,7 +1511,7 @@ mod tools_alignment {
 
     #[test]
     fn list_tools_result_back_compat_accepts_missing_result_type() {
-        // Per schema line 178–181 backward-compat clause for resultType.
+        // Per `Result.resultType` backward-compat clause.
         // CacheableResult fields are required, so a back-compat wire MUST still carry them.
         let wire = json!({"tools": [], "ttlMs": 0, "cacheScope": "public"});
         let r: ListToolsResult = serde_json::from_value(wire).unwrap();
@@ -1536,11 +1526,11 @@ mod tools_alignment {
     }
 }
 
-/// Phase 2.3 — `ClientCapabilities`/`ServerCapabilities` shape compliance.
+/// `ClientCapabilities`/`ServerCapabilities` shape compliance.
 ///
 /// Verifies the DRAFT-2026-v1-specific fields (`sampling.context`, `sampling.tools`,
 /// `elicitation.form`, `elicitation.url`, `extensions` on both client and server)
-/// serialize with the correct wire names from schema lines 623–772.
+/// serialize with the correct wire names per `ClientCapabilities`/`ServerCapabilities`.
 #[cfg(test)]
 mod capabilities_shape {
     use turul_mcp_protocol_2026_07_28::initialize::{
@@ -1551,7 +1541,7 @@ mod capabilities_shape {
 
     #[test]
     fn client_sampling_subcapabilities_serialize_with_camelcase() {
-        // Schema lines 648–658: `sampling?: { context?, tools? }`.
+        // `ClientCapabilities.sampling?: { context?, tools? }`.
         let mut caps = ClientCapabilities::default();
         caps.sampling = Some(SamplingCapabilities {
             context: Some(HashMap::new()),
@@ -1581,7 +1571,7 @@ mod capabilities_shape {
 
     #[test]
     fn client_elicitation_subcapabilities_serialize_with_camelcase() {
-        // Schema lines 668–671: `elicitation?: { form?, url? }`.
+        // `ClientCapabilities.elicitation?: { form?, url? }`.
         let mut caps = ClientCapabilities::default();
         caps.elicitation = Some(ElicitationCapabilities {
             form: Some(HashMap::new()),
@@ -1595,7 +1585,7 @@ mod capabilities_shape {
 
     #[test]
     fn client_extensions_serializes_reverse_dns_keys() {
-        // Schema lines 673–681: `extensions?: { [k]: JSONObject }`.
+        // `ClientCapabilities.extensions?: { [k]: JSONObject }`.
         let mut caps = ClientCapabilities::default();
         let mut exts = HashMap::new();
         exts.insert(
@@ -1614,7 +1604,6 @@ mod capabilities_shape {
 
     #[test]
     fn server_extensions_serializes() {
-        // Schema lines 763–771.
         let mut caps = ServerCapabilities::default();
         let mut exts = HashMap::new();
         exts.insert("io.modelcontextprotocol/apps".to_string(), json!({}));
@@ -1675,11 +1664,11 @@ mod capabilities_shape {
     }
 }
 
-/// Phase 8 — Exhaustive method-string coverage against the vendored schema.
+/// Exhaustive method-string coverage against the vendored schema.
 ///
 /// Maintains a single source of truth list of all 22 method strings DRAFT-2026-v1
-/// declares (per `Phase 2.4 removed_methods` cross-check + the positive list
-/// from `docs/plans/2026-07-28-migration-diff.md`). Three guarantees:
+/// declares (cross-checked against the `removed_methods` module and the
+/// positive list from `docs/plans/2026-07-28-migration-diff.md`). Three guarantees:
 ///
 /// 1. Every method in the list appears in the vendored `schema/draft-schema.ts`
 ///    (positive cross-check — catches typos in the list).
@@ -1742,7 +1731,7 @@ mod method_strings {
             DRAFT_METHODS.len(),
             "Schema declares {} methods but our canonical list has {}. \
              Re-vendor was performed without updating the list — \
-             see docs/plans/2026-07-28-migration-diff.md and update Phase 8 / Phase 2.4.",
+             see docs/plans/2026-07-28-migration-diff.md.",
             schema_method_count,
             DRAFT_METHODS.len()
         );
@@ -1893,7 +1882,7 @@ mod method_strings {
     // - elicitation/create (ElicitRequest, needs schema)
 }
 
-/// Phase 2.4 — Schema-drift detector for removed methods.
+/// Schema-drift detector for removed methods.
 ///
 /// Reads the vendored `schema/draft-schema.ts` at compile time and asserts that
 /// the methods removed from DRAFT-2026-v1 (per the migration diff) do NOT
@@ -1915,7 +1904,7 @@ mod removed_methods {
         assert!(
             !SCHEMA_TS.contains(&pattern),
             "DRAFT-2026-v1 schema unexpectedly contains `{}` — the migration diff \
-             and Phase 2/3 assumptions need revisiting. Re-vendor + re-audit.",
+             and removed-method assumptions need revisiting. Re-vendor + re-audit.",
             pattern
         );
     }
@@ -2056,12 +2045,12 @@ mod convention_meta_keys {
 
     #[test]
     fn log_level_constant_matches_schema_line_106() {
-        // Schema line 106: `"io.modelcontextprotocol/logLevel"?: LoggingLevel`.
+        // `RequestMetaObject` field: `"io.modelcontextprotocol/logLevel"?: LoggingLevel`.
         assert_eq!(META_KEY_LOG_LEVEL, "io.modelcontextprotocol/logLevel");
     }
 }
 
-/// Phase 1.2 — `RequestMetaObject` compliance with draft schema (lines 70–107).
+/// `RequestMetaObject` compliance with draft schema.
 ///
 /// Verifies the required-fields invariant of the stateless-core per-request
 /// capability negotiation: `protocolVersion`, `clientInfo`, `clientCapabilities`.
@@ -2082,21 +2071,21 @@ mod request_meta {
 
     #[test]
     fn required_fields_serialize_with_namespaced_keys() {
-        // Schema lines 83, 90, 98: keys use full `io.modelcontextprotocol/<name>` prefix.
+        // `RequestMetaObject` required keys use full `io.modelcontextprotocol/<name>` prefix.
         let m = RequestMetaObject::new("DRAFT-2026-v1", fixture_impl(), fixture_caps());
         let v = serde_json::to_value(&m).unwrap();
 
         assert_eq!(
             v["io.modelcontextprotocol/protocolVersion"], "DRAFT-2026-v1",
-            "protocolVersion key must use full reverse-DNS prefix per schema line 83"
+            "protocolVersion key must use full reverse-DNS prefix per `RequestMetaObject`"
         );
         assert!(
             v["io.modelcontextprotocol/clientInfo"].is_object(),
-            "clientInfo key must use full reverse-DNS prefix per schema line 90"
+            "clientInfo key must use full reverse-DNS prefix per `RequestMetaObject`"
         );
         assert!(
             v["io.modelcontextprotocol/clientCapabilities"].is_object(),
-            "clientCapabilities key must use full reverse-DNS prefix per schema line 98"
+            "clientCapabilities key must use full reverse-DNS prefix per `RequestMetaObject`"
         );
     }
 
@@ -2118,7 +2107,7 @@ mod request_meta {
 
     #[test]
     fn progress_token_serializes_under_short_camelcase_key() {
-        // Schema line 74: `progressToken?: ProgressToken` — NOT namespaced.
+        // `RequestMetaObject.progressToken?: ProgressToken` — NOT namespaced.
         let m = RequestMetaObject::new("DRAFT-2026-v1", fixture_impl(), fixture_caps())
             .with_progress_token("tok-1");
         let v = serde_json::to_value(&m).unwrap();
@@ -2127,7 +2116,7 @@ mod request_meta {
 
     #[test]
     fn log_level_serializes_under_namespaced_key() {
-        // Schema line 100–106: `"io.modelcontextprotocol/logLevel"?: LoggingLevel`.
+        // `RequestMetaObject` field: `"io.modelcontextprotocol/logLevel"?: LoggingLevel`.
         let m = RequestMetaObject::new("DRAFT-2026-v1", fixture_impl(), fixture_caps())
             .with_log_level(LoggingLevel::Warning);
         let v = serde_json::to_value(&m).unwrap();
@@ -2167,7 +2156,7 @@ mod request_meta {
         let r: Result<RequestMetaObject, _> = serde_json::from_value(json);
         assert!(
             r.is_err(),
-            "missing clientCapabilities must fail (required per schema line 92)"
+            "missing clientCapabilities must fail (required per `RequestMetaObject`)"
         );
     }
 
@@ -2199,7 +2188,7 @@ mod request_meta {
     }
 }
 
-/// Phase 1.3 — `ResultType` discriminator compliance with draft schema (lines 157–185).
+/// `ResultType` discriminator compliance with draft schema.
 ///
 /// The `ResultType` enum's serialization is already covered in `result_type::tests`;
 /// this section verifies its integration with the broader Result contract — that
@@ -2221,7 +2210,7 @@ mod result_discrimination {
 
     #[test]
     fn pre_2026_result_without_result_type_defaults_to_complete() {
-        // Schema lines 178–181: "when a client receives a result from a server
+        // Per `Result.resultType` backward-compat clause: "when a client receives a result from a server
         // implementing an earlier protocol version (which does not include
         // `resultType`), the client MUST treat the absent field as 'complete'."
         //
@@ -2238,7 +2227,7 @@ mod result_discrimination {
     }
 }
 
-/// Phase 1.5 — multi-round-trip flow compliance with draft schema (lines 437–514).
+/// multi-round-trip flow compliance with draft schema.
 ///
 /// Integration-style test that walks the schema-defined flow end-to-end:
 /// server emits `InputRequiredResult`, client constructs
@@ -2276,7 +2265,7 @@ mod multi_round_trip {
 
     #[test]
     fn client_retries_with_responses_keyed_same_as_input_requests() {
-        // Schema line 507–509: "For each key in the response's inputRequests
+        // Per `InputResponseRequestParams`: "For each key in the response's inputRequests
         // field, the same key must appear here with the associated response."
         let mut responses: InputResponses = HashMap::new();
         responses.insert(
@@ -2300,12 +2289,12 @@ mod multi_round_trip {
         );
         assert_eq!(
             v["requestState"], "opaque-server-state-v1",
-            "client must echo requestState verbatim per schema lines 494–498"
+            "client must echo requestState verbatim per `InputResponseRequestParams`"
         );
     }
 
-    /// Group D — `InputResponseRequestParams` is a mixin (schema line 505,
-    /// `extends RequestParams`). The three extending interfaces inline its
+    /// `InputResponseRequestParams` is a mixin
+    /// (`extends RequestParams`). The three extending interfaces inline its
     /// fields (`inputResponses?`, `requestState?`) by composition. This test
     /// proves the same JSON wire shape produced by each extender so future
     /// drift in any single extender is caught against the others.
@@ -2348,7 +2337,7 @@ mod multi_round_trip {
         assert!(obj.contains_key("requestState"));
     }
 
-    /// Group E — `InputRequest` (schema line 438) is a union of three
+    /// `InputRequest` is a union of three
     /// `*Request` types. Discrimination on the wire `method` string is
     /// enforced by the custom Deserialize impl: known methods map to
     /// their variant, unknown methods fail to parse.
@@ -2391,7 +2380,7 @@ mod multi_round_trip {
         assert!(err.contains("method"), "error should mention method discriminator: {err}");
     }
 
-    /// Group F — schema line 480 "At least one of `inputRequests` or
+    /// `InputRequiredResult` invariant "At least one of `inputRequests` or
     /// `requestState` MUST be present" is enforced by the custom Deserialize
     /// impl. JSON missing both fields must be rejected at parse time.
     #[test]
@@ -2427,7 +2416,7 @@ mod multi_round_trip {
 
     #[test]
     fn input_required_well_formed_invariant() {
-        // Schema line 480: "At least one of `inputRequests` or `requestState`
+        // `InputRequiredResult` invariant: "At least one of `inputRequests` or `requestState`
         // MUST be present."
         let only_requests =
             InputRequiredResult::with_requests(HashMap::new()); // empty map counts as present
@@ -2441,7 +2430,7 @@ mod multi_round_trip {
     }
 }
 
-/// Phase 1.1 — JSON-RPC envelope compliance with draft schema (lines 26–258).
+/// JSON-RPC envelope compliance with draft schema.
 ///
 /// Cross-crate integration tests: asserts that our consumption of the
 /// `turul-rpc` wire envelopes produces JSON byte shapes matching the MCP
@@ -2611,7 +2600,7 @@ mod envelope {
     // code today deserializes one shape at a time based on direction.
 }
 
-/// Phase 1.4 — Error code compliance with draft schema (lines 261–427).
+/// Error code compliance with draft schema.
 ///
 /// Asserts every McpError variant emits the on-wire code and structured data
 /// the schema declares. See `docs/plans/2026-07-28-compliance-plan.md` §1.4
@@ -2619,8 +2608,7 @@ mod envelope {
 #[cfg(test)]
 mod error_codes {
     use turul_mcp_protocol_2026_07_28::McpError;
-    // McpError::to_error_object is an inherent method; the `ToJsonRpcError` trait
-    // import previously needed here was removed when we stopped using its trait form.
+    // `McpError::to_error_object` is an inherent method; no trait import required.
 
     // -- Not-found errors: must now map to JSON-RPC standard -32602 (InvalidParams)
     //    per SEP-2164 (was custom -32001/-32002/-32003 in 2025-11-25). --
@@ -2657,7 +2645,7 @@ mod error_codes {
 
     #[test]
     fn missing_required_client_capability_emits_minus_32003_with_data() {
-        // Schema lines 363, 414–427: `MissingRequiredClientCapabilityError` carries
+        // `MissingRequiredClientCapabilityError` carries
         // `data: { requiredCapabilities: ClientCapabilities }`.
         let required_caps = serde_json::json!({
             "elicitation": { "form": {} }
@@ -2680,7 +2668,7 @@ mod error_codes {
 
     #[test]
     fn unsupported_protocol_version_emits_minus_32004_with_data() {
-        // Schema lines 371, 384–402: `UnsupportedProtocolVersionError` carries
+        // `UnsupportedProtocolVersionError` carries
         // `data: { supported: string[], requested: string }`.
         let err = McpError::UnsupportedProtocolVersion {
             supported: vec!["DRAFT-2026-v1".to_string(), "2025-11-25".to_string()],
@@ -2695,7 +2683,7 @@ mod error_codes {
         assert_eq!(v["data"]["requested"], "1999-01-01");
     }
 
-    // -- Standard JSON-RPC codes round-trip correctly per schema lines 261–265. --
+    // -- Standard JSON-RPC codes round-trip correctly. --
 
     #[test]
     fn invalid_params_variants_all_emit_minus_32602() {
@@ -2736,13 +2724,14 @@ mod error_codes {
         use std::collections::HashSet;
 
         let allowed: HashSet<i64> = [
-            // Standard JSON-RPC (schema 261–265):
+            // Standard JSON-RPC error codes:
             -32700, -32600, -32601, -32602, -32603,
-            // MCP-specific structured codes (schema 363, 371):
+            // MCP-specific structured codes (`MissingRequiredClientCapabilityError`,
+            // `UnsupportedProtocolVersionError`):
             -32003, -32004,
             // Framework-internal server-error codes still in use (not in spec,
-            // but in the JSON-RPC-reserved server-error range; replace per area
-            // as Phases 2+ land):
+            // but in the JSON-RPC-reserved server-error range; replaced area-by-area
+            // as bindings adopt typed errors):
             -32010, -32011, -32012, -32013, -32020, -32021, -32022,
             -32030, -32031, -32040, -32041,
             // Sample passthrough code for the `JsonRpcError` test variant above.
@@ -2789,7 +2778,7 @@ mod error_codes {
             // Use a server-error-range code (-32099..=-32000). Standard codes
             // like -32603 currently panic when passed through `server_error()` —
             // tracked as a separate pre-existing bug in the `JsonRpcError`
-            // pass-through path, orthogonal to this Phase 1.4 slice.
+            // pass-through path.
             McpError::JsonRpcError {
                 code: -32050,
                 message: "x".into(),

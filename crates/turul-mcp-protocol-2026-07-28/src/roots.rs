@@ -76,10 +76,6 @@ pub struct ListRootsResult {
     pub roots: Vec<Root>,
 }
 
-// `RootsListChangedParams` and `RootsListChangedNotification` removed:
-// `notifications/roots/list_changed` is NOT in DRAFT-2026-v1 schema (roots
-// soft-deprecated per SEP-2577 with no listChanged notification).
-
 impl Default for ListRootsParams {
     fn default() -> Self {
         Self::new()
@@ -209,9 +205,6 @@ mod tests {
         assert_eq!(result.roots[0].name, Some("Root 1".to_string()));
     }
 
-    // `test_roots_list_changed_notification` removed: RootsListChangedNotification
-    // is NOT in DRAFT-2026-v1 schema.
-
     #[test]
     fn test_serialization() {
         let root = Root::new("file:///test/path").with_name("Test Root");
@@ -261,8 +254,6 @@ mod tests {
         assert_eq!(obj.len(), 1);
     }
 
-    // `test_roots_list_changed_notification_matches_typescript_spec` removed:
-    // RootsListChangedNotification is NOT in DRAFT-2026-v1 schema.
 
     #[test]
     fn test_optional_params_serialization() {

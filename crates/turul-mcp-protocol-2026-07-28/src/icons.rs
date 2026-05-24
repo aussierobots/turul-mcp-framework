@@ -3,12 +3,13 @@
 //! Icons are display hints for tools, resources, prompts, and implementations.
 //! Most implementations do not need icons — they are optional visual enhancements.
 //!
-//! See [MCP spec](https://modelcontextprotocol.io/specification/2025-11-25)
+//! Carried as `Vec<Icon>` on `Tool`, `Resource`, `Prompt`, `ResourceTemplate`,
+//! and `Implementation` per the DRAFT-2026-v1 schema.
 
 use serde::{Deserialize, Serialize};
 
 /// Theme preference for an icon (light or dark mode).
-/// See [MCP spec](https://modelcontextprotocol.io/specification/2025-11-25)
+/// Defined on tool/resource/prompt/implementation interfaces in the DRAFT-2026-v1 schema.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum IconTheme {
@@ -18,7 +19,7 @@ pub enum IconTheme {
 
 /// Icon for tools, resources, prompts, and implementations.
 /// Icons are display hints — most implementations do not need icons.
-/// See [MCP spec](https://modelcontextprotocol.io/specification/2025-11-25)
+/// Defined on tool/resource/prompt/implementation interfaces in the DRAFT-2026-v1 schema.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Icon {

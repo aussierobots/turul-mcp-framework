@@ -1,4 +1,4 @@
-//! Content types for MCP 2025-11-25 specification
+//! Content block types for MCP DRAFT-2026-v1.
 //!
 //! This module contains the exact content type definitions from the MCP spec,
 //! ensuring perfect compliance with the TypeScript schema definitions.
@@ -76,7 +76,7 @@ pub struct ResourceReference {
     pub meta: Option<HashMap<String, Value>>,
 }
 
-/// Content block union type matching MCP 2025-11-25 specification exactly
+/// Content block union — `text | image | audio | resource_link | resource | tool_use | tool_result`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ContentBlock {
@@ -134,7 +134,7 @@ pub enum ContentBlock {
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         meta: Option<HashMap<String, Value>>,
     },
-    /// Tool use content block (per MCP 2025-11-25 spec)
+    /// Tool use content block.
     #[serde(rename = "tool_use")]
     ToolUse {
         /// Unique identifier for this tool use
@@ -146,7 +146,7 @@ pub enum ContentBlock {
         #[serde(rename = "_meta", skip_serializing_if = "Option::is_none")]
         meta: Option<HashMap<String, Value>>,
     },
-    /// Tool result content block (per MCP 2025-11-25 spec)
+    /// Tool result content block.
     #[serde(rename = "tool_result")]
     ToolResult {
         /// ID of the tool use this result corresponds to

@@ -86,8 +86,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    // `test_ping_request` removed: PingRequest deleted with `ping` (not in DRAFT-2026-v1 schema).
-
     #[test]
     fn test_empty_result() {
         let result = EmptyResult::new();

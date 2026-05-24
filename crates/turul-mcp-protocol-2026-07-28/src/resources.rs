@@ -526,13 +526,11 @@ impl ListResourceTemplatesResult {
     }
 }
 
-// `SubscribeParams`, `SubscribeRequest`, `UnsubscribeParams`, `UnsubscribeRequest`
-// removed: `resources/subscribe` and `resources/unsubscribe` are NOT in DRAFT-2026-v1
-// schema. Subscriptions are managed via the unified `subscriptions/listen` stream
-// (`SubscriptionFilter.resource_subscriptions`); see `crate::subscriptions`.
+// Resource subscriptions in DRAFT-2026-v1 flow through the unified
+// `subscriptions/listen` stream — see [`crate::subscriptions::SubscriptionFilter::resource_subscriptions`].
 
-/// Result for resources/read — extends `CacheableResult` per draft schema
-/// lines 1116–1118. Caller may also return [`InputRequiredResult`](crate::input_required::InputRequiredResult)
+/// Result for `resources/read` — `ReadResourceResult extends CacheableResult`.
+/// Caller may also return [`InputRequiredResult`](crate::input_required::InputRequiredResult)
 /// via the `ReadResourceResultResponse.result` union.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -609,8 +607,6 @@ impl crate::traits::HasResultType for ReadResourceResult {
 
 impl crate::traits::RpcResult for ReadResourceResult {}
 
-// `ResourceSubscription` removed: subscriptions managed via the unified
-// `subscriptions/listen` filter (`SubscriptionFilter.resource_subscriptions`).
 
 // Trait implementations for resources
 

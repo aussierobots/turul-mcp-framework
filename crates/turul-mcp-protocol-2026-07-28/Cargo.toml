@@ -22,16 +22,15 @@ client = []  # Client-side features
 compliance = []
 
 [dependencies]
-# Wire-level JSON-RPC types come from turul-rpc 0.2.1 directly (not via the
+# Wire-level JSON-RPC types come from turul-rpc directly (not via the
 # turul-mcp-json-rpc-server shim) — this crate is on the 0.4 line and cuts
 # the shim per ADR-025.
 #
-# Pinned to 0.2.1 here (not `.workspace = true`) because workspace stays on
-# `turul-rpc 0.1` for the 0.3.x line (shim + downstream consumers written
-# against the 0.1 API). 0.2 renamed `JsonRpcResponse` to a union and added
-# `JsonRpcSuccessResponse` as the success-only struct; the 2026-07-28 crate
-# wants the new shape, the 0.3.x line doesn't yet.
-turul-rpc = { version = "0.2.1", default-features = false, features = ["async"] }
+# Pinned independently of workspace because workspace stays on `turul-rpc 0.1`
+# for the 0.3.x line (shim + downstream consumers written against the 0.1 API).
+# 0.2 renamed `JsonRpcResponse` to a union; the 2026-07-28 crate wants the new
+# shape, the 0.3.x line doesn't yet.
+turul-rpc = { version = "0.2.2", default-features = false, features = ["async"] }
 serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true

@@ -1,6 +1,11 @@
-//! MCP Initialize Protocol Types
+//! Shared capability and implementation identity types for MCP DRAFT-2026-v1.
 //!
-//! This module defines the types used for the MCP initialization handshake.
+//! DRAFT-2026-v1 is stateless (SEP-2567, SEP-2575) — there is no
+//! `initialize`/`notifications/initialized` handshake. These types
+//! ([`Implementation`], [`ClientCapabilities`], [`ServerCapabilities`])
+//! survive because they are referenced by
+//! [`crate::meta::RequestMetaObject`] (per-request negotiation) and
+//! [`crate::discover::DiscoverResult`].
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -175,8 +180,8 @@ pub struct ToolsCapabilities {
     pub list_changed: Option<bool>,
 }
 
-// All `TasksXxxCapabilities` types removed: tasks moved to extension (SEP-2663).
-// Advertise via `extensions["io.modelcontextprotocol/tasks"]`.
+// Tasks capabilities live in the tasks extension (SEP-2663). Advertise via
+// `extensions["io.modelcontextprotocol/tasks"]` on `ServerCapabilities`.
 
 /// Capabilities for resources provided by the server
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -250,10 +255,10 @@ pub struct ServerCapabilities {
     pub extensions: Option<HashMap<String, Value>>,
 }
 
-// `InitializeRequest` and `InitializeResult` removed: DRAFT-2026-v1 stateless
-// core (SEP-2567, SEP-2575) has no initialize handshake. Client info and
-// capabilities travel in `RequestMetaObject` on every request; server info
-// and capabilities come from `DiscoverResult` (see `crate::discover`).
+// DRAFT-2026-v1 is stateless (SEP-2567, SEP-2575) — there is no initialize
+// handshake. Client info and capabilities travel in `RequestMetaObject` on
+// every request; server info and capabilities come from `DiscoverResult`
+// (see [`crate::discover`]).
 
 #[cfg(test)]
 mod tests {

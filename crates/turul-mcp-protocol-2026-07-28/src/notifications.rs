@@ -1,7 +1,12 @@
-//! MCP Notifications Protocol Types
+//! Notification payload types for MCP DRAFT-2026-v1.
 //!
-//! This module defines types for notifications in MCP according to the 2025-11-25 specification.
-//! MCP notifications are JSON-RPC notifications that inform clients about server state changes.
+//! **Important**: `*ListChangedNotification`, [`ProgressNotification`], and the
+//! other types in this module carry only the MCP `method` and `params` fields —
+//! they are NOT wire-complete JSON-RPC messages. Wrap them in
+//! [`crate::JsonRpcNotification`] (which adds `jsonrpc: "2.0"`) before sending
+//! over any transport.
+//!
+//! Method strings use `list_changed` (underscore) per the DRAFT-2026-v1 spec.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -201,10 +206,6 @@ impl PromptListChangedNotification {
     }
 }
 
-// `RootsListChangedNotification` removed: `notifications/roots/list_changed`
-// is NOT in DRAFT-2026-v1 schema (roots soft-deprecated per SEP-2577 with no
-// listChanged notification).
-
 /// Method: "notifications/progress"
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -215,8 +216,9 @@ pub struct ProgressNotification {
     pub params: ProgressNotificationParams,
 }
 
-/// Progress token value — can be a string or a number per MCP 2025-11-25.
-/// See [MCP spec](https://modelcontextprotocol.io/specification/2025-11-25)
+/// Progress token value — a string or a number. Used by the caller to opt in
+/// to out-of-band `notifications/progress` for a request; echoed in every
+/// progress notification for that operation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(untagged)]
 pub enum ProgressTokenValue {
@@ -373,11 +375,6 @@ impl CancelledNotification {
     }
 }
 
-// `InitializedNotification` removed: stateless core (SEP-2567, SEP-2575)
-// drops the initialize handshake entirely. Per-request capability negotiation
-// via `RequestMetaObject` replaces it. The `notifications/initialized` method
-// is NOT in DRAFT-2026-v1 schema.
-
 /// Method: "notifications/message"
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -427,11 +424,7 @@ impl LoggingMessageNotification {
     }
 }
 
-// `TaskStatusNotification` removed: tasks moved to extension (SEP-2663);
-// the entire `tasks.rs` module is deleted from this crate. The
-// `notifications/tasks/status` method is NOT in DRAFT-2026-v1 schema.
-
-/// Method: "notifications/elicitation/complete" (per MCP 2025-11-25)
+/// Method: `"notifications/elicitation/complete"`.
 ///
 /// Sent by the client when an elicitation has been completed.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -511,8 +504,6 @@ mod tests {
         assert_eq!(notification.method, "notifications/prompts/list_changed");
     }
 
-    // `test_roots_list_changed` removed: `notifications/roots/list_changed`
-    // is NOT in DRAFT-2026-v1 schema.
 
     #[test]
     fn test_progress_notification() {
@@ -562,9 +553,6 @@ mod tests {
         );
     }
 
-    // `test_initialized_notification` removed: `notifications/initialized`
-    // is NOT in DRAFT-2026-v1 schema (stateless core).
-
     #[test]
     fn test_logging_message_notification() {
         use crate::logging::LoggingLevel;
@@ -577,14 +565,6 @@ mod tests {
         assert_eq!(notification.params.logger, Some("test-logger".to_string()));
         assert_eq!(notification.params.data, data);
     }
-
-    // `test_serialization` removed: it tested `InitializedNotification`, which
-    // is NOT in DRAFT-2026-v1 schema. Other notification serialization is
-    // covered by the per-area tests above.
-
-    // `test_task_status_notification` removed: tasks moved to extension (SEP-2663);
-    // `TaskStatusNotification` and the entire `tasks.rs` module are no longer
-    // part of this crate.
 
     #[test]
     fn test_elicitation_complete_notification() {

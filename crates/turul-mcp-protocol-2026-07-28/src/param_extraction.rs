@@ -31,8 +31,7 @@ macro_rules! impl_serde_extractor {
     };
 }
 
-// Apply macro to all serde-compatible parameter types that exist
-// Note: InitializeRequest doesn't follow the Request/Params pattern
+// Apply macro to all serde-compatible parameter types that exist.
 impl_serde_extractor!(crate::tools::CallToolRequestParams);
 // `PaginatedRequestParams` covers all 4 `PaginatedRequest` extenders —
 // `ListToolsRequest`, `ListResourcesRequest`, `ListResourceTemplatesRequest`,

@@ -1,6 +1,6 @@
 //! Framework traits for JSON-RPC types per the MCP DRAFT-2026-v1 specification.
 //!
-//! Trait names follow the schema's TypeScript interface names (`InitializeRequest`,
+//! Trait names follow the schema's TypeScript interface names (`CallToolRequest`,
 //! `CallToolResult`, etc.). The `Has*Params` helpers expose per-interface field
 //! access without leaking the concrete Rust struct, so framework dispatchers
 //! can work with any Params implementation.
@@ -11,7 +11,6 @@ use std::collections::HashMap;
 
 use crate::{
     completion::CompleteArgument,
-    initialize::{ClientCapabilities, Implementation, ServerCapabilities},
     logging::LogLevel,
     meta::{Cursor, ProgressToken},
     prompts::{Prompt, PromptMessage},
@@ -19,7 +18,6 @@ use crate::{
     roots::Root,
     sampling::{ModelPreferences, Role, SamplingMessage, SamplingMessageContent},
     tools::{Tool, ToolResult},
-    version::McpVersion,
 };
 
 // JSON-RPC version constant
@@ -148,37 +146,12 @@ pub trait HasProgressTokenParam: Params {
     fn progress_token(&self) -> Option<&ProgressToken>;
 }
 
-pub trait HasInitializeParams: Params {
-    fn protocol_version(&self) -> McpVersion;
-    fn capabilities(&self) -> &ClientCapabilities;
-    fn client_info(&self) -> &Implementation;
-}
-
 // ==========================
 // === Typed Traits from MCP Spec ===
 // ==========================
 
 pub trait HasCancelledParams: HasRequestIdParam + HasReasonParam {}
 pub trait CancelledNotification: RpcNotification + HasCancelledParams {}
-
-pub trait InitializeRequest: JsonRpcRequestTrait + HasInitializeParams {
-    fn method(&self) -> &str {
-        "initialize"
-    }
-}
-
-pub trait InitializeResult: RpcResult {
-    fn protocol_version(&self) -> &str;
-    fn capabilities(&self) -> &ServerCapabilities;
-    fn server_info(&self) -> &Implementation;
-    fn instructions(&self) -> Option<&str>;
-}
-
-pub trait InitializeNotification: JsonRpcNotificationTrait {
-    fn method(&self) -> &str {
-        "notifications/initialized"
-    }
-}
 
 // ---------------------- notifications/progress ------------------------
 
@@ -304,7 +277,8 @@ pub trait ListToolsResult: RpcResult {
 
 pub trait HasCallToolRequestParams: Params {
     fn name(&self) -> &String;
-    fn arguments(&self) -> Option<&Value>; // Keep as Value for now for compatibility
+    /// Tool arguments map. Schema's `arguments?: { [key: string]: unknown }`.
+    fn arguments(&self) -> Option<&HashMap<String, Value>>;
     fn meta(&self) -> Option<&HashMap<String, Value>>;
 }
 
@@ -414,17 +388,12 @@ pub trait ListRootsRequest: JsonRpcRequestTrait + HasListRootsParams {
 }
 
 // `ListRootsResult` is `{roots: Root[]}` per the DRAFT-2026-v1 schema — bare,
-// no `_meta`, no `resultType`. The `RpcResult: HasMeta + HasData` bound doesn't
+// no `_meta`, no `resultType`. The `RpcResult: HasMeta + HasResultType` bound doesn't
 // fit, so the trait is plain.
 pub trait ListRootsResult {
     fn roots(&self) -> &Vec<Root>;
 }
 
-pub trait RootsListChangedNotification: JsonRpcNotificationTrait {
-    fn method(&self) -> &str {
-        "notifications/roots/list_changed"
-    }
-}
 
 // ---------------------- logging ------------------------
 
@@ -466,7 +435,7 @@ pub trait ElicitRequest: JsonRpcRequestTrait + HasElicitParams {
 }
 
 // `ElicitResult` is `{action, content?}` per the schema — bare, no `_meta`,
-// no `resultType`. The `RpcResult: HasMeta + HasData` bound doesn't fit.
+// no `resultType`. The `RpcResult: HasMeta + HasResultType` bound doesn't fit.
 pub trait ElicitResult {
     fn action(&self) -> &Value;
     fn content(&self) -> Option<&HashMap<String, Value>>;

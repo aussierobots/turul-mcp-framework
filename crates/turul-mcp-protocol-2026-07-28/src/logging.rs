@@ -90,9 +90,9 @@ impl LoggingMessageNotification {
     }
 }
 
-// `SetLevelParams` and `SetLevelRequest` removed: `logging/setLevel` is NOT
-// in DRAFT-2026-v1 schema. Clients now opt in to log notifications per-request
-// via `_meta.io.modelcontextprotocol/logLevel` (see `RequestMetaObject::log_level`).
+// Clients opt in to log notifications per-request via
+// `_meta.io.modelcontextprotocol/logLevel` (see [`crate::meta::RequestMetaObject::log_level`]).
+// There is no `logging/setLevel` RPC in DRAFT-2026-v1.
 
 /// Convenience constructors for LoggingLevel
 impl LoggingLevel {
@@ -172,9 +172,6 @@ mod tests {
         assert!(LoggingLevel::Error.should_log(LoggingLevel::Warning));
         assert!(!LoggingLevel::Info.should_log(LoggingLevel::Error));
     }
-
-    // `test_set_level_request` and `test_serialization` (of SetLevelRequest) removed:
-    // SetLevelRequest deleted with `logging/setLevel` (not in DRAFT-2026-v1 schema).
 
     #[test]
     fn test_logging_message_notification() {

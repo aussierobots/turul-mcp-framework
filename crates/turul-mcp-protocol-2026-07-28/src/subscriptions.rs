@@ -99,7 +99,7 @@ impl SubscriptionsListenRequestParams {
 
 /// `subscriptions/listen` request.
 ///
-/// The `jsonrpc`/`id` envelope is supplied by [`JsonRpcRequest`](crate::json_rpc::JsonRpcRequest)
+/// The `jsonrpc`/`id` envelope is supplied by [`JsonRpcRequest`](crate::JsonRpcRequest)
 /// when wrapped for the wire (existing crate convention).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubscriptionsListenRequest {

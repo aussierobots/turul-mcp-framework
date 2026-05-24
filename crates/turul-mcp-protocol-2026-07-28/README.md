@@ -35,7 +35,7 @@ A faithful 1:1 mapping of `schema/draft-schema.ts`. Every TS interface, type, an
 
 ## Status
 
-**293 compliance tests passing.** The schema-drift detector in `src/compliance_test.rs::removed_methods` enforces absence of methods the schema does not declare. The method-string count-pin in `method_strings::schema_method_count_matches_canonical_list` catches new schema methods that don't have Rust bindings.
+**322 tests passing** (139 lib + 179 compliance integration + 3 upstream-fixture + 1 doctest). The schema-drift detector in `tests/compliance.rs::removed_methods` enforces absence of methods the schema does not declare. The method-string count-pin in `method_strings::schema_method_count_matches_canonical_list` catches new schema methods that don't have Rust bindings.
 
 ⚠ **DRAFT spec.** The upstream `schema.ts` is still in draft. When the final 2026-07-28 specification publishes, the wire-version string is expected to change from `"DRAFT-2026-v1"` to a stable date form. Regeneration trigger and process: [`docs/adr/027-targeting-mcp-draft-2026-v1.md`](../../docs/adr/027-targeting-mcp-draft-2026-v1.md).
 
@@ -75,7 +75,9 @@ src/
   version.rs         — McpVersion enum incl. V2026_07_28
   prelude.rs         — Convenience re-exports
   param_extraction.rs — Generic parameter extraction
-  compliance_test.rs — 19 named test modules
+tests/
+  compliance.rs      — 19+ named test modules (integration tests via public API)
+  upstream_fixtures.rs — Pinned upstream-example roundtrip harness
 schema/
   draft-schema.ts    — Vendored upstream schema (ETag-pinned)
   README.md          — Provenance + regeneration instructions

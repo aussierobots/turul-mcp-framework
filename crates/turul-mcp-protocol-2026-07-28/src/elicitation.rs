@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// StringSchema (per MCP 2025-11-25 spec)
+/// `StringSchema` — primitive string schema for elicitation requests.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StringSchema {
@@ -27,7 +27,7 @@ pub struct StringSchema {
     pub format: Option<StringFormat>,
 }
 
-/// NumberSchema (per MCP 2025-11-25 spec) - handles both "number" and "integer"
+/// `NumberSchema` — primitive numeric schema; `schema_type` is `"number"` or `"integer"`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NumberSchema {
@@ -735,7 +735,7 @@ impl ElicitationBuilder {
         ElicitRequest::new_form(message, schema)
     }
 
-    /// Create a URL input elicitation with format: "uri" (MCP 2025-11-25)
+    /// Create a single-field URL input elicitation (format: `"uri"`).
     pub fn url_input(
         message: impl Into<String>,
         field_name: impl Into<String>,

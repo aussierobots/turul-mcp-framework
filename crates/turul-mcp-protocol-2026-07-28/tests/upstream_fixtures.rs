@@ -31,8 +31,8 @@ fn ensure_once() {
     });
 }
 
-/// Coverage floor — modeled count must not regress. Bumped per migration slice.
-/// Slice 1: 8 modeled cases — `Tool`, `CallToolRequestParams`, `CallToolResult`,
+/// Coverage floor — modeled count must not regress. Bumped per migration batch.
+/// Current modeled set (8): `Tool`, `CallToolRequestParams`, `CallToolResult`,
 /// `ListToolsResult`, `Resource`, `Root`, `ListRootsResult`, `ElicitResult` —
 /// all round-trip cleanly against every upstream fixture. Raise this in
 /// subsequent slices as more bindings flip from `NotModeled` to a real `Kind`.
