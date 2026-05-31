@@ -415,3 +415,73 @@ When writing about streaming in this framework, always specify:
 This compatibility architecture ensures the turul-mcp-framework works seamlessly with the current MCP client ecosystem while maintaining full specification compliance. The solution prioritizes developer experience and real-world usability over strict specification enforcement, with clear paths forward as the ecosystem matures.
 
 The architecture successfully resolves the MCP Inspector timeout issues while preserving all advanced MCP 2025-06-18 Streamable HTTP capabilities for compliant clients.
+## DRAFT-2026-v1: Stateless variant; GET SSE is 2025-only
+
+**Status: Added 2026-05-31. Relevant when the server runs with default (DRAFT-2026-v1) protocol per ADR-027. The behavior described above for 2025-11-25 still applies under `--features legacy-2025-11-25`.**
+
+### What changes in DRAFT-2026-v1
+
+The 2026-07-28 RC schema removes the stateful session handshake from the core protocol:
+
+- **No `initialize` request.** Discovery is via `server/discover` (a new method, returns server capabilities + extension declarations).
+- **No `notifications/initialized` notification.** Servers are ready immediately.
+- **No `Mcp-Session-Id` header.** Per-request `_meta` carries the protocol version, client info, client capabilities, and optional progress token on every request.
+- **No session lifecycle on the server.** Each POST is independent. Sessions are not a wire concept — they are an opt-in extension or an upper-layer concern.
+
+### POST behavior (request-response and POST streaming)
+
+Unchanged in shape. The Accept-header compatibility matrix and method-level Content-Type negotiation policy (above) still apply. The transport carries JSON-RPC frames either as `application/json` or as `text/event-stream` chunks. The discriminator is the method, not the spec version:
+
+- `tools/call` under `Accept: application/json, text/event-stream` → SSE-framed chunked response (progress notifications + final result).
+- All other methods → `application/json`.
+
+**What is removed in DRAFT-2026-v1 mode:**
+
+- The pre-flight `validate_session_exists()` check on every POST. There is no session to validate.
+- The 404 response for missing/terminated `Mcp-Session-Id`. There is no `Mcp-Session-Id` header.
+- The `validate_session_exists()`-driven fingerprint comparison (per ADR-023). In stateless mode, fingerprint persistence is per-request rather than per-session — see ADR-023 amendment.
+- The `notifications/initialized` 202 response.
+
+**What is added in DRAFT-2026-v1 mode:**
+
+- Required `_meta` carrier on every request payload (`RequestMetaObject` with `io.modelcontextprotocol/protocolVersion`, `clientInfo`, `clientCapabilities`).
+- `server/discover` request as the analogue of `initialize`.
+- Per-request capability/version routing: the dispatcher routes by method, optionally tightened by the declared client capabilities in the request's `_meta`.
+
+### GET SSE is 2025-only
+
+**GET SSE (the long-lived `GET /mcp` with `Accept: text/event-stream` for server-initiated notifications) requires a `Mcp-Session-Id` header to attach the connection to a server-known session.** That header does not exist in DRAFT-2026-v1.
+
+In DRAFT-2026-v1 mode, the framework:
+
+- **Does NOT serve `GET /mcp` for SSE.** A GET to `/mcp` returns HTTP 405 Method Not Allowed (or 404 if the route is unmounted) — there is no notion of "attach to my session" without a session identifier.
+- **Does NOT broadcast server-initiated notifications** through the dual-path delivery model described above for 2025-11-25. The fan-out targets (per-session subscribers) are not a 2026 concept.
+- **Still supports POST streaming chunked responses** for tool execution that emits `notifications/progress` mid-stream. That delivery model is per-POST and does not require a session.
+
+### When server-initiated notifications matter under DRAFT-2026-v1
+
+Server→client notifications that are NOT tied to a specific in-flight tool call (e.g., resource list changes, prompt list changes, generic server events) have **no transport vehicle in DRAFT-2026-v1 core**. They are deferred to:
+
+- **Extensions** that establish a long-lived connection (e.g., a future WebSocket transport extension under SEP-2133).
+- **Custom transports** outside the HTTP envelope.
+
+Servers that need to advertise list-changed events to long-lived clients should either run in legacy 2025-11-25 mode or wait for a streaming extension to land.
+
+### Routing summary (updated)
+
+Updated routing table for the framework's `McpRequestHandler` (see ADR-009 amendment for the per-protocol selection logic):
+
+| Spec mode | POST request-response | POST streaming | GET SSE |
+|---|---|---|---|
+| 2025-11-25 (`legacy-2025-11-25` feature) | Yes | Yes (under combined Accept) | Yes (with `Mcp-Session-Id`) |
+| DRAFT-2026-v1 (default in 0.4.0) | Yes | Yes (under combined Accept) | **No** (no session header) |
+
+### Lambda compatibility under DRAFT-2026-v1
+
+The Lambda streaming limitation documented above (server-initiated notifications fail because spawned tokio tasks are torn down at invocation completion) is **moot under DRAFT-2026-v1 + Lambda**. GET SSE is not served. POST streaming for tool progress still works (the streaming response completes within the invocation lifetime). The asymmetry between Lambda and long-running HTTP servers for SSE delivery disappears in the stateless model.
+
+### References
+
+- ADR-009 §"DRAFT-2026-v1: McpProtocolVersion becomes feature-exclusive" — handler routing under the new default.
+- ADR-023 §"DRAFT-2026-v1: per-request fingerprint persistence" — tool-change semantics without per-session state.
+- ADR-027 §"Status update (2026-05-31)" — 0.4.0 ships DRAFT-2026-v1 as default.

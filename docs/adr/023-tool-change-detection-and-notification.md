@@ -298,3 +298,65 @@ turul-mcp-server = { version = "0.3", features = ["dynamodb", "dynamic-tools"] }
 - Fingerprint mismatch triggers update + notification, never session invalidation
 - SessionEventDispatcher ensures notifications reach session event storage before request completes
 - Single event bus architecture — all emitters go through SessionManager
+
+## DRAFT-2026-v1: per-request fingerprint persistence
+
+**Status: Added 2026-05-31. Relevant when the server runs with default (DRAFT-2026-v1) protocol per ADR-027. The 2025-11-25 behavior above still applies under `--features legacy-2025-11-25`.**
+
+### What stays the same
+
+- **Live registry mutation + `notifications/tools/list_changed`** for runtime tool changes (activate/deactivate, cross-instance coordination via shared storage) still applies. The registry mechanics — `ToolRegistry::activate_tool()`, polling vs request-time detection, cross-instance fingerprint via shared `ServerStateStorage` — are unchanged.
+- **The fingerprint computation** (`compute_tool_fingerprint()`, FNV-1a over canonicalized JSON) is unchanged.
+- **`compute_tool_fingerprint()` determinism** is unchanged.
+
+### What changes
+
+**The per-session anchor for fingerprint comparison disappears.** DRAFT-2026-v1 has no `Mcp-Session-Id` and no `initialize`-time hook to store `mcp:tool_fingerprint` against a session record. The fingerprint detection model becomes per-request:
+
+1. **Client carries the last-known fingerprint in request `_meta`** (under an extension-namespaced key, e.g. `io.modelcontextprotocol/tools.fingerprint`). The wire-level shape is defined by the SEP-2133 extension framework, not by the core protocol crate.
+2. **Server compares the client-provided fingerprint against its current registry fingerprint** on each request that opts into change detection. If they differ:
+   - Server includes the current fingerprint in its response `_meta` (under the same extension key).
+   - Server includes a tools-changed advisory in the response.
+   - Client updates its cached fingerprint and calls `tools/list` to refresh.
+3. **No server-side session-keyed persistence** of the fingerprint. The server's only durable state for fingerprint purposes is the **server-global** fingerprint stored in `ServerStateStorage` (key `entityType=tools, entityId=#fingerprint`), which already exists per the original ADR.
+
+### Stateless implications
+
+- **No 404 for fingerprint mismatch.** The original ADR's rule "404 is ONLY for missing or terminated sessions, never for fingerprint mismatch" stays correct in spirit — the 404 path doesn't exist at all in DRAFT-2026-v1 because there are no sessions to be missing or terminated. Tools mismatch is handled in-band via response `_meta`.
+- **No `validate_session_exists()` fingerprint check.** The original ADR's session-validation table (existence → termination → fingerprint) collapses to a single check: the request's declared client capabilities + extension-carried fingerprint.
+- **No persisted per-session event for `notifications/tools/list_changed`.** Without a session to persist into, the notification is delivered at-most-once on the current POST response or via an out-of-band extension transport (when one exists). The "persistence at SessionManager layer with awaited dispatcher" pattern still governs runtime registry mutation events, but the persistence target is the server-global event log (if any) rather than per-session event lists.
+- **Cross-instance coordination via shared `ServerStateStorage`** still works exactly as documented (`sync_from_storage()` on cold start, polling on EC2, request-time `check_for_changes()` on Lambda). What changes is the delivery side: the server's response `_meta` carries the current fingerprint regardless of whether the client asked, letting the client detect change on its own.
+
+### Notification persistence architecture (DRAFT-2026-v1 variant)
+
+The `SessionEventDispatcher` + `SessionManager` event-bus architecture documented above is **for 2025-11-25 only**. In DRAFT-2026-v1:
+
+- There is no `SessionManager` (no session lifecycle to manage).
+- Tool registry mutations still happen via `ToolRegistry::activate_tool()` / `deactivate_tool()`, but the broadcast targets are:
+  - **In-flight POST streaming connections**: any tool execution currently emitting progress can opt to include a tools-changed marker in its next progress frame.
+  - **The server-global event log** (`ServerStateStorage`, optional): for cross-instance coordination, the change is recorded there and detected by other instances on their next request via the same `check_for_changes()` TTL gating mechanism that already exists.
+- The "single event bus" principle from the original ADR persists at the registry boundary (one place where mutations land), but the fan-out shape changes from per-session to per-active-request.
+
+### Modes (DRAFT-2026-v1 variant)
+
+```rust
+pub enum ToolChangeMode {
+    Static,                     // Default. No fingerprint advertising.
+    #[cfg(feature = "dynamic-tools")]
+    Dynamic,                    // Opt-in. Server advertises fingerprint in response _meta.
+}
+```
+
+| Mode | Fingerprint in response `_meta` | Live mutation API | Cross-instance |
+|------|---|---|---|
+| Static | Not advertised | Not exposed | N/A |
+| Dynamic | Advertised on every response (under extension key) | `ToolRegistry::activate_tool()` etc. | Via `ServerStateStorage` + per-instance `check_for_changes()` |
+
+The `listChanged` capability flag from the 2025-11-25 capability shape is removed in DRAFT-2026-v1 (the capability negotiation surface moved to the SEP-2133 extension framework). Servers signal mutability via the extension key in their `server/discover` response.
+
+### References
+
+- ADR-006 §"DRAFT-2026-v1: Stateless variant; GET SSE is 2025-only" — why per-session SSE delivery doesn't exist.
+- ADR-009 §"DRAFT-2026-v1: McpProtocolVersion becomes feature-exclusive" — feature flag mechanics.
+- ADR-027 §"Status update (2026-05-31)" — 0.4.0 default is DRAFT-2026-v1.
+- ADR-028 (extensions strategy) — the `io.modelcontextprotocol/tools.fingerprint` extension key registration (TBD; identifier not yet finalized upstream).

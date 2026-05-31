@@ -185,3 +185,5 @@ The 0.3.39 release passed:
   `turul-mcp-aws-lambda`, etc.) stay on `turul-mcp-json-rpc-server`
   through the rest of 0.3.x, per the original lifecycle above. ADR-026
   will still cover the framework-wide cutover at 0.4.0.
+
+- **2026-05-31**: Cross-reference with ADR-027 §"Status update (2026-05-31)". ADR-025's framework-wide cutover from `turul-mcp-json-rpc-server` shim to direct `turul-rpc` dependency is still scheduled for framework 0.4.0, and that release will also be the DRAFT-2026-v1 default cutover per ADR-027. The two are scoped to the same release for release-engineering convenience, but they are independent decisions — the turul-rpc shim cleanup is orthogonal to MCP spec version. No content change to this ADR.
