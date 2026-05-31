@@ -1,6 +1,6 @@
 [package]
 name = "session-aware-resource-server"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 publish = false
 

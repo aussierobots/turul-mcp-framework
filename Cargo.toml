@@ -111,11 +111,11 @@ exclude = [
 ]
 
 [workspace.package]
-# Per per-crate-independent-versioning policy (see CLAUDE.md/AGENTS.md "Crate
-# Versioning Policy"), individual crates carry their own literal `version = "..."`
-# declarations and do NOT inherit from this field. The value here is a default
-# for tooling that still references `[workspace.package].version` (e.g. some
-# IDE plugins); it does not flow into any published crate.
+# Per-crate independent versioning: individual crates carry their own literal
+# `version = "..."` declarations and do NOT inherit from this field. The value
+# here is a default for tooling that still references
+# `[workspace.package].version` (e.g. some IDE plugins); it does not flow into
+# any published crate.
 version = "0.4.0"
 edition = "2024"
 authors = ["Nick Hortovanyi <nick@aussierobots.com.au>"]
@@ -159,11 +159,11 @@ bytes = "1"
 turul-rpc = { version = "0.1", default-features = false }
 
 # Internal crate dependencies.
-# Per-crate independent versioning: each crate publishes at its own semver
-# (see CLAUDE.md/AGENTS.md "Crate Versioning Policy"). The version pinned
-# here is what consumers of this workspace see for path+version resolution.
-# Frozen historical protocol crates (`2025-06-18`, `2025-11-25`) stay at
-# their last 0.3.x publish — everything else moves on its own cadence.
+# Per-crate independent versioning: each crate publishes at its own semver.
+# The version pinned here is what consumers of this workspace see for
+# path+version resolution. Frozen historical protocol crates (`2025-06-18`,
+# `2025-11-25`) stay at their last 0.3.x publish — everything else moves on
+# its own cadence.
 turul-mcp-json-rpc-server = { version = "0.4.0", path = "crates/turul-mcp-json-rpc-server" }
 turul-mcp-protocol-2025-06-18 = { version = "0.3.47", path = "crates/turul-mcp-protocol-2025-06-18" }
 turul-mcp-protocol-2025-11-25 = { version = "0.3.47", path = "crates/turul-mcp-protocol-2025-11-25" }

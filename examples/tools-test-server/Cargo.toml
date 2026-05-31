@@ -1,6 +1,6 @@
 [package]
 name = "tools-test-server"
-version.workspace = true
+version = "0.4.0"
 edition.workspace = true
 description = "MCP Tools Test Server - Comprehensive test tools for E2E validation"
 license = "MIT OR Apache-2.0"
